@@ -114,6 +114,42 @@ export function safeParseJSON<T = any>(text: string, defaultValue: T): T {
   }
 }
 
+/**
+ * Parse AI JSON response with optional repair callback.
+ * Tries extractAndParseJSON first. On failure, calls the repair function
+ * (typically an AI "fix this JSON" call) and retries once.
+ */
+export async function parseWithRepair(
+  text: string,
+  repair: (broken: string, error: string) => Promise<string>
+): Promise<any> {
+  try {
+    return extractAndParseJSON(text);
+  } catch (firstError: any) {
+    // Attempt repair
+    let repaired: string;
+    try {
+      repaired = await repair(text, firstError.message);
+    } catch (repairError: any) {
+      throw new Error(
+        `JSON parse failed and repair also failed. ` +
+        `Parse error: ${firstError.message}. Repair error: ${repairError.message}. ` +
+        `Raw preview: ${text.substring(0, 300)}...`
+      );
+    }
+
+    try {
+      return extractAndParseJSON(repaired);
+    } catch (secondError: any) {
+      throw new Error(
+        `JSON parse failed even after repair. ` +
+        `Original error: ${firstError.message}. Post-repair error: ${secondError.message}. ` +
+        `Raw preview: ${text.substring(0, 300)}...`
+      );
+    }
+  }
+}
+
 export function extractAndParseJSONArray(text: string): any[] {
   const result = extractAndParseJSON(text);
   if (!Array.isArray(result)) {

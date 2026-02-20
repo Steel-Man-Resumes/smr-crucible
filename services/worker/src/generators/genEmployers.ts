@@ -4,7 +4,7 @@
  * Consumes: employers_enriched.v1, signals.v1, jobs.v1, profile.v1
  * Output: Target_Employers_BattlePlan.docx
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON, query } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent, parseWithRepair } from '@crucible/core';
 import type { EmployersV1Type, SignalsV1Type, ProfileV1Type, JobsV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
 import {
@@ -156,6 +156,7 @@ RULES:
 6. Current openings should be matched from the job data where the company name matches. Include the direct URL.
 7. Contact info comes from the enrichment data. Use what's there. Don't fabricate phone numbers.
 8. The total employer count in the document header must match the actual count you return.
+9. Do NOT fabricate ANY data — phone numbers, addresses, websites, contact names, salary figures. Use exactly what's provided in the data. Null is always acceptable. A missing phone number is better than a wrong one.
 
 VOICE: Direct, tactical, no corporate fluff. This is a battle plan, not a report. Write like a coach who knows the local job market and is giving real advice.
 
@@ -538,7 +539,17 @@ export async function generateEmployersBattlePlan(job: ArtifactJobData): Promise
     },
   });
 
-  const content = extractAndParseJSON(text);
+  const content = await parseWithRepair(text, async (broken, error) => {
+    console.warn(`[gen_employers] JSON parse failed (${error}), attempting Claude repair...`);
+    const repairMsg = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 16000,
+      messages: [
+        { role: 'user', content: `The following JSON is malformed. Fix it and return ONLY the corrected JSON, nothing else.\n\nError: ${error}\n\nBroken JSON:\n${broken}` },
+      ],
+    });
+    return repairMsg.content[0].type === 'text' ? repairMsg.content[0].text : '';
+  });
 
   // Normalize with fallbacks
   const tier1: Tier1Content[] = (content.tier1 || []).map((e: Record<string, unknown>, i: number) => {
