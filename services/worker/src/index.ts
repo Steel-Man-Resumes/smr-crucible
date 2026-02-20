@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { runPipeline, emitEvent } from "@crucible/core";
+import { runPipeline, emitEvent, getOne } from "@crucible/core";
 import { careerIntakeV1, careerIntakeHandlers } from "./pipelines/careerIntakeV1";
 import { careerIntakeV2, careerIntakeV2Handlers } from "./pipelines/careerIntakeV2";
 import {
@@ -119,6 +119,16 @@ async function processArtifactJob(job: Job) {
   const jobKey = job.name; // BullMQ job name = the job_key from runplan
   console.log(`[artifact] Received job ${job.id}: key=${jobKey} artifact=${artifactKey} run=${runId}`);
 
+  // Idempotency guard: skip if this artifact already exists for this run
+  const existing = await getOne<{ id: string }>(
+    `SELECT id FROM artifact WHERE run_id = $1 AND artifact_type = $2 AND version = 1`,
+    [runId, artifactKey]
+  );
+  if (existing) {
+    console.log(`[artifact] Artifact ${artifactKey} already exists for run ${runId}, skipping`);
+    return { artifactKey, status: 'already_exists' };
+  }
+
   const generator = GENERATORS[jobKey];
   if (!generator) {
     console.log(`[artifact] No generator for "${jobKey}" — skipping (not yet implemented)`);
@@ -187,8 +197,43 @@ async function main() {
       }
     }
   });
-  artifactWorker.on("failed", (job, err) => {
+  artifactWorker.on("failed", async (job, err) => {
     console.error(`[artifact] Job ${job?.id} failed:`, err.message);
+    const { bundleId, orgId, projectId, runId, artifactKey } = job?.data || {};
+    if (bundleId && artifactKey) {
+      // Record failed artifact so Stage C knows this job is resolved
+      try {
+        const { insert: dbInsert, emitEvent: emit } = await import("@crucible/core");
+        await dbInsert("artifact", {
+          org_id: orgId, run_id: runId, project_id: projectId,
+          artifact_type: artifactKey, artifact_key: artifactKey, bundle_id: bundleId,
+          file_object_id: null, display_title: `${artifactKey} (failed)`,
+          display_section: 'apply', preview_type: 'none', order_index: 99,
+          version: 1, review_status: 'generation_failed',
+        });
+        await emit({
+          org_id: orgId, project_id: projectId, run_id: runId, step_id: null,
+          event_type: 'ARTIFACT_GENERATED', severity: 'error',
+          actor_type: 'system', actor_user_id: null, actor_label: job?.name || 'generator',
+          data_classification: 'internal', retention_class: 'standard',
+          correlation_id: null, parent_event_id: null, sensitive_ref: null,
+          payload: { artifact_key: artifactKey, status: 'failed', error: err.message.substring(0, 200) },
+        });
+      } catch (insertErr: unknown) {
+        const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+        // Duplicate key means failure was already recorded (job replay) — safe to ignore
+        if (!msg.includes('duplicate key')) {
+          console.error(`[artifact] Failed to record failure for ${artifactKey}: ${msg}`);
+        }
+      }
+      // Try Stage C — maybe all jobs are now resolved
+      try {
+        await runStageC(bundleId);
+      } catch (stageErr: unknown) {
+        const msg = stageErr instanceof Error ? stageErr.message : String(stageErr);
+        console.error(`[stageC] Assembly check after failure failed for bundle ${bundleId}: ${msg}`);
+      }
+    }
   });
 
   console.log(`Worker ready — listening on queues: ${PIPELINE_QUEUE}, ${LEGACY_QUEUE}, ${ARTIFACT_QUEUE}`);

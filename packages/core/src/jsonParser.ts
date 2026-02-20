@@ -5,6 +5,64 @@
  */
 
 /**
+ * Escape control characters (0x00-0x1F) inside JSON string literals.
+ * AI models often emit literal newlines, tabs, or other control chars
+ * within strings, which breaks JSON.parse. This walks the text tracking
+ * whether we're inside a "string" and escapes any control chars found there.
+ */
+function sanitizeJsonStrings(text: string): string {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const code = ch.charCodeAt(0);
+
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+
+    // Outside strings, pass everything through (including structural whitespace)
+    if (!inString) {
+      result += ch;
+      continue;
+    }
+
+    // Inside a string: escape control characters
+    if (code <= 0x1F) {
+      switch (code) {
+        case 0x0A: result += '\\n'; break;   // newline
+        case 0x0D: result += '\\r'; break;   // carriage return
+        case 0x09: result += '\\t'; break;   // tab
+        case 0x08: result += '\\b'; break;   // backspace
+        case 0x0C: result += '\\f'; break;   // form feed
+        default:   result += ' ';   break;   // other control chars → space
+      }
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result;
+}
+
+/**
  * Find a brace-matched JSON block starting from the first { or [
  * Returns the extracted substring, or null if no valid block found
  */
@@ -84,6 +142,9 @@ export function extractAndParseJSON(text: string): any {
   jsonText = jsonText
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n');
+
+  // Escape control characters inside string literals
+  jsonText = sanitizeJsonStrings(jsonText);
 
   // Attempt to parse
   try {

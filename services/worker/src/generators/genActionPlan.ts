@@ -4,7 +4,8 @@
  * Consumes: employers_enriched.v1, jobs.v1, resources.v1, market.v1, signals.v1
  * Output: table-based 4-week DOCX with real employer names and job URLs
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { EmployersV1Type, JobsV1Type, MarketV1Type, SignalsV1Type } from '@crucible/core';
 import type { ResourcesV1 as ResourcesV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
@@ -91,7 +92,7 @@ Return ONLY valid JSON.`;
   });
 
   const text = message.content[0].type === 'text' ? message.content[0].text : '';
-  const plan = extractAndParseJSON(text);
+  const plan = await parseAIJson(text);
 
   await emitEvent({
     org_id: orgId, project_id: projectId, run_id: runId, step_id: null,

@@ -4,7 +4,8 @@
  * Consumes: artifact_manifest.v1
  * AI-generated hour-by-hour guide referencing actual artifact names
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { ArtifactManifestV1 as ArtifactManifestV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
 import {
@@ -72,7 +73,7 @@ Return ONLY valid JSON.`;
   });
 
   const text = message.content[0].type === 'text' ? message.content[0].text : '';
-  const guide = extractAndParseJSON(text);
+  const guide = await parseAIJson(text);
 
   await emitEvent({
     org_id: orgId, project_id: projectId, run_id: runId, step_id: null,

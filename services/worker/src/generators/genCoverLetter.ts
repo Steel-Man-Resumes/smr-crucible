@@ -5,7 +5,8 @@
  * Output: DOCX — one per invocation (tone + target employer passed via params)
  * Params: { tone: 'bold' | 'friendly' | 'professional', target_employer_index: number }
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { ProfileV1Type, EmployersV1Type, SignalsV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
 import {
@@ -291,7 +292,7 @@ export async function generateCoverLetter(job: ArtifactJobData): Promise<Generat
     },
   });
 
-  const content = extractAndParseJSON(text);
+  const content = await parseAIJson(text);
 
   const letterContent = {
     greeting: content.greeting || `Dear Hiring Manager at ${targetEmployer.name},`,

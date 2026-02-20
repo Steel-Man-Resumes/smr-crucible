@@ -5,7 +5,8 @@
  * Consumes: profile.v1, signals.v1, employers_enriched.v1
  * Output: DOCX with branded formatting, proper heading styles
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { ProfileV1Type, SignalsV1Type, EmployersV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
 import {
@@ -65,7 +66,7 @@ Return ONLY valid JSON.`;
   });
 
   const text = message.content[0].type === 'text' ? message.content[0].text : '';
-  const parsed = extractAndParseJSON(text);
+  const parsed = await parseAIJson(text);
 
   return {
     brandedHeadline: parsed.brandedHeadline || `${yearsExp}+ Years Building Operations Excellence`,

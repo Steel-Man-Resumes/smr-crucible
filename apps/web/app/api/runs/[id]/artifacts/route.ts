@@ -5,6 +5,10 @@ import { getAuthContext, requireOrg } from "../../../../../lib/api-auth";
 interface ArtifactRow {
   id: string;
   artifact_type: string;
+  artifact_key: string;
+  display_title: string;
+  display_section: string;
+  order_index: number;
   version: number;
   review_status: string;
   reviewed_at: string | null;
@@ -24,12 +28,13 @@ export async function GET(
   if (orgError) return orgError;
 
   const artifacts = await query<ArtifactRow>(
-    `SELECT a.id, a.artifact_type, a.version, a.review_status, a.reviewed_at, a.created_at,
+    `SELECT a.id, a.artifact_type, a.artifact_key, a.display_title, a.display_section,
+            a.order_index, a.version, a.review_status, a.reviewed_at, a.created_at,
             f.object_key, f.byte_size, f.mime_type
      FROM artifact a
      JOIN file_object f ON f.id = a.file_object_id
      WHERE a.run_id = $1 AND a.org_id = $2
-     ORDER BY a.created_at DESC`,
+     ORDER BY COALESCE(a.order_index, 999) ASC, a.created_at ASC`,
     [params.id, ctx.orgId]
   );
 

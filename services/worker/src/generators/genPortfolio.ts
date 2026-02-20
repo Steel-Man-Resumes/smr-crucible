@@ -4,7 +4,8 @@
  * Consumes: profile.v1, signals.v1, portfolio_prefs.v1
  * Output: Single HTML file with all CSS inline — no external dependencies
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { ProfileV1Type, SignalsV1Type } from '@crucible/core';
 import type { PortfolioPrefsV1 as PortfolioPrefsV1Type } from '@crucible/core';
 import { DEFAULT_PORTFOLIO_PREFS } from '@crucible/core';
@@ -58,7 +59,7 @@ Return ONLY valid JSON.`;
   });
 
   const text = message.content[0].type === 'text' ? message.content[0].text : '';
-  const aiContent = extractAndParseJSON(text);
+  const aiContent = await parseAIJson(text);
 
   await emitEvent({
     org_id: orgId, project_id: projectId, run_id: runId, step_id: null,

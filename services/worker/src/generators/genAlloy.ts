@@ -5,7 +5,8 @@
  * Output: Alloy_Report_CONFIDENTIAL.docx
  * Conditional: Only generated when signals.barriers_any === true
  */
-import { getRunData, uploadFile, insert, emitEvent, extractAndParseJSON } from '@crucible/core';
+import { getRunData, uploadFile, insert, emitEvent } from '@crucible/core';
+import { parseAIJson } from './repairJson';
 import type { SignalsV1Type, ProfileV1Type, EmployersV1Type } from '@crucible/core';
 import type { ResourcesV1 as ResourcesV1Type } from '@crucible/core';
 import Anthropic from '@anthropic-ai/sdk';
@@ -714,7 +715,7 @@ export async function generateAlloyReport(job: ArtifactJobData): Promise<Generat
     },
   });
 
-  const content = extractAndParseJSON(text) as AlloyContent;
+  const content = await parseAIJson(text) as AlloyContent;
 
   // Validate critical sections exist
   if (!content.your_situation?.opening) {

@@ -69,5 +69,13 @@ export async function GET(
     [params.id, ctx.orgId]
   );
 
-  return NextResponse.json({ project, documents, events });
+  // Get the most recent run for this project
+  const latestRun = await getOne<{ id: string; status: string; pipeline_key: string }>(
+    `SELECT id, status, pipeline_key FROM workflow_run
+     WHERE project_id = $1 AND org_id = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [params.id, ctx.orgId]
+  );
+
+  return NextResponse.json({ project, documents, events, latestRun });
 }

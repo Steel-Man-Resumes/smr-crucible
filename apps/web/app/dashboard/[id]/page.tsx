@@ -58,6 +58,10 @@ interface StepData {
 interface ArtifactData {
   id: string;
   artifact_type: string;
+  artifact_key: string;
+  display_title: string;
+  display_section: string;
+  order_index: number;
   version: number;
   review_status: string;
   reviewed_at: string | null;
@@ -71,18 +75,49 @@ interface ArtifactData {
 // --- Constants ---
 
 const STEP_LABELS: Record<string, string> = {
+  // v1 steps
   extract: "Text Extraction",
   parse: "AI Parsing",
   analyze: "Career Analysis",
   generate: "Resume Generation",
+  // v2 steps
+  extract_resume_text: "Text Extraction",
+  parse_profile: "Resume Parsing",
+  compute_signals: "Career Signals",
+  research_jobs: "Job Research",
+  build_employer_tiers: "Employer Ranking",
+  enrich_contacts: "Contact Enrichment",
+  market_salary: "Salary Research",
+  local_resources: "Local Resources",
+  plan_package: "Package Planning",
+  init_bundle: "Bundle Setup",
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
+  // v1
   extract: "Extracting text from uploaded documents",
   parse: "AI parsing resume into structured data",
   analyze: "Running multi-model career analysis",
   generate: "Generating professional resume DOCX",
+  // v2
+  extract_resume_text: "Extracting text from uploaded documents",
+  parse_profile: "AI parsing resume into structured profile",
+  compute_signals: "Analyzing career signals, barriers, and strengths",
+  research_jobs: "Discovering live job openings via JSearch",
+  build_employer_tiers: "Ranking 50 employers into Tier 1/2/3",
+  enrich_contacts: "Enriching Tier 1 employer contact details",
+  market_salary: "Researching salary data for target roles",
+  local_resources: "Finding local support resources",
+  plan_package: "Planning artifact package contents",
+  init_bundle: "Creating bundle and queuing artifact generation",
 };
+
+const V1_STEPS = ["extract", "parse", "analyze", "generate"];
+const V2_STEPS = [
+  "extract_resume_text", "parse_profile", "compute_signals", "research_jobs",
+  "build_employer_tiers", "enrich_contacts", "market_salary", "local_resources",
+  "plan_package", "init_bundle",
+];
 
 const EVENT_LABELS: Record<string, string> = {
   PROJECT_CREATED: "Project created",
@@ -163,14 +198,15 @@ function eventDisplayText(event: EventItem): string {
   if (event.event_type === "AI_CALL_COMPLETED" && p.provider) {
     return `AI call completed (${p.provider}/${p.model}, ${p.latency_ms}ms)`;
   }
-  if (event.event_type === "ARTIFACT_GENERATED" && p.artifact_type) {
-    return `Resume generated — awaiting review`;
+  if (event.event_type === "ARTIFACT_GENERATED") {
+    const name = p.artifact_key || p.artifact_type || "artifact";
+    return `${name} generated — awaiting review`;
   }
   if (event.event_type === "HUMAN_REVIEW_APPROVED") {
-    return `Resume approved by ${event.actor_label}`;
+    return `Artifact approved by ${event.actor_label}`;
   }
   if (event.event_type === "HUMAN_REVIEW_REJECTED") {
-    return `Resume rejected by ${event.actor_label}`;
+    return `Artifact rejected by ${event.actor_label}`;
   }
   if (event.event_type === "RUN_COMPLETED") {
     return "Pipeline completed successfully";
@@ -243,6 +279,7 @@ export default function ProjectPage() {
   const [runEvents, setRunEvents] = useState<EventItem[]>([]);
   const [starting, setStarting] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [pipelineVersion, setPipelineVersion] = useState<"v1" | "v2">("v2");
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Data Fetching ---
@@ -254,6 +291,10 @@ export default function ProjectPage() {
       setProject(data.project);
       setDocuments(data.documents);
       setEvents(data.events);
+      // Auto-load the latest run if one exists
+      if (data.latestRun) {
+        setActiveRunId((prev) => prev || data.latestRun.id);
+      }
     }
     setLoading(false);
   }, [projectId]);
@@ -296,17 +337,25 @@ export default function ProjectPage() {
     };
   }, [activeRunId, fetchRun]);
 
-  // Stop polling when run is done
+  // Stop polling when run is done AND no more artifacts are generating
   useEffect(() => {
     if (run && !["queued", "running"].includes(run.status)) {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
+      // For v2 pipelines, the run completes after init_bundle but artifacts
+      // continue generating on the artifact queue. Keep polling until we see
+      // a RUN_COMPLETED event (emitted by Stage C assembly).
+      const isV2 = run.pipeline_key === "career_intake_v2";
+      const hasRunCompleted = runEvents.some(e => e.event_type === "RUN_COMPLETED");
+
+      if (!isV2 || hasRunCompleted) {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+        fetchProject();
       }
-      // Refresh project events
-      fetchProject();
+      // else: keep polling — artifacts still generating
     }
-  }, [run, fetchProject]);
+  }, [run, runEvents, fetchProject]);
 
   // --- Actions ---
 
@@ -334,7 +383,11 @@ export default function ProjectPage() {
 
   async function handleStartRun() {
     setStarting(true);
-    const res = await fetch(`/api/projects/${projectId}/run`, { method: "POST" });
+    const res = await fetch(`/api/projects/${projectId}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pipeline: pipelineVersion }),
+    });
     if (res.ok) {
       const data = await res.json();
       setActiveRunId(data.runId);
@@ -380,8 +433,6 @@ export default function ProjectPage() {
 
   const uploadedDocs = documents.filter((d) => d.source === "user_upload");
   const hasUploads = uploadedDocs.length > 0;
-  const isRunning = run && ["queued", "running"].includes(run.status);
-  const isComplete = run && run.status === "succeeded";
   const isFailed = run && run.status === "failed";
 
   return (
@@ -485,6 +536,31 @@ export default function ProjectPage() {
       {/* Run Analysis Button */}
       {!activeRunId && (
         <section className="mb-8">
+          {hasUploads && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm text-[var(--muted)]">Pipeline:</span>
+              <button
+                onClick={() => setPipelineVersion("v1")}
+                className={`px-3 py-1 text-xs rounded-lg border transition-colors ${
+                  pipelineVersion === "v1"
+                    ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50"
+                }`}
+              >
+                v1 — Resume Only
+              </button>
+              <button
+                onClick={() => setPipelineVersion("v2")}
+                className={`px-3 py-1 text-xs rounded-lg border transition-colors ${
+                  pipelineVersion === "v2"
+                    ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50"
+                }`}
+              >
+                v2 — Full Package
+              </button>
+            </div>
+          )}
           <button
             onClick={handleStartRun}
             disabled={!hasUploads || starting}
@@ -500,7 +576,7 @@ export default function ProjectPage() {
                 Starting...
               </span>
             ) : hasUploads ? (
-              "Run Analysis"
+              pipelineVersion === "v2" ? "Run Full Package (v2)" : "Run Analysis (v1)"
             ) : (
               "Upload a document first"
             )}
@@ -529,48 +605,58 @@ export default function ProjectPage() {
           </div>
 
           <div className="space-y-3">
-            {["extract", "parse", "analyze", "generate"].map((key) => {
-              const step = steps.find((s) => s.step_key === key);
-              const status = step?.status || "pending";
+            {(() => {
+              // Determine step list: use run's pipeline_key to pick the right step sequence
+              const isV2 = run.pipeline_key === "career_intake_v2";
+              const stepKeys = isV2 ? V2_STEPS : V1_STEPS;
 
-              return (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${
-                    status === "running"
-                      ? "bg-blue-500/5 border-blue-500/30"
-                      : status === "succeeded"
-                      ? "bg-emerald-500/5 border-emerald-500/20"
-                      : status === "failed"
-                      ? "bg-red-500/5 border-red-500/20"
-                      : "bg-[var(--card)] border-[var(--border)]"
-                  }`}
-                >
-                  <StepStatusIcon status={status} />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">
-                      {STEP_LABELS[key] || key}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {status === "running"
-                        ? STEP_DESCRIPTIONS[key]
-                        : status === "failed" && step?.error_message
-                        ? step.error_message.substring(0, 100)
+              return stepKeys.map((key) => {
+                const step = steps.find((s) => s.step_key === key);
+                const status = step?.status || "pending";
+
+                return (
+                  <motion.div
+                    key={key}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${
+                      status === "running"
+                        ? "bg-blue-500/5 border-blue-500/30"
                         : status === "succeeded"
-                        ? `Completed in ${formatDuration(step?.started_at || null, step?.finished_at || null)}`
-                        : "Waiting..."}
-                    </p>
-                  </div>
-                  {step?.started_at && (
-                    <span className="text-xs text-[var(--muted)]">
-                      {formatDuration(step.started_at, step.finished_at)}
-                    </span>
-                  )}
-                </motion.div>
-              );
-            })}
+                        ? "bg-emerald-500/5 border-emerald-500/20"
+                        : status === "failed"
+                        ? "bg-red-500/5 border-red-500/20"
+                        : status === "skipped"
+                        ? "bg-zinc-500/5 border-zinc-500/20"
+                        : "bg-[var(--card)] border-[var(--border)]"
+                    }`}
+                  >
+                    <StepStatusIcon status={status} />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        {STEP_LABELS[key] || key}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {status === "running"
+                          ? STEP_DESCRIPTIONS[key] || "Processing..."
+                          : status === "failed" && step?.error_message
+                          ? step.error_message.substring(0, 100)
+                          : status === "skipped"
+                          ? "Skipped (optional)"
+                          : status === "succeeded"
+                          ? `Completed in ${formatDuration(step?.started_at || null, step?.finished_at || null)}`
+                          : "Waiting..."}
+                      </p>
+                    </div>
+                    {step?.started_at && (
+                      <span className="text-xs text-[var(--muted)]">
+                        {formatDuration(step.started_at, step.finished_at)}
+                      </span>
+                    )}
+                  </motion.div>
+                );
+              });
+            })()}
           </div>
 
           {/* Error message */}
@@ -599,10 +685,26 @@ export default function ProjectPage() {
         </section>
       )}
 
+      {/* Stage B progress indicator — shows while artifacts are still generating */}
+      {run && run.pipeline_key === "career_intake_v2" && run.status === "succeeded" &&
+       !runEvents.some(e => e.event_type === "RUN_COMPLETED") && (
+        <section className="mb-8">
+          <div className="p-4 bg-blue-500/5 border border-blue-500/30 rounded-xl flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Generating Artifacts...</p>
+              <p className="text-xs text-[var(--muted)]">
+                {artifacts.length} artifact{artifacts.length !== 1 ? "s" : ""} generated so far. This typically takes 2-5 minutes.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Artifacts */}
       {artifacts.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-medium mb-3">Generated Artifacts</h2>
+          <h2 className="text-lg font-medium mb-3">Generated Artifacts ({artifacts.length})</h2>
           <div className="space-y-3">
             {artifacts.map((artifact) => (
               <motion.div
@@ -620,10 +722,10 @@ export default function ProjectPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">
-                        {artifact.artifact_type === "resume_docx" ? "Professional Resume" : artifact.artifact_type}
+                        {artifact.display_title || artifact.artifact_type}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
-                        DOCX &middot; {formatBytes(artifact.byte_size)} &middot; v{artifact.version}
+                        {artifact.mime_type?.split("/").pop()?.toUpperCase() || "FILE"} &middot; {formatBytes(artifact.byte_size)} &middot; v{artifact.version}
                       </p>
                     </div>
                   </div>

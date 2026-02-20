@@ -32,8 +32,8 @@ interface BundleRow {
 }
 
 /**
- * Check if all Stage B jobs for a bundle are complete.
- * Returns the list of completed artifacts if done, null if still pending.
+ * Check if all Stage B jobs for a bundle are resolved (completed or failed).
+ * Returns the list of successfully completed artifacts if all jobs are resolved, null if still pending.
  */
 export async function checkBundleComplete(bundleId: string): Promise<ArtifactRow[] | null> {
   // Get all artifacts for this bundle that have file_object_id (i.e., actually generated)
@@ -49,6 +49,15 @@ export async function checkBundleComplete(bundleId: string): Promise<ArtifactRow
     [bundleId]
   );
 
+  // Also count failed artifacts (inserted with review_status='generation_failed', no file_object_id)
+  const failedRows = await query<{ cnt: string }>(
+    `SELECT COUNT(*) as cnt FROM artifact
+     WHERE bundle_id = $1 AND review_status = 'generation_failed'`,
+    [bundleId]
+  );
+  const failedCount = parseInt(failedRows[0]?.cnt || '0', 10);
+  const resolvedCount = artifacts.length + failedCount;
+
   // Check if the bundle has an associated run plan to know expected count
   const bundle = await getOne<BundleRow>(
     `SELECT * FROM bundle WHERE id = $1`,
@@ -62,11 +71,14 @@ export async function checkBundleComplete(bundleId: string): Promise<ArtifactRow
     const plan = await getRunData<{ tasks: Array<{ artifact_key: string }> }>(bundle.run_id, 'runplan.v1');
     const expectedCount = plan.tasks.length;
 
-    if (artifacts.length >= expectedCount) {
+    if (resolvedCount >= expectedCount) {
+      if (failedCount > 0) {
+        console.log(`[stageC] Bundle ${bundleId}: ${artifacts.length} succeeded, ${failedCount} failed out of ${expectedCount} total — proceeding with available artifacts`);
+      }
       return artifacts;
     }
 
-    console.log(`[stageC] Bundle ${bundleId}: ${artifacts.length}/${expectedCount} artifacts complete`);
+    console.log(`[stageC] Bundle ${bundleId}: ${artifacts.length} succeeded + ${failedCount} failed = ${resolvedCount}/${expectedCount} resolved`);
     return null;
   } catch {
     // No run plan — check if we have at least some artifacts
@@ -180,11 +192,16 @@ export async function generateZip(
   );
   if (!bundle) throw new Error(`Bundle ${bundleId} not found`);
 
-  // Create ZIP archive
+  // Create ZIP archive — set up all listeners before adding data
   const archive = archiver('zip', { zlib: { level: 6 } });
   const chunks: Buffer[] = [];
 
+  // Collect data chunks and set up completion promise BEFORE adding files
   archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+  const archiveComplete = new Promise<void>((resolve, reject) => {
+    archive.on('end', resolve);
+    archive.on('error', reject);
+  });
 
   // Download each artifact from R2 and add to ZIP
   for (const artifact of artifacts) {
@@ -200,6 +217,7 @@ export async function generateZip(
       // Use a clean filename
       const fileName = artifact.file_name || `${artifact.artifact_key}.bin`;
       archive.append(buffer, { name: fileName });
+      console.log(`[stageC] Added to ZIP: ${fileName} (${buffer.length} bytes)`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[stageC] Error adding ${artifact.artifact_key} to ZIP: ${msg}`);
@@ -207,12 +225,7 @@ export async function generateZip(
   }
 
   await archive.finalize();
-
-  // Wait for all data
-  await new Promise<void>((resolve, reject) => {
-    archive.on('end', resolve);
-    archive.on('error', reject);
-  });
+  await archiveComplete;
 
   const zipBuffer = Buffer.concat(chunks);
 
@@ -283,20 +296,34 @@ export async function setBundleStatus(
  * Called after detecting all artifacts are complete.
  */
 export async function runStageC(bundleId: string): Promise<void> {
-  console.log(`[stageC] Starting assembly for bundle ${bundleId}...`);
+  // Guard: don't re-run assembly if already completed
+  const bundle = await getOne<BundleRow>(
+    `SELECT * FROM bundle WHERE id = $1`,
+    [bundleId]
+  );
+  if (!bundle || bundle.status !== 'building') {
+    return; // Already assembled or doesn't exist
+  }
 
   const artifacts = await checkBundleComplete(bundleId);
   if (!artifacts) {
-    console.log(`[stageC] Bundle ${bundleId} not yet complete — skipping assembly`);
-    return;
+    return; // Not all jobs resolved yet
   }
+
+  console.log(`[stageC] Starting assembly for bundle ${bundleId}...`);
 
   // Step 1: Update manifest with real URLs
   await updateManifest(bundleId, artifacts);
 
-  // Step 2: Generate ZIP bundle
-  const { fileObjectId, byteSize } = await generateZip(bundleId, artifacts);
-  console.log(`[stageC] ZIP uploaded: file_object=${fileObjectId}, ${byteSize} bytes`);
+  // Step 2: Generate ZIP bundle (non-fatal — proceed even if ZIP fails)
+  try {
+    const { fileObjectId, byteSize } = await generateZip(bundleId, artifacts);
+    console.log(`[stageC] ZIP uploaded: file_object=${fileObjectId}, ${byteSize} bytes`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[stageC] ZIP generation failed for bundle ${bundleId}: ${msg}`);
+    // Still proceed to set status — artifacts are individually downloadable
+  }
 
   // Step 3: Set status to awaiting_review
   await setBundleStatus(bundleId, 'awaiting_review');
