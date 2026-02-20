@@ -9,6 +9,9 @@
     "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@neondatabase/serverless": "^0.10.0",
     "pg": "^8.13.0"
   },
   "devDependencies": {
