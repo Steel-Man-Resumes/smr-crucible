@@ -2,6 +2,12 @@ import { Worker, Job } from "bullmq";
 import { runPipeline, emitEvent } from "@crucible/core";
 import { careerIntakeV1, careerIntakeHandlers } from "./pipelines/careerIntakeV1";
 import { careerIntakeV2, careerIntakeV2Handlers } from "./pipelines/careerIntakeV2";
+import {
+  generateEmployersBattlePlan,
+  generateCoverLetter,
+  generateAlloyReport,
+} from "./generators";
+import type { ArtifactJobData } from "./generators";
 
 const PIPELINE_QUEUE = "crucible-pipeline";
 const ARTIFACT_QUEUE = "crucible-artifacts";
@@ -84,14 +90,28 @@ async function processPipelineJob(job: Job) {
   return result;
 }
 
+// Generator registry — maps job_key to generator function
+const GENERATORS: Record<string, (data: ArtifactJobData) => Promise<unknown>> = {
+  gen_employers: generateEmployersBattlePlan,
+  gen_coverletter: generateCoverLetter,
+  gen_alloy: generateAlloyReport,
+};
+
 async function processArtifactJob(job: Job) {
   const { runId, bundleId, orgId, projectId, artifactKey, params } = job.data;
-  console.log(`[artifact] Received job ${job.id}: artifact=${artifactKey} run=${runId}`);
+  const jobKey = job.name; // BullMQ job name = the job_key from runplan
+  console.log(`[artifact] Received job ${job.id}: key=${jobKey} artifact=${artifactKey} run=${runId}`);
 
-  // Stage B artifact generators will be implemented in Phase 3B.
-  // For now, log and skip.
-  console.log(`[artifact] Generator for "${artifactKey}" not yet implemented (Phase 3B). Skipping.`);
-  return { artifactKey, status: 'not_implemented' };
+  const generator = GENERATORS[jobKey];
+  if (!generator) {
+    console.log(`[artifact] No generator for "${jobKey}" — skipping (not yet implemented)`);
+    return { artifactKey, status: 'not_implemented' };
+  }
+
+  const data: ArtifactJobData = { runId, bundleId, orgId, projectId, artifactKey, params: params || {} };
+  const result = await generator(data);
+  console.log(`[artifact] Generator "${jobKey}" completed for artifact=${artifactKey}`);
+  return result;
 }
 
 async function main() {
