@@ -1,0 +1,10 @@
+{
+  "name": "smr-crucible",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {}
+}
