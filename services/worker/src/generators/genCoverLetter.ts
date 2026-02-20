@@ -35,11 +35,15 @@ function buildCoverLetterPrompt(
     return `${w.title} at ${w.company}: ${bullets}`;
   }).join('\n');
 
-  const barrierContext = signals.barriers_any
-    ? `The candidate has barriers (${Object.entries(signals.barriers).filter(([,v]) => v).map(([k]) => k.replace(/_/g, ' ')).join(', ')}). Address these strategically — don't over-explain, don't hide. Frame gaps or challenges as growth moments.`
-    : 'No significant barriers detected. Focus on strengths.';
+  const activeBarriers = Object.entries(signals.barriers)
+    .filter(([, v]) => v)
+    .map(([k]) => k.replace(/_/g, ' '));
 
-  return COVERLETTER_PROMPT_TEMPLATE
+  const barrierContext = signals.barriers_any
+    ? `BARRIER CONTEXT: The candidate has ${activeBarriers.join(', ')}. Address this naturally — one sentence maximum, positioned as growth and accountability. Do NOT over-explain, apologize, or dedicate a paragraph to it. If the barrier is a criminal record, something like "I've built a strong track record of reliability since then" is sufficient. If the barrier is an employment gap, a brief "I took time to [reason] and am now fully committed to [target]" works.`
+    : ''; // Omit entirely when no barriers — empty variable makes Claude think something is missing
+
+  let result = COVERLETTER_PROMPT_TEMPLATE
     .replace('{{CANDIDATE_NAME}}', profile.full_name)
     .replace('{{CANDIDATE_EMAIL}}', profile.email || '')
     .replace('{{CANDIDATE_PHONE}}', profile.phone || '')
@@ -59,6 +63,13 @@ function buildCoverLetterPrompt(
     .replace('{{TONE}}', tone)
     .replace('{{TONE_INSTRUCTIONS}}', TONE_INSTRUCTIONS[tone] || TONE_INSTRUCTIONS.professional)
     .replace('{{BARRIER_CONTEXT}}', barrierContext);
+
+  // Clean up empty lines from omitted barrier context
+  if (!signals.barriers_any) {
+    result = result.replace(/\n{3,}/g, '\n\n');
+  }
+
+  return result;
 }
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
