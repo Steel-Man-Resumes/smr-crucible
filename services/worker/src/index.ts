@@ -6,6 +6,15 @@ import {
   generateEmployersBattlePlan,
   generateCoverLetter,
   generateAlloyReport,
+  generateResume,
+  generateActionPlan,
+  generateInterviewPrep,
+  generateSalaryNegotiation,
+  generatePortfolio,
+  generateTracker,
+  generateQuickstart,
+  generateReadme,
+  runStageC,
 } from "./generators";
 import type { ArtifactJobData } from "./generators";
 
@@ -95,6 +104,14 @@ const GENERATORS: Record<string, (data: ArtifactJobData) => Promise<unknown>> = 
   gen_employers: generateEmployersBattlePlan,
   gen_coverletter: generateCoverLetter,
   gen_alloy: generateAlloyReport,
+  gen_resume: generateResume,
+  gen_actionplan: generateActionPlan,
+  gen_interview: generateInterviewPrep,
+  gen_salary: generateSalaryNegotiation,
+  gen_portfolio: generatePortfolio,
+  gen_tracker: generateTracker,
+  gen_quickstart: generateQuickstart,
+  gen_readme: generateReadme,
 };
 
 async function processArtifactJob(job: Job) {
@@ -147,8 +164,8 @@ async function main() {
     concurrency: 5,
   });
 
-  // Event handlers
-  for (const [name, worker] of Object.entries({ pipeline: pipelineWorker, legacy: legacyWorker, artifact: artifactWorker })) {
+  // Event handlers for pipeline/legacy workers
+  for (const [name, worker] of Object.entries({ pipeline: pipelineWorker, legacy: legacyWorker })) {
     worker.on("completed", (job) => {
       console.log(`[${name}] Job ${job?.id} completed`);
     });
@@ -156,6 +173,23 @@ async function main() {
       console.error(`[${name}] Job ${job?.id} failed:`, err.message);
     });
   }
+
+  // Artifact worker — trigger Stage C assembly after each completion
+  artifactWorker.on("completed", async (job) => {
+    console.log(`[artifact] Job ${job?.id} completed`);
+    const bundleId = job?.data?.bundleId;
+    if (bundleId) {
+      try {
+        await runStageC(bundleId);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[stageC] Assembly failed for bundle ${bundleId}: ${msg}`);
+      }
+    }
+  });
+  artifactWorker.on("failed", (job, err) => {
+    console.error(`[artifact] Job ${job?.id} failed:`, err.message);
+  });
 
   console.log(`Worker ready — listening on queues: ${PIPELINE_QUEUE}, ${LEGACY_QUEUE}, ${ARTIFACT_QUEUE}`);
 

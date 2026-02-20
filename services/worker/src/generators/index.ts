@@ -1,4 +1,13 @@
 export { generateEmployersBattlePlan, EMPLOYERS_PROMPT_TEMPLATE } from './genEmployers';
 export { generateCoverLetter, COVERLETTER_PROMPT_TEMPLATE } from './genCoverLetter';
 export { generateAlloyReport, ALLOY_PROMPT_TEMPLATE } from './genAlloy';
+export { generateResume } from './genResume';
+export { generateActionPlan } from './genActionPlan';
+export { generateInterviewPrep } from './genInterview';
+export { generateSalaryNegotiation } from './genSalary';
+export { generatePortfolio } from './genPortfolio';
+export { generateTracker } from './genTracker';
+export { generateQuickstart } from './genQuickstart';
+export { generateReadme } from './genReadme';
+export { runStageC, checkBundleComplete } from './stageC';
 export type { ArtifactJobData, GeneratorResult } from './types';
