@@ -29,13 +29,35 @@ AI-assisted career services platform. Replaces smr-forge and smr-refinery with u
 Neon Postgres. Migrations in packages/core/migrations/ as sequential numbered SQL files.
 Run migrations: npm run migrate -w packages/core
 
-Tables: org, user, membership, subject, project, file_object, document, event, consent_record, _migrations
+Tables: org, user, membership, subject, project, file_object, document, event, consent_record, workflow_run, run_step, artifact, _migrations
 
 ## Core Utilities (packages/core/src/)
 - db.ts: query(), getOne(), insert() — thin wrappers around @neondatabase/serverless
-- events.ts: emitEvent() — single function to log structured events
+- events.ts: emitEvent(), emitStepEvent(), emitAICallEvent() — structured event logging
 - storage.ts: uploadFile(), getSignedUrl(), createFileObject() — R2 via S3 SDK
 - types.ts: All TypeScript types, event type unions, CrucibleEvent interface
+- pipeline.ts: PipelineDef, StepContext, StepHandler types + runPipeline() generic runner
+- jsonParser.ts: extractAndParseJSON(), safeParseJSON() — robust AI response parser
+
+## Pipeline Framework
+Generic pipeline runner that executes step definitions in sequence:
+- PipelineDef: key, version, steps[] (each with key, critical, maxRetries, timeoutMs)
+- StepHandler: (ctx, input) => output. Each step receives previous step's output.
+- runPipeline(): Creates run_step records, handles retries, emits events, manages failure.
+- Critical steps abort pipeline on failure. Optional steps skip and continue.
+
+### career_intake_v1 Pipeline (services/worker/src/pipelines/careerIntakeV1.ts)
+Steps: extract → parse → analyze → generate
+1. extract: Pull text from uploaded docs (PDF via pdf-parse, DOCX via mammoth, OCR via tesseract.js)
+2. parse: GPT-4o-mini structured resume parsing with confidence scoring
+3. analyze: Parallel AI analysis — Claude (narrative + strategy) + GPT (skills/ATS)
+4. generate: Resume DOCX artifact via docx package, stored in R2, artifact record created
+
+### Worker Job Flow
+1. Web app POSTs to /api/projects/[id]/run → creates workflow_run (queued) → enqueues to Redis
+2. Worker picks up job → looks up pipeline by key → calls runPipeline()
+3. Pipeline runner iterates steps → emits events at each stage → stores artifacts
+4. UI polls GET /api/runs/[id] every 2s for progress → shows step cards + artifacts
 
 ## API Routes (apps/web)
 All routes require auth. Org resolved from authenticated user's membership.
@@ -44,8 +66,12 @@ All routes require auth. Org resolved from authenticated user's membership.
 - POST /api/projects — Create project (auto-creates subject)
 - GET /api/projects/[id] — Project detail with documents + recent events
 - POST /api/projects/[id]/upload — Multipart file upload to R2
+- POST /api/projects/[id]/run — Start pipeline run (enqueues to Redis)
 - GET /api/projects/[id]/documents — List documents with signed URLs
 - GET /api/projects/[id]/events — Activity timeline (last 50 events)
+- GET /api/runs/[id] — Run status + steps + recent events
+- GET /api/runs/[id]/artifacts — Artifacts with signed download URLs
+- POST /api/artifacts/[id]/review — Human review (approved/rejected)
 
 ## Auth Pattern
 - auth.ts at web root configures Auth.js with Resend provider
@@ -55,7 +81,7 @@ All routes require auth. Org resolved from authenticated user's membership.
 
 ## Dashboard Pages
 - /dashboard — Project list, new project creation, org onboarding
-- /dashboard/[id] — Project detail with file upload dropzone + activity timeline
+- /dashboard/[id] — Project detail with file upload, "Run Analysis" button, pipeline progress view, artifact review (approve/reject), activity timeline with human-readable pipeline events
 - /login — Email magic link form
 - /check-email — Post-login confirmation
 
@@ -77,10 +103,12 @@ All routes require auth. Org resolved from authenticated user's membership.
 - PERPLEXITY_API_KEY
 
 ## Commands
-- npm run dev -w apps/web        # Start web app dev server
-- npm run dev -w services/worker  # Start worker in dev mode
+- npm run dev -w apps/web          # Start web app dev server
+- npm run dev -w services/worker   # Start worker in dev mode
 - npm run migrate -w packages/core # Run DB migrations
-- npm run build -w apps/web       # Build for production
+- npm run build -w packages/core   # Build core package (must run before worker build)
+- npm run build -w apps/web        # Build web for production
+- npm run build -w services/worker # Build worker for production
 
 ## Git
 - Branch: main

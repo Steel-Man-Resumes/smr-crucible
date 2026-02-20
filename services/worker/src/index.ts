@@ -1,5 +1,6 @@
 import { Worker, Job } from "bullmq";
-import { Client } from "pg";
+import { runPipeline, emitEvent } from "@crucible/core";
+import { careerIntakeV1, careerIntakeHandlers } from "./pipelines/careerIntakeV1";
 
 const QUEUE_NAME = "crucible-jobs";
 
@@ -12,6 +13,11 @@ function parseRedisUrl(url: string) {
     maxRetriesPerRequest: null as null,
   };
 }
+
+// Pipeline registry
+const PIPELINES: Record<string, { def: any; handlers: Record<string, any> }> = {
+  career_intake_v1: { def: careerIntakeV1, handlers: careerIntakeHandlers },
+};
 
 async function main() {
   const redisUrl = process.env.REDIS_URL;
@@ -27,38 +33,76 @@ async function main() {
   }
 
   const connection = parseRedisUrl(redisUrl);
-  const db = new Client({ connectionString: databaseUrl });
-  await db.connect();
 
   console.log(`Worker starting on queue: ${QUEUE_NAME}`);
 
   const worker = new Worker(
     QUEUE_NAME,
     async (job: Job) => {
-      console.log(`Received job ${job.id}: ${job.name}`, job.data);
+      const { runId, orgId, projectId, userId, pipelineKey } = job.data;
 
-      // Write RUN_QUEUED event to event table
-      await db.query(
-        `INSERT INTO event (org_id, project_id, run_id, event_type, actor_type, actor_label, payload)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          job.data.org_id,
-          job.data.project_id || null,
-          job.data.run_id || job.id,
-          "RUN_QUEUED",
-          "system",
-          "worker",
-          JSON.stringify(job.data),
-        ]
+      console.log(`Received job ${job.id}: pipeline=${pipelineKey} run=${runId}`);
+
+      const pipeline = PIPELINES[pipelineKey];
+      if (!pipeline) {
+        console.error(`Unknown pipeline: ${pipelineKey}`);
+        await emitEvent({
+          org_id: orgId,
+          project_id: projectId,
+          run_id: runId,
+          step_id: null,
+          event_type: "RUN_FAILED",
+          severity: "error",
+          actor_type: "system",
+          actor_user_id: null,
+          actor_label: "worker",
+          data_classification: "internal",
+          retention_class: "standard",
+          correlation_id: null,
+          parent_event_id: null,
+          payload: { error: `Unknown pipeline: ${pipelineKey}` },
+          sensitive_ref: null,
+        });
+        throw new Error(`Unknown pipeline: ${pipelineKey}`);
+      }
+
+      // Emit RUN_STARTED
+      await emitEvent({
+        org_id: orgId,
+        project_id: projectId,
+        run_id: runId,
+        step_id: null,
+        event_type: "RUN_STARTED",
+        severity: "info",
+        actor_type: "system",
+        actor_user_id: null,
+        actor_label: "worker",
+        data_classification: "internal",
+        retention_class: "standard",
+        correlation_id: null,
+        parent_event_id: null,
+        payload: { pipeline_key: pipelineKey, job_id: job.id },
+        sensitive_ref: null,
+      });
+
+      // Run the pipeline
+      const result = await runPipeline(
+        pipeline.def,
+        pipeline.handlers,
+        runId,
+        orgId,
+        projectId,
+        { userId }
       );
 
-      console.log(`Event logged for job ${job.id}`);
+      console.log(`Pipeline ${pipelineKey} completed for run ${runId}`);
+      return result;
     },
-    { connection }
+    { connection, concurrency: 1 }
   );
 
   worker.on("completed", (job) => {
-    console.log(`Job ${job?.id} completed`);
+    console.log(`Job ${job?.id} completed successfully`);
   });
 
   worker.on("failed", (job, err) => {
@@ -71,7 +115,6 @@ async function main() {
   const shutdown = async () => {
     console.log("Shutting down worker...");
     await worker.close();
-    await db.end();
     process.exit(0);
   };
 
