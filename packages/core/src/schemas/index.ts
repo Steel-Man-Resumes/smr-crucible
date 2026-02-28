@@ -25,6 +25,18 @@ export type { RunPlanV1 as RunPlanV1Type } from './runplan';
 export { ArtifactManifestV1 } from './artifactManifest';
 export type { ArtifactManifestV1 as ArtifactManifestV1Type } from './artifactManifest';
 
+// Consumer domain schemas
+export {
+  ReadinessStage,
+  CriminalRecordData,
+  ConsumerProfileV1,
+  ConsentRecordV1,
+  ForgeSessionV1,
+  DecisionLogV1,
+  RefineryArtifactV1,
+  ForgeOutputV1,
+} from './consumer';
+
 import { z } from 'zod';
 import { ProfileV1 } from './profile';
 import { SignalsV1 } from './signals';

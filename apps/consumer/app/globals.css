@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm, non-institutional palette */
+  /* No red (triggers), no government blue */
+  --background: #fdf8f0;
+  --foreground: #2c2418;
+  --muted: #8c7e6e;
+  --border: #e0cebc;
+  --card: #f9f3ea;
+  --accent: #557553;
+
+  /* Semantic tokens */
+  --success: #557553;
+  --info: #3d89af;
+  --warning: #d67a2a;
+  --surface: #ffffff;
+  --surface-elevated: #f9f3ea;
+}
+
+@layer base {
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-size: 1.125rem; /* 18px minimum per design brief */
+    line-height: 1.75rem;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus styles for accessibility — WCAG 2.2 AA */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Minimum touch target enforcement */
+  button, a, input, select, textarea, [role="button"] {
+    min-height: 3rem; /* 48px minimum touch target */
+  }
+
+  /* Ensure readable text contrast */
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  /* One-question-per-screen flow page centering */
+  .flow-center {
+    @apply mx-auto max-w-flow px-4 py-8;
+  }
+}

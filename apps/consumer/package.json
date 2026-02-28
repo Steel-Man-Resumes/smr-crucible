@@ -1,0 +1,33 @@
+{
+  "name": "@crucible/consumer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@auth/pg-adapter": "^1.11.1",
+    "@crucible/core": "*",
+    "@neondatabase/serverless": "^0.10.0",
+    "ai": "^4.3.0",
+    "@ai-sdk/anthropic": "^1.2.0",
+    "framer-motion": "^11.0.0",
+    "next": "^14.2.0",
+    "next-auth": "5.0.0-beta.25",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}
