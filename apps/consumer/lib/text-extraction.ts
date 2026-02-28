@@ -124,7 +124,7 @@ async function extractFromImageBuffer(
   console.log(`Starting OCR (${(buffer.length / 1024).toFixed(1)} KB)...`);
 
   const { data } = await Tesseract.recognize(buffer, "eng", {
-    logger: (m) => {
+    logger: (m: any) => {
       if (m.status === "recognizing text") {
         console.log(`OCR: ${Math.round(m.progress * 100)}%`);
       }
