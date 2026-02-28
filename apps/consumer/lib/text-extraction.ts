@@ -113,26 +113,30 @@ async function extractFromDOCX(buffer: Buffer): Promise<string> {
 
 async function extractFromImageBuffer(
   buffer: Buffer,
-  mimeType: string
+  _mimeType: string
 ): Promise<string> {
   if (buffer.length === 0) throw new Error("Image file is empty");
   if (buffer.length > 50 * 1024 * 1024)
     throw new Error("Image too large (max 50MB)");
 
-  const Tesseract = await import("tesseract.js");
-
-  console.log(`Starting OCR (${(buffer.length / 1024).toFixed(1)} KB)...`);
-
-  const { data } = await Tesseract.recognize(buffer, "eng", {
-    logger: (m: any) => {
-      if (m.status === "recognizing text") {
-        console.log(`OCR: ${Math.round(m.progress * 100)}%`);
-      }
-    },
-  });
-
-  if (!data.text?.trim()) throw new Error("No text detected in image");
-
-  console.log(`OCR: ${data.text.length} chars`);
-  return data.text;
+  // tesseract.js is ~35MB and not installed in the consumer app.
+  // OCR is a fallback for scanned PDFs/images — rare for this use case.
+  try {
+    const Tesseract = await import("tesseract.js");
+    console.log(`Starting OCR (${(buffer.length / 1024).toFixed(1)} KB)...`);
+    const { data } = await Tesseract.recognize(buffer, "eng", {
+      logger: (m: any) => {
+        if (m.status === "recognizing text") {
+          console.log(`OCR: ${Math.round(m.progress * 100)}%`);
+        }
+      },
+    });
+    if (!data.text?.trim()) throw new Error("No text detected in image");
+    console.log(`OCR: ${data.text.length} chars`);
+    return data.text;
+  } catch {
+    throw new Error(
+      "This file looks like a scanned image. Please upload a text-based PDF or Word document instead."
+    );
+  }
 }
