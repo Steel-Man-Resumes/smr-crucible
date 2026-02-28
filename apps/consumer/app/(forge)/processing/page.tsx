@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { GhostGuide } from "@crucible/consumer-ui";
 
 const PROCESSING_STEPS = [
   "Reading your experience...",
@@ -135,6 +136,10 @@ export default function ProcessingPage() {
   return (
     <div className="flow-center min-h-screen flex flex-col items-center justify-center">
       <div className="w-full max-w-flow text-center">
+        <GhostGuide
+          message="I'm putting it all together. This takes a minute because I'm being thorough."
+          pageId="processing"
+        />
         {/* Processing animation */}
         <div className="mb-8">
           <div className="w-16 h-16 mx-auto mb-6 relative">

@@ -11,10 +11,10 @@
  * Each barrier connects to real resources/orgs.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage } from "@crucible/consumer-ui";
+import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 
 const CHALLENGE_OPTIONS = [
   { id: "criminal_record", label: "Criminal record" },
@@ -40,6 +40,13 @@ export default function StoryPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
   const [selected, setSelected] = useState<string[]>(session.challenges || []);
+
+  // Track page visit
+  useEffect(() => {
+    updateSession({
+      pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "story"])),
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [crimRecord, setCrimRecord] = useState<CriminalRecordData>(
     session.criminalRecord || {
       type: "",
@@ -88,6 +95,10 @@ export default function StoryPage() {
         </p>
       }
     >
+      <GhostGuide
+        message="This part takes courage. You only share what you want to. I'm here if you need to talk through it."
+        pageId="story"
+      />
       {/* Challenge selection */}
       <div className="space-y-2 mb-6">
         {CHALLENGE_OPTIONS.map((opt) => {

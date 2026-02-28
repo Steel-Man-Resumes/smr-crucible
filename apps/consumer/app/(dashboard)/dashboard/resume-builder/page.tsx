@@ -496,6 +496,6 @@ function formatResumeText(resume: ResumeData): string {
     lines.push("EXPERIENCE");
     bullets.forEach((b) => lines.push(`• ${b.text}`));
   }
-  lines.push("", "Built with The Refinery — secondmilereentry.com");
+  lines.push("", "Built with The Refinery — steelmanresumes.com");
   return lines.join("\n");
 }

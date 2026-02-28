@@ -41,6 +41,10 @@ export interface ForgeSessionData {
   // Page 6-7: Output
   forgeOutput?: Record<string, unknown>;
 
+  // Audience & engagement tracking
+  audience?: "client" | "partner" | "observer";
+  pagesVisited?: string[];
+
   // Meta
   startedAt?: string;
   lastPageVisited?: string;

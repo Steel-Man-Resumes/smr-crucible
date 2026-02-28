@@ -8,10 +8,10 @@
  * Adapts based on location, barriers, goals.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage, CardSelect } from "@crucible/consumer-ui";
+import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 
 const SCHEDULE_OPTIONS = [
   { id: "full-time", label: "Full-time", description: "35+ hours per week" },
@@ -42,6 +42,13 @@ export default function PreferencesPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
 
+  // Track page visit
+  useEffect(() => {
+    updateSession({
+      pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "preferences"])),
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const prefs = session.preferences || {};
   const [schedule, setSchedule] = useState(prefs.schedule || "");
   const [environment, setEnvironment] = useState(prefs.environment || "");
@@ -70,6 +77,10 @@ export default function PreferencesPage() {
       showBack
       onBack={() => router.push("/story")}
     >
+      <GhostGuide
+        message="Almost done with this part. These details help me find opportunities that actually fit your life."
+        pageId="preferences"
+      />
       <div className="space-y-8">
         {/* Schedule */}
         <div>

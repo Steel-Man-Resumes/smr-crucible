@@ -39,7 +39,7 @@ export default function LandingPage() {
 
         <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-20 text-center">
           <p className="text-sage-600 font-medium mb-4 tracking-wide">
-            SECOND MILE REENTRY
+            STEEL MAN RESUMES
           </p>
 
           <h1 className="text-3xl sm:text-[2.5rem] font-bold text-foreground leading-tight mb-6">
@@ -55,7 +55,7 @@ export default function LandingPage() {
           </p>
 
           <Link
-            href="/welcome"
+            href="/intro"
             className="inline-flex items-center justify-center px-10 py-4 bg-sage-600 text-white rounded-xl text-lg font-semibold hover:bg-sage-700 transition-colors min-h-touch shadow-lg shadow-sage-600/20"
           >
             Get Started — It&apos;s Free
@@ -210,7 +210,7 @@ export default function LandingPage() {
           at any time. No exceptions.
         </p>
         <Link
-          href="/welcome"
+          href="/intro"
           className="inline-flex items-center justify-center px-10 py-4 bg-sage-600 text-white rounded-xl text-lg font-semibold hover:bg-sage-700 transition-colors min-h-touch shadow-lg shadow-sage-600/20"
         >
           Start The Forge
@@ -223,7 +223,7 @@ export default function LandingPage() {
           <p className="mb-2">
             Built by{" "}
             <span className="font-medium text-foreground">
-              Second Mile Reentry
+              Steel Man Resumes
             </span>{" "}
             — a project of The Midnight Garden
           </p>

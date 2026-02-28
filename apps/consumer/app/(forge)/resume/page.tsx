@@ -10,10 +10,10 @@
  * D: Guided AI builder — hidden fallback, scaffolded, never auto-generates
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage } from "@crucible/consumer-ui";
+import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | null;
 
@@ -32,8 +32,15 @@ const ACCEPTED_TYPES = [
 
 export default function ResumeIntakePage() {
   const router = useRouter();
-  const { updateSession } = useForgeSession();
+  const { session, updateSession } = useForgeSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Track page visit
+  useEffect(() => {
+    updateSession({
+      pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "resume"])),
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activePath, setActivePath] = useState<IntakePath>(null);
   const [uploading, setUploading] = useState(false);
@@ -151,6 +158,10 @@ export default function ResumeIntakePage() {
           </button>
         }
       >
+        <GhostGuide
+          message="Don't worry if your resume isn't perfect. I can work with anything — even just a list of jobs you've had."
+          pageId="resume"
+        />
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setActivePath("upload")}

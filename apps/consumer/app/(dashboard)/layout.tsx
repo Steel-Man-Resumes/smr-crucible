@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
+import { ContactTroyButton } from "@/components/ContactTroyButton";
 
 /**
  * Dashboard Layout — Authenticated area
@@ -55,7 +56,7 @@ export default function DashboardLayout({
               href="/dashboard"
               className="font-bold text-lg text-foreground"
             >
-              Second Mile
+              Steel Man
             </Link>
             <div className="flex items-center gap-4">
               <Link
@@ -91,6 +92,9 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">{children}</main>
+
+      {/* Contact Troy — always unlocked for authenticated users */}
+      <ContactTroyButton isAuthenticated />
 
       {/* AI Assistant — available on every dashboard page */}
       <AssistantDrawer>

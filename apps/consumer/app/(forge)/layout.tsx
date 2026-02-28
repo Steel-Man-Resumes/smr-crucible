@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ForgeProvider, useForgeSession } from "@/lib/forge-context";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
+import { ContactTroyButton } from "@/components/ContactTroyButton";
 
 function ForgeAssistant() {
   const { session } = useForgeSession();
@@ -18,10 +19,23 @@ function ForgeAssistant() {
             ? (session.forgeOutput as any).skills?.map((s: any) => s.name)
             : undefined,
           barriers: session.challenges,
+          audience: session.audience,
+          mode: "chat",
         }}
         sessionId={session.startedAt}
       />
     </AssistantDrawer>
+  );
+}
+
+function ForgeContactTroy() {
+  const { session } = useForgeSession();
+
+  return (
+    <ContactTroyButton
+      pagesVisited={session.pagesVisited?.length || 0}
+      hasForgeOutput={!!session.forgeOutput}
+    />
   );
 }
 
@@ -39,6 +53,9 @@ export default function ForgeLayout({ children }: { children: ReactNode }) {
         </a>
       </div>
       <div className="min-h-screen">{children}</div>
+
+      {/* Contact Troy — engagement-gated */}
+      <ForgeContactTroy />
 
       {/* AI Assistant — available on every Forge page */}
       <ForgeAssistant />

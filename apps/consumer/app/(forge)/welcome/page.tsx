@@ -10,10 +10,10 @@
  * AI assistant available but not forced.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage, CardSelect } from "@crucible/consumer-ui";
+import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 
 type ReadinessStage =
   | "precontemplation"
@@ -56,8 +56,16 @@ const STAGE_MAP: Record<string, ReadinessStage> = {
 
 export default function WelcomePage() {
   const router = useRouter();
-  const { updateSession } = useForgeSession();
+  const { session, updateSession } = useForgeSession();
   const [selected, setSelected] = useState<string>("");
+
+  // Track page visit
+  useEffect(() => {
+    updateSession({
+      lastPageVisited: "welcome",
+      pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "welcome"])),
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleContinue() {
     if (!selected) return;
@@ -80,13 +88,17 @@ export default function WelcomePage() {
       actionDisabled={!selected}
       onAction={handleContinue}
       showBack
-      onBack={() => router.push("/")}
+      onBack={() => router.push("/intro")}
       footer={
         <p>
           Everything here is private. You can change your answer at any time.
         </p>
       }
     >
+      <GhostGuide
+        message="There's no wrong answer here. I just want to know where you're starting from so I can help the right way."
+        pageId="welcome"
+      />
       <CardSelect
         options={READINESS_OPTIONS}
         selected={selected}

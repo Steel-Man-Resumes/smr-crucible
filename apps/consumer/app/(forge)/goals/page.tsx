@@ -10,10 +10,10 @@
  * No blue-collar assumptions.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage, CardSelect } from "@crucible/consumer-ui";
+import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 
 const GOAL_OPTIONS = [
   {
@@ -44,6 +44,13 @@ export default function GoalsPage() {
   const [selected, setSelected] = useState<string[]>(session.goals || []);
   const [narrative, setNarrative] = useState(session.goalNarrative || "");
   const [showNarrative, setShowNarrative] = useState(false);
+
+  // Track page visit
+  useEffect(() => {
+    updateSession({
+      pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "goals"])),
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(id: string) {
     setSelected((prev) =>
@@ -76,6 +83,10 @@ export default function GoalsPage() {
         </p>
       }
     >
+      <GhostGuide
+        message="Pick what feels true to you. This isn't a test — it helps me understand what matters to you."
+        pageId="goals"
+      />
       <CardSelect
         options={GOAL_OPTIONS}
         selected={selected}

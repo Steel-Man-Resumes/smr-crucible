@@ -375,7 +375,7 @@ export default function SettingsPage() {
         <h2 className="text-lg font-bold text-foreground mb-4">About</h2>
         <div className="bg-white rounded-2xl p-5 border border-border">
           <h3 className="font-semibold text-foreground mb-2">
-            Second Mile Reentry
+            Steel Man Resumes
           </h3>
           <p className="text-sm text-muted leading-relaxed mb-3">
             Built by people who believe your past doesn&apos;t define your

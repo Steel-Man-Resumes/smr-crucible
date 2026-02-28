@@ -66,7 +66,11 @@ export function AssistantChat({ context, sessionId }: AssistantChatProps) {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 text-foreground px-4 py-3 rounded-2xl rounded-bl-sm">
+            <div
+              className="bg-gray-100 text-foreground px-4 py-3 rounded-2xl rounded-bl-sm"
+              role="status"
+              aria-label="Assistant is thinking"
+            >
               <div className="flex gap-1">
                 <span className="w-2 h-2 bg-muted rounded-full animate-bounce" />
                 <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.1s]" />
