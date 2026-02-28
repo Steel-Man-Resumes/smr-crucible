@@ -10,7 +10,7 @@ const isDev = process.env.NODE_ENV === "development";
 
 const providers: any[] = [
   Resend({
-    from: "Second Mile <noreply@secondmilereentry.com>",
+    from: process.env.AUTH_EMAIL_FROM || "onboarding@resend.dev",
   }),
 ];
 
