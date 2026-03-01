@@ -12,6 +12,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { getOpusMessage } from "@/lib/opus-messages";
+import { GhostGuide } from "@crucible/consumer-ui";
 
 type Step = "input" | "processing" | "result";
 
@@ -43,7 +45,9 @@ const ACCEPTED_TYPES = [
 
 export default function RushPage() {
   const router = useRouter();
-  const { updateSession } = useForgeSession();
+  const { session, updateSession } = useForgeSession();
+  const audience = session.audience || "client";
+  const isDemo = session.isDemo === true;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -195,6 +199,11 @@ export default function RushPage() {
               .
             </p>
           </div>
+
+          <GhostGuide
+            message={getOpusMessage("rush", audience, isDemo)}
+            pageId="rush"
+          />
 
           {error && (
             <div className="bg-red-50 rounded-xl px-4 py-3 mb-4 border border-red-200">
@@ -401,7 +410,14 @@ export default function RushPage() {
                 {copied ? "Copied!" : "Copy to Clipboard"}
               </button>
               <button
-                onClick={() => router.push("/intro")}
+                onClick={() => {
+                  updateSession({
+                    resumeText,
+                    resumeMethod: "rush",
+                    pagesVisited: ["rush"],
+                  });
+                  router.push("/welcome");
+                }}
                 className="flex-1 px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
               >
                 Go Deeper

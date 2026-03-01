@@ -18,7 +18,7 @@ export interface ForgeSessionData {
   // Page 2: Resume
   resumeText?: string;
   resumeFileName?: string;
-  resumeMethod?: "upload" | "import" | "external" | "guided";
+  resumeMethod?: "upload" | "import" | "external" | "guided" | "rush";
 
   // Page 3: Goals
   goals?: string[];
