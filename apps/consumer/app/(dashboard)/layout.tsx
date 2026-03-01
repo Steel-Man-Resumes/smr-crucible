@@ -32,20 +32,45 @@ export default function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  // Post-auth access code redemption
+  // Post-auth: redeem access codes + sync Forge data to DB
   useEffect(() => {
+    // Access code redemption
     const pendingCode = localStorage.getItem("pending_access_code");
-    if (!pendingCode) return;
+    if (pendingCode) {
+      localStorage.removeItem("pending_access_code");
+      fetch("/api/access-code/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pendingCode }),
+      }).catch(() => {});
+    }
 
-    localStorage.removeItem("pending_access_code");
+    // Sync Forge localStorage data to DB (one-time migration)
+    try {
+      const stored = localStorage.getItem("forge_session");
+      if (!stored) return;
+      const forgeData = JSON.parse(stored);
+      if (!forgeData.forgeOutput && !forgeData.resumeText) return;
 
-    fetch("/api/access-code/redeem", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: pendingCode }),
-    }).catch(() => {
-      // Silent — code redemption is best-effort on first login
-    });
+      // Check if already synced (flag prevents duplicate writes)
+      if (forgeData._synced) return;
+
+      fetch("/api/forge/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: stored,
+      })
+        .then((res) => {
+          if (res.ok) {
+            // Mark as synced so we don't re-send
+            forgeData._synced = true;
+            localStorage.setItem("forge_session", JSON.stringify(forgeData));
+          }
+        })
+        .catch(() => {});
+    } catch {
+      // Silent — sync is best-effort
+    }
   }, []);
 
   return (

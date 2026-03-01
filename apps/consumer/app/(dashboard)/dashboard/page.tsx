@@ -77,19 +77,41 @@ const REFINERY_TOOLS = [
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>({});
 
-  // Load Forge output from localStorage (until backend persistence in Phase 4)
+  // Load Forge output — try DB first, fall back to localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.forgeOutput) {
-          setData(session.forgeOutput);
+    let cancelled = false;
+
+    async function loadData() {
+      // Try server-side first (persisted data)
+      try {
+        const res = await fetch("/api/forge/load");
+        if (res.ok) {
+          const { data: profile } = await res.json();
+          if (!cancelled && profile?.forgeOutput) {
+            setData(profile.forgeOutput);
+            return;
+          }
         }
+      } catch {
+        // Fall through to localStorage
       }
-    } catch {
-      // Silent — no data available yet
+
+      // Fallback: localStorage (pre-sync or same-device)
+      try {
+        const stored = localStorage.getItem("forge_session");
+        if (stored) {
+          const session = JSON.parse(stored);
+          if (!cancelled && session.forgeOutput) {
+            setData(session.forgeOutput);
+          }
+        }
+      } catch {
+        // Silent — no data available yet
+      }
     }
+
+    loadData();
+    return () => { cancelled = true; };
   }, []);
 
   const hasForgeData = !!(data.narrative || data.skills?.length);

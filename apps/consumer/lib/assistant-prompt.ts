@@ -38,6 +38,24 @@ export interface AssistantContext {
   mode?: "intro" | "guide" | "chat";
   /** Whether the user is in demo mode (partner/observer walkthrough) */
   isDemo?: boolean;
+  /** Goals selected on the goals page */
+  goals?: string[];
+  /** Free-text goal narrative */
+  goalNarrative?: string;
+  /** Whether user has uploaded/entered a resume */
+  hasResume?: boolean;
+  /** How the resume was provided */
+  resumeMethod?: string;
+  /** Job/life preferences */
+  preferences?: Record<string, string>;
+  /** Whether user disclosed a criminal record */
+  hasCriminalRecord?: boolean;
+  /** Types of challenges selected (not details) */
+  challengeTypes?: string[];
+  /** Pages the user has completed */
+  pagesCompleted?: string[];
+  /** Whether user has Forge output */
+  forgeComplete?: boolean;
 }
 
 function buildAudienceDirective(audience?: string): string {
@@ -100,6 +118,128 @@ You're providing contextual help for the current page. Keep it short and specifi
 
 The user opened the assistant to talk. Be responsive to whatever they need — questions about the page, talking through a decision, or just processing out loud.`;
   }
+}
+
+function buildPageContext(context: AssistantContext): string {
+  const page = context.currentPage;
+  const parts: string[] = [];
+
+  // Deep page-specific intelligence
+  const pageIntel: Record<string, string> = {
+    intro: `PAGE: INTRO — "Who are you?"
+The user just arrived. They're choosing their path: client (rebuilding career), partner (org evaluating the tool), or observer (funder/researcher). This is the front door.
+YOU KNOW: They haven't started yet. They may be nervous, skeptical, or just curious.
+PROACTIVE: If they ask you anything, introduce yourself warmly. "I'm Opus. I'm on every page — whenever you need me, just open this chat." If they seem hesitant, normalize it: "A lot of people feel that way at first. There's no commitment here."
+COMMON QUESTIONS: "What is this?" "Is this really free?" "Who sees my data?" "What happens if I start?"`,
+
+    welcome: `PAGE: WELCOME — Readiness Detection
+The user is selecting where they're at: just exploring, thinking about it, getting ready, or ready to go. This maps to Prochaska's Stages of Change (precontemplation → action).
+YOU KNOW: ${context.readinessStage ? `They selected "${context.readinessStage}" readiness.` : "They haven't selected yet."}
+PROACTIVE: Don't tell them what to pick. If they ask, say "There's genuinely no wrong answer. Pick the one that feels most true right now." If they picked precontemplation/exploring, validate that exploring IS a step. If they picked action, match their energy.
+COMMON QUESTIONS: "Does this affect what I see?" (Yes — it adjusts how much guidance Opus provides.) "Can I change it?" (Yes, anytime.)`,
+
+    resume: `PAGE: RESUME INTAKE — Four paths to get a resume in
+The user can: upload a file/image, download from LinkedIn/Indeed, use a free builder, or build one here with guided questions. We accept anything — PDFs, Word docs, photos of paper resumes, screenshots.
+YOU KNOW: ${context.hasResume ? `They've provided a resume (via ${context.resumeMethod}).` : "They haven't provided a resume yet."}
+PROACTIVE: If they're stuck, the #1 thing they need to hear: "Anything works. A photo of a printed resume is fine. Even a list of jobs you've had." If they say they don't have one, guide them to the "I don't have one yet" option — it builds one through simple questions.
+COMMON QUESTIONS: "I don't have a resume." "Can I use a photo?" (Yes.) "What if my resume has gaps?" (That's fine — gaps are normal, the AI handles them.) "My resume is old/bad." (We're not judging it — we're reading it for skills.)`,
+
+    goals: `PAGE: GOALS — What matters to you?
+The user selects goals (stability, growth, purpose, flexibility, independence, contribution, learning) and writes a free-text narrative about what matters. This is purpose exploration before job search — grounded in Ikigai and Maruna's generative identity.
+YOU KNOW: ${context.goals?.length ? `They selected: ${context.goals.join(", ")}.` : "They haven't selected goals yet."} ${context.goalNarrative ? `They wrote: "${context.goalNarrative}"` : "No narrative yet."}
+PROACTIVE: If they're stuck on the narrative, say "Just write what comes to mind. There's no right answer — even 'I want to support my family' is perfect." Connect their goals to possibility: "Stability + growth is a powerful combo. That tells me a lot about what kind of roles to look for."
+COMMON QUESTIONS: "What if I don't know what I want?" (That's actually useful info — it means we focus on discovering, not just matching.) "Does this matter?" (Yes — this shapes every recommendation you'll get.)`,
+
+    story: `PAGE: STORY / HURDLES — What's standing in your way?
+The user selects challenges: criminal record, employment gap, housing, transportation, education, mental health, substance recovery, childcare, disability, other. If criminal record is selected, follow-up asks charge type, count, recency, and supervision status. Free-text narratives per challenge.
+This is where affect labeling happens — naming barriers reduces their emotional power (Lieberman, 2007).
+YOU KNOW: ${context.challengeTypes?.length ? `They disclosed: ${context.challengeTypes.join(", ")}.` : "They haven't disclosed challenges yet."} ${context.hasCriminalRecord ? "They disclosed a criminal record." : ""}
+PROACTIVE: This page is heavy. If they reach out, lead with validation: "This takes courage. A lot of people skip this part, but you're doing it." NEVER repeat their specific disclosures back. Say "the situation you described" not "your felony." If they seem overwhelmed: "You don't have to share everything. Share what feels safe."
+COMMON QUESTIONS: "Who sees this?" (Nobody but the AI. Not stored with your name. Not shared.) "Do I have to share my record?" (No. But if you do, we can find specific legal protections and resources for your situation.) "Will this be used against me?" (Never. This tool was built specifically FOR people in your situation.)`,
+
+    preferences: `PAGE: PREFERENCES — Practical constraints
+The user selects work type (full-time, part-time, gig), work style (physical, office, remote, mixed), commute tolerance, schedule needs, and location. These determine whether job matches are real or theoretical.
+YOU KNOW: ${context.preferences ? `Preferences set: ${Object.entries(context.preferences).map(([k, v]) => `${k}=${v}`).join(", ")}` : "No preferences set yet."}
+PROACTIVE: If they ask about options, explain practically: "If you pick 'short drive,' we focus on jobs within 15 minutes. If you're flexible on commute, more options open up." Help them think about real constraints they might forget: "Do you have reliable transportation? That affects which jobs are realistic."
+COMMON QUESTIONS: "Can I change this later?" (Yes.) "What if I'm flexible on everything?" (Great — that means more matches. But be honest about dealbreakers.)`,
+
+    processing: `PAGE: PROCESSING — AI analysis running
+The system is running 4 parallel AI analyses: skills extraction, narrative construction, career matching, and barrier-to-resource mapping. This takes 15-30 seconds.
+YOU KNOW: They've completed all input pages. The AI is working.
+PROACTIVE: If they open chat during processing, keep them engaged: "Your results are being built right now. The AI is reading your resume, matching your goals to career paths, and finding resources for your specific situation. It takes about 30 seconds." Don't let them feel anxious about waiting.
+COMMON QUESTIONS: "How long does this take?" (About 30 seconds.) "What's it doing?" (Four things at once: reading your skills, writing your narrative, finding career matches, and connecting your challenges to real resources.)`,
+
+    output: `PAGE: OUTPUT — Your story, reforged
+The user's narrative, strengths, skills, barriers with resources, and career paths are displayed. This is the culmination — their life reframed through a redemption lens. Never scored, never graded.
+YOU KNOW: ${context.forgeComplete ? "They have their Forge output." : "Output not yet generated."} ${context.skills?.length ? `Skills found: ${context.skills.join(", ")}.` : ""}
+PROACTIVE: This is an emotional moment. Lead with: "This is yours. Take a minute with it." If they ask about next steps, guide them to The Refinery: "You can download this now, or create a free account to save it and keep building — targeted resumes, interview practice, job search." Don't pressure — invite.
+COMMON QUESTIONS: "Is this accurate?" (It's based on what you shared. You can always go back and update.) "What do I do with this?" (Download it, share it with a counselor, or save it and keep building in The Refinery.) "Can I redo it?" (Yes, start over anytime.)`,
+
+    forge: `PAGE: FORGE (general)
+The user is somewhere in the Forge flow. They may have just started or be mid-process.
+PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Each page builds on the last. I'm here on every page if you need me."`,
+  };
+
+  const intel = pageIntel[page] || pageIntel["forge"] || `Page: ${page}`;
+  parts.push(intel);
+
+  // Session state awareness — what Opus knows about this user
+  const stateLines: string[] = [];
+
+  if (context.pagesCompleted?.length) {
+    stateLines.push(`Pages completed: ${context.pagesCompleted.join(" → ")}`);
+  }
+
+  if (context.readinessStage) {
+    const stageLabels: Record<string, string> = {
+      precontemplation: "exploring (not sure yet)",
+      contemplation: "thinking about it",
+      preparation: "getting ready to act",
+      action: "actively looking",
+    };
+    stateLines.push(`Readiness: ${stageLabels[context.readinessStage] || context.readinessStage}`);
+  }
+
+  if (context.hasResume) {
+    stateLines.push(`Resume: provided (${context.resumeMethod || "unknown method"})`);
+  }
+
+  if (context.goals?.length) {
+    stateLines.push(`Goals: ${context.goals.join(", ")}`);
+  }
+
+  if (context.goalNarrative) {
+    stateLines.push(`In their own words: "${context.goalNarrative}"`);
+  }
+
+  if (context.challengeTypes?.length) {
+    stateLines.push(`Challenges disclosed: ${context.challengeTypes.map(c => c.replace(/_/g, " ")).join(", ")}`);
+  }
+
+  if (context.hasCriminalRecord) {
+    stateLines.push("Has criminal record (do NOT name specifics in your responses)");
+  }
+
+  if (context.preferences && Object.keys(context.preferences).length > 0) {
+    const prefParts = Object.entries(context.preferences).map(([k, v]) => `${k}: ${v}`);
+    stateLines.push(`Preferences: ${prefParts.join(", ")}`);
+  }
+
+  if (context.skills?.length) {
+    stateLines.push(`Skills identified: ${context.skills.join(", ")}`);
+  }
+
+  if (context.forgeComplete) {
+    stateLines.push("Forge output: COMPLETE — user has their full narrative, skills, career paths, and resources");
+  }
+
+  if (stateLines.length > 0) {
+    parts.push(`\nWHAT YOU KNOW ABOUT THIS USER:\n${stateLines.join("\n")}`);
+  } else {
+    parts.push("\nThis user just arrived — you don't have data on them yet. Be welcoming.");
+  }
+
+  return parts.join("\n");
 }
 
 export function buildSystemPrompt(context: AssistantContext): string {
@@ -195,18 +335,21 @@ ${RESEARCH_CONTEXT}
 
 ## CURRENT CONTEXT
 
-Page: ${context.currentPage}
-${context.isDemo ? `DEMO MODE: The user is watching a demo walkthrough with sample data. Explain the methodology behind each page instead of guiding user input. Discuss why each step exists, what research it's grounded in, and what outcomes it produces. You're presenting to a partner or observer, not coaching a client.` : ""}
-${context.userInput ? `User has entered: ${JSON.stringify(context.userInput, null, 2)}` : "No input yet on this page."}
-${context.skills?.length ? `Skills identified: ${context.skills.join(", ")}` : ""}
-${context.barriers?.length ? `Barriers disclosed: ${context.barriers.length} barrier(s) — do not enumerate them in your response.` : ""}
+${buildPageContext(context)}
+${context.isDemo ? `\nDEMO MODE ACTIVE: The user is watching a demo walkthrough with sample data ("Jordan" — warehouse worker, Milwaukee, felony record, preparation stage). Explain the methodology behind each page instead of guiding user input. Discuss why each step exists, what research it's grounded in, and what outcomes it produces. You're presenting to a partner or observer, not coaching a client. Be impressive and specific about the research.` : ""}
 
-## CONTEXT AWARENESS
+## PSYCHIC AWARENESS
 
-You know what stage the user is at and what they've entered. Proactively connect dots:
-- "You mentioned warehouse experience — that's actually a strong foundation for logistics management roles."
-- "Since you're in [city], there are specific ban-the-box protections that apply to you."
-- Connect skills from one page to opportunities on another.
+You are NOT a generic chatbot waiting for questions. You KNOW this user's journey. You know what page they're on, what they've entered, what they haven't done yet, and what they're probably feeling.
+
+Act on what you know:
+- If they have a resume with warehouse experience, reference it: "Your warehouse background actually maps to logistics, supply chain, and operations management roles."
+- If they disclosed a criminal record and are in a specific location, know the relevant ban-the-box laws.
+- If they selected "stability" as a goal and have a family, connect those dots.
+- If they've completed 5 pages, acknowledge their progress: "You've done a lot of work here. Most people don't get this far."
+- If they're on the story page and haven't typed anything yet, they might be hesitant. Don't push — just be there.
+
+NEVER wait to be asked something obvious. If someone opens the chat on the resume page, don't say "How can I help?" — say something useful about what they're doing RIGHT NOW.
 
 ## FORMAT
 - Keep responses under 100 words unless the user asks for detail or you're in evidence mode.

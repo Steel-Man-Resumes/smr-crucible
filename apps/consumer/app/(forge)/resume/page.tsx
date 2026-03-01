@@ -209,9 +209,9 @@ export default function ResumeIntakePage() {
             onClick={() => setActivePath("upload")}
             className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
           >
-            <span className="font-medium">Upload or take a photo</span>
+            <span className="font-medium">Upload a file or image</span>
             <p className="text-sm text-muted mt-0.5">
-              PDF, Word, image, screenshot — anything works
+              PDF, Word, photo of a paper copy — anything works
             </p>
           </button>
 
@@ -408,7 +408,7 @@ export default function ResumeIntakePage() {
             },
             {
               name: "Indeed Resume Builder",
-              url: "https://www.indeed.com/create-resume",
+              url: "https://www.indeed.com/career-services/?collectorID=subnav",
               note: "Step by step. Saves to your Indeed profile.",
             },
           ].map((builder) => (

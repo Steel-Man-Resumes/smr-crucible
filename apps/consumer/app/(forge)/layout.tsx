@@ -22,6 +22,15 @@ function ForgeAssistant() {
           audience: session.audience,
           mode: "chat",
           isDemo: session.isDemo,
+          goals: session.goals,
+          goalNarrative: session.goalNarrative,
+          hasResume: !!session.resumeText,
+          resumeMethod: session.resumeMethod,
+          preferences: session.preferences,
+          hasCriminalRecord: !!session.criminalRecord,
+          challengeTypes: session.challenges,
+          pagesCompleted: session.pagesVisited,
+          forgeComplete: !!session.forgeOutput,
         }}
         sessionId={session.startedAt}
       />
