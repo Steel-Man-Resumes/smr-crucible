@@ -9,8 +9,9 @@
  * No auth required. IP-rate-limited via /api/rush-resume.
  */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useForgeSession } from "@/lib/forge-context";
 
 type Step = "input" | "processing" | "result";
 
@@ -42,7 +43,12 @@ const ACCEPTED_TYPES = [
 
 export default function RushPage() {
   const router = useRouter();
+  const { updateSession } = useForgeSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    updateSession({ lastPageVisited: "rush" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [step, setStep] = useState<Step>("input");
   const [resumeText, setResumeText] = useState("");

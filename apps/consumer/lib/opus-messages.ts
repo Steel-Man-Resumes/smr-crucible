@@ -9,6 +9,8 @@
 type Audience = "client" | "partner" | "observer";
 
 const CLIENT_MESSAGES: Record<string, string> = {
+  rush:
+    "Paste your resume and tell me the job. I'll rewrite it fast — no fluff, just your real experience sharpened for that specific role.",
   welcome:
     "There's no wrong answer here. I just want to know where you're starting from so I can help the right way.",
   resume:
@@ -26,6 +28,8 @@ const CLIENT_MESSAGES: Record<string, string> = {
 };
 
 const DEMO_MESSAGES: Record<string, string> = {
+  rush:
+    "Rush Mode — single-page fast track. Paste + target job → rewritten resume in under 60 seconds. Same crucible rules: only real facts, never fabricated. Quick start before the full Forge.",
   welcome:
     "This page detects readiness using Prochaska's Stages of Change — no clinical assessment needed. Clients self-select without realizing they're being screened.",
   resume:
@@ -43,6 +47,8 @@ const DEMO_MESSAGES: Record<string, string> = {
 };
 
 const PARTNER_MESSAGES: Record<string, string> = {
+  rush:
+    "Rush Mode is for urgent situations — interview tomorrow, application due tonight. One page, paste + target job, rewritten resume in 60 seconds. Same integrity rules as the full Forge. Designed as an on-ramp to deeper engagement.",
   welcome:
     "Your clients self-select their readiness stage here. It maps to Prochaska's Stages of Change model — we adjust guidance intensity based on where they are.",
   resume:
@@ -60,6 +66,8 @@ const PARTNER_MESSAGES: Record<string, string> = {
 };
 
 const OBSERVER_MESSAGES: Record<string, string> = {
+  rush:
+    "Rush Mode demonstrates the crucible principle at speed: AI enhances what's real, never fabricates. Same ethical constraints as the full pipeline — only facts from the original resume. Designed as a low-friction entry point that funnels into the full Forge flow.",
   welcome:
     "Readiness detection without clinical assessment. Based on Prochaska & DiClemente's Transtheoretical Model (1983). Each stage gets calibrated guidance intensity.",
   resume:

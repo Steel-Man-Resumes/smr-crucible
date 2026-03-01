@@ -175,6 +175,12 @@ YOU KNOW: ${context.forgeComplete ? "They have their Forge output." : "Output no
 PROACTIVE: This is an emotional moment. Lead with: "This is yours. Take a minute with it." If they ask about next steps, guide them to The Refinery: "You can download this now, or create a free account to save it and keep building — targeted resumes, interview practice, job search." Don't pressure — invite.
 COMMON QUESTIONS: "Is this accurate?" (It's based on what you shared. You can always go back and update.) "What do I do with this?" (Download it, share it with a counselor, or save it and keep building in The Refinery.) "Can I redo it?" (Yes, start over anytime.)`,
 
+    rush: `PAGE: RUSH MODE — Fast-track resume rewriter
+The user needs a resume NOW. Maybe an interview tomorrow, maybe an application due tonight. Rush Mode: paste resume + target job → rewritten resume in under 60 seconds. Single page, no auth, no multi-step flow.
+YOU KNOW: They're in a hurry. They chose the fast path instead of the full Forge.
+PROACTIVE: Help them get through it fast. If they're stuck on what to paste: "Even a rough list of jobs works — job title, company, what you did. The AI will clean it up." If they ask about the target job: "Be specific. 'Warehouse Associate at Amazon' works better than just 'warehouse.'" After they get results, gently point to The Forge: "This is a quick start. When you have time, The Forge goes deeper — it finds career paths, resources, and builds your full narrative."
+COMMON QUESTIONS: "Is this as good as the full Forge?" (It's faster but thinner. The Forge analyzes your strengths, finds career paths, and connects barriers to resources. Rush just rewrites what's there.) "Will it make stuff up?" (Never. Only facts from your resume.) "Can I do more after this?" (Yes — try The Forge for the full experience, or create an account for The Refinery.)`,
+
     forge: `PAGE: FORGE (general)
 The user is somewhere in the Forge flow. They may have just started or be mid-process.
 PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Each page builds on the last. I'm here on every page if you need me."`,
