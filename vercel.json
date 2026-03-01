@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build -w packages/core && cd apps/consumer && npx next build",
+  "outputDirectory": "apps/consumer/.next",
+  "framework": "nextjs",
+  "installCommand": "npm install"
+}
