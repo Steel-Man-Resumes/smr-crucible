@@ -66,6 +66,7 @@ Run migrations: npm run migrate -w packages/core
 | 003_phase3.sql | run_data, bundle, artifact extensions (artifact_key, bundle_id, display_title, etc.) |
 | 004_artifact_failures.sql | artifact.file_object_id nullable, review_status adds 'generation_failed' |
 | 005_consent.sql | consent_record, consent_event tables for participant consent tracking |
+| 005_consumer.sql | consumer_profile, forge_session, decision_log, refinery_artifact, data_access_log tables for consumer app |
 | 006_access_control.sql | access_code, ai_usage, access_code_redemption tables for rate limiting + partner codes |
 
 ## Core Utilities (packages/core/src/)
@@ -80,6 +81,7 @@ Run migrations: npm run migrate -w packages/core
 - decision.ts: recordDecision() — decision audit trail
 - rateLimit.ts: checkUserRateLimit(), checkIpRateLimit(), incrementUserUsage(), incrementIpUsage(), getUserDailyLimit() — per-user/IP daily rate limiting with atomic upserts
 - accessCode.ts: createAccessCode(), validateAccessCode(), redeemAccessCode(), getUserAccessCodes() — partner access code management
+- forgeSession.ts: saveForgeSession(), loadForgeProfile() — Forge data persistence (upsert to consumer_profile + forge_session tables)
 
 ## Pipeline Framework
 Generic pipeline runner that executes step definitions in sequence:
@@ -307,12 +309,14 @@ All routes require auth. Org resolved from authenticated user's membership.
 | 3d74b95 | Stage C assembly — manifest, ZIP, status transition |
 | 95a7b4a | v2 end-to-end fix — JSON robustness, Stage C resilience, idempotency |
 | bac8e98 | Consumer app: access control, rate limiting, Ghost assistant, 12 deliverables (73 files, ~9,500 lines) |
+| 8db41cb | Opus 10x: Ghost→Opus rename, intro page, three audience paths, demo mode, JBS decision logging |
+| 2a378ea | Psychic Opus, resume page fixes, Forge→DB persistence |
 
 ---
 
 ## Consumer App (apps/consumer) — "SMR App"
 
-Consumer-facing web app combining Forge (free career analysis) + Refinery (authenticated dashboard with 5 tools) + The Ghost (AI assistant). Deployed to Vercel as `smr-app`.
+Consumer-facing web app combining Forge (free career analysis) + Refinery (authenticated dashboard with 7 tools) + Opus (AI assistant). Deployed to Vercel. **Live at `consumer-blond.vercel.app`.**
 
 ### Architecture
 - Next.js 14 App Router with two route groups: `(forge)` and `(dashboard)`
@@ -322,26 +326,62 @@ Consumer-facing web app combining Forge (free career analysis) + Refinery (authe
 - UI components: `@crucible/consumer-ui` package
 
 ### Route Groups
-- `(forge)` — Free, no auth required. 8 pages: intro → barriers → skills → preferences → processing → output. IP-rate-limited.
+- `(forge)` — Free, no auth required. Pages: intro → welcome → resume → goals → story → preferences → processing → output. Also: `/partner` (methodology showcase), `/overview` (evidence showcase). IP-rate-limited.
 - `(auth)` — Login page with email magic link + partner code field
-- `(dashboard)` — Authenticated. Dashboard home + 5 Refinery tools + settings. User-rate-limited.
+- `(dashboard)` — Authenticated. Dashboard home + 7 Refinery tools (Resume Builder, Disclosure Planner, Interview Practice, Job Board, Resources, Progress, + Methodology, Evidence) + settings. User-rate-limited.
+
+### Three Audience Paths (from /intro)
+1. **Client** ("I'm rebuilding my career") → `/welcome` → full Forge flow with warm Opus guidance
+2. **Partner** ("I'm from a partner organization") → `/partner` → methodology showcase with appetizer content → "Watch it work" → demo mode → deep content gated behind auth (`/dashboard/methodology`)
+3. **Observer** ("I'm here to learn about this tool") → `/overview` → evidence showcase with appetizer content → "See it in action" → demo mode → deep content gated behind auth (`/dashboard/evidence`)
+
+### Demo Mode
+Triggered by `?demo=true` URL param. Pre-filled sample data ("Jordan" — warehouse associate, felony, Milwaukee WI). Opus narrates methodology at each step. No user input required.
+- `lib/demo-data.ts` — Complete sample ForgeSession
+- `isDemo` field in ForgeSessionData (`lib/forge-context.tsx`)
+- Each Forge page shows pre-filled data (not editable) with methodology callouts
+- Processing page skips API call, loads pre-generated output
 
 ### The Forge (Free Tool)
-AI career analysis from barrier/skill/preference input. No resume upload — conversational intake. Produces career paths, skills mapping, barrier analysis, resource recommendations. Stored in localStorage as `forge_session`.
+8-page conversational career analysis. No resume upload required (but accepts file/image upload). Produces career paths, skills mapping, barrier analysis, resource recommendations.
+- Data stored in localStorage as `forge_session`
+- Auto-synced to Postgres on first authenticated dashboard visit via `/api/forge/save`
+- Dashboard loads from DB first, falls back to localStorage
 
-### The Refinery (5 Dashboard Tools)
+### The Refinery (Dashboard Tools)
 1. **Resume Builder** — AI-generated resume from Forge data
-2. **Disclosure Coach** — Practice talking about criminal record with employers
+2. **Disclosure Planner** — Practice talking about criminal record with employers
 3. **Interview Practice** — AI mock interviews with feedback
 4. **Job Board** — Fair-chance employer search
-5. **Resource Hub** — Categorized support resources (housing, legal, etc.)
+5. **Resources** — Categorized support resources (housing, legal, etc.)
+6. **Progress** — Track sessions, skills, resumes, applications
+7. **Methodology** — Auth-gated deep methodology playbook (for partners)
+8. **Evidence** — Auth-gated evidence deck (for observers/funders)
 
-### The Ghost (AI Assistant)
-Troy's voice as an AI companion. Available on every page via AssistantDrawer.
-- `lib/assistant-prompt.ts` — 10 behavioral rules, research-grounded persona, depth-on-demand evidence mode
+### Opus (AI Assistant)
+Troy's voice as an AI companion. Named "Opus" — Troy's magnum opus, but really the user's masterpiece. Available on every page via AssistantDrawer ("Ask Opus" trigger).
+
+**Key files:**
+- `lib/assistant-prompt.ts` — 10 behavioral rules, research-grounded persona, depth-on-demand evidence mode, `buildPageContext()` for psychic page awareness, `AssistantContext` interface with 15+ fields
 - `lib/research-context.ts` — Condensed citations from 6 research workstreams (Bandura, Maruna, Lieberman, Pennebaker, etc.)
 - `lib/use-assistant.ts` — Hook wrapping Vercel AI SDK useChat
-- Dual-mode: IP-rate-limited in Forge (20/day), user-rate-limited in Refinery
+- `lib/opus-messages.ts` — Audience-aware message lookup: `getOpusMessage(pageId, audience, isDemo)`
+
+**Psychic page awareness:** `buildPageContext()` maps each page to detailed intelligence (what user has entered, proactive guidance, common questions). Opus references user state without being asked.
+
+**Dual-mode:** IP-rate-limited in Forge (20/day), user-rate-limited in Refinery.
+
+**Internal component names** (GhostGuide, AssistantDrawer, etc.) are unchanged — only display strings say "Opus".
+
+### Data Persistence
+- **localStorage** (`forge_session`) — primary during Forge flow (pre-auth)
+- **Postgres** — `consumer_profile` + `forge_session` tables (post-auth)
+- **Auto-sync:** Dashboard layout syncs localStorage → DB on first auth visit (one-time, `_synced` flag prevents duplicates)
+- **DB-first loading:** Dashboard page tries `/api/forge/load` first, falls back to localStorage
+- **Core functions:** `saveForgeSession()` and `loadForgeProfile()` in `packages/core/src/forgeSession.ts`
+
+### JBS Decision Logging
+`logDecision()` wired into all 7 AI API routes. Captures: userId, sessionId, contextPage, modelProvider, modelId, input hash, explanation, outputSummary, tokenCount, latencyMs. Stored in `decision_log` table.
 
 ### Access Control System
 - **Email verification**: Magic link via Resend, no passwords
@@ -364,12 +404,14 @@ Troy's voice as an AI companion. Available on every page via AssistantDrawer.
 |---|---|---|---|
 | /api/analyze | No | IP (5/day) | Forge career analysis |
 | /api/parse | No | IP (10/day) | Forge data parsing |
-| /api/assistant | Dual | IP or User | Ghost AI chat (streaming) |
+| /api/assistant | Dual | IP or User | Opus AI chat (streaming) |
 | /api/disclosure-guide | Yes | User | Disclosure coaching |
 | /api/interview-practice | Yes | User | Mock interviews |
 | /api/job-search | Yes | User | Fair-chance job search |
 | /api/resources-search | Yes | User | Resource recommendations |
 | /api/resume-generate | Yes | User | Resume generation |
+| /api/forge/save | Yes | — | Persist Forge data to DB |
+| /api/forge/load | Yes | — | Load Forge data from DB |
 | /api/access-code/redeem | Yes | — | Redeem partner code |
 | /api/access-code/mine | Yes | — | List user's codes |
 | /api/usage | Yes | — | Daily usage + limit |
@@ -386,13 +428,13 @@ Troy's voice as an AI companion. Available on every page via AssistantDrawer.
 
 ### Consumer Build & Dev
 - `npm run dev -w apps/consumer` — Dev server (port 3001)
-- `npm run build -w apps/consumer` — Production build (32 routes)
+- `npm run build -w apps/consumer` — Production build
 - Must build `packages/core` first: `npm run build -w packages/core`
 
 ### Deployment Status
-- Vercel project: `smr-app` — PENDING Troy's deployment
-- Needs env vars set in Vercel: DATABASE_URL, AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY, ANTHROPIC_API_KEY
-- Needs Resend domain verification for `noreply@secondmilereentry.com`
+- **Live at `consumer-blond.vercel.app`**
+- Env vars set in Vercel: DATABASE_URL, AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY, ANTHROPIC_API_KEY
+- Resend domain verification needed for `noreply@secondmilereentry.com`
 
 ---
 
