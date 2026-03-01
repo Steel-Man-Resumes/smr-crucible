@@ -69,7 +69,28 @@ RULES:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return NextResponse.json({ resources: [] });
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]));
+    const result = JSON.parse(jsonMatch[0]);
+
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "resources-search",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: JSON.stringify({ category, barriers, location }).slice(0, 500),
+        explanation: `Generated resource recommendations for category: ${category}. Location: ${location || "general"}.`,
+        outputSummary: {
+          type: "resource_search",
+          resources_count: result.resources?.length ?? 0,
+          category,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (resources):", err);
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Resource search error:", error);
     return NextResponse.json({ resources: [] });

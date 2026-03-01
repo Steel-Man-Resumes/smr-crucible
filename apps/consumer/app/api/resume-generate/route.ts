@@ -73,6 +73,25 @@ No buzzwords. Keep it honest. One sentence only.`;
     const data = await response.json();
     const suggestion = data.content[0]?.text?.trim() || "";
 
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "resume-generate",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: JSON.stringify({ targetJob, action, skills }).slice(0, 500),
+        explanation: `Generated resume ${action === "suggest_summary" ? "summary" : "bullet point"} for ${targetJob}${targetCompany ? ` at ${targetCompany}` : ""}.`,
+        outputSummary: {
+          type: "resume_suggestion",
+          action,
+          suggestion_length: suggestion.length,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (resume-generate):", err);
+    }
+
     return NextResponse.json({ suggestion });
   } catch (error: any) {
     console.error("Resume generate error:", error);

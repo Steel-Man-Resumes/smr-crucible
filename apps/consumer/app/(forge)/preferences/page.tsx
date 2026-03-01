@@ -11,6 +11,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { DEMO_SESSION } from "@/lib/demo-data";
+import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 
 const SCHEDULE_OPTIONS = [
@@ -41,6 +43,8 @@ const COMMUTE_OPTIONS = [
 export default function PreferencesPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
+  const isDemo = session.isDemo === true;
+  const audience = session.audience || "client";
 
   // Track page visit
   useEffect(() => {
@@ -49,22 +53,30 @@ export default function PreferencesPage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const prefs = session.preferences || {};
+  const demoPrefs = DEMO_SESSION.preferences || {};
+  const prefs = isDemo ? demoPrefs : (session.preferences || {});
   const [schedule, setSchedule] = useState(prefs.schedule || "");
   const [environment, setEnvironment] = useState(prefs.environment || "");
   const [commute, setCommute] = useState(prefs.commute || "");
   const [location, setLocation] = useState(prefs.location || "");
 
   function handleContinue() {
-    updateSession({
-      preferences: {
-        schedule,
-        environment,
-        commute,
-        location,
-      },
-      lastPageVisited: "preferences",
-    });
+    if (isDemo) {
+      updateSession({
+        preferences: DEMO_SESSION.preferences,
+        lastPageVisited: "preferences",
+      });
+    } else {
+      updateSession({
+        preferences: {
+          schedule,
+          environment,
+          commute,
+          location,
+        },
+        lastPageVisited: "preferences",
+      });
+    }
     router.push("/processing");
   }
 
@@ -72,15 +84,23 @@ export default function PreferencesPage() {
     <FlowPage
       title="A few quick preferences"
       subtitle="This helps us find the right fit. You can change any of these later."
-      actionLabel="Continue"
+      actionLabel={isDemo ? "Next" : "Continue"}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/story")}
     >
       <GhostGuide
-        message="Almost done with this part. These details help me find opportunities that actually fit your life."
+        message={getOpusMessage("preferences", audience, isDemo)}
         pageId="preferences"
       />
+
+      {isDemo && (
+        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
+          <p className="text-sm text-amber-800 font-medium">
+            Demo mode — sample preferences pre-selected
+          </p>
+        </div>
+      )}
       <div className="space-y-8">
         {/* Schedule */}
         <div>
@@ -90,7 +110,7 @@ export default function PreferencesPage() {
           <CardSelect
             options={SCHEDULE_OPTIONS}
             selected={schedule}
-            onSelect={setSchedule}
+            onSelect={isDemo ? () => {} : setSchedule}
           />
         </div>
 
@@ -102,7 +122,7 @@ export default function PreferencesPage() {
           <CardSelect
             options={ENVIRONMENT_OPTIONS}
             selected={environment}
-            onSelect={setEnvironment}
+            onSelect={isDemo ? () => {} : setEnvironment}
           />
         </div>
 
@@ -114,7 +134,7 @@ export default function PreferencesPage() {
           <CardSelect
             options={COMMUTE_OPTIONS}
             selected={commute}
-            onSelect={setCommute}
+            onSelect={isDemo ? () => {} : setCommute}
           />
         </div>
 

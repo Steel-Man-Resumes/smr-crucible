@@ -23,6 +23,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/jobs", label: "Job Board" },
   { href: "/dashboard/resources", label: "Resources" },
   { href: "/dashboard/progress", label: "Progress" },
+  { href: "/dashboard/methodology", label: "Methodology" },
+  { href: "/dashboard/evidence", label: "Evidence" },
 ];
 
 export default function DashboardLayout({

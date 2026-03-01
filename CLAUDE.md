@@ -4,9 +4,11 @@
 AI-assisted career services platform. Replaces smr-forge and smr-refinery with unified persistent architecture. Produces a complete career services package — resume, cover letters, employer battle plan, interview prep, salary negotiation sheet, portfolio, and more — from a single resume upload.
 
 ## Architecture
-- apps/web: Next.js 14 App Router, deployed to Vercel
+- apps/web: Next.js 14 App Router, deployed to Vercel (B2B career services platform)
+- apps/consumer: Next.js 14 App Router, deployed to Vercel as "smr-app" (consumer-facing Forge + Refinery + Ghost)
 - services/worker: BullMQ job consumer, runs in Docker on VPS (76.13.98.230)
-- packages/core: Shared TypeScript types, event definitions, schema validators, DB/storage/event utilities
+- packages/core: Shared TypeScript types, event definitions, schema validators, DB/storage/event utilities, rate limiting, access codes
+- packages/consumer-ui: Shared React components for consumer app (CardSelect, AssistantDrawer, ProgressRing, etc.)
 
 ## Tech Stack
 - Database: PostgreSQL on Neon (connection string in DATABASE_URL)
@@ -26,7 +28,7 @@ AI-assisted career services platform. Replaces smr-forge and smr-refinery with u
 6. Human review gates before artifacts reach downloadable status.
 7. Config (prompts, options, output defs) stored as versioned immutable JSON.
 
-## Current State (as of 2026-02-20)
+## Current State (as of 2026-02-28)
 
 ### What Works
 - **v1 pipeline (career_intake_v1)**: 4-step sequential pipeline. Extract → Parse → Analyze → Generate. Produces a single DOCX resume. Fully functional end-to-end.
@@ -63,15 +65,21 @@ Run migrations: npm run migrate -w packages/core
 | 002_pipeline.sql | workflow_run, run_step, artifact (with UNIQUE on run_id+artifact_type+version) |
 | 003_phase3.sql | run_data, bundle, artifact extensions (artifact_key, bundle_id, display_title, etc.) |
 | 004_artifact_failures.sql | artifact.file_object_id nullable, review_status adds 'generation_failed' |
+| 005_consent.sql | consent_record, consent_event tables for participant consent tracking |
+| 006_access_control.sql | access_code, ai_usage, access_code_redemption tables for rate limiting + partner codes |
 
 ## Core Utilities (packages/core/src/)
 - db.ts: query(), getOne(), insert() — thin wrappers around @neondatabase/serverless
 - events.ts: emitEvent(), emitStepEvent(), emitAICallEvent() — structured event logging
 - storage.ts: uploadFile(), getSignedUrl(), createFileObject() — R2 via S3 SDK
-- types.ts: All TypeScript types, event type unions, CrucibleEvent interface
+- types.ts: All TypeScript types, event type unions, CrucibleEvent interface (includes ACCESS_CODE_CREATED, ACCESS_CODE_REDEEMED, RATE_LIMIT_EXCEEDED)
 - pipeline.ts: PipelineDef, StepContext, StepHandler types + runPipeline() generic runner
 - jsonParser.ts: extractAndParseJSON(), sanitizeJsonStrings(), parseWithRepair() — robust AI JSON handling
 - runData.ts: putRunData(), getRunData(), hasRunData(), listRunData() — typed write-once data products
+- consent.ts: recordConsent(), getConsent() — participant consent tracking
+- decision.ts: recordDecision() — decision audit trail
+- rateLimit.ts: checkUserRateLimit(), checkIpRateLimit(), incrementUserUsage(), incrementIpUsage(), getUserDailyLimit() — per-user/IP daily rate limiting with atomic upserts
+- accessCode.ts: createAccessCode(), validateAccessCode(), redeemAccessCode(), getUserAccessCodes() — partner access code management
 
 ## Pipeline Framework
 Generic pipeline runner that executes step definitions in sequence:
@@ -298,6 +306,93 @@ All routes require auth. Org resolved from authenticated user's membership.
 | b600f4d | gen_tracker XLSX + gen_quickstart + gen_readme |
 | 3d74b95 | Stage C assembly — manifest, ZIP, status transition |
 | 95a7b4a | v2 end-to-end fix — JSON robustness, Stage C resilience, idempotency |
+| bac8e98 | Consumer app: access control, rate limiting, Ghost assistant, 12 deliverables (73 files, ~9,500 lines) |
+
+---
+
+## Consumer App (apps/consumer) — "SMR App"
+
+Consumer-facing web app combining Forge (free career analysis) + Refinery (authenticated dashboard with 5 tools) + The Ghost (AI assistant). Deployed to Vercel as `smr-app`.
+
+### Architecture
+- Next.js 14 App Router with two route groups: `(forge)` and `(dashboard)`
+- Auth: Auth.js v5 with Resend magic link (prod) + Credentials bypass (dev)
+- AI: Anthropic Claude Sonnet via Vercel AI SDK (streaming)
+- DB: Shared Neon Postgres via `@crucible/core`
+- UI components: `@crucible/consumer-ui` package
+
+### Route Groups
+- `(forge)` — Free, no auth required. 8 pages: intro → barriers → skills → preferences → processing → output. IP-rate-limited.
+- `(auth)` — Login page with email magic link + partner code field
+- `(dashboard)` — Authenticated. Dashboard home + 5 Refinery tools + settings. User-rate-limited.
+
+### The Forge (Free Tool)
+AI career analysis from barrier/skill/preference input. No resume upload — conversational intake. Produces career paths, skills mapping, barrier analysis, resource recommendations. Stored in localStorage as `forge_session`.
+
+### The Refinery (5 Dashboard Tools)
+1. **Resume Builder** — AI-generated resume from Forge data
+2. **Disclosure Coach** — Practice talking about criminal record with employers
+3. **Interview Practice** — AI mock interviews with feedback
+4. **Job Board** — Fair-chance employer search
+5. **Resource Hub** — Categorized support resources (housing, legal, etc.)
+
+### The Ghost (AI Assistant)
+Troy's voice as an AI companion. Available on every page via AssistantDrawer.
+- `lib/assistant-prompt.ts` — 10 behavioral rules, research-grounded persona, depth-on-demand evidence mode
+- `lib/research-context.ts` — Condensed citations from 6 research workstreams (Bandura, Maruna, Lieberman, Pennebaker, etc.)
+- `lib/use-assistant.ts` — Hook wrapping Vercel AI SDK useChat
+- Dual-mode: IP-rate-limited in Forge (20/day), user-rate-limited in Refinery
+
+### Access Control System
+- **Email verification**: Magic link via Resend, no passwords
+- **Rate limiting**: Per-user daily limits (default 30/day) + per-IP for Forge routes
+- **Partner access codes**: Distributable codes with tiers (partner=200/day, unlimited, admin)
+- **Rate limit wrapper**: `lib/withRateLimit.ts` — HOF wrapping API route handlers
+- **Post-auth code redemption**: localStorage `pending_access_code` → auto-redeemed on dashboard load
+- **Client-side 429 handling**: All pages show friendly message when limit exceeded
+
+### Rate Limit Tiers
+| Tier | Daily AI Calls | Who |
+|---|---|---|
+| default | 30/day | Any authenticated user |
+| partner | 200/day | Users with partner access code |
+| unlimited | No limit | Special partner codes |
+| admin | No limit | Troy + staff |
+
+### Consumer API Routes
+| Route | Auth | Rate Limit | Purpose |
+|---|---|---|---|
+| /api/analyze | No | IP (5/day) | Forge career analysis |
+| /api/parse | No | IP (10/day) | Forge data parsing |
+| /api/assistant | Dual | IP or User | Ghost AI chat (streaming) |
+| /api/disclosure-guide | Yes | User | Disclosure coaching |
+| /api/interview-practice | Yes | User | Mock interviews |
+| /api/job-search | Yes | User | Fair-chance job search |
+| /api/resources-search | Yes | User | Resource recommendations |
+| /api/resume-generate | Yes | User | Resume generation |
+| /api/access-code/redeem | Yes | — | Redeem partner code |
+| /api/access-code/mine | Yes | — | List user's codes |
+| /api/usage | Yes | — | Daily usage + limit |
+
+### Consumer Env Vars (apps/consumer/.env.local)
+- DATABASE_URL (Neon connection string — shared with apps/web)
+- AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY
+- ANTHROPIC_API_KEY
+
+### Seeded Access Codes
+- SECONDMILE — admin tier (Troy + staff)
+- PARTNER2026 — partner tier, 200/day, max 100 redemptions
+- UNLIMITED2026 — unlimited tier, max 50 redemptions
+
+### Consumer Build & Dev
+- `npm run dev -w apps/consumer` — Dev server (port 3001)
+- `npm run build -w apps/consumer` — Production build (32 routes)
+- Must build `packages/core` first: `npm run build -w packages/core`
+
+### Deployment Status
+- Vercel project: `smr-app` — PENDING Troy's deployment
+- Needs env vars set in Vercel: DATABASE_URL, AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY, ANTHROPIC_API_KEY
+- Needs Resend domain verification for `noreply@secondmilereentry.com`
 
 ---
 

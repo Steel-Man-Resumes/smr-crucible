@@ -65,6 +65,28 @@ async function handlePost(request: Request) {
       barriers: barriers?.barriers || [],
     };
 
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        sessionId: input.sessionId ?? null,
+        contextPage: "analyze",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: context.slice(0, 500),
+        explanation: "Generated Forge career analysis from resume, goals, barriers, and preferences",
+        outputSummary: {
+          type: "forge_analysis",
+          strengths_count: (narrative.strengths as unknown[])?.length ?? 0,
+          skills_count: (skills.skills as unknown[])?.length ?? 0,
+          career_paths_count: (careerPaths.paths as unknown[])?.length ?? 0,
+          barriers_count: (barriers?.barriers as unknown[])?.length ?? 0,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (analyze):", err);
+    }
+
     return NextResponse.json(forgeOutput);
   } catch (error: any) {
     console.error("Analysis pipeline error:", error);

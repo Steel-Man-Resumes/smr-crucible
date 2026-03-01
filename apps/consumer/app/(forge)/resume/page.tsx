@@ -13,6 +13,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { DEMO_SESSION } from "@/lib/demo-data";
+import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | null;
@@ -34,6 +36,8 @@ export default function ResumeIntakePage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDemo = session.isDemo === true;
+  const audience = session.audience || "client";
 
   // Track page visit
   useEffect(() => {
@@ -41,6 +45,44 @@ export default function ResumeIntakePage() {
       pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "resume"])),
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Demo mode: show pre-filled resume and continue
+  if (isDemo) {
+    return (
+      <FlowPage
+        title="Resume received."
+        subtitle="We extracted experience, skills, and education from the sample resume."
+        actionLabel="Next"
+        onAction={() => {
+          updateSession({
+            resumeText: DEMO_SESSION.resumeText,
+            resumeFileName: DEMO_SESSION.resumeFileName,
+            resumeMethod: DEMO_SESSION.resumeMethod,
+            lastPageVisited: "resume",
+          });
+          router.push("/goals");
+        }}
+        showBack
+        onBack={() => router.push("/welcome")}
+      >
+        <GhostGuide
+          message={getOpusMessage("resume", audience, true)}
+          pageId="resume"
+        />
+        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
+          <p className="text-sm text-amber-800 font-medium">
+            Demo mode — sample resume pre-loaded
+          </p>
+        </div>
+        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
+          <p className="text-sm text-sage-700 font-medium mb-2">Sample: Jordan Mitchell</p>
+          <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+            {DEMO_SESSION.resumeText?.slice(0, 500)}...
+          </p>
+        </div>
+      </FlowPage>
+    );
+  }
 
   const [activePath, setActivePath] = useState<IntakePath>(null);
   const [uploading, setUploading] = useState(false);
@@ -159,7 +201,7 @@ export default function ResumeIntakePage() {
         }
       >
         <GhostGuide
-          message="Don't worry if your resume isn't perfect. I can work with anything — even just a list of jobs you've had."
+          message={getOpusMessage("resume", audience, false)}
           pageId="resume"
         />
         <div className="flex flex-col gap-3">

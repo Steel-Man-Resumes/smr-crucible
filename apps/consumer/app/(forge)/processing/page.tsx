@@ -12,6 +12,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { DEMO_OUTPUT } from "@/lib/demo-data";
+import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide } from "@crucible/consumer-ui";
 
 const PROCESSING_STEPS = [
@@ -42,16 +44,30 @@ const REFLECTION_PROMPTS = [
 export default function ProcessingPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
+  const isDemo = session.isDemo === true;
+  const audience = session.audience || "client";
   const [currentStep, setCurrentStep] = useState(0);
   const [currentFact, setCurrentFact] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [reflection, setReflection] = useState("");
   const hasStarted = useRef(false);
 
-  // Run the analysis pipeline
+  // Run the analysis pipeline (or load demo data)
   useEffect(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
+
+    if (isDemo) {
+      // Demo mode: skip API call, load pre-generated output after brief animation
+      const timer = setTimeout(() => {
+        updateSession({
+          forgeOutput: DEMO_OUTPUT,
+          lastPageVisited: "processing",
+        });
+        router.push("/output");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
 
     async function runAnalysis() {
       try {
@@ -137,7 +153,7 @@ export default function ProcessingPage() {
     <div className="flow-center min-h-screen flex flex-col items-center justify-center">
       <div className="w-full max-w-flow text-center">
         <GhostGuide
-          message="I'm putting it all together. This takes a minute because I'm being thorough."
+          message={getOpusMessage("processing", audience, isDemo)}
           pageId="processing"
         />
         {/* Processing animation */}

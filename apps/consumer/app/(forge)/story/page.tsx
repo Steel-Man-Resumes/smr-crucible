@@ -14,6 +14,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { DEMO_SESSION } from "@/lib/demo-data";
+import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 
 const CHALLENGE_OPTIONS = [
@@ -39,7 +41,11 @@ interface CriminalRecordData {
 export default function StoryPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
-  const [selected, setSelected] = useState<string[]>(session.challenges || []);
+  const isDemo = session.isDemo === true;
+  const audience = session.audience || "client";
+  const [selected, setSelected] = useState<string[]>(
+    isDemo ? (DEMO_SESSION.challenges || []) : (session.challenges || [])
+  );
 
   // Track page visit
   useEffect(() => {
@@ -48,7 +54,13 @@ export default function StoryPage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [crimRecord, setCrimRecord] = useState<CriminalRecordData>(
-    session.criminalRecord || {
+    isDemo ? (DEMO_SESSION.criminalRecord || {
+      type: "",
+      charge_count: "",
+      most_recent: "",
+      supervision: "",
+      context: "",
+    }) : session.criminalRecord || {
       type: "",
       charge_count: "",
       most_recent: "",
@@ -57,24 +69,34 @@ export default function StoryPage() {
     }
   );
   const [narratives, setNarratives] = useState<Record<string, string>>(
-    session.challengeNarratives || {}
+    isDemo ? (DEMO_SESSION.challengeNarratives || {}) : (session.challengeNarratives || {})
   );
 
   function toggleChallenge(id: string) {
+    if (isDemo) return;
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
 
   function handleContinue() {
-    updateSession({
-      challenges: selected,
-      criminalRecord: selected.includes("criminal_record")
-        ? crimRecord
-        : undefined,
-      challengeNarratives: narratives,
-      lastPageVisited: "story",
-    });
+    if (isDemo) {
+      updateSession({
+        challenges: DEMO_SESSION.challenges,
+        criminalRecord: DEMO_SESSION.criminalRecord,
+        challengeNarratives: DEMO_SESSION.challengeNarratives,
+        lastPageVisited: "story",
+      });
+    } else {
+      updateSession({
+        challenges: selected,
+        criminalRecord: selected.includes("criminal_record")
+          ? crimRecord
+          : undefined,
+        challengeNarratives: narratives,
+        lastPageVisited: "story",
+      });
+    }
     router.push("/preferences");
   }
 
@@ -84,7 +106,7 @@ export default function StoryPage() {
     <FlowPage
       title="What stands in your way?"
       subtitle="Everyone has hurdles. Naming them helps us find real solutions."
-      actionLabel={selected.length > 0 ? "Continue" : "Nothing right now — skip"}
+      actionLabel={isDemo ? "Next" : (selected.length > 0 ? "Continue" : "Nothing right now — skip")}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/goals")}
@@ -96,9 +118,17 @@ export default function StoryPage() {
       }
     >
       <GhostGuide
-        message="This part takes courage. You only share what you want to. I'm here if you need to talk through it."
+        message={getOpusMessage("story", audience, isDemo)}
         pageId="story"
       />
+
+      {isDemo && (
+        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
+          <p className="text-sm text-amber-800 font-medium">
+            Demo mode — sample barriers pre-filled
+          </p>
+        </div>
+      )}
       {/* Challenge selection */}
       <div className="space-y-2 mb-6">
         {CHALLENGE_OPTIONS.map((opt) => {

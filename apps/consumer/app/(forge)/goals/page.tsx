@@ -13,6 +13,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { DEMO_SESSION } from "@/lib/demo-data";
+import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 
 const GOAL_OPTIONS = [
@@ -41,9 +43,15 @@ const GOAL_OPTIONS = [
 export default function GoalsPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
-  const [selected, setSelected] = useState<string[]>(session.goals || []);
-  const [narrative, setNarrative] = useState(session.goalNarrative || "");
-  const [showNarrative, setShowNarrative] = useState(false);
+  const isDemo = session.isDemo === true;
+  const audience = session.audience || "client";
+  const [selected, setSelected] = useState<string[]>(
+    isDemo ? (DEMO_SESSION.goals || []) : (session.goals || [])
+  );
+  const [narrative, setNarrative] = useState(
+    isDemo ? (DEMO_SESSION.goalNarrative || "") : (session.goalNarrative || "")
+  );
+  const [showNarrative, setShowNarrative] = useState(isDemo && !!DEMO_SESSION.goalNarrative);
 
   // Track page visit
   useEffect(() => {
@@ -53,6 +61,7 @@ export default function GoalsPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(id: string) {
+    if (isDemo) return;
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
@@ -60,8 +69,8 @@ export default function GoalsPage() {
 
   function handleContinue() {
     updateSession({
-      goals: selected,
-      goalNarrative: narrative || undefined,
+      goals: isDemo ? DEMO_SESSION.goals : selected,
+      goalNarrative: isDemo ? DEMO_SESSION.goalNarrative : (narrative || undefined),
       lastPageVisited: "goals",
     });
     router.push("/story");
@@ -71,22 +80,33 @@ export default function GoalsPage() {
     <FlowPage
       title="What matters to you in work?"
       subtitle="Pick as many as feel right. There are no wrong answers."
-      actionLabel="Continue"
-      actionDisabled={selected.length === 0 && !narrative.trim()}
+      actionLabel={isDemo ? "Next" : "Continue"}
+      actionDisabled={!isDemo && selected.length === 0 && !narrative.trim()}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/resume")}
       footer={
-        <p>
-          Not sure yet? That&apos;s okay — pick what feels closest and we&apos;ll
-          explore together.
-        </p>
+        !isDemo ? (
+          <p>
+            Not sure yet? That&apos;s okay — pick what feels closest and we&apos;ll
+            explore together.
+          </p>
+        ) : undefined
       }
     >
       <GhostGuide
-        message="Pick what feels true to you. This isn't a test — it helps me understand what matters to you."
+        message={getOpusMessage("goals", audience, isDemo)}
         pageId="goals"
       />
+
+      {isDemo && (
+        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
+          <p className="text-sm text-amber-800 font-medium">
+            Demo mode — sample goals pre-selected
+          </p>
+        </div>
+      )}
+
       <CardSelect
         options={GOAL_OPTIONS}
         selected={selected}
@@ -97,27 +117,30 @@ export default function GoalsPage() {
       {/* Optional free-text for more nuanced expression */}
       <div className="mt-6">
         {!showNarrative ? (
-          <button
-            onClick={() => setShowNarrative(true)}
-            className="text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700"
-          >
-            Want to say more about what you&apos;re looking for?
-          </button>
+          !isDemo && (
+            <button
+              onClick={() => setShowNarrative(true)}
+              className="text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700"
+            >
+              Want to say more about what you&apos;re looking for?
+            </button>
+          )
         ) : (
           <div className="space-y-2">
             <label
               htmlFor="goal-narrative"
               className="text-sm font-medium text-foreground"
             >
-              Tell us more in your own words
+              {isDemo ? "Sample goal narrative" : "Tell us more in your own words"}
             </label>
             <textarea
               id="goal-narrative"
               value={narrative}
-              onChange={(e) => setNarrative(e.target.value)}
+              onChange={isDemo ? () => {} : (e) => setNarrative(e.target.value)}
               placeholder="e.g., I want to work with my hands, or I'm interested in healthcare, or I want to start my own business someday..."
               rows={3}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y"
+              readOnly={isDemo}
+              className={`w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y ${isDemo ? "bg-gray-50 cursor-default" : ""}`}
             />
           </div>
         )}

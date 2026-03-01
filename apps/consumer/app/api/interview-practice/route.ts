@@ -100,6 +100,26 @@ RULES:
     const text = data.content[0]?.text || "";
 
     if (shouldWrapUp) {
+      // Log wrapup decision
+      try {
+        const { logDecision } = await import("@crucible/core");
+        await logDecision({
+          contextPage: "interview-practice",
+          modelProvider: "anthropic",
+          modelId: "claude-sonnet-4-20250514",
+          input: (messages[messages.length - 1]?.content || "").slice(0, 500),
+          explanation: `Interview practice feedback wrapup. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}. ${exchangeCount} exchanges.`,
+          outputSummary: {
+            type: "interview_feedback",
+            exchange_count: exchangeCount,
+            interview_type: config.interviewType,
+            is_wrapup: true,
+          },
+        });
+      } catch (err) {
+        console.error("Decision log failed (interview wrapup):", err);
+      }
+
       // Parse feedback from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -134,6 +154,26 @@ RULES:
           overall: "Every practice session makes the real thing easier.",
         },
       });
+    }
+
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "interview-practice",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: (messages[messages.length - 1]?.content || "").slice(0, 500),
+        explanation: `Interview practice exchange #${exchangeCount}. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}.`,
+        outputSummary: {
+          type: "interview_exchange",
+          exchange_count: exchangeCount,
+          interview_type: config.interviewType,
+          is_wrapup: false,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (interview):", err);
     }
 
     return NextResponse.json({ response: text });

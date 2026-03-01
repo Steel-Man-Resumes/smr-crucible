@@ -79,7 +79,28 @@ RULES:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]));
+    const result = JSON.parse(jsonMatch[0]);
+
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "disclosure-guide",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: JSON.stringify({ record, timing }).slice(0, 500),
+        explanation: "Generated disclosure plan based on criminal record type, recency, and jurisdiction",
+        outputSummary: {
+          type: "disclosure_plan",
+          has_script: !!result.script,
+          tips_count: result.tips?.length ?? 0,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (disclosure):", err);
+    }
+
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("Disclosure guide error:", error);
     return NextResponse.json(

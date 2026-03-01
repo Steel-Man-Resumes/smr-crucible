@@ -1,126 +1,132 @@
 "use client";
 
 /**
- * Page 0.5: Mandatory Intro — The Ghost Introduces Itself
+ * Intro Page — Opus Introduces Itself
  *
- * Conversational reveal: Troy's philosophy, what's about to happen,
- * and audience selection. NOT a wall of text — a conversation-style
- * reveal using the FlowPage pattern.
+ * Clean, confident, single-screen presentation. No chatbot monologue,
+ * no line-by-line animation. Opus walks into the room and tells you
+ * what's happening. Three genuinely different paths.
  *
- * Audience selection changes how The Ghost communicates throughout
- * the Forge flow (client / partner / observer).
+ * Routes:
+ * - Client → /welcome (full Forge flow)
+ * - Partner → /partner (methodology showcase)
+ * - Observer → /overview (evidence showcase)
  */
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { FlowPage, CardSelect } from "@crucible/consumer-ui";
 
 type Audience = "client" | "partner" | "observer";
 
-const INTRO_LINES = [
-  "Hey. I\u2019m The Ghost \u2014 the AI behind this tool.",
-  "I was built by someone who knows what it\u2019s like to rebuild. Not from a textbook. From life.",
-  "Here\u2019s what\u2019s about to happen: I\u2019m going to ask you some questions. About your work, your skills, what you\u2019re looking for, and what\u2019s standing in your way.",
-  "It takes about 10 minutes. You\u2019ll do some real work. That\u2019s the point.",
-  "Nobody can hand you a career. But I can help you see what\u2019s already there \u2014 and figure out what\u2019s next.",
-];
+interface PathOption {
+  id: Audience;
+  label: string;
+  subtitle: string;
+  route: string;
+}
 
-const AUDIENCE_OPTIONS = [
+const PATHS: PathOption[] = [
   {
     id: "client",
-    label: "I\u2019m looking for work or rebuilding my career",
-    description:
-      "I want to use this tool to explore my options and build a plan.",
+    label: "I\u2019m rebuilding my career",
+    subtitle: "Full Forge flow \u2014 about 10 minutes",
+    route: "/welcome",
   },
   {
     id: "partner",
     label: "I\u2019m from a partner organization",
-    description:
-      "AJC, nonprofit, DOC, or similar \u2014 I want to see how this works.",
+    subtitle: "See how it works with your clients",
+    route: "/partner",
   },
   {
     id: "observer",
     label: "I\u2019m here to learn about this tool",
-    description:
-      "Funder, researcher, media, or just curious about what this does.",
+    subtitle: "See the evidence and methodology",
+    route: "/overview",
   },
 ];
 
 export default function IntroPage() {
   const router = useRouter();
   const { updateSession } = useForgeSession();
-  const [visibleLines, setVisibleLines] = useState(0);
-  const [showAudience, setShowAudience] = useState(false);
-  const [selected, setSelected] = useState<string>("");
 
-  // Reveal lines one at a time with a conversational cadence
-  useEffect(() => {
-    if (visibleLines < INTRO_LINES.length) {
-      const delay = visibleLines === 0 ? 400 : 1200;
-      const timer = setTimeout(() => setVisibleLines((v) => v + 1), delay);
-      return () => clearTimeout(timer);
-    } else {
-      // All lines visible — show audience selection after a beat
-      const timer = setTimeout(() => setShowAudience(true), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [visibleLines]);
-
-  function handleContinue() {
-    if (!selected) return;
-
+  function handleSelect(path: PathOption) {
     updateSession({
-      audience: selected as Audience,
+      audience: path.id,
       pagesVisited: ["intro"],
+      isDemo: path.id !== "client",
     });
 
-    // Also persist audience to localStorage for pre-auth Ghost access
+    // Persist audience for pre-auth Opus access
     try {
-      localStorage.setItem("forge_audience", selected);
+      localStorage.setItem("forge_audience", path.id);
     } catch {
       // localStorage may be unavailable
     }
 
-    router.push("/welcome");
+    router.push(path.route);
   }
 
   return (
-    <FlowPage
-      title="Before we start"
-      subtitle=""
-      actionLabel={showAudience && selected ? "Let\u2019s go" : undefined}
-      actionDisabled={!selected}
-      onAction={handleContinue}
-      showBack
-      onBack={() => router.push("/")}
-    >
-      {/* Conversational reveal */}
-      <div className="space-y-4 mb-8">
-        {INTRO_LINES.slice(0, visibleLines).map((line, i) => (
-          <p
-            key={i}
-            className="text-body text-foreground leading-relaxed animate-fadeIn"
-            style={{ animationDelay: `${i * 100}ms` }}
-          >
-            {line}
-          </p>
-        ))}
-      </div>
-
-      {/* Audience selection — appears after all lines are visible */}
-      {showAudience && (
-        <div className="animate-fadeIn">
-          <p className="font-medium text-foreground mb-4">
-            Before we jump in — which best describes you?
-          </p>
-          <CardSelect
-            options={AUDIENCE_OPTIONS}
-            selected={selected}
-            onSelect={setSelected}
-          />
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md">
+        {/* Opus icon */}
+        <div className="flex justify-center mb-6">
+          <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center">
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              className="text-sage-600"
+            >
+              <path
+                d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                fill="none"
+              />
+            </svg>
+          </div>
         </div>
-      )}
-    </FlowPage>
+
+        {/* Opus introduction */}
+        <div className="text-center mb-8 space-y-4">
+          <h1 className="text-2xl font-bold text-foreground">I&apos;m Opus.</h1>
+
+          <p className="text-body text-foreground leading-relaxed">
+            Troy built me from everything he knows &mdash; the research, the
+            experience, all of it. I&apos;m the best career AI that exists for
+            people rebuilding their lives.
+          </p>
+
+          <p className="text-sm text-muted leading-relaxed">
+            I&apos;m on every page. If you get stuck, just ask.
+          </p>
+        </div>
+
+        {/* "Who are you?" prompt */}
+        <p className="font-medium text-foreground mb-4">Who are you?</p>
+
+        {/* Three path buttons */}
+        <div className="flex flex-col gap-3">
+          {PATHS.map((path) => (
+            <button
+              key={path.id}
+              onClick={() => handleSelect(path)}
+              className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-400 hover:bg-sage-50/50 transition-all min-h-touch"
+            >
+              <span className="font-medium text-foreground block">
+                {path.label}
+              </span>
+              <span className="text-sm text-muted mt-0.5 block">
+                {path.subtitle}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

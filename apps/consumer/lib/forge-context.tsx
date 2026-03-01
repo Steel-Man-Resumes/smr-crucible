@@ -45,6 +45,9 @@ export interface ForgeSessionData {
   audience?: "client" | "partner" | "observer";
   pagesVisited?: string[];
 
+  // Demo mode (partner/observer walkthrough with sample data)
+  isDemo?: boolean;
+
   // Meta
   startedAt?: string;
   lastPageVisited?: string;

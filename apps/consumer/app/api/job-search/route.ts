@@ -82,7 +82,28 @@ RULES:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return NextResponse.json({ jobs: [] });
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]));
+    const result = JSON.parse(jsonMatch[0]);
+
+    // Log decision for JBS compliance
+    try {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "job-search",
+        modelProvider: "anthropic",
+        modelId: "claude-sonnet-4-20250514",
+        input: JSON.stringify({ targetRole, location, skills, hasRecord }).slice(0, 500),
+        explanation: `Generated job listings for ${targetRole || "general"} roles${location ? ` in ${location}` : ""}. Record: ${hasRecord ? "yes" : "not specified"}.`,
+        outputSummary: {
+          type: "job_search",
+          jobs_count: result.jobs?.length ?? 0,
+          second_chance_count: result.jobs?.filter((j: any) => j.second_chance)?.length ?? 0,
+        },
+      });
+    } catch (err) {
+      console.error("Decision log failed (job-search):", err);
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Job search error:", error);
     return NextResponse.json({ jobs: [] });

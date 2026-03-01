@@ -21,6 +21,7 @@ function ForgeAssistant() {
           barriers: session.challenges,
           audience: session.audience,
           mode: "chat",
+          isDemo: session.isDemo,
         }}
         sessionId={session.startedAt}
       />

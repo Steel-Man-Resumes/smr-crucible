@@ -50,8 +50,8 @@ export default function LandingPage() {
 
           <p className="text-body text-muted max-w-lg mx-auto mb-10 leading-relaxed">
             Free career intelligence built for people rebuilding their lives.
-            Real tools, real resources, and an AI assistant that actually
-            understands what you&apos;re going through.
+            Real tools, real resources, and Opus &mdash; an AI career guide that
+            actually understands what you&apos;re going through.
           </p>
 
           <Link
