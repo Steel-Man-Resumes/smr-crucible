@@ -14,9 +14,13 @@
  *
  * The user does the work. The AI never auto-generates.
  * Right-sized output: one resume for one application.
+ *
+ * Phase 1: Persists to refinery_artifact table via /api/artifacts endpoints.
+ * Supports save, auto-save, load, and "My Resumes" list.
  */
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
 interface ResumeData {
   targetJob: string;
@@ -29,6 +33,14 @@ interface BulletEntry {
   id: number;
   text: string;
   scaffoldLevel: number; // 1.0 = full template, 0.0 = independent
+}
+
+interface SavedResume {
+  id: string;
+  target_context: { targetJob?: string; targetCompany?: string };
+  scaffold_level: number;
+  iteration_number: number;
+  updated_at: string;
 }
 
 // Scaffold levels determine how much help the user gets
@@ -75,7 +87,35 @@ function getScaffoldLevel(bulletIndex: number): number {
   return 0.0;
 }
 
+function averageScaffoldLevel(bullets: BulletEntry[]): number {
+  if (bullets.length === 0) return 1.0;
+  const sum = bullets.reduce((acc, b) => acc + b.scaffoldLevel, 0);
+  return Math.round((sum / bullets.length) * 100) / 100;
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export default function ResumeBuilderPage() {
+  return (
+    <Suspense>
+      <ResumeBuilderContent />
+    </Suspense>
+  );
+}
+
+function ResumeBuilderContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [step, setStep] = useState<"target" | "build" | "preview">("target");
   const [resume, setResume] = useState<ResumeData>({
     targetJob: "",
@@ -86,6 +126,13 @@ export default function ResumeBuilderPage() {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [rateLimitError, setRateLimitError] = useState("");
+
+  // Persistence state
+  const [currentArtifactId, setCurrentArtifactId] = useState<string | null>(null);
+  const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedContent = useRef<string>("");
 
   // Load profile data from Forge session
   const [profileSkills, setProfileSkills] = useState<string[]>([]);
@@ -102,6 +149,144 @@ export default function ResumeBuilderPage() {
       }
     } catch {}
   }, []);
+
+  // Load saved resumes list
+  useEffect(() => {
+    async function loadSavedResumes() {
+      try {
+        const res = await fetch("/api/artifacts?type=resume&limit=20");
+        if (res.ok) {
+          const { data } = await res.json();
+          setSavedResumes(data || []);
+        }
+      } catch {}
+    }
+    loadSavedResumes();
+  }, []);
+
+  // Load artifact from URL param ?id=
+  useEffect(() => {
+    const artifactId = searchParams.get("id");
+    if (!artifactId) return;
+
+    async function loadArtifact(id: string) {
+      try {
+        const res = await fetch(`/api/artifacts/${id}`);
+        if (res.ok) {
+          const { data } = await res.json();
+          setCurrentArtifactId(data.id);
+          const content = data.content as ResumeData;
+          setResume({
+            targetJob: content.targetJob || "",
+            targetCompany: content.targetCompany || "",
+            summary: content.summary || "",
+            bullets: content.bullets?.length
+              ? content.bullets
+              : [{ id: 1, text: "", scaffoldLevel: 1.0 }],
+          });
+          lastSavedContent.current = JSON.stringify(content);
+          // Skip target step if we have a target job
+          if (content.targetJob) {
+            setStep("build");
+          }
+        }
+      } catch {}
+    }
+    loadArtifact(artifactId);
+  }, [searchParams]);
+
+  // Build content payload for save
+  const buildContent = useCallback(() => ({
+    targetJob: resume.targetJob,
+    targetCompany: resume.targetCompany,
+    summary: resume.summary,
+    bullets: resume.bullets,
+    formatVersion: 1,
+  }), [resume]);
+
+  // Save function
+  const saveResume = useCallback(async (isAutoSave = false) => {
+    const content = buildContent();
+    const contentStr = JSON.stringify(content);
+
+    // Skip if nothing changed
+    if (contentStr === lastSavedContent.current) {
+      if (!isAutoSave) setSaveStatus("saved");
+      return;
+    }
+
+    setSaveStatus("saving");
+    try {
+      const scaffoldLevel = averageScaffoldLevel(resume.bullets);
+
+      if (currentArtifactId) {
+        // Update existing
+        const res = await fetch(`/api/artifacts/${currentArtifactId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, scaffoldLevel }),
+        });
+        if (res.ok) {
+          lastSavedContent.current = contentStr;
+          setSaveStatus("saved");
+        } else {
+          setSaveStatus("error");
+        }
+      } else {
+        // Create new
+        const res = await fetch("/api/artifacts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "resume",
+            targetContext: {
+              targetJob: resume.targetJob,
+              targetCompany: resume.targetCompany,
+            },
+            content,
+            scaffoldLevel,
+          }),
+        });
+        if (res.ok) {
+          const { data } = await res.json();
+          setCurrentArtifactId(data.id);
+          lastSavedContent.current = contentStr;
+          setSaveStatus("saved");
+          // Update URL without full navigation
+          router.replace(`/dashboard/resume-builder?id=${data.id}`, { scroll: false });
+          // Refresh saved resumes list
+          setSavedResumes((prev) => [data, ...prev]);
+        } else {
+          setSaveStatus("error");
+        }
+      }
+    } catch {
+      setSaveStatus("error");
+    }
+  }, [buildContent, currentArtifactId, resume.bullets, resume.targetJob, resume.targetCompany, router]);
+
+  // Auto-save: debounced 5s after content changes (only when editing an existing artifact)
+  useEffect(() => {
+    if (!currentArtifactId) return;
+    if (step !== "build") return;
+
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      saveResume(true);
+    }, 5000);
+
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [resume, currentArtifactId, step, saveResume]);
+
+  // Clear saved indicator after 3s
+  useEffect(() => {
+    if (saveStatus === "saved") {
+      const t = setTimeout(() => setSaveStatus("idle"), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [saveStatus]);
 
   function addBullet() {
     const nextIndex = resume.bullets.length;
@@ -155,6 +340,80 @@ export default function ResumeBuilderPage() {
     }
   }
 
+  function startNewResume() {
+    setCurrentArtifactId(null);
+    setResume({
+      targetJob: "",
+      targetCompany: "",
+      summary: "",
+      bullets: [{ id: 1, text: "", scaffoldLevel: 1.0 }],
+    });
+    lastSavedContent.current = "";
+    setSaveStatus("idle");
+    setStep("target");
+    router.replace("/dashboard/resume-builder", { scroll: false });
+  }
+
+  // Save status indicator
+  const SaveIndicator = () => {
+    if (saveStatus === "saving") return <span className="text-xs text-muted">Saving...</span>;
+    if (saveStatus === "saved") return <span className="text-xs text-sage-600">Saved</span>;
+    if (saveStatus === "error") return <span className="text-xs text-earth-600">Save failed</span>;
+    return null;
+  };
+
+  // --- My Resumes List ---
+  const MyResumes = () => {
+    if (savedResumes.length === 0) return null;
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-foreground">My Resumes</h2>
+          <button
+            onClick={startNewResume}
+            className="text-sm text-sage-600 hover:text-sage-700 font-medium"
+          >
+            + New Resume
+          </button>
+        </div>
+        <div className="space-y-2">
+          {savedResumes.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => {
+                router.replace(`/dashboard/resume-builder?id=${r.id}`, { scroll: false });
+              }}
+              className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+                currentArtifactId === r.id
+                  ? "border-sage-400 bg-sage-50"
+                  : "border-border bg-white hover:border-sage-300"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground truncate">
+                  {r.target_context?.targetJob || "Untitled resume"}
+                </span>
+                <span className="text-xs text-muted ml-2 flex-shrink-0">
+                  {timeAgo(r.updated_at)}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                {r.target_context?.targetCompany && (
+                  <span className="text-xs text-muted">
+                    at {r.target_context.targetCompany}
+                  </span>
+                )}
+                <span className="text-xs text-muted">
+                  v{r.iteration_number}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // --- Step 1: Target ---
   if (step === "target") {
     return (
@@ -166,6 +425,8 @@ export default function ResumeBuilderPage() {
           One resume for one job. Tell us what you&apos;re applying for, and
           we&apos;ll help you build it.
         </p>
+
+        <MyResumes />
 
         <div className="space-y-4 mb-8">
           <div>
@@ -248,12 +509,15 @@ export default function ResumeBuilderPage() {
               <p className="text-sm text-muted">at {resume.targetCompany}</p>
             )}
           </div>
-          <button
-            onClick={() => setStep("target")}
-            className="text-sm text-muted hover:text-foreground"
-          >
-            Change target
-          </button>
+          <div className="flex items-center gap-3">
+            <SaveIndicator />
+            <button
+              onClick={() => setStep("target")}
+              className="text-sm text-muted hover:text-foreground"
+            >
+              Change target
+            </button>
+          </div>
         </div>
 
         {/* Summary */}
@@ -373,6 +637,12 @@ export default function ResumeBuilderPage() {
 
         <div className="flex gap-3">
           <button
+            onClick={() => saveResume(false)}
+            className="px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+          >
+            Save
+          </button>
+          <button
             onClick={() => setStep("preview")}
             disabled={
               !resume.summary.trim() &&
@@ -392,12 +662,15 @@ export default function ResumeBuilderPage() {
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-foreground">Preview</h1>
-        <button
-          onClick={() => setStep("build")}
-          className="text-sm text-sage-600 hover:text-sage-700"
-        >
-          Edit
-        </button>
+        <div className="flex items-center gap-3">
+          <SaveIndicator />
+          <button
+            onClick={() => setStep("build")}
+            className="text-sm text-sage-600 hover:text-sage-700"
+          >
+            Edit
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl p-8 border border-border shadow-sm">
@@ -457,9 +730,15 @@ export default function ResumeBuilderPage() {
             a.click();
             URL.revokeObjectURL(url);
           }}
-          className="flex-1 px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+          className="px-6 py-4 bg-white border-2 border-border text-foreground rounded-xl font-medium hover:bg-gray-50 transition-colors min-h-touch"
         >
           Download
+        </button>
+        <button
+          onClick={() => saveResume(false)}
+          className="px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+        >
+          Save
         </button>
         <button
           onClick={() => setStep("build")}

@@ -21,6 +21,8 @@ export const config = {
     // Access code management
     "/api/access-code/:path*",
     "/api/usage",
+    // Artifact persistence (requires auth)
+    "/api/artifacts/:path*",
   ],
   // The Forge flow (/, /welcome, /resume, /goals, /story, /preferences,
   // /processing, /output) is intentionally NOT protected.

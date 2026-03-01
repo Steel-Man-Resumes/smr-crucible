@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { DevToolbar } from "@/components/DevToolbar";
 
 export const metadata: Metadata = {
   title: "Steel Man Resumes",
@@ -21,7 +22,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <DevToolbar />
+      </body>
     </html>
   );
 }

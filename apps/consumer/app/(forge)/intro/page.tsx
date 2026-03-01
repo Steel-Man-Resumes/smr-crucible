@@ -126,6 +126,19 @@ export default function IntroPage() {
             </button>
           ))}
         </div>
+
+        {/* Rush Mode escape valve */}
+        <div className="mt-6 pt-4 border-t border-border text-center">
+          <button
+            onClick={() => router.push("/rush")}
+            className="text-sm text-muted hover:text-sage-600 transition-colors"
+          >
+            Need a resume fast?{" "}
+            <span className="underline underline-offset-2">
+              Try Rush Mode
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   analyze: 5,
   parse: 10,
   assistant: 20,
+  "rush-resume": 5,
 };
 
 export interface RateLimitResult {

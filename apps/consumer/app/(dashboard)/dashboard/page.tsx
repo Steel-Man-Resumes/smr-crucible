@@ -74,8 +74,46 @@ const REFINERY_TOOLS = [
   },
 ];
 
+interface ArtifactSummary {
+  id: string;
+  artifact_type: string;
+  target_context: { targetJob?: string; targetCompany?: string };
+  updated_at: string;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  resume: "resumes",
+  cover_letter: "cover letters",
+  disclosure_plan: "disclosure plans",
+  interview_prep: "interview sessions",
+  resource_list: "resource lists",
+  job_match: "job matches",
+};
+
+const TYPE_TOOL_HREF: Record<string, string> = {
+  resume: "/dashboard/resume-builder",
+  disclosure_plan: "/dashboard/disclosure",
+  interview_prep: "/dashboard/interview",
+  job_match: "/dashboard/jobs",
+  resource_list: "/dashboard/resources",
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>({});
+  const [artifactCounts, setArtifactCounts] = useState<Record<string, number>>({});
+  const [recentArtifacts, setRecentArtifacts] = useState<ArtifactSummary[]>([]);
 
   // Load Forge output — try DB first, fall back to localStorage
   useEffect(() => {
@@ -114,7 +152,29 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Load artifact counts + recent artifacts
+  useEffect(() => {
+    async function loadArtifacts() {
+      try {
+        const [countsRes, recentRes] = await Promise.all([
+          fetch("/api/artifacts/counts"),
+          fetch("/api/artifacts?limit=5"),
+        ]);
+        if (countsRes.ok) {
+          const { data } = await countsRes.json();
+          setArtifactCounts(data || {});
+        }
+        if (recentRes.ok) {
+          const { data } = await recentRes.json();
+          setRecentArtifacts(data || []);
+        }
+      } catch {}
+    }
+    loadArtifacts();
+  }, []);
+
   const hasForgeData = !!(data.narrative || data.skills?.length);
+  const totalArtifacts = Object.values(artifactCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-10">
@@ -209,26 +269,93 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* Your Saved Work */}
+      {totalArtifacts > 0 && (
+        <section>
+          <h2 className="text-lg font-bold text-foreground mb-4">
+            Your Saved Work
+          </h2>
+          {/* Count summary */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {Object.entries(artifactCounts).map(([type, count]) => (
+              <Link
+                key={type}
+                href={TYPE_TOOL_HREF[type] || "/dashboard"}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-sage-100 text-sage-700 hover:bg-sage-200 transition-colors"
+              >
+                {count} {TYPE_LABELS[type] || type}
+              </Link>
+            ))}
+          </div>
+          {/* Recent artifacts */}
+          {recentArtifacts.length > 0 && (
+            <div className="space-y-2">
+              {recentArtifacts.map((a) => {
+                const href = TYPE_TOOL_HREF[a.artifact_type]
+                  ? `${TYPE_TOOL_HREF[a.artifact_type]}?id=${a.id}`
+                  : "/dashboard";
+                return (
+                  <Link
+                    key={a.id}
+                    href={href}
+                    className="block bg-white rounded-xl px-4 py-3 border border-border hover:border-sage-300 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {a.target_context?.targetJob || TYPE_LABELS[a.artifact_type] || a.artifact_type}
+                      </span>
+                      <span className="text-xs text-muted ml-2 flex-shrink-0">
+                        {timeAgo(a.updated_at)}
+                      </span>
+                    </div>
+                    {a.target_context?.targetCompany && (
+                      <p className="text-xs text-muted mt-0.5">
+                        at {a.target_context.targetCompany}
+                      </p>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Refinery Tool Cards */}
       <section>
         <h2 className="text-lg font-bold text-foreground mb-4">
           The Refinery — Your Workshop
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {REFINERY_TOOLS.map((tool) => (
-            <Link
-              key={tool.href}
-              href={tool.href}
-              className={`block rounded-2xl p-5 border transition-all hover:shadow-md ${tool.color}`}
-            >
-              <h3 className={`font-semibold mb-1 ${tool.accent}`}>
-                {tool.title}
-              </h3>
-              <p className="text-sm text-muted leading-relaxed">
-                {tool.description}
-              </p>
-            </Link>
-          ))}
+          {REFINERY_TOOLS.map((tool) => {
+            // Find count for this tool's artifact type
+            const typeForTool = Object.entries(TYPE_TOOL_HREF).find(
+              ([, href]) => href === tool.href
+            )?.[0];
+            const count = typeForTool ? artifactCounts[typeForTool] : 0;
+
+            return (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className={`block rounded-2xl p-5 border transition-all hover:shadow-md ${tool.color}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className={`font-semibold mb-1 ${tool.accent}`}>
+                    {tool.title}
+                  </h3>
+                  {count > 0 && (
+                    <span className="text-xs font-medium text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                      {count} saved
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-muted leading-relaxed">
+                  {tool.description}
+                </p>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
