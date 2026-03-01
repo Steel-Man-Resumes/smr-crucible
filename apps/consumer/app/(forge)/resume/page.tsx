@@ -46,6 +46,13 @@ export default function ResumeIntakePage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [activePath, setActivePath] = useState<IntakePath>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [parsedName, setParsedName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
   // Demo mode: show pre-filled resume and continue
   if (isDemo) {
     return (
@@ -84,12 +91,46 @@ export default function ResumeIntakePage() {
     );
   }
 
-  const [activePath, setActivePath] = useState<IntakePath>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [parsedName, setParsedName] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  // Rush Mode passthrough: resume already provided via /rush
+  if (session.resumeMethod === "rush" && session.resumeText) {
+    return (
+      <FlowPage
+        title="We already have your resume."
+        subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis — no need to re-enter."
+        actionLabel="Continue"
+        onAction={() => {
+          updateSession({ lastPageVisited: "resume" });
+          router.push("/goals");
+        }}
+        showBack
+        onBack={() => router.push("/welcome")}
+        footer={
+          <button
+            onClick={() => {
+              updateSession({ resumeText: undefined, resumeMethod: undefined });
+            }}
+            className="text-sage-600 underline underline-offset-2 hover:text-sage-700"
+          >
+            I want to use a different resume
+          </button>
+        }
+      >
+        <GhostGuide
+          message={getOpusMessage("resume", audience, false)}
+          pageId="resume"
+        />
+        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
+          <p className="text-sm text-sage-700 font-medium mb-2">
+            From Rush Mode
+          </p>
+          <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+            {session.resumeText.slice(0, 500)}
+            {session.resumeText.length > 500 ? "..." : ""}
+          </p>
+        </div>
+      </FlowPage>
+    );
+  }
 
   // --- Path A: File Upload ---
   const handleFile = useCallback(
