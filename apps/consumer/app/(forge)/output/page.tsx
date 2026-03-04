@@ -5,12 +5,13 @@
  *
  * Narrative, not report. User's life reframed through redemption lens.
  * Reflects user's own words back, reorganized, affirmed.
- * Sections: Strengths → Skills → Barriers (with resources) → Career paths → Next steps
+ * Sections: Strengths -> Skills -> Barriers (with resources) -> Career paths -> Documents -> Next steps
  * Never scored, never graded.
- * Downloadable, saveable to dashboard.
+ * Downloadable (analysis text + resume DOCX + cover letter DOCX), saveable to dashboard.
  * Gateway to Refinery: value-based invitation, not fear-based conversion.
  */
 
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -62,6 +63,8 @@ interface ForgeOutput {
   career_paths?: CareerPath[];
 }
 
+type DocGenState = "idle" | "generating" | "done" | "error";
+
 export default function OutputPage() {
   const router = useRouter();
   const { session } = useForgeSession();
@@ -74,6 +77,89 @@ export default function OutputPage() {
   const skills = output.skills || [];
   const barriers = output.barriers || [];
   const careerPaths = output.career_paths || [];
+
+  // Document generation state
+  const [docState, setDocState] = useState<DocGenState>("idle");
+  const [resumeText, setResumeText] = useState<string>("");
+  const [coverLetterText, setCoverLetterText] = useState<string>("");
+  const [docError, setDocError] = useState<string>("");
+  const [downloading, setDownloading] = useState<string>("");
+
+  const generateDocs = useCallback(async () => {
+    if (docState === "generating" || docState === "done") return;
+    setDocState("generating");
+    setDocError("");
+
+    try {
+      const response = await fetch("/api/forge/generate-docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          narrative: output.narrative,
+          strengths: output.strengths,
+          skills: output.skills,
+          career_paths: output.career_paths,
+          barriers: output.barriers,
+          resumeText: session.resumeText,
+          goals: session.goals,
+          goalNarrative: session.goalNarrative,
+          preferences: session.preferences,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Document generation failed");
+      }
+
+      const data = await response.json();
+      setResumeText(data.resume || "");
+      setCoverLetterText(data.coverLetter || "");
+      setDocState("done");
+    } catch (err: any) {
+      console.error("Doc generation error:", err);
+      setDocError(err.message || "Something went wrong generating your documents.");
+      setDocState("error");
+    }
+  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences]);
+
+  // Auto-trigger document generation when output page loads
+  useEffect(() => {
+    if (session.forgeOutput && docState === "idle") {
+      generateDocs();
+    }
+  }, [session.forgeOutput, docState, generateDocs]);
+
+  const handleDownload = async (type: "resume" | "cover_letter") => {
+    const content = type === "resume" ? resumeText : coverLetterText;
+    if (!content) return;
+
+    setDownloading(type);
+    try {
+      const response = await fetch("/api/forge/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, type, format: "docx" }),
+      });
+
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        type === "resume"
+          ? "My_Resume_SteelMan.docx"
+          : "My_CoverLetter_SteelMan.docx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
+    } finally {
+      setDownloading("");
+    }
+  };
 
   // If no output, redirect back
   if (!session.forgeOutput) {
@@ -287,12 +373,143 @@ export default function OutputPage() {
         </section>
       )}
 
+      {/* Your Documents */}
+      <section className="mb-10">
+        <h2 className="text-xl font-bold text-foreground mb-4">
+          Your Documents
+        </h2>
+
+        {docState === "generating" && (
+          <div className="bg-sage-50 rounded-2xl p-8 border border-sage-200 text-center">
+            <div className="w-10 h-10 mx-auto mb-4 relative">
+              <div className="absolute inset-0 border-3 border-sage-200 rounded-full" />
+              <div className="absolute inset-0 border-3 border-sage-600 rounded-full border-t-transparent animate-spin" />
+            </div>
+            <p className="text-sm font-medium text-sage-700">
+              Generating your resume and cover letter...
+            </p>
+            <p className="text-xs text-muted mt-1">
+              This usually takes 30-60 seconds
+            </p>
+          </div>
+        )}
+
+        {docState === "error" && (
+          <div className="bg-warm-50 rounded-2xl p-6 border border-warm-200 text-center">
+            <p className="text-sm text-earth-700 mb-3">{docError}</p>
+            <button
+              onClick={() => {
+                setDocState("idle");
+                generateDocs();
+              }}
+              className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {docState === "done" && (
+          <div className="space-y-4">
+            {/* Resume */}
+            {resumeText && (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
+                  <h3 className="font-semibold text-sage-800 text-sm">
+                    Resume
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(resumeText);
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => handleDownload("resume")}
+                      disabled={downloading === "resume"}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors disabled:opacity-50"
+                    >
+                      {downloading === "resume"
+                        ? "Downloading..."
+                        : "Download .docx"}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 max-h-80 overflow-y-auto">
+                  <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                    {resumeText}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Cover Letter */}
+            {coverLetterText && (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
+                  <h3 className="font-semibold text-sage-800 text-sm">
+                    Cover Letter
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(coverLetterText);
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => handleDownload("cover_letter")}
+                      disabled={downloading === "cover_letter"}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors disabled:opacity-50"
+                    >
+                      {downloading === "cover_letter"
+                        ? "Downloading..."
+                        : "Download .docx"}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 max-h-80 overflow-y-auto">
+                  <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                    {coverLetterText}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted text-center mt-2">
+              Tip: Replace [Company Name] and [Hiring Manager] in the cover
+              letter with the actual employer before sending.
+            </p>
+          </div>
+        )}
+
+        {docState === "idle" && (
+          <div className="bg-sage-50 rounded-2xl p-6 border border-sage-200 text-center">
+            <p className="text-sm text-muted mb-3">
+              Ready to generate your resume and cover letter from the analysis
+              above.
+            </p>
+            <button
+              onClick={generateDocs}
+              className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            >
+              Generate Documents
+            </button>
+          </div>
+        )}
+      </section>
+
       {/* Actions */}
       <section className="border-t border-border pt-8 mb-8">
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => {
-              // Download as text file
+              // Download analysis as text file
               const text = formatOutputAsText(output, narrative);
               const blob = new Blob([text], { type: "text/plain" });
               const url = URL.createObjectURL(blob);
@@ -304,7 +521,7 @@ export default function OutputPage() {
             }}
             className="flex-1 px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
           >
-            Download Results
+            Download Analysis
           </button>
           <button
             onClick={() => router.push("/login")}
@@ -345,10 +562,10 @@ function formatOutputAsText(
   narrative: Record<string, unknown>
 ): string {
   const lines: string[] = [
-    "═══════════════════════════════════════",
-    "  THE FORGE — Your Story, Reforged",
+    "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
+    "  THE FORGE \u2014 Your Story, Reforged",
     "  Steel Man Resumes",
-    "═══════════════════════════════════════",
+    "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
     "",
   ];
 
@@ -356,19 +573,19 @@ function formatOutputAsText(
   if (narrative.summary) lines.push(String(narrative.summary), "");
 
   if (output.strengths?.length) {
-    lines.push("", "YOUR STRENGTHS", "─────────────");
+    lines.push("", "YOUR STRENGTHS", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
     for (const s of output.strengths) {
-      lines.push(`• ${s.title}: ${s.evidence}`);
+      lines.push(`\u2022 ${s.title}: ${s.evidence}`);
     }
   }
 
   if (output.skills?.length) {
-    lines.push("", "SKILLS", "──────");
+    lines.push("", "SKILLS", "\u2500\u2500\u2500\u2500\u2500\u2500");
     lines.push(output.skills.map((s) => s.name).join(", "));
   }
 
   if (output.career_paths?.length) {
-    lines.push("", "CAREER PATHS", "────────────");
+    lines.push("", "CAREER PATHS", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
     for (const cp of output.career_paths) {
       lines.push(`\n${cp.title}${cp.salary_range ? ` (${cp.salary_range})` : ""}`);
       lines.push(cp.match_reason);
@@ -380,16 +597,16 @@ function formatOutputAsText(
   }
 
   if (output.barriers?.length) {
-    lines.push("", "RESOURCES FOR YOUR SITUATION", "───────────────────────────");
+    lines.push("", "RESOURCES FOR YOUR SITUATION", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
     for (const b of output.barriers) {
       lines.push(`\n${b.type.replace(/_/g, " ").toUpperCase()}`);
       if (b.legal_notes) lines.push(`Legal note: ${b.legal_notes}`);
       for (const r of b.resources) {
-        lines.push(`  • ${r.name}: ${r.description}`);
+        lines.push(`  \u2022 ${r.name}: ${r.description}`);
       }
     }
   }
 
-  lines.push("", "", "Generated by The Forge, powered by Opus — steelmanresumes.com");
+  lines.push("", "", "Generated by The Forge, powered by Opus \u2014 steelmanresumes.com");
   return lines.join("\n");
 }

@@ -22,6 +22,8 @@ const PROCESSING_STEPS = [
   "Matching career paths...",
   "Connecting barriers to resources...",
   "Crafting your narrative...",
+  "Generating your resume...",
+  "Writing your cover letter...",
   "Almost done...",
 ];
 
