@@ -30,6 +30,19 @@ function LoginForm() {
     }
   }, [searchParams]);
 
+  // Check for NextAuth error in URL params
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError) {
+      const messages: Record<string, string> = {
+        Configuration: "Login is temporarily unavailable. Please try again later or contact Troy.",
+        AccessDenied: "Access denied. Check your email and try again.",
+        Verification: "That link has expired. Please request a new one.",
+      };
+      setError(messages[urlError] || `Login error: ${urlError}`);
+    }
+  }, [searchParams]);
+
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
@@ -43,10 +56,22 @@ function LoginForm() {
     }
 
     try {
-      await signIn("resend", {
+      const result = await signIn("resend", {
         email: email.trim(),
         callbackUrl: "/dashboard",
+        redirect: false,
       });
+
+      if (result?.error) {
+        setError(
+          result.error === "Configuration"
+            ? "Email delivery is temporarily unavailable. Please try again later or contact Troy."
+            : `Login error: ${result.error}`
+        );
+        setSending(false);
+      } else if (result?.url) {
+        window.location.href = result.url;
+      }
     } catch {
       setError("Something went wrong. Please try again.");
       setSending(false);

@@ -7,6 +7,7 @@
 
 "use client";
 
+import { useRef, useEffect } from "react";
 import { useAssistant } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 
@@ -20,6 +21,12 @@ export function AssistantChat({ context, sessionId }: AssistantChatProps) {
     context,
     sessionId,
   });
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages or loading state
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
   return (
     <div className="flex flex-col h-full">
@@ -79,6 +86,8 @@ export function AssistantChat({ context, sessionId }: AssistantChatProps) {
             </div>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}

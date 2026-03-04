@@ -123,6 +123,17 @@ export default function IntroPage() {
           </p>
         </div>
 
+        {/* t.ROY callout — use it */}
+        <div className="bg-sage-600 rounded-xl px-5 py-4 mb-6 text-white">
+          <p className="text-sm font-bold mb-1">One more thing.</p>
+          <p className="text-sm leading-relaxed opacity-90">
+            You&apos;ll see a chat button on every page. That&apos;s me. Real
+            Troy designed every word I say, and I&apos;m here to actually help
+            &mdash; not sell you something. If you get stuck, confused, or just
+            want to talk it through &mdash; use it. That&apos;s what it&apos;s for.
+          </p>
+        </div>
+
         {/* "Who are you?" prompt */}
         <p className="font-medium text-foreground mb-4">Who are you?</p>
 

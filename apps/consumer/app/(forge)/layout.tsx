@@ -7,6 +7,12 @@ import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { ContactTroyButton } from "@/components/ContactTroyButton";
 
+/** Map pathname to page ID for assistant context */
+function getPageId(pathname: string): string {
+  const segment = pathname.split("/").filter(Boolean).pop();
+  return segment || "forge";
+}
+
 const FORGE_STEPS = [
   { path: "/resume", label: "Resume" },
   { path: "/goals", label: "Goals" },
@@ -28,12 +34,13 @@ function ForgeProgress() {
 
 function ForgeAssistant() {
   const { session } = useForgeSession();
+  const pathname = usePathname();
 
   return (
     <AssistantDrawer>
       <AssistantChat
         context={{
-          currentPage: session.lastPageVisited || "forge",
+          currentPage: getPageId(pathname),
           readinessStage: session.readinessStage,
           skills: session.forgeOutput
             ? (session.forgeOutput as any).skills?.map((s: any) => s.name)
