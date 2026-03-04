@@ -26,7 +26,7 @@ interface AssistantDrawerProps {
 export function AssistantDrawer({
   children,
   enabled = true,
-  triggerLabel = "Ask Opus",
+  triggerLabel = "Ask t.ROY",
 }: AssistantDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);

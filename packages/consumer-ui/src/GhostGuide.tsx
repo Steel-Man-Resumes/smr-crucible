@@ -66,7 +66,7 @@ export function GhostGuide({
         <button
           onClick={toggleCollapse}
           className="w-full flex items-center gap-2 px-4 py-3 text-sm text-sage-600 hover:text-sage-700 transition-colors"
-          aria-label="Show guidance from Opus"
+          aria-label="Show guidance from t.ROY"
         >
           {/* Ghost icon */}
           <svg
@@ -84,7 +84,7 @@ export function GhostGuide({
               fill="none"
             />
           </svg>
-          <span>Show Opus guidance</span>
+          <span>Show t.ROY guidance</span>
         </button>
       ) : (
         <div className="px-4 py-3">

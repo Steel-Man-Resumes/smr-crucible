@@ -136,7 +136,7 @@ function WelcomePageInner() {
       {isDemo && (
         <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
           <p className="text-sm text-amber-800 font-medium">
-            Demo mode — sample data pre-filled. Watch how Opus guides each step.
+            Demo mode — sample data pre-filled. Watch how t.ROY guides each step.
           </p>
         </div>
       )}

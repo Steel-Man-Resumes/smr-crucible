@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Intro Page — Opus Introduces Itself
+ * Intro Page — t.ROY Introduces Itself
  *
  * Clean, confident, single-screen presentation. No chatbot monologue,
- * no line-by-line animation. Opus walks into the room and tells you
+ * no line-by-line animation. t.ROY walks into the room and tells you
  * what's happening. Three genuinely different paths.
  *
  * Routes:
@@ -57,7 +57,7 @@ export default function IntroPage() {
       isDemo: path.id !== "client",
     });
 
-    // Persist audience for pre-auth Opus access
+    // Persist audience for pre-auth t.ROY access
     try {
       localStorage.setItem("forge_audience", path.id);
     } catch {
@@ -70,7 +70,7 @@ export default function IntroPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-        {/* Opus icon */}
+        {/* t.ROY icon */}
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center">
             <svg
@@ -91,9 +91,9 @@ export default function IntroPage() {
           </div>
         </div>
 
-        {/* Opus introduction */}
+        {/* t.ROY introduction */}
         <div className="text-center mb-8 space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">I&apos;m Opus.</h1>
+          <h1 className="text-2xl font-bold text-foreground">I&apos;m t.ROY.</h1>
 
           <p className="text-body text-foreground leading-relaxed">
             Troy built me from everything he knows &mdash; the research, the

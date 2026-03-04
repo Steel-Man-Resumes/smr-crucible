@@ -28,7 +28,7 @@ export function AssistantChat({ context, sessionId }: AssistantChatProps) {
         {messages.length === 0 && (
           <div className="text-muted text-sm">
             <p className="mb-2">
-              I&apos;m Opus. Ask me anything about this page, or just talk
+              I&apos;m t.ROY. Ask me anything about this page, or just talk
               through what you&apos;re thinking.
             </p>
             <p>There are no wrong questions.</p>

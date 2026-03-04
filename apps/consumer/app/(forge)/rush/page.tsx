@@ -5,7 +5,7 @@
  *
  * Single-page flow: paste resume + target job → get rewritten resume in ~30s.
  * Crucible rules: only uses facts from original resume, never fabricates.
- * Lives in (forge) route group — gets ForgeLayout wrapper (exit button, Opus, contact Troy).
+ * Lives in (forge) route group — gets ForgeLayout wrapper (exit button, t.ROY, contact Troy).
  * No auth required. IP-rate-limited via /api/rush-resume.
  */
 

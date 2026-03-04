@@ -69,7 +69,7 @@ export default function MethodologyPage() {
             title="Scaffolding Philosophy"
             researchers="Wood, Bruner, Ross, 1976"
             summary="Scaffolding provides structure that fades as competence grows. More support early, less later. The goal is independence, not dependence on the tool."
-            application="The Forge provides heavy scaffolding (structured inputs, guidance). The Refinery fades scaffolding (open-ended tools, user-directed). The Ghost/Opus guides but never does the work."
+            application="The Forge provides heavy scaffolding (structured inputs, guidance). The Refinery fades scaffolding (open-ended tools, user-directed). t.ROY guides but never does the work."
           />
         </div>
       </section>
@@ -108,14 +108,14 @@ export default function MethodologyPage() {
             <p className="text-muted">
               No prep needed. The Forge requires no login, no paperwork, and no
               prior resume. Clients can start on any device with internet access.
-              Point them to steelmanresumes.com and let Opus guide them.
+              Point them to steelmanresumes.com and let t.ROY guide them.
             </p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-border">
             <h3 className="font-semibold mb-1">During the session</h3>
             <p className="text-muted">
               10-15 minutes. Can be done independently or with a facilitator
-              present. The AI assistant (Opus) is available on every page but
+              present. The AI assistant (t.ROY) is available on every page but
               never auto-opens. Clients can ask questions, talk through
               decisions, or skip sections they&apos;re not ready for.
             </p>
