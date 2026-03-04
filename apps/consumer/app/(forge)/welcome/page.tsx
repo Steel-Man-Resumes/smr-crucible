@@ -26,24 +26,36 @@ const READINESS_OPTIONS = [
   {
     id: "exploring",
     label: "Just exploring",
-    description: "I'm not sure if I'm ready to look for work yet, but I'm curious.",
+    description: "Not sure I'm ready yet, but I'm curious.",
   },
   {
     id: "thinking",
     label: "Thinking about it",
-    description: "I know I need to do something, but I'm not sure where to start.",
+    description: "I know I need to do something, but I don't know where to start.",
   },
   {
     id: "getting-ready",
     label: "Getting ready",
-    description: "I've decided to make a change. I want to figure out my next steps.",
+    description: "I've decided to make a change. Show me what's next.",
   },
   {
     id: "ready-now",
     label: "Ready to go",
-    description: "I'm actively looking for work and need real tools right now.",
+    description: "I'm looking for work right now. Let's move.",
   },
 ];
+
+/** t.ROY responds differently based on what they picked */
+const TROY_RESPONSES: Record<string, string> = {
+  exploring:
+    "No pressure. Let's just see what's out there. You can stop anytime.",
+  thinking:
+    "That's where most people start. Let's figure it out together.",
+  "getting-ready":
+    "Good. You've already made the hardest decision. Let's build on it.",
+  "ready-now":
+    "Let's go. First thing — your resume.",
+};
 
 const STAGE_MAP: Record<string, ReadinessStage> = {
   exploring: "precontemplation",
@@ -81,6 +93,7 @@ function WelcomePageInner() {
       ? REVERSE_STAGE_MAP[DEMO_SESSION.readinessStage] || ""
       : ""
   );
+  const [acknowledged, setAcknowledged] = useState(false);
 
   // Track page visit + set demo mode from URL param
   useEffect(() => {
@@ -113,10 +126,16 @@ function WelcomePageInner() {
     router.push("/resume");
   }
 
+  function handleSelect(id: string) {
+    if (isDemo) return;
+    setSelected(id);
+    setAcknowledged(true);
+  }
+
   return (
     <FlowPage
       title="Where are you at right now?"
-      subtitle="There's no wrong answer. This helps us meet you where you are."
+      subtitle="This changes how much I talk. Pick what's true."
       actionLabel={isDemo ? "Next" : "Continue"}
       actionDisabled={!isDemo && !selected}
       onAction={handleContinue}
@@ -144,8 +163,32 @@ function WelcomePageInner() {
       <CardSelect
         options={READINESS_OPTIONS}
         selected={isDemo ? (REVERSE_STAGE_MAP[DEMO_SESSION.readinessStage!] || "") : selected}
-        onSelect={isDemo ? () => {} : setSelected}
+        onSelect={handleSelect}
       />
+
+      {/* t.ROY acknowledges the selection */}
+      {acknowledged && selected && TROY_RESPONSES[selected] && (
+        <div className="mt-4 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 flex items-start gap-3 animate-in fade-in duration-300">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+            className="flex-shrink-0 mt-0.5 text-sage-500"
+          >
+            <path
+              d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              fill="none"
+            />
+          </svg>
+          <p className="text-sm text-sage-700 leading-relaxed">
+            {TROY_RESPONSES[selected]}
+          </p>
+        </div>
+      )}
     </FlowPage>
   );
 }

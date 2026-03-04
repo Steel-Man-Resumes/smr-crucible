@@ -104,16 +104,16 @@ export default function StoryPage() {
 
   return (
     <FlowPage
-      title="What stands in your way?"
-      subtitle="Everyone has hurdles. Naming them helps us find real solutions."
+      title="What&apos;s in your way?"
+      subtitle="Check what applies. Skip what doesn&apos;t."
       actionLabel={isDemo ? "Next" : (selected.length > 0 ? "Continue" : "Nothing right now — skip")}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/goals")}
       footer={
         <p>
-          Your data stays on your device. We use it to connect you with
-          resources, not to store or share.
+          Nothing leaves your device. We use this to find resources, not to
+          judge.
         </p>
       }
     >
@@ -121,6 +121,18 @@ export default function StoryPage() {
         message={getOpusMessage("story", audience, isDemo)}
         pageId="story"
       />
+
+      {/* The trade — why it's worth sharing */}
+      {!isDemo && (
+        <div className="bg-warm-50 rounded-xl px-4 py-3 mb-4 border border-warm-200">
+          <p className="text-sm text-earth-700 leading-relaxed">
+            <span className="font-semibold">Here&apos;s the deal:</span> if you
+            tell me about your record, I find the specific laws that protect you
+            and resources in your area. If you skip it, I still work with
+            everything else. Your call.
+          </p>
+        </div>
+      )}
 
       {isDemo && (
         <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">

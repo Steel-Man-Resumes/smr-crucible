@@ -51,6 +51,8 @@ export default function ResumeIntakePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [parsedName, setParsedName] = useState<string | null>(null);
+  const [parsedEmail, setParsedEmail] = useState<string>("");
+  const [parsedPhone, setParsedPhone] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
 
   // All hooks must be declared before any conditional returns (rules-of-hooks)
@@ -82,6 +84,8 @@ export default function ResumeIntakePage() {
         });
 
         setParsedName(data.profile?.full_name || null);
+        setParsedEmail(data.profile?.email || "");
+        setParsedPhone(data.profile?.phone || "");
         setUploadSuccess(true);
       } catch (err) {
         setUploadError("Couldn't read that file. Try a different one?");
@@ -199,27 +203,87 @@ export default function ResumeIntakePage() {
     setActivePath("guided");
   }
 
-  // If upload succeeded, show confirmation and continue
+  // If upload succeeded, show verification and optional contact info
   if (uploadSuccess) {
     return (
       <FlowPage
         title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
-        subtitle="We read your resume. You can review and change anything later — nothing is permanent."
+        subtitle="Here&apos;s what we found. Look right?"
         actionLabel="Continue"
-        onAction={handleContinue}
+        onAction={() => {
+          // Save any added contact info into the resume text header
+          if (parsedEmail || parsedPhone) {
+            const contactLine = [parsedPhone, parsedEmail].filter(Boolean).join(" | ");
+            const currentText = session.resumeText || "";
+            // Prepend contact info if not already present
+            if (contactLine && !currentText.includes(parsedEmail || "___") && !currentText.includes(parsedPhone || "___")) {
+              const nameHeader = parsedName || "";
+              updateSession({
+                resumeText: nameHeader + "\n" + contactLine + "\n\n" + currentText.replace(new RegExp("^" + nameHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\n?"), ""),
+              });
+            }
+          }
+          handleContinue();
+        }}
         showBack
         onBack={() => {
           setUploadSuccess(false);
           setActivePath("upload");
         }}
       >
-        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
-          <p className="text-sm text-sage-700 font-medium">Resume received</p>
-          <p className="text-sm text-muted mt-1">
-            We extracted your experience, skills, and education. The next few
-            pages help us understand what you&apos;re looking for.
-          </p>
+        {/* What we found */}
+        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200 mb-4">
+          <p className="text-sm text-sage-700 font-medium mb-2">We read from your resume:</p>
+          <div className="text-sm text-foreground space-y-1">
+            {parsedName && <p><span className="text-muted">Name:</span> {parsedName}</p>}
+            <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto mt-2">
+              {session.resumeText?.slice(0, 300)}
+              {(session.resumeText?.length || 0) > 300 ? "..." : ""}
+            </p>
+          </div>
         </div>
+
+        {/* Optional contact info — only show fields that are missing */}
+        {(!parsedEmail || !parsedPhone) && (
+          <div className="bg-white rounded-xl p-5 border border-border">
+            <p className="text-sm font-medium text-foreground mb-1">
+              Missing anything?
+            </p>
+            <p className="text-xs text-muted mb-3">
+              Not required — but these go on your resume when you download it.
+            </p>
+            <div className="space-y-3">
+              {!parsedPhone && (
+                <div>
+                  <label className="text-xs font-medium text-muted block mb-1">
+                    Phone number
+                  </label>
+                  <input
+                    type="tel"
+                    value={parsedPhone}
+                    onChange={(e) => setParsedPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  />
+                </div>
+              )}
+              {!parsedEmail && (
+                <div>
+                  <label className="text-xs font-medium text-muted block mb-1">
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    value={parsedEmail}
+                    onChange={(e) => setParsedEmail(e.target.value)}
+                    placeholder="you@email.com"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </FlowPage>
     );
   }

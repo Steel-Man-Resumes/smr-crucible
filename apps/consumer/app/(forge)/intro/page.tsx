@@ -92,17 +92,34 @@ export default function IntroPage() {
         </div>
 
         {/* t.ROY introduction */}
-        <div className="text-center mb-8 space-y-4">
+        <div className="text-center mb-6 space-y-3">
           <h1 className="text-2xl font-bold text-foreground">I&apos;m t.ROY.</h1>
 
           <p className="text-body text-foreground leading-relaxed">
-            Troy built me from everything he knows &mdash; the research, the
-            experience, all of it. I&apos;m the best career AI that exists for
-            people rebuilding their lives.
+            I find what you&apos;re good at, match it to jobs that fit, and
+            handle the record stuff so you don&apos;t have to figure it out
+            alone.
           </p>
+        </div>
 
-          <p className="text-sm text-muted leading-relaxed">
-            I&apos;m on every page. If you get stuck, just ask.
+        {/* Here's the deal */}
+        <div className="bg-sage-50 rounded-xl px-4 py-4 mb-6 border border-sage-200">
+          <p className="text-sm font-semibold text-foreground mb-2">Here&apos;s what happens:</p>
+          <ol className="text-sm text-foreground space-y-1.5 list-decimal list-inside leading-relaxed">
+            <li>You give me your resume (or we build one together)</li>
+            <li>I ask a few questions about what you want and what&apos;s in your way</li>
+            <li>You get: a resume, cover letter, career paths, and resources for your situation</li>
+            <li>~10 minutes. Free. Nothing stored unless you say so.</li>
+          </ol>
+        </div>
+
+        {/* Do the work warning */}
+        <div className="bg-warm-50 rounded-xl px-4 py-3 mb-6 border border-warm-200">
+          <p className="text-sm text-earth-700 leading-relaxed">
+            <span className="font-semibold">Fair warning:</span> shortcuts are
+            dangerous. A rushed resume gets you in the door, but you&apos;ll
+            fall apart in the interview if you haven&apos;t done the work. The
+            Forge does the work. I&apos;ll help you through every step.
           </p>
         </div>
 
@@ -111,7 +128,30 @@ export default function IntroPage() {
 
         {/* Three path buttons */}
         <div className="flex flex-col gap-3">
-          {PATHS.map((path) => (
+          {/* Client path with Rush Mode escape valve */}
+          <div>
+            <button
+              onClick={() => handleSelect(PATHS[0])}
+              className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-400 hover:bg-sage-50/50 transition-all min-h-touch"
+            >
+              <span className="font-medium text-foreground block">
+                {PATHS[0].label}
+              </span>
+              <span className="text-sm text-muted mt-0.5 block">
+                {PATHS[0].subtitle}
+              </span>
+            </button>
+            <button
+              onClick={() => router.push("/rush")}
+              className="mt-1.5 ml-5 text-xs text-muted hover:text-sage-600 transition-colors"
+            >
+              Need to apply somewhere today?{" "}
+              <span className="underline underline-offset-2">Rush Mode</span>{" "}
+              <span className="text-warm-500">(not recommended)</span>
+            </button>
+          </div>
+
+          {PATHS.slice(1).map((path) => (
             <button
               key={path.id}
               onClick={() => handleSelect(path)}
@@ -125,19 +165,6 @@ export default function IntroPage() {
               </span>
             </button>
           ))}
-        </div>
-
-        {/* Rush Mode escape valve */}
-        <div className="mt-6 pt-4 border-t border-border text-center">
-          <button
-            onClick={() => router.push("/rush")}
-            className="text-sm text-muted hover:text-sage-600 transition-colors"
-          >
-            Need a resume fast?{" "}
-            <span className="underline underline-offset-2">
-              Try Rush Mode
-            </span>
-          </button>
         </div>
       </div>
     </div>

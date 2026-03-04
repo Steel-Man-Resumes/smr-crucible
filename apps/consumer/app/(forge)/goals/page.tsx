@@ -78,8 +78,8 @@ export default function GoalsPage() {
 
   return (
     <FlowPage
-      title="What matters to you in work?"
-      subtitle="Pick as many as feel right. There are no wrong answers."
+      title="What do you actually want?"
+      subtitle="Pick as many as fit. This changes what jobs I recommend."
       actionLabel={isDemo ? "Next" : "Continue"}
       actionDisabled={!isDemo && selected.length === 0 && !narrative.trim()}
       onAction={handleContinue}
@@ -88,8 +88,7 @@ export default function GoalsPage() {
       footer={
         !isDemo ? (
           <p>
-            Not sure yet? That&apos;s okay — pick what feels closest and we&apos;ll
-            explore together.
+            Not sure? Pick what feels closest. We&apos;ll figure it out.
           </p>
         ) : undefined
       }
@@ -98,6 +97,17 @@ export default function GoalsPage() {
         message={getOpusMessage("goals", audience, isDemo)}
         pageId="goals"
       />
+
+      {/* Why we ask */}
+      {!isDemo && (
+        <div className="bg-sage-50 rounded-xl px-4 py-3 mb-4 border border-sage-200">
+          <p className="text-sm text-sage-700 leading-relaxed">
+            This isn&apos;t a form — it&apos;s a filter. &ldquo;Stability&rdquo; and
+            &ldquo;growth&rdquo; lead to different jobs. I need to know what
+            matters so I don&apos;t waste your time.
+          </p>
+        </div>
+      )}
 
       {isDemo && (
         <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">

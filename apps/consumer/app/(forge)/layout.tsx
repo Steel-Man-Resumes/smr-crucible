@@ -1,10 +1,30 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { ForgeProvider, useForgeSession } from "@/lib/forge-context";
-import { AssistantDrawer } from "@crucible/consumer-ui";
+import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { ContactTroyButton } from "@/components/ContactTroyButton";
+
+const FORGE_STEPS = [
+  { path: "/resume", label: "Resume" },
+  { path: "/goals", label: "Goals" },
+  { path: "/story", label: "Story" },
+  { path: "/preferences", label: "Preferences" },
+  { path: "/processing", label: "Processing" },
+  { path: "/output", label: "Results" },
+];
+
+// Pages that show the progress bar (not intro/welcome — those are entry gates)
+const PROGRESS_PATHS = FORGE_STEPS.map((s) => s.path);
+
+function ForgeProgress() {
+  const pathname = usePathname();
+  const stepIndex = PROGRESS_PATHS.indexOf(pathname);
+  if (stepIndex < 0) return null;
+  return <ProgressIndicator current={stepIndex} total={FORGE_STEPS.length} />;
+}
 
 function ForgeAssistant() {
   const { session } = useForgeSession();
@@ -62,6 +82,7 @@ export default function ForgeLayout({ children }: { children: ReactNode }) {
           Leave this page
         </a>
       </div>
+      <ForgeProgress />
       <div className="min-h-screen">{children}</div>
 
       {/* Contact Troy — engagement-gated */}
