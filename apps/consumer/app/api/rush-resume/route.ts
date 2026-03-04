@@ -18,6 +18,7 @@ interface RushInput {
   resumeText: string;
   targetJob: string;
   targetCompany?: string;
+  jobDescription?: string;
 }
 
 const SYSTEM_PROMPT = `You are a resume rewriter for justice-impacted job seekers.
@@ -52,7 +53,7 @@ async function handlePost(request: Request) {
 
     const userMessage = `Rewrite this resume for the target job.
 
-TARGET JOB: ${input.targetJob}${input.targetCompany ? `\nTARGET COMPANY: ${input.targetCompany}` : ""}
+TARGET JOB: ${input.targetJob}${input.targetCompany ? `\nTARGET COMPANY: ${input.targetCompany}` : ""}${input.jobDescription ? `\n\nJOB DESCRIPTION:\n${input.jobDescription.slice(0, 4000)}` : ""}
 
 ORIGINAL RESUME:
 ${input.resumeText.slice(0, 6000)}
