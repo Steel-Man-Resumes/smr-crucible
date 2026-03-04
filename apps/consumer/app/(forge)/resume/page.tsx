@@ -53,6 +53,63 @@ export default function ResumeIntakePage() {
   const [parsedName, setParsedName] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
+  // All hooks must be declared before any conditional returns (rules-of-hooks)
+  const handleFile = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      setUploadError(null);
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/parse", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setUploadError(data.error || "Something went wrong. Try again?");
+          return;
+        }
+
+        updateSession({
+          resumeText: data.resumeText,
+          resumeFileName: file.name,
+          resumeMethod: "upload",
+        });
+
+        setParsedName(data.profile?.full_name || null);
+        setUploadSuccess(true);
+      } catch (err) {
+        setUploadError("Couldn't read that file. Try a different one?");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [updateSession]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
   // Demo mode: show pre-filled resume and continue
   if (isDemo) {
     return (
@@ -131,63 +188,6 @@ export default function ResumeIntakePage() {
       </FlowPage>
     );
   }
-
-  // --- Path A: File Upload ---
-  const handleFile = useCallback(
-    async (file: File) => {
-      setUploading(true);
-      setUploadError(null);
-
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/parse", {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          setUploadError(data.error || "Something went wrong. Try again?");
-          return;
-        }
-
-        updateSession({
-          resumeText: data.resumeText,
-          resumeFileName: file.name,
-          resumeMethod: "upload",
-        });
-
-        setParsedName(data.profile?.full_name || null);
-        setUploadSuccess(true);
-      } catch (err) {
-        setUploadError("Couldn't read that file. Try a different one?");
-      } finally {
-        setUploading(false);
-      }
-    },
-    [updateSession]
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
-
-  const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
 
   function handleContinue() {
     updateSession({ lastPageVisited: "resume" });

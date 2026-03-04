@@ -1,7 +1,14 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 /**
  * Page 0: Landing
+ *
+ * Hostname routing:
+ * - forge.steelmanresumes.com → /intro
+ * - refinery.steelmanresumes.com → /login
+ * - All other hostnames → show landing page
  *
  * Design brief requirements:
  * - Image-first design, custom hero (not stock)
@@ -30,6 +37,11 @@ const TESTIMONIALS = [
 ];
 
 export default function LandingPage() {
+  // Hostname-based routing for domain swap
+  const hostname = headers().get("host") || "";
+  if (hostname.includes("forge.steelmanresumes.com")) redirect("/intro");
+  if (hostname.includes("refinery.steelmanresumes.com")) redirect("/login");
+
   return (
     <main className="min-h-screen">
       {/* Hero Section */}
