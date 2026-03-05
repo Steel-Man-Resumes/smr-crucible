@@ -36,15 +36,41 @@ export async function GET() {
     }
   }
 
-  // 3. Check Resend API key validity
+  // 3. Check Resend API key validity + domain status
   if (process.env.AUTH_RESEND_KEY) {
     try {
       const res = await fetch("https://api.resend.com/domains", {
         headers: { Authorization: `Bearer ${process.env.AUTH_RESEND_KEY}` },
       });
-      checks.resend_api = res.ok ? "valid" : `ERROR: ${res.status} ${res.statusText}`;
+      if (res.ok) {
+        const data = await res.json();
+        checks.resend_api = "valid";
+        checks.resend_domains = JSON.stringify(
+          data.data?.map((d: any) => ({ name: d.name, status: d.status })) || "none"
+        );
+      } else {
+        checks.resend_api = `ERROR: ${res.status} ${res.statusText}`;
+      }
     } catch (e: any) {
       checks.resend_api = `ERROR: ${e.message}`;
+    }
+  }
+
+  // 4. Check AUTH_TRUST_HOST
+  checks.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST || "NOT SET";
+
+  // 5. Check access_code table
+  if (process.env.DATABASE_URL) {
+    const pool2 = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const r = await pool2.query(`SELECT code, partner_name, tier, is_active FROM access_code`);
+      checks.access_codes = r.rows.length > 0
+        ? JSON.stringify(r.rows.map((c: any) => `${c.code} (${c.tier})`))
+        : "NONE — codes not seeded";
+    } catch (e: any) {
+      checks.access_codes = `ERROR: ${e.message}`;
+    } finally {
+      await pool2.end();
     }
   }
 
