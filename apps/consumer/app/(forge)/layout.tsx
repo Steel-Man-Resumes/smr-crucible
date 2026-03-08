@@ -79,10 +79,16 @@ function ForgeContactTroy() {
 export default function ForgeLayout({ children }: { children: ReactNode }) {
   return (
     <ForgeProvider>
-      {/* Exit button — always visible per design brief principle 10 */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* Top bar — branding left, exit right */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3">
         <a
-          href="/"
+          href="https://steelmanresumes.com"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/80 backdrop-blur border border-border text-sm font-medium text-foreground hover:text-sage-600 transition-colors min-h-touch"
+        >
+          Steel Man Resumes
+        </a>
+        <a
+          href="https://steelmanresumes.com"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/80 backdrop-blur border border-border text-sm text-muted hover:text-foreground hover:bg-white transition-colors min-h-touch"
           aria-label="Leave this page"
         >

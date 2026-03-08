@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: "Steel Man Resumes",
   description:
     "Free career intelligence for justice-impacted individuals. Your past doesn't define your paycheck.",
-  robots: "noindex, nofollow", // Until production launch
+  robots: "index, follow",
 };
 
 export const viewport: Viewport = {

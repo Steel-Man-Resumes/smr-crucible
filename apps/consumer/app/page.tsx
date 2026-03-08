@@ -231,15 +231,53 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8 px-6">
-        <div className="max-w-3xl mx-auto text-center text-sm text-muted">
-          <p className="mb-2">
+        <div className="max-w-3xl mx-auto text-sm text-muted">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
+            <a
+              href="https://steelmanresumes.com"
+              className="text-sage-600 hover:text-sage-700 font-medium transition-colors"
+            >
+              steelmanresumes.com
+            </a>
+            <span className="hidden sm:block text-border">|</span>
+            <a
+              href="https://forge.steelmanresumes.com"
+              className="hover:text-foreground transition-colors"
+            >
+              The Forge (Free Report)
+            </a>
+            <span className="hidden sm:block text-border">|</span>
+            <a
+              href="https://refinery.steelmanresumes.com"
+              className="hover:text-foreground transition-colors"
+            >
+              The Refinery (Free Tools)
+            </a>
+            <span className="hidden sm:block text-border">|</span>
+            <a
+              href="tel:2623918137"
+              className="hover:text-foreground transition-colors"
+            >
+              (262) 391-8137
+            </a>
+          </div>
+          <p className="text-center mb-2">
             Built by{" "}
-            <span className="font-medium text-foreground">
+            <a
+              href="https://steelmanresumes.com"
+              className="font-medium text-foreground hover:text-sage-600 transition-colors"
+            >
               Steel Man Resumes
-            </span>{" "}
-            — a project of The Midnight Garden
+            </a>{" "}
+            — a project of{" "}
+            <a
+              href="https://themidnightgarden.club"
+              className="hover:text-sage-600 transition-colors"
+            >
+              The Midnight Garden
+            </a>
           </p>
-          <p>
+          <p className="text-center">
             Grounded in research. Designed with care. Made for people who
             deserve a real second chance.
           </p>

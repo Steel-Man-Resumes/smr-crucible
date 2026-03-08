@@ -172,6 +172,27 @@ function LoginForm() {
         <p className="text-xs text-muted mt-6 text-center">
           No credit card. No spam. Just a way to save your work.
         </p>
+
+        <div className="mt-8 pt-6 border-t border-border text-center text-sm text-muted space-y-2">
+          <p>
+            Haven&apos;t started yet?{" "}
+            <a
+              href="https://forge.steelmanresumes.com"
+              className="text-sage-600 hover:text-sage-700 font-medium"
+            >
+              Try The Forge first
+            </a>{" "}
+            — it&apos;s free, no account needed.
+          </p>
+          <p>
+            <a
+              href="https://steelmanresumes.com"
+              className="text-sage-600 hover:text-sage-700"
+            >
+              steelmanresumes.com
+            </a>
+          </p>
+        </div>
       </div>
     </main>
   );
