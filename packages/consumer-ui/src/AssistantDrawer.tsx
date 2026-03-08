@@ -123,8 +123,8 @@ export function AssistantDrawer({
           </button>
         </div>
 
-        {/* Drawer content — flex column so chat input stays pinned at bottom */}
-        <div className="flex-1 overflow-hidden p-5 flex flex-col">{children}</div>
+        {/* Drawer content — min-h-0 breaks flexbox default so overflow works */}
+        <div className="flex-1 min-h-0 p-5 flex flex-col">{children}</div>
       </div>
     </>
   );
