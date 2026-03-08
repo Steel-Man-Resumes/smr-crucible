@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     model: anthropic("claude-sonnet-4-20250514"),
     system: systemPrompt,
     messages,
-    maxTokens: 500,
+    maxTokens: 200,
     temperature: 0.7,
     async onFinish({ text, usage }) {
       const latencyMs = Date.now() - startTime;
