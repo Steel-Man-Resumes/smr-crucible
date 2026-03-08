@@ -1,13 +1,13 @@
 /**
  * AssistantChat — The chat UI that lives inside the AssistantDrawer.
  *
- * Simple, clean conversation interface. The AI behavioral rules
- * are enforced at the API level (system prompt), not here.
+ * Simple, clean conversation interface with quick-tap suggestion buttons.
+ * The AI behavioral rules are enforced at the API level (system prompt), not here.
  */
 
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { useAssistant } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 
@@ -16,17 +16,116 @@ interface AssistantChatProps {
   sessionId?: string;
 }
 
+/** Page-aware quick prompts — buttons users can tap instead of typing */
+function getQuickPrompts(context: AssistantContext): string[] {
+  const page = context.currentPage;
+  const isDemo = context.isDemo;
+
+  if (isDemo) {
+    return [
+      "What am I looking at?",
+      "How does this help my clients?",
+      "Show me a different scenario",
+      "What's the research behind this?",
+    ];
+  }
+
+  switch (page) {
+    case "intro":
+      return [
+        "What is this?",
+        "Is it really free?",
+        "Who sees my data?",
+      ];
+    case "welcome":
+      return [
+        "What should I pick?",
+        "Does this change my results?",
+        "I'm not sure I'm ready",
+      ];
+    case "resume":
+      return [
+        "I don't have a resume",
+        "Can I use a photo?",
+        "My resume is old",
+      ];
+    case "goals":
+      return [
+        "I don't know what I want",
+        "Does this matter?",
+        "I just need money right now",
+      ];
+    case "story":
+      return [
+        "Who sees this?",
+        "Do I have to share my record?",
+        "I'm not comfortable with this",
+      ];
+    case "preferences":
+      return [
+        "I'm flexible on everything",
+        "I don't have a car",
+        "Can I change this later?",
+      ];
+    case "processing":
+      return [
+        "How long does this take?",
+        "What's it doing right now?",
+      ];
+    case "output":
+      return [
+        "What do I do with this?",
+        "Is this accurate?",
+        "What's The Refinery?",
+      ];
+    case "rush":
+      return [
+        "Is this as good as the full version?",
+        "What if my resume is bad?",
+        "I have an interview tomorrow",
+      ];
+    case "dashboard":
+      return [
+        "What should I do first?",
+        "How do I build a resume?",
+        "What's the disclosure planner?",
+      ];
+    default:
+      return [
+        "Help me with this page",
+        "What should I do next?",
+        "Talk to a real person",
+      ];
+  }
+}
+
 export function AssistantChat({ context, sessionId }: AssistantChatProps) {
   const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
     context,
     sessionId,
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Auto-scroll to bottom on new messages or loading state
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // Send a quick prompt as if the user typed it
+  const sendQuickPrompt = useCallback(
+    (text: string) => {
+      setInput(text);
+      // Submit on next tick after state updates
+      setTimeout(() => {
+        formRef.current?.requestSubmit();
+      }, 0);
+    },
+    [setInput]
+  );
+
+  const quickPrompts = getQuickPrompts(context);
+  const showQuickPrompts = messages.length === 0 && !isLoading;
 
   return (
     <div className="flex flex-col h-full">
@@ -90,8 +189,24 @@ export function AssistantChat({ context, sessionId }: AssistantChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Quick prompt buttons — shown before first message */}
+      {showQuickPrompts && (
+        <div className="flex flex-wrap gap-2 pb-3 flex-shrink-0">
+          {quickPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => sendQuickPrompt(prompt)}
+              className="px-3 py-2 text-xs font-medium rounded-full border-2 border-sage-200 text-sage-700 hover:bg-sage-50 hover:border-sage-400 transition-colors"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Input — shrink-0 keeps it pinned at bottom always */}
-      <form onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">
+      <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
