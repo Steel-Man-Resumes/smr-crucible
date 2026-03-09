@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { TierGate } from "@/components/TierGate";
 
 interface JobListing {
   title: string;
@@ -42,7 +43,15 @@ const COMMON_ROLES = [
   "Retail Associate",
 ];
 
-export default function JobBoardPage() {
+export default function JobBoardPageWrapper() {
+  return (
+    <TierGate requiredTier="client">
+      <JobBoardPage />
+    </TierGate>
+  );
+}
+
+function JobBoardPage() {
   const [context, setContext] = useState<UserContext>({
     targetRole: "",
     location: "",

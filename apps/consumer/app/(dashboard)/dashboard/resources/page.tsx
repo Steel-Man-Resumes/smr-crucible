@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { TierGate } from "@/components/TierGate";
 
 interface Resource {
   name: string;
@@ -97,7 +98,15 @@ const UNIVERSAL_RESOURCES: Resource[] = [
   },
 ];
 
-export default function ResourceHubPage() {
+export default function ResourceHubPageWrapper() {
+  return (
+    <TierGate requiredTier="client">
+      <ResourceHubPage />
+    </TierGate>
+  );
+}
+
+function ResourceHubPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [userBarriers, setUserBarriers] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState("");

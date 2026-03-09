@@ -14,8 +14,10 @@ export default function LoginPage() {
 
 function LoginForm() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [showCode, setShowCode] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const searchParams = useSearchParams();
@@ -38,19 +40,19 @@ function LoginForm() {
         Configuration: "Login is temporarily unavailable. Please try again later or contact Troy.",
         AccessDenied: "Access denied. Check your email and try again.",
         Verification: "That link has expired. Please request a new one.",
+        CredentialsSignin: "Invalid email or password.",
       };
       setError(messages[urlError] || `Login error: ${urlError}`);
     }
   }, [searchParams]);
 
-  async function handleEmailLogin(e: React.FormEvent) {
+  async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
 
     setError("");
     setSending(true);
 
-    // Store pending access code for post-auth redemption
     if (code.trim()) {
       localStorage.setItem("pending_access_code", code.trim());
     }
@@ -58,7 +60,7 @@ function LoginForm() {
     try {
       const result = await signIn("resend", {
         email: email.trim(),
-        callbackUrl: "/dashboard",
+        callbackUrl: searchParams.get("callbackUrl") || "/dashboard",
         redirect: false,
       });
 
@@ -78,13 +80,44 @@ function LoginForm() {
     }
   }
 
+  async function handlePasswordLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+
+    setError("");
+    setSending(true);
+
+    if (code.trim()) {
+      localStorage.setItem("pending_access_code", code.trim());
+    }
+
+    try {
+      const result = await signIn("password-login", {
+        email: email.trim(),
+        password,
+        callbackUrl: searchParams.get("callbackUrl") || "/dashboard",
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password.");
+        setSending(false);
+      } else if (result?.url) {
+        window.location.href = result.url;
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setSending(false);
+    }
+  }
+
   async function handleDevLogin() {
     setSending(true);
     if (code.trim()) {
       localStorage.setItem("pending_access_code", code.trim());
     }
     try {
-      await signIn("credentials", {
+      await signIn("dev-login", {
         email: email.trim() || "dev@test.com",
         callbackUrl: "/dashboard",
       });
@@ -101,11 +134,15 @@ function LoginForm() {
           Save Your Results
         </h1>
         <p className="text-body text-muted mb-6 text-center">
-          Enter your email to create a free account. We&apos;ll send you a magic
-          link — no password needed.
+          {usePassword
+            ? "Sign in with your email and password."
+            : "Enter your email to create a free account. We\u2019ll send you a magic link \u2014 no password needed."}
         </p>
 
-        <form onSubmit={handleEmailLogin} className="space-y-4">
+        <form
+          onSubmit={usePassword ? handlePasswordLogin : handleMagicLink}
+          className="space-y-4"
+        >
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1">
               Email
@@ -117,10 +154,30 @@ function LoginForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
+              autoComplete="email"
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
               disabled={sending}
             />
           </div>
+
+          {usePassword && (
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                required
+                autoComplete="current-password"
+                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                disabled={sending}
+              />
+            </div>
+          )}
 
           {/* Collapsible partner code field */}
           <div>
@@ -150,12 +207,50 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={sending || !email.trim()}
+            disabled={sending || !email.trim() || (usePassword && !password)}
             className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
           >
-            {sending ? "Sending..." : "Send Magic Link"}
+            {sending
+              ? "Signing in..."
+              : usePassword
+              ? "Sign In"
+              : "Send Magic Link"}
           </button>
         </form>
+
+        {/* Toggle between magic link and password */}
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setUsePassword(!usePassword);
+              setError("");
+              setPassword("");
+            }}
+            className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
+          >
+            {usePassword
+              ? "Don\u2019t have a password? Use a magic link instead"
+              : "Already have a password? Sign in with password"}
+          </button>
+          {usePassword && (
+            <p className="text-xs text-muted mt-2">
+              Forgot your password?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setUsePassword(false);
+                  setError("");
+                  setPassword("");
+                }}
+                className="text-sage-600 hover:text-sage-700 underline underline-offset-2"
+              >
+                Send a magic link
+              </button>{" "}
+              to sign in and set a new one in Settings.
+            </p>
+          )}
+        </div>
 
         {isDev && (
           <div className="mt-6 pt-6 border-t border-border">

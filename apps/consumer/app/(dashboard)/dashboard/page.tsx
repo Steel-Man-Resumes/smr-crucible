@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useUserTier } from "@/lib/useUserTier";
 
 interface DashboardData {
   narrative?: { headline?: string; summary?: string };
@@ -173,6 +174,8 @@ export default function DashboardPage() {
     loadArtifacts();
   }, []);
 
+  const tier = useUserTier();
+  const isObserver = tier === "observer";
   const hasForgeData = !!(data.narrative || data.skills?.length);
   const totalArtifacts = Object.values(artifactCounts).reduce((a, b) => a + b, 0);
 
@@ -326,6 +329,20 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-foreground mb-4">
           The Refinery — Your Workshop
         </h2>
+        {isObserver && (
+          <div className="mb-4 bg-sage-50 rounded-xl p-4 border border-sage-200">
+            <p className="text-sm text-foreground">
+              These tools are available to clients and partners.{" "}
+              <a href="https://forge.steelmanresumes.com" className="text-sage-600 font-medium hover:text-sage-700">
+                Try The Forge
+              </a>{" "}
+              to get started, or{" "}
+              <Link href="/dashboard/settings" className="text-sage-600 font-medium hover:text-sage-700">
+                enter a partner code
+              </Link>.
+            </p>
+          </div>
+        )}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {REFINERY_TOOLS.map((tool) => {
             // Find count for this tool's artifact type
@@ -333,6 +350,22 @@ export default function DashboardPage() {
               ([, href]) => href === tool.href
             )?.[0];
             const count = typeForTool ? artifactCounts[typeForTool] : 0;
+
+            if (isObserver) {
+              return (
+                <div
+                  key={tool.href}
+                  className={`block rounded-2xl p-5 border opacity-60 ${tool.color}`}
+                >
+                  <h3 className={`font-semibold mb-1 ${tool.accent}`}>
+                    {tool.title}
+                  </h3>
+                  <p className="text-sm text-muted leading-relaxed">
+                    {tool.description}
+                  </p>
+                </div>
+              );
+            }
 
             return (
               <Link

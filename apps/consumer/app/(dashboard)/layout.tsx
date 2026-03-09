@@ -3,36 +3,59 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { ContactTroyButton } from "@/components/ContactTroyButton";
+import { useUserTier, type UserTier } from "@/lib/useUserTier";
 
 /**
  * Dashboard Layout — Authenticated area
  *
  * Persistent navigation for Refinery tools.
- * Designed for 6+ month engagement.
+ * Nav items filtered by user tier.
  * JBS-compliant: consent status visible, data export/delete available.
  */
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview" },
-  { href: "/dashboard/resume-builder", label: "Resume Builder" },
-  { href: "/dashboard/disclosure", label: "Disclosure Planner" },
-  { href: "/dashboard/interview", label: "Interview Practice" },
-  { href: "/dashboard/jobs", label: "Job Board" },
-  { href: "/dashboard/resources", label: "Resources" },
-  { href: "/dashboard/progress", label: "Progress" },
-  { href: "/dashboard/methodology", label: "Methodology" },
-  { href: "/dashboard/evidence", label: "Evidence" },
+interface NavItem {
+  href: string;
+  label: string;
+  minTier: UserTier;
+}
+
+const TIER_RANK: Record<string, number> = {
+  admin: 0,
+  partner: 1,
+  client: 2,
+  observer: 3,
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Overview", minTier: "observer" },
+  { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client" },
+  { href: "/dashboard/disclosure", label: "Disclosure Planner", minTier: "client" },
+  { href: "/dashboard/interview", label: "Interview Practice", minTier: "client" },
+  { href: "/dashboard/jobs", label: "Job Board", minTier: "client" },
+  { href: "/dashboard/resources", label: "Resources", minTier: "client" },
+  { href: "/dashboard/progress", label: "Progress", minTier: "observer" },
+  { href: "/dashboard/methodology", label: "Methodology", minTier: "observer" },
+  { href: "/dashboard/evidence", label: "Evidence", minTier: "observer" },
 ];
+
+function getVisibleNav(userTier: UserTier): NavItem[] {
+  const rank = TIER_RANK[userTier] ?? 3;
+  return NAV_ITEMS.filter((item) => rank <= (TIER_RANK[item.minTier] ?? 3));
+}
 
 export default function DashboardLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  // Post-auth: redeem access codes + sync Forge data to DB
+  const userTier = useUserTier();
+  const pathname = usePathname();
+
+  // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
     // Access code redemption
     const pendingCode = localStorage.getItem("pending_access_code");
@@ -43,6 +66,21 @@ export default function DashboardLayout({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: pendingCode }),
       }).catch(() => {});
+    }
+
+    // Sync audience from Forge intro selection to user tier
+    try {
+      const audience = localStorage.getItem("forge_audience");
+      if (audience && ["client", "partner", "observer"].includes(audience)) {
+        localStorage.removeItem("forge_audience");
+        fetch("/api/user/set-tier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier: audience }),
+        }).catch(() => {});
+      }
+    } catch {
+      // Silent
     }
 
     // Sync Forge localStorage data to DB (one-time migration)
@@ -72,6 +110,8 @@ export default function DashboardLayout({
       // Silent — sync is best-effort
     }
   }, []);
+
+  const visibleNav = getVisibleNav(userTier);
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,11 +156,15 @@ export default function DashboardLayout({
             className="flex gap-1 overflow-x-auto py-2 scrollbar-hide"
             aria-label="Refinery tools"
           >
-            {NAV_ITEMS.map((item) => (
+            {visibleNav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="px-4 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-sage-50 rounded-lg transition-colors whitespace-nowrap min-h-touch flex items-center"
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap min-h-touch flex items-center ${
+                  pathname === item.href
+                    ? "text-foreground bg-sage-100"
+                    : "text-muted hover:text-foreground hover:bg-sage-50"
+                }`}
               >
                 {item.label}
               </Link>

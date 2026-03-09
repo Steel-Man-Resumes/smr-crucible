@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from "react";
 import { CardSelect, FlowPage } from "@crucible/consumer-ui";
+import { TierGate } from "@/components/TierGate";
 
 type PlannerStep = "assess" | "plan" | "rehearse";
 
@@ -46,7 +47,15 @@ const DISCLOSURE_TIMING = [
   },
 ];
 
-export default function DisclosurePlannerPage() {
+export default function DisclosurePlannerPageWrapper() {
+  return (
+    <TierGate requiredTier="client">
+      <DisclosurePlannerPage />
+    </TierGate>
+  );
+}
+
+function DisclosurePlannerPage() {
   const [step, setStep] = useState<PlannerStep>("assess");
   const [record, setRecord] = useState<RecordInfo>({
     type: "",

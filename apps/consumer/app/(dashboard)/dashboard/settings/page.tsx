@@ -11,7 +11,7 @@
  * - Daily AI usage display
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 
 interface UsageData {
   used: number;
@@ -272,6 +272,9 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Set Password */}
+      <SetPasswordSection />
+
       {/* Privacy & Data */}
       <section className="mb-8">
         <h2 className="text-lg font-bold text-foreground mb-4">
@@ -389,5 +392,100 @@ export default function SettingsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function SetPasswordSection() {
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleSetPassword(e: FormEvent) {
+    e.preventDefault();
+    if (pw.length < 8) {
+      setErrorMsg("Password must be at least 8 characters.");
+      setStatus("error");
+      return;
+    }
+    if (pw !== confirm) {
+      setErrorMsg("Passwords don\u2019t match.");
+      setStatus("error");
+      return;
+    }
+
+    setStatus("saving");
+    setErrorMsg("");
+
+    try {
+      const res = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+
+      if (res.ok) {
+        setStatus("done");
+        setPw("");
+        setConfirm("");
+        setTimeout(() => setStatus("idle"), 3000);
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.error || "Could not set password.");
+        setStatus("error");
+      }
+    } catch {
+      setErrorMsg("Something went wrong. Try again.");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-lg font-bold text-foreground mb-4">
+        Password
+      </h2>
+      <div className="bg-white rounded-2xl p-5 border border-border">
+        <h3 className="font-semibold text-foreground mb-2">
+          Set a password for quick login
+        </h3>
+        <p className="text-sm text-muted mb-4">
+          Optional. Set a password so you can sign in without waiting for a magic link email every time.
+        </p>
+        <form onSubmit={handleSetPassword} className="space-y-3">
+          <input
+            type="password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            placeholder="New password (min 8 characters)"
+            autoComplete="new-password"
+            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+          />
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Confirm password"
+            autoComplete="new-password"
+            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+          />
+          {status === "error" && (
+            <p className="text-sm text-red-600">{errorMsg}</p>
+          )}
+          {status === "done" && (
+            <p className="text-sm text-sage-600">
+              Password set! You can now sign in with email + password.
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={status === "saving" || !pw || !confirm}
+            className="px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
+          >
+            {status === "saving" ? "Saving..." : "Set Password"}
+          </button>
+        </form>
+      </div>
+    </section>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { TierGate } from "@/components/TierGate";
+
 /**
  * Resume Builder — Refinery Tool 1
  *
@@ -107,9 +109,11 @@ function timeAgo(dateStr: string): string {
 
 export default function ResumeBuilderPage() {
   return (
-    <Suspense>
-      <ResumeBuilderContent />
-    </Suspense>
+    <TierGate requiredTier="client">
+      <Suspense>
+        <ResumeBuilderContent />
+      </Suspense>
+    </TierGate>
   );
 }
 

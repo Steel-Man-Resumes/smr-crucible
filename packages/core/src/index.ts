@@ -11,5 +11,6 @@ export * from './consent';
 export * from './decision';
 export * from './rateLimit';
 export * from './accessCode';
+export * from './userTier';
 export * from './forgeSession';
 export * from './refineryArtifact';

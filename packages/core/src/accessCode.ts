@@ -5,6 +5,7 @@
 
 import { query, getOne } from "./db";
 import { emitEvent } from "./events";
+import { syncUserTierFromCodes } from "./userTier";
 
 export interface AccessCode {
   id: string;
@@ -152,6 +153,9 @@ export async function redeemAccessCode(
     payload: { code: ac.code, partner: ac.partner_name, tier: ac.tier },
     sensitive_ref: null,
   });
+
+  // Sync tier to user record (highest code tier wins)
+  await syncUserTierFromCodes(userId);
 
   return { success: true };
 }

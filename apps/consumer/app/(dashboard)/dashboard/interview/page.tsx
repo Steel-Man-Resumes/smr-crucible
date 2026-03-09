@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { CardSelect } from "@crucible/consumer-ui";
+import { TierGate } from "@/components/TierGate";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -43,7 +44,15 @@ const INTERVIEW_TYPES = [
   },
 ];
 
-export default function InterviewPracticePage() {
+export default function InterviewPracticePageWrapper() {
+  return (
+    <TierGate requiredTier="client">
+      <InterviewPracticePage />
+    </TierGate>
+  );
+}
+
+function InterviewPracticePage() {
   const [step, setStep] = useState<InterviewStep>("setup");
   const [config, setConfig] = useState<InterviewConfig>({
     targetRole: "",
