@@ -63,6 +63,25 @@ function JobBoardPage() {
   const [searched, setSearched] = useState(false);
   const [fairChanceInfo, setFairChanceInfo] = useState<string>("");
   const [rateLimitError, setRateLimitError] = useState("");
+  const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
+
+  // Load dismissed jobs
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("hidden_jobs");
+      if (stored) setHiddenJobs(new Set(JSON.parse(stored)));
+    } catch {}
+  }, []);
+
+  function dismissJob(key: string) {
+    setHiddenJobs((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      localStorage.setItem("hidden_jobs", JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }
 
   // Load from Forge session
   useEffect(() => {
@@ -260,54 +279,81 @@ function JobBoardPage() {
         </div>
       )}
 
-      {!searching && jobs.length > 0 && (
+      {!searching && jobs.filter((j) => showHidden || !hiddenJobs.has(`${j.company}-${j.title}`)).length > 0 && (
         <div className="space-y-3">
-          {jobs.map((job, i) => (
-            <div
-              key={i}
-              className="bg-white rounded-xl p-4 border border-border"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-foreground">
-                      {job.title}
-                    </h3>
-                    {job.second_chance && (
-                      <span className="text-[10px] font-medium bg-sage-100 text-sage-700 px-2 py-0.5 rounded-full">
-                        Fair Chance
-                      </span>
+          {jobs
+            .filter((j) => showHidden || !hiddenJobs.has(`${j.company}-${j.title}`))
+            .map((job, i) => {
+              const jobKey = `${job.company}-${job.title}`;
+              const isDismissed = hiddenJobs.has(jobKey);
+              return (
+                <div
+                  key={i}
+                  className={`bg-white rounded-xl p-4 border border-border ${isDismissed ? "opacity-50" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-foreground">
+                          {job.title}
+                        </h3>
+                        {job.second_chance && (
+                          <span className="text-[10px] font-medium bg-sage-100 text-sage-700 px-2 py-0.5 rounded-full">
+                            Fair Chance
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted">{job.company}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted">
+                        {job.location && <span>{job.location}</span>}
+                        {job.salary && (
+                          <span className="font-medium text-sage-600">
+                            {job.salary}
+                          </span>
+                        )}
+                        {job.posted && <span>{job.posted}</span>}
+                      </div>
+                      <p className="text-sm text-muted mt-2 leading-relaxed">
+                        {job.description}
+                      </p>
+                    </div>
+                    {!isDismissed && (
+                      <button
+                        onClick={() => dismissJob(jobKey)}
+                        className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0 mt-1"
+                        title="Not for me"
+                      >
+                        Not for me
+                      </button>
                     )}
                   </div>
-                  <p className="text-sm text-muted">{job.company}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                    {job.location && <span>{job.location}</span>}
-                    {job.salary && (
-                      <span className="font-medium text-sage-600">
-                        {job.salary}
-                      </span>
-                    )}
-                    {job.posted && <span>{job.posted}</span>}
-                  </div>
-                  <p className="text-sm text-muted mt-2 leading-relaxed">
-                    {job.description}
-                  </p>
+                  {job.url && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <a
+                        href={job.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-sky-600 hover:text-sky-700 font-medium"
+                      >
+                        View & Apply ↗
+                      </a>
+                    </div>
+                  )}
                 </div>
-              </div>
-              {job.url && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <a
-                    href={job.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-sky-600 hover:text-sky-700 font-medium"
-                  >
-                    View & Apply ↗
-                  </a>
-                </div>
-              )}
+              );
+            })}
+
+          {/* Hidden jobs toggle */}
+          {hiddenJobs.size > 0 && (
+            <div className="flex justify-center">
+              <button
+                onClick={() => setShowHidden(!showHidden)}
+                className="text-xs text-muted hover:text-foreground underline underline-offset-2"
+              >
+                {showHidden ? "Hide dismissed" : `Show hidden (${hiddenJobs.size})`}
+              </button>
             </div>
-          ))}
+          )}
 
           <p className="text-xs text-muted text-center py-4">
             Always verify job details directly with the employer. Listings are

@@ -7,10 +7,13 @@
  * Record-aware: adjusts guidance by conviction type, jurisdiction, ban-the-box.
  * Rehearsal mode: practice the conversation with AI.
  *
- * New capability — no equivalent in current tools.
+ * Philosophy: Disclosure happens IN PERSON during interviews, NEVER on paper.
+ * This tool helps users practice and prepare what to say face-to-face.
+ *
+ * Loads Forge session data for personalized strengths + narrative context.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CardSelect, FlowPage } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 
@@ -23,6 +26,26 @@ interface RecordInfo {
   supervision: string;
   state: string;
 }
+
+interface ForgeStrength {
+  title: string;
+  evidence: string;
+  source?: string;
+}
+
+interface ForgeContext {
+  headline?: string;
+  summary?: string;
+  strengths: ForgeStrength[];
+  skills: Array<{ name: string; category: string }>;
+  careerPaths: Array<{ title: string; industry?: string; match_reason: string }>;
+}
+
+const EMPTY_FORGE: ForgeContext = {
+  strengths: [],
+  skills: [],
+  careerPaths: [],
+};
 
 const DISCLOSURE_TIMING = [
   {
@@ -73,30 +96,76 @@ function DisclosurePlannerPage() {
   const [rehearsalInput, setRehearsalInput] = useState("");
   const [rehearsing, setRehearsing] = useState(false);
   const [rateLimitError, setRateLimitError] = useState("");
+  const [targetJob, setTargetJob] = useState("");
+  const [forge, setForge] = useState<ForgeContext>(EMPTY_FORGE);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Load criminal record from Forge session
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    if (step === "rehearse") {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [rehearsalMessages, rehearsing, step]);
+
+  // Load criminal record + Forge context from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.criminalRecord) {
-          setRecord((prev) => ({
-            ...prev,
-            ...session.criminalRecord,
-          }));
+      if (!stored) return;
+      const session = JSON.parse(stored);
+
+      // Criminal record
+      if (session.criminalRecord) {
+        setRecord((prev) => ({ ...prev, ...session.criminalRecord }));
+      }
+
+      // State from location preference
+      if (session.preferences?.location) {
+        const stateMatch = session.preferences.location.match(/,\s*([A-Z]{2})\b/);
+        if (stateMatch) {
+          setRecord((prev) => ({ ...prev, state: stateMatch[1] }));
         }
-        if (session.preferences?.location) {
-          const loc = session.preferences.location;
-          // Try to extract state from location
-          const stateMatch = loc.match(/,\s*([A-Z]{2})\b/);
-          if (stateMatch) {
-            setRecord((prev) => ({ ...prev, state: stateMatch[1] }));
-          }
+      }
+
+      // Forge output: narrative, strengths, skills, career paths
+      if (session.forgeOutput) {
+        const o = session.forgeOutput;
+        setForge({
+          headline: o.narrative?.headline,
+          summary: o.narrative?.summary,
+          strengths: o.narrative?.strengths || [],
+          skills: o.skills || [],
+          careerPaths: o.career_paths || [],
+        });
+
+        // Pre-fill target job from top career path
+        if (o.career_paths?.[0]?.title) {
+          setTargetJob(o.career_paths[0].title);
         }
       }
     } catch {}
   }, []);
+
+  const hasForgeData = forge.strengths.length > 0 || !!forge.headline;
+
+  /** Build context string for AI prompts so responses reference real strengths */
+  function buildForgePromptContext(): string {
+    const parts: string[] = [];
+    if (targetJob) parts.push(`TARGET ROLE: ${targetJob}`);
+    if (forge.headline) parts.push(`PROFESSIONAL HEADLINE: ${forge.headline}`);
+    if (forge.summary) parts.push(`CAREER SUMMARY: ${forge.summary}`);
+    if (forge.strengths.length > 0) {
+      parts.push(
+        `KEY STRENGTHS (from career analysis):\n${forge.strengths.map((s) => `- ${s.title}: ${s.evidence}`).join("\n")}`
+      );
+    }
+    if (forge.skills.length > 0) {
+      parts.push(`TOP SKILLS: ${forge.skills.slice(0, 8).map((s) => s.name).join(", ")}`);
+    }
+    return parts.length > 0
+      ? `\n\nCANDIDATE PROFILE (from Forge career analysis):\n${parts.join("\n\n")}`
+      : "";
+  }
 
   async function generatePlan() {
     setGenerating(true);
@@ -105,7 +174,19 @@ function DisclosurePlannerPage() {
       const res = await fetch("/api/disclosure-guide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record, timing }),
+        body: JSON.stringify({
+          record,
+          timing,
+          targetJob: targetJob || undefined,
+          forgeContext: hasForgeData
+            ? {
+                headline: forge.headline,
+                summary: forge.summary,
+                strengths: forge.strengths,
+                skills: forge.skills.slice(0, 8),
+              }
+            : undefined,
+        }),
       });
       if (res.status === 429) {
         const data = await res.json();
@@ -131,6 +212,8 @@ function DisclosurePlannerPage() {
     setRehearsalInput("");
     setRehearsing(true);
 
+    const forgeCtx = buildForgePromptContext();
+
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
@@ -143,6 +226,8 @@ function DisclosurePlannerPage() {
             userInput: { record, timing },
           },
           systemOverride: `You are playing the role of a hiring manager conducting a job interview. The candidate needs to practice disclosing their criminal record.
+${targetJob ? `\nYou are interviewing them for: ${targetJob}` : ""}
+${forgeCtx}
 
 Your role:
 - Act as a professional but fair hiring manager
@@ -150,6 +235,8 @@ Your role:
 - Don't be hostile, but don't be a pushover either
 - After 3-4 exchanges, break character and give brief feedback on how they did
 - Focus feedback on: confidence, honesty, brevity, pivot to strengths
+${forge.strengths.length > 0 ? `- When giving feedback, note whether they leveraged their verified strengths: ${forge.strengths.map((s) => s.title).join(", ")}` : ""}
+- Remember: disclosure happens in person, face-to-face. The goal is to control the narrative with voice and presence, not apologize on paper.
 
 The candidate's record: ${record.type || "criminal record"}, ${record.most_recent || "timing unknown"}, ${record.supervision || "supervision unknown"}.`,
         }),
@@ -203,10 +290,84 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         <h1 className="text-2xl font-bold text-foreground mb-2">
           Disclosure Planner
         </h1>
-        <p className="text-body text-muted mb-8">
+        <p className="text-body text-muted mb-2">
           Knowing when and how to talk about your record makes all the
           difference. Let&apos;s build a plan together.
         </p>
+        <p className="text-sm text-muted mb-8">
+          Disclosure happens in person, face-to-face — never on paper. This
+          tool helps you prepare and practice what to say.
+        </p>
+
+        {/* Lead with your strengths — from Forge */}
+        {hasForgeData && (
+          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-8">
+            <h2 className="font-semibold text-sage-800 mb-1">
+              Lead with your strengths
+            </h2>
+            <p className="text-xs text-sage-600 mb-3">
+              From your Forge career analysis — the foundation of your
+              disclosure pivot.
+            </p>
+
+            {forge.headline && (
+              <p className="text-sm font-medium text-foreground mb-3">
+                {forge.headline}
+              </p>
+            )}
+
+            {forge.strengths.length > 0 && (
+              <div className="space-y-2">
+                {forge.strengths.map((s, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-xl px-4 py-3 border border-sage-100"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-sage-500 font-bold text-sm mt-0.5 flex-shrink-0">
+                        {i + 1}.
+                      </span>
+                      <div>
+                        <span className="text-sm font-medium text-foreground">
+                          {s.title}
+                        </span>
+                        <p className="text-xs text-muted mt-0.5 leading-relaxed">
+                          {s.evidence}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-xs text-sage-600 mt-3 italic">
+              Good disclosure follows a simple pattern: acknowledge briefly,
+              then pivot to these strengths. Your record is one chapter —
+              these are the rest of the book.
+            </p>
+          </div>
+        )}
+
+        {/* Target job */}
+        <div className="mb-6">
+          <label className="text-sm font-medium block mb-1">
+            Target job{" "}
+            <span className="font-normal text-muted">
+              (so we can tailor your plan)
+            </span>
+          </label>
+          <input
+            value={targetJob}
+            onChange={(e) => setTargetJob(e.target.value)}
+            placeholder={
+              forge.careerPaths[0]?.title
+                ? `e.g., ${forge.careerPaths[0].title}`
+                : "e.g., Warehouse Associate, CNC Operator"
+            }
+            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+          />
+        </div>
 
         {/* Record info (pre-filled from Forge if available) */}
         <div className="space-y-4 mb-8">
@@ -316,6 +477,38 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </button>
         </div>
 
+        {/* In-person philosophy callout */}
+        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 mb-6">
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">Remember:</span> Disclosure is a
+            conversation, not a checkbox. It happens face-to-face, where you
+            control the narrative with your voice and your presence.
+          </p>
+        </div>
+
+        {/* Strengths to pivot to */}
+        {forge.strengths.length > 0 && (
+          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-6">
+            <h2 className="font-semibold text-sage-800 mb-2">
+              Your pivot points
+            </h2>
+            <p className="text-xs text-sage-600 mb-3">
+              After a brief acknowledgment, pivot to these. They are real,
+              they are yours, and they are what the employer needs to hear.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {forge.strengths.map((s, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white border border-sage-200 text-sm text-foreground font-medium"
+                >
+                  {s.title}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Timing guidance */}
         {plan.timing_advice && (
           <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
@@ -348,8 +541,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               &ldquo;{plan.script}&rdquo;
             </blockquote>
             <p className="text-xs text-muted mt-3">
-              This is a starting point. Practice it until it sounds natural in
-              your voice.
+              This is a starting point. Practice it out loud until it sounds
+              natural in your voice.
             </p>
           </div>
         )}
@@ -372,13 +565,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         <button
           onClick={() => {
             setStep("rehearse");
-            setRehearsalMessages([
-              {
-                role: "assistant",
-                content:
-                  "Hi there. Thanks for coming in today. So, tell me a little about yourself and why you're interested in this position.",
-              },
-            ]);
+            const opener = targetJob
+              ? `Hi there. Thanks for coming in today. I see you're interested in the ${targetJob} position. Tell me a little about yourself and why you're interested in this role.`
+              : "Hi there. Thanks for coming in today. So, tell me a little about yourself and why you're interested in this position.";
+            setRehearsalMessages([{ role: "assistant", content: opener }]);
           }}
           className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
         >
@@ -397,7 +587,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             Practice Mode
           </h1>
           <p className="text-sm text-muted">
-            Practice disclosing with a simulated hiring manager.
+            Practice disclosing with a simulated hiring manager
+            {targetJob ? ` for a ${targetJob} role` : ""}.
           </p>
         </div>
         <button
@@ -407,6 +598,25 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           Back to plan
         </button>
       </div>
+
+      {/* Strength reminders — compact chips above the chat */}
+      {forge.strengths.length > 0 && (
+        <div className="bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 mb-4">
+          <p className="text-xs text-sage-700 font-medium mb-1.5">
+            Pivot to your strengths:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {forge.strengths.map((s, i) => (
+              <span
+                key={i}
+                className="text-xs px-2 py-1 rounded-md bg-white border border-sage-200 text-sage-800"
+              >
+                {s.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Chat */}
       <div className="bg-white rounded-2xl border border-border mb-4">
@@ -436,6 +646,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               </div>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
         <form
@@ -461,6 +672,12 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </button>
         </form>
       </div>
+
+      {rateLimitError && (
+        <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mb-4">
+          <p className="text-sm text-amber-800">{rateLimitError}</p>
+        </div>
+      )}
 
       <p className="text-xs text-muted text-center">
         This is a safe practice space. Nothing here is saved or shared.

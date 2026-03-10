@@ -114,6 +114,31 @@ function ResourceHubPage() {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Resource[]>([]);
   const [rateLimitError, setRateLimitError] = useState("");
+  const [hiddenResources, setHiddenResources] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
+
+  // Load dismissed resources
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("hidden_resources");
+      if (stored) setHiddenResources(new Set(JSON.parse(stored)));
+    } catch {}
+  }, []);
+
+  function dismissResource(name: string) {
+    setHiddenResources((prev) => {
+      const next = new Set(prev);
+      next.add(name);
+      localStorage.setItem("hidden_resources", JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }
+
+  function restoreResources() {
+    setHiddenResources(new Set());
+    localStorage.removeItem("hidden_resources");
+    setShowHidden(false);
+  }
 
   // Load barriers and location from Forge session
   useEffect(() => {
@@ -195,15 +220,22 @@ function ResourceHubPage() {
       </p>
 
       {/* Forge-sourced resources */}
-      {forgeResources.length > 0 && (
+      {forgeResources.filter((r) => showHidden || !hiddenResources.has(r.name)).length > 0 && (
         <section className="mb-10">
           <h2 className="text-lg font-bold text-foreground mb-3">
             Matched to Your Situation
           </h2>
           <div className="space-y-3">
-            {forgeResources.map((r, i) => (
-              <ResourceCard key={i} resource={r} />
-            ))}
+            {forgeResources
+              .filter((r) => showHidden || !hiddenResources.has(r.name))
+              .map((r, i) => (
+                <ResourceCard
+                  key={i}
+                  resource={r}
+                  dismissed={hiddenResources.has(r.name)}
+                  onDismiss={() => dismissResource(r.name)}
+                />
+              ))}
           </div>
         </section>
       )}
@@ -259,11 +291,18 @@ function ResourceHubPage() {
               <div className="w-5 h-5 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
               Finding resources...
             </div>
-          ) : searchResults.length > 0 ? (
+          ) : searchResults.filter((r) => showHidden || !hiddenResources.has(r.name)).length > 0 ? (
             <div className="space-y-3">
-              {searchResults.map((r, i) => (
-                <ResourceCard key={i} resource={r} />
-              ))}
+              {searchResults
+                .filter((r) => showHidden || !hiddenResources.has(r.name))
+                .map((r, i) => (
+                  <ResourceCard
+                    key={i}
+                    resource={r}
+                    dismissed={hiddenResources.has(r.name)}
+                    onDismiss={() => dismissResource(r.name)}
+                  />
+                ))}
             </div>
           ) : (
             <p className="text-sm text-muted py-4">
@@ -273,6 +312,33 @@ function ResourceHubPage() {
           )}
         </section>
       )}
+
+      {/* Hidden resources toggle */}
+      {hiddenResources.size > 0 && (
+        <div className="flex items-center justify-between mb-6 px-1">
+          <button
+            onClick={() => setShowHidden(!showHidden)}
+            className="text-xs text-muted hover:text-foreground underline underline-offset-2"
+          >
+            {showHidden ? "Hide dismissed" : `Show hidden (${hiddenResources.size})`}
+          </button>
+          {showHidden && (
+            <button
+              onClick={restoreResources}
+              className="text-xs text-sage-600 hover:text-sage-700"
+            >
+              Restore all
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Encouragement */}
+      <div className="bg-warm-50 rounded-xl p-4 border border-warm-200 mb-8">
+        <p className="text-sm text-earth-700">
+          Your needs will change over time. Check back when you&apos;re ready for new challenges.
+        </p>
+      </div>
 
       {/* Universal resources */}
       <section>
@@ -289,9 +355,9 @@ function ResourceHubPage() {
   );
 }
 
-function ResourceCard({ resource }: { resource: Resource }) {
+function ResourceCard({ resource, onDismiss, dismissed }: { resource: Resource; onDismiss?: () => void; dismissed?: boolean }) {
   return (
-    <div className="bg-white rounded-xl p-4 border border-border">
+    <div className={`bg-white rounded-xl p-4 border border-border relative ${dismissed ? "opacity-50" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <h3 className="font-semibold text-foreground">{resource.name}</h3>
@@ -299,6 +365,15 @@ function ResourceCard({ resource }: { resource: Resource }) {
             {resource.description}
           </p>
         </div>
+        {onDismiss && !dismissed && (
+          <button
+            onClick={onDismiss}
+            className="text-gray-400 hover:text-gray-600 flex-shrink-0 p-1"
+            title="Not for me"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        )}
       </div>
       <div className="flex gap-3 mt-3">
         {resource.url && (

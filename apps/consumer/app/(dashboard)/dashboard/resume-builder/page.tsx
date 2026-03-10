@@ -771,6 +771,9 @@ function ResumeBuilderContent() {
   }
 
   // --- Step 3: Preview ---
+  // Parse bullets into resume sections
+  const parsed = parseResumeContent(resume.bullets, profileSkills);
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
@@ -786,55 +789,103 @@ function ResumeBuilderContent() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl p-8 border border-border shadow-sm">
-        {/* Resume preview */}
-        <div className="text-center mb-6 pb-4 border-b border-border">
-          <h2 className="text-xl font-bold text-foreground uppercase tracking-wide">
-            Resume
+      {/* Resume document */}
+      <div className="bg-white rounded-2xl border border-border shadow-sm" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+        {/* Header */}
+        <div className="text-center px-8 pt-8 pb-4 border-b-2 border-gray-800">
+          <h2 className="text-xl font-bold text-gray-900 uppercase tracking-widest">
+            {resume.targetJob}
           </h2>
-          <p className="text-sm text-sage-600 italic mt-1">
-            Targeting: {resume.targetJob}
-            {resume.targetCompany ? ` at ${resume.targetCompany}` : ""}
-          </p>
+          {resume.targetCompany && (
+            <p className="text-sm text-gray-600 mt-1 tracking-wide">
+              {resume.targetCompany}
+            </p>
+          )}
         </div>
 
-        {resume.summary && (
-          <div className="mb-6">
-            <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-2">
-              Professional Summary
-            </h3>
-            <p className="text-sm text-foreground leading-relaxed">
-              {resume.summary}
-            </p>
-          </div>
-        )}
+        <div className="px-8 py-6 space-y-5">
+          {/* Professional Summary */}
+          {resume.summary && (
+            <div>
+              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-2">
+                Professional Summary
+              </h3>
+              <p className="text-sm text-gray-800 leading-relaxed">
+                {resume.summary}
+              </p>
+            </div>
+          )}
 
-        {resume.bullets.some((b) => b.text.trim()) && (
-          <div>
-            <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-2">
-              Experience
-            </h3>
-            <ul className="space-y-1.5">
-              {resume.bullets
-                .filter((b) => b.text.trim())
-                .map((b) => (
-                  <li
-                    key={b.id}
-                    className="text-sm text-foreground flex gap-2"
-                  >
-                    <span className="text-muted flex-shrink-0">•</span>
-                    <span>{b.text}</span>
-                  </li>
+          {/* Core Competencies / Skills */}
+          {parsed.skills.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-2">
+                Core Competencies
+              </h3>
+              <p className="text-sm text-gray-800 leading-relaxed">
+                {parsed.skills.join("  |  ")}
+              </p>
+            </div>
+          )}
+
+          {/* Experience */}
+          {parsed.experience.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-3">
+                Professional Experience
+              </h3>
+              <div className="space-y-4">
+                {parsed.experience.map((group, gi) => (
+                  <div key={gi}>
+                    {group.header && (
+                      <div className="mb-1.5">
+                        <p className="text-sm font-bold text-gray-900">{group.title}</p>
+                        {group.company && (
+                          <p className="text-sm text-gray-600 italic">{group.company}{group.dates ? ` | ${group.dates}` : ""}</p>
+                        )}
+                      </div>
+                    )}
+                    <ul className="space-y-1">
+                      {group.bullets.map((text, bi) => (
+                        <li key={bi} className="text-sm text-gray-800 flex gap-2 leading-relaxed">
+                          <span className="text-gray-500 flex-shrink-0 mt-0.5">&#8226;</span>
+                          <span>{text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-            </ul>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
+
+          {/* Education */}
+          {parsed.education.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-1 mb-2">
+                Education &amp; Certifications
+              </h3>
+              <ul className="space-y-1">
+                {parsed.education.map((item, i) => (
+                  <li key={i} className="text-sm text-gray-800">{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-8 pb-4">
+          <p className="text-[10px] text-gray-400 text-center border-t border-gray-200 pt-2">
+            Built with The Refinery &mdash; steelmanresumes.com
+          </p>
+        </div>
       </div>
 
       <div className="flex gap-3 mt-6">
         <button
           onClick={() => {
-            const text = formatResumeText(resume);
+            const text = formatResumeText(resume, parsed);
             const blob = new Blob([text], { type: "text/plain" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -862,32 +913,120 @@ function ResumeBuilderContent() {
       </div>
 
       <p className="text-xs text-muted text-center mt-4">
-        Scaffold level:{" "}
-        {resume.bullets.length <= 2
-          ? "guided"
-          : resume.bullets.length <= 5
-            ? "building independence"
-            : "mostly independent"}{" "}
-        — you&apos;re getting better each time.
+        This is your resume. Edit anything, then download when ready.
       </p>
     </div>
   );
 }
 
-function formatResumeText(resume: ResumeData): string {
-  const lines = [
-    "RESUME",
-    `Target: ${resume.targetJob}${resume.targetCompany ? ` at ${resume.targetCompany}` : ""}`,
-    "",
-  ];
+interface ExperienceGroup {
+  header: boolean;
+  title: string;
+  company: string;
+  dates: string;
+  bullets: string[];
+}
+
+interface ParsedResume {
+  skills: string[];
+  experience: ExperienceGroup[];
+  education: string[];
+}
+
+function parseResumeContent(bullets: BulletEntry[], forgeSkills: string[]): ParsedResume {
+  const skills: string[] = [...forgeSkills];
+  const education: string[] = [];
+  const experience: ExperienceGroup[] = [];
+  let currentGroup: ExperienceGroup = { header: false, title: "", company: "", dates: "", bullets: [] };
+
+  const eduKeywords = /\b(degree|diploma|certificate|certification|ged|associate|bachelor|master|phd|training|completed|coursework|licensed|certified)\b/i;
+  const jobHeaderPattern = /^(.+?)\s*(?:--|—|\|)\s*(.+?)(?:\s*(?:--|—|\|)\s*(.+?))?$/;
+
+  for (const b of bullets) {
+    const text = b.text.trim();
+    if (!text) continue;
+
+    // Detect education/certification lines
+    if (eduKeywords.test(text)) {
+      education.push(text);
+      continue;
+    }
+
+    // Detect job title headers: "Title -- Company" or "Title | Company | Dates"
+    const headerMatch = text.match(jobHeaderPattern);
+    if (headerMatch && text.length < 80) {
+      // Save previous group if it has bullets
+      if (currentGroup.bullets.length > 0) {
+        experience.push(currentGroup);
+      }
+      currentGroup = {
+        header: true,
+        title: headerMatch[1].trim(),
+        company: headerMatch[2].trim(),
+        dates: headerMatch[3]?.trim() || "",
+        bullets: [],
+      };
+      continue;
+    }
+
+    // Regular bullet point
+    currentGroup.bullets.push(text);
+  }
+
+  // Push last group
+  if (currentGroup.bullets.length > 0) {
+    experience.push(currentGroup);
+  }
+
+  return { skills, experience, education };
+}
+
+function formatResumeText(resume: ResumeData, parsed: ParsedResume): string {
+  const lines: string[] = [];
+
+  // Header
+  lines.push(resume.targetJob.toUpperCase());
+  if (resume.targetCompany) lines.push(resume.targetCompany);
+  lines.push("");
+
+  // Summary
   if (resume.summary) {
-    lines.push("PROFESSIONAL SUMMARY", resume.summary, "");
+    lines.push("PROFESSIONAL SUMMARY", "-".repeat(40));
+    lines.push(resume.summary, "");
   }
-  const bullets = resume.bullets.filter((b) => b.text.trim());
-  if (bullets.length) {
-    lines.push("EXPERIENCE");
-    bullets.forEach((b) => lines.push(`• ${b.text}`));
+
+  // Skills
+  if (parsed.skills.length > 0) {
+    lines.push("CORE COMPETENCIES", "-".repeat(40));
+    lines.push(parsed.skills.join("  |  "), "");
   }
-  lines.push("", "Built with The Refinery — steelmanresumes.com");
+
+  // Experience
+  if (parsed.experience.length > 0) {
+    lines.push("PROFESSIONAL EXPERIENCE", "-".repeat(40));
+    for (const group of parsed.experience) {
+      if (group.header) {
+        lines.push(group.title);
+        if (group.company) {
+          lines.push(`${group.company}${group.dates ? `  |  ${group.dates}` : ""}`);
+        }
+      }
+      for (const bullet of group.bullets) {
+        lines.push(`  * ${bullet}`);
+      }
+      lines.push("");
+    }
+  }
+
+  // Education
+  if (parsed.education.length > 0) {
+    lines.push("EDUCATION & CERTIFICATIONS", "-".repeat(40));
+    for (const item of parsed.education) {
+      lines.push(item);
+    }
+    lines.push("");
+  }
+
+  lines.push("Built with The Refinery - steelmanresumes.com");
   return lines.join("\n");
 }

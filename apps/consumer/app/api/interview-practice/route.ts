@@ -13,7 +13,7 @@ export const maxDuration = 30;
 
 async function handlePost(request: Request) {
   try {
-    const { messages, config, exchangeCount } = await request.json();
+    const { messages, config, exchangeCount, forgeContext } = await request.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -27,6 +27,18 @@ async function handlePost(request: Request) {
       config.interviewType === "disclosure" || config.includeDisclosure;
     const shouldWrapUp = exchangeCount >= 5;
 
+    // Build candidate context from Forge data
+    let candidateBlock = "";
+    if (forgeContext) {
+      const parts: string[] = [];
+      if (forgeContext.narrative) parts.push(`About the candidate: ${forgeContext.narrative}`);
+      if (forgeContext.strengths?.length) parts.push(`Their key strengths: ${forgeContext.strengths.join(", ")}`);
+      if (forgeContext.skills?.length) parts.push(`Their skills: ${forgeContext.skills.join(", ")}`);
+      if (parts.length) {
+        candidateBlock = `\n\nCANDIDATE PROFILE (use this to ask relevant follow-up questions):\n${parts.join("\n")}`;
+      }
+    }
+
     let systemPrompt = `You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${config.targetRole} position` : ""}.
 
 INTERVIEW STYLE: ${config.interviewType}
@@ -39,7 +51,7 @@ YOUR ROLE:
 - React naturally to their answers — acknowledge what they said before moving on
 - Don't be hostile, but don't be a pushover. Ask follow-ups a real interviewer would.
 - Keep your responses to 2-3 sentences max
-
+${candidateBlock}
 ${isDisclosure ? `DISCLOSURE ELEMENT:
 - At some point during the interview (around exchange 3-4), naturally bring up background checks
 - Say something like "We do run a background check as part of our process. Is there anything you'd like to share about that?"
@@ -49,6 +61,7 @@ ${isDisclosure ? `DISCLOSURE ELEMENT:
       // Generate feedback instead of continuing
       systemPrompt = `You were conducting a mock job interview${config.targetRole ? ` for a ${config.targetRole} position` : ""}.
 ${isDisclosure ? "The interview included a criminal record disclosure element." : ""}
+${candidateBlock}
 
 The interview is now over. Review the entire conversation and provide:
 1. A brief closing statement as the interviewer (1-2 sentences)

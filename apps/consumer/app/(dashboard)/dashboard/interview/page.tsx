@@ -69,7 +69,14 @@ function InterviewPracticePage() {
   const [rateLimitError, setRateLimitError] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // Load target role from Forge session
+  // Forge context for richer AI interaction
+  const [forgeContext, setForgeContext] = useState<{
+    skills: string[];
+    strengths: string[];
+    narrative: string;
+  } | null>(null);
+
+  // Load target role and context from Forge session
   useEffect(() => {
     try {
       const stored = localStorage.getItem("forge_session");
@@ -80,6 +87,23 @@ function InterviewPracticePage() {
             ...prev,
             targetRole: session.forgeOutput.careerPaths[0].title,
           }));
+        }
+        const ctx: { skills: string[]; strengths: string[]; narrative: string } = {
+          skills: [],
+          strengths: [],
+          narrative: "",
+        };
+        if (session.forgeOutput?.skills) {
+          ctx.skills = session.forgeOutput.skills.map((s: any) => s.name).slice(0, 10);
+        }
+        if (session.forgeOutput?.narrative?.strengths) {
+          ctx.strengths = session.forgeOutput.narrative.strengths.map((s: any) => s.title);
+        }
+        if (session.forgeOutput?.narrative?.summary) {
+          ctx.narrative = session.forgeOutput.narrative.summary;
+        }
+        if (ctx.skills.length || ctx.strengths.length || ctx.narrative) {
+          setForgeContext(ctx);
         }
       }
     } catch {}
@@ -137,6 +161,7 @@ function InterviewPracticePage() {
           messages: updatedMessages,
           config,
           exchangeCount: newExchangeCount,
+          forgeContext: forgeContext || undefined,
         }),
       });
 
@@ -211,6 +236,20 @@ function InterviewPracticePage() {
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
             />
           </div>
+
+          {/* Skills from Forge */}
+          {forgeContext?.skills && forgeContext.skills.length > 0 && (
+            <div>
+              <p className="text-xs text-muted mb-2">Your skills (from The Forge)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {forgeContext.skills.map((s, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-full text-xs bg-sage-50 text-sage-700 border border-sage-200">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Interview type */}
           <div>
@@ -366,17 +405,21 @@ function InterviewPracticePage() {
   // --- Practice ---
   return (
     <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-lg font-bold text-foreground">
-            Mock Interview
-          </h1>
-          <p className="text-xs text-muted">
-            {config.targetRole
-              ? `Role: ${config.targetRole}`
-              : "General practice"}{" "}
-            · Exchange {exchangeCount}/6
-          </p>
+      {/* Video-call style header */}
+      <div className="bg-gray-900 rounded-2xl px-5 py-4 mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-bold">
+            HM
+          </div>
+          <div>
+            <p className="text-white text-sm font-medium flex items-center gap-2">
+              Hiring Manager
+              <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+            </p>
+            <p className="text-gray-400 text-xs">
+              {config.targetRole ? `${config.targetRole} interview` : "Interview in progress"}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => {
@@ -384,9 +427,9 @@ function InterviewPracticePage() {
             setMessages([]);
             setExchangeCount(0);
           }}
-          className="text-sm text-muted hover:text-foreground"
+          className="text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
         >
-          End interview
+          End
         </button>
       </div>
 
@@ -394,7 +437,7 @@ function InterviewPracticePage() {
       <div className="bg-white rounded-2xl border border-border mb-4">
         <div
           ref={chatRef}
-          className="p-5 space-y-4 max-h-[450px] overflow-y-auto"
+          className="p-5 space-y-4 max-h-[500px] overflow-y-auto"
         >
           {messages.map((msg, i) => (
             <div
