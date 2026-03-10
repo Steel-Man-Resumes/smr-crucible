@@ -21,7 +21,7 @@ interface RushInput {
   jobDescription?: string;
 }
 
-const SYSTEM_PROMPT = `You are a resume rewriter for justice-impacted job seekers.
+const SYSTEM_PROMPT = `You are a professional resume rewriter for Steel Man Resumes.
 
 You take a rough/weak resume and rewrite it for a specific target job.
 
@@ -32,6 +32,10 @@ RULES:
 - Extract and organize skills relevant to the target role.
 - 6th grade reading level. Short sentences. No buzzwords ("results-driven", "detail-oriented").
 - If the resume is thin, work with what's there. An honest 3-bullet resume beats a fabricated 10-bullet one.
+- NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, convictions, justice involvement, re-entry, or any disqualifying information. Not even obliquely. Not even with growth framing. This is a paper document and disclosure should ONLY happen in person during interviews.
+- For employment gaps, simply omit or skip that period. Do NOT explain gaps. Use a functional/skills-based format if needed.
+- If the original resume mentions prison, jail, incarceration, parole officers, correctional programs, etc., IGNORE those details entirely. Extract only the skills, education, and certifications gained — never mention WHERE they were earned if the location was a correctional facility.
+- Parole officer references should be removed from the output entirely.
 - Output JSON only.`;
 
 async function handlePost(request: Request) {
@@ -51,12 +55,23 @@ async function handlePost(request: Request) {
       );
     }
 
+    // Strip incarceration-related content before sending to AI
+    const cleanedResume = input.resumeText
+      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.]*\./gi, '')
+      .replace(/(?:I was |was )?incarcerat(?:ed|ion)[^.]*\./gi, '')
+      .replace(/(?:prison|jail|correctional|waupun|penitentiary|detention)[^.]*(?:program|vocational|course|certificate|kitchen|facility)[^.]*\./gi, '')
+      .replace(/(?:parole|probat(?:ion|ionary))\s*(?:officer|agent|supervisor)?[^.]*\./gi, '')
+      .replace(/(?:disciplinary|infraction|conduct)[^.]*(?:issue|record|report)[^.]*\./gi, '')
+      .replace(/\d{4}\s*[-–—]\s*\d{4}\s*[-–—]\s*I was/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     const userMessage = `Rewrite this resume for the target job.
 
 TARGET JOB: ${input.targetJob}${input.targetCompany ? `\nTARGET COMPANY: ${input.targetCompany}` : ""}${input.jobDescription ? `\n\nJOB DESCRIPTION:\n${input.jobDescription.slice(0, 4000)}` : ""}
 
 ORIGINAL RESUME:
-${input.resumeText.slice(0, 6000)}
+${cleanedResume.slice(0, 6000)}
 
 Return JSON:
 {

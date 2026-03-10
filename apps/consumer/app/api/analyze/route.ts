@@ -181,15 +181,19 @@ async function analyzeNarrative(
   context: string,
   input: ForgeInput
 ): Promise<Record<string, unknown>> {
-  const system = `You are a career narrative analyst for justice-impacted individuals.
-Your job is to find the redemption story in this person's experience.
+  const system = `You are a career narrative analyst for Steel Man Resumes.
+Your job is to find the strengths and professional story in this person's experience.
 
 RULES:
 - Use the person's OWN words and experiences. Never fabricate.
 - Frame strengths, not deficits.
-- Acknowledge barriers honestly but frame through resilience.
 - Write at a 6th grade reading level.
 - Never judge, score, or grade.
+- The headline and summary should be RESUME-READY. They may appear on actual job applications. Therefore:
+  - NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, "time away", "time served", re-entry, or any reference to justice involvement — not even obliquely or with euphemisms like "during his time away" or "while building new skills in a structured environment."
+  - Focus purely on professional skills, experience, education, and certifications.
+  - If education/certs were earned in prison, just list them without mentioning where. "GED, 2021" not "GED earned at Waupun Correctional."
+- The "reflection" field is private (shown only to the user) — this CAN acknowledge their full journey with warmth.
 - Output JSON only.`;
 
   const prompt = `Analyze this person's story and create their narrative.
