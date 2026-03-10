@@ -18,21 +18,29 @@ export async function POST(request: Request) {
 
   const sessionId = body.startedAt || new Date().toISOString();
 
-  await saveForgeSession(userId, sessionId, {
-    readinessStage: body.readinessStage,
-    resumeText: body.resumeText,
-    resumeMethod: body.resumeMethod,
-    goals: body.goals,
-    goalNarrative: body.goalNarrative,
-    challenges: body.challenges,
-    criminalRecord: body.criminalRecord,
-    challengeNarratives: body.challengeNarratives,
-    preferences: body.preferences,
-    forgeOutput: body.forgeOutput,
-    audience: body.audience,
-    pagesVisited: body.pagesVisited,
-    startedAt: body.startedAt,
-  });
+  try {
+    await saveForgeSession(userId, sessionId, {
+      readinessStage: body.readinessStage,
+      resumeText: body.resumeText,
+      resumeMethod: body.resumeMethod,
+      goals: body.goals,
+      goalNarrative: body.goalNarrative,
+      challenges: body.challenges,
+      criminalRecord: body.criminalRecord,
+      challengeNarratives: body.challengeNarratives,
+      preferences: body.preferences,
+      forgeOutput: body.forgeOutput,
+      audience: body.audience,
+      pagesVisited: body.pagesVisited,
+      startedAt: body.startedAt,
+    });
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Forge save error:", err?.message || err);
+    return NextResponse.json(
+      { error: "Failed to save progress. Please try again." },
+      { status: 500 }
+    );
+  }
 }
