@@ -15,7 +15,7 @@ export const maxDuration = 30;
 
 async function handlePost(request: Request) {
   try {
-    const { record, timing } = await request.json();
+    const { record, timing, targetJob, forgeContext } = await request.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -23,6 +23,21 @@ async function handlePost(request: Request) {
         { error: "AI not configured" },
         { status: 500 }
       );
+    }
+
+    // Build candidate profile from Forge data
+    let candidateBlock = "";
+    if (targetJob || forgeContext) {
+      const parts: string[] = [];
+      if (targetJob) parts.push(`Target role: ${targetJob}`);
+      if (forgeContext?.headline) parts.push(`Professional headline: ${forgeContext.headline}`);
+      if (forgeContext?.strengths?.length) {
+        parts.push(`Key strengths to pivot to after disclosure:\n${forgeContext.strengths.map((s: any) => `- ${s.title}: ${s.evidence}`).join("\n")}`);
+      }
+      if (forgeContext?.skills?.length) {
+        parts.push(`Top skills: ${forgeContext.skills.map((s: any) => s.name).join(", ")}`);
+      }
+      candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
     }
 
     const prompt = `You are a reentry career specialist helping someone plan how to disclose their criminal record to employers.
@@ -33,13 +48,13 @@ THEIR SITUATION:
 - Most recent: ${record.most_recent || "not specified"}
 - Probation/parole: ${record.supervision || "not specified"}
 - State: ${record.state || "not specified"}
-- Preferred timing: ${timing || "not sure"}
+- Preferred timing: ${timing || "not sure"}${candidateBlock}
 
 GENERATE a disclosure plan as JSON:
 {
   "timing_advice": "When they should disclose and why, specific to their situation. Consider ban-the-box laws in their state if known.",
   "legal_context": "Relevant laws and rights. Ban-the-box status, expungement eligibility, what employers can/cannot ask.",
-  "script": "A natural, conversational script they can use. Under 30 seconds spoken. Acknowledges the past, pivots to growth and value. Must sound human, not rehearsed.",
+  "script": "A natural, conversational script they can use. Under 30 seconds spoken. Acknowledges the past, pivots to growth and value. If candidate strengths are provided, reference them specifically in the pivot. Must sound human, not rehearsed.",
   "tips": [
     "tip 1 — specific, actionable",
     "tip 2",
