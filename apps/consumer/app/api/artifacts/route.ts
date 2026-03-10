@@ -39,13 +39,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const artifact = await createArtifact(
-    userId,
-    body.type as ArtifactType,
-    body.targetContext || {},
-    body.content,
-    body.scaffoldLevel ?? 1.0
-  );
+  try {
+    const artifact = await createArtifact(
+      userId,
+      body.type as ArtifactType,
+      body.targetContext || {},
+      body.content,
+      body.scaffoldLevel ?? 1.0
+    );
 
-  return NextResponse.json({ data: artifact }, { status: 201 });
+    return NextResponse.json({ data: artifact }, { status: 201 });
+  } catch (err: any) {
+    console.error("Create artifact error:", err?.message || err);
+    return NextResponse.json(
+      { error: "Failed to save. Please try again.", detail: err?.message },
+      { status: 500 }
+    );
+  }
 }

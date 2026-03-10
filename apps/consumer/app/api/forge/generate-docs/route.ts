@@ -144,14 +144,16 @@ async function generateResume(input: GenerateDocsInput): Promise<string> {
   const careerPaths = input.career_paths || [];
   const narrative = input.narrative || {};
 
-  const system = `You are a professional resume writer for Steel Man Resumes. You write resumes for people who may have barriers to employment (criminal records, employment gaps, career changes).
+  const system = `You are a professional resume writer for Steel Man Resumes. You write resumes for people re-entering the workforce who deserve to lead with their strengths.
 
 RULES:
 - Use ONLY facts from the provided data. Never fabricate experience, jobs, or credentials.
 - If there's original resume text, use it as the primary source of work history and education.
 - If there's NO resume, build from strengths, skills, goals, and narrative data.
 - Write at a professional level but keep it clear and readable.
-- Frame barriers through growth and resilience — never hide them, never lead with them.
+- NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information. Not even obliquely. Not even with growth framing. This is a paper document and disclosure should ONLY happen in person during interviews.
+- For employment gaps, simply omit dates or use a functional/skills-based format. Do NOT explain gaps.
+- If the user's data mentions incarceration or justice involvement, ignore those details entirely for the resume. Focus on skills, experience, education, and certifications.
 - Include a professional summary, core skills, and relevant experience sections.
 - Output clean, formatted plain text ready for copy-paste or DOCX conversion.`;
 
@@ -184,7 +186,13 @@ RULES:
   }
 
   if (input.resumeText) {
-    parts.push(`ORIGINAL RESUME TEXT:\n${input.resumeText.slice(0, 6000)}`);
+    // Strip any incarceration-related content from the resume text before sending to AI
+    const cleanedResume = input.resumeText
+      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.]*\./gi, '')
+      .replace(/(?:incarcerat|prison|jail|parole|probat|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon|convict)[^.]*\./gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    parts.push(`ORIGINAL RESUME TEXT:\n${cleanedResume.slice(0, 6000)}`);
   }
 
   if (input.goals?.length) {
@@ -238,15 +246,16 @@ async function generateCoverLetter(input: GenerateDocsInput): Promise<string> {
   const barriers = input.barriers || [];
   const narrative = input.narrative || {};
 
-  const system = `You are a cover letter writer for Steel Man Resumes. You write compelling, honest cover letters for people who may face barriers to employment.
+  const system = `You are a cover letter writer for Steel Man Resumes. You write compelling, confident cover letters for people re-entering the workforce.
 
 RULES:
-- Write a GENERIC cover letter template — not targeted to a specific employer.
+- Write a GENERIC cover letter template, not targeted to a specific employer.
 - The letter should work for any employer in their target career path(s).
 - Use [Company Name] and [Hiring Manager] as placeholders ONLY for the employer name and contact.
 - Everything else must use REAL data from the person's profile.
 - 250-350 words. Professional tone with warmth.
-- If they have barriers (criminal record, employment gap), address naturally in ONE sentence — growth framing, not apologetic.
+- NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information in the cover letter. Disclosure happens in person during interviews, never on paper.
+- Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - Never fabricate achievements or experience.`;
 
   const parts: string[] = [];
@@ -270,14 +279,17 @@ RULES:
     );
   }
 
-  if (barriers.length > 0) {
-    const barrierTypes = barriers.map((b) => b.type.replace(/_/g, " ")).join(", ");
-    parts.push(`BARRIERS TO ADDRESS: ${barrierTypes}`);
-  }
+  // NEVER include barriers in written documents. Disclosure happens in interviews only.
 
   if (input.resumeText) {
+    // Strip incarceration-related content before sending to AI
+    const cleanedResume = input.resumeText
+      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.]*\./gi, '')
+      .replace(/(?:incarcerat|prison|jail|parole|probat|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon|convict)[^.]*\./gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     parts.push(
-      `WORK HISTORY EXCERPT:\n${input.resumeText.slice(0, 3000)}`
+      `WORK HISTORY EXCERPT:\n${cleanedResume.slice(0, 3000)}`
     );
   }
 

@@ -27,6 +27,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 interface ResumeData {
   targetJob: string;
   targetCompany: string;
+  jobListingUrl: string;
   summary: string;
   bullets: BulletEntry[];
 }
@@ -124,6 +125,7 @@ function ResumeBuilderContent() {
   const [resume, setResume] = useState<ResumeData>({
     targetJob: "",
     targetCompany: "",
+    jobListingUrl: "",
     summary: "",
     bullets: [{ id: 1, text: "", scaffoldLevel: 1.0 }],
   });
@@ -140,15 +142,24 @@ function ResumeBuilderContent() {
 
   // Load profile data from Forge session
   const [profileSkills, setProfileSkills] = useState<string[]>([]);
+  const [forgeData, setForgeData] = useState<any>(null);
+  const [forgeResumeText, setForgeResumeText] = useState<string>("");
   useEffect(() => {
     try {
       const stored = localStorage.getItem("forge_session");
       if (stored) {
         const session = JSON.parse(stored);
+        setForgeData(session);
         if (session.forgeOutput?.skills) {
           setProfileSkills(
             session.forgeOutput.skills.map((s: any) => s.name).slice(0, 10)
           );
+        }
+        // Store the Forge-generated resume or original resume text
+        if (session.forgeOutput?.resume) {
+          setForgeResumeText(session.forgeOutput.resume);
+        } else if (session.resumeText) {
+          setForgeResumeText(session.resumeText);
         }
       }
     } catch {}
@@ -183,6 +194,7 @@ function ResumeBuilderContent() {
           setResume({
             targetJob: content.targetJob || "",
             targetCompany: content.targetCompany || "",
+            jobListingUrl: content.jobListingUrl || "",
             summary: content.summary || "",
             bullets: content.bullets?.length
               ? content.bullets
@@ -203,6 +215,7 @@ function ResumeBuilderContent() {
   const buildContent = useCallback(() => ({
     targetJob: resume.targetJob,
     targetCompany: resume.targetCompany,
+    jobListingUrl: resume.jobListingUrl,
     summary: resume.summary,
     bullets: resume.bullets,
     formatVersion: 1,
@@ -234,6 +247,8 @@ function ResumeBuilderContent() {
           lastSavedContent.current = contentStr;
           setSaveStatus("saved");
         } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Save (update) failed:", res.status, errData);
           setSaveStatus("error");
         }
       } else {
@@ -261,10 +276,13 @@ function ResumeBuilderContent() {
           // Refresh saved resumes list
           setSavedResumes((prev) => [data, ...prev]);
         } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Save (create) failed:", res.status, errData);
           setSaveStatus("error");
         }
       }
-    } catch {
+    } catch (err) {
+      console.error("Save exception:", err);
       setSaveStatus("error");
     }
   }, [buildContent, currentArtifactId, resume.bullets, resume.targetJob, resume.targetCompany, router]);
@@ -323,10 +341,13 @@ function ResumeBuilderContent() {
         body: JSON.stringify({
           targetJob: resume.targetJob,
           targetCompany: resume.targetCompany,
+          jobListingUrl: resume.jobListingUrl,
           existingBullets: resume.bullets
             .filter((b) => b.text.trim())
             .map((b) => b.text),
           skills: profileSkills,
+          forgeNarrative: forgeData?.forgeOutput?.narrative?.summary || "",
+          forgeStrengths: forgeData?.forgeOutput?.narrative?.strengths?.map((s: any) => s.title) || [],
           action: "suggest_summary",
         }),
       });
@@ -349,6 +370,7 @@ function ResumeBuilderContent() {
     setResume({
       targetJob: "",
       targetCompany: "",
+      jobListingUrl: "",
       summary: "",
       bullets: [{ id: 1, text: "", scaffoldLevel: 1.0 }],
     });
@@ -362,7 +384,7 @@ function ResumeBuilderContent() {
   const SaveIndicator = () => {
     if (saveStatus === "saving") return <span className="text-xs text-muted">Saving...</span>;
     if (saveStatus === "saved") return <span className="text-xs text-sage-600">Saved</span>;
-    if (saveStatus === "error") return <span className="text-xs text-earth-600">Save failed</span>;
+    if (saveStatus === "error") return <span className="text-xs text-earth-600">Save failed. Try again?</span>;
     return null;
   };
 
@@ -469,6 +491,29 @@ function ResumeBuilderContent() {
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
             />
           </div>
+
+          <div>
+            <label
+              htmlFor="job-url"
+              className="text-sm font-medium text-foreground block mb-1.5"
+            >
+              Job listing link{" "}
+              <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <input
+              id="job-url"
+              type="url"
+              value={resume.jobListingUrl}
+              onChange={(e) =>
+                setResume({ ...resume, jobListingUrl: e.target.value })
+              }
+              placeholder="Paste the URL from Indeed, LinkedIn, or any job board"
+              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            />
+            <p className="text-xs text-muted mt-1">
+              If you have a link to the actual job posting, paste it here. We&apos;ll use it to tailor your resume.
+            </p>
+          </div>
         </div>
 
         {profileSkills.length > 0 && (
@@ -490,7 +535,71 @@ function ResumeBuilderContent() {
         )}
 
         <button
-          onClick={() => setStep("build")}
+          onClick={() => {
+            // Pre-fill from Forge data if available and resume is empty
+            if (forgeData && !resume.summary && resume.bullets.every(b => !b.text.trim())) {
+              const output = forgeData.forgeOutput;
+              let summary = "";
+              const bullets: BulletEntry[] = [];
+
+              // Build summary from Forge narrative
+              if (output?.narrative?.summary) {
+                summary = output.narrative.summary;
+              } else if (output?.narrative?.headline) {
+                summary = output.narrative.headline;
+              }
+
+              // Build bullets from Forge resume text or strengths
+              if (forgeResumeText) {
+                // Parse bullet points from the Forge resume
+                const lines = forgeResumeText.split("\n").filter((l: string) => l.trim());
+                let bulletIndex = 0;
+                for (const line of lines) {
+                  const cleaned = line.replace(/^[•\-\*]\s*/, "").trim();
+                  // Skip headers, names, contact info, section titles
+                  if (
+                    cleaned.length < 15 ||
+                    cleaned === cleaned.toUpperCase() ||
+                    cleaned.includes("@") ||
+                    cleaned.match(/^\d{3}[-.]/) ||
+                    cleaned.match(/^(PROFESSIONAL|CORE|EDUCATION|CERTIFIC|REFER|RESUME|TARGET)/i)
+                  ) continue;
+                  // Skip incarceration-related content
+                  if (cleaned.match(/incarcerat|prison|jail|parole|probat|convict/i)) continue;
+                  bullets.push({
+                    id: bulletIndex + 1,
+                    text: cleaned,
+                    scaffoldLevel: getScaffoldLevel(bulletIndex),
+                  });
+                  bulletIndex++;
+                  if (bulletIndex >= 12) break;
+                }
+              }
+
+              // Fallback: build from strengths if no resume bullets
+              if (bullets.length === 0 && output?.narrative?.strengths?.length) {
+                output.narrative.strengths.forEach((s: any, i: number) => {
+                  bullets.push({
+                    id: i + 1,
+                    text: `${s.title}: ${s.evidence}`,
+                    scaffoldLevel: getScaffoldLevel(i),
+                  });
+                });
+              }
+
+              // Ensure at least one empty bullet
+              if (bullets.length === 0) {
+                bullets.push({ id: 1, text: "", scaffoldLevel: 1.0 });
+              }
+
+              setResume(prev => ({
+                ...prev,
+                summary,
+                bullets,
+              }));
+            }
+            setStep("build");
+          }}
           disabled={!resume.targetJob.trim()}
           className="px-8 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
         >

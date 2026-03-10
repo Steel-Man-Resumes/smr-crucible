@@ -17,7 +17,7 @@ import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 
-type IntakePath = "upload" | "import" | "external" | "guided" | null;
+type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -311,12 +311,22 @@ export default function ResumeIntakePage() {
         />
         <div className="flex flex-col gap-3">
           <button
+            onClick={() => setActivePath("paste")}
+            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-300 bg-sage-50 hover:border-sage-400 transition-all min-h-touch"
+          >
+            <span className="font-medium">Paste your resume text</span>
+            <p className="text-sm text-muted mt-0.5">
+              Copy from an email, notes app, or anywhere and paste it here
+            </p>
+          </button>
+
+          <button
             onClick={() => setActivePath("upload")}
             className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
           >
             <span className="font-medium">Upload a file or image</span>
             <p className="text-sm text-muted mt-0.5">
-              PDF, Word, photo of a paper copy — anything works
+              PDF, Word, photo of a paper copy
             </p>
           </button>
 
@@ -536,6 +546,11 @@ export default function ResumeIntakePage() {
     );
   }
 
+  // --- Path E: Paste text ---
+  if (activePath === "paste") {
+    return <PasteResume onComplete={handleContinue} onBack={() => setActivePath(null)} />;
+  }
+
   // --- Path D: Guided AI Builder (hidden fallback) ---
   if (activePath === "guided") {
     return <GuidedBuilder onComplete={handleContinue} onBack={() => setActivePath(null)} />;
@@ -673,6 +688,60 @@ function GuidedBuilder({
           className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
           autoFocus
         />
+      )}
+    </FlowPage>
+  );
+}
+
+// --- Paste Resume sub-component ---
+
+function PasteResume({
+  onComplete,
+  onBack,
+}: {
+  onComplete: () => void;
+  onBack: () => void;
+}) {
+  const { updateSession } = useForgeSession();
+  const [text, setText] = useState("");
+
+  function handleSubmit() {
+    if (!text.trim()) return;
+    updateSession({
+      resumeText: text.trim(),
+      resumeMethod: "paste" as any,
+      lastPageVisited: "resume",
+    });
+    onComplete();
+  }
+
+  return (
+    <FlowPage
+      title="Paste your resume"
+      subtitle="Copy your resume text from anywhere and paste it below. Don't worry about formatting."
+      actionLabel="Continue"
+      actionDisabled={text.trim().length < 20}
+      onAction={handleSubmit}
+      showBack
+      onBack={onBack}
+      footer={
+        <p className="text-xs text-muted">
+          Minimum 20 characters. Just get the basics in there.
+        </p>
+      }
+    >
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"Paste your resume here...\n\nExample:\nJohn Smith\nForklift Operator with 5 years experience\n\nWork History:\nWarehouse Associate, Amazon, 2019-2024\n- Operated forklift and pallet jack\n- Trained new team members"}
+        rows={10}
+        className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y min-h-[200px]"
+        autoFocus
+      />
+      {text.length > 0 && text.trim().length < 20 && (
+        <p className="text-xs text-warm-600 mt-2">
+          Keep going. We need a little more to work with.
+        </p>
       )}
     </FlowPage>
   );

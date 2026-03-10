@@ -14,7 +14,7 @@ export const maxDuration = 30;
 async function handlePost(request: Request) {
   try {
     const body = await request.json();
-    const { targetJob, targetCompany, existingBullets, skills, action } = body;
+    const { targetJob, targetCompany, jobListingUrl, existingBullets, skills, forgeNarrative, forgeStrengths, action } = body;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -24,27 +24,36 @@ async function handlePost(request: Request) {
       );
     }
 
+    // Build context from Forge data if available
+    const forgeContext = [];
+    if (forgeNarrative) forgeContext.push(`About this person: ${forgeNarrative}`);
+    if (forgeStrengths?.length) forgeContext.push(`Key strengths: ${forgeStrengths.join(", ")}`);
+    if (jobListingUrl) forgeContext.push(`Job listing: ${jobListingUrl}`);
+    const forgeBlock = forgeContext.length > 0 ? `\n\n${forgeContext.join("\n")}` : "";
+
     let prompt = "";
 
     if (action === "suggest_summary") {
       prompt = `Write a 2-3 sentence professional summary for someone applying for a ${targetJob} position${targetCompany ? ` at ${targetCompany}` : ""}.
 
 Their skills include: ${skills?.join(", ") || "not specified"}.
-${existingBullets?.length ? `They've described their experience as:\n${existingBullets.join("\n")}` : ""}
+${existingBullets?.length ? `They've described their experience as:\n${existingBullets.join("\n")}` : ""}${forgeBlock}
 
 RULES:
 - Write at a 6th grade reading level
 - Be specific, not generic
 - No buzzwords like "results-driven" or "detail-oriented"
 - Keep it honest and grounded
+- NEVER mention incarceration, criminal records, justice involvement, or any disqualifying information
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
       prompt = `Suggest one experience bullet point for a ${targetJob} resume.
 Their skills: ${skills?.join(", ") || "general"}.
-Existing bullets: ${existingBullets?.join("; ") || "none yet"}.
+Existing bullets: ${existingBullets?.join("; ") || "none yet"}.${forgeBlock}
 
 Write ONE bullet starting with an action verb. Include a number or result if possible.
-No buzzwords. Keep it honest. One sentence only.`;
+No buzzwords. Keep it honest. One sentence only.
+NEVER mention incarceration, criminal records, or any disqualifying information.`;
     } else {
       return NextResponse.json(
         { error: "Unknown action" },
