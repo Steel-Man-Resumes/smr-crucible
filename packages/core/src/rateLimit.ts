@@ -68,35 +68,39 @@ export async function checkIpRateLimit(
 }
 
 /**
- * Atomic increment for user-based usage.
+ * Atomic increment for user-based usage. Returns the new count.
  */
 export async function incrementUserUsage(
   userId: string,
   endpoint: string
-): Promise<void> {
-  await query(
+): Promise<number> {
+  const row = await getOne<{ call_count: number }>(
     `INSERT INTO ai_usage (user_id, endpoint, usage_date, call_count)
      VALUES ($1, $2, CURRENT_DATE, 1)
      ON CONFLICT (user_id, endpoint, usage_date)
-     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()`,
+     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()
+     RETURNING call_count`,
     [userId, endpoint]
   );
+  return row?.call_count ?? 1;
 }
 
 /**
- * Atomic increment for IP-based usage.
+ * Atomic increment for IP-based usage. Returns the new count.
  */
 export async function incrementIpUsage(
   ip: string,
   endpoint: string
-): Promise<void> {
-  await query(
+): Promise<number> {
+  const row = await getOne<{ call_count: number }>(
     `INSERT INTO ai_usage (ip_address, endpoint, usage_date, call_count)
      VALUES ($1, $2, CURRENT_DATE, 1)
      ON CONFLICT (ip_address, endpoint, usage_date)
-     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()`,
+     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()
+     RETURNING call_count`,
     [ip, endpoint]
   );
+  return row?.call_count ?? 1;
 }
 
 /**

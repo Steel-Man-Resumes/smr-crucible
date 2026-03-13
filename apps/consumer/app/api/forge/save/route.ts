@@ -3,6 +3,11 @@ import { auth } from "@/auth";
 import { saveForgeSession } from "@crucible/core";
 
 export async function POST(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   const session = await auth();
   const userId = session?.user?.id;
 

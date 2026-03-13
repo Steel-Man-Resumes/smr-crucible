@@ -9,10 +9,16 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const { targetRole, location, skills, hasRecord, recordType } =
       await request.json();
@@ -22,14 +28,19 @@ async function handlePost(request: Request) {
       return NextResponse.json({ jobs: [] });
     }
 
-    const prompt = `You are a reentry employment specialist. Find 8-12 real job opportunities for someone looking for ${targetRole || "employment"} work${location ? ` in or near ${location}` : ""}.
+    const sanitizedRole = sanitizeForPrompt(targetRole);
+    const sanitizedLocation = sanitizeForPrompt(location);
+    const sanitizedSkills = sanitizeArray(skills);
+    const sanitizedRecordType = sanitizeForPrompt(recordType, 200);
+
+    const prompt = `You are a reentry employment specialist. Find 8-12 real job opportunities for someone looking for ${sanitizedRole || "employment"} work${location ? ` in or near ${sanitizedLocation}` : ""}.
 
 CANDIDATE CONTEXT:
-- Target role: ${targetRole || "open to options"}
-- Location: ${location || "United States (flexible)"}
-- Skills: ${skills?.join(", ") || "general"}
+- Target role: ${sanitizedRole || "open to options"}
+- Location: ${sanitizedLocation || "United States (flexible)"}
+- Skills: ${sanitizedSkills || "general"}
 - Has criminal record: ${hasRecord ? "yes" : "not specified"}
-${hasRecord && recordType ? `- Record type: ${recordType}` : ""}
+${hasRecord && recordType ? `- Record type: ${sanitizedRecordType}` : ""}
 
 Return JSON:
 {
@@ -110,4 +121,4 @@ RULES:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "jobs" });
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "jobs", requiredTier: "client" });

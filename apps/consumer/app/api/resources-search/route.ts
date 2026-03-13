@@ -7,10 +7,16 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const { category, barriers, location } = await request.json();
 
@@ -19,11 +25,15 @@ async function handlePost(request: Request) {
       return NextResponse.json({ resources: [] });
     }
 
-    const prompt = `You are a reentry resource specialist. Find 5-8 real organizations and programs for someone who needs help with: ${category}.
+    const sanitizedCategory = sanitizeForPrompt(category);
+    const sanitizedBarriers = sanitizeArray(barriers);
+    const sanitizedLocation = sanitizeForPrompt(location);
+
+    const prompt = `You are a reentry resource specialist. Find 5-8 real organizations and programs for someone who needs help with: ${sanitizedCategory}.
 
 Context:
-- Their barriers: ${barriers?.join(", ") || "not specified"}
-- Location: ${location || "United States (general)"}
+- Their barriers: ${sanitizedBarriers}
+- Location: ${sanitizedLocation || "United States (general)"}
 
 Return JSON:
 {
@@ -97,4 +107,4 @@ RULES:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "resources" });
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "resources", requiredTier: "client" });

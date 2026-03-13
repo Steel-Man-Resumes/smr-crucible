@@ -25,6 +25,14 @@ async function handlePost(request: Request) {
       );
     }
 
+    // File size limit: 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "File too large (max 10MB)" },
+        { status: 413 }
+      );
+    }
+
     // Extract text from file
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -33,6 +41,13 @@ async function handlePost(request: Request) {
       file.name,
       file.type
     );
+
+    if (resumeText && resumeText.length > 50_000) {
+      return NextResponse.json(
+        { error: "Text content too large" },
+        { status: 400 }
+      );
+    }
 
     if (!resumeText || resumeText.trim().length < 20) {
       return NextResponse.json(
@@ -70,10 +85,7 @@ async function handlePost(request: Request) {
   } catch (error: any) {
     console.error("Parse error:", error);
     return NextResponse.json(
-      {
-        error:
-          error.message || "Something went wrong reading your file. Try again?",
-      },
+      { error: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }

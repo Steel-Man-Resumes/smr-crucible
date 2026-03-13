@@ -8,10 +8,16 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const { messages, config, exchangeCount, forgeContext } = await request.json();
 
@@ -31,19 +37,22 @@ async function handlePost(request: Request) {
     let candidateBlock = "";
     if (forgeContext) {
       const parts: string[] = [];
-      if (forgeContext.narrative) parts.push(`About the candidate: ${forgeContext.narrative}`);
-      if (forgeContext.strengths?.length) parts.push(`Their key strengths: ${forgeContext.strengths.join(", ")}`);
-      if (forgeContext.skills?.length) parts.push(`Their skills: ${forgeContext.skills.join(", ")}`);
+      if (forgeContext.narrative) parts.push(`About the candidate: ${sanitizeForPrompt(forgeContext.narrative, 1000)}`);
+      if (forgeContext.strengths?.length) parts.push(`Their key strengths: ${sanitizeArray(forgeContext.strengths)}`);
+      if (forgeContext.skills?.length) parts.push(`Their skills: ${sanitizeArray(forgeContext.skills)}`);
       if (parts.length) {
         candidateBlock = `\n\nCANDIDATE PROFILE (use this to ask relevant follow-up questions):\n${parts.join("\n")}`;
       }
     }
 
-    let systemPrompt = `You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${config.targetRole} position` : ""}.
+    const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
+    const sanitizedInterviewType = sanitizeForPrompt(config.interviewType, 100);
 
-INTERVIEW STYLE: ${config.interviewType}
+    let systemPrompt = `You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
+
+INTERVIEW STYLE: ${sanitizedInterviewType}
 ${config.interviewType === "behavioral" ? "Ask STAR-method questions (Situation, Task, Action, Result). Press for specifics." : ""}
-${config.interviewType === "industry" ? `Ask questions specific to the ${config.targetRole || "target"} field. Include technical and situational questions.` : ""}
+${config.interviewType === "industry" ? `Ask questions specific to the ${sanitizedTargetRole || "target"} field. Include technical and situational questions.` : ""}
 
 YOUR ROLE:
 - Be professional, warm, and realistic
@@ -59,7 +68,7 @@ ${isDisclosure ? `DISCLOSURE ELEMENT:
 
     if (shouldWrapUp) {
       // Generate feedback instead of continuing
-      systemPrompt = `You were conducting a mock job interview${config.targetRole ? ` for a ${config.targetRole} position` : ""}.
+      systemPrompt = `You were conducting a mock job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
 ${isDisclosure ? "The interview included a criminal record disclosure element." : ""}
 ${candidateBlock}
 
@@ -199,4 +208,4 @@ RULES:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview" });
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client" });

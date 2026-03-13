@@ -20,6 +20,7 @@
  */
 
 import { RESEARCH_CONTEXT } from "./research-context";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export interface AssistantContext {
   /** Current page the user is on */
@@ -134,32 +135,32 @@ COMMON QUESTIONS: "What is this?" "Is this really free?" "Who sees my data?" "Wh
 
     welcome: `PAGE: WELCOME — Readiness Detection
 The user is selecting where they're at: just exploring, thinking about it, getting ready, or ready to go. This maps to Prochaska's Stages of Change (precontemplation → action).
-YOU KNOW: ${context.readinessStage ? `They selected "${context.readinessStage}" readiness.` : "They haven't selected yet."}
+YOU KNOW: ${context.readinessStage ? `They selected "${sanitizeForPrompt(context.readinessStage, 100)}" readiness.` : "They haven't selected yet."}
 PROACTIVE: Don't tell them what to pick. If they ask, say "There's genuinely no wrong answer. Pick the one that feels most true right now." If they picked precontemplation/exploring, validate that exploring IS a step. If they picked action, match their energy.
 COMMON QUESTIONS: "Does this affect what I see?" (Yes — it adjusts how much guidance t.ROY provides.) "Can I change it?" (Yes, anytime.)`,
 
     resume: `PAGE: RESUME INTAKE — Four paths to get a resume in
 The user can: upload a file/image, download from LinkedIn/Indeed, use a free builder, or build one here with guided questions. We accept anything — PDFs, Word docs, photos of paper resumes, screenshots.
-YOU KNOW: ${context.hasResume ? `They've provided a resume (via ${context.resumeMethod}).` : "They haven't provided a resume yet."}
+YOU KNOW: ${context.hasResume ? `They've provided a resume (via ${sanitizeForPrompt(context.resumeMethod, 100)}).` : "They haven't provided a resume yet."}
 PROACTIVE: If they're stuck, the #1 thing they need to hear: "Anything works. A photo of a printed resume is fine. Even a list of jobs you've had." If they say they don't have one, guide them to the "I don't have one yet" option — it builds one through simple questions.
 COMMON QUESTIONS: "I don't have a resume." "Can I use a photo?" (Yes.) "What if my resume has gaps?" (That's fine — gaps are normal, the AI handles them.) "My resume is old/bad." (We're not judging it — we're reading it for skills.)`,
 
     goals: `PAGE: GOALS — What matters to you?
 The user selects goals (stability, growth, purpose, flexibility, independence, contribution, learning) and writes a free-text narrative about what matters. This is purpose exploration before job search — grounded in Ikigai and Maruna's generative identity.
-YOU KNOW: ${context.goals?.length ? `They selected: ${context.goals.join(", ")}.` : "They haven't selected goals yet."} ${context.goalNarrative ? `They wrote: "${context.goalNarrative}"` : "No narrative yet."}
+YOU KNOW: ${context.goals?.length ? `They selected: ${sanitizeArray(context.goals)}.` : "They haven't selected goals yet."} ${context.goalNarrative ? `They wrote: "${sanitizeForPrompt(context.goalNarrative, 500)}"` : "No narrative yet."}
 PROACTIVE: If they're stuck on the narrative, say "Just write what comes to mind. There's no right answer — even 'I want to support my family' is perfect." Connect their goals to possibility: "Stability + growth is a powerful combo. That tells me a lot about what kind of roles to look for."
 COMMON QUESTIONS: "What if I don't know what I want?" (That's actually useful info — it means we focus on discovering, not just matching.) "Does this matter?" (Yes — this shapes every recommendation you'll get.)`,
 
     story: `PAGE: STORY / HURDLES — What's standing in your way?
 The user selects challenges: criminal record, employment gap, housing, transportation, education, mental health, substance recovery, childcare, disability, other. If criminal record is selected, follow-up asks charge type, count, recency, and supervision status. Free-text narratives per challenge.
 This is where affect labeling happens — naming barriers reduces their emotional power (Lieberman, 2007).
-YOU KNOW: ${context.challengeTypes?.length ? `They disclosed: ${context.challengeTypes.join(", ")}.` : "They haven't disclosed challenges yet."} ${context.hasCriminalRecord ? "They disclosed a criminal record." : ""}
+YOU KNOW: ${context.challengeTypes?.length ? `They disclosed: ${sanitizeArray(context.challengeTypes)}.` : "They haven't disclosed challenges yet."} ${context.hasCriminalRecord ? "They disclosed a criminal record." : ""}
 PROACTIVE: This page is heavy. If they reach out, lead with validation: "This takes courage. A lot of people skip this part, but you're doing it." NEVER repeat their specific disclosures back. Say "the situation you described" not "your felony." If they seem overwhelmed: "You don't have to share everything. Share what feels safe."
 COMMON QUESTIONS: "Who sees this?" (Nobody but the AI. Not stored with your name. Not shared.) "Do I have to share my record?" (No. But if you do, we can find specific legal protections and resources for your situation.) "Will this be used against me?" (Never. This tool was built specifically FOR people in your situation.)`,
 
     preferences: `PAGE: PREFERENCES — Practical constraints
 The user selects work type (full-time, part-time, gig), work style (physical, office, remote, mixed), commute tolerance, schedule needs, and location. These determine whether job matches are real or theoretical.
-YOU KNOW: ${context.preferences ? `Preferences set: ${Object.entries(context.preferences).map(([k, v]) => `${k}=${v}`).join(", ")}` : "No preferences set yet."}
+YOU KNOW: ${context.preferences ? `Preferences set: ${Object.entries(context.preferences).map(([k, v]) => `${sanitizeForPrompt(k, 50)}=${sanitizeForPrompt(v, 100)}`).join(", ")}` : "No preferences set yet."}
 PROACTIVE: If they ask about options, explain practically: "If you pick 'short drive,' we focus on jobs within 15 minutes. If you're flexible on commute, more options open up." Help them think about real constraints they might forget: "Do you have reliable transportation? That affects which jobs are realistic."
 COMMON QUESTIONS: "Can I change this later?" (Yes.) "What if I'm flexible on everything?" (Great — that means more matches. But be honest about dealbreakers.)`,
 
@@ -171,7 +172,7 @@ COMMON QUESTIONS: "How long does this take?" (About 30 seconds.) "What's it doin
 
     output: `PAGE: OUTPUT — Your story, reforged
 The user's narrative, strengths, skills, barriers with resources, and career paths are displayed. This is the culmination — their life reframed through a redemption lens. Never scored, never graded.
-YOU KNOW: ${context.forgeComplete ? "They have their Forge output." : "Output not yet generated."} ${context.skills?.length ? `Skills found: ${context.skills.join(", ")}.` : ""}
+YOU KNOW: ${context.forgeComplete ? "They have their Forge output." : "Output not yet generated."} ${context.skills?.length ? `Skills found: ${sanitizeArray(context.skills)}.` : ""}
 PROACTIVE: This is an emotional moment. Lead with: "This is yours. Take a minute with it." If they ask about next steps, guide them to The Refinery: "You can download this now, or create a free account to save it and keep building — targeted resumes, interview practice, job search." Don't pressure — invite.
 COMMON QUESTIONS: "Is this accurate?" (It's based on what you shared. You can always go back and update.) "What do I do with this?" (Download it, share it with a counselor, or save it and keep building in The Refinery.) "Can I redo it?" (Yes, start over anytime.)`,
 
@@ -193,7 +194,7 @@ PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Ea
   const stateLines: string[] = [];
 
   if (context.pagesCompleted?.length) {
-    stateLines.push(`Pages completed: ${context.pagesCompleted.join(" → ")}`);
+    stateLines.push(`Pages completed: ${sanitizeArray(context.pagesCompleted)}`);
   }
 
   if (context.readinessStage) {
@@ -203,23 +204,24 @@ PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Ea
       preparation: "getting ready to act",
       action: "actively looking",
     };
-    stateLines.push(`Readiness: ${stageLabels[context.readinessStage] || context.readinessStage}`);
+    const sanitizedStage = sanitizeForPrompt(context.readinessStage, 100);
+    stateLines.push(`Readiness: ${stageLabels[context.readinessStage] || sanitizedStage}`);
   }
 
   if (context.hasResume) {
-    stateLines.push(`Resume: provided (${context.resumeMethod || "unknown method"})`);
+    stateLines.push(`Resume: provided (${sanitizeForPrompt(context.resumeMethod, 100) || "unknown method"})`);
   }
 
   if (context.goals?.length) {
-    stateLines.push(`Goals: ${context.goals.join(", ")}`);
+    stateLines.push(`Goals: ${sanitizeArray(context.goals)}`);
   }
 
   if (context.goalNarrative) {
-    stateLines.push(`In their own words: "${context.goalNarrative}"`);
+    stateLines.push(`In their own words: "${sanitizeForPrompt(context.goalNarrative, 500)}"`);
   }
 
   if (context.challengeTypes?.length) {
-    stateLines.push(`Challenges disclosed: ${context.challengeTypes.map(c => c.replace(/_/g, " ")).join(", ")}`);
+    stateLines.push(`Challenges disclosed: ${sanitizeArray(context.challengeTypes.map(c => c.replace(/_/g, " ")))}`);
   }
 
   if (context.hasCriminalRecord) {
@@ -227,12 +229,12 @@ PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Ea
   }
 
   if (context.preferences && Object.keys(context.preferences).length > 0) {
-    const prefParts = Object.entries(context.preferences).map(([k, v]) => `${k}: ${v}`);
+    const prefParts = Object.entries(context.preferences).map(([k, v]) => `${sanitizeForPrompt(k, 50)}: ${sanitizeForPrompt(v, 100)}`);
     stateLines.push(`Preferences: ${prefParts.join(", ")}`);
   }
 
   if (context.skills?.length) {
-    stateLines.push(`Skills identified: ${context.skills.join(", ")}`);
+    stateLines.push(`Skills identified: ${sanitizeArray(context.skills)}`);
   }
 
   if (context.forgeComplete) {
@@ -285,7 +287,7 @@ ${buildModeDirective(context.mode)}
    This builds the redemption narrative (Maruna's generative identity, 2001).
 
 4. MEET READINESS LEVEL
-   ${context.readinessStage ? `The user appears to be in the ${context.readinessStage} stage.` : "Assess the user's readiness stage through conversation."}
+   ${context.readinessStage ? `The user appears to be in the ${sanitizeForPrompt(context.readinessStage, 100)} stage.` : "Assess the user's readiness stage through conversation."}
    - Precontemplation: Don't push. Explore. Validate ambivalence.
    - Contemplation: Acknowledge both sides. Ask about values.
    - Preparation: Help plan concrete steps. Celebrate decision.

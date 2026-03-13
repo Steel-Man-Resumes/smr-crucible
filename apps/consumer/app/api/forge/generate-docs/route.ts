@@ -41,6 +41,11 @@ interface GenerateDocsInput {
 }
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const input: GenerateDocsInput = await request.json();
 
@@ -188,8 +193,8 @@ RULES:
   if (input.resumeText) {
     // Strip any incarceration-related content from the resume text before sending to AI
     const cleanedResume = input.resumeText
-      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.]*\./gi, '')
-      .replace(/(?:incarcerat|prison|jail|parole|probat|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon|convict)[^.]*\./gi, '')
+      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi, '')
+      .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     parts.push(`ORIGINAL RESUME TEXT:\n${cleanedResume.slice(0, 6000)}`);
@@ -284,8 +289,8 @@ RULES:
   if (input.resumeText) {
     // Strip incarceration-related content before sending to AI
     const cleanedResume = input.resumeText
-      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.]*\./gi, '')
-      .replace(/(?:incarcerat|prison|jail|parole|probat|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon|convict)[^.]*\./gi, '')
+      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi, '')
+      .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     parts.push(

@@ -16,10 +16,10 @@ import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import {
-  checkUserRateLimit,
-  checkIpRateLimit,
+  getUserDailyLimit,
   incrementUserUsage,
   incrementIpUsage,
+  FORGE_IP_LIMITS,
 } from "@crucible/core";
 
 export const maxDuration = 30;
@@ -33,21 +33,25 @@ export async function POST(request: Request) {
   const userId = session?.user?.id;
 
   if (userId) {
-    // Authenticated: user-rate-limited
-    const result = await checkUserRateLimit(userId, "assistant");
-    if (!result.allowed) {
+    // Authenticated: user-rate-limited (atomic increment-then-check)
+    const limit = await getUserDailyLimit(userId);
+    const newCount = await incrementUserUsage(userId, "assistant");
+    if (limit !== 0 && newCount > limit) {
       return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
     }
-    await incrementUserUsage(userId, "assistant");
   } else {
-    // Pre-auth (Forge flow): IP-rate-limited
+    // Pre-auth (Forge flow): IP-rate-limited (atomic increment-then-check)
+    // Use x-real-ip (Vercel edge, not spoofable), fall back to last x-forwarded-for value
+    const realIp = request.headers.get("x-real-ip")?.trim();
     const forwarded = request.headers.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim() || "unknown";
-    const result = await checkIpRateLimit(ip, "assistant");
-    if (!result.allowed) {
+    const lastForwarded = forwarded ? forwarded.split(",").pop()?.trim() : undefined;
+    const ip = realIp || lastForwarded || "unknown";
+
+    const limit = FORGE_IP_LIMITS["assistant"] ?? 20;
+    const newCount = await incrementIpUsage(ip, "assistant");
+    if (newCount > limit) {
       return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
     }
-    await incrementIpUsage(ip, "assistant");
   }
 
   const body = await request.json();

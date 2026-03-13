@@ -16,6 +16,7 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 120;
 
@@ -38,6 +39,11 @@ interface ForgeInput {
 }
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const input: ForgeInput = await request.json();
 
@@ -101,37 +107,37 @@ function buildContext(input: ForgeInput): string {
   const parts: string[] = [];
 
   if (input.resumeText) {
-    parts.push(`RESUME:\n${input.resumeText.slice(0, 6000)}`);
+    parts.push(`RESUME:\n${sanitizeForPrompt(input.resumeText, 6000)}`);
   }
 
   if (input.goals?.length) {
-    parts.push(`GOALS: ${input.goals.join(", ")}`);
+    parts.push(`GOALS: ${sanitizeArray(input.goals)}`);
   }
   if (input.goalNarrative) {
-    parts.push(`GOAL NARRATIVE: ${input.goalNarrative}`);
+    parts.push(`GOAL NARRATIVE: ${sanitizeForPrompt(input.goalNarrative, 1000)}`);
   }
 
   if (input.challenges?.length) {
-    parts.push(`CHALLENGES: ${input.challenges.join(", ")}`);
+    parts.push(`CHALLENGES: ${sanitizeArray(input.challenges)}`);
   }
   if (input.challengeNarratives) {
     for (const [key, value] of Object.entries(input.challengeNarratives)) {
-      if (value) parts.push(`CHALLENGE DETAIL (${key}): ${value}`);
+      if (value) parts.push(`CHALLENGE DETAIL (${sanitizeForPrompt(key, 100)}): ${sanitizeForPrompt(value, 1000)}`);
     }
   }
 
   if (input.criminalRecord?.type) {
     const cr = input.criminalRecord;
     parts.push(
-      `CRIMINAL RECORD: ${cr.type}, ${cr.charge_count} charge(s), most recent: ${cr.most_recent}, supervision: ${cr.supervision}`
+      `CRIMINAL RECORD: ${sanitizeForPrompt(cr.type)}, ${sanitizeForPrompt(cr.charge_count)} charge(s), most recent: ${sanitizeForPrompt(cr.most_recent)}, supervision: ${sanitizeForPrompt(cr.supervision)}`
     );
-    if (cr.context) parts.push(`CONTEXT: ${cr.context}`);
+    if (cr.context) parts.push(`CONTEXT: ${sanitizeForPrompt(cr.context, 1000)}`);
   }
 
   if (input.preferences) {
     const p = input.preferences;
     parts.push(
-      `PREFERENCES: schedule=${p.schedule || "any"}, environment=${p.environment || "any"}, commute=${p.commute || "any"}, location=${p.location || "not specified"}`
+      `PREFERENCES: schedule=${sanitizeForPrompt(p.schedule) || "any"}, environment=${sanitizeForPrompt(p.environment) || "any"}, commute=${sanitizeForPrompt(p.commute) || "any"}, location=${sanitizeForPrompt(p.location)}`
     );
   }
 

@@ -10,10 +10,16 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const { record, timing, targetJob, forgeContext } = await request.json();
 
@@ -29,13 +35,13 @@ async function handlePost(request: Request) {
     let candidateBlock = "";
     if (targetJob || forgeContext) {
       const parts: string[] = [];
-      if (targetJob) parts.push(`Target role: ${targetJob}`);
-      if (forgeContext?.headline) parts.push(`Professional headline: ${forgeContext.headline}`);
+      if (targetJob) parts.push(`Target role: ${sanitizeForPrompt(targetJob)}`);
+      if (forgeContext?.headline) parts.push(`Professional headline: ${sanitizeForPrompt(forgeContext.headline)}`);
       if (forgeContext?.strengths?.length) {
-        parts.push(`Key strengths to pivot to after disclosure:\n${forgeContext.strengths.map((s: any) => `- ${s.title}: ${s.evidence}`).join("\n")}`);
+        parts.push(`Key strengths to pivot to after disclosure: ${forgeContext.strengths.map((s: any) => `${sanitizeForPrompt(s.title)}: ${sanitizeForPrompt(s.evidence)}`).join("; ")}`);
       }
       if (forgeContext?.skills?.length) {
-        parts.push(`Top skills: ${forgeContext.skills.map((s: any) => s.name).join(", ")}`);
+        parts.push(`Top skills: ${sanitizeArray(forgeContext.skills.map((s: any) => s.name))}`);
       }
       candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
     }
@@ -43,12 +49,12 @@ async function handlePost(request: Request) {
     const prompt = `You are a reentry career specialist helping someone plan how to disclose their criminal record to employers.
 
 THEIR SITUATION:
-- Charge type: ${record.type || "not specified"}
-- Number of charges: ${record.charge_count || "not specified"}
-- Most recent: ${record.most_recent || "not specified"}
-- Probation/parole: ${record.supervision || "not specified"}
-- State: ${record.state || "not specified"}
-- Preferred timing: ${timing || "not sure"}${candidateBlock}
+- Charge type: ${sanitizeForPrompt(record.type)}
+- Number of charges: ${sanitizeForPrompt(record.charge_count)}
+- Most recent: ${sanitizeForPrompt(record.most_recent)}
+- Probation/parole: ${sanitizeForPrompt(record.supervision)}
+- State: ${sanitizeForPrompt(record.state)}
+- Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}
 
 GENERATE a disclosure plan as JSON:
 {
@@ -125,4 +131,4 @@ RULES:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "disclosure" });
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "disclosure", requiredTier: "client" });

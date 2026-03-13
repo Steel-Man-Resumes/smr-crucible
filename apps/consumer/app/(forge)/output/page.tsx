@@ -11,7 +11,7 @@
  * Gateway to Refinery: value-based invitation, not fear-based conversion.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -78,6 +78,9 @@ export default function OutputPage() {
   const barriers = output.barriers || [];
   const careerPaths = output.career_paths || [];
 
+  // Prevent double-submission on mount
+  const hasStarted = useRef(false);
+
   // Document generation state
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
@@ -86,7 +89,9 @@ export default function OutputPage() {
   const [downloading, setDownloading] = useState<string>("");
 
   const generateDocs = useCallback(async () => {
+    if (hasStarted.current) return;
     if (docState === "generating" || docState === "done") return;
+    hasStarted.current = true;
     setDocState("generating");
     setDocError("");
 
@@ -118,8 +123,9 @@ export default function OutputPage() {
       setDocState("done");
     } catch (err: any) {
       console.error("Doc generation error:", err);
-      setDocError(err.message || "Something went wrong generating your documents.");
+      setDocError("Something went wrong generating your documents.");
       setDocState("error");
+      hasStarted.current = false;
     }
   }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences]);
 

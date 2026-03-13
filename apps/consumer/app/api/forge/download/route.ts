@@ -7,6 +7,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import {
   Document,
   Packer,
@@ -30,6 +31,11 @@ interface DownloadInput {
 }
 
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   try {
     const input: DownloadInput = await request.json();
 

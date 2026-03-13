@@ -8,10 +8,16 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
 export const maxDuration = 30;
 
 async function handlePost(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   try {
     const body = await request.json();
     const { targetJob, targetCompany, jobListingUrl, existingBullets, skills, forgeNarrative, forgeStrengths, action } = body;
@@ -25,19 +31,24 @@ async function handlePost(request: Request) {
     }
 
     // Build context from Forge data if available
+    const sanitizedTargetJob = sanitizeForPrompt(targetJob);
+    const sanitizedTargetCompany = sanitizeForPrompt(targetCompany);
+    const sanitizedSkills = sanitizeArray(skills);
+    const sanitizedBullets = sanitizeArray(existingBullets, 20, 500);
+
     const forgeContext = [];
-    if (forgeNarrative) forgeContext.push(`About this person: ${forgeNarrative}`);
-    if (forgeStrengths?.length) forgeContext.push(`Key strengths: ${forgeStrengths.join(", ")}`);
-    if (jobListingUrl) forgeContext.push(`Job listing: ${jobListingUrl}`);
+    if (forgeNarrative) forgeContext.push(`About this person: ${sanitizeForPrompt(forgeNarrative, 1000)}`);
+    if (forgeStrengths?.length) forgeContext.push(`Key strengths: ${sanitizeArray(forgeStrengths)}`);
+    if (jobListingUrl) forgeContext.push(`Job listing: ${sanitizeForPrompt(jobListingUrl, 2000)}`);
     const forgeBlock = forgeContext.length > 0 ? `\n\n${forgeContext.join("\n")}` : "";
 
     let prompt = "";
 
     if (action === "suggest_summary") {
-      prompt = `Write a 2-3 sentence professional summary for someone applying for a ${targetJob} position${targetCompany ? ` at ${targetCompany}` : ""}.
+      prompt = `Write a 2-3 sentence professional summary for someone applying for a ${sanitizedTargetJob} position${targetCompany ? ` at ${sanitizedTargetCompany}` : ""}.
 
-Their skills include: ${skills?.join(", ") || "not specified"}.
-${existingBullets?.length ? `They've described their experience as:\n${existingBullets.join("\n")}` : ""}${forgeBlock}
+Their skills include: ${sanitizedSkills}.
+${existingBullets?.length ? `They've described their experience as: ${sanitizedBullets}` : ""}${forgeBlock}
 
 RULES:
 - Write at a 6th grade reading level
@@ -47,9 +58,9 @@ RULES:
 - NEVER mention incarceration, criminal records, justice involvement, or any disqualifying information
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
-      prompt = `Suggest one experience bullet point for a ${targetJob} resume.
-Their skills: ${skills?.join(", ") || "general"}.
-Existing bullets: ${existingBullets?.join("; ") || "none yet"}.${forgeBlock}
+      prompt = `Suggest one experience bullet point for a ${sanitizedTargetJob} resume.
+Their skills: ${sanitizedSkills || "general"}.
+Existing bullets: ${sanitizedBullets || "none yet"}.${forgeBlock}
 
 Write ONE bullet starting with an action verb. Include a number or result if possible.
 No buzzwords. Keep it honest. One sentence only.
@@ -111,4 +122,4 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "resume" });
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "resume", requiredTier: "client" });
