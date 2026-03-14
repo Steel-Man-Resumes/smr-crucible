@@ -1,25 +1,38 @@
 "use client";
 
 /**
- * Progress Tracker — Refinery Tool 6
+ * Progress — Refinery Tool 6
  *
- * Process-focused metrics: sessions, skills, resumes, interviews.
- * Celebrates process, not outcomes.
- * Visualizes growth over time.
+ * Three sections:
+ *   1. Quick Wins — personalized next steps (rule-based, not AI)
+ *   2. Career Roadmap — visual journey with lit-up nodes
+ *   3. Activity Scoreboard — milestones + counts (existing)
  */
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  getQuickWins,
+  type QuickWin,
+  type QuickWinContext,
+  type ReadinessStage,
+} from "@/lib/quick-wins";
+import {
+  generateRoadmap,
+  getRoadmapProgress,
+  PHASE_META,
+  type RoadmapNode,
+  type RoadmapPhase,
+} from "@/lib/roadmap";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ProgressData {
-  // Forge
   forge_completed: boolean;
-  forge_completed_at?: string;
   skills_identified: number;
   strengths_found: number;
   career_paths: number;
   barriers_addressed: number;
-
-  // Refinery
   resumes_built: number;
   resume_bullets_written: number;
   disclosure_plans_created: number;
@@ -27,34 +40,13 @@ interface ProgressData {
   interviews_completed: number;
   job_searches: number;
   resources_viewed: number;
-
-  // Sessions
+  applications_sent: number;
   total_sessions: number;
-  last_session?: string;
-  first_session?: string;
 }
 
-const MILESTONES = [
-  { key: "forge_completed", label: "Completed The Forge", threshold: true },
-  {
-    key: "skills_identified",
-    label: "skills identified",
-    thresholds: [5, 10, 20],
-  },
-  {
-    key: "resume_bullets_written",
-    label: "resume bullets written",
-    thresholds: [3, 10, 25],
-  },
-  {
-    key: "interviews_completed",
-    label: "practice interviews completed",
-    thresholds: [1, 3, 5],
-  },
-  { key: "job_searches", label: "job searches run", thresholds: [1, 5, 10] },
-];
+// ─── Main ───────────────────────────────────────────────────────────────────
 
-export default function ProgressTrackerPage() {
+export default function ProgressPage() {
   const [progress, setProgress] = useState<ProgressData>({
     forge_completed: false,
     skills_identified: 0,
@@ -68,23 +60,37 @@ export default function ProgressTrackerPage() {
     interviews_completed: 0,
     job_searches: 0,
     resources_viewed: 0,
+    applications_sent: 0,
     total_sessions: 0,
   });
+  const [barriers, setBarriers] = useState<string[]>([]);
+  const [readinessStage, setReadinessStage] =
+    useState<ReadinessStage>("unknown");
+  const [quickWins, setQuickWins] = useState<QuickWin[]>([]);
+  const [roadmapNodes, setRoadmapNodes] = useState<RoadmapNode[]>([]);
 
+  // Load all data
   useEffect(() => {
     const data: Partial<ProgressData> = {};
+    let userBarriers: string[] = [];
+    let stage: ReadinessStage = "unknown";
 
     // Load Forge data
     try {
-      const forgeSession = localStorage.getItem("forge_session");
-      if (forgeSession) {
-        const session = JSON.parse(forgeSession);
+      const stored = localStorage.getItem("forge_session");
+      if (stored) {
+        const session = JSON.parse(stored);
+
+        if (session.readinessStage) {
+          stage = session.readinessStage;
+        }
+        if (session.challenges) {
+          userBarriers = session.challenges;
+        }
 
         if (session.forgeOutput) {
           data.forge_completed = true;
-          data.forge_completed_at = session.completedAt;
 
-          // Count skills
           if (session.forgeOutput.skills) {
             let count = 0;
             for (const cat of Object.values(session.forgeOutput.skills)) {
@@ -92,18 +98,12 @@ export default function ProgressTrackerPage() {
             }
             data.skills_identified = count;
           }
-
-          // Count strengths
           if (session.forgeOutput.strengths) {
             data.strengths_found = session.forgeOutput.strengths.length;
           }
-
-          // Count career paths
           if (session.forgeOutput.careerPaths) {
             data.career_paths = session.forgeOutput.careerPaths.length;
           }
-
-          // Count barriers
           if (session.forgeOutput.barriers) {
             data.barriers_addressed = session.forgeOutput.barriers.length;
           }
@@ -123,12 +123,48 @@ export default function ProgressTrackerPage() {
       data.interviews_completed = tracker.interviews_completed || 0;
       data.job_searches = tracker.job_searches || 0;
       data.resources_viewed = tracker.resources_viewed || 0;
+      data.applications_sent = tracker.applications_sent || 0;
       data.total_sessions = tracker.total_sessions || 1;
-      data.first_session = tracker.first_session;
-      data.last_session = tracker.last_session;
     } catch {}
 
-    setProgress((prev) => ({ ...prev, ...data }));
+    const merged = { ...progress, ...data };
+    setProgress(merged);
+    setBarriers(userBarriers);
+    setReadinessStage(stage);
+
+    // Generate quick wins
+    const ctx: QuickWinContext = {
+      readinessStage: stage,
+      barriers: userBarriers,
+      forgeCompleted: !!data.forge_completed,
+      activity: {
+        resumes_built: merged.resumes_built,
+        interviews_completed: merged.interviews_completed,
+        interviews_started: merged.interviews_started,
+        disclosure_plans_created: merged.disclosure_plans_created,
+        job_searches: merged.job_searches,
+        resources_viewed: merged.resources_viewed,
+        applications_sent: merged.applications_sent,
+      },
+    };
+    setQuickWins(getQuickWins(ctx));
+
+    // Generate roadmap
+    setRoadmapNodes(
+      generateRoadmap({
+        forgeCompleted: !!data.forge_completed,
+        barriers: userBarriers,
+        activity: {
+          resumes_built: merged.resumes_built,
+          interviews_completed: merged.interviews_completed,
+          disclosure_plans_created: merged.disclosure_plans_created,
+          job_searches: merged.job_searches,
+          resources_viewed: merged.resources_viewed,
+          applications_sent: merged.applications_sent,
+          skills_identified: merged.skills_identified,
+        },
+      })
+    );
 
     // Track this session
     try {
@@ -142,130 +178,135 @@ export default function ProgressTrackerPage() {
       }
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Calculate active milestones
-  const achievedMilestones: string[] = [];
-  for (const m of MILESTONES) {
-    if (m.threshold === true) {
-      if (progress[m.key as keyof ProgressData]) {
-        achievedMilestones.push(m.label);
-      }
-    } else if (m.thresholds) {
-      const val = progress[m.key as keyof ProgressData] as number;
-      for (const t of m.thresholds) {
-        if (val >= t) {
-          achievedMilestones.push(`${t}+ ${m.label}`);
-        }
-      }
-    }
-  }
-
+  const roadmapProgress = getRoadmapProgress(roadmapNodes);
   const totalActions =
     progress.resumes_built +
     progress.interviews_completed +
     progress.job_searches +
     progress.disclosure_plans_created +
-    progress.resources_viewed;
+    progress.resources_viewed +
+    progress.applications_sent;
 
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-foreground mb-2">Your Progress</h1>
       <p className="text-body text-muted mb-8">
-        Every step counts. Here&apos;s what you&apos;ve accomplished.
+        Every step counts. Here&apos;s what you&apos;ve accomplished and
+        what to do next.
       </p>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        <StatCard
-          label="Skills Found"
-          value={progress.skills_identified}
-          color="sage"
-        />
-        <StatCard
-          label="Career Paths"
-          value={progress.career_paths}
-          color="sky"
-        />
-        <StatCard
-          label="Practice Interviews"
-          value={progress.interviews_completed}
-          color="warm"
-        />
-        <StatCard label="Actions Taken" value={totalActions} color="earth" />
-      </div>
+      {/* ── Quick Wins ──────────────────────────────────────────────────── */}
+      {quickWins.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-foreground mb-4">
+            What to Do Next
+          </h2>
+          <div className="space-y-3">
+            {quickWins.map((win) => (
+              <QuickWinCard key={win.id} win={win} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      {/* Forge completion */}
+      {/* ── Career Roadmap ──────────────────────────────────────────────── */}
+      {roadmapNodes.length > 0 && (
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-foreground">
+              Your Roadmap
+            </h2>
+            <span className="text-sm text-muted">
+              {roadmapProgress.completed}/{roadmapProgress.total} steps
+              ({roadmapProgress.percent}%)
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden mb-6">
+            <div
+              className="h-full bg-sage-500 rounded-full transition-all duration-500"
+              style={{ width: `${roadmapProgress.percent}%` }}
+            />
+          </div>
+
+          {/* Roadmap phases */}
+          <div className="space-y-6">
+            {(
+              ["foundation", "preparation", "action", "momentum"] as RoadmapPhase[]
+            ).map((phase) => {
+              const phaseNodes = roadmapNodes.filter(
+                (n) => n.phase === phase
+              );
+              if (phaseNodes.length === 0) return null;
+              const meta = PHASE_META[phase];
+
+              return (
+                <div key={phase}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">
+                    {meta.label}
+                  </h3>
+                  <div className="space-y-2">
+                    {phaseNodes.map((node) => (
+                      <RoadmapNodeCard key={node.id} node={node} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Summary Stats ───────────────────────────────────────────────── */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-3">The Forge</h2>
-        <div
-          className={`rounded-2xl p-5 border ${
-            progress.forge_completed
-              ? "bg-sage-50 border-sage-200"
-              : "bg-gray-50 border-border"
-          }`}
-        >
-          {progress.forge_completed ? (
-            <div>
-              <p className="font-medium text-sage-700 mb-2">
-                Forge complete
-              </p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted block">Skills identified</span>
-                  <span className="font-semibold text-foreground">
-                    {progress.skills_identified}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted block">Strengths found</span>
-                  <span className="font-semibold text-foreground">
-                    {progress.strengths_found}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted block">Career paths</span>
-                  <span className="font-semibold text-foreground">
-                    {progress.career_paths}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted block">Barriers addressed</span>
-                  <span className="font-semibold text-foreground">
-                    {progress.barriers_addressed}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <p className="text-muted mb-2">
-                You haven&apos;t completed The Forge yet.
-              </p>
-              <a
-                href="/"
-                className="text-sm text-sage-600 hover:text-sage-700 font-medium"
-              >
-                Start The Forge →
-              </a>
-            </div>
-          )}
+        <h2 className="text-lg font-bold text-foreground mb-4">
+          By the Numbers
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard
+            label="Skills Found"
+            value={progress.skills_identified}
+            color="sage"
+          />
+          <StatCard
+            label="Career Paths"
+            value={progress.career_paths}
+            color="sky"
+          />
+          <StatCard
+            label="Interviews"
+            value={progress.interviews_completed}
+            color="warm"
+          />
+          <StatCard
+            label="Actions Taken"
+            value={totalActions}
+            color="earth"
+          />
         </div>
       </section>
 
-      {/* Refinery activity */}
+      {/* ── Refinery Activity ───────────────────────────────────────────── */}
       <section className="mb-8">
         <h2 className="text-lg font-bold text-foreground mb-3">
-          Refinery Activity
+          Activity Detail
         </h2>
-        <div className="space-y-3">
+        <div className="space-y-2">
           <ActivityRow
             label="Resumes built"
             value={progress.resumes_built}
-            sub={`${progress.resume_bullets_written} bullets written`}
+            sub={
+              progress.resume_bullets_written > 0
+                ? `${progress.resume_bullets_written} bullets written`
+                : undefined
+            }
           />
           <ActivityRow
-            label="Disclosure plans created"
+            label="Disclosure plans"
             value={progress.disclosure_plans_created}
           />
           <ActivityRow
@@ -277,9 +318,10 @@ export default function ProgressTrackerPage() {
                 : undefined
             }
           />
+          <ActivityRow label="Job searches" value={progress.job_searches} />
           <ActivityRow
-            label="Job searches"
-            value={progress.job_searches}
+            label="Applications sent"
+            value={progress.applications_sent}
           />
           <ActivityRow
             label="Resources explored"
@@ -288,40 +330,142 @@ export default function ProgressTrackerPage() {
         </div>
       </section>
 
-      {/* Milestones */}
-      {achievedMilestones.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-foreground mb-3">
-            Milestones Reached
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {achievedMilestones.map((m, i) => (
-              <span
-                key={i}
-                className="text-sm bg-warm-100 text-earth-700 px-3 py-1.5 rounded-full font-medium"
-              >
-                {m}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Encouragement */}
+      {/* ── Encouragement ───────────────────────────────────────────────── */}
       <div className="bg-warm-50 rounded-2xl p-5 border border-warm-200 text-center">
         <p className="text-sm text-earth-700 leading-relaxed">
           {totalActions === 0
-            ? "Your journey starts with one step. Explore the tools above and come back to see your progress grow."
+            ? "Your journey starts with one step. Check out the suggestions above — pick whichever one feels right."
             : totalActions < 5
-              ? "You're building momentum. Every resume bullet, every practice interview, every search — it all adds up."
+              ? "You're building momentum. Every action you take makes the next one easier."
               : totalActions < 15
-                ? "You're putting in real work. The preparation you're doing now gives you a real advantage."
+                ? "You're putting in real work. This kind of preparation gives you a serious edge."
                 : "You've shown serious commitment to your future. That dedication speaks volumes to any employer."}
         </p>
       </div>
     </div>
   );
 }
+
+// ─── Quick Win Card ─────────────────────────────────────────────────────────
+
+function QuickWinCard({ win }: { win: QuickWin }) {
+  const categoryColors: Record<string, string> = {
+    foundation: "border-l-sage-500",
+    "skill-building": "border-l-sky-500",
+    action: "border-l-amber-500",
+    wellbeing: "border-l-red-400",
+  };
+
+  return (
+    <div
+      className={`bg-white rounded-xl p-4 border border-border border-l-4 ${
+        categoryColors[win.category] || "border-l-sage-500"
+      }`}
+    >
+      <h3 className="font-semibold text-foreground mb-1">{win.title}</h3>
+      <p className="text-sm text-muted leading-relaxed mb-3">
+        {win.description}
+      </p>
+      {win.action.type === "link" && win.action.href ? (
+        <Link
+          href={win.action.href}
+          className="inline-flex items-center px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+        >
+          {win.action.label} &rarr;
+        </Link>
+      ) : win.action.type === "phone" && win.action.phone ? (
+        <a
+          href={`tel:${win.action.phone}`}
+          className="inline-flex items-center px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+        >
+          {win.action.label}
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Roadmap Node Card ──────────────────────────────────────────────────────
+
+function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
+  const content = (
+    <div
+      className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors ${
+        node.completed
+          ? "bg-sage-50 border-sage-200"
+          : node.current
+            ? "bg-white border-sage-400 shadow-sm"
+            : "bg-gray-50 border-border"
+      }`}
+    >
+      {/* Status indicator */}
+      <div className="flex-shrink-0">
+        {node.completed ? (
+          <div className="w-6 h-6 rounded-full bg-sage-500 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M3 7l3 3 5-5"
+                stroke="white"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        ) : node.current ? (
+          <div className="w-6 h-6 rounded-full border-2 border-sage-500 bg-white flex items-center justify-center">
+            <div className="w-2 h-2 rounded-full bg-sage-500 animate-pulse" />
+          </div>
+        ) : (
+          <div className="w-6 h-6 rounded-full border-2 border-gray-200 bg-white" />
+        )}
+      </div>
+
+      {/* Text */}
+      <div className="flex-1 min-w-0">
+        <span
+          className={`text-sm font-medium block ${
+            node.completed
+              ? "text-sage-700"
+              : node.current
+                ? "text-foreground"
+                : "text-muted"
+          }`}
+        >
+          {node.title}
+        </span>
+        <span className="text-xs text-muted block">{node.description}</span>
+      </div>
+
+      {/* Arrow for actionable items */}
+      {node.toolLink && !node.completed && (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          className="text-muted flex-shrink-0"
+        >
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      )}
+    </div>
+  );
+
+  if (node.toolLink && !node.completed) {
+    return <Link href={node.toolLink}>{content}</Link>;
+  }
+
+  return content;
+}
+
+// ─── Stat Card ──────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -347,6 +491,8 @@ function StatCard({
   );
 }
 
+// ─── Activity Row ───────────────────────────────────────────────────────────
+
 function ActivityRow({
   label,
   value,
@@ -360,10 +506,14 @@ function ActivityRow({
     <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-border">
       <div>
         <span className="text-sm font-medium text-foreground">{label}</span>
-        {sub && <span className="text-xs text-muted block mt-0.5">{sub}</span>}
+        {sub && (
+          <span className="text-xs text-muted block mt-0.5">{sub}</span>
+        )}
       </div>
       <span
-        className={`text-lg font-bold ${value > 0 ? "text-sage-600" : "text-gray-300"}`}
+        className={`text-lg font-bold ${
+          value > 0 ? "text-sage-600" : "text-gray-300"
+        }`}
       >
         {value}
       </span>

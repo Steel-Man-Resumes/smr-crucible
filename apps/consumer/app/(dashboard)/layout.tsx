@@ -37,9 +37,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/interview", label: "Interview Practice", minTier: "client" },
   { href: "/dashboard/jobs", label: "Job Board", minTier: "client" },
   { href: "/dashboard/resources", label: "Resources", minTier: "client" },
+  { href: "/dashboard/applications", label: "Applications", minTier: "client" },
   { href: "/dashboard/progress", label: "Progress", minTier: "observer" },
   { href: "/dashboard/methodology", label: "Methodology", minTier: "observer" },
   { href: "/dashboard/evidence", label: "Evidence", minTier: "observer" },
+  { href: "/dashboard/security", label: "Security & Privacy", minTier: "observer" },
 ];
 
 function getVisibleNav(userTier: UserTier): NavItem[] {
@@ -84,11 +86,22 @@ export default function DashboardLayout({
     }
 
     // Sync Forge localStorage data to DB (one-time migration)
+    // Also build Forge preload for Refinery tools
     try {
       const stored = localStorage.getItem("forge_session");
       if (!stored) return;
       const forgeData = JSON.parse(stored);
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
+
+      // Build Forge preload for Refinery deep linking
+      try {
+        import("@/lib/forge-preload").then(({ buildForgePreload, saveForgePreload }) => {
+          const preload = buildForgePreload(forgeData);
+          saveForgePreload(preload);
+        }).catch(() => {});
+      } catch {
+        // Preload build failed — not critical
+      }
 
       // Check if already synced (flag prevents duplicate writes)
       if (forgeData._synced) return;

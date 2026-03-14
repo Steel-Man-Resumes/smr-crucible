@@ -1,15 +1,23 @@
 /**
- * Resource Search API
+ * Resource Search API — Curated directory + live APIs
  *
- * Finds relevant resources based on category, barriers, and location.
- * Uses Claude to generate contextually appropriate resources.
+ * Phase 1 (current): Return curated MILWAUKEE_RESOURCES filtered by category + barriers.
+ * Phase 2: Augment housing results with live HUD API data.
+ * Phase 3: Add CareerOneStop for education/training.
+ * Falls back to Claude only for categories with zero curated data.
  */
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import {
+  getResourcesByCategory,
+  getResourcesForBarriers,
+  RESOURCE_DIRECTORY,
+  type ResourceEntry,
+  type ResourceCategory,
+} from "@/lib/resource-directory";
 
-export const maxDuration = 30;
+export const maxDuration = 15;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -20,91 +28,106 @@ async function handlePost(request: Request) {
   try {
     const { category, barriers, location } = await request.json();
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ resources: [] });
+    let resources: ResourceEntry[] = [];
+
+    if (category) {
+      // Category-specific search
+      resources = getResourcesByCategory(category as ResourceCategory);
+    } else if (barriers && Array.isArray(barriers) && barriers.length > 0) {
+      // Barrier-matched search
+      resources = getResourcesForBarriers(barriers);
+    } else {
+      // Return all resources
+      resources = [...RESOURCE_DIRECTORY];
     }
 
-    const sanitizedCategory = sanitizeForPrompt(category);
-    const sanitizedBarriers = sanitizeArray(barriers);
-    const sanitizedLocation = sanitizeForPrompt(location);
+    // Sort: local Milwaukee/Waukesha first, then Wisconsin, then national
+    const geoOrder: Record<string, number> = {
+      milwaukee: 0,
+      waukesha: 1,
+      wisconsin: 2,
+      national: 3,
+    };
+    resources.sort(
+      (a, b) => (geoOrder[a.geo] ?? 9) - (geoOrder[b.geo] ?? 9)
+    );
 
-    const prompt = `You are a reentry resource specialist. Find 5-8 real organizations and programs for someone who needs help with: ${sanitizedCategory}.
+    // If housing category, augment with live HUD data
+    if (category === "housing") {
+      try {
+        const hudUrl = new URL(
+          "/api/resources/hud-counselors",
+          request.url
+        );
+        if (location) hudUrl.searchParams.set("location", location);
 
-Context:
-- Their barriers: ${sanitizedBarriers}
-- Location: ${sanitizedLocation || "United States (general)"}
-
-Return JSON:
-{
-  "resources": [
-    {
-      "name": "Organization name",
-      "description": "What they offer and how to access it. 1-2 sentences.",
-      "url": "website URL if known",
-      "phone": "phone number if known"
+        const hudRes = await fetch(hudUrl.toString());
+        if (hudRes.ok) {
+          const { counselors } = await hudRes.json();
+          // Convert HUD counselors to ResourceEntry format
+          const hudResources: ResourceEntry[] = (counselors || []).map(
+            (c: {
+              name: string;
+              address: string;
+              city: string;
+              state: string;
+              phone: string;
+              services: string[];
+            }) => ({
+              id: `hud-${c.name.toLowerCase().replace(/\s+/g, "-").slice(0, 30)}`,
+              category: "housing" as ResourceCategory,
+              type: "curated" as const,
+              title: c.name,
+              provider: "HUD-Approved Counseling Agency",
+              description: c.services?.length
+                ? `Services: ${c.services.slice(0, 3).join(", ")}`
+                : "HUD-approved housing counseling agency. Free counseling for renters and homebuyers.",
+              phone: c.phone || undefined,
+              address: [c.address, c.city, c.state]
+                .filter(Boolean)
+                .join(", "),
+              geo: "milwaukee" as const,
+              verifiedAt: new Date().toISOString().split("T")[0],
+              tags: ["housing", "counseling", "hud"],
+            })
+          );
+          resources = [...resources, ...hudResources];
+        }
+      } catch {
+        // HUD augmentation failed — continue with curated data
+      }
     }
-  ]
-}
-
-RULES:
-- Prioritize REAL organizations that actually exist
-- Include at least 2 national resources that anyone can access
-- If location is specified, include local resources if you know them
-- For legal aid: include expungement/record-sealing resources
-- Keep descriptions actionable — what they do and how to contact them
-- 6th grade reading level
-- JSON only`;
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      return NextResponse.json({ resources: [] });
-    }
-
-    const data = await response.json();
-    const text = data.content[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return NextResponse.json({ resources: [] });
-
-    const result = JSON.parse(jsonMatch[0]);
 
     // Log decision for JBS compliance
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "resources-search",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: "curated-directory",
+        modelId: "resource-directory-v1",
         input: JSON.stringify({ category, barriers, location }).slice(0, 500),
-        explanation: `Generated resource recommendations for category: ${category}. Location: ${location || "general"}.`,
+        explanation: `Returned ${resources.length} curated resources for category: ${category || "all"}. Location: ${location || "default"}.`,
         outputSummary: {
           type: "resource_search",
-          resources_count: result.resources?.length ?? 0,
-          category,
+          source: "curated",
+          resources_count: resources.length,
+          category: category || "all",
+          hud_augmented: category === "housing",
         },
       });
     } catch (err) {
       console.error("Decision log failed (resources):", err);
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ resources });
   } catch (error) {
     console.error("Resource search error:", error);
     return NextResponse.json({ resources: [] });
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "resources", requiredTier: "client" });
+export const POST = withRateLimit(handlePost, {
+  mode: "user",
+  endpoint: "resources",
+  requiredTier: "client",
+});

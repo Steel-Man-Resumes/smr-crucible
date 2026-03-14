@@ -61,9 +61,17 @@ const REFINERY_TOOLS = [
     href: "/dashboard/resources",
     title: "Resources",
     description:
-      "Housing, transportation, legal aid, and more — matched to your barriers and location.",
+      "Housing, transportation, legal aid, and more — verified local organizations in Milwaukee and Waukesha.",
     color: "bg-warm-50 border-warm-200",
     accent: "text-warm-600",
+  },
+  {
+    href: "/dashboard/applications",
+    title: "Applications",
+    description:
+      "Track your job applications from saved to offered. Each step has tools to help you prepare.",
+    color: "bg-sky-50 border-sky-200",
+    accent: "text-sky-600",
   },
   {
     href: "/dashboard/progress",

@@ -1,25 +1,37 @@
 "use client";
 
 /**
- * Second-Chance Job Board — Refinery Tool 4
+ * Job Board — Refinery Tool 4
  *
- * Curated: only fair-chance employers.
- * Record-aware matching by user's situation and jurisdiction.
- * Links to actual postings — user applies themselves.
+ * Real listings from JSearch API. Fair-chance flagged.
+ * Everything renders natively — no outbound links.
+ * Save jobs to track applications across the Refinery.
  */
 
 import { useState, useEffect } from "react";
 import { TierGate } from "@/components/TierGate";
 
-interface JobListing {
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface EnrichedJob {
+  id: string;
   title: string;
   company: string;
   location: string;
-  salary?: string;
-  url?: string;
+  salary: string | null;
   description: string;
+  requirements: string[];
+  benefits: string[];
+  employment_type: string;
+  posted: string;
   second_chance: boolean;
-  posted?: string;
+  fair_chance_reason: string | null;
+  remote: boolean;
+}
+
+interface SavedJob {
+  id: string;
+  status: "saved" | "applied" | "heard_back" | "interviewing" | "offered";
 }
 
 interface UserContext {
@@ -30,9 +42,11 @@ interface UserContext {
   recordType?: string;
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
 const COMMON_ROLES = [
   "Warehouse Associate",
-  "Customer Service Representative",
+  "Customer Service",
   "Forklift Operator",
   "General Labor",
   "Production Worker",
@@ -42,6 +56,8 @@ const COMMON_ROLES = [
   "Janitorial / Cleaning",
   "Retail Associate",
 ];
+
+// ─── Main ───────────────────────────────────────────────────────────────────
 
 export default function JobBoardPageWrapper() {
   return (
@@ -58,32 +74,51 @@ function JobBoardPage() {
     skills: [],
     hasRecord: false,
   });
-  const [jobs, setJobs] = useState<JobListing[]>([]);
+  const [jobs, setJobs] = useState<EnrichedJob[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [fairChanceInfo, setFairChanceInfo] = useState<string>("");
+  const [fairChanceInfo, setFairChanceInfo] = useState("");
   const [rateLimitError, setRateLimitError] = useState("");
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
-  const [showHidden, setShowHidden] = useState(false);
 
-  // Load dismissed jobs
+  // Load saved/hidden state
   useEffect(() => {
     try {
       const stored = localStorage.getItem("hidden_jobs");
       if (stored) setHiddenJobs(new Set(JSON.parse(stored)));
     } catch {}
+
+    // Load saved jobs from API (DB-backed)
+    async function loadSavedJobs() {
+      try {
+        const res = await fetch("/api/applications");
+        if (res.ok) {
+          const data = await res.json();
+          const map = new Map<string, SavedJob>();
+          for (const app of data.applications || []) {
+            // Use source_id (JSearch job ID) as the key to match against search results
+            const key = app.source_id || app.id;
+            map.set(key, { id: app.id, status: app.status });
+          }
+          setSavedJobs(map);
+        }
+      } catch {
+        // Fallback to localStorage
+        try {
+          const stored = localStorage.getItem("saved_jobs");
+          if (stored) {
+            const arr: SavedJob[] = JSON.parse(stored);
+            setSavedJobs(new Map(arr.map((j) => [j.id, j])));
+          }
+        } catch {}
+      }
+    }
+    loadSavedJobs();
   }, []);
 
-  function dismissJob(key: string) {
-    setHiddenJobs((prev) => {
-      const next = new Set(prev);
-      next.add(key);
-      localStorage.setItem("hidden_jobs", JSON.stringify(Array.from(next)));
-      return next;
-    });
-  }
-
-  // Load from Forge session
+  // Load context from Forge session
   useEffect(() => {
     try {
       const stored = localStorage.getItem("forge_session");
@@ -113,6 +148,8 @@ function JobBoardPage() {
       }
     } catch {}
   }, []);
+
+  // ─── Actions ────────────────────────────────────────────────────────────
 
   async function searchJobs() {
     if (!context.targetRole && !context.location) return;
@@ -152,15 +189,135 @@ function JobBoardPage() {
     } catch {}
   }
 
+  async function saveJob(job: EnrichedJob) {
+    // Optimistic UI update
+    setSavedJobs((prev) => {
+      const next = new Map(prev);
+      next.set(job.id, { id: job.id, status: "saved" });
+      return next;
+    });
+
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary,
+          description: job.description,
+          employment_type: job.employment_type,
+          source: "jsearch",
+          source_id: job.id,
+          status: "saved",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSavedJobs((prev) => {
+          const next = new Map(prev);
+          next.set(job.id, { id: data.application.id, status: "saved" });
+          return next;
+        });
+      }
+    } catch {}
+  }
+
+  async function markApplied(jobId: string) {
+    const saved = savedJobs.get(jobId);
+    const dbId = saved?.id || jobId;
+
+    setSavedJobs((prev) => {
+      const next = new Map(prev);
+      next.set(jobId, { id: dbId, status: "applied" });
+      return next;
+    });
+
+    try {
+      await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: dbId, status: "applied" }),
+      });
+    } catch {}
+
+    // Track application in progress
+    try {
+      const tracker = JSON.parse(
+        localStorage.getItem("consumer_progress") || "{}"
+      );
+      tracker.applications_sent = (tracker.applications_sent || 0) + 1;
+      localStorage.setItem("consumer_progress", JSON.stringify(tracker));
+    } catch {}
+  }
+
+  async function unsaveJob(jobId: string) {
+    const saved = savedJobs.get(jobId);
+
+    setSavedJobs((prev) => {
+      const next = new Map(prev);
+      next.delete(jobId);
+      return next;
+    });
+
+    if (saved?.id) {
+      try {
+        await fetch("/api/applications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: saved.id, status: "rejected" }),
+        });
+      } catch {}
+    }
+  }
+
+  function dismissJob(jobId: string) {
+    setHiddenJobs((prev) => {
+      const next = new Set(prev);
+      next.add(jobId);
+      localStorage.setItem("hidden_jobs", JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }
+
+  // ─── Derived ────────────────────────────────────────────────────────────
+
+  const visibleJobs = jobs.filter((j) => !hiddenJobs.has(j.id));
+  const hiddenCount = jobs.length - visibleJobs.length;
+  const savedCount = savedJobs.size;
+
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-foreground mb-2">
-        Second-Chance Job Board
+        Job Board
       </h1>
-      <p className="text-body text-muted mb-8">
-        Employers who believe in fair chances. Every listing here is from a
-        company known to consider applicants with records.
+      <p className="text-body text-muted mb-6">
+        Real job listings updated daily. Fair-chance employers highlighted.
+        Everything stays right here in your dashboard.
       </p>
+
+      {/* Saved jobs summary */}
+      {savedCount > 0 && (
+        <div className="bg-sage-50 rounded-xl p-4 border border-sage-200 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-semibold text-sage-700">
+                {savedCount} saved job{savedCount !== 1 ? "s" : ""}
+              </span>
+              <span className="text-xs text-muted ml-2">
+                {Array.from(savedJobs.values()).filter(
+                  (j) => j.status === "applied"
+                ).length}{" "}
+                applied
+              </span>
+            </div>
+            <span className="text-xs text-muted">
+              Application tracking coming soon
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Search form */}
       <div className="bg-white rounded-2xl p-5 border border-border mb-6">
@@ -212,7 +369,7 @@ function JobBoardPage() {
             disabled={searching || (!context.targetRole && !context.location)}
             className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
           >
-            {searching ? "Searching..." : "Find Fair-Chance Jobs"}
+            {searching ? "Searching real listings..." : "Find Jobs"}
           </button>
         </div>
       </div>
@@ -236,189 +393,258 @@ function JobBoardPage() {
         </div>
       )}
 
-      {/* Results */}
+      {/* Loading */}
       {searching && (
         <div className="flex items-center gap-3 py-12 justify-center text-muted">
           <div className="w-5 h-5 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
-          Finding fair-chance employers...
+          Searching real job listings...
         </div>
       )}
 
-      {!searching && searched && jobs.length === 0 && (
+      {/* No results */}
+      {!searching && searched && visibleJobs.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted mb-3">
-            We couldn&apos;t find specific listings right now. Try broadening
-            your search or check these resources:
+            No listings found for this search right now. Try:
           </p>
-          <div className="space-y-2">
-            <a
-              href="https://www.70millionjobs.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-sm text-sky-600 hover:text-sky-700"
-            >
-              70 Million Jobs — Job board for people with records ↗
-            </a>
-            <a
-              href="https://www.honestrecruiters.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-sm text-sky-600 hover:text-sky-700"
-            >
-              Honest Recruiters — Fair-chance employment network ↗
-            </a>
-            <a
-              href="https://www.careeronestop.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-sm text-sky-600 hover:text-sky-700"
-            >
-              CareerOneStop — Free career counseling at American Job Centers ↗
-            </a>
-          </div>
+          <ul className="text-sm text-muted space-y-1">
+            <li>A broader role (e.g., &quot;General Labor&quot; instead of a specific title)</li>
+            <li>A different location or just &quot;Milwaukee, WI&quot;</li>
+            <li>Searching again in a day — new jobs post every day</li>
+          </ul>
         </div>
       )}
 
-      {!searching && jobs.filter((j) => showHidden || !hiddenJobs.has(`${j.company}-${j.title}`)).length > 0 && (
+      {/* Results */}
+      {!searching && visibleJobs.length > 0 && (
         <div className="space-y-3">
-          {jobs
-            .filter((j) => showHidden || !hiddenJobs.has(`${j.company}-${j.title}`))
-            .map((job, i) => {
-              const jobKey = `${job.company}-${job.title}`;
-              const isDismissed = hiddenJobs.has(jobKey);
-              return (
-                <div
-                  key={i}
-                  className={`bg-white rounded-xl p-4 border border-border ${isDismissed ? "opacity-50" : ""}`}
+          {visibleJobs.map((job) => {
+            const isSaved = savedJobs.has(job.id);
+            const savedStatus = savedJobs.get(job.id)?.status;
+            const isExpanded = expandedJob === job.id;
+
+            return (
+              <div
+                key={job.id}
+                className="bg-white rounded-xl border border-border overflow-hidden transition-shadow hover:shadow-sm"
+              >
+                {/* Header — always visible */}
+                <button
+                  onClick={() =>
+                    setExpandedJob(isExpanded ? null : job.id)
+                  }
+                  className="w-full text-left p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="font-semibold text-foreground">
                           {job.title}
                         </h3>
                         {job.second_chance && (
-                          <span className="text-[10px] font-medium bg-sage-100 text-sage-700 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-medium bg-sage-100 text-sage-700 px-2 py-0.5 rounded-full whitespace-nowrap">
                             Fair Chance
+                          </span>
+                        )}
+                        {job.remote && (
+                          <span className="text-[10px] font-medium bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                            Remote
                           </span>
                         )}
                       </div>
                       <p className="text-sm text-muted">{job.company}</p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted flex-wrap">
                         {job.location && <span>{job.location}</span>}
                         {job.salary && (
                           <span className="font-medium text-sage-600">
                             {job.salary}
                           </span>
                         )}
+                        {job.employment_type && (
+                          <span>{job.employment_type}</span>
+                        )}
                         {job.posted && <span>{job.posted}</span>}
                       </div>
-                      <p className="text-sm text-muted mt-2 leading-relaxed">
-                        {job.description}
-                      </p>
                     </div>
-                    {!isDismissed && (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      className={`text-muted flex-shrink-0 mt-1 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                    >
+                      <path
+                        d="M4 6l4 4 4-4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Brief description — always visible */}
+                  <p className="text-sm text-muted mt-2 leading-relaxed line-clamp-2">
+                    {job.description}
+                  </p>
+                </button>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                    {/* Full description */}
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {job.description}
+                    </p>
+
+                    {/* Fair chance reason */}
+                    {job.fair_chance_reason && (
+                      <div className="bg-sage-50 rounded-lg px-3 py-2 border border-sage-200">
+                        <p className="text-xs text-sage-700">
+                          {job.fair_chance_reason}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Requirements */}
+                    {job.requirements.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-foreground mb-1.5 uppercase tracking-wide">
+                          Requirements
+                        </h4>
+                        <ul className="text-sm text-muted space-y-1">
+                          {job.requirements.map((r, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-sage-500 flex-shrink-0">
+                                &bull;
+                              </span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Benefits */}
+                    {job.benefits.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-foreground mb-1.5 uppercase tracking-wide">
+                          Benefits
+                        </h4>
+                        <ul className="text-sm text-muted space-y-1">
+                          {job.benefits.map((b, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-sage-500 flex-shrink-0">
+                                &bull;
+                              </span>
+                              {b}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-2">
+                      {!isSaved ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            saveJob(job);
+                          }}
+                          className="px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+                        >
+                          Save Job
+                        </button>
+                      ) : savedStatus === "saved" ? (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markApplied(job.id);
+                            }}
+                            className="px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+                          >
+                            Mark Applied
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unsaveJob(job.id);
+                            }}
+                            className="text-xs text-muted hover:text-foreground"
+                          >
+                            Unsave
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs font-medium text-sage-600 bg-sage-100 px-3 py-1.5 rounded-full">
+                          Applied
+                        </span>
+                      )}
+
                       <button
-                        onClick={() => dismissJob(jobKey)}
-                        className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0 mt-1"
-                        title="Not for me"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dismissJob(job.id);
+                        }}
+                        className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
                       >
                         Not for me
                       </button>
-                    )}
-                  </div>
-                  {job.url && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <a
-                        href={job.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-sky-600 hover:text-sky-700 font-medium"
-                      >
-                        View & Apply ↗
-                      </a>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* Hidden jobs toggle */}
-          {hiddenJobs.size > 0 && (
-            <div className="flex justify-center">
+          {hiddenCount > 0 && (
+            <div className="flex justify-center pt-2">
               <button
-                onClick={() => setShowHidden(!showHidden)}
+                onClick={() => setHiddenJobs(new Set())}
                 className="text-xs text-muted hover:text-foreground underline underline-offset-2"
               >
-                {showHidden ? "Hide dismissed" : `Show hidden (${hiddenJobs.size})`}
+                Show {hiddenCount} hidden job{hiddenCount !== 1 ? "s" : ""}
               </button>
             </div>
           )}
 
           <p className="text-xs text-muted text-center py-4">
-            Always verify job details directly with the employer. Listings are
-            AI-generated suggestions based on known fair-chance employers.
+            Listings sourced from real job boards. Updated daily.
+            Always confirm details directly with the employer.
           </p>
         </div>
       )}
 
-      {/* Always-visible resources */}
+      {/* How it works — always visible at bottom */}
       <div className="mt-8 pt-6 border-t border-border">
         <h2 className="text-sm font-semibold text-foreground mb-3">
-          National Job Resources
+          How This Works
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <a
-            href="https://www.70millionjobs.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3 bg-warm-50 rounded-xl border border-warm-200 hover:border-warm-300 transition-colors"
-          >
-            <span className="text-sm font-medium block">70 Million Jobs</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
+            <span className="text-sm font-medium block">Real Listings</span>
             <span className="text-xs text-muted">
-              America&apos;s leading employment platform for people with records
+              Every job here is a real posting from employers hiring right now
+              in your area.
             </span>
-          </a>
-          <a
-            href="https://www.careeronestop.org/LocalHelp/AmericanJobCenters/find-american-job-centers.aspx"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3 bg-warm-50 rounded-xl border border-warm-200 hover:border-warm-300 transition-colors"
-          >
-            <span className="text-sm font-medium block">
-              American Job Centers
-            </span>
+          </div>
+          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
+            <span className="text-sm font-medium block">Fair Chance First</span>
             <span className="text-xs text-muted">
-              Free career counseling, resume help, and job training near you
+              Companies known to hire people with records are highlighted and
+              shown first.
             </span>
-          </a>
-          <a
-            href="https://nationalreentryresourcecenter.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3 bg-warm-50 rounded-xl border border-warm-200 hover:border-warm-300 transition-colors"
-          >
-            <span className="text-sm font-medium block">
-              National Reentry Resource Center
-            </span>
+          </div>
+          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
+            <span className="text-sm font-medium block">Save &amp; Track</span>
             <span className="text-xs text-muted">
-              State-by-state guides for employment, housing, and legal aid
+              Save jobs you like. Mark when you apply. Build your resume and
+              practice interviews for each one.
             </span>
-          </a>
-          <a
-            href="https://www.dol.gov/agencies/eta/reentry"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3 bg-warm-50 rounded-xl border border-warm-200 hover:border-warm-300 transition-colors"
-          >
-            <span className="text-sm font-medium block">
-              DOL Reentry Employment
-            </span>
-            <span className="text-xs text-muted">
-              Federal programs supporting employment for justice-involved
-              individuals
-            </span>
-          </a>
+          </div>
         </div>
       </div>
     </div>
