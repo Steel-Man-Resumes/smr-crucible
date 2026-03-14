@@ -88,8 +88,9 @@ export function GlobalTourOverlay() {
   const endTour = useCallback(() => {
     setActive(false);
     setTourState(false, 0);
-    router.push("/intro");
-  }, [router]);
+    // Send them to the main marketing site, not the app
+    window.location.href = "https://steelmanresumes.com";
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
