@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
+import { GlobalTourOverlay } from "@/components/tour/GlobalTourOverlay";
 
 export const metadata: Metadata = {
   title: "Steel Man Resumes",
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           {children}
+          <GlobalTourOverlay />
           <DevToolbar />
         </AuthProvider>
       </body>
