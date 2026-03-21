@@ -95,6 +95,8 @@ if (isDev) {
   );
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PostgresAdapter(pool as any),
   providers,
@@ -102,6 +104,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
   },
+  // Share session cookie across all .steelmanresumes.com subdomains
+  // so the marketing site can detect auth state
+  ...(isProduction && {
+    cookies: {
+      sessionToken: {
+        name: "authjs.session-token",
+        options: {
+          httpOnly: true,
+          sameSite: "lax" as const,
+          path: "/",
+          secure: true,
+          domain: ".steelmanresumes.com",
+        },
+      },
+    },
+  }),
   pages: {
     signIn: "/login",
     verifyRequest: "/check-email",
