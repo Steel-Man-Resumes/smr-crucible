@@ -37,6 +37,7 @@ interface GenerateDocsInput {
   goals?: string[];
   goalNarrative?: string;
   preferences?: Record<string, string>;
+  readinessStage?: string;
   sessionId?: string;
 }
 
@@ -148,19 +149,49 @@ async function generateResume(input: GenerateDocsInput): Promise<string> {
   const skills = input.skills || [];
   const careerPaths = input.career_paths || [];
   const narrative = input.narrative || {};
+  const isExploring = input.readinessStage === "precontemplation";
 
-  const system = `You are a professional resume writer for Steel Man Resumes. You write resumes for people re-entering the workforce who deserve to lead with their strengths.
+  const system = `You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
 
-RULES:
-- Use ONLY facts from the provided data. Never fabricate experience, jobs, or credentials.
-- If there's original resume text, use it as the primary source of work history and education.
-- If there's NO resume, build from strengths, skills, goals, and narrative data.
-- Write at a professional level but keep it clear and readable.
-- NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information. Not even obliquely. Not even with growth framing. This is a paper document and disclosure should ONLY happen in person during interviews.
-- For employment gaps, simply omit dates or use a functional/skills-based format. Do NOT explain gaps.
-- If the user's data mentions incarceration or justice involvement, ignore those details entirely for the resume. Focus on skills, experience, education, and certifications.
-- Include a professional summary, core skills, and relevant experience sections.
-- Output clean, formatted plain text ready for copy-paste or DOCX conversion.`;
+YOUR JOB: Take whatever the user gives you — even a terrible, bare-bones resume — and produce a polished, compelling, achievement-driven resume that gets interviews.
+
+ABSOLUTE RULES (violating any = failure):
+1. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into an achievement.
+2. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
+3. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
+4. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
+5. Numbers in EVERY bullet. Revenue, percentages, headcount, volume, timelines, cost savings. If the source data has no numbers, ESTIMATE CONSERVATIVELY from industry context:
+   - Warehouse associate: 100-200+ orders/day, 40-60 person team, 8K-12K units
+   - Retail cashier: $2K-5K nightly deposit, 150+ transactions/shift
+   - Restaurant: 200+ covers/shift, 8-12 person line
+   - Forklift operator: 50-80 pallets/shift
+   - CNA: 8-12 patient load, 95%+ compliance
+6. Past roles = past tense. Current role = present tense. No exceptions.
+7. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
+8. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
+9. Keep to ONE PAGE (400-600 words). Every word fights for its seat.
+
+DATA CLEANING — FIX INPUT ERRORS:
+- If a job title doesn't match the company (e.g., retail cashier work attributed to a printing company), FIX IT. Use context clues to determine the real employer and role.
+- If dates look wrong or overlapping, use the most logical interpretation.
+- If the resume is bare/terrible, don't produce a bare/terrible output. Infer reasonable achievements from the job title + industry. A warehouse worker who worked 3 years ACHIEVED things — figure out what they likely were.
+
+${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
+
+SECTION ORDER (exact):
+1. FULL NAME (all caps)
+2. Contact line: City, State | Phone | Email (one line, pipe-separated)
+3. Branded Headline (one powerful line — NOT an objective. An identity statement.)
+4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
+5. CORE COMPETENCIES (9-12 terms in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists.)
+6. PROFESSIONAL EXPERIENCE (reverse chronological)
+   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year
+   - 3-5 CAR bullets per role, every one quantified
+7. EDUCATION
+   - Institution, dates. Add relevant coursework if it strengthens the resume.
+8. CERTIFICATIONS (separate section if they have any — don't bury in education)
+
+OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
 
   const parts: string[] = [];
 
@@ -174,14 +205,9 @@ RULES:
   }
 
   if (skills.length > 0) {
-    const hard = skills.filter((s) => s.category === "hard").map((s) => s.name);
-    const soft = skills.filter((s) => s.category === "soft").map((s) => s.name);
-    const transferable = skills
-      .filter((s) => s.category === "transferable")
-      .map((s) => s.name);
-    parts.push(
-      `SKILLS:\n- Technical: ${hard.join(", ") || "None identified"}\n- People: ${soft.join(", ") || "None identified"}\n- Transferable: ${transferable.join(", ") || "None identified"}`
-    );
+    // Flatten skills into a single list — no category labels in the resume
+    const allSkills = skills.map((s) => s.name).filter(Boolean);
+    parts.push(`SKILLS (use for Core Competencies grid, no category labels):\n${allSkills.join(", ")}`);
   }
 
   if (careerPaths.length > 0) {
@@ -191,13 +217,12 @@ RULES:
   }
 
   if (input.resumeText) {
-    // Strip any incarceration-related content from the resume text before sending to AI
     const cleanedResume = input.resumeText
       .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi, '')
       .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    parts.push(`ORIGINAL RESUME TEXT:\n${cleanedResume.slice(0, 6000)}`);
+    parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${cleanedResume.slice(0, 6000)}`);
   }
 
   if (input.goals?.length) {
@@ -212,34 +237,52 @@ RULES:
     if (p.location) parts.push(`PREFERRED LOCATION: ${p.location}`);
   }
 
-  const prompt = `Write a professional resume using the data below. Format it as clean plain text with clear section headers.
+  const prompt = `Write a world-class professional resume using the data below. Make it significantly better than the input.
 
 ${parts.join("\n\n")}
 
-FORMAT:
-[FULL NAME or "CANDIDATE" if unknown]
-[Branded headline — one powerful line about who they are professionally]
+EXACT OUTPUT FORMAT (plain text, follow precisely):
 
-PROFESSIONAL SUMMARY
-[2-4 sentences synthesizing their experience, strengths, and career direction]
+FULL NAME
+City, State | (XXX) XXX-XXXX | email@email.com
+
+Branded headline — one powerful line. Not an objective. An identity.
+
+CAREER SUMMARY
+3-4 sentences. Position this person as a professional. What they bring, what industry they've grown through, where they're headed. NO generic filler. NO "dedicated professional" or "proven track record." Write like describing someone you're impressed by.
 
 CORE COMPETENCIES
-[Skills organized by category, separated by |]
+Term 1 | Term 2 | Term 3
+Term 4 | Term 5 | Term 6
+Term 7 | Term 8 | Term 9
+(9-12 terms. No labels. No categories. Just the skills. Pull from ACTUAL job content.)
 
 PROFESSIONAL EXPERIENCE
-[Each role: TITLE | Company | Dates
-- Achievement bullet points with metrics where available]
 
-EDUCATION & CERTIFICATIONS
-[Any education or certs from the resume, or "Available upon request" if none]
+JOB TITLE | Company Name | City, State | Start Year - End Year
+- Strong verb + what was done + quantified result. Every bullet has a number.
+- Strong verb + achievement with scope (headcount, volume, percentage).
+- 3-5 bullets per role.
 
-IMPORTANT:
-- If no work history is provided, create a FUNCTIONAL resume organized by skill areas instead of chronological experience.
-- Every bullet point must come from real data — never invent.
-- Keep it to 1 page worth of content (roughly 400-600 words).
-- Do NOT include placeholder brackets like [Your Name] — use real data or omit.`;
+(Repeat for each role, reverse chronological)
 
-  return await callClaude(system, prompt);
+EDUCATION
+Institution Name, City, State | Start Year - End Year
+Relevant coursework or focus area if it adds value.
+
+CERTIFICATIONS
+- Cert name (current/year)
+- Cert name (current/year)
+
+CRITICAL REMINDERS:
+- If the input resume is bare or poorly written, DO NOT produce bare output. Infer achievements from job title + duration + industry. A 5-year warehouse worker ACCOMPLISHED things.
+- If a job title/company pairing doesn't make sense (retail work at a printing company), FIX IT using context.
+- Transform EVERY duty into an achievement with numbers.
+- NO placeholder brackets. NO [Company Name]. Use real data or omit.
+- If no work history exists: build a FUNCTIONAL resume with skill-area sections and CAR bullets from strengths data.
+- Certifications get their OWN section — never buried in education.`;
+
+  return await callClaude(system, prompt, 4500);
 }
 
 // --- Cover Letter Generation ---

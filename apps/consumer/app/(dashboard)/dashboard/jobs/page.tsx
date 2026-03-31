@@ -8,7 +8,8 @@
  * Save jobs to track applications across the Refinery.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { TierGate } from "@/components/TierGate";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -62,12 +63,14 @@ const COMMON_ROLES = [
 export default function JobBoardPageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <JobBoardPage />
+      <Suspense><JobBoardPage /></Suspense>
     </TierGate>
   );
 }
 
 function JobBoardPage() {
+  const searchParams = useSearchParams();
+  const autoSearched = useRef(false);
   const [context, setContext] = useState<UserContext>({
     targetRole: "",
     location: "",
@@ -148,6 +151,22 @@ function JobBoardPage() {
       }
     } catch {}
   }, []);
+
+  // Auto-search from URL param (e.g., ?q=Warehouse+Associate from dashboard CTA)
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !autoSearched.current) {
+      autoSearched.current = true;
+      setContext((prev) => ({ ...prev, targetRole: q }));
+    }
+  }, [searchParams]);
+
+  // Trigger search when context is set from URL param
+  useEffect(() => {
+    if (autoSearched.current && context.targetRole && !searched) {
+      searchJobs();
+    }
+  }, [context.targetRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Actions ────────────────────────────────────────────────────────────
 

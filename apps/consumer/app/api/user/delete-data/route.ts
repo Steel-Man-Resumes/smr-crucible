@@ -34,6 +34,9 @@ export async function DELETE() {
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
+    // Reset access codes and tier
+    await query("DELETE FROM access_code_redemption WHERE user_id = $1", [userId]);
+    await query("UPDATE users SET tier = 'client' WHERE id = $1", [userId]);
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

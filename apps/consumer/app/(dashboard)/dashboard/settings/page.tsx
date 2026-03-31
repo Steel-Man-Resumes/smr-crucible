@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, FormEvent } from "react";
+import { useRealTier } from "@/lib/useUserTier";
 
 interface UsageData {
   used: number;
@@ -27,7 +28,17 @@ interface RedeemedCode {
 }
 
 export default function SettingsPage() {
+  const realTier = useRealTier();
+  const isAdmin = realTier === "admin";
+  const [testMode, setTestMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Load admin test mode on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setTestMode(localStorage.getItem("admin_test_mode") === "client");
+    }
+  }, []);
   const [exportStatus, setExportStatus] = useState<
     "idle" | "exporting" | "done"
   >("idle");
@@ -170,7 +181,8 @@ export default function SettingsPage() {
       localStorage.removeItem(key);
     }
     setShowDeleteConfirm(false);
-    window.location.href = "/";
+    // Force fresh JWT by signing out — tier was reset server-side
+    window.location.href = "/login";
   }
 
   return (
@@ -179,6 +191,41 @@ export default function SettingsPage() {
       <p className="text-body text-muted mb-8">
         Your data, your control. Manage your information and privacy.
       </p>
+
+      {/* Admin Test Mode Toggle */}
+      {isAdmin && (
+        <section className="mb-8">
+          <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-amber-900">Admin Mode</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  {testMode
+                    ? "Testing as a regular client. Toggle off to restore admin access."
+                    : "You have full admin access. Toggle on to see the real user experience."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (testMode) {
+                    localStorage.removeItem("admin_test_mode");
+                  } else {
+                    localStorage.setItem("admin_test_mode", "client");
+                  }
+                  window.location.reload();
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors min-h-touch ${
+                  testMode
+                    ? "bg-amber-600 text-white hover:bg-amber-700"
+                    : "bg-white border-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                }`}
+              >
+                {testMode ? "Back to Admin" : "Test as Client"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Daily Usage */}
       <section className="mb-8">

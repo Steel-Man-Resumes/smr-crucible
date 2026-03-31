@@ -323,16 +323,33 @@ export default function DashboardPage() {
       )}
 
       {/* Primary CTA when no resume yet */}
-      {onboarding.state === "needs_resume" && hasForgeData && !isAdmin && (
-        <Link
-          href="/dashboard/jobs"
-          className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
-        >
-          <h3 className="font-semibold text-lg mb-1">Find a Job & Build Your Resume</h3>
-          <p className="text-sm text-sage-100">
-            Pick a real job listing and we&apos;ll generate a targeted resume using your Forge results.
-          </p>
-        </Link>
+      {onboarding.state === "needs_resume" && !isAdmin && (
+        <section>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Link
+              href={forgeData.career_paths?.[0]?.title
+                ? `/dashboard/jobs?q=${encodeURIComponent(forgeData.career_paths[0].title)}`
+                : "/dashboard/jobs"}
+              className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+            >
+              <h3 className="font-semibold text-lg mb-1">Find a Job</h3>
+              <p className="text-sm text-sage-100">
+                {forgeData.career_paths?.[0]?.title
+                  ? `Search for "${forgeData.career_paths[0].title}" and other roles that fit.`
+                  : "Search real job listings from employers hiring now."}
+              </p>
+            </Link>
+            <Link
+              href="/dashboard/resume-builder"
+              className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+            >
+              <h3 className="font-semibold text-lg mb-1">Build a Resume</h3>
+              <p className="text-sm text-sky-100">
+                Start building a resume from your Forge results.
+              </p>
+            </Link>
+          </div>
+        </section>
       )}
 
       {/* Saved work */}
@@ -389,6 +406,54 @@ export default function DashboardPage() {
           )}
         </section>
       )}
+
+      {/* What's Next — contextual suggestions based on what they've done */}
+      {onboarding.state === "full_access" && recentArtifacts.length > 0 && (() => {
+        const latestResume = recentArtifacts.find((a) => a.artifact_type === "resume");
+        const targetJob = latestResume?.target_context?.targetJob;
+        const targetCompany = latestResume?.target_context?.targetCompany;
+        const hasDisclosure = (artifactCounts.disclosure_plan || 0) > 0;
+        const hasInterview = (artifactCounts.interview_prep || 0) > 0;
+
+        if (!targetJob || (hasDisclosure && hasInterview)) return null;
+
+        return (
+          <section className="bg-sage-50 rounded-2xl p-6 border border-sage-200">
+            <h2 className="font-semibold text-foreground mb-3">
+              What&apos;s Next
+            </h2>
+            <p className="text-sm text-muted mb-4">
+              You built a resume for <span className="font-medium text-foreground">{targetJob}</span>
+              {targetCompany ? <> at <span className="font-medium text-foreground">{targetCompany}</span></> : ""}.
+              Keep preparing:
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {!hasDisclosure && (
+                <Link
+                  href={`/dashboard/disclosure${targetCompany ? `?company=${encodeURIComponent(targetCompany)}` : ""}`}
+                  className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+                >
+                  Plan your disclosure
+                </Link>
+              )}
+              {!hasInterview && (
+                <Link
+                  href={`/dashboard/interview${targetJob ? `?role=${encodeURIComponent(targetJob)}` : ""}`}
+                  className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+                >
+                  Practice {targetJob} interview
+                </Link>
+              )}
+              <Link
+                href="/dashboard/jobs"
+                className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+              >
+                Find another job
+              </Link>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Tool cards — all visible, locked ones greyed out */}
       <section>
@@ -507,13 +572,14 @@ function ProfileSetup({
   return (
     <div className="max-w-lg mx-auto">
       <h1 className="text-2xl font-bold text-foreground mb-2">
-        Welcome to The Refinery
+        {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
       </h1>
-      <p className="text-body text-muted mb-8">
-        Before we start building, we need a few details for your resume.
+      <p className="text-body text-muted mb-4">
+        I analyzed your background in The Forge — now we put it to work.
+        These details go on your resume header. Nothing else.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="text-sm font-medium block mb-1">Full Name *</label>
           <input
@@ -523,10 +589,11 @@ function ProfileSetup({
             className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
             required
           />
+          <p className="text-xs text-muted mt-1">Top of every resume we build for you.</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium block mb-1">Email *</label>
+          <label className="text-sm font-medium block mb-1">Email</label>
           <input
             type="email"
             value={email}
@@ -534,6 +601,7 @@ function ProfileSetup({
             placeholder="you@example.com"
             className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
           />
+          <p className="text-xs text-muted mt-1">Resume header + how employers reach you.</p>
         </div>
 
         <div>
@@ -546,6 +614,7 @@ function ProfileSetup({
             className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
             required
           />
+          <p className="text-xs text-muted mt-1">Required on resumes. Employers call this number.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -568,6 +637,7 @@ function ProfileSetup({
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch uppercase"
             />
           </div>
+          <p className="text-xs text-muted col-span-2">For local job matching.</p>
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -64,7 +64,7 @@ async function handlePost(request: Request) {
     const contactCity = sanitizeForPrompt(contact?.city, 50);
     const contactState = sanitizeForPrompt(contact?.state, 20);
 
-    const prompt = `Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON matching the exact structure below.
+    const prompt = `Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON.
 
 TARGET JOB:
 - Title: ${jobTitle}
@@ -87,14 +87,14 @@ CONTACT INFO:
 
 Return this exact JSON structure:
 {
-  "summary": "2-3 sentence professional summary targeted specifically at ${jobTitle} at ${jobCompany}",
+  "summary": "3-4 sentence summary targeted at ${jobTitle} at ${jobCompany}. NO generic phrases. NO 'dedicated professional' or 'proven track record'. Position them as someone this employer needs.",
   "experience": [
     {
       "title": "Job Title",
       "company": "Company Name",
       "startDate": "2020",
       "endDate": "",
-      "bullets": ["Action verb bullet with metrics...", "Another bullet..."]
+      "bullets": ["Strong verb + achievement + number. Every bullet quantified.", "Another achievement with metrics."]
     }
   ],
   "education": [
@@ -107,17 +107,19 @@ Return this exact JSON structure:
   "skills": ["skill1", "skill2", "skill3"]
 }
 
-CRITICAL RULES:
-1. Target this resume SPECIFICALLY at ${jobTitle} at ${jobCompany}
-2. Match the person's real background to the job requirements
-3. Use strong action verbs, include numbers/metrics where possible
-4. Write at a 6th grade reading level — clear, direct, no jargon
-5. Include 6-10 relevant skills that match the job posting
-6. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or any disqualifying information
-7. NEVER fabricate experience — only use what's in the person's background
-8. Each work entry needs 2-4 bullet points
-9. If the person's resume has work history, preserve the real companies and dates
-10. Return ONLY the JSON object, no markdown fences, no explanation`;
+ABSOLUTE RULES:
+1. Target this resume SPECIFICALLY at ${jobTitle} at ${jobCompany}. Match their background to the job requirements.
+2. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform every duty into an achievement.
+3. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
+4. Numbers in EVERY bullet. Estimate conservatively from industry context if source has no numbers.
+5. Every bullet starts with a strong action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed.
+6. 3-5 bullets per role, each with measurable impact.
+7. 9-12 skills that match the job posting. Pull from actual job content, not generic lists.
+8. NEVER mention incarceration, criminal records, justice involvement, parole, probation.
+9. NEVER fabricate companies or job titles — only use what's in the person's background. But DO quantify achievements from context.
+10. If a title/company pairing doesn't make sense, FIX IT using context clues.
+11. Preserve real companies and dates from their history. Use years only (no months).
+12. Return ONLY the JSON object, no markdown fences, no explanation.`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
