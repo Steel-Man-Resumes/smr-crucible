@@ -545,7 +545,17 @@ function JobBoardPage() {
                     )}
 
                     {/* Actions */}
-                    <div className="flex items-center gap-3 pt-2">
+                    <div className="flex items-center gap-3 pt-2 flex-wrap">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sessionStorage.setItem("resume_target_job", JSON.stringify(job));
+                          window.location.href = "/dashboard/resume-builder?from=job";
+                        }}
+                        className="px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-lg hover:bg-sky-700 transition-colors"
+                      >
+                        Build a Resume for This Job
+                      </button>
                       {!isSaved ? (
                         <button
                           onClick={(e) => {

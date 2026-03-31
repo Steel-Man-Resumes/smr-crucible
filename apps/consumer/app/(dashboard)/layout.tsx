@@ -4,23 +4,27 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { ContactTroyButton } from "@/components/ContactTroyButton";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
+import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 
 /**
  * Dashboard Layout — Authenticated area
  *
  * Persistent navigation for Refinery tools.
- * Nav items filtered by user tier.
- * JBS-compliant: consent status visible, data export/delete available.
+ * Nav items: always visible, locked until earned.
+ * Admin tier = god mode (everything unlocked).
  */
 
 interface NavItem {
   href: string;
   label: string;
   minTier: UserTier;
+  /** Minimum onboarding state to unlock this nav item */
+  minState: OnboardingState;
 }
 
 const TIER_RANK: Record<string, number> = {
@@ -30,23 +34,35 @@ const TIER_RANK: Record<string, number> = {
   observer: 3,
 };
 
+const STATE_RANK: Record<string, number> = {
+  full_access: 0,
+  needs_resume: 1,
+  needs_profile: 2,
+  loading: 3,
+};
+
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Overview", minTier: "observer" },
-  { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client" },
-  { href: "/dashboard/disclosure", label: "Disclosure Planner", minTier: "client" },
-  { href: "/dashboard/interview", label: "Interview Practice", minTier: "client" },
-  { href: "/dashboard/jobs", label: "Job Board", minTier: "client" },
-  { href: "/dashboard/resources", label: "Resources", minTier: "client" },
-  { href: "/dashboard/applications", label: "Applications", minTier: "client" },
-  { href: "/dashboard/progress", label: "Progress", minTier: "observer" },
-  { href: "/dashboard/methodology", label: "Methodology", minTier: "observer" },
-  { href: "/dashboard/evidence", label: "Evidence", minTier: "observer" },
-  { href: "/dashboard/security", label: "Security & Privacy", minTier: "observer" },
+  { href: "/dashboard", label: "Overview", minTier: "observer", minState: "needs_profile" },
+  { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
+  { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client", minState: "needs_resume" },
+  { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
+  { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
+  { href: "/dashboard/resources", label: "Resources", minTier: "client", minState: "full_access" },
+  { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+  { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
+  { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
 ];
 
-function getVisibleNav(userTier: UserTier): NavItem[] {
-  const rank = TIER_RANK[userTier] ?? 3;
-  return NAV_ITEMS.filter((item) => rank <= (TIER_RANK[item.minTier] ?? 3));
+function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: OnboardingState): boolean {
+  // Admin = god mode
+  if (userTier === "admin") return true;
+  // Tier check
+  const tierRank = TIER_RANK[userTier] ?? 3;
+  if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
+  // Onboarding state check
+  const stateRank = STATE_RANK[onboardingState] ?? 3;
+  const requiredRank = STATE_RANK[item.minState] ?? 3;
+  return stateRank <= requiredRank;
 }
 
 export default function DashboardLayout({
@@ -56,6 +72,7 @@ export default function DashboardLayout({
 }) {
   const userTier = useUserTier();
   const pathname = usePathname();
+  const onboarding = useOnboarding();
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
@@ -103,8 +120,10 @@ export default function DashboardLayout({
         // Preload build failed — not critical
       }
 
-      // Check if already synced (flag prevents duplicate writes)
-      if (forgeData._synced) return;
+      // Check if already synced — compare startedAt to detect new sessions
+      const syncedAt = forgeData._syncedAt;
+      const currentStartedAt = forgeData.startedAt || "unknown";
+      if (syncedAt === currentStartedAt) return;
 
       fetch("/api/forge/save", {
         method: "POST",
@@ -113,9 +132,12 @@ export default function DashboardLayout({
       })
         .then((res) => {
           if (res.ok) {
-            // Mark as synced so we don't re-send
+            // Mark this specific session as synced
             forgeData._synced = true;
+            forgeData._syncedAt = currentStartedAt;
             localStorage.setItem("forge_session", JSON.stringify(forgeData));
+            // Signal that forge data has been synced (Resume Builder listens)
+            window.dispatchEvent(new Event("forge-synced"));
           }
         })
         .catch(() => {});
@@ -123,8 +145,6 @@ export default function DashboardLayout({
       // Silent — sync is best-effort
     }
   }, []);
-
-  const visibleNav = getVisibleNav(userTier);
 
   return (
     <div className="min-h-screen bg-background">
@@ -161,31 +181,59 @@ export default function DashboardLayout({
               >
                 Settings
               </Link>
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Tool navigation — horizontal scroll on mobile */}
+      {/* Tool navigation — all items visible, locked ones greyed out */}
       <div className="border-b border-border bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <nav
             className="flex gap-1 overflow-x-auto py-2 scrollbar-hide"
             aria-label="Refinery tools"
           >
-            {visibleNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap min-h-touch flex items-center ${
-                  pathname === item.href
-                    ? "text-foreground bg-sage-100"
-                    : "text-muted hover:text-foreground hover:bg-sage-50"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {NAV_ITEMS.map((item) => {
+              const unlocked = isNavUnlocked(item, userTier, onboarding.state);
+              const isActive = pathname === item.href;
+
+              if (!unlocked) {
+                return (
+                  <span
+                    key={item.href}
+                    className="px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap min-h-touch flex items-center gap-1.5 text-gray-300 cursor-not-allowed select-none"
+                    title={onboarding.state === "needs_profile"
+                      ? "Set up your profile to unlock"
+                      : "Build your first resume to unlock"}
+                  >
+                    {item.label}
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="flex-shrink-0 opacity-50">
+                      <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
+                    </svg>
+                  </span>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap min-h-touch flex items-center ${
+                    isActive
+                      ? "text-foreground bg-sage-100"
+                      : "text-muted hover:text-foreground hover:bg-sage-50"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
         </div>
       </div>

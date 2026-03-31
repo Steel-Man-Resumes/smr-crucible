@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { saveForgeSession } from "@crucible/core";
+import { saveForgeSession, createArtifact, updateArtifact, listArtifacts } from "@crucible/core";
+import { buildForgeResumeContent } from "@/lib/forge-to-resume";
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -39,6 +40,46 @@ export async function POST(request: Request) {
       pagesVisited: body.pagesVisited,
       startedAt: body.startedAt,
     });
+
+    // Auto-create (or update) a resume artifact from Forge data (non-fatal)
+    if (body.forgeOutput) {
+      try {
+        const resumeContent = buildForgeResumeContent({
+          resumeText: body.resumeText,
+          forgeOutput: body.forgeOutput,
+        });
+
+        const existing = await listArtifacts(userId, { type: "resume" });
+        const forgeResume = existing.find(
+          (a) => (a.target_context as any)?.source === "forge"
+        );
+
+        if (forgeResume) {
+          // Update existing forge resume with new data
+          await updateArtifact(
+            forgeResume.id,
+            userId,
+            resumeContent as unknown as Record<string, unknown>,
+            1.0
+          );
+        } else {
+          // Create new forge resume
+          await createArtifact(
+            userId,
+            "resume",
+            {
+              source: "forge",
+              targetJob: resumeContent.meta.targetJob || "General",
+            },
+            resumeContent as unknown as Record<string, unknown>,
+            1.0
+          );
+        }
+      } catch (artErr: any) {
+        console.error("Auto-create resume artifact failed:", artErr?.message || artErr);
+        // Non-fatal: Forge save succeeded, artifact creation is best-effort
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

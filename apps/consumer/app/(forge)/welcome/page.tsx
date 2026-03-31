@@ -83,7 +83,7 @@ export default function WelcomePage() {
 function WelcomePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { session, updateSession } = useForgeSession();
+  const { session, updateSession, clearSession } = useForgeSession();
 
   const isDemo = searchParams.get("demo") === "true" || session.isDemo === true;
   const audience = session.audience || "client";
@@ -108,19 +108,29 @@ function WelcomePageInner() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleContinue() {
+    // Clear old session data before starting fresh
+    // (preserves audience from intro, clears everything else)
+    const audience = session.audience;
+    clearSession();
+
     if (isDemo) {
       updateSession({
+        audience,
+        isDemo: true,
         readinessStage: DEMO_SESSION.readinessStage,
         startedAt: new Date().toISOString(),
         lastPageVisited: "welcome",
+        pagesVisited: ["intro", "welcome"],
       });
     } else {
       if (!selected) return;
       const readinessStage = STAGE_MAP[selected];
       updateSession({
+        audience,
         readinessStage,
         startedAt: new Date().toISOString(),
         lastPageVisited: "welcome",
+        pagesVisited: ["intro", "welcome"],
       });
     }
     router.push("/resume");

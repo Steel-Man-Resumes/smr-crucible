@@ -52,6 +52,10 @@ export function ResumeWorkspace() {
   const lastSaved = useRef<string>("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Delete
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   // AI
   const [generating, setGenerating] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
@@ -59,13 +63,46 @@ export function ResumeWorkspace() {
   // Forge data
   const [forgeAvailable, setForgeAvailable] = useState(false);
 
+  // Full resume generation (from job board)
+  const [generatingFull, setGeneratingFull] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  // --- Delete resume ---
+  async function deleteResume(id: string) {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSavedResumes((prev) => prev.filter((r) => r.id !== id));
+        if (artifactId === id) {
+          startNewResume();
+        }
+      }
+    } catch {} finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  }
+
   // --- Load saved resumes list ---
-  useEffect(() => {
+  const loadSavedResumes = useCallback(() => {
     fetch("/api/artifacts?type=resume&limit=20")
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((d) => setSavedResumes(d.data || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadSavedResumes();
+
+    // Re-fetch when forge sync completes (may have created a new artifact)
+    const handleForgeSync = () => {
+      // Small delay to let the DB commit settle
+      setTimeout(loadSavedResumes, 500);
+    };
+    window.addEventListener("forge-synced", handleForgeSync);
+    return () => window.removeEventListener("forge-synced", handleForgeSync);
+  }, [loadSavedResumes]);
 
   // --- Check for Forge data ---
   useEffect(() => {
@@ -119,6 +156,111 @@ export function ResumeWorkspace() {
       } catch {}
     }
   }, [searchParams]);
+
+  // --- Import from Job Board (AI-generated targeted resume) ---
+  useEffect(() => {
+    const from = searchParams.get("from");
+    if (from !== "job") return;
+
+    const jobData = sessionStorage.getItem("resume_target_job");
+    if (!jobData) return;
+
+    sessionStorage.removeItem("resume_target_job");
+
+    async function generateFromJob() {
+      try {
+        const job = JSON.parse(jobData!);
+        setGeneratingFull(true);
+        setGenError(null);
+        setShowSetup(false);
+
+        // Pre-fill target info immediately
+        updateDoc((d) => ({
+          ...d,
+          meta: {
+            ...d.meta,
+            targetJob: job.title || "",
+            targetCompany: job.company || "",
+            createdFrom: "forge" as const,
+          },
+        }));
+
+        // Load Forge data for context
+        let forgeOutput: any = null;
+        let resumeText: string | undefined;
+        let contactInfo: any = {};
+
+        // Try localStorage first
+        try {
+          const stored = localStorage.getItem("forge_session");
+          if (stored) {
+            const session = JSON.parse(stored);
+            forgeOutput = session.forgeOutput;
+            resumeText = session.resumeText;
+          }
+        } catch {}
+
+        // If no localStorage, try API
+        if (!forgeOutput) {
+          try {
+            const res = await fetch("/api/forge/load");
+            if (res.ok) {
+              const { data } = await res.json();
+              if (data) {
+                forgeOutput = data.forgeOutput;
+                resumeText = data.resumeText;
+              }
+            }
+          } catch {}
+        }
+
+        // Try to get contact from existing resume artifacts
+        if (savedResumes.length > 0) {
+          try {
+            const res = await fetch(`/api/artifacts/${savedResumes[0].id}`);
+            if (res.ok) {
+              const { data } = await res.json();
+              if (data?.content?.contact) {
+                contactInfo = data.content.contact;
+              }
+            }
+          } catch {}
+        }
+
+        // Call the full generation API
+        const res = await fetch("/api/resume-generate-full", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            forgeOutput,
+            resumeText,
+            job: {
+              title: job.title,
+              company: job.company,
+              description: job.description,
+              requirements: job.requirements,
+            },
+            contact: contactInfo,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Generation failed");
+        }
+
+        const { resume } = await res.json();
+        setDoc(resume as ResumeDocument);
+        setGeneratingFull(false);
+      } catch (err: any) {
+        console.error("Job-to-resume generation error:", err);
+        setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
+        setGeneratingFull(false);
+      }
+    }
+
+    generateFromJob();
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Updater function passed to section editors ---
   const updateDoc = useCallback(
@@ -286,6 +428,55 @@ export function ResumeWorkspace() {
   // Scoring
   const { overall, sections } = scoreResume(doc);
 
+  // --- Full resume generation loading state ---
+  if (generatingFull) {
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-bold text-foreground mb-2">
+          Building Your Resume
+        </h1>
+        <div className="bg-sage-50 rounded-2xl p-8 border border-sage-200 text-center mt-6">
+          <div className="w-12 h-12 mx-auto mb-4 relative">
+            <div className="absolute inset-0 border-3 border-sage-200 rounded-full" />
+            <div className="absolute inset-0 border-3 border-sage-600 rounded-full border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm font-medium text-sage-700">
+            Generating a targeted resume for {doc.meta.targetJob || "this job"}
+            {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...
+          </p>
+          <p className="text-xs text-muted mt-2">
+            Using your background to match the job requirements. This takes 15-30 seconds.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Generation error state ---
+  if (genError && !showSetup) {
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-bold text-foreground mb-2">
+          Resume Builder
+        </h1>
+        <div className="bg-warm-50 rounded-2xl p-6 border border-warm-200 text-center mt-6">
+          <p className="text-sm text-earth-700 mb-4">{genError}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                setGenError(null);
+                setShowSetup(true);
+              }}
+              className="px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            >
+              Start Manually
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // --- Setup screen (target + import options) ---
   if (showSetup) {
     return (
@@ -314,20 +505,59 @@ export function ResumeWorkspace() {
             </div>
             <div className="space-y-2">
               {savedResumes.map((r) => (
-                <button
+                <div
                   key={r.id}
-                  onClick={() => loadResume(r.id)}
-                  className="w-full text-left px-4 py-3 rounded-xl border border-border bg-white hover:border-sage-300 transition-colors"
+                  className="rounded-xl border border-border bg-white hover:border-sage-300 transition-colors"
                 >
-                  <span className="text-sm font-medium text-foreground">
-                    {r.target_context?.targetJob || "Untitled resume"}
-                  </span>
-                  {r.target_context?.targetCompany && (
-                    <span className="text-xs text-muted ml-2">
-                      at {r.target_context.targetCompany}
-                    </span>
+                  {confirmDeleteId === r.id ? (
+                    <div className="px-4 py-3 flex items-center justify-between gap-3">
+                      <span className="text-sm text-foreground">Delete this resume?</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => deleteResume(r.id)}
+                          disabled={deletingId === r.id}
+                          className="text-xs font-medium text-white bg-red-500 px-3 py-1.5 rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                        >
+                          {deletingId === r.id ? "Deleting..." : "Delete"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-xs text-muted hover:text-foreground px-2"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => loadResume(r.id)}
+                        className="flex-1 text-left px-4 py-3"
+                      >
+                        <span className="text-sm font-medium text-foreground">
+                          {r.target_context?.targetJob || "Untitled resume"}
+                        </span>
+                        {r.target_context?.targetCompany && (
+                          <span className="text-xs text-muted ml-2">
+                            at {r.target_context.targetCompany}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(r.id);
+                        }}
+                        className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                        title="Delete resume"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                          <path d="M3 3l8 8M11 3l-8 8" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           </div>

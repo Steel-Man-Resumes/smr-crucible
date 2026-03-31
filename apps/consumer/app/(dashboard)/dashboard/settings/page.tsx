@@ -138,11 +138,33 @@ export default function SettingsPage() {
     }
   }
 
-  function deleteAllData() {
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteAllData() {
+    setDeleting(true);
+    try {
+      // Delete server-side data first
+      const res = await fetch("/api/user/delete-data", { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to delete data. Please try again.");
+        setDeleting(false);
+        return;
+      }
+    } catch {
+      alert("Failed to delete data. Please try again.");
+      setDeleting(false);
+      return;
+    }
+
+    // Then clear all localStorage
     const keys = [
       "forge_session",
       "consumer_progress",
       "consent_record",
+      "hidden_jobs",
+      "saved_jobs",
+      "forge_preload",
     ];
     for (const key of keys) {
       localStorage.removeItem(key);
@@ -362,9 +384,10 @@ export default function SettingsPage() {
                   </button>
                   <button
                     onClick={deleteAllData}
-                    className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors min-h-touch"
+                    disabled={deleting}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors min-h-touch"
                   >
-                    Confirm Delete
+                    {deleting ? "Deleting..." : "Confirm Delete"}
                   </button>
                 </div>
               )}

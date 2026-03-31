@@ -10,8 +10,32 @@ const nextConfig = {
     ];
     return config;
   },
+  async redirects() {
+    return [
+      {
+        source: "/",
+        has: [{ type: "host", value: "forge.steelmanresumes.com" }],
+        destination: "/intro",
+        permanent: false,
+      },
+      {
+        source: "/",
+        has: [{ type: "host", value: "refinery.steelmanresumes.com" }],
+        destination: "/login",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
+      {
+        // Prevent browser caching of dashboard pages (back-button after signout)
+        source: "/dashboard/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+          { key: "Pragma", value: "no-cache" },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [

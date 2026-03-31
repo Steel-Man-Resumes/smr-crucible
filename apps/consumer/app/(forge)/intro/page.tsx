@@ -29,7 +29,7 @@ const PATHS: PathOption[] = [
   {
     id: "client",
     label: "I\u2019m rebuilding my career",
-    subtitle: "Full Forge flow \u2014 about 10 minutes",
+    subtitle: "Full Forge flow, about 10 minutes",
     route: "/welcome",
   },
   {
@@ -48,9 +48,12 @@ const PATHS: PathOption[] = [
 
 export default function IntroPage() {
   const router = useRouter();
-  const { updateSession } = useForgeSession();
+  const { updateSession, clearSession } = useForgeSession();
 
   function handleSelect(path: PathOption) {
+    // Clear any previous session data — fresh start every time
+    clearSession();
+
     updateSession({
       audience: path.id,
       pagesVisited: ["intro"],
@@ -129,8 +132,8 @@ export default function IntroPage() {
           <p className="text-sm leading-relaxed opacity-90">
             You&apos;ll see a chat button on every page. That&apos;s me. Real
             Troy designed every word I say, and I&apos;m here to actually help
-            &mdash; not sell you something. If you get stuck, confused, or just
-            want to talk it through &mdash; use it. That&apos;s what it&apos;s for.
+            -- not sell you something. If you get stuck, confused, or just
+            want to talk it through -- use it. That&apos;s what it&apos;s for.
           </p>
         </div>
 

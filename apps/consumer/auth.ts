@@ -125,6 +125,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: "/check-email",
   },
   callbacks: {
+    async authorized({ request, auth: session }) {
+      const path = request.nextUrl.pathname;
+      const isApi = path.startsWith("/api/");
+      const isDashboard = path.startsWith("/dashboard");
+
+      // Dashboard pages: redirect to login if not authenticated
+      if (isDashboard && !session) {
+        return Response.redirect(new URL("/login", request.url));
+      }
+
+      // Protected API routes: return 401 (don't redirect)
+      if (isApi && !session) {
+        const protectedPrefixes = [
+          "/api/dashboard", "/api/artifacts", "/api/access-code",
+          "/api/disclosure-guide", "/api/interview-practice",
+          "/api/job-search", "/api/resources-search", "/api/resume-generate",
+          "/api/usage", "/api/user/",
+        ];
+        if (protectedPrefixes.some((p) => path.startsWith(p))) {
+          return Response.json({ error: "Not authenticated" }, { status: 401 });
+        }
+      }
+
+      return true;
+    },
     async jwt({ token, user, trigger }) {
       // On sign-in or when user object is available, persist tier
       if (user) {
