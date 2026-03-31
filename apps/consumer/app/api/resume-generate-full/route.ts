@@ -1,8 +1,11 @@
 /**
- * Full Resume Generation API
+ * Career Package Generation API
  *
- * Takes Forge data + a specific job posting and generates
- * a complete, targeted ResumeDocument ready for the editor.
+ * Takes Forge data + a specific job posting and generates a complete package:
+ * 1. Targeted resume (ResumeDocument JSON)
+ * 2. Targeted cover letter (plain text, for THAT employer)
+ * 3. Disclosure mini-brief (confidence rating + script based on what Forge knows)
+ *
  * Logged to decision_log for JBS compliance.
  */
 
@@ -10,7 +13,30 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+async function callClaude(apiKey: string, prompt: string, maxTokens = 2000): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claude API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.content[0]?.text?.trim() || "";
+}
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -20,7 +46,7 @@ async function handlePost(request: Request) {
 
   try {
     const body = await request.json();
-    const { forgeOutput, resumeText, job, contact } = body;
+    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord } = body;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -31,7 +57,7 @@ async function handlePost(request: Request) {
       return NextResponse.json({ error: "Job title required" }, { status: 400 });
     }
 
-    // Build context strings
+    // Build shared context strings
     const jobTitle = sanitizeForPrompt(job.title, 200);
     const jobCompany = sanitizeForPrompt(job.company, 200);
     const jobDescription = sanitizeForPrompt(job.description, 2000);
@@ -40,8 +66,7 @@ async function handlePost(request: Request) {
     const skills = forgeOutput?.skills
       ? sanitizeArray(
           forgeOutput.skills.map((s: any) => (typeof s === "string" ? s : s.name)),
-          20,
-          100
+          20, 100
         )
       : "not specified";
 
@@ -49,8 +74,7 @@ async function handlePost(request: Request) {
     const strengths = forgeOutput?.narrative?.strengths
       ? sanitizeArray(
           forgeOutput.narrative.strengths.map((s: any) => `${s.title}: ${s.evidence}`),
-          10,
-          300
+          10, 300
         )
       : "";
 
@@ -64,7 +88,9 @@ async function handlePost(request: Request) {
     const contactCity = sanitizeForPrompt(contact?.city, 50);
     const contactState = sanitizeForPrompt(contact?.state, 20);
 
-    const prompt = `Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON.
+    // ─── Generate resume + cover letter in parallel ───────────────────
+
+    const resumePrompt = `Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON.
 
 TARGET JOB:
 - Title: ${jobTitle}
@@ -94,7 +120,7 @@ Return this exact JSON structure:
       "company": "Company Name",
       "startDate": "2020",
       "endDate": "",
-      "bullets": ["Strong verb + achievement + number. Every bullet quantified.", "Another achievement with metrics."]
+      "bullets": ["Strong verb + achievement + number.", "Another achievement with metrics."]
     }
   ],
   "education": [
@@ -108,48 +134,61 @@ Return this exact JSON structure:
 }
 
 ABSOLUTE RULES:
-1. Target this resume SPECIFICALLY at ${jobTitle} at ${jobCompany}. Match their background to the job requirements.
+1. Target this resume SPECIFICALLY at ${jobTitle} at ${jobCompany}.
 2. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform every duty into an achievement.
 3. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
 4. Numbers in EVERY bullet. Estimate conservatively from industry context if source has no numbers.
-5. Every bullet starts with a strong action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed.
+5. Every bullet starts with a strong action verb.
 6. 3-5 bullets per role, each with measurable impact.
-7. 9-12 skills that match the job posting. Pull from actual job content, not generic lists.
+7. 9-12 skills that match the job posting.
 8. NEVER mention incarceration, criminal records, justice involvement, parole, probation.
-9. NEVER fabricate companies or job titles — only use what's in the person's background. But DO quantify achievements from context.
-10. If a title/company pairing doesn't make sense, FIX IT using context clues.
-11. Preserve real companies and dates from their history. Use years only (no months).
-12. Return ONLY the JSON object, no markdown fences, no explanation.`;
+9. NEVER fabricate companies or job titles. But DO quantify achievements from context.
+10. If a title/company pairing doesn't make sense, FIX IT.
+11. Use years only (no months).
+12. Return ONLY the JSON object.`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    const coverLetterPrompt = `Write a targeted cover letter for a specific job application. Plain text only, no JSON.
 
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
+APPLICANT: ${contactName} from ${contactCity}, ${contactState}
+TARGET: ${jobTitle} at ${jobCompany}
+JOB DESCRIPTION: ${jobDescription}
+REQUIREMENTS: ${jobRequirements}
+BACKGROUND: ${narrative}
+KEY SKILLS: ${skills}
+${strengths ? `STRENGTHS: ${strengths}` : ""}
 
-    const aiData = await response.json();
-    const rawText = aiData.content[0]?.text?.trim() || "";
+RULES:
+- Address to the SPECIFIC company (${jobCompany}). NO [Company Name] placeholders. NO [Hiring Manager] — use "Dear Hiring Team" if unknown.
+- 250-350 words.
+- Opening: who they are, what role, why this company specifically.
+- Middle: 2-3 specific achievements that match the job requirements. Include numbers.
+- Close: enthusiasm, availability, confidence.
+- NEVER mention incarceration, criminal records, justice involvement. Not even obliquely.
+- NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
+- Write like a confident human, not an AI. No buzzwords.
+- Sign with the applicant's name.
 
-    // Parse JSON from AI response (handles markdown fences, etc.)
+FORMAT:
+Dear Hiring Team,
+
+[body paragraphs]
+
+Sincerely,
+${contactName || "Candidate"}`;
+
+    // Run resume + cover letter in parallel
+    const [resumeRaw, coverLetterText] = await Promise.all([
+      callClaude(apiKey, resumePrompt, 2000),
+      callClaude(apiKey, coverLetterPrompt, 1500),
+    ]);
+
+    // Parse resume JSON
     let parsed: any;
     try {
       const { extractAndParseJSON } = await import("@crucible/core");
-      parsed = extractAndParseJSON(rawText);
+      parsed = extractAndParseJSON(resumeRaw);
     } catch {
-      // Fallback: try direct parse
-      parsed = JSON.parse(rawText);
+      parsed = JSON.parse(resumeRaw);
     }
 
     if (!parsed || typeof parsed !== "object") {
@@ -190,31 +229,87 @@ ABSOLUTE RULES:
       skills: Array.isArray(parsed.skills) ? parsed.skills.filter(Boolean) : [],
     };
 
-    // Log decision for JBS compliance
+    // ─── Build disclosure mini-brief from Forge data (no AI call) ────
+
+    const hasRecord = (challenges || []).includes("criminal_record");
+    const record = criminalRecord || {};
+    let confidenceLevel: "low" | "medium" | "high" = "low";
+    let confidencePercent = 15;
+    let briefScript: string | null = null;
+    let timingAdvice: string | null = null;
+    let upgradeMessage = "";
+
+    if (hasRecord) {
+      const hasType = !!record.type;
+      const hasRecency = !!record.most_recent;
+      const hasSupervision = !!record.supervision;
+      const hasState = !!record.state;
+
+      // Calculate confidence
+      const factors = [hasType, hasRecency, hasSupervision, hasState].filter(Boolean).length;
+
+      if (factors >= 3) {
+        confidenceLevel = "high";
+        confidencePercent = 75;
+        const recencyText = record.most_recent === "<1 year" ? "recently"
+          : record.most_recent === "1-3 years" ? "a couple years ago"
+          : record.most_recent === "3-5 years" ? "several years ago"
+          : "some time ago";
+        briefScript = `I want to be upfront with you — I have a ${record.type || "conviction"} on my record from ${recencyText}. ${record.supervision === "completed" ? "I've completed all supervision requirements. " : ""}Since then, I've been focused on building my career in ${jobTitle.toLowerCase()}, and I'm ready to show what I bring to ${jobCompany}.`;
+        timingAdvice = `For ${jobTitle} roles, disclose after they've seen your qualifications — ideally during or just after the first interview, not on the application.`;
+        upgradeMessage = "Strong starting point. The full Disclosure Planner will prepare you for follow-up questions, identify legal protections in your state, and let you practice the conversation.";
+      } else if (factors >= 1) {
+        confidenceLevel = "medium";
+        confidencePercent = 45;
+        briefScript = `I want to be transparent — I have a ${record.type || "record"} in my background. Since then, I've been building skills and experience, and I'm committed to contributing to ${jobCompany}.`;
+        timingAdvice = "Disclose in person during the interview, never on paper. The Disclosure Planner can help you nail the timing.";
+        upgradeMessage = "Good start, but we can do better. The full Disclosure Planner will craft a strategy specific to this employer, including what they're likely thinking and how to handle follow-ups.";
+      } else {
+        confidencePercent = 15;
+        briefScript = null;
+        timingAdvice = null;
+        upgradeMessage = "We know you have a record but need more details to prepare a disclosure strategy. The Disclosure Planner will walk you through it safely and privately.";
+      }
+    }
+
+    const disclosureBrief = {
+      hasRecord,
+      confidenceLevel,
+      confidencePercent,
+      briefScript,
+      timingAdvice,
+      upgradeMessage,
+      targetJob: job.title,
+      targetCompany: job.company,
+    };
+
+    // ─── Log decision ─────────────────────────────────────────────────
+
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
-        contextPage: "resume-generate-full",
+        contextPage: "career-package-generate",
         modelProvider: "anthropic",
         modelId: "claude-sonnet-4-20250514",
         input: JSON.stringify({ jobTitle: job.title, jobCompany: job.company }).slice(0, 500),
-        explanation: `Generated full targeted resume for ${job.title} at ${job.company}.`,
+        explanation: `Generated career package (resume + cover letter + disclosure brief) for ${job.title} at ${job.company}.`,
         outputSummary: {
-          type: "full_resume_generation",
-          experienceCount: resume.experience.length,
-          skillsCount: resume.skills.length,
-          summaryLength: resume.summary.length,
+          type: "career_package",
+          resumeExperienceCount: resume.experience.length,
+          resumeSkillsCount: resume.skills.length,
+          coverLetterLength: coverLetterText.length,
+          disclosureConfidence: confidenceLevel,
         },
       });
     } catch (err) {
-      console.error("Decision log failed (resume-generate-full):", err);
+      console.error("Decision log failed (career-package):", err);
     }
 
-    return NextResponse.json({ resume });
+    return NextResponse.json({ resume, coverLetter: coverLetterText, disclosureBrief });
   } catch (error: any) {
-    console.error("Full resume generation error:", error);
+    console.error("Career package generation error:", error);
     return NextResponse.json(
-      { error: "Could not generate resume. Please try again." },
+      { error: "Could not generate career package. Please try again." },
       { status: 500 }
     );
   }

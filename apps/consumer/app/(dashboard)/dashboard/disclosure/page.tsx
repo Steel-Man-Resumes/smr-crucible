@@ -13,7 +13,8 @@
  * Loads Forge session data for personalized strengths + narrative context.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { CardSelect, FlowPage } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 
@@ -73,12 +74,16 @@ const DISCLOSURE_TIMING = [
 export default function DisclosurePlannerPageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <DisclosurePlannerPage />
+      <Suspense><DisclosurePlannerPage /></Suspense>
     </TierGate>
   );
 }
 
 function DisclosurePlannerPage() {
+  const searchParams = useSearchParams();
+  const [consentGiven, setConsentGiven] = useState(false);
+  const [showConsentGate, setShowConsentGate] = useState(false);
+  const [targetCompany, setTargetCompany] = useState("");
   const [step, setStep] = useState<PlannerStep>("assess");
   const [record, setRecord] = useState<RecordInfo>({
     type: "",
@@ -145,6 +150,14 @@ function DisclosurePlannerPage() {
       }
     } catch {}
   }, []);
+
+  // Load URL params (from dashboard CTA or disclosure brief)
+  useEffect(() => {
+    const company = searchParams.get("company");
+    const job = searchParams.get("job");
+    if (company) setTargetCompany(company);
+    if (job) setTargetJob(job);
+  }, [searchParams]);
 
   const hasForgeData = forge.strengths.length > 0 || !!forge.headline;
 
@@ -369,8 +382,114 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           />
         </div>
 
+        {/* Target company (from URL param) */}
+        {targetCompany && (
+          <div className="mb-6">
+            <label className="text-sm font-medium block mb-1">Target employer</label>
+            <input
+              value={targetCompany}
+              onChange={(e) => setTargetCompany(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+            />
+          </div>
+        )}
+
+        {/* Privacy consent gate — Tier 2 */}
+        {!consentGiven && !showConsentGate && (
+          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-8">
+            <h3 className="font-semibold text-sky-900 mb-2">
+              Your resume was built with public data only.
+            </h3>
+            <p className="text-sm text-sky-700 leading-relaxed mb-3">
+              To prepare you for what the employer will actually be thinking — even the
+              questions they can&apos;t legally ask — we need some details about your record.
+              This gives you a real strategy, not generic advice.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConsentGate(true)}
+                className="px-4 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 transition-colors"
+              >
+                I want a personalized plan
+              </button>
+              <button
+                onClick={() => setConsentGiven(true)}
+                className="px-4 py-2.5 text-sky-600 text-sm font-medium hover:text-sky-800 transition-colors"
+              >
+                Skip — use basic guidance
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showConsentGate && !consentGiven && (
+          <div className="bg-white rounded-2xl p-6 border-2 border-sky-300 mb-8">
+            <h3 className="font-bold text-foreground mb-4 text-lg">
+              Before we continue
+            </h3>
+
+            <div className="space-y-4 text-sm text-foreground leading-relaxed mb-6">
+              <div>
+                <p className="font-semibold mb-1">What we&apos;ll ask:</p>
+                <ul className="text-muted space-y-1 ml-4">
+                  <li>Type of conviction and approximate date</li>
+                  <li>Current supervision status</li>
+                  <li>State where it occurred</li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">What we do with it:</p>
+                <ul className="text-muted space-y-1 ml-4">
+                  <li>Craft a disclosure script specific to this employer</li>
+                  <li>Prepare you for follow-up questions they&apos;ll likely ask</li>
+                  <li>Identify legal protections in your state</li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1">What we NEVER do:</p>
+                <ul className="text-muted space-y-1 ml-4">
+                  <li>Put any of this on your resume or cover letter</li>
+                  <li>Share it with anyone — ever</li>
+                  <li>Store it longer than you want — delete anytime in Settings</li>
+                </ul>
+              </div>
+
+              <div className="bg-sage-50 rounded-xl p-4 border border-sage-200">
+                <p className="text-xs text-sage-700 leading-relaxed">
+                  Research shows candidates who prepare their disclosure are significantly
+                  more likely to receive a job offer compared to those who don&apos;t address
+                  it or improvise in the moment. (Bushway & Apel, 2012; Maruna, 2001)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setConsentGiven(true);
+                  setShowConsentGate(false);
+                }}
+                className="px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              >
+                I understand — let&apos;s prepare
+              </button>
+              <button
+                onClick={() => {
+                  setConsentGiven(true);
+                  setShowConsentGate(false);
+                }}
+                className="px-4 py-3 text-muted text-sm hover:text-foreground transition-colors min-h-touch"
+              >
+                Not now — basic guidance
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Record info (pre-filled from Forge if available) */}
-        <div className="space-y-4 mb-8">
+        <div className={`space-y-4 mb-8 ${!consentGiven ? "opacity-40 pointer-events-none" : ""}`}>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium block mb-1">

@@ -67,6 +67,21 @@ export function ResumeWorkspace() {
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+  // Career package (cover letter + disclosure brief)
+  const [packageTab, setPackageTab] = useState<"resume" | "cover-letter" | "disclosure">("resume");
+  const [coverLetterText, setCoverLetterText] = useState<string | null>(null);
+  const [disclosureBrief, setDisclosureBrief] = useState<{
+    hasRecord: boolean;
+    confidenceLevel: string;
+    confidencePercent: number;
+    briefScript: string | null;
+    timingAdvice: string | null;
+    upgradeMessage: string;
+    targetJob: string;
+    targetCompany: string;
+  } | null>(null);
+  const [coverLetterCopied, setCoverLetterCopied] = useState(false);
+
   // --- Delete resume ---
   async function deleteResume(id: string) {
     setDeletingId(id);
@@ -189,6 +204,8 @@ export function ResumeWorkspace() {
         let forgeOutput: any = null;
         let resumeText: string | undefined;
         let contactInfo: any = {};
+        let challenges: string[] = [];
+        let criminalRecord: any = null;
 
         // Try localStorage first
         try {
@@ -197,6 +214,8 @@ export function ResumeWorkspace() {
             const session = JSON.parse(stored);
             forgeOutput = session.forgeOutput;
             resumeText = session.resumeText;
+            challenges = session.challenges || [];
+            criminalRecord = session.criminalRecord || null;
           }
         } catch {}
 
@@ -209,25 +228,23 @@ export function ResumeWorkspace() {
               if (data) {
                 forgeOutput = data.forgeOutput;
                 resumeText = data.resumeText;
+                challenges = data.challenges || [];
+                criminalRecord = data.criminalRecord || null;
               }
             }
           } catch {}
         }
 
-        // Try to get contact from existing resume artifacts
-        if (savedResumes.length > 0) {
-          try {
-            const res = await fetch(`/api/artifacts/${savedResumes[0].id}`);
-            if (res.ok) {
-              const { data } = await res.json();
-              if (data?.content?.contact) {
-                contactInfo = data.content.contact;
-              }
-            }
-          } catch {}
-        }
+        // Try to get contact from profile API
+        try {
+          const profileRes = await fetch("/api/user/profile");
+          if (profileRes.ok) {
+            const { contact: profileContact } = await profileRes.json();
+            if (profileContact) contactInfo = profileContact;
+          }
+        } catch {}
 
-        // Call the full generation API
+        // Call the career package generation API
         const res = await fetch("/api/resume-generate-full", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -241,6 +258,8 @@ export function ResumeWorkspace() {
               requirements: job.requirements,
             },
             contact: contactInfo,
+            challenges,
+            criminalRecord,
           }),
         });
 
@@ -249,9 +268,47 @@ export function ResumeWorkspace() {
           throw new Error(errData.error || "Generation failed");
         }
 
-        const { resume } = await res.json();
+        const { resume, coverLetter, disclosureBrief: brief } = await res.json();
         setDoc(resume as ResumeDocument);
+        if (coverLetter) setCoverLetterText(coverLetter);
+        if (brief) setDisclosureBrief(brief);
+        setPackageTab("resume");
         setGeneratingFull(false);
+
+        // Auto-save cover letter as artifact
+        if (coverLetter) {
+          try {
+            await fetch("/api/artifacts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                type: "cover_letter",
+                targetContext: { targetJob: job.title, targetCompany: job.company, source: "job" },
+                content: { text: coverLetter, targetJob: job.title, targetCompany: job.company },
+                scaffoldLevel: 1.0,
+              }),
+            });
+          } catch {}
+        }
+
+        // Auto-create job application with "preparing" status
+        try {
+          await fetch("/api/applications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_title: job.title,
+              company: job.company,
+              location: job.location || "",
+              salary: job.salary || "",
+              description: job.description || "",
+              employment_type: job.employment_type || "",
+              source: "jsearch",
+              source_id: job.id || "",
+              status: "saved",
+            }),
+          });
+        } catch {}
       } catch (err: any) {
         console.error("Job-to-resume generation error:", err);
         setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
@@ -433,7 +490,7 @@ export function ResumeWorkspace() {
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Building Your Resume
+          Building Your Career Package
         </h1>
         <div className="bg-sage-50 rounded-2xl p-8 border border-sage-200 text-center mt-6">
           <div className="w-12 h-12 mx-auto mb-4 relative">
@@ -441,11 +498,11 @@ export function ResumeWorkspace() {
             <div className="absolute inset-0 border-3 border-sage-600 rounded-full border-t-transparent animate-spin" />
           </div>
           <p className="text-sm font-medium text-sage-700">
-            Generating a targeted resume for {doc.meta.targetJob || "this job"}
+            Building your package for {doc.meta.targetJob || "this job"}
             {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...
           </p>
           <p className="text-xs text-muted mt-2">
-            Using your background to match the job requirements. This takes 15-30 seconds.
+            Targeted resume + cover letter + disclosure brief. Takes 20-40 seconds.
           </p>
         </div>
       </div>
@@ -677,6 +734,124 @@ export function ResumeWorkspace() {
         </div>
       </div>
 
+      {/* Career Package tabs — shown when cover letter or disclosure brief exists */}
+      {(coverLetterText || disclosureBrief) && (
+        <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
+          <button
+            onClick={() => setPackageTab("resume")}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+              packageTab === "resume" ? "bg-white shadow-sm text-foreground" : "text-muted"
+            }`}
+          >
+            Resume
+          </button>
+          {coverLetterText && (
+            <button
+              onClick={() => setPackageTab("cover-letter")}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+                packageTab === "cover-letter" ? "bg-white shadow-sm text-foreground" : "text-muted"
+              }`}
+            >
+              Cover Letter
+            </button>
+          )}
+          {disclosureBrief?.hasRecord && (
+            <button
+              onClick={() => setPackageTab("disclosure")}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+                packageTab === "disclosure" ? "bg-white shadow-sm text-foreground" : "text-muted"
+              }`}
+            >
+              Disclosure
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Cover Letter panel */}
+      {packageTab === "cover-letter" && coverLetterText && (
+        <div className="bg-white rounded-2xl border border-border overflow-hidden mb-6">
+          <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
+            <h3 className="font-semibold text-sage-800 text-sm">
+              Cover Letter for {doc.meta.targetCompany || doc.meta.targetJob}
+            </h3>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(coverLetterText);
+                setCoverLetterCopied(true);
+                setTimeout(() => setCoverLetterCopied(false), 2000);
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+            >
+              {coverLetterCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <div className="p-6">
+            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+              {coverLetterText}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Disclosure Brief panel */}
+      {packageTab === "disclosure" && disclosureBrief?.hasRecord && (
+        <div className="space-y-4 mb-6">
+          {/* Confidence meter */}
+          <div className="bg-white rounded-2xl p-6 border border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-foreground">Disclosure Readiness</h3>
+              <span className={`text-sm font-medium ${
+                disclosureBrief.confidenceLevel === "high" ? "text-sage-600" :
+                disclosureBrief.confidenceLevel === "medium" ? "text-amber-600" : "text-red-500"
+              }`}>
+                {disclosureBrief.confidencePercent}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-3 mb-4">
+              <div
+                className={`rounded-full h-3 transition-all ${
+                  disclosureBrief.confidenceLevel === "high" ? "bg-sage-500" :
+                  disclosureBrief.confidenceLevel === "medium" ? "bg-amber-400" : "bg-red-400"
+                }`}
+                style={{ width: `${disclosureBrief.confidencePercent}%` }}
+              />
+            </div>
+
+            {disclosureBrief.briefScript && (
+              <div className="bg-sage-50 rounded-xl p-4 border border-sage-200 mb-4">
+                <p className="text-xs font-medium text-sage-600 uppercase tracking-wide mb-2">
+                  Starting script
+                </p>
+                <p className="text-sm text-foreground leading-relaxed italic">
+                  &ldquo;{disclosureBrief.briefScript}&rdquo;
+                </p>
+              </div>
+            )}
+
+            {disclosureBrief.timingAdvice && (
+              <p className="text-sm text-muted mb-4">
+                {disclosureBrief.timingAdvice}
+              </p>
+            )}
+
+            <p className="text-sm text-muted mb-4">
+              {disclosureBrief.upgradeMessage}
+            </p>
+
+            <a
+              href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
+              className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            >
+              Open Disclosure Planner for {disclosureBrief.targetCompany || "this role"}
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Resume editor — only shown on resume tab */}
+      {packageTab !== "resume" ? null : <>
+
       {/* Mobile toggle */}
       <div className="flex gap-1 mb-4 lg:hidden bg-gray-100 p-1 rounded-lg">
         <button
@@ -793,6 +968,7 @@ export function ResumeWorkspace() {
           </div>
         </div>
       </div>
+      </>}
     </div>
   );
 }

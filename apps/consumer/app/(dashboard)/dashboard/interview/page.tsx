@@ -8,7 +8,8 @@
  * Feedback on content, not judgment.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { CardSelect } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 
@@ -47,12 +48,13 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <InterviewPracticePage />
+      <Suspense><InterviewPracticePage /></Suspense>
     </TierGate>
   );
 }
 
 function InterviewPracticePage() {
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<InterviewStep>("setup");
   const [config, setConfig] = useState<InterviewConfig>({
     targetRole: "",
@@ -108,6 +110,22 @@ function InterviewPracticePage() {
       }
     } catch {}
   }, []);
+
+  // Load URL params (from dashboard CTA)
+  useEffect(() => {
+    const role = searchParams.get("role");
+    const company = searchParams.get("company");
+    if (role) {
+      setConfig((prev) => ({ ...prev, targetRole: role }));
+    }
+    // If company provided, append to targetRole for context
+    if (company && !config.targetRole.includes(" at ")) {
+      setConfig((prev) => ({
+        ...prev,
+        targetRole: prev.targetRole ? `${prev.targetRole} at ${company}` : role || "",
+      }));
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll chat
   useEffect(() => {
