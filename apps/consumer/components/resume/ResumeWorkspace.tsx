@@ -360,6 +360,8 @@ export function ResumeWorkspace() {
               targetContext: {
                 targetJob: doc.meta.targetJob,
                 targetCompany: doc.meta.targetCompany,
+                // Mark source so onboarding can distinguish forge-auto vs job-targeted
+                source: (coverLetterText || disclosureBrief) ? "job" : doc.meta.createdFrom || "fresh",
               },
               content,
               scaffoldLevel: 0.5,
