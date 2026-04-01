@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { buildFullContext } from "@/lib/context-library";
 
 export const maxDuration = 30;
 
@@ -42,10 +43,15 @@ async function handlePost(request: Request) {
     if (jobListingUrl) forgeContext.push(`Job listing: ${sanitizeForPrompt(jobListingUrl, 2000)}`);
     const forgeBlock = forgeContext.length > 0 ? `\n\n${forgeContext.join("\n")}` : "";
 
+    // Research context for resume suggestions
+    const resumeResearch = buildFullContext("resume", undefined, { targetJob, targetCompany });
+
     let prompt = "";
 
     if (action === "suggest_summary") {
-      prompt = `Write a 2-3 sentence professional summary for someone applying for a ${sanitizedTargetJob} position${targetCompany ? ` at ${sanitizedTargetCompany}` : ""}.
+      prompt = `${resumeResearch}
+
+Write a 2-3 sentence professional summary for someone applying for a ${sanitizedTargetJob} position${targetCompany ? ` at ${sanitizedTargetCompany}` : ""}.
 
 Their skills include: ${sanitizedSkills}.
 ${existingBullets?.length ? `They've described their experience as: ${sanitizedBullets}` : ""}${forgeBlock}

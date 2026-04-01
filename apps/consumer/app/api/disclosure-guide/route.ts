@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { buildFullContext, type UserContext } from "@/lib/context-library";
 
 export const maxDuration = 30;
 
@@ -46,7 +47,19 @@ async function handlePost(request: Request) {
       candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
     }
 
-    const prompt = `You are a reentry career specialist helping someone plan how to disclose their criminal record to employers.
+    // Build research-backed context
+    const userCtx: UserContext = {
+      strengths: forgeContext?.strengths || [],
+      skills: forgeContext?.skills || [],
+      narrative: forgeContext?.headline || undefined,
+      criminalRecord: record,
+      barriers: ["criminal_record"],
+    };
+    const disclosureResearch = buildFullContext("disclosure", userCtx, { targetJob });
+
+    const prompt = `${disclosureResearch}
+
+You are a reentry career specialist helping someone plan how to disclose their criminal record to employers.
 
 THEIR SITUATION:
 - Charge type: ${sanitizeForPrompt(record.type)}

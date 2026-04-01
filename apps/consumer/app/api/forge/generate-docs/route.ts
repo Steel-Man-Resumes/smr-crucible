@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 
 export const maxDuration = 120;
 
@@ -151,7 +152,16 @@ async function generateResume(input: GenerateDocsInput): Promise<string> {
   const narrative = input.narrative || {};
   const isExploring = input.readinessStage === "precontemplation";
 
-  const system = `You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
+  // Inject research-backed context
+  const researchCtx = buildFullContext("resume", userContextFromForge({
+    forgeOutput: { narrative, strengths, skills, career_paths: careerPaths },
+    readinessStage: input.readinessStage,
+    resumeText: input.resumeText,
+  }));
+
+  const system = `${researchCtx}
+
+You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
 
 YOUR JOB: Take whatever the user gives you — even a terrible, bare-bones resume — and produce a polished, compelling, achievement-driven resume that gets interviews.
 

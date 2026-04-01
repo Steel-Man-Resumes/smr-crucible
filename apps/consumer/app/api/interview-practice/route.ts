@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { buildFullContext, type UserContext } from "@/lib/context-library";
 
 export const maxDuration = 30;
 
@@ -48,7 +49,17 @@ async function handlePost(request: Request) {
     const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
     const sanitizedInterviewType = sanitizeForPrompt(config.interviewType, 100);
 
-    let systemPrompt = `You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
+    // Build research-backed context
+    const interviewUserCtx: UserContext = {
+      strengths: forgeContext?.strengths?.map((s: string) => ({ title: s, evidence: "" })) || [],
+      skills: forgeContext?.skills?.map((s: string) => ({ name: s })) || [],
+      narrative: forgeContext?.narrative || undefined,
+    };
+    const interviewResearch = buildFullContext("interview", interviewUserCtx, { targetJob: config.targetRole });
+
+    let systemPrompt = `${interviewResearch}
+
+You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
 
 INTERVIEW STYLE: ${sanitizedInterviewType}
 ${config.interviewType === "behavioral" ? "Ask STAR-method questions (Situation, Task, Action, Result). Press for specifics." : ""}

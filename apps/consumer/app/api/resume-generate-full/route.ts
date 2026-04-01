@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
 
 export const maxDuration = 120;
 
@@ -90,7 +91,15 @@ async function handlePost(request: Request) {
 
     // ─── Generate resume + cover letter in parallel ───────────────────
 
-    const resumePrompt = `Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON.
+    // Build research-backed context
+    const userCtx = userContextFromForge({ forgeOutput, resumeText, challenges, criminalRecord, readinessStage: forgeOutput?.readiness_stage });
+    const jobCtx: JobContext = { targetJob: job.title, targetCompany: job.company, jobDescription: job.description, requirements: job.requirements };
+    const resumeResearch = buildFullContext("resume", userCtx, jobCtx);
+    const coverLetterResearch = buildFullContext("cover_letter", userCtx, jobCtx);
+
+    const resumePrompt = `${resumeResearch}
+
+Generate a complete, targeted resume for this specific job posting. Return ONLY valid JSON.
 
 TARGET JOB:
 - Title: ${jobTitle}
@@ -147,7 +156,9 @@ ABSOLUTE RULES:
 11. Use years only (no months).
 12. Return ONLY the JSON object.`;
 
-    const coverLetterPrompt = `Write a targeted cover letter for a specific job application. Plain text only, no JSON.
+    const coverLetterPrompt = `${coverLetterResearch}
+
+Write a targeted cover letter for a specific job application. Plain text only, no JSON.
 
 APPLICANT: ${contactName} from ${contactCity}, ${contactState}
 TARGET: ${jobTitle} at ${jobCompany}
