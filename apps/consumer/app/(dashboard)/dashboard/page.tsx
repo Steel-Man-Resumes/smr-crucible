@@ -260,9 +260,9 @@ export default function DashboardPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* t.ROY welcome */}
-            <div className="bg-sage-600 rounded-2xl p-6 text-white">
+          <div className="max-w-lg mx-auto py-8">
+            {/* t.ROY — clear gate */}
+            <div className="bg-sage-600 rounded-2xl p-6 text-white mb-6">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-white">
@@ -272,38 +272,40 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-white/90 mb-1">t.ROY</p>
                   <p className="text-sm text-white/80 leading-relaxed">
-                    I&apos;m t.ROY. I help at every step. Right now, I&apos;d recommend starting with The Forge
-                    -- it takes about 10 minutes and gives me everything I need to build you a great resume.
+                    I&apos;m t.ROY. The Refinery is where the real work happens -- targeted
+                    resumes, interview practice, disclosure strategy, job matching. But I
+                    need your story first. The Forge takes about 10 minutes and gives me
+                    everything I need to help you win.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Explanation + CTA */}
-            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-border text-center">
               <h1 className="text-2xl font-bold text-foreground mb-3">
-                Welcome to The Refinery
+                Start with The Forge
               </h1>
               <p className="text-body text-muted mb-2">
-                The Refinery is where you build real resumes, practice interviews,
-                and prepare for employers. But first, we need your story.
+                The Forge analyzes your resume, identifies your strengths, maps career
+                paths, and builds your narrative. Everything in The Refinery is built
+                on that foundation.
               </p>
               <p className="text-sm text-muted mb-6">
-                The Forge (free, ~10 minutes) analyzes your resume, identifies your
-                strengths, maps career paths, and gives you a starting resume and cover
-                letter. Everything you build here starts from that foundation.
+                This isn&apos;t a resume template tool. It&apos;s a narrative engine that turns
+                your real story into career ammunition.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link
-                  href="/intro"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-                >
-                  Start The Forge
-                </Link>
-                <p className="text-xs text-muted self-center">
-                  Already completed The Forge? Your data syncs automatically when you sign in.
-                </p>
-              </div>
+              <Link
+                href="/intro"
+                className="inline-flex items-center justify-center px-8 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              >
+                Start The Forge
+              </Link>
+              <p className="text-xs text-muted mt-4">
+                Free. ~10 minutes. No account needed until you&apos;re ready to save.
+              </p>
+              <p className="text-xs text-muted mt-2">
+                Already completed The Forge on another device? Your data syncs automatically.
+              </p>
             </div>
           </div>
         )}
