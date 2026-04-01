@@ -238,8 +238,8 @@ export default function DashboardLayout({
         </div>
       </div>
 
-      {/* Main content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">{children}</main>
+      {/* Main content — pb-32 clears floating buttons on mobile */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pb-32 sm:pb-8">{children}</main>
 
       {/* Contact Troy — always unlocked for authenticated users */}
       <ContactTroyButton isAuthenticated />

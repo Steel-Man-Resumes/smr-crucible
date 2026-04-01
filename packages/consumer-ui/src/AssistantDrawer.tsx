@@ -57,7 +57,7 @@ export function AssistantDrawer({
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 px-5 py-3 bg-sage-600 text-white rounded-full shadow-lg hover:bg-sage-700 transition-colors min-h-touch"
+          className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-40 inline-flex items-center gap-2 px-5 py-3 bg-sage-600 text-white rounded-full shadow-lg hover:bg-sage-700 transition-colors min-h-touch"
           aria-label="Open assistant"
         >
           <svg

@@ -49,7 +49,7 @@ export function ContactTroyButton({
   }
 
   return (
-    <div className="fixed bottom-20 left-4 sm:bottom-6 sm:left-6 z-40">
+    <div className="fixed bottom-24 left-4 sm:bottom-6 sm:left-6 z-40">
       {/* Gate message tooltip */}
       {showGateMessage && (
         <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-white rounded-xl shadow-lg border border-border animate-fadeIn">

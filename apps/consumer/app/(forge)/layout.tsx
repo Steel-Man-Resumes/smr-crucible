@@ -96,7 +96,7 @@ export default function ForgeLayout({ children }: { children: ReactNode }) {
         </a>
       </div>
       <ForgeProgress />
-      <div className="min-h-screen">{children}</div>
+      <div className="min-h-screen pb-32 sm:pb-8">{children}</div>
 
       {/* Contact Troy — engagement-gated */}
       <ForgeContactTroy />
