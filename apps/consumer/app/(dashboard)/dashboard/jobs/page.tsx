@@ -11,6 +11,8 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { TierGate } from "@/components/TierGate";
+import { GhostGuide } from "@crucible/consumer-ui";
+import { getOpusMessage } from "@/lib/opus-messages";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -311,6 +313,7 @@ function JobBoardPage() {
       <h1 className="text-2xl font-bold text-foreground mb-2">
         Job Board
       </h1>
+      <GhostGuide message={getOpusMessage("jobs")} pageId="jobs" />
       <p className="text-body text-muted mb-6">
         Real job listings updated daily. Fair-chance employers highlighted.
         Everything stays right here in your dashboard.

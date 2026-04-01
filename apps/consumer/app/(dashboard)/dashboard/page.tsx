@@ -260,21 +260,51 @@ export default function DashboardPage() {
             )}
           </div>
         ) : (
-          <div className="bg-sage-50 rounded-2xl p-6 sm:p-8 border border-sage-200">
-            <h1 className="text-2xl font-bold text-foreground mb-2">
-              Welcome to The Refinery
-            </h1>
-            <p className="text-body text-muted mb-4">
-              This is where you build real resumes, find jobs, and prepare for interviews.
-            </p>
-            {onboarding.state === "needs_resume" && (
-              <Link
-                href="/dashboard/jobs"
-                className="inline-flex items-center px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-              >
-                Find a Job to Apply For
-              </Link>
-            )}
+          <div className="space-y-6">
+            {/* t.ROY welcome */}
+            <div className="bg-sage-600 rounded-2xl p-6 text-white">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-white">
+                    <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white/90 mb-1">t.ROY</p>
+                  <p className="text-sm text-white/80 leading-relaxed">
+                    I&apos;m t.ROY. I help at every step. Right now, I&apos;d recommend starting with The Forge
+                    -- it takes about 10 minutes and gives me everything I need to build you a great resume.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanation + CTA */}
+            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+              <h1 className="text-2xl font-bold text-foreground mb-3">
+                Welcome to The Refinery
+              </h1>
+              <p className="text-body text-muted mb-2">
+                The Refinery is where you build real resumes, practice interviews,
+                and prepare for employers. But first, we need your story.
+              </p>
+              <p className="text-sm text-muted mb-6">
+                The Forge (free, ~10 minutes) analyzes your resume, identifies your
+                strengths, maps career paths, and gives you a starting resume and cover
+                letter. Everything you build here starts from that foundation.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  href="/intro"
+                  className="inline-flex items-center justify-center px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                >
+                  Start The Forge
+                </Link>
+                <p className="text-xs text-muted self-center">
+                  Already completed The Forge? Your data syncs automatically when you sign in.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </section>

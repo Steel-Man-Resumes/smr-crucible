@@ -15,8 +15,9 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CardSelect, FlowPage } from "@crucible/consumer-ui";
+import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { getOpusMessage } from "@/lib/opus-messages";
 
 type PlannerStep = "assess" | "plan" | "rehearse";
 
@@ -303,6 +304,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         <h1 className="text-2xl font-bold text-foreground mb-2">
           Disclosure Planner
         </h1>
+        <GhostGuide message={getOpusMessage("disclosure")} pageId="disclosure" />
         <p className="text-body text-muted mb-2">
           Knowing when and how to talk about your record makes all the
           difference. Let&apos;s build a plan together.

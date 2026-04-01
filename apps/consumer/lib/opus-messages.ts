@@ -9,6 +9,26 @@
 type Audience = "client" | "partner" | "observer";
 
 const CLIENT_MESSAGES: Record<string, string> = {
+  // Refinery pages
+  dashboard:
+    "Your Forge results are loaded. Find a job you like and I'll build your resume for it.",
+  "dashboard-no-forge":
+    "I'm t.ROY. Start with The Forge -- 10 minutes, and I'll have everything I need to build you a great resume.",
+  "resume-builder":
+    "Every bullet needs a number. Focus on what you accomplished, not what you were assigned. I'll help.",
+  jobs:
+    "Fair-chance employers are highlighted first. They're not doing you a favor -- they know the value. Find one that fits.",
+  disclosure:
+    "Most people skip this. The ones who don't get the job. Let's prepare what to say.",
+  interview:
+    "Practice doesn't make perfect. It makes confident. Each session builds real skill.",
+  resources:
+    "I've matched resources to your specific situation. Start with the ones marked most relevant.",
+  applications:
+    "Track every job from saved to offered. Each step has tools to help you prepare.",
+  progress:
+    "This is how far you've come. Every session, every resume, every practice run counts.",
+  // Forge pages
   rush:
     "Paste your resume and tell me the job. I'll rewrite it fast — no fluff, just your real experience sharpened for that specific role.",
   welcome:
@@ -47,6 +67,16 @@ const DEMO_MESSAGES: Record<string, string> = {
 };
 
 const PARTNER_MESSAGES: Record<string, string> = {
+  dashboard:
+    "The Refinery is where persistent career work happens. Clients build targeted resumes, practice interviews, and plan disclosure strategies. Each tool connects to the next.",
+  "resume-builder":
+    "The Resume Builder scaffolds from Forge data. CAR-format bullets with quantified achievements. Fading scaffold tracks iteration number for each user.",
+  jobs:
+    "Real job listings from JSearch API. Fair-chance employers highlighted via known employer list + AI enrichment. 6-hour cache prevents API abuse.",
+  disclosure:
+    "Two-tier system: basic guidance from public data, personalized strategy after consent gate. Research-backed (Bushway & Apel, 2012; Maruna, 2001).",
+  interview:
+    "AI mock interviews adapted to role, industry, and disclosure needs. Bandura's mastery experience framework -- practice builds genuine confidence.",
   rush:
     "Rush Mode is for urgent situations — interview tomorrow, application due tonight. One page, paste + target job, rewritten resume in 60 seconds. Same integrity rules as the full Forge. Designed as an on-ramp to deeper engagement.",
   welcome:
@@ -66,6 +96,16 @@ const PARTNER_MESSAGES: Record<string, string> = {
 };
 
 const OBSERVER_MESSAGES: Record<string, string> = {
+  dashboard:
+    "The Refinery implements persistent scaffolded career services (Wood, Bruner, Ross, 1976). Progressive unlock ensures users build skills before advancing. Each tool's output feeds the next.",
+  "resume-builder":
+    "TORI-competitive resume generation with research-backed prompts. Generative identity framing (Maruna, 2001) transforms duties into achievements. Multi-level detection adapts output to user sophistication.",
+  jobs:
+    "Fair-chance employer matching uses JSearch API with AI enrichment. Ban-the-box compliance checking, WOTC tax credit awareness, and second-chance employer database.",
+  disclosure:
+    "Two-tier disclosure coaching. Tier 1: public data only. Tier 2: consent-gated private info. Grounded in Bushway & Apel (2012) timing research and Maruna's agency framework.",
+  interview:
+    "Mock interviews implement Bandura's self-efficacy (1977) via mastery experience. Disclosure rehearsal integrated at exchange 3-4. Process praise feedback (Dweck, 2006).",
   rush:
     "Rush Mode demonstrates the crucible principle at speed: AI enhances what's real, never fabricates. Same ethical constraints as the full pipeline — only facts from the original resume. Designed as a low-friction entry point that funnels into the full Forge flow.",
   welcome:

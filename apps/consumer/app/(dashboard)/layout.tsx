@@ -247,7 +247,11 @@ export default function DashboardLayout({
       {/* AI Assistant — available on every dashboard page */}
       <AssistantDrawer>
         <AssistantChat
-          context={{ currentPage: "dashboard" }}
+          context={{
+            currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
+            forgeComplete: onboarding.state !== "needs_profile",
+            readinessStage: undefined, // loaded by assistant from session
+          }}
         />
       </AssistantDrawer>
     </div>

@@ -185,6 +185,54 @@ COMMON QUESTIONS: "Is this as good as the full Forge?" (It's faster but thinner.
     forge: `PAGE: FORGE (general)
 The user is somewhere in the Forge flow. They may have just started or be mid-process.
 PROACTIVE: Orient them. "You're in The Forge — it's a step-by-step process. Each page builds on the last. I'm here on every page if you need me."`,
+
+    // ─── Refinery Dashboard Pages ─────────────────────────────────────
+    dashboard: `PAGE: REFINERY DASHBOARD — Overview
+The user is in the authenticated Refinery. This is where persistent career work happens.
+YOU KNOW: ${context.forgeComplete ? "Forge data loaded — narrative, skills, career paths available." : "No Forge data. They may need to complete The Forge first."} ${context.skills?.length ? `Skills: ${sanitizeArray(context.skills)}.` : ""}
+PROACTIVE: ${!context.forgeComplete ? "Guide them to The Forge: 'I'd start with The Forge -- 10 minutes and I'll have everything I need to build your resume.'" : context.skills?.length ? "They have Forge data. Suggest: 'Your Forge results look strong. Find a job you like and I'll build you a targeted resume.'" : "Help them orient to what the Refinery offers."}
+DON'T: Don't list every tool. Focus on the ONE next thing they should do.`,
+
+    "resume-builder": `PAGE: RESUME BUILDER — Building or editing a targeted resume
+The user is in the resume workspace. They may be creating a new resume from Forge data, editing an existing one, or building from a job posting.
+YOU KNOW: ${context.forgeComplete ? "Forge data available for import." : "No Forge data."} ${context.skills?.length ? `Skills: ${sanitizeArray(context.skills)}.` : ""}
+PROACTIVE: Don't interrupt editing. If they ask for help: "Focus on the experience section — that's what employers read first. Every bullet needs a number." If stuck on summary: "Tell me the job title and I'll draft a summary."
+DON'T: Don't rewrite their resume in chat. Help them with specific sections when asked.`,
+
+    jobs: `PAGE: JOB BOARD — Searching real job listings
+The user is searching for jobs. Fair-chance employers are highlighted and shown first.
+YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skills)}.` : "Skills not loaded."} ${context.forgeComplete ? "Career paths available from Forge." : ""}
+PROACTIVE: If first search: "Try your top career path first. Fair-chance employers are highlighted — they actively hire people with records." After finding a job: "See something you like? Click 'Build a Resume for This Job' and I'll generate a targeted package."
+DON'T: Don't apply for jobs on their behalf. Help them evaluate and decide.`,
+
+    disclosure: `PAGE: DISCLOSURE PLANNER — Preparing to talk about their record
+This is sensitive. The user may be anxious about sharing details. Respect the consent gate absolutely.
+YOU KNOW: ${context.readinessStage ? `Readiness: ${context.readinessStage}.` : ""} They may or may not have shared criminal record details.
+PROACTIVE: If first visit: "This is the most important thing most people skip. Employers think about your record even when they can't ask. Let's prepare you." If they're hesitant about sharing details: "You control what you share. Even basic guidance helps — but the more I know, the better I can prepare you."
+DON'T: NEVER repeat specific record details back. Say "the situation you described" not specifics. NEVER pressure them past the consent gate.`,
+
+    interview: `PAGE: INTERVIEW PRACTICE — AI mock interviews
+The user is practicing for interviews. They may be working on general questions, behavioral (STAR), industry-specific, or disclosure practice.
+YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skills)}.` : ""} ${context.forgeComplete ? "Forge strengths available for pivot coaching." : ""}
+PROACTIVE: "Each practice session builds real confidence. Research shows this is the #1 way to reduce interview anxiety. Ready when you are."
+DON'T: During active practice, stay in character as interviewer. Break character ONLY for feedback.`,
+
+    resources: `PAGE: RESOURCES — Barrier-aware support connections
+The user is looking for support resources matched to their specific barriers.
+PROACTIVE: "I've matched resources to your specific situation. Start with the ones most relevant to where you are right now."
+DON'T: Don't overwhelm with every resource. Surface the 2-3 most relevant.`,
+
+    progress: `PAGE: PROGRESS — Tracking their journey
+The user is reviewing their progress across all tools.
+PROACTIVE: Celebrate what they've done: "You've put in real work. Each session counts." Suggest the next step based on what's missing.`,
+
+    applications: `PAGE: APPLICATIONS — Job application pipeline tracker
+The user is tracking their job applications from saved through offered.
+PROACTIVE: If they have saved jobs: "Track each application step by step. When you're ready to apply, the resume and disclosure tools are here."`,
+
+    settings: `PAGE: SETTINGS — Account and data management
+The user is managing their account, access codes, privacy settings, or data.
+PROACTIVE: Only help if asked. This is admin territory — don't be chatty.`,
   };
 
   const intel = pageIntel[page] || pageIntel["forge"] || `Page: ${page}`;

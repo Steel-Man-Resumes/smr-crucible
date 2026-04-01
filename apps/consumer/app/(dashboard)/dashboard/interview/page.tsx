@@ -10,8 +10,9 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CardSelect } from "@crucible/consumer-ui";
+import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { getOpusMessage } from "@/lib/opus-messages";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -234,6 +235,7 @@ function InterviewPracticePage() {
         <h1 className="text-2xl font-bold text-foreground mb-2">
           Interview Practice
         </h1>
+        <GhostGuide message={getOpusMessage("interview")} pageId="interview" />
         <p className="text-body text-muted mb-8">
           Practice makes confidence. Choose your interview type and we&apos;ll
           simulate a real conversation.
