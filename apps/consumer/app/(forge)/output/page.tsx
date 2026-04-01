@@ -57,6 +57,7 @@ interface ForgeOutput {
     reflection?: string;
     strengths?: Strength[];
   };
+  readiness_stage?: string;
   strengths?: Strength[];
   skills?: Skill[];
   barriers?: Barrier[];
@@ -65,12 +66,73 @@ interface ForgeOutput {
 
 type DocGenState = "idle" | "generating" | "done" | "error";
 
+/** Readiness-aware messaging for the output page */
+const READINESS_CONFIG: Record<string, {
+  docsHeading: string;
+  docsSubtext: string;
+  refineryHeading: string;
+  refineryBody: string;
+  refineryCta: string;
+  refinerySubtext: string;
+  careersHeading: string;
+  strengthsHeading: string;
+  reflectionLabel: string;
+}> = {
+  precontemplation: {
+    docsHeading: "Your Resume Draft",
+    docsSubtext: "This is a starting point. When you are ready to polish it, The Refinery has tools built for that.",
+    refineryHeading: "This is yours whenever you need it",
+    refineryBody: "Create a free account to save your results. No pressure, no timeline. When you are ready to take the next step, everything will be here.",
+    refineryCta: "Save My Results",
+    refinerySubtext: "Free. No credit card. Come back anytime.",
+    careersHeading: "Paths Worth Knowing About",
+    strengthsHeading: "What You Bring",
+    reflectionLabel: "A note from t.ROY",
+  },
+  contemplation: {
+    docsHeading: "Your Resume Draft",
+    docsSubtext: "A solid starting point. The Refinery can help you sharpen it for specific jobs when you are ready.",
+    refineryHeading: "Ready to keep building?",
+    refineryBody: "Save your results and get access to The Refinery, where you can target specific jobs, practice interviews, and plan your disclosure strategy.",
+    refineryCta: "Save & Explore The Refinery",
+    refinerySubtext: "Free. No credit card. No catch.",
+    careersHeading: "Career Paths to Consider",
+    strengthsHeading: "Your Strengths",
+    reflectionLabel: "A note from t.ROY",
+  },
+  preparation: {
+    docsHeading: "Your Documents",
+    docsSubtext: "Resume and cover letter ready to customize. Replace [Company Name] and [Hiring Manager] before sending.",
+    refineryHeading: "Take the next step",
+    refineryBody: "Save your results and unlock The Refinery: targeted resume versions, interview practice, disclosure planning, and a job board filtered for fair-chance employers.",
+    refineryCta: "Continue to The Refinery",
+    refinerySubtext: "Free. No credit card. Your results carry over.",
+    careersHeading: "Career Paths That Fit",
+    strengthsHeading: "Your Strengths",
+    reflectionLabel: "A reflection",
+  },
+  action: {
+    docsHeading: "Your Documents",
+    docsSubtext: "Download, customize, and send. Replace [Company Name] and [Hiring Manager] with the real employer.",
+    refineryHeading: "Get 10x more in The Refinery",
+    refineryBody: "Your Forge results are the foundation. The Refinery gives you targeted resume versions for each job, AI interview practice, disclosure strategy for your specific record, and a fair-chance job board.",
+    refineryCta: "Start Using The Refinery",
+    refinerySubtext: "Free. No credit card. Built for exactly where you are right now.",
+    careersHeading: "Career Paths That Fit",
+    strengthsHeading: "Your Competitive Advantages",
+    reflectionLabel: "A reflection",
+  },
+};
+
 export default function OutputPage() {
   const router = useRouter();
   const { session } = useForgeSession();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
+
+  const readiness = output.readiness_stage || session.readinessStage || "preparation";
+  const rc = READINESS_CONFIG[readiness] || READINESS_CONFIG.preparation;
 
   const narrative = output.narrative || {};
   const strengths = output.strengths || narrative.strengths || [];
@@ -87,6 +149,13 @@ export default function OutputPage() {
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
+  const [copied, setCopied] = useState<string>("");
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 2000);
+  };
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -109,6 +178,7 @@ export default function OutputPage() {
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           preferences: session.preferences,
+          readinessStage: session.readinessStage,
         }),
       });
 
@@ -208,6 +278,28 @@ export default function OutputPage() {
         </div>
       )}
 
+      {/* Section jump nav */}
+      <nav className="flex flex-wrap gap-2 justify-center mb-10" aria-label="Jump to section">
+        {strengths.length > 0 && (
+          <a href="#strengths" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+            {rc.strengthsHeading}
+          </a>
+        )}
+        {skills.length > 0 && (
+          <a href="#skills" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+            Skills
+          </a>
+        )}
+        {careerPaths.length > 0 && (
+          <a href="#careers" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+            {rc.careersHeading}
+          </a>
+        )}
+        <a href="#documents" className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors">
+          {rc.docsHeading}
+        </a>
+      </nav>
+
       {/* Header / Narrative */}
       <section className="mb-12 text-center">
         <h1 className="text-3xl font-bold text-foreground mb-4">
@@ -227,9 +319,9 @@ export default function OutputPage() {
 
       {/* Strengths */}
       {strengths.length > 0 && (
-        <section className="mb-10">
+        <section id="strengths" className="mb-10 scroll-mt-20">
           <h2 className="text-xl font-bold text-foreground mb-4">
-            Your Strengths
+            {rc.strengthsHeading}
           </h2>
           <div className="space-y-3">
             {strengths.map((s, i) => (
@@ -247,7 +339,7 @@ export default function OutputPage() {
 
       {/* Skills */}
       {skills.length > 0 && (
-        <section className="mb-10">
+        <section id="skills" className="mb-10 scroll-mt-20">
           <h2 className="text-xl font-bold text-foreground mb-4">
             Skills We Found
           </h2>
@@ -286,7 +378,7 @@ export default function OutputPage() {
       {barriers.length > 0 && (
         <section className="mb-10">
           <h2 className="text-xl font-bold text-foreground mb-4">
-            Your Hurdles — and What Can Help
+            Your Hurdles, and What Can Help
           </h2>
           <div className="space-y-4">
             {barriers.map((b, i) => (
@@ -333,9 +425,9 @@ export default function OutputPage() {
 
       {/* Career Paths */}
       {careerPaths.length > 0 && (
-        <section className="mb-10">
+        <section id="careers" className="mb-10 scroll-mt-20">
           <h2 className="text-xl font-bold text-foreground mb-4">
-            Career Paths That Fit
+            {rc.careersHeading}
           </h2>
           <div className="space-y-4">
             {careerPaths.map((cp, i) => (
@@ -380,9 +472,9 @@ export default function OutputPage() {
       )}
 
       {/* Your Documents */}
-      <section className="mb-10">
+      <section id="documents" className="mb-10 scroll-mt-20">
         <h2 className="text-xl font-bold text-foreground mb-4">
-          Your Documents
+          {rc.docsHeading}
         </h2>
 
         {docState === "generating" && (
@@ -426,12 +518,10 @@ export default function OutputPage() {
                   </h3>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(resumeText);
-                      }}
+                      onClick={() => handleCopy(resumeText, "resume")}
                       className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
                     >
-                      Copy
+                      {copied === "resume" ? "Copied!" : "Copy"}
                     </button>
                     <button
                       onClick={() => handleDownload("resume")}
@@ -461,12 +551,10 @@ export default function OutputPage() {
                   </h3>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(coverLetterText);
-                      }}
+                      onClick={() => handleCopy(coverLetterText, "cover")}
                       className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
                     >
-                      Copy
+                      {copied === "cover" ? "Copied!" : "Copy"}
                     </button>
                     <button
                       onClick={() => handleDownload("cover_letter")}
@@ -488,8 +576,7 @@ export default function OutputPage() {
             )}
 
             <p className="text-xs text-muted text-center mt-2">
-              Tip: Replace [Company Name] and [Hiring Manager] in the cover
-              letter with the actual employer before sending.
+              {rc.docsSubtext}
             </p>
           </div>
         )}
@@ -530,33 +617,30 @@ export default function OutputPage() {
             Download Analysis
           </button>
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => router.push("/login?from=forge")}
             className="flex-1 px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
           >
-            Save & Continue to The Refinery
+            {rc.refineryCta}
           </button>
         </div>
       </section>
 
-      {/* Post-value account creation — not pressure, value-based */}
+      {/* Post-value account creation -- readiness-aware CTA */}
       <section className="bg-sage-50 rounded-2xl p-6 border border-sage-200 text-center">
         <h3 className="font-semibold text-foreground mb-2">
-          Want to keep building?
+          {rc.refineryHeading}
         </h3>
         <p className="text-sm text-muted mb-4 max-w-md mx-auto">
-          Create a free account to save your results and access The Refinery —
-          where you build targeted resumes, practice interviews, and plan your
-          next move.
+          {rc.refineryBody}
         </p>
         <button
-          onClick={() => router.push("/login")}
+          onClick={() => router.push("/login?from=forge")}
           className="px-8 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
         >
-          Create Free Account
+          {rc.refineryCta}
         </button>
         <p className="text-xs text-muted mt-3">
-          It&apos;s all free. No credit card. No catch. Your results stay
-          available either way.
+          {rc.refinerySubtext}
         </p>
       </section>
     </main>
@@ -569,7 +653,7 @@ function formatOutputAsText(
 ): string {
   const lines: string[] = [
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
-    "  THE FORGE \u2014 Your Story, Reforged",
+    "  THE FORGE -- Your Story, Reforged",
     "  Steel Man Resumes",
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
     "",
@@ -613,6 +697,6 @@ function formatOutputAsText(
     }
   }
 
-  lines.push("", "", "Generated by The Forge, powered by t.ROY \u2014 steelmanresumes.com");
+  lines.push("", "", "Generated by The Forge, powered by t.ROY -- steelmanresumes.com");
   return lines.join("\n");
 }

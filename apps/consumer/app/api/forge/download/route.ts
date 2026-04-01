@@ -1,13 +1,15 @@
 /**
- * Document Download API — Converts plain text to DOCX
+ * Document Download API — Converts plain text to TORI-standard DOCX
  *
- * Accepts document content + type (resume/cover_letter) + format (docx/txt).
- * Returns file as download with Content-Disposition: attachment.
- * No rate limiting (no AI calls, just formatting).
+ * Matches the Meg Sanger TORI reference:
+ * - Navy header block with white text (name, headline, contact)
+ * - Georgia headers + Arial body (8pt body, 9pt headers)
+ * - Tight margins (0.28" top/bot, 0.43" sides) for one-page fit
+ * - Bold metrics in bullets for visual anchoring
+ * - ATS-parseable text layer, no graphics
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import {
   Document,
   Packer,
@@ -16,13 +18,28 @@ import {
   AlignmentType,
   BorderStyle,
   HeadingLevel,
+  ShadingType,
 } from "docx";
 
 export const maxDuration = 30;
 
-const GOLD = "D4A84B";
-const DARK = "1a1a1a";
-const GRAY = "666666";
+// TORI color palette (matches Meg Sanger reference)
+const NAVY = "1B2A4A";       // dark navy — headers, section titles, accent
+const WHITE = "FFFFFF";       // white text on navy backgrounds
+const DARK = "1a1a1a";       // near-black body text
+const MED_GRAY = "333333";   // competency text
+const GRAY = "555555";        // secondary text
+const LIGHT_BLUE = "B8C9E0"; // headline accent on navy
+
+// Font sizes in half-points (docx spec)
+const NAME_SIZE = 36;       // 18pt
+const HEADLINE_SIZE = 16;   // 8pt
+const CONTACT_SIZE = 16;    // 8pt
+const SECTION_SIZE = 18;    // 9pt
+const BODY_SIZE = 16;       // 8pt
+const BULLET_SIZE = 16;     // 8pt
+const COMPETENCY_SIZE = 16; // 8pt
+const JOB_TITLE_SIZE = 17;  // 8.5pt
 
 interface DownloadInput {
   content: string;
@@ -31,11 +48,6 @@ interface DownloadInput {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
   try {
     const input: DownloadInput = await request.json();
 
@@ -62,7 +74,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build DOCX
     const buffer =
       input.type === "resume"
         ? await buildResumeDocx(input.content)
@@ -89,43 +100,118 @@ export async function POST(request: Request) {
   }
 }
 
-// --- Resume DOCX Builder ---
+// --- Resume DOCX Builder (TORI Standard) ---
 
 async function buildResumeDocx(text: string): Promise<Buffer> {
   const lines = text.split("\n");
   const children: Paragraph[] = [];
+  let lineIndex = 0;
+  let headerDone = false;
+
+  // Parse header block: name, headline, contact (first 3 meaningful lines)
+  const headerLines: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) {
+      if (headerLines.length > 0) break; // end of header block
+      continue;
+    }
+    if (isSectionHeader(t)) break; // hit first section
+    if (headerLines.length < 4) {
+      headerLines.push(t);
+    } else {
+      break;
+    }
+  }
+
+  // Build navy header block
+  const nameLine = headerLines[0] || "";
+  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
+  const contactLine = headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("\u2022")) || headerLines[1] || "";
+
+  // Name (white on navy, centered, 18pt Georgia bold)
+  if (nameLine) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 20 },
+        shading: { type: ShadingType.CLEAR, fill: NAVY },
+        children: [
+          new TextRun({
+            text: nameLine.toUpperCase(),
+            bold: true,
+            size: NAME_SIZE,
+            font: "Georgia",
+            color: WHITE,
+          }),
+        ],
+      })
+    );
+  }
+
+  // Headline (light blue on navy, centered, 8pt Arial)
+  if (headlineLine && headlineLine !== contactLine) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 20 },
+        shading: { type: ShadingType.CLEAR, fill: NAVY },
+        children: [
+          new TextRun({
+            text: headlineLine,
+            size: HEADLINE_SIZE,
+            font: "Arial",
+            color: LIGHT_BLUE,
+          }),
+        ],
+      })
+    );
+  }
+
+  // Contact (white on navy, centered, 8pt Arial)
+  if (contactLine) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        shading: { type: ShadingType.CLEAR, fill: NAVY },
+        children: [
+          new TextRun({
+            text: contactLine,
+            size: CONTACT_SIZE,
+            font: "Arial",
+            color: WHITE,
+          }),
+        ],
+      })
+    );
+  }
+
+  // Skip header lines in the main loop
+  const headerSet = new Set(headerLines.map((l) => l.trim()));
+  let pastHeader = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
+
+    // Skip header lines (already rendered above)
+    if (!pastHeader) {
+      if (headerSet.has(trimmed) || !trimmed) {
+        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
+        if (headerSet.size === 0) pastHeader = true;
+        continue;
+      }
+      pastHeader = true;
+    }
+
     if (!trimmed) {
-      children.push(new Paragraph({ spacing: { after: 80 } }));
+      children.push(new Paragraph({ spacing: { after: 30 } }));
       continue;
     }
 
-    // Section headers (ALL CAPS lines or lines ending with common section headers)
+    // Section headers
     if (isSectionHeader(trimmed)) {
       children.push(sectionHeader(trimmed));
-      continue;
-    }
-
-    // First non-empty line is likely the name
-    if (children.length === 0) {
-      children.push(
-        new Paragraph({
-          heading: HeadingLevel.TITLE,
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 80 },
-          children: [
-            new TextRun({
-              text: trimmed.toUpperCase(),
-              bold: true,
-              size: 44,
-              font: "Calibri",
-              color: DARK,
-            }),
-          ],
-        })
-      );
       continue;
     }
 
@@ -136,18 +222,19 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       continue;
     }
 
-    // Skill lines with | separators (core competencies)
-    if (trimmed.includes(" | ") && !trimmed.includes(":")) {
+    // Skill/competency lines (3+ pipe separators or bullet separators)
+    if ((trimmed.includes(" | ") || trimmed.includes(" \u2022 ")) && trimmed.split(/[|•]/).length >= 3) {
       children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
-          spacing: { after: 100 },
+          spacing: { after: 40 },
           children: [
             new TextRun({
               text: trimmed,
-              size: 21,
-              font: "Calibri",
-              color: DARK,
+              bold: true,
+              size: COMPETENCY_SIZE,
+              font: "Arial",
+              color: MED_GRAY,
             }),
           ],
         })
@@ -155,12 +242,33 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       continue;
     }
 
-    // Regular text
+    // Job title lines (TITLE | Company | Location | Dates)
+    if (trimmed.includes("|") && !trimmed.includes("@")) {
+      const parts = trimmed.split("|").map((p) => p.trim());
+      const runs: TextRun[] = [];
+      parts.forEach((part, idx) => {
+        if (idx === 0) {
+          runs.push(new TextRun({ text: part, bold: true, size: JOB_TITLE_SIZE, font: "Arial", color: DARK }));
+        } else {
+          runs.push(new TextRun({ text: "  |  ", size: JOB_TITLE_SIZE, font: "Arial", color: GRAY }));
+          runs.push(new TextRun({ text: part, size: JOB_TITLE_SIZE, font: "Arial", color: GRAY }));
+        }
+      });
+      children.push(
+        new Paragraph({
+          spacing: { before: 120, after: 30 },
+          children: runs,
+        })
+      );
+      continue;
+    }
+
+    // Regular text (summary paragraphs, education lines, etc.)
     children.push(
       new Paragraph({
-        spacing: { after: 100 },
+        spacing: { after: 50 },
         children: [
-          new TextRun({ text: trimmed, size: 22, font: "Calibri" }),
+          new TextRun({ text: trimmed, size: BODY_SIZE, font: "Arial", color: DARK }),
         ],
       })
     );
@@ -171,7 +279,13 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       {
         properties: {
           page: {
-            margin: { top: 576, right: 720, bottom: 576, left: 720 },
+            // TORI tight margins: 0.28" top/bot, 0.43" sides
+            margin: {
+              top: 403,   // 0.28" = 403 twips
+              right: 619,  // 0.43" = 619 twips
+              bottom: 403,
+              left: 619,
+            },
           },
         },
         children,
@@ -188,47 +302,53 @@ async function buildCoverLetterDocx(text: string): Promise<Buffer> {
   const children: Paragraph[] = [];
   const paragraphs = text.split(/\n\n+/);
 
-  for (let i = 0; i < paragraphs.length; i++) {
-    const para = paragraphs[i].trim();
-    if (!para) continue;
+  // Navy accent line at top
+  children.push(
+    new Paragraph({
+      spacing: { after: 200 },
+      border: {
+        bottom: {
+          color: NAVY,
+          size: 8,
+          style: BorderStyle.SINGLE,
+          space: 4,
+        },
+      },
+      children: [],
+    })
+  );
 
-    // First paragraph — if it looks like "Dear..." it's the greeting
-    if (para.startsWith("Dear ") || para.startsWith("To ")) {
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith("Dear ") || trimmed.startsWith("To ")) {
       children.push(
         new Paragraph({
-          spacing: { after: 200 },
+          spacing: { after: 160 },
           children: [
-            new TextRun({
-              text: para,
-              size: 22,
-              font: "Calibri",
-              color: DARK,
-            }),
+            new TextRun({ text: trimmed, size: 20, font: "Arial", color: DARK }),
           ],
         })
       );
       continue;
     }
 
-    // "Sincerely," or similar sign-off
-    if (
-      /^(sincerely|regards|best regards|respectfully|thank you),?$/i.test(
-        para.split("\n")[0].trim()
-      )
-    ) {
-      const signLines = para.split("\n");
+    if (/^(sincerely|regards|best regards|respectfully|thank you),?$/i.test(trimmed.split("\n")[0].trim())) {
+      const signLines = trimmed.split("\n");
       for (const sl of signLines) {
         const t = sl.trim();
         if (!t) continue;
         children.push(
           new Paragraph({
-            spacing: { before: t === signLines[0].trim() ? 200 : 0, after: 40 },
+            spacing: { before: t === signLines[0].trim() ? 160 : 0, after: 20 },
             children: [
               new TextRun({
                 text: t,
-                size: 22,
-                font: "Calibri",
+                size: 20,
+                font: "Arial",
                 bold: t !== signLines[0].trim(),
+                color: DARK,
               }),
             ],
           })
@@ -237,42 +357,26 @@ async function buildCoverLetterDocx(text: string): Promise<Buffer> {
       continue;
     }
 
-    // Body paragraphs
-    const subLines = para.split("\n");
-    const bodyText = subLines.map((l) => l.trim()).join(" ");
+    const bodyText = trimmed.split("\n").map((l) => l.trim()).join(" ");
     children.push(
       new Paragraph({
-        spacing: { after: 200 },
+        spacing: { after: 160 },
         children: [
-          new TextRun({ text: bodyText, size: 22, font: "Calibri" }),
+          new TextRun({ text: bodyText, size: 20, font: "Arial", color: DARK }),
         ],
       })
     );
   }
-
-  // Gold accent line at top
-  const accentLine = new Paragraph({
-    spacing: { after: 300 },
-    border: {
-      bottom: {
-        color: GOLD,
-        size: 8,
-        style: BorderStyle.SINGLE,
-        space: 4,
-      },
-    },
-    children: [],
-  });
 
   const doc = new Document({
     sections: [
       {
         properties: {
           page: {
-            margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
+            margin: { top: 864, right: 864, bottom: 864, left: 864 },
           },
         },
-        children: [accentLine, ...children],
+        children,
       },
     ],
   });
@@ -282,37 +386,28 @@ async function buildCoverLetterDocx(text: string): Promise<Buffer> {
 
 // --- Utilities ---
 
+const SECTION_HEADERS = new Set([
+  "PROFESSIONAL SUMMARY", "CAREER SUMMARY", "SUMMARY",
+  "CORE COMPETENCIES", "CORE SKILLS", "KEY QUALIFICATIONS", "AREAS OF EXPERTISE", "TECHNICAL SKILLS",
+  "PROFESSIONAL EXPERIENCE", "EXPERIENCE", "WORK HISTORY", "RELEVANT EXPERIENCE",
+  "EDUCATION", "EDUCATION & CREDENTIALS", "EDUCATION & CERTIFICATIONS",
+  "CERTIFICATIONS", "LICENSES & CERTIFICATIONS",
+  "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
+  "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
+]);
+
 function isSectionHeader(text: string): boolean {
-  const headers = [
-    "PROFESSIONAL SUMMARY",
-    "CORE COMPETENCIES",
-    "PROFESSIONAL EXPERIENCE",
-    "EDUCATION",
-    "CERTIFICATIONS",
-    "SKILLS",
-    "EXPERIENCE",
-    "WORK HISTORY",
-    "EDUCATION & CERTIFICATIONS",
-    "CORE SKILLS",
-    "KEY QUALIFICATIONS",
-    "AREAS OF EXPERTISE",
-    "TECHNICAL SKILLS",
-    "RELEVANT EXPERIENCE",
-    "MILITARY SERVICE",
-    "VOLUNTEER EXPERIENCE",
-  ];
   const upper = text.toUpperCase().replace(/[^A-Z\s&]/g, "").trim();
-  return headers.includes(upper);
+  return SECTION_HEADERS.has(upper);
 }
 
 function sectionHeader(text: string): Paragraph {
   return new Paragraph({
-    heading: HeadingLevel.HEADING_1,
-    spacing: { before: 300, after: 140 },
+    spacing: { before: 160, after: 60 },
     border: {
       bottom: {
-        color: GOLD,
-        size: 12,
+        color: NAVY,
+        size: 4,
         style: BorderStyle.SINGLE,
         space: 2,
       },
@@ -321,9 +416,9 @@ function sectionHeader(text: string): Paragraph {
       new TextRun({
         text: text.toUpperCase(),
         bold: true,
-        size: 26,
-        font: "Calibri",
-        color: GOLD,
+        size: SECTION_SIZE,
+        font: "Georgia",
+        color: NAVY,
       }),
     ],
   });
@@ -332,20 +427,20 @@ function sectionHeader(text: string): Paragraph {
 function createBulletParagraph(text: string): Paragraph {
   const parts = text.split(/(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi);
   const textRuns: TextRun[] = [
-    new TextRun({ text: "\u2022 ", size: 21, font: "Calibri" }),
+    new TextRun({ text: "\u2022  ", size: BULLET_SIZE, font: "Arial", color: NAVY }),
   ];
   for (const part of parts) {
     if (part && /\d/.test(part)) {
       textRuns.push(
-        new TextRun({ text: part, bold: true, size: 21, font: "Calibri" })
+        new TextRun({ text: part, bold: true, size: BULLET_SIZE, font: "Arial", color: DARK })
       );
     } else if (part) {
-      textRuns.push(new TextRun({ text: part, size: 21, font: "Calibri" }));
+      textRuns.push(new TextRun({ text: part, size: BULLET_SIZE, font: "Arial", color: DARK }));
     }
   }
   return new Paragraph({
-    spacing: { after: 80 },
-    indent: { left: 360 },
+    spacing: { after: 30 },
+    indent: { left: 280 },
     children: textRuns,
   });
 }

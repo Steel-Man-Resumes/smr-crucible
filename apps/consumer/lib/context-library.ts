@@ -11,6 +11,64 @@
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+// ─── User Level Detection ───────────────────────────────────────────────────
+
+export type UserLevel = "foundation" | "professional" | "executive";
+
+/**
+ * Detect user's level from Forge data. Determines language complexity,
+ * resume format, interview difficulty, and disclosure depth.
+ */
+export function detectUserLevel(forgeData: Record<string, any>): UserLevel {
+  const resumeText = (forgeData.resumeText || "").toLowerCase();
+  const resumeLength = resumeText.length;
+  const output = forgeData.forgeOutput || forgeData;
+  const skillCount = (output.skills || []).length;
+  const topSalary = output.career_paths?.[0]?.salary_range || "";
+
+  // Executive signals
+  const hasAdvancedEd = /doctorate|master'?s?|mba|jd|ph\.?d|m\.?d|esq\b|juris/i.test(resumeText);
+  const hasSeniorTitle = /director|vp|vice president|chief|cto|cfo|coo|ceo|partner|principal|senior manager/i.test(resumeText);
+  const highSalary = /[89]\d,?\d{3}|1\d{2},?\d{3}|\$[89]\d|100/i.test(topSalary);
+
+  if (hasAdvancedEd || hasSeniorTitle || (resumeLength > 3000 && highSalary)) {
+    return "executive";
+  }
+
+  // Professional signals
+  const hasDegree = /bachelor|associate|b\.?a\b|b\.?s\b|a\.?a\.?s|college|university/i.test(resumeText);
+  const hasMidTitle = /manager|supervisor|coordinator|specialist|analyst|lead|technician/i.test(resumeText);
+
+  if (hasDegree || hasMidTitle || resumeLength > 1500 || skillCount > 10) {
+    return "professional";
+  }
+
+  return "foundation";
+}
+
+const LEVEL_DIRECTIVES: Record<UserLevel, string> = {
+  foundation: `USER LEVEL: Foundation (entry-level, rebuilding, limited resume history)
+LANGUAGE: Write at a 6th grade reading level. Short sentences. No jargon.
+TONE: Warm, encouraging, patient. Explain everything. Heavy scaffolding.
+RESUME FORMAT: Functional format acceptable if chronological history is thin. Estimate metrics generously.
+INTERVIEW: General questions, slow pace, more encouragement. Build confidence.
+DISCLOSURE: Simple script, basic timing advice. Don't overwhelm.`,
+
+  professional: `USER LEVEL: Professional (mid-career, solid experience, some education)
+LANGUAGE: Professional level. Concise and direct.
+TONE: Confident peer. Don't over-explain basics.
+RESUME FORMAT: Chronological, real metrics, achievement-dense. Standard professional bar.
+INTERVIEW: Behavioral STAR, industry-specific questions, moderate challenge.
+DISCLOSURE: Employer-specific strategy with legal context.`,
+
+  executive: `USER LEVEL: Executive (senior, advanced degrees, leadership history)
+LANGUAGE: Executive level. Assume expertise. Strategic positioning.
+TONE: Colleague-to-colleague. No hand-holding.
+RESUME FORMAT: Achievement-dense, metrics-heavy, ATS + human optimization. Board-level impact framing.
+INTERVIEW: Executive presence, salary negotiation scenarios, panel interview prep.
+DISCLOSURE: Multi-stakeholder strategy, board-level framing, reputation management.`,
+};
+
 export type UseCase =
   | "resume"
   | "cover_letter"
@@ -22,6 +80,7 @@ export type UseCase =
 
 export interface UserContext {
   name?: string;
+  level?: UserLevel;
   readinessStage?: string;
   barriers?: string[];
   criminalRecord?: {
@@ -154,6 +213,10 @@ STAGES OF CHANGE (Prochaska & DiClemente, 1983):
 export function buildUserContext(user: UserContext): string {
   const parts: string[] = [];
 
+  if (user.level) {
+    parts.push(LEVEL_DIRECTIVES[user.level]);
+  }
+
   if (user.readinessStage) {
     parts.push(`USER READINESS: ${user.readinessStage} (Prochaska Stages of Change). Adapt tone and specificity accordingly.`);
   }
@@ -243,6 +306,7 @@ export function userContextFromForge(forgeData: Record<string, any>): UserContex
   const output = forgeData.forgeOutput || forgeData;
 
   return {
+    level: detectUserLevel(forgeData),
     readinessStage: forgeData.readinessStage || undefined,
     barriers: forgeData.challenges || undefined,
     criminalRecord: forgeData.criminalRecord || undefined,

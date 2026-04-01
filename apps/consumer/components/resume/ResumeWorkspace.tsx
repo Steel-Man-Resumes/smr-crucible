@@ -431,7 +431,31 @@ export function ResumeWorkspace() {
     }
   }
 
-  // --- Download ---
+  // --- Download DOCX ---
+  async function downloadDocx(type: "resume" | "cover_letter", content: string) {
+    try {
+      const res = await fetch("/api/forge/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, type, format: "docx" }),
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const jobSlug = (doc.meta.targetJob || "resume").replace(/\s+/g, "_");
+      a.download = type === "resume"
+        ? `${jobSlug}_Resume_SteelMan.docx`
+        : `${jobSlug}_CoverLetter_SteelMan.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("DOCX download error:", err);
+    }
+  }
+
+  // --- Download TXT ---
   function downloadResume() {
     const text = formatResumeDownload(doc);
     const blob = new Blob([text], { type: "text/plain" });
@@ -755,7 +779,7 @@ export function ResumeWorkspace() {
               Cover Letter
             </button>
           )}
-          {disclosureBrief?.hasRecord && (
+          {disclosureBrief && (
             <button
               onClick={() => setPackageTab("disclosure")}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -775,16 +799,24 @@ export function ResumeWorkspace() {
             <h3 className="font-semibold text-sage-800 text-sm">
               Cover Letter for {doc.meta.targetCompany || doc.meta.targetJob}
             </h3>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(coverLetterText);
-                setCoverLetterCopied(true);
-                setTimeout(() => setCoverLetterCopied(false), 2000);
-              }}
-              className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
-            >
-              {coverLetterCopied ? "Copied!" : "Copy"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(coverLetterText);
+                  setCoverLetterCopied(true);
+                  setTimeout(() => setCoverLetterCopied(false), 2000);
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+              >
+                {coverLetterCopied ? "Copied!" : "Copy"}
+              </button>
+              <button
+                onClick={() => downloadDocx("cover_letter", coverLetterText)}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors"
+              >
+                Download .docx
+              </button>
+            </div>
           </div>
           <div className="p-6">
             <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
@@ -795,8 +827,24 @@ export function ResumeWorkspace() {
       )}
 
       {/* Disclosure Brief panel */}
-      {packageTab === "disclosure" && disclosureBrief?.hasRecord && (
+      {packageTab === "disclosure" && disclosureBrief && (
         <div className="space-y-4 mb-6">
+          {!disclosureBrief.hasRecord && (
+            <div className="bg-white rounded-2xl p-6 border border-border text-center">
+              <h3 className="font-semibold text-foreground mb-2">Disclosure Planner</h3>
+              <p className="text-sm text-muted mb-4">
+                No criminal record was detected from your Forge session.
+                If you need help preparing a disclosure strategy, the full Disclosure Planner can help.
+              </p>
+              <a
+                href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
+                className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              >
+                Open Disclosure Planner
+              </a>
+            </div>
+          )}
+          {disclosureBrief.hasRecord && <>
           {/* Confidence meter */}
           <div className="bg-white rounded-2xl p-6 border border-border">
             <div className="flex items-center justify-between mb-3">
@@ -846,6 +894,7 @@ export function ResumeWorkspace() {
               Open Disclosure Planner for {disclosureBrief.targetCompany || "this role"}
             </a>
           </div>
+          </>}
         </div>
       )}
 
@@ -939,7 +988,7 @@ export function ResumeWorkspace() {
           </SectionWrapper>
 
           {/* Action bar */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-wrap gap-3 pt-2">
             <button
               onClick={() => save(false)}
               className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
@@ -947,10 +996,10 @@ export function ResumeWorkspace() {
               Save
             </button>
             <button
-              onClick={downloadResume}
-              className="px-5 py-3 bg-white border-2 border-border text-foreground rounded-xl font-medium hover:bg-gray-50 transition-colors min-h-touch"
+              onClick={() => downloadDocx("resume", formatResumeDownload(doc))}
+              className="px-5 py-3 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
             >
-              Download
+              Download .docx
             </button>
           </div>
         </div>
