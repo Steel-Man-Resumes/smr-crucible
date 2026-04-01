@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, FormEvent } from "react";
+import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 
 interface UsageData {
@@ -226,6 +227,9 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      {/* Account Info */}
+      <AccountSection />
 
       {/* Daily Usage */}
       <section className="mb-8">
@@ -555,6 +559,170 @@ function SetPasswordSection() {
             {status === "saving" ? "Saving..." : "Set Password"}
           </button>
         </form>
+      </div>
+    </section>
+  );
+}
+
+function AccountSection() {
+  const { data: session } = useSession();
+  const [contact, setContact] = useState<{
+    name: string; phone: string; email: string; city: string; state: string;
+  } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", phone: "", email: "", city: "", state: "" });
+
+  useEffect(() => {
+    fetch("/api/user/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.contact) {
+          setContact(data.contact);
+          setEditForm(data.contact);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) {
+        const { contact: updated } = await res.json();
+        setContact(updated);
+        setEditing(false);
+      }
+    } catch {} finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-lg font-bold text-foreground mb-4">Account</h2>
+      <div className="bg-white rounded-2xl p-5 border border-border">
+        {/* Auth email */}
+        <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+          <div>
+            <p className="text-xs text-muted uppercase tracking-wide">Signed in as</p>
+            <p className="text-sm font-medium text-foreground">{session?.user?.email || "—"}</p>
+          </div>
+          <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">
+            {(session?.user as any)?.tier || "client"}
+          </span>
+        </div>
+
+        {/* Resume contact info */}
+        {!editing ? (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted uppercase tracking-wide">Resume Contact Info</p>
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-sage-600 hover:text-sage-700 font-medium"
+              >
+                Edit
+              </button>
+            </div>
+            {contact ? (
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted">Name:</span> <span className="text-foreground">{contact.name || "—"}</span></div>
+                <div><span className="text-muted">Phone:</span> <span className="text-foreground">{contact.phone || "—"}</span></div>
+                <div><span className="text-muted">Email:</span> <span className="text-foreground">{contact.email || "—"}</span></div>
+                <div><span className="text-muted">Location:</span> <span className="text-foreground">{[contact.city, contact.state].filter(Boolean).join(", ") || "—"}</span></div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No contact info set. Complete your profile on the dashboard.</p>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-3">
+            <p className="text-xs text-muted uppercase tracking-wide mb-1">Edit Resume Contact Info</p>
+            <input
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              placeholder="Full name"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+            />
+            <input
+              value={editForm.phone}
+              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              placeholder="Phone"
+              type="tel"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+            />
+            <input
+              value={editForm.email}
+              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              placeholder="Resume email"
+              type="email"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={editForm.city}
+                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                placeholder="City"
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+              />
+              <input
+                value={editForm.state}
+                onChange={(e) => setEditForm({ ...editForm, state: e.target.value.toUpperCase() })}
+                placeholder="State"
+                maxLength={2}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors uppercase"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-sage-600 text-white rounded-lg text-sm font-medium hover:bg-sage-700 disabled:opacity-50 transition-colors"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditing(false); setEditForm(contact || { name: "", phone: "", email: "", city: "", state: "" }); }}
+                className="px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Sign-in methods */}
+      <div className="bg-white rounded-2xl p-5 border border-border mt-4">
+        <h3 className="font-semibold text-foreground mb-3">Sign-in Methods</h3>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between py-2 border-b border-border">
+            <div>
+              <p className="font-medium text-foreground">Email & Password</p>
+              <p className="text-xs text-muted">Sign in with your email and a password you set</p>
+            </div>
+            <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">Active</span>
+          </div>
+          <div className="flex items-center justify-between py-2 border-b border-border">
+            <div>
+              <p className="font-medium text-foreground">Magic Link</p>
+              <p className="text-xs text-muted">One-time sign-in link sent to your email. No password needed.</p>
+            </div>
+            <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">Available</span>
+          </div>
+          <p className="text-xs text-muted leading-relaxed pt-1">
+            Lost your device? Use the magic link option on the sign-in page to get back in.
+            You can set a new password anytime below.
+          </p>
+        </div>
       </div>
     </section>
   );

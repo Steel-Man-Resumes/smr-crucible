@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * Login / Create Account — Unified auth page
+ *
+ * Standard app sign-in pattern:
+ * 1. Email field first (always visible, auto-fills from browser)
+ * 2. Password field (for sign-in or account creation)
+ * 3. Magic link as backup ("Can't remember your password?")
+ * 4. From Forge: defaults to "Create Account" mode
+ */
+
 import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
@@ -12,152 +22,59 @@ export default function LoginPage() {
   );
 }
 
+type Mode = "sign-in" | "create" | "magic-link";
+
 function LoginForm() {
+  const searchParams = useSearchParams();
+  const isDev = process.env.NODE_ENV === "development";
+  const fromForge = searchParams.get("from") === "forge";
+
+  const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
   const [showCode, setShowCode] = useState(false);
-  const [usePassword, setUsePassword] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const searchParams = useSearchParams();
-  const isDev = process.env.NODE_ENV === "development";
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
-  // "Create Account" mode when arriving from Forge
-  const fromForge = searchParams.get("from") === "forge";
-  const [isRegister, setIsRegister] = useState(fromForge);
-
-  // Pre-fill partner code from URL param
+  // Pre-fill partner code from URL
   useEffect(() => {
     const urlCode = searchParams.get("code");
-    if (urlCode) {
-      setCode(urlCode);
-      setShowCode(true);
-    }
+    if (urlCode) { setCode(urlCode); setShowCode(true); }
   }, [searchParams]);
 
-  // Check for NextAuth error in URL params
+  // NextAuth error from URL
   useEffect(() => {
     const urlError = searchParams.get("error");
     if (urlError) {
-      const messages: Record<string, string> = {
-        Configuration: "Login is temporarily unavailable. Please try again later or contact Troy.",
+      const msgs: Record<string, string> = {
+        Configuration: "Login is temporarily unavailable. Please contact Troy.",
         AccessDenied: "Access denied. Check your email and try again.",
-        Verification: "That link has expired. Please request a new one.",
+        Verification: "That link has expired. Request a new one below.",
         CredentialsSignin: "Invalid email or password.",
       };
-      setError(messages[urlError] || `Login error: ${urlError}`);
+      setError(msgs[urlError] || `Login error: ${urlError}`);
     }
   }, [searchParams]);
 
-  async function handleMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim()) return;
-
-    setError("");
-    setSending(true);
-
-    if (code.trim()) {
-      localStorage.setItem("pending_access_code", code.trim());
-    }
-
-    try {
-      const result = await signIn("resend", {
-        email: email.trim(),
-        callbackUrl: searchParams.get("callbackUrl") || "/dashboard",
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError(
-          result.error === "Configuration"
-            ? "Email delivery is temporarily unavailable. Please try again later or contact Troy."
-            : `Login error: ${result.error}`
-        );
-        setSending(false);
-      } else if (result?.url) {
-        window.location.href = result.url;
-      }
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setSending(false);
-    }
+  function storeCode() {
+    if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
   }
 
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim() || !password || !confirmPassword) return;
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
-    if (password !== confirmPassword) {
-      setError("Passwords don't match.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-
-    setError("");
-    setSending(true);
-
-    if (code.trim()) {
-      localStorage.setItem("pending_access_code", code.trim());
-    }
-
-    try {
-      const regRes = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
-      });
-
-      if (!regRes.ok) {
-        const data = await regRes.json().catch(() => ({}));
-        setError(data.error || "Could not create account.");
-        setSending(false);
-        return;
-      }
-
-      // Auto-sign in after registration
-      const result = await signIn("password-login", {
-        email: email.trim(),
-        password,
-        callbackUrl: searchParams.get("callbackUrl") || "/dashboard",
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError("Account created but sign-in failed. Try signing in manually.");
-        setSending(false);
-      } else if (result?.url) {
-        window.location.href = result.url;
-      }
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setSending(false);
-    }
-  }
-
-  async function handlePasswordLogin(e: React.FormEvent) {
+  // ─── Sign In ──────────────────────────────────────────────────────────
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !password) return;
-
-    setError("");
-    setSending(true);
-
-    if (code.trim()) {
-      localStorage.setItem("pending_access_code", code.trim());
-    }
+    setError(""); setSending(true); storeCode();
 
     try {
       const result = await signIn("password-login", {
-        email: email.trim(),
-        password,
-        callbackUrl: searchParams.get("callbackUrl") || "/dashboard",
-        redirect: false,
+        email: email.trim(), password, callbackUrl, redirect: false,
       });
-
       if (result?.error) {
         setError("Invalid email or password.");
         setSending(false);
@@ -170,40 +87,118 @@ function LoginForm() {
     }
   }
 
-  async function handleDevLogin() {
-    setSending(true);
-    if (code.trim()) {
-      localStorage.setItem("pending_access_code", code.trim());
-    }
+  // ─── Create Account ───────────────────────────────────────────────────
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || !password || !confirmPassword) return;
+    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    setError(""); setSending(true); storeCode();
+
     try {
-      await signIn("dev-login", {
-        email: email.trim() || "dev@test.com",
-        callbackUrl: "/dashboard",
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Could not create account.");
+        setSending(false);
+        return;
+      }
+      const result = await signIn("password-login", {
+        email: email.trim(), password, callbackUrl, redirect: false,
+      });
+      if (result?.error) {
+        setError("Account created. Try signing in.");
+        setMode("sign-in");
+        setSending(false);
+      } else if (result?.url) {
+        window.location.href = result.url;
+      }
     } catch {
-      setError("Dev login failed.");
+      setError("Something went wrong. Please try again.");
       setSending(false);
     }
   }
 
-  return (
-    <main className="flow-center min-h-screen flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-4 text-center">
-          {isRegister ? "Create Your Account" : "Sign In"}
-        </h1>
-        <p className="text-body text-muted mb-6 text-center">
-          {isRegister
-            ? "Create a free account to save your Forge results and start building in The Refinery."
-            : usePassword
-              ? "Sign in with your email and password."
-              : "Enter your email and we\u2019ll send you a magic link \u2014 no password needed."}
-        </p>
+  // ─── Magic Link ───────────────────────────────────────────────────────
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setError(""); setSending(true); storeCode();
 
-        <form
-          onSubmit={isRegister ? handleRegister : usePassword ? handlePasswordLogin : handleMagicLink}
-          className="space-y-4"
-        >
+    try {
+      const result = await signIn("resend", {
+        email: email.trim(), callbackUrl, redirect: false,
+      });
+      if (result?.error) {
+        setError("Could not send magic link. Try again or use a password.");
+        setSending(false);
+      } else if (result?.url) {
+        setMagicLinkSent(true);
+        setSending(false);
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setSending(false);
+    }
+  }
+
+  // ─── Magic link sent confirmation ─────────────────────────────────────
+  if (magicLinkSent) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-sage-100 flex items-center justify-center">
+            <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-sage-600">
+              <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
+          <p className="text-body text-muted mb-6">
+            We sent a sign-in link to <span className="font-medium text-foreground">{email}</span>.
+            Click the link in the email to sign in. It expires in 24 hours.
+          </p>
+          <button
+            onClick={() => { setMagicLinkSent(false); setMode("sign-in"); }}
+            className="text-sm text-sage-600 hover:text-sage-700"
+          >
+            Back to sign in
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // ─── Main form ────────────────────────────────────────────────────────
+  const submitHandler = mode === "create" ? handleCreate
+    : mode === "magic-link" ? handleMagicLink
+    : handleSignIn;
+
+  const submitDisabled = sending || !email.trim()
+    || (mode !== "magic-link" && !password)
+    || (mode === "create" && !confirmPassword);
+
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 pb-16">
+      <div className="w-full max-w-sm">
+        {/* Brand */}
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-foreground">Steel Man Resumes</h1>
+          <p className="text-sm text-muted mt-1">
+            {mode === "create"
+              ? "Create your free account"
+              : mode === "magic-link"
+                ? "Sign in with a magic link"
+                : "Sign in to your account"}
+          </p>
+        </div>
+
+        <form onSubmit={submitHandler} className="space-y-4">
+          {/* Email — always visible, autoComplete for saved credentials */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1">
               Email
@@ -216,12 +211,14 @@ function LoginForm() {
               placeholder="you@example.com"
               required
               autoComplete="email"
+              autoFocus
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
               disabled={sending}
             />
           </div>
 
-          {(usePassword || isRegister) && (
+          {/* Password — visible for sign-in and create modes */}
+          {mode !== "magic-link" && (
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
                 Password
@@ -231,22 +228,23 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isRegister ? "Create a password (8+ characters)" : "Your password"}
+                placeholder={mode === "create" ? "Create a password (8+ characters)" : "Your password"}
                 required
-                autoComplete={isRegister ? "new-password" : "current-password"}
+                autoComplete={mode === "create" ? "new-password" : "current-password"}
                 className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
                 disabled={sending}
               />
             </div>
           )}
 
-          {isRegister && (
+          {/* Confirm password — create mode only */}
+          {mode === "create" && (
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1">
+              <label htmlFor="confirm" className="block text-sm font-medium text-foreground mb-1">
                 Confirm Password
               </label>
               <input
-                id="confirmPassword"
+                id="confirm"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -259,104 +257,135 @@ function LoginForm() {
             </div>
           )}
 
-          {/* Collapsible partner code field */}
+          {/* Partner code — collapsible */}
           <div>
             <button
               type="button"
               onClick={() => setShowCode(!showCode)}
-              className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
+              className="text-xs text-sage-600 hover:text-sage-700 transition-colors"
             >
               {showCode ? "Hide partner code" : "Have a partner code?"}
             </button>
-
             {showCode && (
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="Enter code (e.g., PARTNER123)"
+                placeholder="e.g., PARTNER123"
                 className="mt-2 w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch uppercase"
                 disabled={sending}
               />
             )}
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
+          {/* Submit */}
           <button
             type="submit"
-            disabled={sending || !email.trim() || ((usePassword || isRegister) && !password) || (isRegister && !confirmPassword)}
+            disabled={submitDisabled}
             className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
           >
             {sending
-              ? (isRegister ? "Creating account..." : "Signing in...")
-              : isRegister
-              ? "Create Account"
-              : usePassword
-              ? "Sign In"
-              : "Send Magic Link"}
+              ? "Working..."
+              : mode === "create"
+                ? "Create Account"
+                : mode === "magic-link"
+                  ? "Send Magic Link"
+                  : "Sign In"}
           </button>
         </form>
 
-        {/* Toggle between modes */}
-        <div className="mt-4 text-center">
-          {isRegister ? (
+        {/* Mode switchers */}
+        <div className="mt-6 space-y-3 text-center">
+          {mode === "sign-in" && (
+            <>
+              <button
+                type="button"
+                onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
+                className="text-xs text-muted hover:text-sage-600 transition-colors block mx-auto"
+              >
+                Forgot password? Sign in with a magic link
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
+                className="text-sm text-sage-600 hover:text-sage-700 transition-colors block mx-auto"
+              >
+                New here? Create an account
+              </button>
+            </>
+          )}
+
+          {mode === "create" && (
             <button
               type="button"
-              onClick={() => {
-                setIsRegister(false);
-                setUsePassword(true);
-                setError("");
-                setPassword("");
-                setConfirmPassword("");
-              }}
+              onClick={() => { setMode("sign-in"); setError(""); setPassword(""); setConfirmPassword(""); }}
               className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
             >
               Already have an account? Sign in
             </button>
-          ) : (
+          )}
+
+          {mode === "magic-link" && (
             <>
+              <p className="text-xs text-muted">
+                We&apos;ll email you a one-time sign-in link. No password needed.
+                Use this if you lost your device or forgot your password.
+              </p>
               <button
                 type="button"
-                onClick={() => {
-                  setUsePassword(!usePassword);
-                  setError("");
-                  setPassword("");
-                }}
+                onClick={() => { setMode("sign-in"); setError(""); }}
                 className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
               >
-                {usePassword
-                  ? "Don\u2019t have a password? Use a magic link instead"
-                  : "Already have a password? Sign in with password"}
+                Back to password sign-in
               </button>
-              {usePassword && (
-                <p className="text-xs text-muted mt-2">
-                  Forgot your password? Use a magic link to sign in and set a new one.
-                </p>
-              )}
-              {!usePassword && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegister(true);
-                    setError("");
-                    setPassword("");
-                  }}
-                  className="text-xs text-muted mt-2 block mx-auto hover:text-sage-600 transition-colors"
-                >
-                  New here? Create an account
-                </button>
-              )}
             </>
           )}
         </div>
 
-        {isDev && (
-          <div className="mt-6 pt-6 border-t border-border">
+        {/* Ways to sign in — always visible */}
+        <div className="mt-8 pt-6 border-t border-border">
+          <p className="text-xs text-muted text-center mb-3 font-medium">Ways to sign in</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
             <button
-              onClick={handleDevLogin}
+              type="button"
+              onClick={() => { setMode("sign-in"); setError(""); }}
+              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
+                mode === "sign-in" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
+              }`}
+            >
+              Password
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
+              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
+                mode === "magic-link" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
+              }`}
+            >
+              Magic Link
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
+              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
+                mode === "create" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
+              }`}
+            >
+              New Account
+            </button>
+          </div>
+        </div>
+
+        {isDev && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <button
+              onClick={async () => {
+                setSending(true); storeCode();
+                try { await signIn("dev-login", { email: email.trim() || "dev@test.com", callbackUrl: "/dashboard" }); }
+                catch { setError("Dev login failed."); setSending(false); }
+              }}
               disabled={sending}
               className="w-full px-6 py-3 bg-amber-100 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors min-h-touch"
             >
@@ -365,28 +394,16 @@ function LoginForm() {
           </div>
         )}
 
-        <p className="text-xs text-muted mt-6 text-center">
-          No credit card. No spam. Just a way to save your work.
-        </p>
-
-        <div className="mt-8 pt-6 border-t border-border text-center text-sm text-muted space-y-2">
-          <p>
-            Haven&apos;t started yet?{" "}
-            <a
-              href="https://forge.steelmanresumes.com"
-              className="text-sage-600 hover:text-sage-700 font-medium"
-            >
-              Try The Forge first
-            </a>{" "}
-            — it&apos;s free, no account needed.
+        <div className="mt-6 text-center">
+          <p className="text-xs text-muted">
+            No credit card. No spam. Your data stays yours.
           </p>
-          <p>
-            <a
-              href="https://steelmanresumes.com"
-              className="text-sage-600 hover:text-sage-700"
-            >
-              steelmanresumes.com
-            </a>
+          <p className="text-xs text-muted mt-2">
+            Haven&apos;t started yet?{" "}
+            <a href="/intro" className="text-sage-600 hover:text-sage-700 font-medium">
+              Try The Forge
+            </a>{" "}
+            — free, no account needed.
           </p>
         </div>
       </div>
