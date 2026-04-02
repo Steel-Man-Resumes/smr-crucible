@@ -487,3 +487,9 @@ The intake form should appear DURING Stage A (steps 4-8 take 30-90 seconds on ex
 Resume: proper DOCX heading styles, metrics, Claude-generated brand headline, 700-900 words experienced / 400-600 entry.
 Employer Battle Plan: Tier 1 = full company profile + approach strategy + talking points + contact + insider intel. Tier 2 = website + application channel + fit statement. Tier 3 = name + location + URL + one-line note. Second-chance friendly flag on all.
 Cover Letters: each targets a SPECIFIC Tier 1 employer by name. No placeholders. Ready to send.
+
+---
+
+## Ecosystem Context
+
+For full ecosystem context (brand rules, naming conventions, deadlines, all ventures): `~/todash/COMMAND-CENTER.md`
