@@ -17,6 +17,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
+import ForgeAccumulator from "@/components/ForgeAccumulator";
 
 const CHALLENGE_OPTIONS = [
   { id: "criminal_record", label: "Criminal record" },
@@ -122,7 +123,9 @@ export default function StoryPage() {
         pageId="story"
       />
 
-      {/* The trade — why it's worth sharing */}
+      {!isDemo && <ForgeAccumulator />}
+
+      {/* The trade -- why it's worth sharing */}
       {!isDemo && (
         <div className="bg-warm-50 rounded-xl px-4 py-3 mb-4 border border-warm-200">
           <p className="text-sm text-earth-700 leading-relaxed">

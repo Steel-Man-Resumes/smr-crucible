@@ -64,6 +64,7 @@ async function handlePost(request: Request) {
     const forgeOutput = {
       schema_version: "forge_output.v1",
       generated_at: new Date().toISOString(),
+      readiness_stage: input.readinessStage || "preparation",
       narrative,
       strengths: narrative.strengths || [],
       skills: skills.skills || [],
@@ -103,8 +104,127 @@ async function handlePost(request: Request) {
   }
 }
 
+/**
+ * Readiness stage directives for the AI pipeline.
+ * Each stage genuinely changes what the AI produces.
+ */
+const READINESS_DIRECTIVES: Record<string, {
+  narrative: string;
+  skills: string;
+  careers: string;
+  barriers: string;
+  careerCount: string;
+}> = {
+  precontemplation: {
+    narrative: `This person is EXPLORING. They are not committed to a job search yet.
+- Write the headline as an identity statement, not a job target ("A problem-solver with hands-on expertise" not "Seeking warehouse position")
+- Summary should feel like a mirror, not a sales pitch. Reflect who they are, not where they should apply.
+- Reflection should validate that exploring is smart, not passive.
+- Strengths: focus on transferable, identity-level strengths ("You lead naturally" not "Leadership skills applicable to management roles").`,
+    skills: `This person is exploring, not actively job searching.
+- Emphasize transferable and soft skills over hard/technical ones.
+- Frame skills as personal assets, not resume keywords.
+- Include skills they may not realize they have.`,
+    careers: `This person is EXPLORING, not ready to apply.
+- Suggest 2 paths max. Frame as "worth knowing about" not "you should apply to."
+- Emphasize what the work IS (day-to-day), not next steps to get hired.
+- Skip application timelines. They are not there yet.
+- Salary ranges are helpful (shows their skills have market value) but don't frame as urgency.`,
+    barriers: `This person is exploring. They are not ready for action steps.
+- Name barriers gently. Connect to resources but frame as "these exist when you need them."
+- Legal notes: provide the information but don't push them to act on it.
+- Fewer resources per barrier (top 2 max). Quality over volume.`,
+    careerCount: "2",
+  },
+  contemplation: {
+    narrative: `This person is THINKING ABOUT IT. They know they need to do something but feel stuck.
+- Headline should name their direction without locking them in.
+- Summary should acknowledge both their experience AND their ambivalence. "You have more to work with than you think."
+- Reflection should validate that thinking is not wasted time.
+- Strengths: connect to possibilities. "This strength opens doors in X and Y."`,
+    skills: `This person is weighing their options.
+- Full skill extraction, but frame transferable skills prominently.
+- For each skill cluster, hint at what industries value it.
+- Include implied skills generously. They need to see they have more than they think.`,
+    careers: `This person is THINKING, not applying.
+- Suggest 3 paths, ranging from accessible to aspirational.
+- Frame as "options worth considering" with a sense of possibility.
+- Include what makes each path a good FIT for them specifically.
+- Next steps should be low-commitment ("learn more about..." not "apply to...").
+- Salary ranges help them see the upside.`,
+    barriers: `This person is thinking but not acting.
+- Name barriers honestly. Connect each to resources.
+- Frame resources as "when you're ready, here's where to start."
+- Legal notes: clear and informative. Knowledge is power even before action.
+- 2-3 resources per barrier.`,
+    careerCount: "3",
+  },
+  preparation: {
+    narrative: `This person has DECIDED to make a change. They need a plan.
+- Headline should be resume-ready and targeted.
+- Summary should be confident and forward-looking.
+- Reflection should celebrate the decision and reinforce momentum.
+- Strengths: tie directly to target career paths with specific evidence.`,
+    skills: `This person is getting ready to move.
+- Full skill extraction with resume-ready language.
+- Categorize clearly (hard/soft/transferable) for resume building.
+- Flag high-value skills that should be featured prominently.
+- Include industry keywords where natural.`,
+    careers: `This person is PREPARING to act.
+- Suggest 3-5 paths with concrete detail.
+- Include specific next steps (certifications to get, organizations to contact).
+- Salary ranges with growth potential ("starts at X, moves to Y within 2 years").
+- Note which paths have the lowest barrier to entry for their situation.`,
+    barriers: `This person is preparing to move. They need actionable plans.
+- Full resource lists with contact info where possible.
+- Legal notes: specific to their situation, actionable.
+- Include timelines ("expungement takes X months in this state").
+- Frame through agency: "here's what you do first."`,
+    careerCount: "3-5",
+  },
+  action: {
+    narrative: `This person is READY TO GO. They are actively looking for work.
+- Headline must be resume-ready, keyword-rich, and targeted to their strongest career path.
+- Summary should read like a professional brand statement an employer would respond to.
+- Reflection can be brief. They don't need encouragement, they need tools.
+- Strengths: frame as competitive advantages with specific evidence and metrics.`,
+    skills: `This person is actively job searching.
+- Comprehensive extraction with ATS-optimized language.
+- Categorize precisely. Flag which skills map to which career paths.
+- Include industry-standard terminology and certifications.
+- Prioritize hard skills and quantifiable competencies.`,
+    careers: `This person is READY and actively searching.
+- Suggest 3-5 paths with maximum actionable detail.
+- Next steps should be specific and immediate ("apply on Indeed this week", "call this organization Monday").
+- Include which employers in their area are fair-chance.
+- Salary ranges with negotiation context.
+- Note seasonal hiring patterns if relevant.`,
+    barriers: `This person is actively applying and needs barrier solutions NOW.
+- Maximum resource depth. Real organizations, real contact info.
+- Legal notes: specific, actionable, with deadlines if applicable.
+- Include "what to say when asked" disclosure strategies.
+- Prioritize resources by immediacy and impact.
+- Frame barriers as solvable logistics, not identity.`,
+    careerCount: "3-5",
+  },
+};
+
+function getReadinessDirective(stage?: string) {
+  return READINESS_DIRECTIVES[stage || "preparation"] || READINESS_DIRECTIVES.preparation;
+}
+
 function buildContext(input: ForgeInput): string {
   const parts: string[] = [];
+
+  if (input.readinessStage) {
+    const stageLabels: Record<string, string> = {
+      precontemplation: "Exploring (not ready to search yet)",
+      contemplation: "Thinking about it (knows they need to, not sure how)",
+      preparation: "Getting ready (decided to make a change)",
+      action: "Ready to go (actively looking for work)",
+    };
+    parts.push(`READINESS STAGE: ${stageLabels[input.readinessStage] || input.readinessStage}`);
+  }
 
   if (input.resumeText) {
     parts.push(`RESUME:\n${sanitizeForPrompt(input.resumeText, 6000)}`);
@@ -187,8 +307,13 @@ async function analyzeNarrative(
   context: string,
   input: ForgeInput
 ): Promise<Record<string, unknown>> {
+  const rd = getReadinessDirective(input.readinessStage);
+
   const system = `You are a career narrative analyst for Steel Man Resumes.
 Your job is to find the strengths and professional story in this person's experience.
+
+READINESS-AWARE INSTRUCTIONS:
+${rd.narrative}
 
 RULES:
 - Use the person's OWN words and experiences. Never fabricate.
@@ -196,10 +321,10 @@ RULES:
 - Write at a 6th grade reading level.
 - Never judge, score, or grade.
 - The headline and summary should be RESUME-READY. They may appear on actual job applications. Therefore:
-  - NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, "time away", "time served", re-entry, or any reference to justice involvement — not even obliquely or with euphemisms like "during his time away" or "while building new skills in a structured environment."
+  - NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, "time away", "time served", re-entry, or any reference to justice involvement -- not even obliquely or with euphemisms like "during his time away" or "while building new skills in a structured environment."
   - Focus purely on professional skills, experience, education, and certifications.
   - If education/certs were earned in prison, just list them without mentioning where. "GED, 2021" not "GED earned at Waupun Correctional."
-- The "reflection" field is private (shown only to the user) — this CAN acknowledge their full journey with warmth.
+- The "reflection" field is private (shown only to the user) -- this CAN acknowledge their full journey with warmth.
 - Output JSON only.`;
 
   const prompt = `Analyze this person's story and create their narrative.
@@ -234,9 +359,15 @@ async function extractSkills(
   context: string,
   input: ForgeInput
 ): Promise<Record<string, unknown>> {
+  const rd = getReadinessDirective(input.readinessStage);
+
   const system = `You extract skills from resumes and user narratives.
 Categorize as hard (technical/certifiable), soft (interpersonal), or transferable (cross-industry).
-Be generous — include skills implied by experience, not just explicitly stated.
+Be generous -- include skills implied by experience, not just explicitly stated.
+
+READINESS-AWARE INSTRUCTIONS:
+${rd.skills}
+
 Output JSON only.`;
 
   const prompt = `Extract all skills from this person's experience.
@@ -264,14 +395,19 @@ async function findCareerPaths(
   context: string,
   input: ForgeInput
 ): Promise<Record<string, unknown>> {
+  const rd = getReadinessDirective(input.readinessStage);
+
   const system = `You are a career path researcher specializing in fair-chance employment.
 Match this person's skills, experience, goals, and situation to realistic career paths.
 
+READINESS-AWARE INSTRUCTIONS:
+${rd.careers}
+
 RULES:
-- Suggest 3-5 paths, from most accessible to stretch goals.
+- Suggest ${rd.careerCount} paths, from most accessible to stretch goals.
 - Consider their barriers (if any) and suggest paths where those barriers matter least.
 - Include concrete next steps for each path.
-- No blue-collar assumptions — match based on actual skills and interests.
+- No blue-collar assumptions -- match based on actual skills and interests.
 - Be honest about salary ranges.
 - Output JSON only.`;
 
@@ -306,11 +442,16 @@ async function analyzeBarriers(
   context: string,
   input: ForgeInput
 ): Promise<Record<string, unknown>> {
+  const rd = getReadinessDirective(input.readinessStage);
+
   const system = `You are a reentry resource specialist.
 For each barrier this person faces, provide:
 - Practical resources and organizations that help
 - Legal context where relevant (ban-the-box, fair chance laws)
 - Specific, actionable next steps
+
+READINESS-AWARE INSTRUCTIONS:
+${rd.barriers}
 
 RULES:
 - Be specific, not generic. Real organizations > generic advice.

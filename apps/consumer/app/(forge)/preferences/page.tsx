@@ -14,6 +14,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import ForgeAccumulator from "@/components/ForgeAccumulator";
 
 const SCHEDULE_OPTIONS = [
   { id: "full-time", label: "Full-time", description: "35+ hours per week" },
@@ -93,6 +94,8 @@ export default function PreferencesPage() {
         message={getOpusMessage("preferences", audience, isDemo)}
         pageId="preferences"
       />
+
+      {!isDemo && <ForgeAccumulator />}
 
       {isDemo && (
         <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">

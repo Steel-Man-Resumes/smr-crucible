@@ -16,6 +16,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import ForgeAccumulator from "@/components/ForgeAccumulator";
 
 const GOAL_OPTIONS = [
   {
@@ -98,11 +99,13 @@ export default function GoalsPage() {
         pageId="goals"
       />
 
+      {!isDemo && <ForgeAccumulator />}
+
       {/* Why we ask */}
       {!isDemo && (
         <div className="bg-sage-50 rounded-xl px-4 py-3 mb-4 border border-sage-200">
           <p className="text-sm text-sage-700 leading-relaxed">
-            This isn&apos;t a form — it&apos;s a filter. &ldquo;Stability&rdquo; and
+            This isn&apos;t a form, it&apos;s a filter. &ldquo;Stability&rdquo; and
             &ldquo;growth&rdquo; lead to different jobs. I need to know what
             matters so I don&apos;t waste your time.
           </p>

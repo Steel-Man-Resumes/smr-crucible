@@ -29,5 +29,5 @@ export const config = {
   // No login wall before value delivery.
   // Forge routes (/api/analyze, /api/parse, /api/forge/*) stay unprotected (IP-rate-limited).
   // /api/assistant uses dual-mode: IP pre-auth, user post-auth.
-  // Hostname routing (forge/refinery subdomains) handled in app/page.tsx.
+  // Hostname routing (forge/refinery subdomains) handled in next.config.mjs redirects.
 };
