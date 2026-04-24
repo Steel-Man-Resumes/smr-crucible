@@ -1,2 +1,4 @@
-model: o4-mini
+# No model hardcoded -- Aider picks the best available based on your API keys.
+# Keep Aider current with: aider-upgrade
+# (alias in ~/.bashrc: pip3 install --upgrade aider-chat --break-system-packages)
 weak-model: gpt-4o-mini
