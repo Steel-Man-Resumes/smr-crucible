@@ -6,8 +6,27 @@
 
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
+import { timingSafeEqual } from "crypto";
 
-export async function GET() {
+function tokenMatches(provided: string, expected: string): boolean {
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
+export async function GET(request: Request) {
+  const expectedToken = process.env.AUTH_CHECK_SECRET;
+  const providedToken = request.headers.get("x-admin-token");
+
+  if (!expectedToken || !providedToken || !tokenMatches(providedToken, expectedToken)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const checks: Record<string, string> = {};
 
   // 1. Check env vars exist (not their values)

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getUserTier, setUserTier, type UserTier } from "@crucible/core";
 
-const ALLOWED_SELF_TIERS: UserTier[] = ["client", "partner", "observer"];
+const ALLOWED_SELF_TIERS: UserTier[] = ["client", "observer"];
 
 // Tier priority — lower number = higher privilege
 const TIER_RANK: Record<string, number> = {
