@@ -3,6 +3,8 @@ import "./globals.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
 import { GlobalTourOverlay } from "@/components/tour/GlobalTourOverlay";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Steel Man Resumes",
@@ -30,6 +32,8 @@ export default function RootLayout({
           <GlobalTourOverlay />
           <DevToolbar />
         </AuthProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
