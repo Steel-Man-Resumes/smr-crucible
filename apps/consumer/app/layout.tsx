@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
-import { GlobalTourOverlay } from "@/components/tour/GlobalTourOverlay";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -29,7 +28,6 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           {children}
-          <GlobalTourOverlay />
           <DevToolbar />
         </AuthProvider>
         <Analytics />
