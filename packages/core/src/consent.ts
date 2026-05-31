@@ -8,7 +8,13 @@
 import { query, getOne, insert } from "./db";
 import { emitEvent } from "./events";
 
-export type ConsentLayer = "core" | "enhanced" | "research" | "sharing";
+export type ConsentLayer =
+  | "core"
+  | "enhanced"
+  | "research"
+  | "sharing"
+  | "outcome_anonymous"
+  | "outcome_named";
 
 export interface ConsumerConsent {
   id: string;

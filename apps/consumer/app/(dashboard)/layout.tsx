@@ -53,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
   { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
   { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
+  { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
 ];
 
 function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: OnboardingState): boolean {

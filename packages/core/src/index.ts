@@ -14,3 +14,4 @@ export * from './accessCode';
 export * from './userTier';
 export * from './forgeSession';
 export * from './refineryArtifact';
+export * from './outcomeAggregate';
