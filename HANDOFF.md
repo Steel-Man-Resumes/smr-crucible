@@ -1,7 +1,28 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-05-31  
-**Last session:** The Mini Forge -- full build + production wiring (commits bae9d26, 02fc457)  
-**Next session:** Full flow test + any polish
+**Last session:** Mini Forge + SMR website overhaul (full session close)  
+**Next session:** Full flow test -- land cold on steelmanresumes.com, run Forge, return to SMR and verify personalization
+
+---
+
+## SMR Website Overhaul -- 2026-05-31 (smr-website commit 8d3d926)
+
+- **Migration 014** -- `inquiry` + `newsletter_subscriber` tables in Neon
+- **`/api/forge/summary`** -- CORS-gated safe profile endpoint for steelmanresumes.com personalization
+- **PersonalizedHero** -- homepage bar for authenticated users: headline, skills chips, matched guide links
+- **PersonalizedGuide** -- guide pages strip `<!--if:-->` conditional blocks that don't match user's challenges/work_type
+- **Newsletter** -- Neon + Resend welcome email; inline on homepage, end of every guide, footer compact
+- **InquiryForm** -- role-aware (org/employer/funder/volunteer/researcher) → Neon + Resend notify Troy
+- **3 new pages**: `/coming-home` (Mini Forge import entry), `/mini-forge` (DOC showcase), `/evidence` (6 research workstreams)
+- **Footer**: crisis line (988/211), Resources nav column, newsletter compact
+- **Unsubscribe**: token-based one-click at `/unsubscribe?token=`
+- **Guide conditions**: all 9 guides have `conditions[]` in guides.ts; interview-scripts + employment-gaps have `<!--if:-->` section markers
+- **Deploy fix documented**: smr-crucible must deploy from workspace root -- `@crucible/consumer-ui` is local-only, `.vercel/project.json` must exist at root (recreation JSON in HANDOFF)
+
+### All three projects deployed READY
+- steelmanresumes.com -- smr-website 8d3d926
+- forge/refinery.steelmanresumes.com -- smr-crucible b2cb355
+- consumer-blond.vercel.app -- same
 
 ---
 
