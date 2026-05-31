@@ -116,3 +116,22 @@ export async function markClaimed(id: string): Promise<void> {
     [id]
   );
 }
+
+/** Optimistic lock: transitions pending → processing. Returns true if this caller won. */
+export async function tryClaimProcessing(id: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE tablet_session SET processing_status = 'processing'
+     WHERE id = $1 AND processing_status = 'pending'
+     RETURNING id`,
+    [id]
+  );
+  return rows.length > 0;
+}
+
+/** Read a session regardless of claimed_at -- used by import-complete after claim. */
+export async function getTabletSessionForImport(id: string): Promise<TabletSession | null> {
+  return getOne<TabletSession>(
+    `SELECT * FROM tablet_session WHERE id = $1 AND expires_at > NOW()`,
+    [id]
+  );
+}

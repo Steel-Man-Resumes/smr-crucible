@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { AnalyticsWrapper } from "@/components/AnalyticsWrapper";
 
 export const metadata: Metadata = {
   title: "Steel Man Resumes",
@@ -30,8 +29,7 @@ export default function RootLayout({
           {children}
           <DevToolbar />
         </AuthProvider>
-        <Analytics />
-        <SpeedInsights />
+        <AnalyticsWrapper />
       </body>
     </html>
   );

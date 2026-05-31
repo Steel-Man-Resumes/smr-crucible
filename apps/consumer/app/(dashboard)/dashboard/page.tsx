@@ -17,6 +17,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
 
@@ -260,6 +261,7 @@ export default function DashboardPage() {
   // ─── State: needs_resume OR full_access ───────────────────────────────
   return (
     <div className="space-y-10">
+      <MiniForgeBanner />
       {/* Welcome / Narrative */}
       <section>
         {hasForgeData ? (
@@ -953,6 +955,33 @@ function ProfileSetup({
           {saving ? "Saving..." : "Save & Continue"}
         </button>
       </form>
+    </div>
+  );
+}
+
+// ─── Mini Forge welcome banner ────────────────────────────────────────────
+
+function MiniForgeBanner() {
+  const searchParams = useSearchParams();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (searchParams.get("welcome") !== "mini-forge" || dismissed) return null;
+
+  return (
+    <div className="bg-sage-50 border border-sage-200 rounded-xl p-5 flex items-start gap-4">
+      <div className="flex-1">
+        <p className="font-semibold text-foreground">Welcome. You started this inside.</p>
+        <p className="text-sm text-muted mt-1">
+          Your career plan from The Mini Forge is loaded. Your tools are ready.
+        </p>
+      </div>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-muted hover:text-foreground text-sm shrink-0"
+        aria-label="Dismiss"
+      >
+        Done
+      </button>
     </div>
   );
 }

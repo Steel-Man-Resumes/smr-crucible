@@ -58,8 +58,12 @@ export default async function ImportPage({
     // Mark as claimed
     await markClaimed(tabletSession.id);
 
-    // Redirect to sign in / create account with mini-forge import context
-    redirect("/sign-in?from=mini-forge&code=" + encodeURIComponent(code));
+    // Redirect to login. callbackUrl sends them to import-complete after auth
+    // where forge_output is seeded into their Refinery profile.
+    redirect(
+      "/login?from=mini-forge&callbackUrl=" +
+        encodeURIComponent("/mini-forge/import-complete")
+    );
   }
 
   const errorMessages: Record<string, string> = {
