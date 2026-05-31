@@ -2,10 +2,10 @@
  * Mini Forge AI processing.
  *
  * Uses Haiku 4.5 (fastest/cheapest). Non-streaming -- deferred batch call.
+ * Uses raw fetch to Anthropic API (same pattern as analyze route).
  * With MOCK_AI=true: returns Jordan fixture instantly.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "./mock-ai";
 import { RESEARCH_CONTEXT } from "./research-context";
 
@@ -27,29 +27,44 @@ export async function processMiniForge(
     return { ...MOCK_FORGE_OUTPUT, generated_at: new Date().toISOString(), source: "mock" };
   }
 
-  const client = new Anthropic();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
   const prompt = buildPrompt(intake);
 
-  const message = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
-    system: MINI_FORGE_SYSTEM,
-    messages: [{ role: "user", content: prompt }],
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
+      system: MINI_FORGE_SYSTEM,
+      messages: [{ role: "user", content: prompt }],
+    }),
   });
 
-  const text =
-    message.content[0].type === "text" ? message.content[0].text : "";
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Anthropic API error: ${response.status} ${text}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text ?? "";
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return { generated_at: new Date().toISOString(), raw_text: text, parse_error: true };
+  }
 
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(jsonMatch[0]);
     return { ...parsed, generated_at: new Date().toISOString() };
   } catch {
-    return {
-      generated_at: new Date().toISOString(),
-      raw_text: text,
-      parse_error: true,
-    };
+    return { generated_at: new Date().toISOString(), raw_text: text, parse_error: true };
   }
 }
 
