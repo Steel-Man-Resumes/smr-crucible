@@ -217,13 +217,23 @@ Troy's idea: after Forge + Refinery, the smr-website transforms to show personal
 
 | App | URL | Status |
 |-----|-----|--------|
-| Consumer (Forge + Refinery) | consumer-blond.vercel.app | Live, pending domain move to forge/refinery.steelmanresumes.com |
+| Consumer (Forge + Refinery) | consumer-blond.vercel.app | Live at forge/refinery.steelmanresumes.com |
 | SMR Website | steelmanresumes.com | Live, separate repo (smr-website) |
 
-**Pending before next deploy:**
-- Run `npm run migrate -w packages/core` (migration 012)
-- No env var changes needed for today's work
-- MOCK_AI=true can be added to .env.local for zero-cost dev testing
+**CRITICAL: deploy from workspace root, not apps/consumer/**
+
+```bash
+cd ~/repos/smr-crucible   # workspace root
+vercel --prod --yes
+```
+
+The `vercel.json` is at the workspace root. Deploying from `apps/consumer/` causes E404 on `@crucible/consumer-ui` (local workspace package not on npm). The `.vercel/project.json` must exist at the workspace root -- it is gitignored, recreate if missing:
+
+```json
+{"projectId":"prj_Y05eliHgrKIr4Y0TcCgvG8VATwZH","orgId":"team_XmJN97KS4xaZdLom6qF8R6ys","projectName":"consumer"}
+```
+
+MOCK_AI=true in apps/consumer/.env.local for zero-cost dev testing.
 
 ---
 
