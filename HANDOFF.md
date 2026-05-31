@@ -1,11 +1,33 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-05-31  
-**Last session:** Full overhaul + The Mini Forge spec  
-**Next session:** Build The Mini Forge (mini.steelmanresumes.com / steelmanresumes.com/mini-forge)
+**Last session:** The Mini Forge -- full build (commit bae9d26)  
+**Next session:** Mini Forge refinements + Personalized SMR Website
 
 ---
 
-## What Was Built This Session (commit 980bff1)
+## What Was Built This Session (commit bae9d26)
+
+### The Mini Forge -- full build
+
+- **DB migration `013_tablet_session.sql`** -- `tablet_session` table with UUID pk, 6-char unambiguous import code (no 0/O/1/I/l), bcrypt PIN hash, `forge_intake` JSONB, `forge_output` JSONB, `processing_status`, 18-month expiry. Both 012 and 013 applied to Neon.
+- **`lib/tablet-session.ts`** -- session create/read/update/claim, PIN bcrypt helpers, cookie set/get.
+- **`lib/mini-forge-ai.ts`** -- Haiku 4.5 pipeline. Condensed prompt at 5th grade reading level. `MOCK_AI=true` returns Jordan fixture instantly.
+- **`app/(mini-forge)/layout.tsx`** -- minimal wrapper (no analytics scripts, no third-party JS, no nav, no AssistantDrawer). Wraps all 6 routes.
+- **`app/(mini-forge)/mini-forge/page.tsx`** -- landing: auto-resumes session if cookie present, shows import flow intro.
+- **`app/(mini-forge)/mini-forge/pin/page.tsx`** -- PIN setup with server action; creates `tablet_session`, sets `mf_session` cookie (httpOnly, path=/mini-forge).
+- **`app/(mini-forge)/mini-forge/q/[step]/page.tsx`** -- 7 questions, one per page. Server actions save each answer to `forge_intake` JSONB. Step 7 races AI against 9-second timeout: if done → redirect to results; if slow → redirect to processing.
+- **`app/(mini-forge)/mini-forge/processing/page.tsx`** -- shows import code prominently + `<meta refresh=15>`. Auto-redirects if status = ready.
+- **`app/(mini-forge)/mini-forge/results/page.tsx`** -- career paths, skills, barrier resources, resume starter, import code shown twice.
+- **`app/(mini-forge)/mini-forge/import/page.tsx`** -- enter code + PIN to claim session into Refinery. Marks `claimed_at`, redirects to `/sign-in?from=mini-forge`.
+
+### Route conflict fix
+Route group `(mini-forge)` needs `mini-forge/` subdirectory inside -- route groups don't add URL prefix. Files live at `app/(mini-forge)/mini-forge/*`, routes resolve to `/mini-forge/*`.
+
+### MOCK_AI=true added to apps/consumer/.env.local
+
+---
+
+## What Was Built Last Session (commit 980bff1)
 
 ### Bug fixes
 - **TIER_RANK auth regression** -- `"default"` tier was missing from both `withRateLimit.ts` and `dashboard/layout.tsx`. Regular users (no access code) were silently blocked from "client"-gated API endpoints and nav items. Fixed.
@@ -50,7 +72,16 @@ This applies `012_job_cache_fair_chance.sql` (adds `fair_chance_info` TEXT colum
 
 ---
 
-## The Mini Forge -- Full Build Spec
+## The Mini Forge -- BUILT (commit bae9d26) -- Remaining Work
+
+### What's left for production
+- **BullMQ worker** -- current build calls AI inline in server action (9s timeout). For tablets where AI takes longer, add a BullMQ job that processes `processing_status='pending'` sessions. Queue: `crucible-pipeline` (already exists).
+- **Auth.js import integration** -- `/mini-forge/import` redirects to `/sign-in?from=mini-forge&code=XXXXXX`. The sign-in flow needs to check this query param post-auth and copy `forge_output` → `consumer_profile`. Currently not wired.
+- **Analytics exclusion** -- root `app/layout.tsx` includes `@vercel/analytics` and `@vercel/speed-insights` which render on all pages. Mini Forge spec says no third-party scripts. Solve by moving analytics to a conditional wrapper that checks `!pathname.startsWith('/mini-forge')`.
+- **Facility hint** -- add optional `facility_hint` field to the landing page or PIN page for DOC-configured tablet deployments.
+- **smr-website landing section** -- steelmanresumes.com needs a "Already did The Mini Forge inside?" import entry point.
+
+## The Mini Forge -- Original Spec
 
 **What it is:** A stripped-down version of The Forge that runs on prison tablets (JPay/Securus, GTL/ViaPath, Edovo) nationwide -- WI DOC first. Users complete career intake during their sentence. On release, they enter a 6-digit import code at steelmanresumes.com and their data loads directly into The Refinery.
 
