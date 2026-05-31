@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-05-31  
-**Last session:** The Mini Forge -- full build (commit bae9d26)  
-**Next session:** Mini Forge refinements + Personalized SMR Website
+**Last session:** The Mini Forge -- full build + production wiring (commits bae9d26, 02fc457)  
+**Next session:** Personalized SMR Website (spec in HANDOFF below)
 
 ---
 
@@ -74,12 +74,15 @@ This applies `012_job_cache_fair_chance.sql` (adds `fair_chance_info` TEXT colum
 
 ## The Mini Forge -- BUILT (commit bae9d26) -- Remaining Work
 
-### What's left for production
-- **BullMQ worker** -- current build calls AI inline in server action (9s timeout). For tablets where AI takes longer, add a BullMQ job that processes `processing_status='pending'` sessions. Queue: `crucible-pipeline` (already exists).
-- **Auth.js import integration** -- `/mini-forge/import` redirects to `/sign-in?from=mini-forge&code=XXXXXX`. The sign-in flow needs to check this query param post-auth and copy `forge_output` → `consumer_profile`. Currently not wired.
-- **Analytics exclusion** -- root `app/layout.tsx` includes `@vercel/analytics` and `@vercel/speed-insights` which render on all pages. Mini Forge spec says no third-party scripts. Solve by moving analytics to a conditional wrapper that checks `!pathname.startsWith('/mini-forge')`.
-- **Facility hint** -- add optional `facility_hint` field to the landing page or PIN page for DOC-configured tablet deployments.
+### What's left (commit 02fc457 resolves the first three)
+- **Facility hint** -- add optional `facility_hint` field to the PIN page for DOC-configured tablet deployments.
 - **smr-website landing section** -- steelmanresumes.com needs a "Already did The Mini Forge inside?" import entry point.
+
+### What was wired in commit 02fc457
+- **Processing page** now runs AI inline with `tryClaimProcessing` mutex lock. `maxDuration=60`. Meta refresh as fallback. No BullMQ required.
+- **Import flow** fully wired: `/mini-forge/import` → `/login?callbackUrl=/mini-forge/import-complete` → `/mini-forge/import-complete` reads `mf_session` cookie post-auth, calls `saveForgeSession()` to seed Refinery, clears cookie, redirects to `/dashboard?welcome=mini-forge`.
+- **Analytics** excluded from `/mini-forge/*` via `AnalyticsWrapper` client component (pathname check). Root layout clean.
+- **Dashboard** shows `MiniForgeBanner` on `?welcome=mini-forge`.
 
 ## The Mini Forge -- Original Spec
 
