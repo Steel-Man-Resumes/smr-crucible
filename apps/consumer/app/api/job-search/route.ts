@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
+import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import crypto from "crypto";
 
 export const maxDuration = 30;
@@ -68,14 +69,20 @@ function hashQuery(params: Record<string, unknown>): string {
   return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 }
 
-async function getCachedResults(queryHash: string): Promise<EnrichedJob[] | null> {
+interface CachedSearchResult {
+  results: EnrichedJob[];
+  fair_chance_info: string;
+}
+
+async function getCachedResults(queryHash: string): Promise<CachedSearchResult | null> {
   try {
     const { getOne } = await import("@crucible/core");
-    const row = await getOne<{ results: EnrichedJob[] }>(
-      `SELECT results FROM job_search_cache WHERE query_hash = $1 AND expires_at > NOW()`,
+    const row = await getOne<{ results: EnrichedJob[]; fair_chance_info: string }>(
+      `SELECT results, fair_chance_info FROM job_search_cache WHERE query_hash = $1 AND expires_at > NOW()`,
       [queryHash]
     );
-    return row?.results ?? null;
+    if (!row) return null;
+    return { results: row.results, fair_chance_info: row.fair_chance_info || "" };
   } catch {
     return null;
   }
@@ -84,16 +91,17 @@ async function getCachedResults(queryHash: string): Promise<EnrichedJob[] | null
 async function cacheResults(
   queryHash: string,
   queryParams: Record<string, unknown>,
-  results: EnrichedJob[]
+  results: EnrichedJob[],
+  fairChanceInfo: string
 ): Promise<void> {
   try {
     const { query } = await import("@crucible/core");
     await query(
-      `INSERT INTO job_search_cache (query_hash, query_params, results, result_count, expires_at)
-       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '6 hours')
+      `INSERT INTO job_search_cache (query_hash, query_params, results, result_count, fair_chance_info, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '6 hours')
        ON CONFLICT (query_hash)
-       DO UPDATE SET results = $3, result_count = $4, fetched_at = NOW(), expires_at = NOW() + INTERVAL '6 hours'`,
-      [queryHash, JSON.stringify(queryParams), JSON.stringify(results), results.length]
+       DO UPDATE SET results = $3, result_count = $4, fair_chance_info = $5, fetched_at = NOW(), expires_at = NOW() + INTERVAL '6 hours'`,
+      [queryHash, JSON.stringify(queryParams), JSON.stringify(results), results.length, fairChanceInfo]
     );
   } catch (err) {
     console.error("Cache write failed:", err);
@@ -322,6 +330,10 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  if (isMockEnabled()) {
+    return NextResponse.json(MOCK_JOB_RESULTS);
+  }
+
   try {
     const { targetRole, location, skills, hasRecord, recordType } =
       await request.json();
@@ -340,8 +352,8 @@ async function handlePost(request: Request) {
     const cached = await getCachedResults(queryHash);
     if (cached) {
       return NextResponse.json({
-        jobs: cached,
-        fair_chance_info: "",
+        jobs: cached.results,
+        fair_chance_info: cached.fair_chance_info,
         source: "cache",
       });
     }
@@ -375,8 +387,8 @@ async function handlePost(request: Request) {
       return 0;
     });
 
-    // 5. Cache results
-    await cacheResults(queryHash, cacheParams, enrichedJobs);
+    // 5. Cache results (including fair_chance_info so cache hits return complete data)
+    await cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo);
 
     // 6. Log decision for JBS compliance
     try {

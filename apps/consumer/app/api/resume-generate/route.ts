@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
+import { isMockEnabled, MOCK_RESUME } from "@/lib/mock-ai";
 
 export const maxDuration = 30;
 
@@ -17,6 +18,10 @@ async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
+  if (isMockEnabled()) {
+    return NextResponse.json({ content: MOCK_RESUME, scaffoldLevel: 0.5 });
   }
 
   try {

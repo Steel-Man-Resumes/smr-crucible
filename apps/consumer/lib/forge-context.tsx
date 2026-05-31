@@ -23,6 +23,7 @@ export interface ForgeSessionData {
   // Page 3: Goals
   goals?: string[];
   goalNarrative?: string;
+  hookNarrative?: string;
 
   // Page 4: Story / Hurdles
   challenges?: string[];

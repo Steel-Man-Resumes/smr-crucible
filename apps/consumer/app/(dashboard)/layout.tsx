@@ -29,8 +29,10 @@ interface NavItem {
 
 const TIER_RANK: Record<string, number> = {
   admin: 0,
+  unlimited: 1,
   partner: 1,
   client: 2,
+  default: 2,
   observer: 3,
 };
 

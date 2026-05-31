@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
+import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
 
 export const maxDuration = 30;
 
@@ -19,6 +20,10 @@ async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
+  if (isMockEnabled()) {
+    return NextResponse.json(MOCK_DISCLOSURE_PLAN);
   }
 
   try {
@@ -57,6 +62,11 @@ async function handlePost(request: Request) {
     };
     const disclosureResearch = buildFullContext("disclosure", userCtx, { targetJob });
 
+    // Derive jurisdiction from forge context location (preferences.location)
+    const locationRaw = sanitizeForPrompt(forgeContext?.location || forgeContext?.preferences?.location || "", 200);
+    const stateMatch = locationRaw.match(/,\s*([A-Z]{2})$/) || locationRaw.match(/\b([A-Z]{2})\b/);
+    const jurisdiction = stateMatch ? stateMatch[1] : (sanitizeForPrompt(record.state || "", 10) || "Wisconsin");
+
     const prompt = `${disclosureResearch}
 
 You are a reentry career specialist helping someone plan how to disclose their criminal record to employers.
@@ -66,13 +76,16 @@ THEIR SITUATION:
 - Number of charges: ${sanitizeForPrompt(record.charge_count)}
 - Most recent: ${sanitizeForPrompt(record.most_recent)}
 - Probation/parole: ${sanitizeForPrompt(record.supervision)}
-- State: ${sanitizeForPrompt(record.state)}
+- State/Jurisdiction: ${jurisdiction}
 - Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}
+
+JURISDICTION-SPECIFIC CONTEXT:
+${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin ban-the-box: state/county government employers cannot ask about criminal history on applications. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement eligibility: WI §973.015 allows expungement for offenses committed under age 25, or for misdemeanors/minor felonies with no prior felony convictions. Process takes 6-18 months. Provide this specific guidance.` : `Research the specific ban-the-box laws, fair chance ordinances, and expungement options for ${jurisdiction}. Be specific — generic guidance is not enough.`}
 
 GENERATE a disclosure plan as JSON:
 {
-  "timing_advice": "When they should disclose and why, specific to their situation. Consider ban-the-box laws in their state if known.",
-  "legal_context": "Relevant laws and rights. Ban-the-box status, expungement eligibility, what employers can/cannot ask.",
+  "timing_advice": "When they should disclose and why, specific to their situation and jurisdiction. Apply the ban-the-box rules for their state.",
+  "legal_context": "Relevant laws and rights specific to their jurisdiction. Ban-the-box status, expungement eligibility under state law, what employers can/cannot ask. Be specific — cite the actual statute or ordinance where you can.",
   "script": "A natural, conversational script they can use. Under 30 seconds spoken. Acknowledges the past, pivots to growth and value. If candidate strengths are provided, reference them specifically in the pivot. Must sound human, not rehearsed.",
   "tips": [
     "tip 1 — specific, actionable",

@@ -28,6 +28,7 @@ const TIER_RANK: Record<string, number> = {
   unlimited: 1,
   partner: 2,
   client: 3,
+  default: 3,
   observer: 4,
 };
 

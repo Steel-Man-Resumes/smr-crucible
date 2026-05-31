@@ -39,6 +39,16 @@ const GOAL_OPTIONS = [
     label: "Something right now",
     description: "I need income fast. I'll figure out the rest later.",
   },
+  {
+    id: "independence",
+    label: "Be my own boss someday",
+    description: "I want to build toward running something of my own.",
+  },
+  {
+    id: "community",
+    label: "Give back to my community",
+    description: "I've been through it — I want to help others who are too.",
+  },
 ];
 
 export default function GoalsPage() {
@@ -53,6 +63,10 @@ export default function GoalsPage() {
     isDemo ? (DEMO_SESSION.goalNarrative || "") : (session.goalNarrative || "")
   );
   const [showNarrative, setShowNarrative] = useState(isDemo && !!DEMO_SESSION.goalNarrative);
+  const [hookNarrative, setHookNarrative] = useState(
+    isDemo ? (DEMO_SESSION.hookNarrative || "") : (session.hookNarrative || "")
+  );
+  const [showHookPrompt, setShowHookPrompt] = useState(false);
 
   // Track page visit
   useEffect(() => {
@@ -72,17 +86,20 @@ export default function GoalsPage() {
     updateSession({
       goals: isDemo ? DEMO_SESSION.goals : selected,
       goalNarrative: isDemo ? DEMO_SESSION.goalNarrative : (narrative || undefined),
+      hookNarrative: isDemo ? (DEMO_SESSION.hookNarrative || undefined) : (hookNarrative || undefined),
       lastPageVisited: "goals",
     });
     router.push("/story");
   }
+
+  const canContinue = isDemo || selected.length > 0 || narrative.trim().length > 0;
 
   return (
     <FlowPage
       title="What do you actually want?"
       subtitle="Pick as many as fit. This changes what jobs I recommend."
       actionLabel={isDemo ? "Next" : "Continue"}
-      actionDisabled={!isDemo && selected.length === 0 && !narrative.trim()}
+      actionDisabled={!canContinue}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/resume")}
@@ -127,8 +144,15 @@ export default function GoalsPage() {
         multi
       />
 
+      {/* Helper when nothing is selected */}
+      {!canContinue && (
+        <p className="text-sm text-muted text-center mt-2">
+          Pick at least one, or describe what you&apos;re looking for below.
+        </p>
+      )}
+
       {/* Optional free-text for more nuanced expression */}
-      <div className="mt-6">
+      <div className="mt-6 space-y-4">
         {!showNarrative ? (
           !isDemo && (
             <button
@@ -152,6 +176,38 @@ export default function GoalsPage() {
               onChange={isDemo ? () => {} : (e) => setNarrative(e.target.value)}
               placeholder="e.g., I want to work with my hands, or I'm interested in healthcare, or I want to start my own business someday..."
               rows={3}
+              readOnly={isDemo}
+              className={`w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y ${isDemo ? "bg-gray-50 cursor-default" : ""}`}
+            />
+          </div>
+        )}
+
+        {/* Hooks-for-change prompt — surfaces what would make work feel meaningful */}
+        {!isDemo && (selected.length > 0 || showNarrative) && !showHookPrompt && (
+          <button
+            onClick={() => setShowHookPrompt(true)}
+            className="text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700 block"
+          >
+            What would make work feel like yours?
+          </button>
+        )}
+        {(showHookPrompt || (isDemo && DEMO_SESSION.hookNarrative)) && (
+          <div className="space-y-2">
+            <label
+              htmlFor="hook-narrative"
+              className="text-sm font-medium text-foreground"
+            >
+              {isDemo ? "What would make work feel real to you?" : "What would make work feel like yours?"}
+            </label>
+            <p className="text-xs text-muted">
+              A mentor, a mission, using your story to help others — anything that would make getting up worth it.
+            </p>
+            <textarea
+              id="hook-narrative"
+              value={hookNarrative}
+              onChange={isDemo ? () => {} : (e) => setHookNarrative(e.target.value)}
+              placeholder="e.g., I want to help people going through what I went through. Or: I want to build something I can show my kids."
+              rows={2}
               readOnly={isDemo}
               className={`w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y ${isDemo ? "bg-gray-50 cursor-default" : ""}`}
             />

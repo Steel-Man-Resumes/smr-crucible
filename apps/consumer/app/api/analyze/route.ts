@@ -17,6 +17,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
 
 export const maxDuration = 120;
 
@@ -25,6 +26,7 @@ interface ForgeInput {
   readinessStage?: string;
   goals?: string[];
   goalNarrative?: string;
+  hookNarrative?: string;
   challenges?: string[];
   criminalRecord?: {
     type: string;
@@ -42,6 +44,11 @@ async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
+  // Zero-cost dev mode — return fixture data immediately
+  if (isMockEnabled()) {
+    return NextResponse.json({ ...MOCK_FORGE_OUTPUT, generated_at: new Date().toISOString() });
   }
 
   try {
@@ -140,8 +147,8 @@ const READINESS_DIRECTIVES: Record<string, {
     narrative: `This person is THINKING ABOUT IT. They know they need to do something but feel stuck.
 - Headline should name their direction without locking them in.
 - Summary should acknowledge both their experience AND their ambivalence. "You have more to work with than you think."
-- Reflection should validate that thinking is not wasted time.
-- Strengths: connect to possibilities. "This strength opens doors in X and Y."`,
+- Reflection should validate that thinking is not wasted time — and gently point toward a next small step.
+- Strengths: connect to possibilities. "This strength opens doors in X and Y." Frame strengths as the foundation of a future identity, not just resume bullets.`,
     skills: `This person is weighing their options.
 - Full skill extraction, but frame transferable skills prominently.
 - For each skill cluster, hint at what industries value it.
@@ -149,6 +156,7 @@ const READINESS_DIRECTIVES: Record<string, {
     careers: `This person is THINKING, not applying.
 - Suggest 3 paths, ranging from accessible to aspirational.
 - Frame as "options worth considering" with a sense of possibility.
+- For each path, include what Giordano calls a "hook": a specific program, org, or entry point in this field where someone could build a relationship — not just find a job.
 - Include what makes each path a good FIT for them specifically.
 - Next steps should be low-commitment ("learn more about..." not "apply to...").
 - Salary ranges help them see the upside.`,
@@ -156,15 +164,15 @@ const READINESS_DIRECTIVES: Record<string, {
 - Name barriers honestly. Connect each to resources.
 - Frame resources as "when you're ready, here's where to start."
 - Legal notes: clear and informative. Knowledge is power even before action.
-- 2-3 resources per barrier.`,
+- 2-3 resources per barrier. At least one should be a potential "hook for change" — a program or org that builds relationships, not just delivers services.`,
     careerCount: "3",
   },
   preparation: {
     narrative: `This person has DECIDED to make a change. They need a plan.
 - Headline should be resume-ready and targeted.
-- Summary should be confident and forward-looking.
-- Reflection should celebrate the decision and reinforce momentum.
-- Strengths: tie directly to target career paths with specific evidence.`,
+- Summary should be confident and forward-looking. This IS the replacement self Giordano describes — help them see it.
+- Reflection should celebrate the decision and reinforce the identity shift: they are not "someone trying to get a job," they are a professional in a specific field.
+- Strengths: tie directly to target career paths with specific evidence. Frame as proof of the new identity.`,
     skills: `This person is getting ready to move.
 - Full skill extraction with resume-ready language.
 - Categorize clearly (hard/soft/transferable) for resume building.
@@ -172,21 +180,25 @@ const READINESS_DIRECTIVES: Record<string, {
 - Include industry keywords where natural.`,
     careers: `This person is PREPARING to act.
 - Suggest 3-5 paths with concrete detail.
-- Include specific next steps (certifications to get, organizations to contact).
+- For the top path, identify the specific "hook" — an org, program, or employer in their area that could be both a job opportunity AND a genuine turning-point relationship.
+- Include specific next steps (certifications to get, organizations to contact, people to meet).
 - Salary ranges with growth potential ("starts at X, moves to Y within 2 years").
-- Note which paths have the lowest barrier to entry for their situation.`,
+- Note which paths have the lowest barrier to entry for their situation.
+- Name structural obstacles honestly (background check timing, licensing exclusions) and how to navigate them.`,
     barriers: `This person is preparing to move. They need actionable plans.
 - Full resource lists with contact info where possible.
 - Legal notes: specific to their situation, actionable.
 - Include timelines ("expungement takes X months in this state").
-- Frame through agency: "here's what you do first."`,
+- Frame through agency: "here's what you do first."
+- Name the structural reality (Pager's research) and the navigation: "Employers can discriminate even where ban-the-box applies. Here's how to get ahead of it."
+- At least one resource per barrier should be a potential "hook" org where a relationship can form, not just a service.`,
     careerCount: "3-5",
   },
   action: {
     narrative: `This person is READY TO GO. They are actively looking for work.
 - Headline must be resume-ready, keyword-rich, and targeted to their strongest career path.
 - Summary should read like a professional brand statement an employer would respond to.
-- Reflection can be brief. They don't need encouragement, they need tools.
+- Reflection can be brief — they have made the identity shift. Reinforce it: "You're not job-searching. You're connecting your skills to the right employer."
 - Strengths: frame as competitive advantages with specific evidence and metrics.`,
     skills: `This person is actively job searching.
 - Comprehensive extraction with ATS-optimized language.
@@ -195,16 +207,18 @@ const READINESS_DIRECTIVES: Record<string, {
 - Prioritize hard skills and quantifiable competencies.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
+- For each path: name specific fair-chance employers in their area. SHRM data shows 85% of HR pros say JI employees perform equal or better — this person should know that data exists.
 - Next steps should be specific and immediate ("apply on Indeed this week", "call this organization Monday").
-- Include which employers in their area are fair-chance.
 - Salary ranges with negotiation context.
-- Note seasonal hiring patterns if relevant.`,
+- Note seasonal hiring patterns if relevant.
+- Address the structural barrier upfront for each path: what the background check process looks like, timing of disclosure, which employers use individual assessment.`,
     barriers: `This person is actively applying and needs barrier solutions NOW.
 - Maximum resource depth. Real organizations, real contact info.
 - Legal notes: specific, actionable, with deadlines if applicable.
 - Include "what to say when asked" disclosure strategies.
 - Prioritize resources by immediacy and impact.
-- Frame barriers as solvable logistics, not identity.`,
+- Frame barriers as solvable logistics, not identity: "The system has this obstacle. Here is exactly how to move through it."
+- Include fair-chance employer intelligence — which specific companies in their area have publicly committed to fair hiring.`,
     careerCount: "3-5",
   },
 };
@@ -236,6 +250,9 @@ function buildContext(input: ForgeInput): string {
   if (input.goalNarrative) {
     parts.push(`GOAL NARRATIVE: ${sanitizeForPrompt(input.goalNarrative, 1000)}`);
   }
+  if (input.hookNarrative) {
+    parts.push(`HOOK FOR CHANGE (what would make work feel meaningful — Giordano's turning-point context): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
+  }
 
   if (input.challenges?.length) {
     parts.push(`CHALLENGES: ${sanitizeArray(input.challenges)}`);
@@ -259,6 +276,13 @@ function buildContext(input: ForgeInput): string {
     parts.push(
       `PREFERENCES: schedule=${sanitizeForPrompt(p.schedule) || "any"}, environment=${sanitizeForPrompt(p.environment) || "any"}, commute=${sanitizeForPrompt(p.commute) || "any"}, location=${sanitizeForPrompt(p.location)}`
     );
+    // Extract state for jurisdiction-specific barrier analysis
+    if (p.location) {
+      const stateMatch = sanitizeForPrompt(p.location, 200).match(/,\s*([A-Z]{2})$/);
+      if (stateMatch) {
+        parts.push(`JURISDICTION: ${stateMatch[1]} (use for ban-the-box laws, expungement rules, and fair-chance ordinances)`);
+      }
+    }
   }
 
   return parts.join("\n\n");
@@ -444,20 +468,31 @@ async function analyzeBarriers(
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
 
-  const system = `You are a reentry resource specialist.
+  const system = `You are a reentry resource specialist grounded in evidence-based practice.
+
+CORE FRAMING (non-negotiable):
+Barriers are structural obstacles and logistics to navigate — not character flaws or personal failures.
+Devah Pager's audit studies showed that discrimination in hiring is measurable and systematic.
+Your job is to arm this person with real resources, legal rights, and navigation strategies — not to help them feel better about a system that is genuinely unfair to them.
+
+At the same time: Giordano et al. (2002) showed that lasting change requires both a concrete "hook" (a job, a program, a mentor) AND identity work. For each barrier, surface potential hooks — organizations and programs where the person might find not just a service, but a connection that could become a turning point.
+
 For each barrier this person faces, provide:
 - Practical resources and organizations that help
-- Legal context where relevant (ban-the-box, fair chance laws)
+- Legal context where relevant (ban-the-box, fair chance laws) — be jurisdiction-specific when the state is known
 - Specific, actionable next steps
+- At least one potential "hook for change" — an org or program where this person could build a relationship, not just receive a service
 
 READINESS-AWARE INSTRUCTIONS:
 ${rd.barriers}
 
 RULES:
 - Be specific, not generic. Real organizations > generic advice.
-- For criminal records: consider type, recency, and jurisdiction.
+- For criminal records: consider type, recency, and jurisdiction. Mention specific WI laws if jurisdiction is Wisconsin.
+- Wisconsin ban-the-box: applies to state/county government employers; Milwaukee city has its own ordinance extending to private employers with 15+. Mention expungement eligibility under WI §973.015.
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
+- "The system has real obstacles here. Here's how to move through them." — not "don't worry about it."
 - Output JSON only.`;
 
   const prompt = `Analyze barriers and find resources for this person.

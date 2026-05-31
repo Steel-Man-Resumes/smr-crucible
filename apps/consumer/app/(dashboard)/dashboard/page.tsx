@@ -1,14 +1,18 @@
 "use client";
 
 /**
- * Client Dashboard — Overview
+ * Dashboard — Overview
  *
- * Three states:
- * 1. needs_profile → Profile setup form (name, email, phone, city, state)
+ * Audience-aware: client / partner / observer / admin each see a different entry experience.
+ *
+ * Client states:
+ * 1. needs_profile → Profile setup form
  * 2. needs_resume  → Job Board + Resume Builder only, locked cards for rest
  * 3. full_access   → Everything unlocked
  *
- * Admin tier bypasses all gates (god mode).
+ * Partner: methodology review mode — bypass Forge gate, show tool landscape + deep links.
+ * Observer: evidence mode — research citations, tool explainers, methodology/evidence pages.
+ * Admin: god mode (everything unlocked, all states skipped).
  */
 
 import { useState, useEffect } from "react";
@@ -236,6 +240,16 @@ export default function DashboardPage() {
         <div className="w-8 h-8 border-3 border-sage-200 border-t-sage-600 rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // ─── Audience: Partner ────────────────────────────────────────────────
+  if (tier === "partner") {
+    return <PartnerDashboard />;
+  }
+
+  // ─── Audience: Observer ───────────────────────────────────────────────
+  if (tier === "observer") {
+    return <ObserverDashboard />;
   }
 
   // ─── State: needs_profile ─────────────────────────────────────────────
@@ -549,6 +563,256 @@ export default function DashboardPage() {
             Settings & privacy
           </Link>
         </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Partner Dashboard ────────────────────────────────────────────────────────
+
+function PartnerDashboard() {
+  const TOOL_OVERVIEW = [
+    {
+      title: "The Forge",
+      href: "/intro",
+      description: "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to resources. Free for all clients — no account needed until they want to save.",
+      research: "Stages of Change (Prochaska), Narrative Identity (McAdams), Giordano's hooks-for-change",
+    },
+    {
+      title: "Resume Builder",
+      href: "/dashboard/resume-builder",
+      description: "AI-generated resumes targeted to specific jobs. Pulls from Forge data — every resume is grounded in the client's actual skills and story, not a template.",
+      research: "ATS optimization, Bandura mastery experiences",
+    },
+    {
+      title: "Disclosure Planner",
+      href: "/dashboard/disclosure",
+      description: "Personalized plan for when and how to discuss a criminal record. Includes jurisdiction-specific ban-the-box guidance, a natural-sounding script, and a pivot strategy using the client's strengths.",
+      research: "Pager structural barriers, WI §973.015, ban-the-box compliance",
+    },
+    {
+      title: "Interview Practice",
+      href: "/dashboard/interview",
+      description: "AI mock interviews tailored to role, level, and disclosure needs. Four modes: general, behavioral STAR, industry-specific, and disclosure practice.",
+      research: "SDT competence-building, Bandura performance accomplishments",
+    },
+    {
+      title: "Job Board",
+      href: "/dashboard/jobs",
+      description: "Real listings via JSearch API — no hallucinated jobs. Fair-chance employers flagged and sorted first. No outbound links; everything renders natively.",
+      research: "SHRM fair-chance employer data, Granovetter weak ties",
+    },
+    {
+      title: "Resources",
+      href: "/dashboard/resources",
+      description: "Barrier-matched resource directory. Housing, transportation, legal aid, mental health, recovery support. Matched to what the client disclosed in the Forge.",
+      research: "SAMHSA trauma-informed care, NIJ reentry framework",
+    },
+  ];
+
+  return (
+    <div className="space-y-10">
+      {/* Header */}
+      <section className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-sage-600">
+              <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-sage-600 mb-1">t.ROY — Partner View</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome to The Refinery</h1>
+            <p className="text-body text-muted leading-relaxed">
+              You&apos;re seeing this as a partner organization. The tools below are what your clients experience — each one is built on peer-reviewed research and designed specifically for justice-impacted people. Walk through any tool to see it in action, or go deeper into the methodology.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Deep methodology links */}
+      <section className="grid sm:grid-cols-2 gap-4">
+        <Link
+          href="/dashboard/methodology"
+          className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+        >
+          <h3 className="font-semibold text-lg mb-1">Full Methodology Playbook</h3>
+          <p className="text-sm text-sage-100">
+            10 behavioral rules, research foundation, how each feature was designed. The full picture for program directors and case managers.
+          </p>
+        </Link>
+        <Link
+          href="/dashboard/evidence"
+          className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+        >
+          <h3 className="font-semibold text-lg mb-1">Evidence & Outcomes</h3>
+          <p className="text-sm text-sky-100">
+            Research citations, outcome data, differentiators. Built for funders, grant applications, and accreditation reviewers.
+          </p>
+        </Link>
+      </section>
+
+      {/* Try it with a client */}
+      <section className="bg-warm-50 rounded-2xl p-6 border border-warm-200">
+        <h2 className="font-semibold text-foreground mb-2">Try it with a client</h2>
+        <p className="text-sm text-muted mb-4">
+          The Forge takes about 10 minutes. Walk through it yourself or sit with a client while they do — you&apos;ll see exactly what they experience and what it produces.
+        </p>
+        <Link
+          href="/intro"
+          className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors"
+        >
+          Start The Forge
+        </Link>
+      </section>
+
+      {/* Tool-by-tool breakdown */}
+      <section>
+        <h2 className="text-lg font-bold text-foreground mb-4">What each tool does</h2>
+        <div className="space-y-3">
+          {TOOL_OVERVIEW.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="block bg-white rounded-xl p-5 border border-border hover:border-sage-300 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-foreground mb-1">{tool.title}</h3>
+                  <p className="text-sm text-muted leading-relaxed mb-2">{tool.description}</p>
+                  <p className="text-xs text-sage-600 font-medium">Research basis: {tool.research}</p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-muted flex-shrink-0 mt-1">
+                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Settings */}
+      <section className="border-t border-border pt-8">
+        <Link
+          href="/dashboard/settings"
+          className="text-sm text-muted hover:text-foreground bg-white rounded-xl px-4 py-3 border border-border transition-colors"
+        >
+          Settings & privacy
+        </Link>
+      </section>
+    </div>
+  );
+}
+
+// ─── Observer Dashboard ───────────────────────────────────────────────────────
+
+function ObserverDashboard() {
+  const HEADLINE_CITATIONS = [
+    {
+      finding: "Affect labeling reduces amygdala reactivity by up to 50%",
+      source: "Lieberman et al., 2007",
+      detail: "fMRI study. Putting feelings into words activates prefrontal cortex and dampens amygdala response — the mechanism behind why free-text prompts are therapeutic, not just data collection.",
+    },
+    {
+      finding: "A criminal record reduces job callbacks by 50% for white applicants — and 64% for Black applicants",
+      source: "Pager, 2003 (Milwaukee audit study)",
+      detail: "Black applicants without records were called back less than white applicants with records. Employment barriers are structural, not motivational. This tool is designed to navigate that system — not pretend it doesn't exist.",
+    },
+    {
+      finding: "85% of HR professionals say justice-impacted employees perform the same as or better than other employees",
+      source: "SHRM, 2021",
+      detail: "31% lower turnover in year one. The fair-chance employer matching in this tool is built on evidence that hiring people with records is good business — not charity.",
+    },
+    {
+      finding: "Redemption sequences (bad→good narratives) predict higher well-being and generativity",
+      source: "McAdams & McLean, 2013",
+      detail: "Narrative identity theory. People who construct redemption arcs show better outcomes than those with contamination sequences. The Forge is a structured redemption narrative builder.",
+    },
+    {
+      finding: "Lasting desistance requires both a concrete 'hook for change' and identity transformation",
+      source: "Giordano et al., 2002",
+      detail: "A job offer without identity work, or identity work without a concrete opportunity, both fail. This tool addresses both simultaneously.",
+    },
+  ];
+
+  return (
+    <div className="space-y-10">
+      {/* Header */}
+      <section className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-sky-600">
+              <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-sky-600 mb-1">t.ROY — Evidence View</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Built on evidence. Designed for scrutiny.</h1>
+            <p className="text-body text-muted leading-relaxed">
+              Every feature in this tool has a research basis. This view surfaces the citations, outcomes data, and design decisions. The full evidence deck is in the Evidence tab.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Key citations */}
+      <section>
+        <h2 className="text-lg font-bold text-foreground mb-4">Five findings this tool is built on</h2>
+        <div className="space-y-3">
+          {HEADLINE_CITATIONS.map((c, i) => (
+            <div key={i} className="bg-white rounded-xl p-5 border border-border">
+              <p className="font-semibold text-foreground mb-1">&ldquo;{c.finding}&rdquo;</p>
+              <p className="text-xs font-medium text-sky-600 mb-2">{c.source}</p>
+              <p className="text-sm text-muted leading-relaxed">{c.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Deep links */}
+      <section className="grid sm:grid-cols-2 gap-4">
+        <Link
+          href="/dashboard/evidence"
+          className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+        >
+          <h3 className="font-semibold text-lg mb-1">Full Evidence Deck</h3>
+          <p className="text-sm text-sky-100">
+            All citations, methodology notes, and outcome data. Structured for grant applications and academic review.
+          </p>
+        </Link>
+        <Link
+          href="/dashboard/methodology"
+          className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+        >
+          <h3 className="font-semibold text-lg mb-1">Design Methodology</h3>
+          <p className="text-sm text-sage-100">
+            How each behavioral rule translates into a feature. The 10 non-negotiables and why they exist.
+          </p>
+        </Link>
+      </section>
+
+      {/* Try it */}
+      <section className="bg-sky-50 rounded-2xl p-6 border border-sky-200">
+        <h2 className="font-semibold text-foreground mb-2">See it in action</h2>
+        <p className="text-sm text-muted mb-4">
+          The Forge demo runs with sample data — Jordan, a warehouse worker from Milwaukee navigating a felony record. Walk through all 8 pages and see what the tool produces.
+        </p>
+        <Link
+          href="/intro"
+          className="inline-flex items-center px-5 py-3 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 transition-colors"
+        >
+          Launch demo
+        </Link>
+      </section>
+
+      {/* Settings */}
+      <section className="border-t border-border pt-8">
+        <Link
+          href="/dashboard/settings"
+          className="text-sm text-muted hover:text-foreground bg-white rounded-xl px-4 py-3 border border-border transition-colors"
+        >
+          Settings & privacy
+        </Link>
       </section>
     </div>
   );
