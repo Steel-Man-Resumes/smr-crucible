@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-05-31  
 **Last session:** The Mini Forge -- full build + production wiring (commits bae9d26, 02fc457)  
-**Next session:** Personalized SMR Website (spec in HANDOFF below)
+**Next session:** Full flow test + any polish
 
 ---
 
