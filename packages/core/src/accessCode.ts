@@ -59,7 +59,9 @@ export async function createAccessCode(
     ]
   );
 
-  await emitEvent({
+  // Fire-and-forget -- event table requires a real org FK; don't let a missing
+  // sentinel org row prevent code creation.
+  emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000",
     project_id: null,
     run_id: null,
@@ -75,7 +77,7 @@ export async function createAccessCode(
     parent_event_id: null,
     payload: { code: opts.code, partner: opts.partnerName, tier: opts.tier ?? "partner" },
     sensitive_ref: null,
-  });
+  }).catch(() => {});
 
   return rows[0];
 }
@@ -136,7 +138,7 @@ export async function redeemAccessCode(
     [ac.id]
   );
 
-  await emitEvent({
+  emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000",
     project_id: null,
     run_id: null,
@@ -152,7 +154,7 @@ export async function redeemAccessCode(
     parent_event_id: null,
     payload: { code: ac.code, partner: ac.partner_name, tier: ac.tier },
     sensitive_ref: null,
-  });
+  }).catch(() => {});
 
   // Sync tier to user record (highest code tier wins)
   await syncUserTierFromCodes(userId);
