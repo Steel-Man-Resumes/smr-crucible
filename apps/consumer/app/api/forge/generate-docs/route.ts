@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 120;
 
@@ -74,8 +75,8 @@ async function handlePost(request: Request) {
       await logDecision({
         sessionId: input.sessionId ?? null,
         contextPage: "generate-docs",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: JSON.stringify({
           has_resume: !!input.resumeText,
           strengths_count: (input.strengths || input.narrative?.strengths || []).length,
@@ -116,31 +117,7 @@ async function callClaude(
   userMessage: string,
   maxTokens = 4000
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Claude API error: ${response.status} ${text}`);
-  }
-
-  const data = await response.json();
-  return data.content[0]?.text || "";
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens);
 }
 
 // --- Resume Generation ---

@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 120;
 
@@ -85,8 +86,8 @@ async function handlePost(request: Request) {
       await logDecision({
         sessionId: input.sessionId ?? null,
         contextPage: "analyze",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: context.slice(0, 500),
         explanation: "Generated Forge career analysis from resume, goals, barriers, and preferences",
         outputSummary: {
@@ -292,36 +293,9 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string
 ): Promise<Record<string, unknown>> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Claude API error: ${response.status} ${text}`);
-  }
-
-  const data = await response.json();
-  const text = data.content[0]?.text || "";
-
-  // Extract JSON from response
+  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("No JSON in Claude response");
-
+  if (!jsonMatch) throw new Error("No JSON in AI response");
   return JSON.parse(jsonMatch[0]);
 }
 

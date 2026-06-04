@@ -13,6 +13,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 30;
 
@@ -29,8 +30,7 @@ async function handlePost(request: Request) {
   try {
     const { record, timing, targetJob, forgeContext } = await request.json();
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
@@ -103,26 +103,7 @@ RULES:
 - 6th grade reading level
 - JSON only`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = data.content[0]?.text || "";
+    const text = await callAI("", [{ role: "user", content: prompt }], 1500);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 
@@ -133,8 +114,8 @@ RULES:
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "disclosure-guide",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: JSON.stringify({ record, timing }).slice(0, 500),
         explanation: "Generated disclosure plan based on criminal record type, recency, and jurisdiction",
         outputSummary: {

@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 60;
 
@@ -84,34 +85,9 @@ Return JSON:
 }`;
 
     const startTime = Date.now();
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Claude API error: ${response.status} ${text}`);
-    }
-
-    const data = await response.json();
-    const text = data.content[0]?.text || "";
+    const text = await callAI(SYSTEM_PROMPT, [{ role: "user", content: userMessage }], 4000);
     const latencyMs = Date.now() - startTime;
-    const tokenCount = data.usage?.input_tokens + data.usage?.output_tokens;
+    const tokenCount = undefined;
 
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -124,8 +100,8 @@ Return JSON:
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "rush-resume",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: input.resumeText.slice(0, 500),
         explanation: `Rush resume rewrite for target job: ${input.targetJob}${input.targetCompany ? ` at ${input.targetCompany}` : ""}`,
         outputSummary: {

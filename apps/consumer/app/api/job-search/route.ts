@@ -16,6 +16,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import crypto from "crypto";
 
 export const maxDuration = 30;
@@ -167,7 +168,7 @@ async function enrichWithClaude(
   jobs: JSearchJob[],
   context: { hasRecord: boolean; recordType?: string; location: string }
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
 
   // Pre-process: build basic enriched jobs without AI
   const basicJobs: EnrichedJob[] = jobs.slice(0, 15).map((j) => {
@@ -232,26 +233,12 @@ RULES:
 - 6th grade reading level
 - JSON only, no markdown`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
+    let text: string;
+    try {
+      text = await callAI("", [{ role: "user", content: prompt }], 2000);
+    } catch {
       return { enrichedJobs: basicJobs, fairChanceInfo: "" };
     }
-
-    const data = await response.json();
-    const text = data.content[0]?.text || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
@@ -395,8 +382,8 @@ async function handlePost(request: Request) {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "job-search",
-        modelProvider: "jsearch+anthropic",
-        modelId: "jsearch-v1+claude-sonnet-4",
+        modelProvider: `jsearch+${AI_PROVIDER}`,
+        modelId: `jsearch-v1+${AI_MODEL}`,
         input: JSON.stringify({ targetRole, location, skills, hasRecord }).slice(0, 500),
         explanation: `JSearch API: ${rawJobs.length} raw results for "${targetRole || "general"}" in ${searchLocation}. Claude enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
         outputSummary: {

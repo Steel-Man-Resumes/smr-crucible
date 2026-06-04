@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 30;
 
@@ -22,8 +23,7 @@ async function handlePost(request: Request) {
   try {
     const { messages, config, exchangeCount, forgeContext } = await request.json();
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
@@ -105,32 +105,12 @@ RULES:
 - JSON only (after the closing statement)`;
     }
 
-    const claudeMessages = messages.map((m: any) => ({
+    const chatMessages = messages.map((m: any) => ({
       role: m.role === "assistant" ? "assistant" : "user",
       content: m.content,
     }));
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: shouldWrapUp ? 1500 : 300,
-        system: systemPrompt,
-        messages: claudeMessages,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = data.content[0]?.text || "";
+    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1500 : 300);
 
     if (shouldWrapUp) {
       // Log wrapup decision
@@ -194,8 +174,8 @@ RULES:
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "interview-practice",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: (messages[messages.length - 1]?.content || "").slice(0, 500),
         explanation: `Interview practice exchange #${exchangeCount}. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}.`,
         outputSummary: {

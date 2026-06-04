@@ -11,6 +11,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_RESUME } from "@/lib/mock-ai";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 30;
 
@@ -28,8 +29,7 @@ async function handlePost(request: Request) {
     const body = await request.json();
     const { targetJob, targetCompany, jobListingUrl, existingBullets, skills, forgeNarrative, forgeStrengths, action } = body;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
@@ -83,34 +83,15 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
       );
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const suggestion = data.content[0]?.text?.trim() || "";
+    const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300)).trim();
 
     // Log decision for JBS compliance
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "resume-generate",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: JSON.stringify({ targetJob, action, skills }).slice(0, 500),
         explanation: `Generated resume ${action === "suggest_summary" ? "summary" : "bullet point"} for ${targetJob}${targetCompany ? ` at ${targetCompany}` : ""}.`,
         outputSummary: {

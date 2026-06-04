@@ -13,30 +13,12 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
+import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 120;
 
-async function callClaude(apiKey: string, prompt: string, maxTokens = 2000): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.content[0]?.text?.trim() || "";
+async function callClaude(prompt: string, maxTokens = 2000): Promise<string> {
+  return callAI("", [{ role: "user", content: prompt }], maxTokens);
 }
 
 async function handlePost(request: Request) {
@@ -49,8 +31,7 @@ async function handlePost(request: Request) {
     const body = await request.json();
     const { forgeOutput, resumeText, job, contact, challenges, criminalRecord } = body;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
     }
 
@@ -189,8 +170,8 @@ ${contactName || "Candidate"}`;
 
     // Run resume + cover letter in parallel
     const [resumeRaw, coverLetterText] = await Promise.all([
-      callClaude(apiKey, resumePrompt, 2000),
-      callClaude(apiKey, coverLetterPrompt, 1500),
+      callClaude(resumePrompt, 2000),
+      callClaude(coverLetterPrompt, 1500),
     ]);
 
     // Parse resume JSON
@@ -300,8 +281,8 @@ ${contactName || "Candidate"}`;
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         contextPage: "career-package-generate",
-        modelProvider: "anthropic",
-        modelId: "claude-sonnet-4-20250514",
+        modelProvider: AI_PROVIDER,
+        modelId: AI_MODEL,
         input: JSON.stringify({ jobTitle: job.title, jobCompany: job.company }).slice(0, 500),
         explanation: `Generated career package (resume + cover letter + disclosure brief) for ${job.title} at ${job.company}.`,
         outputSummary: {
