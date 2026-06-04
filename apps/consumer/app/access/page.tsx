@@ -127,13 +127,25 @@ export default function AccessPage() {
       opacity: 0.5 + Math.random() * 0.5,
       isRect: Math.random() > 0.45,
     }));
+    const startTime = Date.now();
+    const STOP_MS = 15_000;
+    const FADE_MS = 2_000; // fade out over last 2s
+
     const draw = () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= STOP_MS + FADE_MS) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const globalFade = elapsed > STOP_MS
+        ? 1 - (elapsed - STOP_MS) / FADE_MS
+        : 1;
       for (const p of particlesRef.current) {
         p.x += p.speedX; p.y += p.speedY; p.rotation += p.rotationSpeed;
         if (p.y > canvas.height + 20) { p.y = -20; p.x = Math.random() * canvas.width; }
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
-        ctx.globalAlpha = p.opacity; ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.opacity * globalFade; ctx.fillStyle = p.color;
         if (p.isRect) ctx.fillRect(-p.size/2, -p.size/5, p.size, p.size*0.45);
         else { ctx.beginPath(); ctx.ellipse(0,0,p.size/3,p.size/5,0,0,Math.PI*2); ctx.fill(); }
         ctx.restore();
