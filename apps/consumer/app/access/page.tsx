@@ -24,14 +24,12 @@ interface Particle {
   opacity: number; isRect: boolean;
 }
 
-export default function WelcomePage() {
+export default function AccessPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const rafRef = useRef<number>(0);
-
   const [phase, setPhase] = useState(0);
 
-  // Stagger content in
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 100);
     const t2 = setTimeout(() => setPhase(2), 500);
@@ -40,7 +38,6 @@ export default function WelcomePage() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, []);
 
-  // Confetti canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -54,7 +51,6 @@ export default function WelcomePage() {
     resize();
     window.addEventListener("resize", resize);
 
-    // Seed particles
     const count = Math.min(180, Math.floor(window.innerWidth / 8));
     particlesRef.current = Array.from({ length: count }, () => ({
       x: Math.random() * window.innerWidth,
@@ -120,31 +116,19 @@ export default function WelcomePage() {
       justifyContent: "center",
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     }}>
-      {/* Canvas */}
       <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }} />
-
-      {/* Radial glow */}
       <div style={{
         position: "absolute", inset: 0, zIndex: 1,
         background: "radial-gradient(ellipse 70% 60% at 50% 40%, rgba(74,158,63,0.18) 0%, transparent 70%)",
         pointerEvents: "none",
       }} />
 
-      {/* Content */}
       <div style={{ position: "relative", zIndex: 2, textAlign: "center", padding: "48px 24px 64px", maxWidth: "680px", width: "100%" }}>
 
-        {/* Eyebrow */}
-        <div style={{
-          ...fade(1),
-          display: "inline-block",
-          fontSize: "11px", fontWeight: 700,
-          letterSpacing: "0.2em", textTransform: "uppercase",
-          color: "#a8c89e", marginBottom: "28px",
-        }}>
+        <div style={{ ...fade(1), display: "inline-block", fontSize: "11px", fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase" as const, color: "#a8c89e", marginBottom: "28px" }}>
           Steel Man Resumes
         </div>
 
-        {/* Headline */}
         <h1 style={{
           ...fade(1, "0.1s"),
           fontSize: "clamp(44px, 9vw, 78px)",
@@ -156,9 +140,8 @@ export default function WelcomePage() {
           <span style={{ color: "#c8e8c0" }}>Dr. Baker.</span>
         </h1>
 
-        {/* Subheadline */}
         <p style={{
-          ...fade(2, "0s"),
+          ...fade(2),
           fontSize: "18px", color: "#c8ddc4",
           lineHeight: 1.75, maxWidth: "480px",
           margin: "0 auto 44px",
@@ -167,7 +150,6 @@ export default function WelcomePage() {
           Your platform access is live. Every tool in the Refinery is unlocked and waiting for you.
         </p>
 
-        {/* CTA Button */}
         <div style={{ ...fade(2, "0.15s"), marginBottom: "52px" }}>
           <a
             href="https://refinery.steelmanresumes.com"
@@ -181,77 +163,40 @@ export default function WelcomePage() {
               textDecoration: "none",
               letterSpacing: "0.01em",
               boxShadow: "0 6px 28px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)",
-              transition: "transform 0.2s, box-shadow 0.2s",
-            }}
-            onMouseEnter={e => {
-              (e.target as HTMLElement).style.transform = "translateY(-2px)";
-              (e.target as HTMLElement).style.boxShadow = "0 10px 36px rgba(0,0,0,0.32), 0 4px 12px rgba(0,0,0,0.18)";
-            }}
-            onMouseLeave={e => {
-              (e.target as HTMLElement).style.transform = "translateY(0)";
-              (e.target as HTMLElement).style.boxShadow = "0 6px 28px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)";
             }}
           >
             Open the Refinery &rarr;
           </a>
         </div>
 
-        {/* Divider label */}
-        <div style={{
-          ...fade(3, "0s"),
-          fontSize: "11px", fontWeight: 600,
-          letterSpacing: "0.16em", textTransform: "uppercase",
-          color: "#6a9e62", marginBottom: "20px",
-        }}>
+        <div style={{ ...fade(3), fontSize: "11px", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#6a9e62", marginBottom: "20px" }}>
           Everything unlocked for you
         </div>
 
-        {/* Tool grid */}
-        <div style={{
-          ...fade(3, "0.05s"),
-          display: "flex", flexWrap: "wrap",
-          gap: "10px", justifyContent: "center",
-          marginBottom: "52px",
-        }}>
+        <div style={{ ...fade(3, "0.05s"), display: "flex", flexWrap: "wrap" as const, gap: "10px", justifyContent: "center", marginBottom: "52px" }}>
           {TOOLS.map((tool, i) => (
-            <div
-              key={tool.name}
-              style={{
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.14)",
-                borderRadius: "10px",
-                padding: "10px 16px",
-                textAlign: "left",
-                minWidth: "180px", maxWidth: "220px",
-                opacity: phase >= 3 ? 1 : 0,
-                transform: phase >= 3 ? "translateY(0)" : "translateY(12px)",
-                transition: `opacity 0.6s ease ${0.05 + i * 0.08}s, transform 0.6s ease ${0.05 + i * 0.08}s`,
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <div style={{ fontSize: "13px", fontWeight: 600, color: "#e8f4e4", marginBottom: "3px" }}>
-                {tool.name}
-              </div>
-              <div style={{ fontSize: "12px", color: "#8ab884", lineHeight: 1.4 }}>
-                {tool.desc}
-              </div>
+            <div key={tool.name} style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: "10px",
+              padding: "10px 16px",
+              textAlign: "left" as const,
+              minWidth: "180px", maxWidth: "220px",
+              opacity: phase >= 3 ? 1 : 0,
+              transform: phase >= 3 ? "translateY(0)" : "translateY(12px)",
+              transition: `opacity 0.6s ease ${0.05 + i * 0.08}s, transform 0.6s ease ${0.05 + i * 0.08}s`,
+            }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#e8f4e4", marginBottom: "3px" }}>{tool.name}</div>
+              <div style={{ fontSize: "12px", color: "#8ab884", lineHeight: 1.4 }}>{tool.desc}</div>
             </div>
           ))}
         </div>
 
-        {/* Footer hint -- the silent pitch */}
-        <div style={{
-          ...fade(4, "0s"),
-          borderTop: "1px solid rgba(255,255,255,0.1)",
-          paddingTop: "32px",
-        }}>
+        <div style={{ ...fade(4), borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "32px" }}>
           <p style={{
-            fontSize: "14px",
-            color: "rgba(200,221,196,0.65)",
-            lineHeight: 1.7,
-            fontFamily: "Georgia, serif",
-            fontStyle: "italic",
-            maxWidth: "440px",
+            fontSize: "14px", color: "rgba(200,221,196,0.65)",
+            lineHeight: 1.7, fontFamily: "Georgia, serif",
+            fontStyle: "italic", maxWidth: "440px",
             margin: "0 auto 16px",
           }}>
             This is the beginning of the Steel Man Resumes experience &mdash; built for every person who deserves to see themselves this way.
