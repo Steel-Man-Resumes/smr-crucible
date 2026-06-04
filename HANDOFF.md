@@ -1,7 +1,29 @@
 # SMR Crucible -- Handoff
-**Last updated:** 2026-05-31  
-**Last session:** Mini Forge + SMR website overhaul (full session close)  
-**Next session:** Full flow test -- land cold on steelmanresumes.com, run Forge, return to SMR and verify personalization
+**Last updated:** 2026-06-04
+**Last session:** AI provider switch (OpenAI temporary) + Dr. Baker access setup + /access landing page
+**Next session:** Restore Anthropic when Troy pays bill (edit apps/consumer/lib/ai-call.ts only). Verify Dr. Baker full flow post-test.
+
+---
+
+## 2026-06-04 -- AI Switch + Dr. Baker Access (commits 807b47d, 49f68ec, 04c0c0e, 0b99bfe, 5463afc)
+
+### AI Provider -- Anthropic → OpenAI (TEMPORARY)
+All 8 consumer AI routes now use OpenAI gpt-4o via single shim at `apps/consumer/lib/ai-call.ts`.
+**To revert when Anthropic bill paid:** edit only `lib/ai-call.ts` -- change endpoint to `api.anthropic.com/v1/messages`, swap `Authorization: Bearer` back to `x-api-key` + `anthropic-version` headers, change response extraction from `choices[0].message.content` back to `content[0].text`, change model from `gpt-4o` to `claude-sonnet-4-20250514`.
+
+Worker generators (genResume, genSalary, etc. in services/worker) still use Anthropic directly -- not in the live Forge/Refinery web flow, deferred.
+
+### Dr. Baker Pre-Authorization
+- `apps/consumer/auth.ts` -- `PARTNER_PRE_AUTH` array contains `latonyabakergoe@gmail.com`. On sign-in, auto-elevates to `partner` tier + updates DB.
+- `apps/consumer/app/(dashboard)/layout.tsx` -- `isNavUnlocked()` updated: `partner` tier bypasses onboarding state requirements (same as admin but without admin tool access). All Refinery tools visible immediately.
+- `BAKER2026` code in Neon DB: partner tier, no expiry, no redemption limit -- for her staff/team.
+
+### /access Landing Page
+`apps/consumer/app/access/page.tsx` -- public page at `forge.steelmanresumes.com/access`.
+Full orientation brief: confetti (stops + fades at 15s), Forge/Refinery philosophy, 6 Refinery tools, access details (pre-auth + BAKER2026 + partner tier), Jimmy Wallace sample resume (one-click clipboard copy), personal note, CTA → `forge.steelmanresumes.com/intro` (client entry).
+
+### .env.example updated
+`apps/consumer/.env.example` -- added `OPENAI_API_KEY=` documentation (was missing).
 
 ---
 
