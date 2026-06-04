@@ -59,6 +59,10 @@ const NAV_ITEMS: NavItem[] = [
 function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: OnboardingState): boolean {
   // Admin = god mode
   if (userTier === "admin") return true;
+  // Partner = all tools visible, onboarding state skipped (tier check still applies)
+  if (userTier === "partner") {
+    return (TIER_RANK[userTier] ?? 3) <= (TIER_RANK[item.minTier] ?? 3);
+  }
   // Tier check
   const tierRank = TIER_RANK[userTier] ?? 3;
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;

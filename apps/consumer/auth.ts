@@ -9,6 +9,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const isDev = process.env.NODE_ENV === "development";
 
+// Emails that receive partner tier automatically on sign-in (no code required)
+const PARTNER_PRE_AUTH = ["latonyabakergoe@gmail.com"];
+
 const providers: any[] = [
   Resend({
     from: process.env.AUTH_EMAIL_FROM || "onboarding@resend.dev",
@@ -170,6 +173,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         } catch {
           token.tier = "client";
+        }
+      }
+      // Pre-authorized emails: auto-elevate to partner tier on sign-in
+      if (trigger === "signIn" && token.email) {
+        const email = (token.email as string).toLowerCase();
+        if (PARTNER_PRE_AUTH.includes(email)) {
+          const tierPriority: Record<string, number> = { admin: 0, unlimited: 1, partner: 1, client: 2, observer: 3 };
+          const current = tierPriority[token.tier as string] ?? 3;
+          if (current > 1) {
+            token.tier = "partner";
+            if (token.sub) {
+              pool.connect().then(async (c) => {
+                try {
+                  await c.query(
+                    `UPDATE users SET tier = 'partner' WHERE id = $1 AND tier NOT IN ('admin', 'unlimited', 'partner')`,
+                    [token.sub]
+                  );
+                } finally { c.release(); }
+              }).catch(() => {});
+            }
+          }
         }
       }
       return token;
