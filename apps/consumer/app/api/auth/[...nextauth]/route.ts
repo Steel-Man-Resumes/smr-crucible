@@ -15,6 +15,13 @@ export const { GET } = handlers;
  * hammering this endpoint with garbage addresses (Mar 2026).
  */
 export async function POST(request: NextRequest) {
+  if (
+    process.env.NODE_ENV === "development" &&
+    request.nextUrl.pathname.includes("/dev-login")
+  ) {
+    return handlers.POST!(request);
+  }
+
   const ip = getClientIp(request);
 
   // Clone the request so we can read the body without consuming it

@@ -13,6 +13,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   return (
@@ -64,6 +65,41 @@ function LoginForm() {
   }
 
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+
+  function resetLocalFlowState() {
+    const keys = [
+      "forge_session",
+      "forge_preload",
+      "consumer_progress",
+      "consent_record",
+      "hidden_jobs",
+      "saved_jobs",
+      "admin_test_mode",
+      "forge_audience",
+      "pending_access_code",
+    ];
+    for (const key of keys) localStorage.removeItem(key);
+  }
+
+  async function handleDevLogin(tier: "client" | "partner" | "admin", fresh = false) {
+    setSending(true);
+    setError("");
+    if (fresh) resetLocalFlowState();
+    storeCode();
+    const devEmail = fresh
+      ? `client-${Date.now()}@steelman.dev`
+      : email.trim() || `${tier}@steelman.dev`;
+    try {
+      await signIn("dev-login", {
+        email: devEmail,
+        tier,
+        callbackUrl: fresh ? "/dashboard" : callbackUrl,
+      });
+    } catch {
+      setError("Dev login failed.");
+      setSending(false);
+    }
+  }
 
   // ─── Sign In ──────────────────────────────────────────────────────────
   async function handleSignIn(e: React.FormEvent) {
@@ -302,10 +338,17 @@ function LoginForm() {
             <>
               <button
                 type="button"
+                onClick={() => { window.location.href = `/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`; }}
+                className="text-xs text-muted hover:text-sage-600 transition-colors block mx-auto"
+              >
+                Forgot password? Reset it by email
+              </button>
+              <button
+                type="button"
                 onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
                 className="text-xs text-muted hover:text-sage-600 transition-colors block mx-auto"
               >
-                Forgot password? Sign in with a magic link
+                No password? Send a magic sign-in link
               </button>
               <button
                 type="button"
@@ -330,8 +373,17 @@ function LoginForm() {
           {mode === "magic-link" && (
             <>
               <p className="text-xs text-muted">
-                We&apos;ll email you a one-time sign-in link. No password needed.
-                Use this if you lost your device or forgot your password.
+                We&apos;ll email you a one-time sign-in link. This signs you in,
+                but it does not change your password.
+              </p>
+              <p className="text-xs text-muted">
+                Need a new password?{" "}
+                <Link
+                  href={`/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
+                  className="text-sage-600 hover:text-sage-700 font-medium"
+                >
+                  Reset it here.
+                </Link>
               </p>
               <button
                 type="button"
@@ -380,17 +432,51 @@ function LoginForm() {
 
         {isDev && (
           <div className="mt-4 pt-4 border-t border-border">
-            <button
-              onClick={async () => {
-                setSending(true); storeCode();
-                try { await signIn("dev-login", { email: email.trim() || "dev@test.com", callbackUrl: "/dashboard" }); }
-                catch { setError("Dev login failed."); setSending(false); }
-              }}
-              disabled={sending}
-              className="w-full px-6 py-3 bg-amber-100 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors min-h-touch"
-            >
-              Dev Login (skip email)
-            </button>
+            <p className="text-xs font-semibold text-amber-800 mb-2">
+              Development access
+            </p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => handleDevLogin("client", true)}
+                disabled={sending}
+                className="w-full px-4 py-3 bg-amber-100 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-200 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+              >
+                Fresh Client Run
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDevLogin("client")}
+                  disabled={sending}
+                  className="px-4 py-3 bg-white border border-amber-200 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                >
+                  Client Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDevLogin("admin")}
+                  disabled={sending}
+                  className="px-4 py-3 bg-white border border-amber-200 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                >
+                  Admin Login
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  resetLocalFlowState();
+                  window.location.href = "/intro";
+                }}
+                disabled={sending}
+                className="w-full px-4 py-3 bg-white border border-border text-muted rounded-xl text-sm font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+              >
+                Reset Local Flow Only
+              </button>
+            </div>
+            <p className="text-[11px] text-muted mt-2">
+              Local only. Skips email sends so you can run demos and debug passes quickly.
+            </p>
           </div>
         )}
 

@@ -14,7 +14,10 @@ const PARTNER_PRE_AUTH = ["latonyabakergoe@gmail.com"];
 
 const providers: any[] = [
   Resend({
-    from: process.env.AUTH_EMAIL_FROM || "onboarding@resend.dev",
+    apiKey: process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY,
+    from:
+      process.env.AUTH_EMAIL_FROM ||
+      "Steel Man Resumes <noreply@steelmanresumes.com>",
   }),
 
   // Password login — available in all environments
@@ -60,16 +63,21 @@ const providers: any[] = [
 
 // Dev-only: skip-email login for local testing
 if (isDev) {
+  const DEV_TIERS = new Set(["client", "partner", "observer", "admin", "unlimited"]);
   providers.push(
     Credentials({
       id: "dev-login",
       name: "Dev Login",
       credentials: {
         email: { label: "Email", type: "email" },
+        tier: { label: "Tier", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
-        const email = credentials.email as string;
+        const email = String(credentials?.email || "dev@test.com")
+          .toLowerCase()
+          .trim();
+        const requestedTier = String(credentials?.tier || "client").trim();
+        const tier = DEV_TIERS.has(requestedTier) ? requestedTier : "client";
         const client = await pool.connect();
         try {
           let result = await client.query(
@@ -78,8 +86,16 @@ if (isDev) {
           );
           if (result.rows.length === 0) {
             result = await client.query(
-              `INSERT INTO users (name, email, "emailVerified") VALUES ($1, $2, NOW()) RETURNING id, name, email, "emailVerified", image, tier`,
-              [email.split("@")[0], email]
+              `INSERT INTO users (name, email, "emailVerified", tier)
+               VALUES ($1, $2, NOW(), $3)
+               RETURNING id, name, email, "emailVerified", image, tier`,
+              [email.split("@")[0], email, tier]
+            );
+          } else if (result.rows[0].tier !== tier) {
+            result = await client.query(
+              `UPDATE users SET tier = $2 WHERE email = $1
+               RETURNING id, name, email, "emailVerified", image, tier`,
+              [email, tier]
             );
           }
           const user = result.rows[0];
@@ -142,7 +158,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (isApi && !session) {
         const protectedPrefixes = [
           "/api/dashboard", "/api/artifacts", "/api/access-code",
-          "/api/disclosure-guide", "/api/interview-practice",
+          "/api/disclosure-guide", "/api/interview-practice", "/api/interview-voice",
           "/api/job-search", "/api/resources-search", "/api/resume-generate",
           "/api/usage", "/api/user/",
         ];
