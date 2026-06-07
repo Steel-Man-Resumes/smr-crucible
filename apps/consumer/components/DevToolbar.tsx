@@ -27,7 +27,7 @@ const NAV_SECTIONS = [
       { path: "/disclosure", label: "Disclosure" },
       { path: "/interview", label: "Interview" },
       { path: "/jobs", label: "Jobs" },
-      { path: "/resources", label: "Resources" },
+      { path: "/resources", label: "Second Chance" },
       { path: "/progress", label: "Progress" },
       { path: "/methodology", label: "Methodology" },
       { path: "/evidence", label: "Evidence" },
@@ -53,8 +53,9 @@ function DevToolbarInner() {
   async function handleDevLogin() {
     setLoggingIn(true);
     try {
-      await signIn("credentials", {
+      await signIn("dev-login", {
         email: "dev@test.com",
+        tier: "admin",
         redirect: false,
       });
       window.location.reload();
