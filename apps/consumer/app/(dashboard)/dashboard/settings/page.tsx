@@ -13,6 +13,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
+import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 
@@ -195,6 +196,8 @@ export default function SettingsPage() {
       </p>
 
       <CoachSettingsSection />
+
+      <SharingConsentSection />
 
       {/* Admin Test Mode Toggle */}
       {isAdmin && (
