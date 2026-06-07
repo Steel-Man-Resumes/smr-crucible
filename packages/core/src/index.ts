@@ -21,3 +21,4 @@ export * from './coachPrompt';
 export * from './coachConversation';
 export * from './coachProactive';
 export * from './partnerDashboard';
+export * from './systemHealth';

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
 import type { AggregateReport, ConsentedCaseStudy } from "@crucible/core";
 
@@ -62,9 +63,17 @@ export default function AdminEvidenceDashboard() {
 
   return (
     <div className="max-w-4xl space-y-10">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Evidence Dashboard</h1>
-        <p className="text-muted text-sm mt-1">Admin view -- live outcomes + pilot data. Shows zeros until pilots run.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Evidence Dashboard</h1>
+          <p className="text-muted text-sm mt-1">Admin view -- live outcomes + pilot data. Shows zeros until pilots run.</p>
+        </div>
+        <Link
+          href="/dashboard/admin/health"
+          className="flex-shrink-0 px-4 py-2 rounded-xl bg-white border-2 border-sage-200 text-sage-700 text-sm font-medium hover:bg-sage-50"
+        >
+          System Health
+        </Link>
       </div>
 
       {/* Mint a partner code */}
