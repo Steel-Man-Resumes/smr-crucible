@@ -17,3 +17,5 @@ export * from './refineryArtifact';
 export * from './outcomeAggregate';
 export * from './getUserProfile';
 export * from './computeNextStep';
+export * from './coachPrompt';
+export * from './coachConversation';
