@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
-**Last updated:** 2026-06-06
-**Last session (CC planning):** Full platform architecture planned with Troy. Master plan written. No code changes this session -- all decisions locked and documented.
-**Next session:** Read the master plan first. Then start at Section 9.2 (commit Codex's uncommitted changes), Section 9.1 (fix voice interview API -- BLOCKING), Section 9.3 (verify password reset). Then work Phase 1 in order.
+**Last updated:** 2026-06-07
+**Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
+**Next session:** Once Troy's new Tier-0 keys are in `.env.local` (esp. `DATABASE_URL`): run `npm run migrate -w packages/core` to apply migration 016, verify getUserProfile/computeNextStep against real data, then build the stage nav + next-step card (Phase 1 W2). Do NOT push/deploy until password-reset email delivery is verified with the new Resend key.
 
 ## MASTER PLAN (READ THIS FIRST)
 `~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
@@ -16,6 +16,35 @@ This is the complete locked architecture for the platform. Written for Opus 4.8 
 - Guardrails (Section 16 -- read before touching anything)
 
 **Do NOT re-litigate architecture decisions. Implement them.**
+
+---
+
+## 2026-06-07 -- Opus 4.8: Master Plan Assessment + Phase 0/1 Backbone
+
+**Assessment artifacts (in ~/todash/smr/):** `SMR-OPUS-ASSESSMENT-AND-BUILD-DESIGN-2026-06-07.md`, `SMR-API-KEY-MASTERCLASS-2026-06-07.md`. Troy approved: slow/steady build to a fully complete platform; Anthropic-primary + OpenAI fallback; Opus direct + bounded agents.
+
+**Critical plan/reality reconciliations (verified against live repo + OpenAI docs):**
+- **Voice Section 9.1 is STALE -- do NOT "fix" it.** Deployed code uses `gpt-realtime-2` + `/v1/realtime/client_secrets` + `/v1/realtime/calls` + voice `marin`, all VERIFIED CORRECT against current OpenAI docs. The plan's instruction to revert would break working voice. Real work = QA behind a flag, not a rewrite.
+- **Table name:** real table is `job_application` (singular). Plan's migration 019 `job_applications` would orphan. All new migrations target `users` (plural, canonical per 008) and `job_application`.
+- **Storage is Cloudflare R2**, not Vercel Blob. Vault uses R2 + a dedicated `DOCUMENT_ENCRYPTION_KEY` (NOT AUTH_SECRET).
+- **Existing structures the plan would duplicate:** `job_application.follow_up_at`+`notes` (use these, not new `follow_up_date`); `refinery_artifact`+`file_object` (the vault; don't create parallel `user_documents`); `consumer_consent` layered consent (richer than `partner_progress_visible` bool). Reconcile, don't bolt on.
+- **AI shim** `lib/ai-call.ts` currently routes ALL to OpenAI gpt-4o (temp). Switch to Anthropic-primary at this single point when key is live.
+- **Coach must consolidate** the existing `/api/assistant` surface, not become a 5th chatbot.
+
+**Phase 0 done (committed locally, NOT pushed):** Codex's 24 modified + 6 new files committed in 8 atomic groups (415b113..15aa455). gitignore: swap files. Fresh `.env.local` template written (Tier 0/1/2/3, every var + where to get it); old values backed up to `apps/consumer/.env.backup-2026-06-07.local` (gitignored).
+
+**Phase 1 backbone done (committed local 332ee63, tsc clean, NOT pushed):**
+- `packages/core/migrations/016_onboarding_coach.sql` -- onboarding + coach columns on `users` + `coach_conversation`. (Plan called this 018; renumbered 016 -- runner applies *.sql lexically.) NOT YET RUN (needs DATABASE_URL).
+- `packages/core/src/getUserProfile.ts` -- backbone profile reader over existing tables (no dup). Contract includes calendar/SMS fields with safe defaults until those migrations land.
+- `packages/core/src/computeNextStep.ts` -- deterministic rules ladder + 1h cache (`getNextStep`) + `invalidateNextStep`.
+
+**Instrumentation backlog (computeNextStep gates that have NO server data source yet):**
+- `job_application.resume_artifact_id` is never set -> Stage 3 gate ("resume tailored to target") can't advance. Wire the resume-builder to link the tailored resume to the saved job.
+- Interview practice is **localStorage-only** (`consumer_progress` key) -> Stage 5 gate reads 0. Wire the interview tool to persist an `interview_prep` artifact on session completion.
+- Disclosure plans persist only if a tool calls `/api/artifacts` -- confirm the disclosure tool does.
+These are small, bounded, and are the real spine of the "intelligence engine."
+
+**Next:** apply migration 016 against the new DB, verify backbone with real data, then stage nav + next-step card.
 
 ---
 
