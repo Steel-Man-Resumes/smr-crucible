@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, FormEvent } from "react";
+import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 
@@ -192,6 +193,8 @@ export default function SettingsPage() {
       <p className="text-body text-muted mb-8">
         Your data, your control. Manage your information and privacy.
       </p>
+
+      <CoachSettingsSection />
 
       {/* Admin Test Mode Toggle */}
       {isAdmin && (
