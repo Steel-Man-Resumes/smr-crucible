@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { listArtifacts, createArtifact } from "@crucible/core";
+import { listArtifacts, createArtifact, query, invalidateNextStep } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
+
+// Journey instrumentation: which artifact types link back to a target job
+// application, and into which (whitelisted) column. The column names are fixed
+// literals, never user input, so interpolating them below is safe.
+const APPLICATION_LINK_COLUMN: Partial<Record<ArtifactType, string>> = {
+  resume: "resume_artifact_id",
+  disclosure_plan: "disclosure_plan_id",
+};
+
+// Creating any of these moves a journey gate, so the next-step engine must
+// recompute rather than serve its 1h cache.
+const NEXT_STEP_RELEVANT: ArtifactType[] = ["resume", "disclosure_plan", "interview_prep"];
 
 const ALLOWED_ARTIFACT_TYPES: ArtifactType[] = [
   "resume",
@@ -76,15 +88,42 @@ export async function POST(request: Request) {
   }
 
   try {
+    const targetContext =
+      body.targetContext && typeof body.targetContext === "object" && !Array.isArray(body.targetContext)
+        ? body.targetContext
+        : {};
+
     const artifact = await createArtifact(
       userId,
       body.type,
-      body.targetContext && typeof body.targetContext === "object" && !Array.isArray(body.targetContext)
-        ? body.targetContext
-        : {},
+      targetContext,
       body.content,
       typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0
     );
+
+    // Journey instrumentation: link a tailored resume / disclosure plan back to
+    // its target job application so computeNextStep() can see Stage 3/4 is done.
+    // Ownership-scoped: the UPDATE only touches an application owned by this user
+    // (a bogus or foreign applicationId silently affects zero rows).
+    const linkColumn = APPLICATION_LINK_COLUMN[body.type as ArtifactType];
+    const applicationId = targetContext.applicationId;
+    if (linkColumn && typeof applicationId === "string" && applicationId) {
+      try {
+        await query(
+          `UPDATE job_application SET ${linkColumn} = $1, updated_at = now()
+           WHERE id = $2 AND user_id = $3`,
+          [artifact.id, applicationId, userId]
+        );
+      } catch (linkErr: any) {
+        // A linkage failure must not fail the save; the artifact is already stored.
+        console.error("Artifact link error:", linkErr?.message || linkErr);
+      }
+    }
+
+    // Force the next-step engine to recompute on the next read.
+    if (NEXT_STEP_RELEVANT.includes(body.type as ArtifactType)) {
+      await invalidateNextStep(userId).catch(() => {});
+    }
 
     return NextResponse.json({ data: artifact }, { status: 201 });
   } catch (err: any) {

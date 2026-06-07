@@ -67,6 +67,10 @@ export function ResumeWorkspace() {
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+  // The saved job application this resume is being tailored for, if any. When
+  // set, the saved resume artifact is linked to it (Stage 3 journey gate).
+  const [targetApplicationId, setTargetApplicationId] = useState<string | null>(null);
+
   // Career package (cover letter + disclosure brief)
   const [packageTab, setPackageTab] = useState<"resume" | "cover-letter" | "disclosure">("resume");
   const [coverLetterText, setCoverLetterText] = useState<string | null>(null);
@@ -172,19 +176,47 @@ export function ResumeWorkspace() {
     }
   }, [searchParams]);
 
-  // --- Import from Job Board (AI-generated targeted resume) ---
+  // --- Import from Job Board (AI-generated targeted resume, via sessionStorage) ---
   useEffect(() => {
-    const from = searchParams.get("from");
-    if (from !== "job") return;
-
+    if (searchParams.get("from") !== "job") return;
     const jobData = sessionStorage.getItem("resume_target_job");
     if (!jobData) return;
-
     sessionStorage.removeItem("resume_target_job");
+    try {
+      runCareerPackage(JSON.parse(jobData), {});
+    } catch {
+      setGenError("Could not read the selected job. Try importing from Forge instead.");
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    async function generateFromJob() {
+  // --- Updater function passed to section editors ---
+  const updateDoc = useCallback(
+    (fn: (prev: ResumeDocument) => ResumeDocument) => {
+      setDoc((prev) => fn(prev));
+    },
+    []
+  );
+
+  // --- Generate the full career package (resume + cover letter + disclosure) ---
+  // Shared by the job-board hand-off (sessionStorage) and the next-step card
+  // (?job=<applicationId>). With existingApplicationId we link to that saved
+  // application instead of creating a new one; either way we remember the id so
+  // the saved resume artifact links back to it (Stage 3 journey gate).
+  const runCareerPackage = useCallback(
+    async (
+      job: {
+        title?: string;
+        company?: string;
+        description?: string;
+        requirements?: string;
+        location?: string;
+        salary?: string;
+        employment_type?: string;
+        id?: string;
+      },
+      opts: { existingApplicationId?: string } = {}
+    ) => {
       try {
-        const job = JSON.parse(jobData!);
         setGeneratingFull(true);
         setGenError(null);
         setShowSetup(false);
@@ -275,6 +307,35 @@ export function ResumeWorkspace() {
         setPackageTab("resume");
         setGeneratingFull(false);
 
+        // Resolve the target application: reuse the existing one (next-step card)
+        // or create it now (job board). Remember its id so the resume artifact
+        // links back to it.
+        let applicationId = opts.existingApplicationId ?? null;
+        if (!applicationId) {
+          try {
+            const appRes = await fetch("/api/applications", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                job_title: job.title,
+                company: job.company,
+                location: job.location || "",
+                salary: job.salary || "",
+                description: job.description || "",
+                employment_type: job.employment_type || "",
+                source: "jsearch",
+                source_id: job.id || "",
+                status: "saved",
+              }),
+            });
+            if (appRes.ok) {
+              const { application } = await appRes.json();
+              if (application?.id) applicationId = application.id;
+            }
+          } catch {}
+        }
+        if (applicationId) setTargetApplicationId(applicationId);
+
         // Auto-save cover letter as artifact
         if (coverLetter) {
           try {
@@ -283,49 +344,65 @@ export function ResumeWorkspace() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 type: "cover_letter",
-                targetContext: { targetJob: job.title, targetCompany: job.company, source: "job" },
+                targetContext: {
+                  targetJob: job.title,
+                  targetCompany: job.company,
+                  source: "job",
+                  ...(applicationId ? { applicationId } : {}),
+                },
                 content: { text: coverLetter, targetJob: job.title, targetCompany: job.company },
                 scaffoldLevel: 1.0,
               }),
             });
           } catch {}
         }
-
-        // Auto-create job application with "preparing" status
-        try {
-          await fetch("/api/applications", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              job_title: job.title,
-              company: job.company,
-              location: job.location || "",
-              salary: job.salary || "",
-              description: job.description || "",
-              employment_type: job.employment_type || "",
-              source: "jsearch",
-              source_id: job.id || "",
-              status: "saved",
-            }),
-          });
-        } catch {}
       } catch (err: any) {
-        console.error("Job-to-resume generation error:", err);
+        console.error("Career-package generation error:", err);
         setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
         setGeneratingFull(false);
       }
-    }
-
-    generateFromJob();
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // --- Updater function passed to section editors ---
-  const updateDoc = useCallback(
-    (fn: (prev: ResumeDocument) => ResumeDocument) => {
-      setDoc((prev) => fn(prev));
     },
-    []
+    [updateDoc]
   );
+
+  // --- Next-step card hand-off (?job=<applicationId>) ---
+  // The journey "Tailor your resume for X" action lands here. Load the saved
+  // application, then tailor against it (or open the existing tailored resume).
+  useEffect(() => {
+    const appId = searchParams.get("job");
+    if (!appId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/applications");
+        if (!res.ok) return;
+        const { applications } = await res.json();
+        const app = (applications || []).find((a: any) => a.id === appId);
+        if (!app || cancelled) return;
+        // Already tailored: open it for editing rather than regenerating (no AI spend).
+        if (app.resume_artifact_id) {
+          setTargetApplicationId(app.id);
+          router.replace(`/dashboard/resume-builder?id=${app.resume_artifact_id}`, { scroll: false });
+          return;
+        }
+        await runCareerPackage(
+          {
+            title: app.job_title,
+            company: app.company,
+            description: app.description,
+            location: app.location,
+            salary: app.salary,
+            employment_type: app.employment_type,
+            id: app.source_id,
+          },
+          { existingApplicationId: app.id }
+        );
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, runCareerPackage, router]);
 
   // --- Save ---
   const save = useCallback(
@@ -362,6 +439,8 @@ export function ResumeWorkspace() {
                 targetCompany: doc.meta.targetCompany,
                 // Mark source so onboarding can distinguish forge-auto vs job-targeted
                 source: (coverLetterText || disclosureBrief) ? "job" : doc.meta.createdFrom || "fresh",
+                // Link to the saved application so the journey sees Stage 3 done.
+                ...(targetApplicationId ? { applicationId: targetApplicationId } : {}),
               },
               content,
               scaffoldLevel: 0.5,
@@ -384,7 +463,7 @@ export function ResumeWorkspace() {
         setSaveStatus("error");
       }
     },
-    [doc, artifactId, router]
+    [doc, artifactId, router, targetApplicationId, coverLetterText, disclosureBrief]
   );
 
   // --- Auto-save (5s debounce after edits, only when past setup) ---
