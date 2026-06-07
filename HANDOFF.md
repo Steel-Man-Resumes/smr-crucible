@@ -2,9 +2,9 @@
 
 > **NEW CHAT: START HERE ->** `docs/HANDOFF-2026-06-07-OPUS-SESSION.md` -- full-context handoff for the 2026-06-07 Opus session (27 local commits; intelligence engine + journey shell + guided tour + AI coach built and verified; nothing pushed).
 
-**Last updated:** 2026-06-07
-**Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
-**Next session:** Through W4 coach BACKEND (done + verified). Remaining is increasingly UI-heavy and wants a running app -- recommend a **preview deploy + QA checkpoint** next (push Tier-0 keys to Vercel -> verify `/forgot-password` email -> deploy preview), then: wire the AssistantChat drawer on Refinery pages to `/api/coach` (use the user's coach_name), build the Settings "Your Coach" controls (style/length/focus/creativity), add proactive triggers + context_digest, then the deeper unified-board merge + CareerOneStop (needs `CAREERONESTOP_USER_ID`). All work is local commits (20 this session) -- do NOT push/deploy until the password-reset email is verified with the new Resend key. Twilio A2P pending ~2 days (non-blocking).
+**Last updated:** 2026-06-07 (session 2)
+**Last session (Opus 4.8):** Stage 3 journey instrumentation -- the resume-tailoring loop now links the saved resume to the saved job application so `computeNextStep` actually advances past Stage 3. Verified end-to-end (13/13) against the live DB. See the "2026-06-07 (session 2)" section directly below. **Surfaced for Troy (propose-only):** Stages 4 (disclosure) + 5 (interview) both promise "Nothing here is saved or shared" on-screen and persist only to localStorage, so those gates read 0 and the journey gets STUCK at Stage 4 (before interview even matters). Persisting a completion signal there means changing a trust promise to a justice-impacted audience -- Troy's call, NOT done autonomously.
+**Next session:** Decide the Stage 4/5 privacy tradeoff (see below), then instrument disclosure + interview the chosen way. Coach still needs real browser QA. Then preview deploy + QA checkpoint (push Tier-0 keys to Vercel -> verify `/forgot-password` email -> deploy preview). All work remains local commits -- do NOT push/deploy until the password-reset email is verified with the new Resend key. Twilio A2P pending (non-blocking).
 
 ## MASTER PLAN (READ THIS FIRST)
 `~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
@@ -19,6 +19,29 @@ This is the complete locked architecture for the platform. Written for Opus 4.8 
 - Guardrails (Section 16 -- read before touching anything)
 
 **Do NOT re-litigate architecture decisions. Implement them.**
+
+---
+
+## 2026-06-07 (session 2) -- Opus 4.8: Stage 3 instrumentation + Stage 4/5 privacy finding
+
+Continuation of the instrumentation backlog in `docs/HANDOFF-2026-06-07-OPUS-SESSION.md` Section 3. **DONE + verified, committed local, NOT pushed.**
+
+**The gap (the engine had no data source):** `computeNextStep` was correct but its Stage 3 gate (`job_application.resume_artifact_id`) was never written. Two breaks found, both fixed:
+1. The next-step card links to `/dashboard/resume-builder?job=<applicationId>`, but `ResumeWorkspace` only handled `?from=job` (sessionStorage) and `?id=<artifactId>` -- the `?job=` param was silently ignored, so the journey's own CTA did nothing.
+2. Even in the working job-board flow, the saved resume artifact was never linked back to the application, so `hasResumeTailoredToTarget` stayed false forever.
+
+**What was built:**
+- `app/api/artifacts/route.ts` (POST): when a `resume` (or `disclosure_plan`) artifact is created with `targetContext.applicationId`, link it to `job_application.resume_artifact_id` (/ `disclosure_plan_id`) via an **ownership-scoped** UPDATE (foreign/bogus id => 0 rows), then `invalidateNextStep`. The column names are a fixed whitelist, never user input.
+- `components/resume/ResumeWorkspace.tsx`: extracted the job-board generation into a shared `runCareerPackage(job, opts)`; the `?job=<applicationId>` next-step path now loads the saved application, tailors against it (or opens the existing tailored resume if already done -- no wasted AI spend), and both paths remember the target application id so the saved resume artifact links back to it.
+
+**Verification (live DB, throwaway `_verify_*` scripts, then deleted):** 13/13. Fresh temp user -> Stage 3 `resume_not_tailored` with href targeting the app -> replay the route's link logic -> Stage 4 `no_disclosure_plan`. Ownership scoping confirmed (wrong user => 0 rows). Temp rows cleaned up (0 leftover). `tsc --noEmit` on the consumer app: 0 errors. core `tsc` build: clean.
+
+**Surfaced for Troy -- NOT done (propose-only, trust-promise decision):** the disclosure tool (Stage 4) and interview tool (Stage 5) are **both** localStorage-only and **both** display "This is a safe practice space. Nothing here is saved or shared." Stage 4 sits *before* Stage 5 in the ladder, so until disclosure persists a `disclosure_plan` artifact, the journey halts at Stage 4 and never reaches the interview gate. Making either advance requires persisting a completion signal, which contradicts the on-screen promise to a justice-impacted audience. Options for Troy:
+- **(A) Metadata-only + honest copy:** persist a content-free completion marker (role + timestamp + count, never answers/transcript) and change the copy to "Your answers are never saved or shared; we only note that you practiced, to track your progress." Truthful, minimal, advances the journey.
+- **(B) Privacy-safe non-artifact signal:** a dedicated per-user progress counter that stores zero practice content and keeps the absolute promise intact (engine reads it instead of artifact counts). More plumbing; strongest trust stance.
+- **(C) Leave as-is:** journey intentionally stops at "plan your disclosure" / "practice" as open-ended steps (no auto-advance). Simplest; the stage bar never completes for these.
+
+**Pattern reinforced:** treat the handoff as a hypothesis, not a spec -- it flagged Stage 3 + Stage 5 but missed that Stage 4 also blocks (and blocks *earlier*), and missed the on-screen privacy-copy conflict. **WSL2 note:** `tsx` here transpiles to CJS -- verify scripts need an async IIFE (no top-level await) + `process.cwd()`-relative paths (no `import.meta.url`); load `DATABASE_URL` inside the script from `.env.local` so no secret hits the shell.
 
 ---
 
