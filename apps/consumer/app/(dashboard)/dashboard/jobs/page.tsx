@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
+import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -131,19 +132,14 @@ function JobBoardPage() {
         const session = JSON.parse(stored);
         const ctx: Partial<UserContext> = {};
 
-        if (session.forgeOutput?.careerPaths?.[0]?.title) {
-          ctx.targetRole = session.forgeOutput.careerPaths[0].title;
+        const careerPaths = getCareerPaths(session.forgeOutput);
+        if (careerPaths[0]?.title) {
+          ctx.targetRole = careerPaths[0].title;
         }
         if (session.preferences?.location) {
           ctx.location = session.preferences.location;
         }
-        if (session.forgeOutput?.skills) {
-          const allSkills: string[] = [];
-          for (const cat of Object.values(session.forgeOutput.skills)) {
-            if (Array.isArray(cat)) allSkills.push(...cat);
-          }
-          ctx.skills = allSkills.slice(0, 10);
-        }
+        ctx.skills = getSkillNames(session.forgeOutput, 10);
         if (session.challenges?.includes("criminal_record")) {
           ctx.hasRecord = true;
           ctx.recordType = session.criminalRecord?.type;
