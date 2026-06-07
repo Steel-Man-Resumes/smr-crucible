@@ -18,6 +18,7 @@ const NEXT_STEP_RELEVANT: ArtifactType[] = ["resume", "disclosure_plan", "interv
 const ALLOWED_ARTIFACT_TYPES: ArtifactType[] = [
   "resume",
   "cover_letter",
+  "follow_up",
   "disclosure_plan",
   "interview_prep",
   "resource_list",

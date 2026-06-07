@@ -136,6 +136,58 @@ function ApplicationsPage() {
     setUpdating(null);
   }
 
+  // --- Follow-up drafting (Stage 6 materials) ---
+  const [followUpFor, setFollowUpFor] = useState<string | null>(null);
+  const [followUps, setFollowUps] = useState<
+    Record<string, { subject: string; body: string }>
+  >({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  function forgeStrengths(): string[] {
+    try {
+      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const raw = s?.forgeOutput?.strengths;
+      if (Array.isArray(raw)) {
+        return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  }
+
+  async function draftFollowUp(id: string) {
+    setFollowUpFor(id);
+    try {
+      const res = await fetch("/api/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: id, forgeContext: { strengths: forgeStrengths() } }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFollowUps((prev) => ({ ...prev, [id]: { subject: data.subject || "", body: data.body || "" } }));
+      }
+    } catch {}
+    setFollowUpFor(null);
+  }
+
+  async function copyFollowUp(id: string) {
+    const f = followUps[id];
+    if (!f) return;
+    const text = `Subject: ${f.subject}\n\n${f.body}`;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = text;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand("copy");
+      t.remove();
+    }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+  }
+
   const activeApps = apps.filter(
     (a) => !TERMINAL_STATUSES.includes(a.status)
   );
@@ -300,6 +352,52 @@ function ApplicationsPage() {
                             </svg>
                             {stage.suggestion.text} for {app.company}
                           </Link>
+                        )}
+
+                        {/* Follow-up drafting (past "saved") */}
+                        {["applied", "heard_back", "interviewing"].includes(
+                          app.status
+                        ) && (
+                          <div className="mt-3">
+                            {!followUps[app.id] ? (
+                              <button
+                                onClick={() => draftFollowUp(app.id)}
+                                disabled={followUpFor === app.id}
+                                className="inline-flex items-center gap-2 px-3 py-2 bg-white/70 rounded-lg border border-border text-xs font-medium text-sage-600 hover:text-sage-700 hover:bg-white transition-colors disabled:opacity-50"
+                              >
+                                {followUpFor === app.id
+                                  ? "Drafting your follow-up..."
+                                  : "Draft a follow-up message"}
+                              </button>
+                            ) : (
+                              <div className="bg-white rounded-lg border border-border p-3">
+                                <p className="text-xs font-semibold text-foreground">
+                                  Subject: {followUps[app.id].subject}
+                                </p>
+                                <p className="text-xs text-foreground whitespace-pre-line mt-2 leading-relaxed">
+                                  {followUps[app.id].body}
+                                </p>
+                                <div className="flex items-center gap-3 mt-3">
+                                  <button
+                                    onClick={() => copyFollowUp(app.id)}
+                                    className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700"
+                                  >
+                                    {copiedId === app.id ? "Copied" : "Copy"}
+                                  </button>
+                                  <button
+                                    onClick={() => draftFollowUp(app.id)}
+                                    disabled={followUpFor === app.id}
+                                    className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                                  >
+                                    {followUpFor === app.id ? "..." : "Redraft"}
+                                  </button>
+                                  <span className="text-[11px] text-muted ml-auto">
+                                    Saved to your materials. Review before sending.
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
 
                         {/* Offered celebration */}

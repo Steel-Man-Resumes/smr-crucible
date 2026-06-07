@@ -24,6 +24,7 @@ export interface RefineryArtifact {
 export type ArtifactType =
   | "resume"
   | "cover_letter"
+  | "follow_up"
   | "disclosure_plan"
   | "interview_prep"
   | "resource_list"

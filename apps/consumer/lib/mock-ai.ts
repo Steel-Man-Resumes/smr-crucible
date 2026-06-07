@@ -197,6 +197,11 @@ export const MOCK_DISCLOSURE_PLAN = {
   ],
 };
 
+export const MOCK_FOLLOW_UP = {
+  subject: "Following up -- Warehouse Associate application",
+  body: "Hi,\n\nI wanted to follow up on my application for the Warehouse Associate role I submitted last week. I'm still very interested and would welcome the chance to talk about how my eight years of warehouse experience could help your team.\n\nPlease let me know if there's anything else you need from me. Thank you for your time.\n\nBest,\nJordan Williams",
+};
+
 export const MOCK_RESUME = `Jordan M. Williams
 Milwaukee, WI | (414) 555-0192 | jordan.williams@email.com
 
