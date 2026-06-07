@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useAssistant } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 
@@ -115,6 +115,22 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Coach speaks first: fetch a proactive opener when there is no conversation yet
+  const [proactive, setProactive] = useState<string | null>(null);
+  useEffect(() => {
+    if (!coach) return;
+    let cancelled = false;
+    fetch("/api/coach/proactive")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j?.data?.message) setProactive(j.data.message as string);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [coach]);
+
   // Send a quick prompt as if the user typed it
   const sendQuickPrompt = useCallback(
     (text: string) => {
@@ -134,7 +150,23 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     <div className="flex flex-col h-full">
       {/* Messages — min-h-0 lets flex-1 actually shrink so overflow scrolls */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && coach &&
+          (proactive ? (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
+                {proactive}
+              </div>
+            </div>
+          ) : (
+            <div className="text-muted text-sm">
+              <p className="mb-2">
+                I&apos;m your coach. Ask me anything, or I&apos;ll point you to your
+                next move.
+              </p>
+            </div>
+          ))}
+
+        {messages.length === 0 && !coach && (
           <div className="text-muted text-sm">
             <p className="mb-2">
               I&apos;m t.ROY. Ask me anything about this page, or just talk
