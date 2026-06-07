@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { query: dbQuery, insert, getOne } = await import("@crucible/core");
+    const { query: dbQuery, insert, getOne, invalidateNextStep } = await import("@crucible/core");
 
     // Update existing application
     if (body.id && body.status) {
@@ -117,6 +117,9 @@ export async function POST(request: Request) {
         params
       );
 
+      // Status / follow-up changes move the journey (Stage 6) -- recompute.
+      await invalidateNextStep(session.user.id).catch(() => {});
+
       return NextResponse.json({ application: rows[0] });
     }
 
@@ -154,6 +157,9 @@ export async function POST(request: Request) {
       applied_at:
         body.status === "applied" ? new Date().toISOString() : null,
     });
+
+    // Saving a first target / applying advances the journey (Stage 2 -> 3, Stage 6) -- recompute.
+    await invalidateNextStep(session.user.id).catch(() => {});
 
     return NextResponse.json({ application: row }, { status: 201 });
   } catch (error) {
