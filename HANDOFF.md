@@ -1,4 +1,7 @@
 # SMR Crucible -- Handoff
+
+> **NEW CHAT: START HERE ->** `docs/HANDOFF-2026-06-07-OPUS-SESSION.md` -- full-context handoff for the 2026-06-07 Opus session (27 local commits; intelligence engine + journey shell + guided tour + AI coach built and verified; nothing pushed).
+
 **Last updated:** 2026-06-07
 **Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
 **Next session:** Through W4 coach BACKEND (done + verified). Remaining is increasingly UI-heavy and wants a running app -- recommend a **preview deploy + QA checkpoint** next (push Tier-0 keys to Vercel -> verify `/forgot-password` email -> deploy preview), then: wire the AssistantChat drawer on Refinery pages to `/api/coach` (use the user's coach_name), build the Settings "Your Coach" controls (style/length/focus/creativity), add proactive triggers + context_digest, then the deeper unified-board merge + CareerOneStop (needs `CAREERONESTOP_USER_ID`). All work is local commits (20 this session) -- do NOT push/deploy until the password-reset email is verified with the new Resend key. Twilio A2P pending ~2 days (non-blocking).
