@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { ContactTroyButton } from "@/components/ContactTroyButton";
+import { GuidedTour } from "@/components/GuidedTour";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 
@@ -250,6 +251,9 @@ export default function DashboardLayout({
 
       {/* Contact Troy — always unlocked for authenticated users */}
       <ContactTroyButton isAuthenticated />
+
+      {/* Guided orientation tour — Stage 0, one-time, DB-persisted (client tier only) */}
+      <GuidedTour />
 
       {/* AI Assistant — available on every dashboard page */}
       <AssistantDrawer>
