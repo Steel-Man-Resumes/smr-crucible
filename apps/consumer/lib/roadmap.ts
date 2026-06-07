@@ -88,8 +88,8 @@ const NODE_DEFS: NodeDef[] = [
   },
   {
     id: "find-resources",
-    title: "Find local resources",
-    description: "Housing, legal aid, training — real help near you",
+    title: "Review second-chance lanes",
+    description: "Find realistic fair-chance starting points",
     phase: "foundation",
     toolLink: "/dashboard/resources",
     isCompleted: (ctx) => ctx.activity.resources_viewed >= 2,

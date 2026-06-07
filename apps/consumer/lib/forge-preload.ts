@@ -8,6 +8,8 @@
  * for each Refinery tool. Tools check for this on mount.
  */
 
+import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ForgePreload {
@@ -41,7 +43,7 @@ export interface ForgePreload {
   // Interview Practice: pre-filled target roles
   interviewRoles: string[];
 
-  // Resources: priority categories from barriers
+  // Second Chance Board: priority categories from barriers
   priorityCategories: string[];
 }
 
@@ -57,24 +59,11 @@ export function buildForgePreload(forgeSession: Record<string, unknown>): ForgeP
   let resumeSkeleton: ForgePreload["resumeSkeleton"] = null;
   if (output) {
     const narrative = output.narrative as Record<string, string> | undefined;
-    const skills = output.skills as Record<string, unknown> | undefined;
     const parsed = forgeSession.parsed as Record<string, unknown> | undefined;
-
-    const allSkills: string[] = [];
-    if (skills) {
-      for (const cat of Object.values(skills)) {
-        if (Array.isArray(cat)) {
-          for (const s of cat) {
-            if (typeof s === "string") allSkills.push(s);
-            else if (s && typeof s === "object" && "name" in s) allSkills.push(String(s.name));
-          }
-        }
-      }
-    }
 
     resumeSkeleton = {
       professionalSummary: narrative?.summary || "",
-      skills: allSkills.slice(0, 15),
+      skills: getSkillNames(output, 15),
       experience: extractExperience(parsed),
       education: extractEducation(parsed),
       certifications: extractCertifications(parsed),
@@ -83,12 +72,11 @@ export function buildForgePreload(forgeSession: Record<string, unknown>): ForgeP
 
   // Saved searches from career paths
   const savedSearches: ForgePreload["savedSearches"] = [];
-  if (output?.careerPaths && Array.isArray(output.careerPaths)) {
+  const careerPaths = getCareerPaths(output);
+  if (careerPaths.length) {
     const location = (preferences?.location as string) || "Milwaukee, WI";
-    for (const cp of (output.careerPaths as Array<Record<string, string>>).slice(0, 3)) {
-      if (cp.title) {
-        savedSearches.push({ role: cp.title, location });
-      }
+    for (const cp of careerPaths.slice(0, 3)) {
+      savedSearches.push({ role: cp.title, location });
     }
   }
 
@@ -104,10 +92,8 @@ export function buildForgePreload(forgeSession: Record<string, unknown>): ForgeP
 
   // Interview roles
   const interviewRoles: string[] = [];
-  if (output?.careerPaths && Array.isArray(output.careerPaths)) {
-    for (const cp of (output.careerPaths as Array<Record<string, string>>).slice(0, 3)) {
-      if (cp.title) interviewRoles.push(cp.title);
-    }
+  if (careerPaths.length) {
+    for (const cp of careerPaths.slice(0, 3)) interviewRoles.push(cp.title);
   }
 
   // Priority resource categories from barriers

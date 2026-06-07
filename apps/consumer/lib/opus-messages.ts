@@ -21,9 +21,9 @@ const CLIENT_MESSAGES: Record<string, string> = {
   disclosure:
     "Most people skip this. The ones who don't get the job. Let's prepare what to say.",
   interview:
-    "Practice doesn't make perfect. It makes confident. Each session builds real skill.",
+    "Practice in writing to shape the answer. Practice out loud to make it hold under pressure.",
   resources:
-    "I've matched resources to your specific situation. Start with the ones marked most relevant.",
+    "Start with one lane that fits your life this week. Then search live jobs, build the resume, and practice the interview.",
   applications:
     "Track every job from saved to offered. Each step has tools to help you prepare.",
   progress:

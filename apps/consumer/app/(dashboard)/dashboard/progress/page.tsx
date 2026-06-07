@@ -24,6 +24,11 @@ import {
   type RoadmapNode,
   type RoadmapPhase,
 } from "@/lib/roadmap";
+import {
+  getCareerPaths,
+  getSkillNames,
+  getStrengthTitles,
+} from "@/lib/forge-output";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -91,19 +96,9 @@ export default function ProgressPage() {
         if (session.forgeOutput) {
           data.forge_completed = true;
 
-          if (session.forgeOutput.skills) {
-            let count = 0;
-            for (const cat of Object.values(session.forgeOutput.skills)) {
-              if (Array.isArray(cat)) count += cat.length;
-            }
-            data.skills_identified = count;
-          }
-          if (session.forgeOutput.strengths) {
-            data.strengths_found = session.forgeOutput.strengths.length;
-          }
-          if (session.forgeOutput.careerPaths) {
-            data.career_paths = session.forgeOutput.careerPaths.length;
-          }
+          data.skills_identified = getSkillNames(session.forgeOutput, 200).length;
+          data.strengths_found = getStrengthTitles(session.forgeOutput, 200).length;
+          data.career_paths = getCareerPaths(session.forgeOutput).length;
           if (session.forgeOutput.barriers) {
             data.barriers_addressed = session.forgeOutput.barriers.length;
           }
@@ -324,7 +319,7 @@ export default function ProgressPage() {
             value={progress.applications_sent}
           />
           <ActivityRow
-            label="Resources explored"
+            label="Board visits"
             value={progress.resources_viewed}
           />
         </div>

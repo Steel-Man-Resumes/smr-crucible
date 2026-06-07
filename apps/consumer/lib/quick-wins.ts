@@ -67,7 +67,7 @@ const RULES: WinRule[] = [
       id: "start-forge",
       title: "Explore The Forge",
       description:
-        "Takes about 10 minutes. We find your skills, match you to careers, and connect you to resources. Everything stays private.",
+        "Takes about 10 minutes. We find your skills, match you to careers, and point you toward realistic next steps. Everything stays private.",
       action: { type: "link", label: "Start The Forge", href: "/welcome" },
       category: "foundation",
     },
@@ -104,19 +104,19 @@ const RULES: WinRule[] = [
       ctx.barriers.includes("health") || ctx.barriers.includes("recovery"),
   },
   {
-    id: "browse-resources",
+    id: "browse-second-chance-board",
     priority: 15,
     win: {
-      id: "browse-resources",
-      title: "Check out local resources",
+      id: "browse-second-chance-board",
+      title: "Review second-chance job lanes",
       description:
-        "Housing, legal aid, transportation, training — real organizations in Milwaukee and Waukesha that can help.",
+        "Start with fair-chance-friendly lanes, then search live jobs that match your skills and constraints.",
       action: {
         type: "link",
-        label: "Browse Resources",
+        label: "Open Job Board",
         href: "/dashboard/resources",
       },
-      category: "wellbeing",
+      category: "action",
     },
     condition: (ctx) =>
       ctx.forgeCompleted &&

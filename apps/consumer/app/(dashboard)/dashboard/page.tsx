@@ -61,15 +61,15 @@ const ALL_TOOLS: ToolCard[] = [
   {
     href: "/dashboard/interview",
     title: "Interview Practice",
-    description: "AI mock interviews tailored to your target role.",
+    description: "Text or live voice mock interviews tailored to your target role.",
     color: "bg-sky-50 border-sky-200",
     accent: "text-sky-600",
     minState: "full_access",
   },
   {
     href: "/dashboard/resources",
-    title: "Resources",
-    description: "Housing, transportation, legal aid, and more.",
+    title: "Second Chance Board",
+    description: "Find realistic fair-chance job lanes and live search paths.",
     color: "bg-warm-50 border-warm-200",
     accent: "text-warm-600",
     minState: "full_access",
@@ -577,7 +577,7 @@ function PartnerDashboard() {
     {
       title: "The Forge",
       href: "/intro",
-      description: "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to resources. Free for all clients — no account needed until they want to save.",
+      description: "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to next steps. Free for all clients — no account needed until they want to save.",
       research: "Stages of Change (Prochaska), Narrative Identity (McAdams), Giordano's hooks-for-change",
     },
     {
@@ -595,8 +595,8 @@ function PartnerDashboard() {
     {
       title: "Interview Practice",
       href: "/dashboard/interview",
-      description: "AI mock interviews tailored to role, level, and disclosure needs. Four modes: general, behavioral STAR, industry-specific, and disclosure practice.",
-      research: "SDT competence-building, Bandura performance accomplishments",
+      description: "AI mock interviews tailored to role, level, and disclosure needs. Includes written practice plus live voice rehearsal through OpenAI Realtime.",
+      research: "SDT competence-building, Bandura performance accomplishments, voice practice for transfer",
     },
     {
       title: "Job Board",
@@ -605,10 +605,10 @@ function PartnerDashboard() {
       research: "SHRM fair-chance employer data, Granovetter weak ties",
     },
     {
-      title: "Resources",
+      title: "Second Chance Board",
       href: "/dashboard/resources",
-      description: "Barrier-matched resource directory. Housing, transportation, legal aid, mental health, recovery support. Matched to what the client disclosed in the Forge.",
-      research: "SAMHSA trauma-informed care, NIJ reentry framework",
+      description: "Curated fair-chance opportunity lanes, employer signals, and handoffs into live listings, targeted resumes, interview practice, and disclosure planning.",
+      research: "SHRM fair-chance hiring, CareerOneStop reentry guidance, Granovetter weak ties",
     },
   ];
 
