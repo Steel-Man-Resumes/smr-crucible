@@ -69,7 +69,7 @@ const ALL_TOOLS: ToolCard[] = [
   },
   {
     href: "/dashboard/resources",
-    title: "Second Chance Board",
+    title: "Fair-Chance Lanes",
     description: "Find realistic fair-chance job lanes and live search paths.",
     color: "bg-warm-50 border-warm-200",
     accent: "text-warm-600",
@@ -607,7 +607,7 @@ function PartnerDashboard() {
       research: "SHRM fair-chance employer data, Granovetter weak ties",
     },
     {
-      title: "Second Chance Board",
+      title: "Fair-Chance Lanes",
       href: "/dashboard/resources",
       description: "Curated fair-chance opportunity lanes, employer signals, and handoffs into live listings, targeted resumes, interview practice, and disclosure planning.",
       research: "SHRM fair-chance hiring, CareerOneStop reentry guidance, Granovetter weak ties",

@@ -81,7 +81,7 @@ const TOOLS = [
   { name: "Resume Builder", desc: "Job-targeted, built from Forge output with no blank-page friction" },
   { name: "Disclosure Coach", desc: "Jurisdiction-specific timing, legal rights, and a natural conversation script" },
   { name: "Interview Prep", desc: "Adaptive AI mock interviews with structured written feedback" },
-  { name: "Second Chance Board", desc: "Fair-chance opportunity lanes connected to live job search, resumes, disclosure, and interview prep" },
+  { name: "Fair-Chance Lanes", desc: "Fair-chance opportunity lanes connected to live job search, resumes, disclosure, and interview prep" },
   { name: "Application Tracker", desc: "Documented arc from intake to placement, measurable at every step" },
 ];
 

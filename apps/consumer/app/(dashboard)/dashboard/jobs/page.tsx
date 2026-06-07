@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -314,6 +315,33 @@ function JobBoardPage() {
         Real job listings updated daily. Fair-chance employers highlighted.
         Everything stays right here in your dashboard.
       </p>
+
+      {/* Cross-link into the curated fair-chance lanes (completes the loop) */}
+      <Link
+        href="/dashboard/resources"
+        className="flex items-center justify-between gap-3 bg-sage-50 border border-sage-200 rounded-xl px-4 py-3 mb-6 hover:bg-sage-100 transition-colors"
+      >
+        <span className="text-sm text-sage-800">
+          <span className="font-semibold">Not sure where to start?</span>{" "}
+          Explore curated fair-chance lanes for your field.
+        </span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          className="text-sage-600 flex-shrink-0"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Link>
 
       {/* Saved jobs summary */}
       {savedCount > 0 && (

@@ -27,7 +27,7 @@ const NAV_SECTIONS = [
       { path: "/disclosure", label: "Disclosure" },
       { path: "/interview", label: "Interview" },
       { path: "/jobs", label: "Jobs" },
-      { path: "/resources", label: "Second Chance" },
+      { path: "/resources", label: "Fair-Chance Lanes" },
       { path: "/progress", label: "Progress" },
       { path: "/methodology", label: "Methodology" },
       { path: "/evidence", label: "Evidence" },

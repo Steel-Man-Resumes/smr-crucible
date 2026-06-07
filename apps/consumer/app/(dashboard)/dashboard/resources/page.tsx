@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Second Chance Job Board — Refinery Tool 5
+ * Fair-Chance Lanes -- Refinery Tool 5
  *
  * Curated fair-chance job lanes plus live-search handoffs.
  * This page does not invent openings. It points users toward realistic
- * second-chance-friendly searches and preparation tools.
+ * fair-chance searches and preparation tools.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -106,7 +106,7 @@ function SecondChanceBoardPage() {
     <div className="max-w-5xl space-y-8">
       <header className="max-w-3xl">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Second Chance Job Board
+          Fair-Chance Lanes
         </h1>
         <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
         <p className="text-body text-muted leading-relaxed">
