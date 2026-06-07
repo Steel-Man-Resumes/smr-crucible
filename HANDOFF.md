@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-06-07
 **Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
-**Next session:** Build the stage nav + next-step card + guided tour (Phase 1 W2), wired to getNextStep(). DB schema is live (all 17 migrations applied to the fresh dedicated Neon `ep-little-cloud-aphpkqbd`, 2026-06-07). Do NOT push/deploy until password-reset email delivery is verified with the new Resend key.
+**Next session:** Phase 1 W2 (journey shell + guided tour) is **DONE + verified**. Next options: W3 (fair-chance job board -- rename "Second Chance" public copy, merge lanes into jobs, CareerOneStop fallback) or W4 (AI coach -- consolidate the existing `/api/assistant` surface, profile-aware via getUserProfile). DB schema live on the fresh dedicated Neon. All work is local commits -- do NOT push/deploy until password-reset email delivery is verified with the new Resend key (Twilio A2P pending ~2 days, non-blocking).
 
 ## MASTER PLAN (READ THIS FIRST)
 `~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
@@ -37,6 +37,11 @@ This is the complete locked architecture for the platform. Written for Opus 4.8 
 - `packages/core/migrations/016_onboarding_coach.sql` -- onboarding + coach columns on `users` + `coach_conversation`. (Plan called this 018; renumbered 016 -- runner applies *.sql lexically.) **APPLIED + VERIFIED 2026-06-07** against the fresh dedicated Neon: all 17 migrations ran clean; confirmed 10 new `users` columns + `coach_conversation` table + 9 coach constraints. 36 public tables total.
 - `packages/core/src/getUserProfile.ts` -- backbone profile reader over existing tables (no dup). Contract includes calendar/SMS fields with safe defaults until those migrations land.
 - `packages/core/src/computeNextStep.ts` -- deterministic rules ladder + 1h cache (`getNextStep`) + `invalidateNextStep`.
+
+**Phase 1 W2 -- Journey shell DONE + verified (committed local, NOT pushed):**
+- `GET /api/next-step` -> getNextStep(); `JourneyHeader` fetches once, renders the 7-stage progress bar + the "your next step" card. Additive to the client dashboard (partner/observer/profile-setup untouched). Verified end-to-end against the live DB (fresh user -> "Build your foundation"; forge-done -> "Find your first target job"; cache persisted).
+- `GET/POST /api/onboarding/tour` + `GuidedTour` (3 screens: promise, journey map, name-your-coach). DB-persisted, 2 deferrals then mandatory, mounted in the dashboard layout, client-tier only. Verified: defer increments, complete persists + names coach + invalidates next-step cache.
+- Env: all Tier 0/1 keys provisioned by Troy into a fresh Steel-Man-only Neon + accounts (Anthropic, OpenAI, Resend, JSearch, R2, Perplexity, DOCUMENT_ENCRYPTION_KEY). `CAREERONESTOP_USER_ID` still blank (needs the DOL User ID alongside the token). Twilio blank (A2P pending).
 
 **Instrumentation backlog (computeNextStep gates that have NO server data source yet):**
 - `job_application.resume_artifact_id` is never set -> Stage 3 gate ("resume tailored to target") can't advance. Wire the resume-builder to link the tailored resume to the saved job.
