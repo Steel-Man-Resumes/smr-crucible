@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-06-07
 **Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
-**Next session:** Phase 1 W2 (journey shell + guided tour) is **DONE + verified**. Next options: W3 (fair-chance job board -- rename "Second Chance" public copy, merge lanes into jobs, CareerOneStop fallback) or W4 (AI coach -- consolidate the existing `/api/assistant` surface, profile-aware via getUserProfile). DB schema live on the fresh dedicated Neon. All work is local commits -- do NOT push/deploy until password-reset email delivery is verified with the new Resend key (Twilio A2P pending ~2 days, non-blocking).
+**Next session:** Through W4 coach BACKEND (done + verified). Remaining is increasingly UI-heavy and wants a running app -- recommend a **preview deploy + QA checkpoint** next (push Tier-0 keys to Vercel -> verify `/forgot-password` email -> deploy preview), then: wire the AssistantChat drawer on Refinery pages to `/api/coach` (use the user's coach_name), build the Settings "Your Coach" controls (style/length/focus/creativity), add proactive triggers + context_digest, then the deeper unified-board merge + CareerOneStop (needs `CAREERONESTOP_USER_ID`). All work is local commits (20 this session) -- do NOT push/deploy until the password-reset email is verified with the new Resend key. Twilio A2P pending ~2 days (non-blocking).
 
 ## MASTER PLAN (READ THIS FIRST)
 `~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
@@ -42,6 +42,10 @@ This is the complete locked architecture for the platform. Written for Opus 4.8 
 - `GET /api/next-step` -> getNextStep(); `JourneyHeader` fetches once, renders the 7-stage progress bar + the "your next step" card. Additive to the client dashboard (partner/observer/profile-setup untouched). Verified end-to-end against the live DB (fresh user -> "Build your foundation"; forge-done -> "Find your first target job"; cache persisted).
 - `GET/POST /api/onboarding/tour` + `GuidedTour` (3 screens: promise, journey map, name-your-coach). DB-persisted, 2 deferrals then mandatory, mounted in the dashboard layout, client-tier only. Verified: defer increments, complete persists + names coach + invalidates next-step cache.
 - Env: all Tier 0/1 keys provisioned by Troy into a fresh Steel-Man-only Neon + accounts (Anthropic, OpenAI, Resend, JSearch, R2, Perplexity, DOCUMENT_ENCRYPTION_KEY). `CAREERONESTOP_USER_ID` still blank (needs the DOL User ID alongside the token). Twilio blank (A2P pending).
+
+**Phase 1 W3 (core) + W4 backend DONE + verified (committed local, NOT pushed):**
+- W3: public "Second Chance" -> "Fair-Chance Lanes" everywhere (nav, tool cards, board heading, partner view, access, dev toolbar); jobs<->lanes cross-link added. Internal module names (second-chance-board.ts etc.) deferred per Codex. Deeper unified-board merge + CareerOneStop fallback still pending (CareerOneStop needs `CAREERONESTOP_USER_ID`).
+- W4 coach backend: `buildCoachSystemPrompt(profile)` (Section 5, style/length/focus-aware), `coach_conversation` persistence (load/append/count), `POST /api/coach` (streams claude-sonnet-4-6 via AI SDK, rate-limited, logged, persists both turns). Verified against the live DB: prompt embeds the full profile; history round-trips. Live streaming mirrors the proven `/api/assistant` pattern -- browser QA pending. NOT yet wired to the UI (AssistantChat still calls /api/assistant; t.ROY stays on Forge/public, coach takes the Refinery surface once wired).
 
 **Instrumentation backlog (computeNextStep gates that have NO server data source yet):**
 - `job_application.resume_artifact_id` is never set -> Stage 3 gate ("resume tailored to target") can't advance. Wire the resume-builder to link the tailored resume to the saved job.
