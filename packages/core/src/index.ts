@@ -15,3 +15,5 @@ export * from './userTier';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './outcomeAggregate';
+export * from './getUserProfile';
+export * from './computeNextStep';
