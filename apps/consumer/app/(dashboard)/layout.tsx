@@ -52,6 +52,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
   { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "full_access" },
   { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+  { href: "/dashboard/vault", label: "My Materials", minTier: "client", minState: "needs_resume" },
   { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
   { href: "/dashboard/partner", label: "Partner Dashboard", minTier: "partner", minState: "needs_profile" },
   { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
