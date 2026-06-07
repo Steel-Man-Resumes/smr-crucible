@@ -22,6 +22,8 @@ import {
 } from "docx";
 
 export const maxDuration = 30;
+const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
+const MAX_DOCUMENT_CHARS = 200_000;
 
 // TORI color palette (matches Meg Sanger reference)
 const NAVY = "1B2A4A";       // dark navy — headers, section titles, accent
@@ -49,6 +51,14 @@ interface DownloadInput {
 
 export async function POST(request: Request) {
   try {
+    const contentLength = request.headers.get("content-length");
+    if (
+      contentLength &&
+      parseInt(contentLength, 10) > MAX_DOWNLOAD_REQUEST_BYTES
+    ) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+
     const input: DownloadInput = await request.json();
 
     if (!input.content || !input.type) {
@@ -57,8 +67,20 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (typeof input.content !== "string") {
+      return NextResponse.json({ error: "content must be text" }, { status: 400 });
+    }
+    if (input.content.length > MAX_DOCUMENT_CHARS) {
+      return NextResponse.json({ error: "content is too large" }, { status: 413 });
+    }
+    if (input.type !== "resume" && input.type !== "cover_letter") {
+      return NextResponse.json({ error: "invalid document type" }, { status: 400 });
+    }
 
     const format = input.format || "docx";
+    if (format !== "docx" && format !== "txt") {
+      return NextResponse.json({ error: "invalid format" }, { status: 400 });
+    }
 
     if (format === "txt") {
       const blob = new Blob([input.content], { type: "text/plain" });

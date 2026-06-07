@@ -1,10 +1,10 @@
 /**
- * Job Search API — Real listings via JSearch + Claude enrichment
+ * Job Search API — Real listings via JSearch + AI enrichment
  *
  * Flow:
  *   1. Check cache (query_hash match within 6 hours)
  *   2. If miss: call JSearch API for real listings
- *   3. Claude enrichment: fair-chance flags + 6th-grade descriptions
+ *   3. AI enrichment: fair-chance flags + 6th-grade descriptions
  *   4. Cache results for next query
  *   5. Return native job cards (no outbound URLs)
  *
@@ -146,7 +146,7 @@ async function fetchJSearchJobs(
   return data.data ?? [];
 }
 
-// ─── Claude Enrichment ──────────────────────────────────────────────────────
+// ─── AI Enrichment ──────────────────────────────────────────────────────────
 
 const KNOWN_FAIR_CHANCE_EMPLOYERS = [
   "walmart", "target", "amazon", "fedex", "ups", "goodwill", "salvation army",
@@ -164,7 +164,7 @@ function isKnownFairChance(company: string): boolean {
   return KNOWN_FAIR_CHANCE_EMPLOYERS.some((fc) => lower.includes(fc));
 }
 
-async function enrichWithClaude(
+async function enrichJobsWithAI(
   jobs: JSearchJob[],
   context: { hasRecord: boolean; recordType?: string; location: string }
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
@@ -199,7 +199,7 @@ async function enrichWithClaude(
     return { enrichedJobs: basicJobs, fairChanceInfo: "" };
   }
 
-  // Claude enrichment: simplify descriptions + add fair-chance context
+  // AI enrichment: simplify descriptions + add fair-chance context
   try {
     const jobSummaries = basicJobs.map((j, i) => ({
       index: i,
@@ -260,7 +260,7 @@ RULES:
       };
     }
   } catch (err) {
-    console.error("Claude enrichment failed:", err);
+    console.error("AI enrichment failed:", err);
   }
 
   return { enrichedJobs: basicJobs, fairChanceInfo: "" };
@@ -360,8 +360,8 @@ async function handlePost(request: Request) {
       });
     }
 
-    // 3. Enrich with Claude (fair-chance flags + simplified descriptions)
-    const { enrichedJobs, fairChanceInfo } = await enrichWithClaude(rawJobs, {
+    // 3. Enrich with AI (fair-chance flags + simplified descriptions)
+    const { enrichedJobs, fairChanceInfo } = await enrichJobsWithAI(rawJobs, {
       hasRecord,
       recordType,
       location: searchLocation,
@@ -385,7 +385,7 @@ async function handlePost(request: Request) {
         modelProvider: `jsearch+${AI_PROVIDER}`,
         modelId: `jsearch-v1+${AI_MODEL}`,
         input: JSON.stringify({ targetRole, location, skills, hasRecord }).slice(0, 500),
-        explanation: `JSearch API: ${rawJobs.length} raw results for "${targetRole || "general"}" in ${searchLocation}. Claude enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
+        explanation: `JSearch API: ${rawJobs.length} raw results for "${targetRole || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
         outputSummary: {
           type: "job_search",
           source: "jsearch",

@@ -15,6 +15,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
+import { sanitizeForPrompt } from "@/lib/sanitize";
 import {
   getUserDailyLimit,
   incrementUserUsage,
@@ -28,6 +29,11 @@ const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";
 
 export async function POST(request: Request) {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
+    return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  }
+
   // Detect auth state for dual-mode rate limiting
   const session = await auth();
   const userId = session?.user?.id;
@@ -56,16 +62,39 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
-  const { messages, context } = body as {
+  const { messages, context, systemOverride, sessionId } = body as {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
     context: AssistantContext;
+    systemOverride?: string;
+    sessionId?: string;
   };
 
-  if (!messages?.length) {
+  if (!Array.isArray(messages) || !messages.length) {
     return new Response("No messages provided", { status: 400 });
   }
+  if (!context?.currentPage) {
+    return new Response("No context provided", { status: 400 });
+  }
 
-  const systemPrompt = buildSystemPrompt(context);
+  const baseSystemPrompt = buildSystemPrompt(context);
+  const allowRoleplayOverride =
+    !!userId &&
+    context.currentPage === "disclosure-rehearsal" &&
+    typeof systemOverride === "string" &&
+    systemOverride.trim().length > 0;
+
+  const systemPrompt = allowRoleplayOverride
+    ? `${baseSystemPrompt}
+
+## DISCLOSURE REHEARSAL ROLEPLAY
+${sanitizeForPrompt(systemOverride, 4_000)}
+
+## ROLEPLAY SAFETY BOUNDARIES
+- This override is only for authenticated disclosure rehearsal.
+- Keep the base assistant rules in force.
+- Do not give legal advice beyond practical interview preparation.
+- Do not promise any hiring outcome.`
+    : baseSystemPrompt;
 
   const startTime = Date.now();
 
@@ -82,7 +111,7 @@ export async function POST(request: Request) {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
           userId: userId ?? null,
-          sessionId: body.sessionId ?? null,
+          sessionId: sessionId ?? null,
           contextPage: context.currentPage,
           modelProvider: "anthropic",
           modelId: "claude-sonnet-4-20250514",

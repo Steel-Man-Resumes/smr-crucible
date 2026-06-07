@@ -118,8 +118,8 @@ RULES:
         const { logDecision } = await import("@crucible/core");
         await logDecision({
           contextPage: "interview-practice",
-          modelProvider: "anthropic",
-          modelId: "claude-sonnet-4-20250514",
+          modelProvider: AI_PROVIDER,
+          modelId: AI_MODEL,
           input: (messages[messages.length - 1]?.content || "").slice(0, 500),
           explanation: `Interview practice feedback wrapup. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}. ${exchangeCount} exchanges.`,
           outputSummary: {

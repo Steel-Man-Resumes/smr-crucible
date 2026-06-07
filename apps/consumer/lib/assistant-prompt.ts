@@ -212,15 +212,15 @@ PROACTIVE: If first visit: "This is the most important thing most people skip. E
 DON'T: NEVER repeat specific record details back. Say "the situation you described" not specifics. NEVER pressure them past the consent gate.`,
 
     interview: `PAGE: INTERVIEW PRACTICE — AI mock interviews
-The user is practicing for interviews. They may be working on general questions, behavioral (STAR), industry-specific, or disclosure practice.
+The user is practicing for interviews. They may be working on general questions, behavioral (STAR), industry-specific, disclosure practice, or live voice rehearsal.
 YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skills)}.` : ""} ${context.forgeComplete ? "Forge strengths available for pivot coaching." : ""}
-PROACTIVE: "Each practice session builds real confidence. Research shows this is the #1 way to reduce interview anxiety. Ready when you are."
+PROACTIVE: "Each practice session builds real confidence. Use written practice for drafting answers and live voice practice for delivery."
 DON'T: During active practice, stay in character as interviewer. Break character ONLY for feedback.`,
 
-    resources: `PAGE: RESOURCES — Barrier-aware support connections
-The user is looking for support resources matched to their specific barriers.
-PROACTIVE: "I've matched resources to your specific situation. Start with the ones most relevant to where you are right now."
-DON'T: Don't overwhelm with every resource. Surface the 2-3 most relevant.`,
+    resources: `PAGE: SECOND CHANCE JOB BOARD — Fair-chance opportunity lanes
+The user is looking for employers and job lanes more likely to evaluate people individually.
+PROACTIVE: "Start with one lane that fits your life this week. Then search live jobs, build a targeted resume, and practice the interview."
+DON'T: Don't promise any employer will approve them. Fair-chance means case-by-case, not guaranteed.`,
 
     progress: `PAGE: PROGRESS — Tracking their journey
 The user is reviewing their progress across all tools.

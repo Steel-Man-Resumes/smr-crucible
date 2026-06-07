@@ -15,6 +15,7 @@ export const config = {
     // Refinery AI endpoints (user-rate-limited, require auth)
     "/api/disclosure-guide",
     "/api/interview-practice",
+    "/api/interview-voice/:path*",
     "/api/job-search",
     "/api/resources-search",
     "/api/resume-generate",
