@@ -1,7 +1,70 @@
 # SMR Crucible -- Handoff
-**Last updated:** 2026-06-04
-**Last session:** AI provider switch (OpenAI temporary) + Dr. Baker access setup + /access landing page
-**Next session:** Restore Anthropic when Troy pays bill (edit apps/consumer/lib/ai-call.ts only). Verify Dr. Baker full flow post-test.
+**Last updated:** 2026-06-06
+**Last session (CC planning):** Full platform architecture planned with Troy. Master plan written. No code changes this session -- all decisions locked and documented.
+**Next session:** Read the master plan first. Then start at Section 9.2 (commit Codex's uncommitted changes), Section 9.1 (fix voice interview API -- BLOCKING), Section 9.3 (verify password reset). Then work Phase 1 in order.
+
+## MASTER PLAN (READ THIS FIRST)
+`~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
+
+This is the complete locked architecture for the platform. Written for Opus 4.8 to implement. Contains:
+- All locked decisions (brand, journey, audiences, intelligence engine, AI coach, partner dashboard)
+- 7 DB migrations to run (016-022)
+- 3-phase build schedule to Aug 14 conference
+- Voice interview fix instructions (Section 9.1 -- endpoints are wrong, must fix before demo)
+- Demo story script (Section 12)
+- Open source prep for Aug 15 launch
+- Guardrails (Section 16 -- read before touching anything)
+
+**Do NOT re-litigate architecture decisions. Implement them.**
+
+---
+
+## 2026-06-06 -- CC Planning Session: Master Plan Locked
+
+---
+
+## 2026-06-06 -- Codex Handoff: Refinery Live Prep + Auth Recovery
+
+**Author:** Codex, OpenAI GPT-5 coding agent.
+
+Detailed handoff: `docs/CODEX-HANDOFF-REFINERY-2026-06-06.md`
+Inspection summary: `docs/REFINERY-LIVE-READINESS-SUMMARY-2026-06-06.md`
+
+### What Codex changed
+- Replaced the old `/dashboard/resources` resource hub UI with a Second Chance Job Board.
+- Added curated fair-chance opportunity lanes in `apps/consumer/lib/second-chance-board.ts`.
+- Added OpenAI Realtime voice practice for interviews with server-minted ephemeral tokens at `/api/interview-voice/token`.
+- Added a true password reset email flow:
+  - `/forgot-password`
+  - `/reset-password`
+  - `/api/auth/reset-password/request`
+  - `/api/auth/reset-password/confirm`
+- Clarified login copy: magic links sign users in, password reset links change passwords.
+- Added dev-only debug login controls:
+  - Fresh Client Run
+  - Client Login
+  - Admin Login
+  - Reset Local Flow Only
+- Fixed dev toolbar provider bug (`dev-login`, not `credentials`).
+- Added Forge output normalization for `career_paths` and legacy `careerPaths`.
+- Tightened assistant override, artifact validation, download validation, CSP, and AI decision log model/provider drift.
+- Ran non-force `npm audit fix`; lockfile changed.
+
+### Verification
+- `npm run build -w apps/consumer` passes.
+- `npm run build -w services/worker` passes.
+- `git diff --check` passes.
+- Production deploy completed: `dpl_HZmm2i3kYVzttXrCxBfryakhvdLu`.
+- Verified aliases include `https://refinery.steelmanresumes.com`.
+- Smoke-tested `/forgot-password`, `/reset-password`, unauth dashboard redirect, and reset-request API.
+
+### CC: continue from here
+1. Verify production password reset email delivery on `https://refinery.steelmanresumes.com/forgot-password`.
+2. Verify magic link delivery separately; it is passwordless sign-in, not reset.
+3. Confirm production envs: `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`, `AUTH_URL`.
+4. Browser-test Realtime voice with a microphone.
+5. Add voice cost/session guardrails.
+6. Plan dependency migrations for remaining audit issues. Do not run `npm audit fix --force` casually.
 
 ---
 
