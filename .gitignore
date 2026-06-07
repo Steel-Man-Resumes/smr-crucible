@@ -27,3 +27,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 .vercel
+
+# editor swap files
+*.swp
+*.swo
