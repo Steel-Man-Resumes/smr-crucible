@@ -20,7 +20,7 @@ import { grantConsent } from "../src/consent";
 import { getNextStep, invalidateNextStep } from "../src/computeNextStep";
 
 const SENTINEL_ORG = "00000000-0000-0000-0000-000000000000";
-const ADMIN_EMAIL = "marcusinplainsight@gmail.com"; // documented SMR admin
+const ADMIN_EMAIL = "troyrichardcarr@gmail.com"; // Troy -- primary admin
 const BAKER_EMAIL = "latonyabakergoe@gmail.com"; // partner pre-auth (auth.ts)
 const DEMO_CLIENT_EMAIL = "demo-client@steelmanresumes.demo";
 

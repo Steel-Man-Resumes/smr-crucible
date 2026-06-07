@@ -5,7 +5,7 @@ that support them. It turns a person's story into a job: a guided, research-grou
 journey from self-understanding to a tailored resume, a disclosure plan, interview
 practice, real fair-chance employers, and an offer.
 
-Built by The Midnight Garden LLC. This is the engine behind Steel Man Resumes
+Built by Steel Man Resumes LLC. This is the engine behind Steel Man Resumes
 (steelmanresumes.com) -- The Forge (free, no login) and The Refinery (the full
 authenticated journey).
 
@@ -65,7 +65,7 @@ Never commit real secrets; `.env.local` is gitignored.
   [LICENSE](./LICENSE).
 - **Content and documentation:** Creative Commons Attribution 4.0 (CC BY 4.0).
 
-Copyright (C) 2026 The Midnight Garden LLC.
+Copyright (C) 2026 Steel Man Resumes LLC.
 
 ## Security
 
