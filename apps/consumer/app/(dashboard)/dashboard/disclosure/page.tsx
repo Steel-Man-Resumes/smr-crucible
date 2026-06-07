@@ -209,6 +209,27 @@ function DisclosurePlannerPage() {
         const data = await res.json();
         setPlan(data);
         setStep("plan");
+
+        // Persist the disclosure plan (the user's deliverable -- a frame, not
+        // their rehearsal words) so they can return to it and the journey engine
+        // advances past Stage 4. Fire-and-forget; never block the plan view.
+        fetch("/api/artifacts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "disclosure_plan",
+            targetContext: { targetJob: targetJob || null },
+            content: {
+              timing_advice: data.timing_advice ?? null,
+              legal_context: data.legal_context ?? null,
+              script: data.script ?? null,
+              tips: data.tips ?? [],
+              targetJob: targetJob || null,
+              completedAt: new Date().toISOString(),
+            },
+            scaffoldLevel: 1.0,
+          }),
+        }).catch(() => {});
       }
     } catch {
       // Silent failure
@@ -801,7 +822,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       )}
 
       <p className="text-xs text-muted text-center">
-        This is a safe practice space. Nothing here is saved or shared.
+        This is a safe space to rehearse, and we never save your words from this
+        practice. Your disclosure plan is saved privately to your account so you
+        can come back and refine it, and it is never shared unless you choose to
+        connect a support partner. You can delete it anytime.
       </p>
     </div>
   );

@@ -27,6 +27,44 @@ interface InterviewConfig {
   includeDisclosure: boolean;
 }
 
+/**
+ * Persist a privacy-safe record that a practice session happened, so the journey
+ * engine (computeNextStep Stage 5) can advance and the coach can see progress.
+ * We teach frames, not scripts, so we store the FRAME practiced and the coach's
+ * meaning-level feedback -- never the user's words, transcript, or audio.
+ */
+async function recordInterviewPractice(record: {
+  role: string;
+  frame: string;
+  mode: "text" | "voice";
+  includeDisclosure: boolean;
+  exchanges?: number;
+  feedback?: unknown;
+}): Promise<void> {
+  try {
+    await fetch("/api/artifacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "interview_prep",
+        targetContext: { targetJob: record.role || null, frame: record.frame },
+        content: {
+          role: record.role || null,
+          frame: record.frame, // the frame practiced (behavioral=STAR, disclosure, industry)
+          mode: record.mode,
+          includeDisclosure: record.includeDisclosure,
+          ...(record.exchanges !== undefined ? { exchanges: record.exchanges } : {}),
+          ...(record.feedback ? { feedback: record.feedback } : {}),
+          completedAt: new Date().toISOString(),
+        },
+        scaffoldLevel: 1.0,
+      }),
+    });
+  } catch {
+    // Never let progress-tracking break the practice experience.
+  }
+}
+
 const INTERVIEW_TYPES = [
   {
     id: "general",
@@ -201,7 +239,8 @@ function InterviewPracticePage() {
           setFeedback(data.feedback);
           setStep("feedback");
 
-          // Track completion
+          // Track completion (localStorage for the in-page tracker; server-side
+          // record so the journey engine advances -- frame + feedback, no words).
           try {
             const tracker = JSON.parse(
               localStorage.getItem("consumer_progress") || "{}"
@@ -210,6 +249,15 @@ function InterviewPracticePage() {
               (tracker.interviews_completed || 0) + 1;
             localStorage.setItem("consumer_progress", JSON.stringify(tracker));
           } catch {}
+          recordInterviewPractice({
+            role: config.targetRole,
+            frame: config.interviewType || "general",
+            mode: "text",
+            includeDisclosure:
+              config.interviewType === "disclosure" || config.includeDisclosure,
+            exchanges: newExchangeCount,
+            feedback: data.feedback,
+          });
         } else {
           setMessages((prev) => [
             ...prev,
@@ -525,7 +573,11 @@ function InterviewPracticePage() {
       )}
 
       <p className="text-xs text-muted text-center">
-        This is a safe practice space. Nothing here is saved or shared.
+        This is a safe space to practice. We never save your words or
+        recordings, only the frames you practice and whether your point lands, so
+        the app can coach you and track your progress. Your practice is private
+        to your account and never shared unless you choose to connect a support
+        partner.
       </p>
     </div>
   );
@@ -567,6 +619,16 @@ function VoicePracticePanel({
   }
 
   function stopVoicePractice() {
+    // Only record a completion if a live session actually took place.
+    if (status === "live") {
+      recordInterviewPractice({
+        role: config.targetRole,
+        frame: config.interviewType || "general",
+        mode: "voice",
+        includeDisclosure:
+          config.interviewType === "disclosure" || config.includeDisclosure,
+      });
+    }
     cleanupVoiceConnection();
     setStatus("idle");
     setError("");
