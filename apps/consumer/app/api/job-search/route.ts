@@ -164,6 +164,70 @@ function isKnownFairChance(company: string): boolean {
   return KNOWN_FAIR_CHANCE_EMPLOYERS.some((fc) => lower.includes(fc));
 }
 
+// ─── CareerOneStop (DOL) Fallback ───────────────────────────────────────────
+// Free, official job source used when JSearch returns zero. Env-gated and
+// fail-safe (returns [] on any error, so the board degrades to "no results").
+// Mapping follows the documented COS jobsearch response shape (Jobs[]). NOTE:
+// live creds returned 401 at build time (2026-06-07) -- verify the field mapping
+// with a real successful call once the User ID/token are active.
+
+interface CareerOneStopJob {
+  JvId?: string;
+  JobTitle?: string;
+  Company?: string;
+  Location?: string;
+  AccquisitionDate?: string;
+  URL?: string;
+}
+
+async function fetchCareerOneStopJobs(
+  keyword: string,
+  location: string
+): Promise<EnrichedJob[]> {
+  const uid = process.env.CAREERONESTOP_USER_ID;
+  const tok = process.env.CAREERONESTOP_TOKEN;
+  if (!uid || !tok) return [];
+
+  const kw = encodeURIComponent(keyword || "jobs");
+  const loc = encodeURIComponent(location || "United States");
+  // v1/jobsearch/{userId}/{keyword}/{location}/{radius}/{sort}/{order}/{start}/{pageSize}/{days}
+  const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/25/0/0/0/15/30`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      console.error(`CareerOneStop API error: ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    const jobs: CareerOneStopJob[] = data?.Jobs ?? [];
+    return jobs.slice(0, 15).map((j, i) => {
+      const company = j.Company || "Employer";
+      const fair = isKnownFairChance(company);
+      return {
+        id: j.JvId || `cos-${i}`,
+        title: j.JobTitle || "Job",
+        company,
+        location: j.Location || location,
+        salary: null,
+        description: "",
+        requirements: [],
+        benefits: [],
+        employment_type: "",
+        posted: j.AccquisitionDate || "",
+        second_chance: fair,
+        fair_chance_reason: fair ? "Known fair-chance employer" : null,
+        remote: false,
+      };
+    });
+  } catch (err) {
+    console.error("CareerOneStop fetch failed:", err);
+    return [];
+  }
+}
+
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
   context: { hasRecord: boolean; recordType?: string; location: string }
@@ -353,6 +417,22 @@ async function handlePost(request: Request) {
     );
 
     if (rawJobs.length === 0) {
+      // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
+      const cosJobs = await fetchCareerOneStopJobs(
+        sanitizeForPrompt(targetRole) || "jobs",
+        searchLocation
+      );
+      if (cosJobs.length > 0) {
+        cosJobs.sort((a, b) =>
+          a.second_chance === b.second_chance ? 0 : a.second_chance ? -1 : 1
+        );
+        await cacheResults(queryHash, cacheParams, cosJobs, "");
+        return NextResponse.json({
+          jobs: cosJobs,
+          fair_chance_info: "",
+          source: "careeronestop",
+        });
+      }
       return NextResponse.json({
         jobs: [],
         fair_chance_info: "",

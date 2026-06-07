@@ -85,6 +85,7 @@ function JobBoardPage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [fairChanceInfo, setFairChanceInfo] = useState("");
+  const [source, setSource] = useState("");
   const [rateLimitError, setRateLimitError] = useState("");
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
@@ -189,6 +190,7 @@ function JobBoardPage() {
         const data = await res.json();
         setJobs(data.jobs || []);
         setFairChanceInfo(data.fair_chance_info || "");
+        setSource(data.source || "");
       }
     } catch {
       setJobs([]);
@@ -458,6 +460,18 @@ function JobBoardPage() {
             <li>A different location or just &quot;Milwaukee, WI&quot;</li>
             <li>Searching again in a day — new jobs post every day</li>
           </ul>
+        </div>
+      )}
+
+      {/* CareerOneStop attribution -- required by DOL API terms when their data is shown */}
+      {source === "careeronestop" && visibleJobs.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 text-xs text-muted">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/cos-logo-star.svg" alt="CareerOneStop" className="h-5 w-auto" />
+          <span>
+            Job listings provided by CareerOneStop, sponsored by the U.S.
+            Department of Labor.
+          </span>
         </div>
       )}
 
