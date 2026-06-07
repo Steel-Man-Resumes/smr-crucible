@@ -13,6 +13,11 @@ import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
+import {
+  getCareerPaths,
+  getSkillNames,
+  getStrengthTitles,
+} from "@/lib/forge-output";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -85,10 +90,11 @@ function InterviewPracticePage() {
       const stored = localStorage.getItem("forge_session");
       if (stored) {
         const session = JSON.parse(stored);
-        if (session.forgeOutput?.careerPaths?.[0]?.title) {
+        const careerPaths = getCareerPaths(session.forgeOutput);
+        if (careerPaths[0]?.title) {
           setConfig((prev) => ({
             ...prev,
-            targetRole: session.forgeOutput.careerPaths[0].title,
+            targetRole: careerPaths[0].title,
           }));
         }
         const ctx: { skills: string[]; strengths: string[]; narrative: string } = {
@@ -96,12 +102,8 @@ function InterviewPracticePage() {
           strengths: [],
           narrative: "",
         };
-        if (session.forgeOutput?.skills) {
-          ctx.skills = session.forgeOutput.skills.map((s: any) => s.name).slice(0, 10);
-        }
-        if (session.forgeOutput?.narrative?.strengths) {
-          ctx.strengths = session.forgeOutput.narrative.strengths.map((s: any) => s.title);
-        }
+        ctx.skills = getSkillNames(session.forgeOutput, 10);
+        ctx.strengths = getStrengthTitles(session.forgeOutput, 6);
         if (session.forgeOutput?.narrative?.summary) {
           ctx.narrative = session.forgeOutput.narrative.summary;
         }
@@ -316,6 +318,12 @@ function InterviewPracticePage() {
               </label>
             )}
 
+          <VoicePracticePanel
+            config={config}
+            forgeContext={forgeContext}
+            enabled={!!config.interviewType}
+          />
+
           <button
             onClick={startInterview}
             disabled={!config.interviewType}
@@ -519,6 +527,179 @@ function InterviewPracticePage() {
       <p className="text-xs text-muted text-center">
         This is a safe practice space. Nothing here is saved or shared.
       </p>
+    </div>
+  );
+}
+
+function VoicePracticePanel({
+  config,
+  forgeContext,
+  enabled,
+}: {
+  config: InterviewConfig;
+  forgeContext: {
+    skills: string[];
+    strengths: string[];
+    narrative: string;
+  } | null;
+  enabled: boolean;
+}) {
+  const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
+  const [error, setError] = useState("");
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupVoiceConnection();
+    };
+  }, []);
+
+  function cleanupVoiceConnection() {
+    dataChannelRef.current?.close();
+    pcRef.current?.close();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    dataChannelRef.current = null;
+    pcRef.current = null;
+    streamRef.current = null;
+  }
+
+  function stopVoicePractice() {
+    cleanupVoiceConnection();
+    setStatus("idle");
+    setError("");
+  }
+
+  async function startVoicePractice() {
+    if (!enabled || status === "connecting" || status === "live") return;
+    setStatus("connecting");
+    setError("");
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("This browser does not support microphone access.");
+      }
+
+      const tokenRes = await fetch("/api/interview-voice/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config, forgeContext: forgeContext || undefined }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) {
+        throw new Error(tokenData.error || "Could not start voice practice.");
+      }
+      const ephemeralKey =
+        tokenData.value || tokenData.client_secret?.value || tokenData.secret?.value;
+      if (!ephemeralKey) {
+        throw new Error("Voice session token was missing.");
+      }
+
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
+      pc.ontrack = (event) => {
+        if (audioRef.current) {
+          audioRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      streamRef.current = mediaStream;
+      mediaStream.getTracks().forEach((track) => pc.addTrack(track, mediaStream));
+
+      const dataChannel = pc.createDataChannel("oai-events");
+      dataChannelRef.current = dataChannel;
+      dataChannel.onopen = () => {
+        dataChannel.send(
+          JSON.stringify({
+            type: "response.create",
+            response: {
+              instructions:
+                "Begin the mock interview now with one short greeting and the first question.",
+            },
+          })
+        );
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if (!offer.sdp) throw new Error("Could not create voice offer.");
+
+      const sdpRes = await fetch("https://api.openai.com/v1/realtime/calls", {
+        method: "POST",
+        body: offer.sdp,
+        headers: {
+          Authorization: `Bearer ${ephemeralKey}`,
+          "Content-Type": "application/sdp",
+        },
+      });
+      if (!sdpRes.ok) {
+        throw new Error("Realtime voice connection failed.");
+      }
+
+      await pc.setRemoteDescription({
+        type: "answer",
+        sdp: await sdpRes.text(),
+      });
+
+      setStatus("live");
+
+      try {
+        const tracker = JSON.parse(
+          localStorage.getItem("consumer_progress") || "{}"
+        );
+        tracker.voice_interviews_started =
+          (tracker.voice_interviews_started || 0) + 1;
+        tracker.interviews_started = (tracker.interviews_started || 0) + 1;
+        tracker.last_interview = new Date().toISOString();
+        localStorage.setItem("consumer_progress", JSON.stringify(tracker));
+      } catch {}
+    } catch (err: any) {
+      cleanupVoiceConnection();
+      setStatus("error");
+      setError(err?.message || "Voice practice could not start.");
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+      <audio ref={audioRef} autoPlay className="hidden" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-sky-800">Live voice practice</h2>
+          <p className="text-sm text-sky-700">
+            Talk out loud with a realtime AI interviewer using gpt-realtime-2.
+          </p>
+          {status === "live" && (
+            <p className="mt-1 text-xs font-medium text-sky-800">
+              Live now. Speak naturally; end the session when you are done.
+            </p>
+          )}
+          {status === "error" && error && (
+            <p className="mt-1 text-xs font-medium text-red-700">{error}</p>
+          )}
+        </div>
+        {status === "live" ? (
+          <button
+            onClick={stopVoicePractice}
+            className="inline-flex min-h-touch items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50"
+          >
+            End voice session
+          </button>
+        ) : (
+          <button
+            onClick={startVoicePractice}
+            disabled={!enabled || status === "connecting"}
+            className="inline-flex min-h-touch items-center justify-center rounded-xl bg-sky-600 px-5 py-3 text-sm font-medium text-white hover:bg-sky-700 disabled:bg-gray-300"
+          >
+            {status === "connecting" ? "Connecting..." : "Start live voice"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
