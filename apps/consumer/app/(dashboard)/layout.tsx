@@ -263,6 +263,7 @@ export default function DashboardLayout({
             forgeComplete: onboarding.state !== "needs_profile",
             readinessStage: undefined, // loaded by assistant from session
           }}
+          coach
         />
       </AssistantDrawer>
     </div>

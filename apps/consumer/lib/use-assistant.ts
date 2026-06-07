@@ -16,11 +16,13 @@ interface UseAssistantOptions {
   context: AssistantContext;
   /** Anonymous session ID (for decision logging) */
   sessionId?: string;
+  /** Use the profile-aware Refinery coach (/api/coach) instead of t.ROY (/api/assistant) */
+  coach?: boolean;
 }
 
-export function useAssistant({ context, sessionId }: UseAssistantOptions) {
+export function useAssistant({ context, sessionId, coach }: UseAssistantOptions) {
   const chat = useChat({
-    api: "/api/assistant",
+    api: coach ? "/api/coach" : "/api/assistant",
     body: {
       context,
       sessionId,

@@ -2,9 +2,10 @@
  * AI Career Coach -- streaming, profile-aware, persistent (master plan Section 5).
  *
  * Authenticated only. This is the in-Refinery, user-named coach (distinct from
- * t.ROY, which stays on the Forge/public surface). It loads the user's full
- * profile before the first token, adapts tone to their coach settings, persists
- * the conversation, and logs every turn for observability.
+ * t.ROY, which stays on the Forge/public surface). It accepts the AI SDK useChat
+ * shape ({ messages }) so it is a drop-in for the existing chat drawer, builds a
+ * profile-aware system prompt from getUserProfile, streams claude-sonnet-4-6,
+ * persists each new turn to coach_conversation, and logs for observability.
  */
 
 import { NextResponse } from "next/server";
@@ -15,8 +16,8 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import {
   getUserProfile,
   buildCoachSystemPrompt,
-  loadCoachHistory,
   appendCoachMessage,
+  loadCoachHistory,
   getUserDailyLimit,
   incrementUserUsage,
 } from "@crucible/core";
@@ -26,6 +27,17 @@ export const maxDuration = 30;
 const MODEL = "claude-sonnet-4-6";
 const RATE_LIMIT_MESSAGE =
   "You've used all your free coach messages for today. Come back tomorrow, or enter a partner code in Settings for more.";
+
+/** GET -> stored conversation, so the chat UI can hydrate on open. */
+export async function GET() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const history = await loadCoachHistory(userId, 50);
+  return NextResponse.json({ data: history.filter((m) => m.role !== "system") });
+}
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -47,9 +59,13 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const userMessage = typeof body?.message === "string" ? body.message.trim() : "";
-  if (!userMessage) {
-    return NextResponse.json({ error: "No message provided" }, { status: 400 });
+  const incoming = Array.isArray(body?.messages) ? body.messages : [];
+  const messages = incoming
+    .filter((m: { role?: string; content?: unknown }) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .map((m: { role: string; content: string }) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+  if (!messages.length) {
+    return NextResponse.json({ error: "No messages provided" }, { status: 400 });
   }
 
   const profile = await getUserProfile(userId);
@@ -58,18 +74,12 @@ export async function POST(request: Request) {
   }
 
   const systemPrompt = buildCoachSystemPrompt(profile);
-  const history = await loadCoachHistory(userId, 50);
-  const cleanMessage = sanitizeForPrompt(userMessage, 4000);
 
-  // Persist the user turn before generating, so it survives a stream drop.
-  await appendCoachMessage(userId, "user", cleanMessage);
-
-  const messages = [
-    ...history
-      .filter((m) => m.role !== "system")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    { role: "user" as const, content: cleanMessage },
-  ];
+  // Persist the newest user turn for cross-session memory (latest message only).
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (lastUser) {
+    await appendCoachMessage(userId, "user", sanitizeForPrompt(lastUser.content, 4000));
+  }
 
   const startTime = Date.now();
 
@@ -93,7 +103,7 @@ export async function POST(request: Request) {
           contextPage: "coach",
           modelProvider: "anthropic",
           modelId: MODEL,
-          input: cleanMessage,
+          input: lastUser?.content ?? "",
           explanation: `Coach (${profile.coachName}) responded at journey stage ${profile.currentStage}.`,
           outputSummary: { response_length: text.length },
           tokenCount: usage?.totalTokens ?? null,

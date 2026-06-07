@@ -14,6 +14,8 @@ import type { AssistantContext } from "@/lib/assistant-prompt";
 interface AssistantChatProps {
   context: AssistantContext;
   sessionId?: string;
+  /** Use the profile-aware Refinery coach instead of t.ROY */
+  coach?: boolean;
 }
 
 /** Page-aware quick prompts — buttons users can tap instead of typing */
@@ -99,10 +101,11 @@ function getQuickPrompts(context: AssistantContext): string[] {
   }
 }
 
-export function AssistantChat({ context, sessionId }: AssistantChatProps) {
+export function AssistantChat({ context, sessionId, coach }: AssistantChatProps) {
   const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
     context,
     sessionId,
+    coach,
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
