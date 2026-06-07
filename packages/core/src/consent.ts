@@ -52,6 +52,8 @@ export async function grantConsent(
     [userId, layer, textVersion, JSON.stringify(context)]
   );
 
+  // Best-effort audit -- the event table needs a real org FK (sentinel org may
+  // not exist on a fresh DB); never let a missing audit row fail a consent grant.
   await emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000", // Consumer context — no org
     project_id: null,
@@ -68,7 +70,7 @@ export async function grantConsent(
     parent_event_id: null,
     payload: { consent_layer: layer, text_version: textVersion },
     sensitive_ref: null,
-  });
+  }).catch(() => {});
 
   return rows[0];
 }
@@ -89,6 +91,7 @@ export async function revokeConsent(
   );
 
   if (rows[0]) {
+    // Best-effort audit (see grantConsent) -- never block a revoke on the event write.
     await emitEvent({
       org_id: "00000000-0000-0000-0000-000000000000",
       project_id: null,
@@ -105,7 +108,7 @@ export async function revokeConsent(
       parent_event_id: null,
       payload: { consent_layer: layer },
       sensitive_ref: null,
-    });
+    }).catch(() => {});
   }
 
   return rows[0] ?? null;

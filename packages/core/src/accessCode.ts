@@ -18,6 +18,7 @@ export interface AccessCode {
   expires_at: string | null;
   is_active: boolean;
   created_by: string | null;
+  partner_user_id: string | null;
   created_at: string;
 }
 
@@ -36,6 +37,7 @@ interface CreateAccessCodeOpts {
   maxRedemptions?: number | null;
   expiresAt?: string | null;
   createdBy?: string | null;
+  partnerUserId?: string | null;
 }
 
 /**
@@ -45,8 +47,8 @@ export async function createAccessCode(
   opts: CreateAccessCodeOpts
 ): Promise<AccessCode> {
   const rows = await query<AccessCode>(
-    `INSERT INTO access_code (code, partner_name, tier, daily_limit, max_redemptions, expires_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO access_code (code, partner_name, tier, daily_limit, max_redemptions, expires_at, created_by, partner_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       opts.code,
@@ -56,6 +58,7 @@ export async function createAccessCode(
       opts.maxRedemptions ?? null,
       opts.expiresAt ?? null,
       opts.createdBy ?? null,
+      opts.partnerUserId ?? null,
     ]
   );
 
