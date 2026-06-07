@@ -1,18 +1,16 @@
 "use client";
 
 /**
- * NextStepCard -- the prominent "your next step" CTA on the dashboard.
+ * NextStepCard -- the prominent "your next step" CTA.
  *
- * Fetches /api/next-step (deterministic computeNextStep over the user's real
- * profile). Renders nothing until loaded, and nothing on error -- it never
- * blocks the dashboard. This is the first surface of the seven-stage journey
- * engine; the full stage progress bar layers on top of the same data.
+ * Presentational: receives the computed next step from JourneyHeader (which owns
+ * the single /api/next-step fetch). This is the focal action of the seven-stage
+ * journey; the stage progress bar sits above it.
  */
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 
-interface NextStep {
+export interface NextStep {
   stage: number;
   action: string;
   href: string;
@@ -30,28 +28,7 @@ const STAGE_LABELS: Record<number, string> = {
   7: "Keep going",
 };
 
-export function NextStepCard() {
-  const [next, setNext] = useState<NextStep | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/next-step")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j?.data) setNext(j.data as NextStep);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading || !next) return null;
-
+export function NextStepCard({ next }: { next: NextStep }) {
   const stageLabel = STAGE_LABELS[next.stage] ?? `Stage ${next.stage}`;
 
   return (

@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
-import { NextStepCard } from "@/components/NextStepCard";
+import { JourneyHeader } from "@/components/JourneyHeader";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -263,7 +263,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-10">
       <MiniForgeBanner />
-      <NextStepCard />
+      <JourneyHeader />
       {/* Welcome / Narrative */}
       <section>
         {hasForgeData ? (
