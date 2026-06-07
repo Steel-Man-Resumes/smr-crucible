@@ -1,7 +1,7 @@
 # SMR Crucible -- Handoff
 **Last updated:** 2026-06-07
 **Last session (Opus 4.8):** Assessment of the master plan + Phase 0 stabilize + Phase 1 intelligence backbone. See the 2026-06-07 section below.
-**Next session:** Once Troy's new Tier-0 keys are in `.env.local` (esp. `DATABASE_URL`): run `npm run migrate -w packages/core` to apply migration 016, verify getUserProfile/computeNextStep against real data, then build the stage nav + next-step card (Phase 1 W2). Do NOT push/deploy until password-reset email delivery is verified with the new Resend key.
+**Next session:** Build the stage nav + next-step card + guided tour (Phase 1 W2), wired to getNextStep(). DB schema is live (all 17 migrations applied to the fresh dedicated Neon `ep-little-cloud-aphpkqbd`, 2026-06-07). Do NOT push/deploy until password-reset email delivery is verified with the new Resend key.
 
 ## MASTER PLAN (READ THIS FIRST)
 `~/todash/smr/SMR-MASTER-PLAN-2026-06-06.md`
@@ -34,7 +34,7 @@ This is the complete locked architecture for the platform. Written for Opus 4.8 
 **Phase 0 done (committed locally, NOT pushed):** Codex's 24 modified + 6 new files committed in 8 atomic groups (415b113..15aa455). gitignore: swap files. Fresh `.env.local` template written (Tier 0/1/2/3, every var + where to get it); old values backed up to `apps/consumer/.env.backup-2026-06-07.local` (gitignored).
 
 **Phase 1 backbone done (committed local 332ee63, tsc clean, NOT pushed):**
-- `packages/core/migrations/016_onboarding_coach.sql` -- onboarding + coach columns on `users` + `coach_conversation`. (Plan called this 018; renumbered 016 -- runner applies *.sql lexically.) NOT YET RUN (needs DATABASE_URL).
+- `packages/core/migrations/016_onboarding_coach.sql` -- onboarding + coach columns on `users` + `coach_conversation`. (Plan called this 018; renumbered 016 -- runner applies *.sql lexically.) **APPLIED + VERIFIED 2026-06-07** against the fresh dedicated Neon: all 17 migrations ran clean; confirmed 10 new `users` columns + `coach_conversation` table + 9 coach constraints. 36 public tables total.
 - `packages/core/src/getUserProfile.ts` -- backbone profile reader over existing tables (no dup). Contract includes calendar/SMS fields with safe defaults until those migrations land.
 - `packages/core/src/computeNextStep.ts` -- deterministic rules ladder + 1h cache (`getNextStep`) + `invalidateNextStep`.
 
