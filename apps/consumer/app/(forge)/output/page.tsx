@@ -11,7 +11,7 @@
  * Gateway to Refinery: value-based invitation, not fear-based conversion.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -65,6 +65,7 @@ interface ForgeOutput {
 }
 
 type DocGenState = "idle" | "generating" | "done" | "error";
+type ResumeViewMode = "preview" | "text";
 
 /** Readiness-aware messaging for the output page */
 const READINESS_CONFIG: Record<string, {
@@ -150,6 +151,7 @@ export default function OutputPage() {
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
   const [copied, setCopied] = useState<string>("");
+  const [resumeViewMode, setResumeViewMode] = useState<ResumeViewMode>("preview");
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -513,9 +515,23 @@ export default function OutputPage() {
             {resumeText && (
               <div className="bg-white rounded-xl border border-border overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
-                  <h3 className="font-semibold text-sage-800 text-sm">
-                    Resume
-                  </h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-sage-800 text-sm">Resume</h3>
+                    <div className="flex rounded-lg border border-sage-200 overflow-hidden text-xs">
+                      <button
+                        onClick={() => setResumeViewMode("preview")}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-sage-600 text-white" : "bg-white text-sage-600 hover:bg-sage-50"}`}
+                      >
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => setResumeViewMode("text")}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-sage-600 text-white" : "bg-white text-sage-600 hover:bg-sage-50"}`}
+                      >
+                        Plain text
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleCopy(resumeText, "resume")}
@@ -528,16 +544,18 @@ export default function OutputPage() {
                       disabled={downloading === "resume"}
                       className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors disabled:opacity-50"
                     >
-                      {downloading === "resume"
-                        ? "Downloading..."
-                        : "Download .docx"}
+                      {downloading === "resume" ? "Downloading..." : "Download .docx"}
                     </button>
                   </div>
                 </div>
-                <div className="p-5 max-h-80 overflow-y-auto">
-                  <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                    {resumeText}
-                  </pre>
+                <div className={resumeViewMode === "preview" ? "p-4 overflow-y-auto max-h-[600px]" : "p-5 max-h-80 overflow-y-auto"}>
+                  {resumeViewMode === "preview" ? (
+                    <ResumePreview text={resumeText} />
+                  ) : (
+                    <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                      {resumeText}
+                    </pre>
+                  )}
                 </div>
               </div>
             )}
@@ -644,6 +662,157 @@ export default function OutputPage() {
         </p>
       </section>
     </main>
+  );
+}
+
+// ─── Resume Preview (mirrors the TORI DOCX format visually) ─────────────────
+
+const PREVIEW_SECTION_HEADERS = new Set([
+  "PROFESSIONAL SUMMARY", "CAREER SUMMARY", "SUMMARY",
+  "CORE COMPETENCIES", "CORE SKILLS", "KEY QUALIFICATIONS", "AREAS OF EXPERTISE", "TECHNICAL SKILLS",
+  "PROFESSIONAL EXPERIENCE", "EXPERIENCE", "WORK HISTORY", "RELEVANT EXPERIENCE",
+  "EDUCATION", "EDUCATION & CREDENTIALS", "EDUCATION & CERTIFICATIONS",
+  "CERTIFICATIONS", "LICENSES & CERTIFICATIONS",
+  "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
+  "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
+]);
+
+function isPreviewSectionHeader(text: string): boolean {
+  return PREVIEW_SECTION_HEADERS.has(text.toUpperCase().replace(/[^A-Z\s&]/g, "").trim());
+}
+
+function ResumePreview({ text }: { text: string }) {
+  const lines = text.split("\n");
+
+  // Parse header block (name, headline, contact)
+  const headerLines: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) { if (headerLines.length > 0) break; continue; }
+    if (isPreviewSectionHeader(t)) break;
+    if (headerLines.length < 4) headerLines.push(t);
+    else break;
+  }
+
+  const nameLine = headerLines[0] || "";
+  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
+  const contactLine =
+    headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("•")) ||
+    (headerLines.length > 1 ? headerLines[1] : "");
+
+  // Parse body
+  const headerSet = new Set(headerLines.map((l) => l.trim()));
+  let pastHeader = false;
+  const bodyNodes: React.ReactNode[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    if (!pastHeader) {
+      if (headerSet.has(trimmed) || !trimmed) {
+        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
+        if (headerSet.size === 0) pastHeader = true;
+        continue;
+      }
+      pastHeader = true;
+    }
+
+    if (!trimmed) {
+      bodyNodes.push(<div key={i} className="h-1.5" />);
+      continue;
+    }
+
+    // Section header
+    if (isPreviewSectionHeader(trimmed)) {
+      bodyNodes.push(
+        <div key={i} className="mt-3 mb-1 pb-0.5 border-b-2" style={{ borderColor: "#1B2A4A" }}>
+          <span className="font-bold text-xs" style={{ fontFamily: "Georgia, serif", color: "#1B2A4A" }}>
+            {trimmed.toUpperCase()}
+          </span>
+        </div>
+      );
+      continue;
+    }
+
+    // Bullet
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
+      const bullet = trimmed.replace(/^[-*•]\s*/, "");
+      const parts = bullet.split(/(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi);
+      bodyNodes.push(
+        <div key={i} className="flex gap-1.5 pl-3 mb-0.5 leading-snug">
+          <span className="flex-shrink-0 text-xs font-bold" style={{ color: "#1B2A4A" }}>&bull;</span>
+          <span className="text-xs" style={{ color: "#1a1a1a" }}>
+            {parts.map((p, j) =>
+              /\d/.test(p) ? <strong key={j}>{p}</strong> : p
+            )}
+          </span>
+        </div>
+      );
+      continue;
+    }
+
+    // Competency line (3+ pipe/bullet separators)
+    if ((trimmed.includes(" | ") || trimmed.includes(" • ")) && trimmed.split(/[|•]/).length >= 3) {
+      bodyNodes.push(
+        <div key={i} className="text-center text-xs font-bold mb-1" style={{ color: "#333333" }}>
+          {trimmed}
+        </div>
+      );
+      continue;
+    }
+
+    // Job title line (pipe-separated, no @)
+    if (trimmed.includes("|") && !trimmed.includes("@")) {
+      const parts = trimmed.split("|").map((p) => p.trim());
+      bodyNodes.push(
+        <div key={i} className="mt-2.5 mb-0.5 text-xs leading-snug">
+          <span className="font-bold" style={{ color: "#1a1a1a" }}>{parts[0]}</span>
+          {parts.slice(1).map((p, j) => (
+            <span key={j} style={{ color: "#555555" }}>{"  |  "}{p}</span>
+          ))}
+        </div>
+      );
+      continue;
+    }
+
+    // Regular body text
+    bodyNodes.push(
+      <p key={i} className="text-xs leading-snug mb-0.5" style={{ color: "#1a1a1a" }}>
+        {trimmed}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="bg-white rounded shadow-md overflow-hidden border border-gray-200 mx-auto"
+      style={{ maxWidth: 600, fontFamily: "Arial, sans-serif" }}
+    >
+      {/* Navy header block */}
+      <div className="px-6 py-4 text-center" style={{ backgroundColor: "#1B2A4A" }}>
+        {nameLine && (
+          <p
+            className="font-bold tracking-wide text-base"
+            style={{ fontFamily: "Georgia, serif", color: "#FFFFFF" }}
+          >
+            {nameLine.toUpperCase()}
+          </p>
+        )}
+        {headlineLine && headlineLine !== contactLine && (
+          <p className="text-xs mt-0.5" style={{ color: "#B8C9E0" }}>{headlineLine}</p>
+        )}
+        {contactLine && (
+          <p className="text-xs mt-0.5" style={{ color: "#FFFFFF" }}>{contactLine}</p>
+        )}
+      </div>
+      {/* Body */}
+      <div className="px-5 py-3">
+        {bodyNodes}
+      </div>
+      <div className="px-5 pb-2 text-center">
+        <p className="text-[10px] text-gray-400">Preview matches your .docx download</p>
+      </div>
+    </div>
   );
 }
 
