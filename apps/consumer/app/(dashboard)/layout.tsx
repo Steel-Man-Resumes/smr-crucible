@@ -7,8 +7,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
-import { ContactTroyButton } from "@/components/ContactTroyButton";
-import { GuidedTour } from "@/components/GuidedTour";
+import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 
@@ -320,6 +319,7 @@ export default function DashboardLayout({
 
         {/* Main content */}
         <main className="flex-1 min-w-0 px-4 sm:px-6 py-8 pb-32 sm:pb-8">
+          <JourneyProgressBanner state={onboarding.state} />
           {children}
         </main>
       </div>
@@ -376,12 +376,6 @@ export default function DashboardLayout({
           </div>
         </div>
       </div>
-
-      {/* Contact Troy -- always available */}
-      <ContactTroyButton isAuthenticated />
-
-      {/* Guided orientation tour */}
-      <GuidedTour />
 
       {/* AI Assistant */}
       <AssistantDrawer>

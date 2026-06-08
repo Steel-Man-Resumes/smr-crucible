@@ -28,7 +28,7 @@ async function handlePost(request: Request) {
   }
 
   try {
-    const { record, timing, targetJob, forgeContext } = await request.json();
+    const { record, timing, targetJob, forgeContext, refinementNote } = await request.json();
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -95,7 +95,7 @@ GENERATE a disclosure plan as JSON:
   ]
 }
 
-RULES:
+${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${sanitizeForPrompt(refinementNote, 500)}\n` : ""}RULES:
 - Be honest but empowering
 - The script should acknowledge the record briefly, then pivot to what they've done since and what they bring
 - For felonies 10+ years old, note that many employers care less about old records

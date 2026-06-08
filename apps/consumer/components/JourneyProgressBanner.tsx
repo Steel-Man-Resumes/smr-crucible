@@ -1,0 +1,109 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import type { OnboardingState } from "@/lib/useOnboarding";
+
+const SKIP_PREFIXES = ["/dashboard/settings", "/dashboard/admin", "/dashboard/partner"];
+
+const STAGES: Record<string, { progress: number; activeStep: number; next: string }> = {
+  needs_profile: {
+    progress: 25,
+    activeStep: 1,
+    next: "Complete your profile to unlock the full Refinery.",
+  },
+  needs_resume: {
+    progress: 50,
+    activeStep: 2,
+    next: "Find a job and build your targeted resume to unlock all tools.",
+  },
+  full_access: {
+    progress: 75,
+    activeStep: 3,
+    next: "Practice your disclosure and interview prep -- every rep builds confidence.",
+  },
+};
+
+const STEP_LABELS = ["Forge", "Profile", "Resume", "Practice"];
+
+interface Props {
+  state: OnboardingState;
+}
+
+export function JourneyProgressBanner({ state }: Props) {
+  const pathname = usePathname();
+
+  if (state === "loading") return null;
+  if (SKIP_PREFIXES.some((p) => pathname.startsWith(p))) return null;
+
+  const stage = STAGES[state];
+  if (!stage) return null;
+
+  return (
+    <div className="mb-6 bg-white rounded-xl border border-border px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold text-muted uppercase tracking-widest">
+          Your Refinery Journey
+        </span>
+        <span className="text-xs font-semibold text-sage-700">
+          {stage.progress}% complete
+        </span>
+      </div>
+
+      {/* Bar */}
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+        <div
+          className="h-full bg-sage-600 rounded-full transition-all duration-700"
+          style={{ width: `${stage.progress}%` }}
+        />
+      </div>
+
+      {/* Steps */}
+      <div className="flex justify-between mb-2 px-1">
+        {STEP_LABELS.map((label, i) => {
+          const done = i < stage.activeStep;
+          const active = i === stage.activeStep;
+          return (
+            <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
+              <div
+                className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors ${
+                  done
+                    ? "bg-sage-600 text-white"
+                    : active
+                      ? "bg-sage-100 text-sage-700 ring-2 ring-sage-400 ring-offset-1"
+                      : "bg-gray-100 text-gray-400"
+                }`}
+              >
+                {done ? (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path
+                      d="M1 3.5l2.5 2.5L8 1"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : (
+                  i + 1
+                )}
+              </div>
+              <span
+                className={`text-[9px] text-center leading-tight ${
+                  done
+                    ? "text-sage-600 font-medium"
+                    : active
+                      ? "text-foreground font-semibold"
+                      : "text-gray-400"
+                }`}
+              >
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-muted text-center">{stage.next}</p>
+    </div>
+  );
+}

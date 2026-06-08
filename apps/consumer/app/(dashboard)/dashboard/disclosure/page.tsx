@@ -105,6 +105,12 @@ function DisclosurePlannerPage() {
   const [targetJob, setTargetJob] = useState("");
   const [forge, setForge] = useState<ForgeContext>(EMPTY_FORGE);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [adjustPanelOpen, setAdjustPanelOpen] = useState(false);
+  const [adjustQuery, setAdjustQuery] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Auto-scroll chat to bottom on new messages
   useEffect(() => {
@@ -181,7 +187,7 @@ function DisclosurePlannerPage() {
       : "";
   }
 
-  async function generatePlan() {
+  async function generatePlan(refinementNote?: string) {
     setGenerating(true);
     setRateLimitError("");
     try {
@@ -200,6 +206,7 @@ function DisclosurePlannerPage() {
                 skills: forge.skills.slice(0, 8),
               }
             : undefined,
+          refinementNote: refinementNote || undefined,
         }),
       });
       if (res.status === 429) {
@@ -209,6 +216,7 @@ function DisclosurePlannerPage() {
         const data = await res.json();
         setPlan(data);
         setStep("plan");
+        if (!refinementNote) setShowCelebration(true);
 
         // Persist the disclosure plan (the user's deliverable -- a frame, not
         // their rehearsal words) so they can return to it and the journey engine
@@ -236,6 +244,93 @@ function DisclosurePlannerPage() {
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function refinePlan() {
+    if (!adjustQuery.trim()) return;
+    setAdjusting(true);
+    setAdjustPanelOpen(false);
+    await generatePlan(adjustQuery.trim());
+    setAdjustQuery("");
+    setAdjusting(false);
+  }
+
+  function downloadPlan() {
+    if (!plan) return;
+    const date = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Disclosure Plan</title>
+<style>
+  @page { margin: 0.85in; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; font-size: 12pt; line-height: 1.65; }
+  h1 { font-size: 18pt; font-weight: bold; margin: 0 0 4pt; }
+  .subtitle { font-size: 9.5pt; color: #777; margin-bottom: 22pt; }
+  h2 { font-size: 10pt; font-weight: bold; color: #2d5a3d; text-transform: uppercase; letter-spacing: 0.12em; border-bottom: 1pt solid #4D7C5A; padding-bottom: 3pt; margin: 22pt 0 8pt; }
+  p { margin: 0 0 9pt; }
+  blockquote { border-left: 3pt solid #4D7C5A; margin: 0 0 9pt; padding: 8pt 14pt; font-style: italic; color: #333; background: #f8f5f0; }
+  ul { margin: 0 0 9pt; padding-left: 18pt; }
+  li { margin-bottom: 5pt; }
+  .callout { border: 1pt solid #d4b896; border-radius: 4pt; padding: 10pt 14pt; margin-bottom: 18pt; font-size: 10pt; color: #5c4a2a; background: #fdf7ef; }
+  .footer { margin-top: 36pt; border-top: 0.5pt solid #ddd; padding-top: 8pt; font-size: 8pt; color: #aaa; text-align: center; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<h1>Disclosure Plan${targetJob ? ` -- ${targetJob}` : ""}</h1>
+<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date}</p>
+<div class="callout">Disclosure is a conversation, not a checkbox. It happens face-to-face, where you control the narrative with your voice and your presence.</div>
+${plan.timing_advice ? `<h2>When to Disclose</h2><p>${plan.timing_advice}</p>` : ""}
+${plan.legal_context ? `<h2>Your Legal Rights</h2><p>${plan.legal_context}</p>` : ""}
+${plan.script ? `<h2>What to Say</h2><blockquote>${plan.script}</blockquote><p style="font-size:10pt;color:#666;font-style:italic;">Practice this out loud until it sounds natural in your own voice.</p>` : ""}
+${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>${t}</li>`).join("")}</ul>` : ""}
+<div class="footer">This plan is yours. It is never shared without your permission. Delete it anytime in Settings.</div>
+</body>
+</html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
+  }
+
+  function startVoice() {
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert("Voice input requires Chrome or Edge.");
+      return;
+    }
+    if (recording) {
+      recognitionRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    const r = new SR();
+    r.lang = "en-US";
+    r.interimResults = false;
+    recognitionRef.current = r;
+    r.onresult = (e: any) => {
+      const text = Array.from(e.results as any[])
+        .map((res: any) => res[0].transcript)
+        .join(" ");
+      setRehearsalInput((prev) =>
+        [prev.trim(), text.trim()].filter(Boolean).join(" ")
+      );
+    };
+    r.onend = () => setRecording(false);
+    r.onerror = () => setRecording(false);
+    r.start();
+    setRecording(true);
   }
 
   async function sendRehearsalMessage() {
@@ -593,7 +688,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         )}
 
         <button
-          onClick={generatePlan}
+          onClick={() => generatePlan()}
           disabled={generating || !record.type}
           className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
         >
@@ -606,18 +701,86 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
   // --- Step 2: Plan ---
   if (step === "plan" && plan) {
     return (
+      <>
+      {showCelebration && (
+        <MilestoneCelebration onDone={() => setShowCelebration(false)} />
+      )}
       <div className="max-w-2xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-foreground">
             Your Disclosure Plan
           </h1>
-          <button
-            onClick={() => setStep("assess")}
-            className="text-sm text-muted hover:text-foreground"
-          >
-            Adjust
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={downloadPlan}
+              className="text-sm font-medium text-sage-700 hover:text-sage-900 flex items-center gap-1.5 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Save PDF
+            </button>
+            <button
+              onClick={() => { setAdjustPanelOpen((o) => !o); setAdjustQuery(""); }}
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Adjust
+            </button>
+          </div>
         </div>
+
+        {/* Adjust panel -- inline refinement, never a full reset */}
+        {adjustPanelOpen && (
+          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
+            <h3 className="font-semibold text-sky-900 mb-1">What would you like to change?</h3>
+            <p className="text-xs text-sky-700 mb-3">
+              Pick a quick option or describe it yourself -- we will refine your plan without starting over.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[
+                "Make the script more conversational",
+                "More formal and professional tone",
+                "Focus more on my strengths",
+                "Shorter script",
+                "More detail on legal rights",
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => setAdjustQuery(chip)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    adjustQuery === chip
+                      ? "bg-sky-600 text-white border-sky-600"
+                      : "bg-white text-sky-700 border-sky-300 hover:border-sky-500"
+                  }`}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={adjustQuery}
+              onChange={(e) => setAdjustQuery(e.target.value)}
+              placeholder="Or describe what to adjust..."
+              rows={2}
+              className="w-full px-4 py-3 rounded-xl border-2 border-sky-200 text-sm bg-white focus:border-sky-500 resize-none mb-3"
+            />
+            <div className="flex items-center gap-3">
+              <button
+                onClick={refinePlan}
+                disabled={!adjustQuery.trim() || adjusting}
+                className="px-5 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 disabled:bg-gray-300 transition-colors"
+              >
+                {adjusting ? "Refining..." : "Refine My Plan"}
+              </button>
+              <button
+                onClick={() => { setAdjustPanelOpen(false); setStep("assess"); }}
+                className="text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Start over instead
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* In-person philosophy callout */}
         <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 mb-6">
@@ -717,6 +880,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           Practice the Conversation
         </button>
       </div>
+      </>
     );
   }
 
@@ -798,10 +962,27 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           }}
           className="flex gap-2 p-4 border-t border-border"
         >
+          <button
+            type="button"
+            onClick={startVoice}
+            title={recording ? "Stop recording" : "Speak your response"}
+            className={`p-3 rounded-xl border-2 transition-colors min-h-touch flex-shrink-0 ${
+              recording
+                ? "bg-red-50 border-red-400 text-red-600 animate-pulse"
+                : "border-border text-muted hover:border-sage-400 hover:text-sage-600"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
           <input
             value={rehearsalInput}
             onChange={(e) => setRehearsalInput(e.target.value)}
-            placeholder="Respond to the interviewer..."
+            placeholder={recording ? "Listening..." : "Respond to the interviewer..."}
             className="flex-1 px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 min-h-touch"
             disabled={rehearsing}
           />
@@ -827,6 +1008,91 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         can come back and refine it, and it is never shared unless you choose to
         connect a support partner. You can delete it anytime.
       </p>
+
+      {/* t.ROY nudge */}
+      <div className="mt-6 bg-sage-50 rounded-xl p-4 border border-sage-200 text-center">
+        <p className="text-sm font-medium text-sage-800 mb-1">
+          Want live coaching on your response?
+        </p>
+        <p className="text-xs text-sage-600">
+          Ask t.ROY -- the AI assistant available on every page. It knows your
+          Forge profile and can help you sharpen your pivot in real time.
+          Hit the &ldquo;Ask t.ROY&rdquo; button to open it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MilestoneCelebration({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 3200);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  const particles = Array.from({ length: 38 }, (_, i) => ({
+    id: i,
+    x: 5 + (i % 12) * 8 + Math.sin(i * 1.3) * 4,
+    color: ["#4D7C5A","#8FA876","#C4A35A","#D4B896","#E8E0D0","#6B9E7A","#A8C5B0"][i % 7],
+    delay: (i % 8) * 0.07,
+    dur: 1.4 + (i % 5) * 0.22,
+    size: 5 + (i % 4),
+    rotate: (i * 47) % 360,
+  }));
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: `${p.x}%`,
+            width: p.size,
+            height: p.size * 1.6,
+            backgroundColor: p.color,
+            borderRadius: 2,
+            opacity: 0,
+            animation: `smr-confetti ${p.dur}s ${p.delay}s ease-in forwards`,
+            transform: `rotate(${p.rotate}deg)`,
+          }}
+        />
+      ))}
+      <div
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{ top: "20%" }}
+      >
+        <div
+          style={{
+            background: "white",
+            border: "1.5px solid #4D7C5A",
+            borderRadius: 12,
+            padding: "14px 28px",
+            textAlign: "center",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            animation: "smr-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards",
+          }}
+        >
+          <p style={{ fontWeight: 700, color: "#2d5a3d", fontSize: 15, margin: 0 }}>
+            Disclosure Plan Built
+          </p>
+          <p style={{ color: "#4D7C5A", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
+            Saved to your materials
+          </p>
+        </div>
+      </div>
+      <style>{`
+        @keyframes smr-confetti {
+          0%   { transform: translateY(-12px) rotate(0deg); opacity: 1; }
+          70%  { opacity: 0.9; }
+          100% { transform: translateY(100vh) rotate(600deg); opacity: 0; }
+        }
+        @keyframes smr-pop {
+          0%   { transform: scale(0.7); opacity: 0; }
+          100% { transform: scale(1);   opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
