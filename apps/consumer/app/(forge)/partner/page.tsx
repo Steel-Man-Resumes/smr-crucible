@@ -1,80 +1,99 @@
 "use client";
 
 /**
- * Partner Path — Methodology Showcase
+ * Partner Path -- For partner organizations
  *
- * For AJC staff, DOC program directors, nonprofit partners.
- * Shows enough to understand what the tool does and why.
- * Deep methodology is gated behind auth.
+ * Audience: nonprofit reentry programs, workforce development orgs,
+ * AJC/DOC staff, job centers, legal aid societies.
+ *
+ * This page covers the operational picture: how to use this with your
+ * clients, what the partner dashboard gives you, how access codes work,
+ * and what funder reporting looks like. Not a methodology deep-dive --
+ * that's the observer path. This is "how do I actually run this."
  */
 
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { useEffect } from "react";
 
-const BEHAVIORAL_RULES = [
+const CLIENT_WORKFLOW = [
   {
-    rule: "Invite naming, prompt causal reasoning",
-    why: "Naming emotions reduces amygdala activation by up to 50%",
+    step: "1",
+    title: "Share The Forge link",
+    detail: "Send your clients to forge.steelmanresumes.com. No login required to start. They complete the 10-minute intake on any device.",
   },
   {
-    rule: "Never prescribe \u2014 offer options",
-    why: "Autonomy is a core psychological need, especially post-incarceration",
+    step: "2",
+    title: "They get their output",
+    detail: "Career narrative, strengths, skills, career paths, and resources -- all in plain language. Downloadable resume and cover letter. No scores, no grades.",
   },
   {
-    rule: "Reflect and affirm",
-    why: "Mirror words back organized and validated \u2014 builds redemption narrative",
+    step: "3",
+    title: "They create a free account",
+    detail: "At the end of the Forge, they're invited into The Refinery. If they enter your partner code at sign-up, their daily AI limit increases and they get linked to your cohort.",
   },
   {
-    rule: "Meet readiness level",
-    why: "Adjust guidance intensity based on stage of change",
+    step: "4",
+    title: "They opt in to share progress",
+    detail: "In Settings, each client has a toggle to share their journey with your program. Off by default. You can't see anyone who hasn't explicitly opted in -- that's not a limitation, it's the design.",
   },
   {
-    rule: "Explain yourself",
-    why: "Every AI recommendation includes reasoning \u2014 transparency builds trust",
-  },
-  {
-    rule: "Scaffold then fade",
-    why: "More structure early, less later \u2014 builds independence, not dependence",
-  },
-  {
-    rule: "Process praise only",
-    why: 'Reference what they DID, not what they ARE \u2014 "You described that well"',
-  },
-  {
-    rule: "Cultural sensitivity",
-    why: "No assumptions about background, family, education, or values",
-  },
-  {
-    rule: "Know when to connect humans",
-    why: "Crisis detection routes to 211.org and Crisis Text Line (741741)",
-  },
-  {
-    rule: "Never share personal data in responses",
-    why: '"The situation you described" \u2014 never repeats sensitive details',
+    step: "5",
+    title: "You monitor in your partner dashboard",
+    detail: "See stage progression, artifacts completed, last activity date for every client who has shared. Export to CSV for your funder reports.",
   },
 ];
 
-const FORGE_STEPS = [
+const DASHBOARD_FEATURES = [
   {
-    name: "Readiness",
-    what: "Self-reported stage of change (Prochaska model). No clinical assessment.",
+    feature: "Cohort progress view",
+    detail: "Each client's current stage (1-7), what they've completed (resume, disclosure plan, interview practice, applications), and when they were last active.",
   },
   {
-    name: "Resume",
-    what: "Multi-path intake \u2014 upload, import, or guided builder. AI extracts skills from anything.",
+    feature: "CSV export",
+    detail: "One-click export of your full cohort for program reporting. Stage data, completion rates, artifact counts -- what your funders ask for.",
   },
   {
-    name: "Goals",
-    what: "Purpose before job titles. What matters to them \u2014 stability, growth, meaning.",
+    feature: "Consent transparency",
+    detail: "You can only see clients who have opted in. The dashboard shows the opt-in date so your records are clean.",
   },
   {
-    name: "Barriers",
-    what: "Structured criminal record input + free-text narrative for affect labeling.",
+    feature: "Access code management",
+    detail: "Your code is tied to your partner account. Redemptions are tracked. You can see how many clients have used it.",
+  },
+];
+
+const WHAT_CLIENTS_GET = [
+  { tool: "The Forge", desc: "10-minute career intake -- resume, cover letter, strengths analysis, career paths, resources" },
+  { tool: "Job Board", desc: "Verified fair-chance employer listings -- real companies, manually checked" },
+  { tool: "Resume Builder", desc: "Targeted resume versions for specific jobs, with AI guidance at each step" },
+  { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },
+  { tool: "Interview Practice", desc: "Text or voice mock interviews, including disclosure-specific questions" },
+  { tool: "Applications Tracker", desc: "Track every application -- company, status, which resume version, follow-up emails" },
+  { tool: "My Materials", desc: "Vault of all generated documents -- resumes, cover letters, disclosure plans, follow-ups" },
+  { tool: "t.ROY (AI coach)", desc: "Available on every page. Research-grounded, 10 behavioral rules, never prescriptive" },
+];
+
+const PARTNER_FAQ = [
+  {
+    q: "How much does it cost?",
+    a: "Free for nonprofit and community organizations during the launch period. No contracts. No per-seat licensing. If that ever changes, existing partners get advance notice.",
   },
   {
-    name: "Output",
-    what: "Narrative-first analysis: strengths, skills, career paths, barrier-to-resource mapping.",
+    q: "Does it replace my case management system?",
+    a: "No. It's a career tools platform, not a case management system. It doesn't track housing, legal, or wraparound service data. Use it alongside your existing workflow.",
+  },
+  {
+    q: "What data do you collect on my clients?",
+    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing shared with third parties. No advertising layer. AGPL-3.0 open source -- the code is public.",
+  },
+  {
+    q: "Can I self-host it for my program?",
+    a: "Yes. The AGPL-3.0 license allows any organization to run their own instance. The source code is available at github.com/Steel-Man-Resumes/smr-crucible (public August 2025).",
+  },
+  {
+    q: "What if my client is in crisis during the session?",
+    a: "t.ROY detects crisis disclosures and stops. It routes immediately to 211.org (resource line) and Crisis Text Line (741741). It does not attempt to coach through a crisis.",
   },
 ];
 
@@ -92,145 +111,113 @@ export default function PartnerPage() {
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-2xl mx-auto px-4 py-12">
+
         {/* Header */}
-        <div className="mb-10">
-          <p className="text-sm font-medium text-sage-600 mb-2 uppercase tracking-wide">
+        <div className="mb-12">
+          <p className="text-sm font-medium text-sage-600 mb-3 uppercase tracking-wide">
             For Partner Organizations
           </p>
-          <h1 className="text-3xl font-bold text-foreground mb-4">
-            How The Forge Works With Your Clients
+          <h1 className="text-3xl font-bold text-foreground mb-4 leading-tight">
+            Run this with your clients.
           </h1>
-          <p className="text-body text-muted leading-relaxed">
-            The Forge is a free, research-grounded career exploration tool
-            designed for justice-impacted populations. No login required. No
-            data sold. Built on behavioral science, not guesswork.
+          <p className="text-body text-foreground leading-relaxed text-lg mb-3">
+            Steel Man Resumes is built to plug into reentry programs, workforce
+            development orgs, AJC offices, and legal aid societies. Your clients
+            use the tools. You see their progress -- with their consent.
+          </p>
+          <p className="text-sm text-muted leading-relaxed">
+            This page covers the operational picture: how your workflow looks,
+            what the partner dashboard gives you, how access codes work, and
+            what your clients actually receive.
           </p>
         </div>
 
-        {/* Section 1: What it does */}
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            What This Tool Does
-          </h2>
-          <p className="text-body text-foreground leading-relaxed">
-            In about 10 minutes, your clients walk through a guided
-            career exploration that surfaces their strengths, maps their
-            skills, identifies career paths, and connects barriers to
-            real resources. The output is narrative-first &mdash; never
-            scored, never graded. It&apos;s built to be the starting
-            point for meaningful career planning.
-          </p>
-        </section>
-
-        {/* Section 2: The 10 Rules */}
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
-            10 Behavioral Rules (Research-Grounded)
-          </h2>
-          <div className="space-y-3">
-            {BEHAVIORAL_RULES.map((item, i) => (
-              <div
-                key={i}
-                className="flex gap-3 px-4 py-3 bg-sage-50 rounded-lg"
-              >
-                <span className="text-sage-600 font-semibold text-sm mt-0.5 flex-shrink-0">
-                  {i + 1}.
-                </span>
-                <div>
-                  <p className="font-medium text-foreground text-sm">
-                    {item.rule}
-                  </p>
-                  <p className="text-xs text-muted mt-0.5">{item.why}</p>
+        {/* How the workflow runs */}
+        <section className="mb-12">
+          <h2 className="text-xl font-bold text-foreground mb-2">How it works with your program</h2>
+          <p className="text-sm text-muted mb-5">Five steps from referral to funder report.</p>
+          <div className="space-y-4">
+            {CLIENT_WORKFLOW.map((item) => (
+              <div key={item.step} className="flex gap-4 items-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sage-600 text-white flex items-center justify-center font-bold text-sm">
+                  {item.step}
+                </div>
+                <div className="pt-0.5">
+                  <p className="font-semibold text-foreground text-sm mb-0.5">{item.title}</p>
+                  <p className="text-sm text-muted leading-relaxed">{item.detail}</p>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Section 3: Research foundation */}
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Research Foundation
-          </h2>
-          <p className="text-body text-foreground leading-relaxed mb-3">
-            Built on Bandura (self-efficacy), Maruna (desistance and
-            generative identity), Lieberman (affect labeling), Prochaska
-            &amp; DiClemente (stages of change), Deci &amp; Ryan
-            (self-determination theory), and McAdams (narrative identity).
-          </p>
-          <div className="bg-sage-50 rounded-lg px-4 py-3">
-            <p className="text-sm text-sage-700 italic">
-              &ldquo;People who construct redemption sequences &mdash;
-              narratives where bad experiences lead to good outcomes &mdash;
-              show higher well-being and generativity.&rdquo;
-              <span className="not-italic text-sage-500 ml-1">
-                &mdash; McAdams, 2013
-              </span>
-            </p>
-          </div>
-        </section>
-
-        {/* Section 4: How it works */}
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
-            The Forge Flow
-          </h2>
-          <div className="space-y-3">
-            {FORGE_STEPS.map((step, i) => (
-              <div key={i} className="flex gap-3 items-start">
-                <div className="w-8 h-8 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-sage-600 font-semibold text-sm">
-                    {i + 1}
-                  </span>
-                </div>
+        {/* What your clients get */}
+        <section className="mb-12">
+          <h2 className="text-xl font-bold text-foreground mb-2">What your clients get</h2>
+          <p className="text-sm text-muted mb-5">Every tool, free, no paywall.</p>
+          <div className="space-y-2">
+            {WHAT_CLIENTS_GET.map((item, i) => (
+              <div key={i} className="flex gap-3 p-4 bg-sage-50 border border-sage-200 rounded-xl items-start">
+                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-sage-500 mt-1.5" />
                 <div>
-                  <p className="font-medium text-foreground text-sm">
-                    {step.name}
-                  </p>
-                  <p className="text-sm text-muted">{step.what}</p>
+                  <span className="font-semibold text-foreground text-sm">{item.tool}</span>
+                  <span className="text-sm text-muted"> -- {item.desc}</span>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Section 5: Sample output preview */}
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Sample Output Preview
-          </h2>
-          <div className="bg-gray-50 rounded-xl border border-border p-5">
-            <p className="text-sm text-muted mb-2 uppercase tracking-wide font-medium">
-              Sample &mdash; Anonymized
-            </p>
-            <p className="font-semibold text-foreground mb-2">
-              &ldquo;A Leader on the Rise&rdquo;
-            </p>
-            <p className="text-sm text-foreground leading-relaxed mb-3">
-              Three years of consistent warehouse operations with a track
-              record that speaks louder than any title. Training new hires,
-              99.2% accuracy, and leading an 8-person crew &mdash; all
-              without the formal promotion. The pattern is clear: this
-              person doesn&apos;t wait to be told to lead.
-            </p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <span className="px-2 py-1 bg-sage-100 text-sage-700 rounded text-xs">
-                Team Leadership
-              </span>
-              <span className="px-2 py-1 bg-sage-100 text-sage-700 rounded text-xs">
-                Inventory Management
-              </span>
-              <span className="px-2 py-1 bg-sage-100 text-sage-700 rounded text-xs">
-                Safety Compliance
-              </span>
-              <span className="px-2 py-1 bg-sage-100 text-sage-700 rounded text-xs">
-                Process Optimization
-              </span>
-            </div>
-            <p className="text-xs text-muted">
-              Career paths: Logistics Coordinator ($42-58K), Warehouse
-              Supervisor ($45-62K), Operations Associate ($38-55K)
-            </p>
+        {/* Partner dashboard */}
+        <section className="mb-12 border border-sage-200 rounded-2xl p-6">
+          <h2 className="text-xl font-bold text-foreground mb-2">Your partner dashboard</h2>
+          <p className="text-sm text-muted leading-relaxed mb-5">
+            Once you have a partner account and your clients have opted in,
+            you get a real-time view of your cohort.
+          </p>
+          <div className="space-y-3">
+            {DASHBOARD_FEATURES.map((item, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 border border-border">
+                <p className="font-semibold text-foreground text-sm mb-1">{item.feature}</p>
+                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Access codes */}
+        <section className="mb-12 bg-warm-50 border border-warm-200 rounded-2xl p-6">
+          <h2 className="text-xl font-bold text-foreground mb-2">Access codes</h2>
+          <p className="text-sm text-muted leading-relaxed mb-4">
+            Your organization gets one partner access code. Your clients
+            enter it at sign-up to unlock higher AI usage limits and link
+            their account to your cohort.
+          </p>
+          <div className="space-y-3">
+            {[
+              { label: "What it unlocks", detail: "200 AI calls/day for each client who redeems it (vs. the default free limit). That's enough for full daily use of every Refinery tool." },
+              { label: "How clients use it", detail: "They enter the code at login/sign-up, or later in Settings > Partner Access Code. It takes 10 seconds." },
+              { label: "How to get one", detail: "Email steelmanresumes@gmail.com with your organization name and program type. Free for nonprofits and community organizations. Typically set up within 24 hours." },
+              { label: "No expiration by default", detail: "Codes stay active as long as your program is running. You can request a new one if you need separate tracking for different cohorts." },
+            ].map((item, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 border border-warm-200">
+                <p className="font-semibold text-foreground text-sm mb-1">{item.label}</p>
+                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section className="mb-12">
+          <h2 className="text-xl font-bold text-foreground mb-5">Common questions</h2>
+          <div className="space-y-3">
+            {PARTNER_FAQ.map((item, i) => (
+              <div key={i} className="border border-border rounded-xl p-4">
+                <p className="font-semibold text-foreground text-sm mb-1">{item.q}</p>
+                <p className="text-sm text-muted leading-relaxed">{item.a}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -241,18 +228,16 @@ export default function PartnerPage() {
               updateSession({ isDemo: true, audience: "partner" });
               router.push("/welcome?demo=true");
             }}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-semibold hover:bg-sage-700 transition-colors min-h-touch"
           >
-            Watch it work
+            See what your clients experience (demo)
           </button>
 
           <button
-            onClick={() =>
-              router.push("/login?callbackUrl=/dashboard/methodology")
-            }
+            onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}
             className="w-full px-6 py-4 bg-white text-sage-600 border-2 border-sage-200 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
           >
-            Sign in for full methodology playbook
+            Sign in to the partner dashboard
           </button>
 
           <button
@@ -262,6 +247,7 @@ export default function PartnerPage() {
             &larr; Back
           </button>
         </div>
+
       </div>
     </div>
   );
