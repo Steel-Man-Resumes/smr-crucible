@@ -205,52 +205,77 @@ export default function ResumeIntakePage() {
 
   // If upload succeeded, show verification and optional contact info
   if (uploadSuccess) {
+    const previewText = session.resumeText || "";
+
+    const commitAndContinue = () => {
+      if (parsedEmail || parsedPhone) {
+        const contactLine = [parsedPhone, parsedEmail].filter(Boolean).join(" | ");
+        if (contactLine && !previewText.includes(parsedEmail || "___") && !previewText.includes(parsedPhone || "___")) {
+          const nameHeader = parsedName || "";
+          updateSession({
+            resumeText: nameHeader + "\n" + contactLine + "\n\n" + previewText.replace(new RegExp("^" + nameHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\n?"), ""),
+          });
+        }
+      }
+      handleContinue();
+    }
+
     return (
       <FlowPage
         title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
-        subtitle="Here&apos;s what we found. Look right?"
-        actionLabel="Continue"
-        onAction={() => {
-          // Save any added contact info into the resume text header
-          if (parsedEmail || parsedPhone) {
-            const contactLine = [parsedPhone, parsedEmail].filter(Boolean).join(" | ");
-            const currentText = session.resumeText || "";
-            // Prepend contact info if not already present
-            if (contactLine && !currentText.includes(parsedEmail || "___") && !currentText.includes(parsedPhone || "___")) {
-              const nameHeader = parsedName || "";
-              updateSession({
-                resumeText: nameHeader + "\n" + contactLine + "\n\n" + currentText.replace(new RegExp("^" + nameHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\n?"), ""),
-              });
-            }
-          }
-          handleContinue();
-        }}
+        subtitle="Check that we read it correctly before moving on."
+        actionLabel="Looks good -- continue"
+        onAction={commitAndContinue}
         showBack
         onBack={() => {
           setUploadSuccess(false);
           setActivePath("upload");
         }}
       >
-        {/* What we found */}
-        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200 mb-4">
-          <p className="text-sm text-sage-700 font-medium mb-2">We read from your resume:</p>
-          <div className="text-sm text-foreground space-y-1">
-            {parsedName && <p><span className="text-muted">Name:</span> {parsedName}</p>}
-            <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto mt-2">
-              {session.resumeText?.slice(0, 300)}
-              {(session.resumeText?.length || 0) > 300 ? "..." : ""}
+        {/* Full resume preview */}
+        <div className="bg-sage-50 rounded-xl border border-sage-200 mb-4 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-sage-200 bg-sage-100">
+            <p className="text-xs font-semibold text-sage-700 uppercase tracking-wide">
+              What we read from your file
             </p>
+            <p className="text-xs text-sage-500">{previewText.length} characters</p>
+          </div>
+          <div className="p-4 max-h-72 overflow-y-auto">
+            <pre className="text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">
+              {previewText}
+            </pre>
           </div>
         </div>
 
-        {/* Optional contact info — only show fields that are missing */}
+        {/* Explicit re-do option */}
+        <div className="bg-warm-50 rounded-xl p-4 border border-warm-200 mb-4">
+          <p className="text-sm text-earth-700 mb-2">
+            Doesn&apos;t look right? Text garbled, cut off, or missing sections?
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={() => { setUploadSuccess(false); setActivePath("upload"); }}
+              className="flex-1 px-4 py-2.5 bg-white border border-warm-300 text-earth-700 rounded-lg text-sm font-medium hover:bg-warm-100 transition-colors"
+            >
+              Re-upload a different file
+            </button>
+            <button
+              onClick={() => { setUploadSuccess(false); setActivePath("paste"); }}
+              className="flex-1 px-4 py-2.5 bg-white border border-warm-300 text-earth-700 rounded-lg text-sm font-medium hover:bg-warm-100 transition-colors"
+            >
+              Paste the text instead
+            </button>
+          </div>
+        </div>
+
+        {/* Optional contact info -- only show fields that are missing */}
         {(!parsedEmail || !parsedPhone) && (
           <div className="bg-white rounded-xl p-5 border border-border">
             <p className="text-sm font-medium text-foreground mb-1">
               Missing anything?
             </p>
             <p className="text-xs text-muted mb-3">
-              Not required — but these go on your resume when you download it.
+              Not required -- but these go on your resume when you download it.
             </p>
             <div className="space-y-3">
               {!parsedPhone && (
@@ -293,17 +318,9 @@ export default function ResumeIntakePage() {
     return (
       <FlowPage
         title="Do you have a resume?"
-        subtitle="Any format works — even a photo of a paper copy."
+        subtitle="Any format works -- even a photo of a paper copy."
         showBack
         onBack={() => router.push("/welcome")}
-        footer={
-          <button
-            onClick={handleNoResume}
-            className="text-sage-600 underline underline-offset-2 hover:text-sage-700"
-          >
-            I don&apos;t have one yet
-          </button>
-        }
       >
         <GhostGuide
           message={getOpusMessage("resume", audience, false)}
@@ -326,7 +343,7 @@ export default function ResumeIntakePage() {
           >
             <span className="font-medium">Upload a file or image</span>
             <p className="text-sm text-muted mt-0.5">
-              PDF, Word, photo of a paper copy
+              PDF, Word, photo of a paper copy, or phone camera screenshot
             </p>
           </button>
 
@@ -346,7 +363,27 @@ export default function ResumeIntakePage() {
           >
             <span className="font-medium">Build one with a free tool first</span>
             <p className="text-sm text-muted mt-0.5">
-              Links to free resume builders. Come back when you&apos;re done
+              Links to Canva, Google Docs, Indeed. Come back when you&apos;re done.
+            </p>
+          </button>
+
+          {/* Divider */}
+          <div className="relative my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-3 text-xs text-muted">Starting from nothing?</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleNoResume}
+            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-200 bg-sage-50/40 hover:border-sage-400 hover:bg-sage-50 transition-all min-h-touch"
+          >
+            <span className="font-medium">Build one from scratch, step by step</span>
+            <p className="text-sm text-muted mt-0.5">
+              15-20 minutes. We guide you through every section. Worth doing right.
             </p>
           </button>
         </div>
@@ -560,8 +597,22 @@ export default function ResumeIntakePage() {
 }
 
 // --- Guided Builder sub-component ---
-// Scaffolded: templates → partial → hints → independent (WS6)
-// NEVER auto-generates. The user does the work.
+// Full resume construction, step by step.
+// Primary path for users with no resume. NEVER auto-generates.
+
+type BuilderStep =
+  | "intro"
+  | "name"
+  | "contact"
+  | "job1-info"
+  | "job1-duties"
+  | "job2-prompt"
+  | "job2-info"
+  | "job2-duties"
+  | "skills"
+  | "education"
+  | "extras"
+  | "review";
 
 function GuidedBuilder({
   onComplete,
@@ -571,126 +622,526 @@ function GuidedBuilder({
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<BuilderStep>("intro");
   const [answers, setAnswers] = useState({
     name: "",
-    recentJob: "",
-    recentDuties: "",
+    phone: "",
+    email: "",
+    city: "",
+    job1Title: "",
+    job1Company: "",
+    job1Dates: "",
+    job1Duties: "",
+    addJob2: false,
+    job2Title: "",
+    job2Company: "",
+    job2Dates: "",
+    job2Duties: "",
     skills: "",
     education: "",
+    extras: "",
   });
 
-  const steps = [
-    {
-      title: "What's your name?",
-      subtitle: "Just your first and last name.",
-      field: "name" as const,
-      placeholder: "e.g., Marcus Johnson",
-    },
-    {
-      title: "What was your most recent job?",
-      subtitle:
-        "Job title and company. If it's been a while, that's okay — what was the last one?",
-      field: "recentJob" as const,
-      placeholder: "e.g., Warehouse Associate at Amazon",
-    },
-    {
-      title: "What did you do there?",
-      subtitle:
-        "Describe your main responsibilities in your own words. Don't worry about making it sound fancy.",
-      field: "recentDuties" as const,
-      placeholder:
-        "e.g., Loaded trucks, operated forklift, trained new employees...",
-      multiline: true,
-    },
-    {
-      title: "What are you good at?",
-      subtitle:
-        "Skills, certifications, things people come to you for. Anything counts.",
-      field: "skills" as const,
-      placeholder:
-        "e.g., Forklift certified, good with people, fast learner, CDL...",
-      multiline: true,
-    },
-    {
-      title: "Any education or training?",
-      subtitle:
-        "High school, GED, college, trade school, military training, certifications — all count.",
-      field: "education" as const,
-      placeholder: "e.g., GED, OSHA 10-hour safety certification",
-    },
-  ];
+  function set(field: string, value: string | boolean) {
+    setAnswers((prev) => ({ ...prev, [field]: value }));
+  }
 
-  function handleNext() {
-    if (step < steps.length - 1) {
-      setStep(step + 1);
-    } else {
-      // Compose resume text from answers
-      const text = [
-        answers.name,
-        "",
-        `Most Recent Position: ${answers.recentJob}`,
-        answers.recentDuties,
-        "",
-        `Skills: ${answers.skills}`,
-        "",
-        `Education/Training: ${answers.education}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      updateSession({
-        resumeText: text,
-        resumeMethod: "guided",
-        lastPageVisited: "resume",
-      });
-
-      onComplete();
+  function goNext() {
+    switch (step) {
+      case "intro":        setStep("name"); break;
+      case "name":         setStep("contact"); break;
+      case "contact":      setStep("job1-info"); break;
+      case "job1-info":    setStep("job1-duties"); break;
+      case "job1-duties":  setStep("job2-prompt"); break;
+      case "job2-prompt":  setStep(answers.addJob2 ? "job2-info" : "skills"); break;
+      case "job2-info":    setStep("job2-duties"); break;
+      case "job2-duties":  setStep("skills"); break;
+      case "skills":       setStep("education"); break;
+      case "education":    setStep("extras"); break;
+      case "extras":       setStep("review"); break;
+      case "review":
+        updateSession({
+          resumeText: assembleResume(),
+          resumeMethod: "guided",
+          lastPageVisited: "resume",
+        });
+        onComplete();
+        break;
     }
   }
 
-  const current = steps[step];
+  function goBack() {
+    switch (step) {
+      case "intro":       onBack(); break;
+      case "name":        setStep("intro"); break;
+      case "contact":     setStep("name"); break;
+      case "job1-info":   setStep("contact"); break;
+      case "job1-duties": setStep("job1-info"); break;
+      case "job2-prompt": setStep("job1-duties"); break;
+      case "job2-info":   setStep("job2-prompt"); break;
+      case "job2-duties": setStep("job2-info"); break;
+      case "skills":      setStep(answers.addJob2 ? "job2-duties" : "job2-prompt"); break;
+      case "education":   setStep("skills"); break;
+      case "extras":      setStep("education"); break;
+      case "review":      setStep("extras"); break;
+    }
+  }
 
-  return (
-    <FlowPage
-      title={current.title}
-      subtitle={current.subtitle}
-      actionLabel={step < steps.length - 1 ? "Next" : "Continue"}
-      actionDisabled={!answers[current.field].trim()}
-      onAction={handleNext}
-      showBack
-      onBack={step === 0 ? onBack : () => setStep(step - 1)}
-      footer={
-        <p className="text-xs">
-          This is just a starting point. You can improve it later in The
-          Refinery.
-        </p>
-      }
-    >
-      {current.multiline ? (
-        <textarea
-          value={answers[current.field]}
-          onChange={(e) =>
-            setAnswers({ ...answers, [current.field]: e.target.value })
-          }
-          placeholder={current.placeholder}
-          rows={4}
-          className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y min-h-[120px]"
-          autoFocus
-        />
-      ) : (
+  function assembleResume(): string {
+    const lines: string[] = [];
+    lines.push(answers.name.trim());
+
+    const contactParts = [answers.phone, answers.email, answers.city].filter(Boolean);
+    if (contactParts.length) lines.push(contactParts.join(" | "));
+
+    lines.push("");
+    lines.push("WORK HISTORY");
+    lines.push("");
+
+    if (answers.job1Title || answers.job1Company || answers.job1Duties) {
+      const h = [answers.job1Title, answers.job1Company, answers.job1Dates].filter(Boolean).join(" -- ");
+      if (h) lines.push(h);
+      if (answers.job1Duties) lines.push(answers.job1Duties.trim());
+      lines.push("");
+    }
+
+    if (answers.addJob2 && (answers.job2Title || answers.job2Company || answers.job2Duties)) {
+      const h = [answers.job2Title, answers.job2Company, answers.job2Dates].filter(Boolean).join(" -- ");
+      if (h) lines.push(h);
+      if (answers.job2Duties) lines.push(answers.job2Duties.trim());
+      lines.push("");
+    }
+
+    if (answers.skills) {
+      lines.push("SKILLS & CERTIFICATIONS");
+      lines.push(answers.skills.trim());
+      lines.push("");
+    }
+
+    if (answers.education) {
+      lines.push("EDUCATION & TRAINING");
+      lines.push(answers.education.trim());
+      lines.push("");
+    }
+
+    if (answers.extras) {
+      lines.push("ADDITIONAL");
+      lines.push(answers.extras.trim());
+    }
+
+    return lines.join("\n").trim();
+  }
+
+  const inputClass =
+    "w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch";
+  const textareaClass =
+    "w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y min-h-[140px]";
+
+  // --- Intro ---
+  if (step === "intro") {
+    return (
+      <FlowPage
+        title="Build your resume from scratch."
+        subtitle="We walk you through it, one section at a time."
+        actionLabel="I'm ready -- let's go"
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
+        <div className="space-y-4">
+          <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
+            <p className="text-sm text-foreground leading-relaxed mb-3">
+              This takes <strong>15-20 minutes</strong> if you do it right. That&apos;s not a lot
+              of time to invest in something this important -- but it only works if you take it
+              seriously.
+            </p>
+            <p className="text-sm text-muted leading-relaxed">
+              We go section by section: contact info, work history, skills, education.
+              Answer each question in your own words. Don&apos;t try to make it sound
+              fancy. Just tell us what&apos;s true.
+            </p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-border">
+            <p className="text-xs font-medium text-foreground mb-1">A note on gaps</p>
+            <p className="text-xs text-muted leading-relaxed">
+              If you have gaps in your history -- incarceration, family obligations, health,
+              or anything else -- you don&apos;t need to hide or explain them here.
+              Just include what you have. The Forge helps you figure out how to
+              talk about the gaps later, on your terms.
+            </p>
+          </div>
+        </div>
+      </FlowPage>
+    );
+  }
+
+  // --- Name ---
+  if (step === "name") {
+    return (
+      <FlowPage
+        title="What's your full name?"
+        subtitle="This goes at the top of your resume."
+        actionLabel="Next"
+        actionDisabled={!answers.name.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
         <input
-          value={answers[current.field]}
-          onChange={(e) =>
-            setAnswers({ ...answers, [current.field]: e.target.value })
-          }
-          placeholder={current.placeholder}
-          className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+          value={answers.name}
+          onChange={(e) => set("name", e.target.value)}
+          placeholder="e.g., Marcus Johnson"
+          className={inputClass}
           autoFocus
         />
-      )}
-    </FlowPage>
-  );
+      </FlowPage>
+    );
+  }
+
+  // --- Contact Info ---
+  if (step === "contact") {
+    return (
+      <FlowPage
+        title="Contact information"
+        subtitle="Goes on your resume. Add what you have -- all optional."
+        actionLabel="Next"
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+        footer={
+          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+            Skip for now
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Phone</label>
+            <input
+              value={answers.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="(555) 123-4567"
+              type="tel"
+              className={inputClass}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Email</label>
+            <input
+              value={answers.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="you@email.com"
+              type="email"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">City, State</label>
+            <input
+              value={answers.city}
+              onChange={(e) => set("city", e.target.value)}
+              placeholder="e.g., Milwaukee, WI"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </FlowPage>
+    );
+  }
+
+  // --- Job 1 Info ---
+  if (step === "job1-info") {
+    return (
+      <FlowPage
+        title="Your most recent job"
+        subtitle="Last job you held -- full-time, part-time, temp, gig, or work program. All count."
+        actionLabel="Next"
+        actionDisabled={!answers.job1Title.trim() && !answers.job1Company.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Job title</label>
+            <input
+              value={answers.job1Title}
+              onChange={(e) => set("job1Title", e.target.value)}
+              placeholder="e.g., Warehouse Associate, Custodian, Cook"
+              className={inputClass}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Company or organization</label>
+            <input
+              value={answers.job1Company}
+              onChange={(e) => set("job1Company", e.target.value)}
+              placeholder="e.g., Amazon, City of Milwaukee, Self-employed"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">When? (approximate is fine)</label>
+            <input
+              value={answers.job1Dates}
+              onChange={(e) => set("job1Dates", e.target.value)}
+              placeholder="e.g., 2019-2022"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </FlowPage>
+    );
+  }
+
+  // --- Job 1 Duties ---
+  if (step === "job1-duties") {
+    return (
+      <FlowPage
+        title="What did you do there?"
+        subtitle="Main responsibilities in your own words. Don't make it fancy -- just be honest."
+        actionLabel="Next"
+        actionDisabled={!answers.job1Duties.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+        footer={
+          <p className="text-xs text-muted">Include accomplishments, things you were proud of, skills you used.</p>
+        }
+      >
+        <textarea
+          value={answers.job1Duties}
+          onChange={(e) => set("job1Duties", e.target.value)}
+          placeholder={"e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season."}
+          rows={5}
+          className={textareaClass}
+          autoFocus
+        />
+      </FlowPage>
+    );
+  }
+
+  // --- Job 2 Prompt ---
+  if (step === "job2-prompt") {
+    return (
+      <FlowPage
+        title="Do you have another job to add?"
+        subtitle="More work history makes a stronger resume. Part-time, temp, and gig work all count."
+        showBack
+        onBack={goBack}
+      >
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => { set("addJob2", true); setStep("job2-info"); }}
+            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-300 bg-sage-50 hover:border-sage-400 transition-all min-h-touch"
+          >
+            <span className="font-medium">Yes -- add another job</span>
+            <p className="text-sm text-muted mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
+          </button>
+          <button
+            onClick={() => { set("addJob2", false); setStep("skills"); }}
+            className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
+          >
+            <span className="font-medium">No -- that's my history</span>
+            <p className="text-sm text-muted mt-0.5">Continue to skills and certifications</p>
+          </button>
+        </div>
+      </FlowPage>
+    );
+  }
+
+  // --- Job 2 Info ---
+  if (step === "job2-info") {
+    return (
+      <FlowPage
+        title="Second job"
+        subtitle="Same as before -- title, company, and when."
+        actionLabel="Next"
+        actionDisabled={!answers.job2Title.trim() && !answers.job2Company.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Job title</label>
+            <input
+              value={answers.job2Title}
+              onChange={(e) => set("job2Title", e.target.value)}
+              placeholder="e.g., Cashier, Driver, Maintenance Tech"
+              className={inputClass}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">Company or organization</label>
+            <input
+              value={answers.job2Company}
+              onChange={(e) => set("job2Company", e.target.value)}
+              placeholder="e.g., Walmart, local restaurant, freelance"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted block mb-1">When?</label>
+            <input
+              value={answers.job2Dates}
+              onChange={(e) => set("job2Dates", e.target.value)}
+              placeholder="e.g., 2015-2019"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </FlowPage>
+    );
+  }
+
+  // --- Job 2 Duties ---
+  if (step === "job2-duties") {
+    return (
+      <FlowPage
+        title="What did you do there?"
+        subtitle="Same question -- main responsibilities in your own words."
+        actionLabel="Next"
+        actionDisabled={!answers.job2Duties.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
+        <textarea
+          value={answers.job2Duties}
+          onChange={(e) => set("job2Duties", e.target.value)}
+          placeholder={"Describe your main responsibilities..."}
+          rows={5}
+          className={textareaClass}
+          autoFocus
+        />
+      </FlowPage>
+    );
+  }
+
+  // --- Skills ---
+  if (step === "skills") {
+    return (
+      <FlowPage
+        title="What are your skills and certifications?"
+        subtitle="What are you good at? Technical skills, people skills, physical skills, licenses -- everything counts."
+        actionLabel="Next"
+        actionDisabled={!answers.skills.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+        footer={
+          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+            Skip for now
+          </button>
+        }
+      >
+        <textarea
+          value={answers.skills}
+          onChange={(e) => set("skills", e.target.value)}
+          placeholder={"e.g., Forklift certified (OSHA), CDL Class A, Microsoft Excel, bilingual English/Spanish, team leadership, conflict de-escalation"}
+          rows={4}
+          className={textareaClass}
+          autoFocus
+        />
+      </FlowPage>
+    );
+  }
+
+  // --- Education ---
+  if (step === "education") {
+    return (
+      <FlowPage
+        title="Education and training"
+        subtitle="School, GED, trade programs, certifications, military -- all count. Include anything you completed, even programs from inside."
+        actionLabel="Next"
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+        footer={
+          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+            Skip for now
+          </button>
+        }
+      >
+        <textarea
+          value={answers.education}
+          onChange={(e) => set("education", e.target.value)}
+          placeholder={"e.g., GED (2018), HVAC certification (ABC Training, 2020), OSHA 10-hour safety, US Army 2004-2008"}
+          rows={4}
+          className={textareaClass}
+          autoFocus
+        />
+      </FlowPage>
+    );
+  }
+
+  // --- Extras ---
+  if (step === "extras") {
+    return (
+      <FlowPage
+        title="Anything else?"
+        subtitle="Volunteer work, community roles, programs you've been part of, or anything that doesn't fit above."
+        actionLabel="Next"
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+        footer={
+          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+            Skip -- that&apos;s everything
+          </button>
+        }
+      >
+        <textarea
+          value={answers.extras}
+          onChange={(e) => set("extras", e.target.value)}
+          placeholder={"e.g., Volunteer at Milwaukee Rescue Mission 2023-present, peer mentor in reentry program, completed financial literacy and conflict resolution"}
+          rows={4}
+          className={textareaClass}
+          autoFocus
+        />
+      </FlowPage>
+    );
+  }
+
+  // --- Review ---
+  if (step === "review") {
+    const assembled = assembleResume();
+    return (
+      <FlowPage
+        title="Here's what we have."
+        subtitle="Review before we start the analysis. Go back to fix anything."
+        actionLabel="Looks good -- start the analysis"
+        actionDisabled={!assembled.trim()}
+        onAction={goNext}
+        showBack
+        onBack={goBack}
+      >
+        <div className="bg-sage-50 rounded-xl border border-sage-200 overflow-hidden mb-4">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-sage-200 bg-sage-100">
+            <p className="text-xs font-semibold text-sage-700 uppercase tracking-wide">
+              Your resume draft
+            </p>
+            <p className="text-xs text-sage-500">{assembled.length} characters</p>
+          </div>
+          <div className="p-4 max-h-80 overflow-y-auto">
+            <pre className="text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">
+              {assembled}
+            </pre>
+          </div>
+        </div>
+        <p className="text-xs text-muted">
+          This is the raw material for the Forge analysis. The AI transforms it
+          into a structured career narrative -- you&apos;ll see the full output at the end.
+        </p>
+      </FlowPage>
+    );
+  }
+
+  return null;
 }
 
 // --- Paste Resume sub-component ---
