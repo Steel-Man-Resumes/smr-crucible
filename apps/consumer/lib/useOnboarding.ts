@@ -33,6 +33,7 @@ export interface OnboardingData {
   contact: UserContact | null;
   resumeCount: number;
   forgeComplete: boolean;
+  disclosureComplete: boolean;
   refresh: () => void;
 }
 
@@ -42,12 +43,14 @@ export function useOnboarding(): OnboardingData {
   const [contact, setContact] = useState<UserContact | null>(null);
   const [resumeCount, setResumeCount] = useState(0);
   const [forgeComplete, setForgeComplete] = useState(false);
+  const [disclosureComplete, setDisclosureComplete] = useState(false);
 
   const refresh = useCallback(() => {
     // Admin = god mode, skip checks
     if (tier === "admin") {
       setState("full_access");
       setForgeComplete(true);
+      setDisclosureComplete(true);
       return;
     }
 
@@ -55,9 +58,9 @@ export function useOnboarding(): OnboardingData {
 
     Promise.all([
       fetch("/api/user/profile").then((r) => (r.ok ? r.json() : null)),
-      // Fetch actual resume artifacts to check for job-targeted ones
       fetch("/api/artifacts?type=resume&limit=50").then((r) => (r.ok ? r.json() : null)),
-    ]).then(([profileRes, artifactsRes]) => {
+      fetch("/api/artifacts?type=disclosure_plan&limit=1").then((r) => (r.ok ? r.json() : null)),
+    ]).then(([profileRes, artifactsRes, disclosureRes]) => {
       if (cancelled) return;
 
       const profileComplete = profileRes?.isComplete === true;
@@ -72,9 +75,12 @@ export function useOnboarding(): OnboardingData {
         return ctx.source === "job" || (ctx.targetJob && ctx.source !== "forge");
       });
 
+      const hasDisclosure = (disclosureRes?.data?.length ?? 0) > 0;
+
       setContact(contactData);
       setResumeCount(jobTargetedResumes.length);
       setForgeComplete(hasForge);
+      setDisclosureComplete(hasDisclosure);
 
       if (!profileComplete) {
         setState("needs_profile");
@@ -94,12 +100,23 @@ export function useOnboarding(): OnboardingData {
     refresh();
   }, [refresh]);
 
-  // Listen for forge-synced events
+  // Listen for forge-synced and resume-saved events
   useEffect(() => {
     const handler = () => setTimeout(refresh, 500);
     window.addEventListener("forge-synced", handler);
-    return () => window.removeEventListener("forge-synced", handler);
+    window.addEventListener("resume-saved", handler);
+    return () => {
+      window.removeEventListener("forge-synced", handler);
+      window.removeEventListener("resume-saved", handler);
+    };
   }, [refresh]);
 
-  return { state, contact, resumeCount, forgeComplete, refresh };
+  // Listen for disclosure_plan saves
+  useEffect(() => {
+    const handler = () => setTimeout(refresh, 500);
+    window.addEventListener("disclosure-saved", handler);
+    return () => window.removeEventListener("disclosure-saved", handler);
+  }, [refresh]);
+
+  return { state, contact, resumeCount, forgeComplete, disclosureComplete, refresh };
 }

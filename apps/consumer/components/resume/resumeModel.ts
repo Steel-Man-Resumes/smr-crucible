@@ -11,7 +11,7 @@ export interface ResumeDocument {
     targetJob: string;
     targetCompany: string;
     jobListingUrl: string;
-    createdFrom: "fresh" | "forge" | "rush" | "loaded";
+    createdFrom: "fresh" | "forge" | "rush" | "loaded" | "job";
   };
   contact: {
     name: string;

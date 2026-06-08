@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -25,6 +25,7 @@ interface NavItem {
   label: string;
   minTier: UserTier;
   minState: OnboardingState;
+  requiresDisclosure?: boolean;
 }
 
 interface NavGroup {
@@ -59,7 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access", requiresDisclosure: true },
     ],
   },
   {
@@ -68,7 +69,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
       { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "needs_profile" },
     ],
   },
   {
@@ -92,7 +93,12 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: OnboardingState): boolean {
+function isNavUnlocked(
+  item: NavItem,
+  userTier: UserTier,
+  onboardingState: OnboardingState,
+  disclosureComplete: boolean,
+): boolean {
   if (userTier === "admin") return true;
   if (userTier === "partner") {
     return (TIER_RANK[userTier] ?? 3) <= (TIER_RANK[item.minTier] ?? 3);
@@ -101,7 +107,9 @@ function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: Onboa
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
   const stateRank = STATE_RANK[onboardingState] ?? 3;
   const requiredRank = STATE_RANK[item.minState] ?? 3;
-  return stateRank <= requiredRank;
+  if (stateRank > requiredRank) return false;
+  if (item.requiresDisclosure && !disclosureComplete) return false;
+  return true;
 }
 
 // Hide items requiring a tier the user can never reach (partner-only, admin-only)
@@ -120,6 +128,27 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const onboarding = useOnboarding();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [unlockToast, setUnlockToast] = useState<string | null>(null);
+  const prevState = useRef<string>("loading");
+  const prevDisclosure = useRef(false);
+
+  // Show unlock toast when key milestones flip
+  useEffect(() => {
+    const prev = prevState.current;
+    const cur = onboarding.state;
+    if (prev !== cur) {
+      if (cur === "full_access" && prev !== "loading") {
+        setUnlockToast("Tools unlocked -- Disclosure Planner and more are ready.");
+        setTimeout(() => setUnlockToast(null), 5000);
+      }
+      prevState.current = cur;
+    }
+    if (!prevDisclosure.current && onboarding.disclosureComplete && cur === "full_access") {
+      setUnlockToast("Interview Prep is now unlocked.");
+      setTimeout(() => setUnlockToast(null), 5000);
+    }
+    prevDisclosure.current = onboarding.disclosureComplete;
+  }, [onboarding.state, onboarding.disclosureComplete]);
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -215,19 +244,23 @@ export default function DashboardLayout({
             </p>
           )}
           {visible.map((item) => {
-            const unlocked = isNavUnlocked(item, userTier, onboarding.state);
+            const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
             const isActive = pathname === item.href;
+
+            // Human-readable lock reason
+            const lockReason = (() => {
+              if (onboarding.state === "needs_profile") return "Complete your profile to unlock";
+              if (onboarding.state === "needs_resume") return "Build a targeted resume to unlock";
+              if (item.requiresDisclosure && !onboarding.disclosureComplete) return "Complete the Disclosure Planner to unlock";
+              return "Keep going to unlock this";
+            })();
 
             if (!unlocked) {
               return (
                 <div
                   key={item.href}
                   className="flex items-center justify-between px-3 py-2 text-sm text-gray-300 cursor-not-allowed select-none rounded-lg"
-                  title={
-                    onboarding.state === "needs_profile"
-                      ? "Set up your profile to unlock"
-                      : "Complete the Forge to unlock"
-                  }
+                  title={lockReason}
                 >
                   <span>{item.label}</span>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="opacity-50">
@@ -388,6 +421,18 @@ export default function DashboardLayout({
           coach
         />
       </AssistantDrawer>
+
+      {/* Unlock toast */}
+      {unlockToast && (
+        <div className="fixed bottom-24 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="bg-sage-700 text-white text-sm font-medium px-5 py-3 rounded-full shadow-xl flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M10 2H6a1 1 0 00-1 1v1H4a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V5a1 1 0 00-1-1h-1V3a1 1 0 00-1-1zM6 4h4v.5H6V4zM8 9a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" fill="currentColor"/>
+            </svg>
+            {unlockToast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

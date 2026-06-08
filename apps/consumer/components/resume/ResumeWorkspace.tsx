@@ -228,7 +228,7 @@ export function ResumeWorkspace() {
             ...d.meta,
             targetJob: job.title || "",
             targetCompany: job.company || "",
-            createdFrom: "forge" as const,
+            createdFrom: "job" as const,
           },
         }));
 
@@ -455,6 +455,8 @@ export function ResumeWorkspace() {
               scroll: false,
             });
             setSavedResumes((prev) => [data, ...prev]);
+            // Signal the nav to re-check unlock state
+            window.dispatchEvent(new Event("resume-saved"));
           } else {
             setSaveStatus("error");
           }

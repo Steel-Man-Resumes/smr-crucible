@@ -237,6 +237,8 @@ function DisclosurePlannerPage() {
             },
             scaffoldLevel: 1.0,
           }),
+        }).then(() => {
+          window.dispatchEvent(new Event("disclosure-saved"));
         }).catch(() => {});
       }
     } catch {
