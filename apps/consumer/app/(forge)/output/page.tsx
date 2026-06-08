@@ -239,6 +239,23 @@ export default function OutputPage() {
     }
   };
 
+  function handlePrintResumePdf() {
+    if (!resumeText) return;
+    const html = resumeTextToStandaloneHtml(resumeText);
+    const w = window.open("", "_blank");
+    if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function handlePrintAnalysisPdf() {
+    const html = analysisToStandaloneHtml(output, narrative);
+    const w = window.open("", "_blank");
+    if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+
   // If no output, redirect back
   if (!session.forgeOutput) {
     return (
@@ -532,12 +549,18 @@ export default function OutputPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
                     <button
                       onClick={() => handleCopy(resumeText, "resume")}
                       className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
                     >
                       {copied === "resume" ? "Copied!" : "Copy"}
+                    </button>
+                    <button
+                      onClick={handlePrintResumePdf}
+                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                    >
+                      Save as PDF
                     </button>
                     <button
                       onClick={() => handleDownload("resume")}
@@ -593,9 +616,13 @@ export default function OutputPage() {
               </div>
             )}
 
-            <p className="text-xs text-muted text-center mt-2">
-              {rc.docsSubtext}
-            </p>
+            <div className="mt-2 text-center space-y-1">
+              <p className="text-xs text-muted">
+                <strong>Save as PDF</strong> -- preserves the exact formatting you see above. Best for sharing and submitting.
+                &nbsp;<strong>Download .docx</strong> -- opens in Word or Google Docs so you can edit if anything needs adjusting.
+              </p>
+              <p className="text-xs text-muted">{rc.docsSubtext}</p>
+            </div>
           </div>
         )}
 
@@ -669,19 +696,10 @@ export default function OutputPage() {
         {/* Secondary: downloads */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
-            onClick={() => {
-              const text = formatOutputAsText(output, narrative);
-              const blob = new Blob([text], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "my-forge-output.txt";
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
+            onClick={handlePrintAnalysisPdf}
             className="flex-1 px-4 py-3 bg-white border border-border text-muted rounded-xl text-sm font-medium hover:border-sage-300 hover:text-foreground transition-colors"
           >
-            Download analysis (.txt)
+            Print / save analysis as PDF
           </button>
         </div>
       </section>
@@ -838,6 +856,174 @@ function ResumePreview({ text }: { text: string }) {
       </div>
     </div>
   );
+}
+
+// ─── Print-to-PDF helpers ─────────────────────────────────────────────────────
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function resumeTextToStandaloneHtml(text: string): string {
+  const lines = text.split("\n");
+
+  const headerLines: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) { if (headerLines.length > 0) break; continue; }
+    if (isPreviewSectionHeader(t)) break;
+    if (headerLines.length < 4) headerLines.push(t);
+    else break;
+  }
+
+  const nameLine = headerLines[0] || "";
+  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
+  const contactLine =
+    headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("•")) ||
+    (headerLines.length > 1 ? headerLines[1] : "");
+
+  let headerHtml = `<div style="background:#1B2A4A;padding:20px 24px;text-align:center;">`;
+  if (nameLine) headerHtml += `<p style="font-family:Georgia,serif;color:#FFF;font-size:18pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;margin:0;">${escHtml(nameLine)}</p>`;
+  if (headlineLine && headlineLine !== contactLine) headerHtml += `<p style="color:#B8C9E0;font-size:11pt;margin:4px 0 0;">${escHtml(headlineLine)}</p>`;
+  if (contactLine) headerHtml += `<p style="color:#FFF;font-size:10pt;margin:4px 0 0;">${escHtml(contactLine)}</p>`;
+  headerHtml += `</div>`;
+
+  const headerSet = new Set(headerLines.map((l) => l.trim()));
+  let pastHeader = false;
+  let bodyHtml = `<div style="padding:12px 20px;">`;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!pastHeader) {
+      if (headerSet.has(trimmed) || !trimmed) {
+        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
+        if (headerSet.size === 0) pastHeader = true;
+        continue;
+      }
+      pastHeader = true;
+    }
+    if (!trimmed) { bodyHtml += `<div style="height:6px;"></div>`; continue; }
+
+    if (isPreviewSectionHeader(trimmed)) {
+      bodyHtml += `<div style="margin-top:12px;margin-bottom:4px;padding-bottom:2px;border-bottom:2px solid #1B2A4A;"><span style="font-family:Georgia,serif;color:#1B2A4A;font-size:11pt;font-weight:bold;">${escHtml(trimmed.toUpperCase())}</span></div>`;
+      continue;
+    }
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
+      const bullet = trimmed.replace(/^[-*•]\s*/, "");
+      const bHtml = bullet.replace(/(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi, "<strong>$1</strong>");
+      bodyHtml += `<div style="display:flex;gap:6px;padding-left:12px;margin-bottom:2px;line-height:1.4;"><span style="color:#1B2A4A;font-weight:bold;font-size:10pt;flex-shrink:0;">&bull;</span><span style="font-size:10pt;color:#1a1a1a;">${bHtml}</span></div>`;
+      continue;
+    }
+    if ((trimmed.includes(" | ") || trimmed.includes(" • ")) && trimmed.split(/[|•]/).length >= 3) {
+      bodyHtml += `<div style="text-align:center;font-size:10pt;font-weight:bold;margin-bottom:4px;color:#333;">${escHtml(trimmed)}</div>`;
+      continue;
+    }
+    if (trimmed.includes("|") && !trimmed.includes("@")) {
+      const parts = trimmed.split("|").map((p) => p.trim());
+      const partsHtml = parts.map((p, i) =>
+        i === 0 ? `<strong style="color:#1a1a1a;">${escHtml(p)}</strong>` : `<span style="color:#555;">&nbsp;&nbsp;|&nbsp;&nbsp;${escHtml(p)}</span>`
+      ).join("");
+      bodyHtml += `<div style="margin-top:10px;margin-bottom:2px;font-size:10pt;line-height:1.4;">${partsHtml}</div>`;
+      continue;
+    }
+    bodyHtml += `<p style="font-size:10pt;line-height:1.4;margin-bottom:2px;color:#1a1a1a;">${escHtml(trimmed)}</p>`;
+  }
+  bodyHtml += `</div>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume -- Steel Man Resumes</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff}
+@media print{@page{margin:0.5in;size:letter}body{margin:0}.no-print{display:none!important}}</style>
+</head><body><div style="max-width:7.5in;margin:0 auto;background:#fff;">
+${headerHtml}${bodyHtml}
+<div class="no-print" style="padding:12px 20px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
+<p style="font-size:9pt;color:#999;">Steel Man Resumes -- steelmanresumes.com</p>
+<p style="font-size:9pt;color:#aaa;">File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
+</div><script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
+</body></html>`;
+}
+
+function analysisToStandaloneHtml(
+  output: ForgeOutput,
+  narrative: Record<string, unknown>
+): string {
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const headline = String(narrative.headline || "Your Career Profile");
+  const summary = String(narrative.summary || "");
+  const reflection = String(narrative.reflection || "");
+
+  let body = "";
+
+  if (summary) body += `<h2>Your Story</h2><p class="narrative">${escHtml(summary)}</p>`;
+  if (reflection) body += `<p class="narrative">${escHtml(reflection)}</p>`;
+
+  if (output.strengths?.length) {
+    body += `<h2>Your Strengths</h2>`;
+    for (const s of output.strengths) {
+      body += `<div class="strength"><p class="strength-title">${escHtml(s.title)}</p><p>${escHtml(s.evidence)}</p></div>`;
+    }
+  }
+
+  if (output.skills?.length) {
+    const grouped: Record<string, string[]> = {};
+    for (const sk of output.skills) {
+      if (!grouped[sk.category]) grouped[sk.category] = [];
+      grouped[sk.category].push(sk.name);
+    }
+    body += `<h2>Skills</h2>`;
+    for (const [cat, names] of Object.entries(grouped)) {
+      body += `<p><strong>${escHtml(cat)}:</strong> ${names.map(escHtml).join(", ")}</p>`;
+    }
+  }
+
+  if (output.career_paths?.length) {
+    body += `<h2>Career Paths</h2>`;
+    for (const cp of output.career_paths) {
+      body += `<div class="career-path">`;
+      body += `<h3>${escHtml(cp.title)}${cp.salary_range ? ` <span style="font-weight:normal;color:#666;">(${escHtml(cp.salary_range)})</span>` : ""}</h3>`;
+      body += `<p>${escHtml(cp.match_reason)}</p>`;
+      if (cp.next_steps.length) {
+        body += `<ul>${cp.next_steps.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
+      }
+      body += `</div>`;
+    }
+  }
+
+  if (output.barriers?.length) {
+    body += `<h2>Resources for Your Situation</h2>`;
+    for (const b of output.barriers) {
+      body += `<div class="career-path">`;
+      body += `<h3>${escHtml(b.type.replace(/_/g, " "))}</h3>`;
+      if (b.legal_notes) body += `<p><em>${escHtml(b.legal_notes)}</em></p>`;
+      if (b.resources.length) {
+        body += `<ul>${b.resources.map((r) => `<li><strong>${escHtml(r.name)}</strong> -- ${escHtml(r.description)}</li>`).join("")}</ul>`;
+      }
+      body += `</div>`;
+    }
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis -- Steel Man Resumes</title>
+<style>
+body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a}
+.header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px}
+.header h1{margin:0 0 4px;font-size:18pt;text-transform:uppercase;letter-spacing:2px}
+.header p{margin:0;color:#B8C9E0;font-size:11pt}
+.date{color:#B8C9E0;font-size:9pt;margin-top:6px}
+h2{font-size:14pt;color:#1B2A4A;border-bottom:2px solid #1B2A4A;padding-bottom:4px;margin-top:28px}
+.narrative{font-size:12pt;line-height:1.8}
+.strength{margin-bottom:14px}
+.strength-title{font-weight:bold;font-size:11pt;color:#1B2A4A;margin:0 0 2px}
+.career-path{margin-bottom:18px;padding:10px 14px;border-left:3px solid #B8C9E0}
+.career-path h3{margin:0 0 4px;font-size:11pt;color:#1B2A4A}
+.career-path p{margin:0 0 4px;font-size:10pt;color:#444}
+ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
+.footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:9pt;color:#888;text-align:center}
+@media print{@page{margin:.5in}.no-print{display:none!important}}
+</style></head><body>
+<div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
+${body}
+<div class="footer no-print"><p>Steel Man Resumes -- steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
+<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
+</body></html>`;
 }
 
 function formatOutputAsText(

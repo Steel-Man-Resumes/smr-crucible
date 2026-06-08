@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -13,19 +13,24 @@ import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 
 /**
- * Dashboard Layout — Authenticated area
+ * Dashboard Layout -- Authenticated area
  *
- * Persistent navigation for Refinery tools.
- * Nav items: always visible, locked until earned.
- * Admin tier = god mode (everything unlocked).
+ * Desktop: sticky top bar + left sidebar with grouped tool nav.
+ * Mobile: sticky top bar + hamburger → slide-in drawer.
+ * Locked tools shown greyed (unlockable through normal progression).
+ * Admin/partner-only tools hidden for tiers that can never reach them.
  */
 
 interface NavItem {
   href: string;
   label: string;
   minTier: UserTier;
-  /** Minimum onboarding state to unlock this nav item */
   minState: OnboardingState;
+}
+
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
 }
 
 const TIER_RANK: Record<string, number> = {
@@ -44,36 +49,67 @@ const STATE_RANK: Record<string, number> = {
   loading: 3,
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Overview", minTier: "observer", minState: "needs_profile" },
-  { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
-  { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client", minState: "needs_resume" },
-  { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
-  { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
-  { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "full_access" },
-  { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
-  { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
-  { href: "/dashboard/vault", label: "My Materials", minTier: "client", minState: "needs_resume" },
-  { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
-  { href: "/dashboard/partner", label: "Partner Dashboard", minTier: "partner", minState: "needs_profile" },
-  { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
-  { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { href: "/dashboard", label: "Overview", minTier: "observer", minState: "needs_profile" },
+    ],
+  },
+  {
+    label: "Build",
+    items: [
+      { href: "/dashboard/resume-builder", label: "Resume Builder", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
+    ],
+  },
+  {
+    label: "Find Work",
+    items: [
+      { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "full_access" },
+    ],
+  },
+  {
+    label: "My Stuff",
+    items: [
+      { href: "/dashboard/vault", label: "My Materials", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
+    ],
+  },
+  {
+    label: "Program",
+    items: [
+      { href: "/dashboard/partner", label: "Partner Dashboard", minTier: "partner", minState: "needs_profile" },
+    ],
+  },
+  {
+    items: [
+      { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
+      { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
+    ],
+  },
 ];
 
 function isNavUnlocked(item: NavItem, userTier: UserTier, onboardingState: OnboardingState): boolean {
-  // Admin = god mode
   if (userTier === "admin") return true;
-  // Partner = all tools visible, onboarding state skipped (tier check still applies)
   if (userTier === "partner") {
     return (TIER_RANK[userTier] ?? 3) <= (TIER_RANK[item.minTier] ?? 3);
   }
-  // Tier check
   const tierRank = TIER_RANK[userTier] ?? 3;
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
-  // Onboarding state check
   const stateRank = STATE_RANK[onboardingState] ?? 3;
   const requiredRank = STATE_RANK[item.minState] ?? 3;
   return stateRank <= requiredRank;
+}
+
+// Hide items requiring a tier the user can never reach (partner-only, admin-only)
+function shouldShowItem(item: NavItem, userTier: UserTier): boolean {
+  if (item.minTier === "admin" && userTier !== "admin") return false;
+  if (item.minTier === "partner" && userTier !== "partner" && userTier !== "admin") return false;
+  return true;
 }
 
 export default function DashboardLayout({
@@ -84,9 +120,14 @@ export default function DashboardLayout({
   const userTier = useUserTier();
   const pathname = usePathname();
   const onboarding = useOnboarding();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
 
   // Gate: client users who have never done the Forge get sent there first.
-  // Excludes Settings so they can still manage their account.
   useEffect(() => {
     if (
       userTier === "client" &&
@@ -100,7 +141,6 @@ export default function DashboardLayout({
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
-    // Access code redemption
     const pendingCode = localStorage.getItem("pending_access_code");
     if (pendingCode) {
       localStorage.removeItem("pending_access_code");
@@ -111,7 +151,6 @@ export default function DashboardLayout({
       }).catch(() => {});
     }
 
-    // Sync audience from Forge intro selection to user tier
     try {
       const audience = localStorage.getItem("forge_audience");
       if (audience && ["client", "partner", "observer"].includes(audience)) {
@@ -126,15 +165,12 @@ export default function DashboardLayout({
       // Silent
     }
 
-    // Sync Forge localStorage data to DB (one-time migration)
-    // Also build Forge preload for Refinery tools
     try {
       const stored = localStorage.getItem("forge_session");
       if (!stored) return;
       const forgeData = JSON.parse(stored);
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
 
-      // Build Forge preload for Refinery deep linking
       try {
         import("@/lib/forge-preload").then(({ buildForgePreload, saveForgePreload }) => {
           const preload = buildForgePreload(forgeData);
@@ -144,7 +180,6 @@ export default function DashboardLayout({
         // Preload build failed — not critical
       }
 
-      // Check if already synced — compare startedAt to detect new sessions
       const syncedAt = forgeData._syncedAt;
       const currentStartedAt = forgeData.startedAt || "unknown";
       if (syncedAt === currentStartedAt) return;
@@ -156,32 +191,97 @@ export default function DashboardLayout({
       })
         .then((res) => {
           if (res.ok) {
-            // Mark this specific session as synced
             forgeData._synced = true;
             forgeData._syncedAt = currentStartedAt;
             localStorage.setItem("forge_session", JSON.stringify(forgeData));
-            // Signal that forge data has been synced (Resume Builder listens)
             window.dispatchEvent(new Event("forge-synced"));
           }
         })
         .catch(() => {});
     } catch {
-      // Silent — sync is best-effort
+      // Silent
     }
   }, []);
 
+  function renderNavItems(onItemClick?: () => void) {
+    return NAV_GROUPS.map((group, gi) => {
+      const visible = group.items.filter((item) => shouldShowItem(item, userTier));
+      if (!visible.length) return null;
+
+      return (
+        <div key={gi} className={gi > 0 ? "mt-1 pt-3 border-t border-border/60" : ""}>
+          {group.label && (
+            <p className="px-3 mb-1 text-[10px] font-bold text-muted/70 uppercase tracking-widest">
+              {group.label}
+            </p>
+          )}
+          {visible.map((item) => {
+            const unlocked = isNavUnlocked(item, userTier, onboarding.state);
+            const isActive = pathname === item.href;
+
+            if (!unlocked) {
+              return (
+                <div
+                  key={item.href}
+                  className="flex items-center justify-between px-3 py-2 text-sm text-gray-300 cursor-not-allowed select-none rounded-lg"
+                  title={
+                    onboarding.state === "needs_profile"
+                      ? "Set up your profile to unlock"
+                      : "Complete the Forge to unlock"
+                  }
+                >
+                  <span>{item.label}</span>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" className="opacity-50">
+                    <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
+                  </svg>
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onItemClick}
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? "bg-sage-100 text-foreground"
+                    : "text-muted hover:bg-sage-50 hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      );
+    });
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Top nav */}
+      {/* Top bar */}
       <nav className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
-            <Link
-              href="/dashboard"
-              className="font-bold text-lg text-foreground"
-            >
-              Steel Man
-            </Link>
+
+            {/* Left: hamburger (mobile) + logo */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="md:hidden p-2 -ml-2 text-muted hover:text-foreground transition-colors"
+                aria-label="Open navigation"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M3 5h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2z" clipRule="evenodd" />
+                </svg>
+              </button>
+              <Link href="/dashboard" className="font-bold text-lg text-foreground">
+                Steel Man
+              </Link>
+            </div>
+
+            {/* Right: account links */}
             <div className="flex items-center gap-4">
               <a
                 href="https://forge.steelmanresumes.com"
@@ -191,17 +291,9 @@ export default function DashboardLayout({
               >
                 The Forge
               </a>
-              <a
-                href="https://steelmanresumes.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted hover:text-foreground transition-colors"
-              >
-                About SMR
-              </a>
               <Link
                 href="/dashboard/settings"
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors"
               >
                 Settings
               </Link>
@@ -216,68 +308,88 @@ export default function DashboardLayout({
         </div>
       </nav>
 
-      {/* Tool navigation — all items visible, locked ones greyed out */}
-      <div className="border-b border-border bg-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <nav
-            className="flex gap-1 overflow-x-auto py-2 scrollbar-hide"
-            aria-label="Refinery tools"
+      {/* Body: sidebar + content */}
+      <div className="flex min-h-[calc(100vh-64px)]">
+
+        {/* Left sidebar -- desktop only */}
+        <aside className="hidden md:block w-52 flex-shrink-0 border-r border-border bg-white">
+          <div className="sticky top-16 h-[calc(100vh-64px)] overflow-y-auto px-2 py-4 space-y-1">
+            {renderNavItems()}
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0 px-4 sm:px-6 py-8 pb-32 sm:pb-8">
+          {children}
+        </main>
+      </div>
+
+      {/* Mobile drawer overlay */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* Mobile drawer panel */}
+      <div
+        className={`fixed left-0 top-0 bottom-0 w-72 bg-white z-50 shadow-xl overflow-y-auto transition-transform duration-200 md:hidden ${
+          drawerOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 h-16 border-b border-border">
+          <Link
+            href="/dashboard"
+            onClick={() => setDrawerOpen(false)}
+            className="font-bold text-lg text-foreground"
           >
-            {NAV_ITEMS.map((item) => {
-              const unlocked = isNavUnlocked(item, userTier, onboarding.state);
-              const isActive = pathname === item.href;
-
-              if (!unlocked) {
-                return (
-                  <span
-                    key={item.href}
-                    className="px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap min-h-touch flex items-center gap-1.5 text-gray-300 cursor-not-allowed select-none"
-                    title={onboarding.state === "needs_profile"
-                      ? "Set up your profile to unlock"
-                      : "Build your first resume to unlock"}
-                  >
-                    {item.label}
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" className="flex-shrink-0 opacity-50">
-                      <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
-                    </svg>
-                  </span>
-                );
-              }
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap min-h-touch flex items-center ${
-                    isActive
-                      ? "text-foreground bg-sage-100"
-                      : "text-muted hover:text-foreground hover:bg-sage-50"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+            Steel Man
+          </Link>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="p-2 text-muted hover:text-foreground transition-colors"
+            aria-label="Close navigation"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-2 py-4 space-y-1">
+          {renderNavItems(() => setDrawerOpen(false))}
+          <div className="mt-3 pt-3 border-t border-border/60 space-y-1">
+            <a
+              href="https://forge.steelmanresumes.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-sage-50 rounded-lg transition-colors"
+            >
+              The Forge &#8599;
+            </a>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="w-full flex items-center px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-sage-50 rounded-lg transition-colors text-left"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main content — pb-32 clears floating buttons on mobile */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pb-32 sm:pb-8">{children}</main>
-
-      {/* Contact Troy — always unlocked for authenticated users */}
+      {/* Contact Troy -- always available */}
       <ContactTroyButton isAuthenticated />
 
-      {/* Guided orientation tour — Stage 0, one-time, DB-persisted (client tier only) */}
+      {/* Guided orientation tour */}
       <GuidedTour />
 
-      {/* AI Assistant — available on every dashboard page */}
+      {/* AI Assistant */}
       <AssistantDrawer>
         <AssistantChat
           context={{
             currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
             forgeComplete: onboarding.state !== "needs_profile",
-            readinessStage: undefined, // loaded by assistant from session
+            readinessStage: undefined,
           }}
           coach
         />
