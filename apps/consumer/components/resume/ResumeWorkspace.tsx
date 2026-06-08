@@ -536,16 +536,48 @@ export function ResumeWorkspace() {
     }
   }
 
-  // --- Download TXT ---
-  function downloadResume() {
+  // --- Print / save as PDF ---
+  function printResumePdf() {
     const text = formatResumeDownload(doc);
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `resume-${(doc.meta.targetJob || "draft").replace(/\s+/g, "-").toLowerCase()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const name = doc.contact.name || "Resume";
+    const job = doc.meta.targetJob || "";
+    const company = doc.meta.targetCompany || "";
+
+    const lines = text.split("\n");
+    let bodyHtml = "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) { bodyHtml += "<br>"; continue; }
+      if (/^[A-Z &]+$/.test(t) && t.length > 3 && !t.includes("|")) {
+        bodyHtml += `<div class="section-header">${t}</div>`;
+      } else if (t.startsWith("- ") || t.startsWith("* ")) {
+        bodyHtml += `<div class="bullet">${t.slice(2)}</div>`;
+      } else {
+        bodyHtml += `<div class="body-line">${t}</div>`;
+      }
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} -- Resume${job ? ` for ${job}` : ""}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;margin:0;padding:0.5in 0.5in 0.5in 0.5in}
+  .name{font-family:Georgia,serif;font-size:16pt;font-weight:bold;text-align:center;background:#1B2A4A;color:#fff;padding:8px 0;letter-spacing:0.05em}
+  .subtitle{text-align:center;background:#1B2A4A;color:#B8C9E0;font-size:8pt;padding:3px 0 6px}
+  .section-header{font-family:Georgia,serif;font-size:9pt;font-weight:bold;color:#1B2A4A;border-bottom:1.5px solid #1B2A4A;margin:12px 0 4px;padding-bottom:2px;text-transform:uppercase;letter-spacing:0.1em}
+  .bullet{margin:2px 0 2px 14px;font-size:8.5pt;line-height:1.45}
+  .bullet::before{content:"\\2022  ";color:#1B2A4A;font-weight:bold}
+  .body-line{margin:2px 0;font-size:8.5pt;line-height:1.4}
+  br{display:block;margin:3px 0}
+  @media print{@page{size:letter;margin:0.4in 0.45in}}
+</style></head>
+<body>
+<div class="name">${name.toUpperCase()}</div>
+${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" -- ")}</div>` : ""}
+${bodyHtml}
+<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
+</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
   }
 
   // --- Import from Forge ---
@@ -821,12 +853,6 @@ export function ResumeWorkspace() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {saveStatus === "saving" && (
-            <span className="text-xs text-muted">Saving...</span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="text-xs text-sage-600">Saved</span>
-          )}
           {saveStatus === "error" && (
             <span className="text-xs text-red-500">Save failed</span>
           )}
@@ -834,7 +860,7 @@ export function ResumeWorkspace() {
             onClick={startNewResume}
             className="text-xs text-muted hover:text-foreground"
           >
-            New
+            + New
           </button>
         </div>
       </div>
@@ -1068,20 +1094,31 @@ export function ResumeWorkspace() {
             <SkillsSection doc={doc} update={updateDoc} />
           </SectionWrapper>
 
-          {/* Action bar */}
-          <div className="flex flex-wrap gap-3 pt-2">
-            <button
-              onClick={() => save(false)}
-              className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => downloadDocx("resume", formatResumeDownload(doc))}
-              className="px-5 py-3 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
-            >
-              Download .docx
-            </button>
+          {/* Action bar -- sticky so it stays visible while editing */}
+          <div className="sticky bottom-0 bg-white border-t border-border pt-3 pb-3 -mx-1 px-1 mt-3">
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                onClick={() => save(false)}
+                className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              >
+                {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
+              </button>
+              <button
+                onClick={() => downloadDocx("resume", formatResumeDownload(doc))}
+                className="px-4 py-3 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch text-sm"
+              >
+                Download .docx
+              </button>
+              <button
+                onClick={printResumePdf}
+                className="px-4 py-3 bg-white border-2 border-sky-500 text-sky-600 rounded-xl font-medium hover:bg-sky-50 transition-colors min-h-touch text-sm"
+              >
+                Save as PDF
+              </button>
+            </div>
+            <p className="text-[11px] text-muted mt-1.5">
+              .docx = editable in Word. PDF = keeps the formatting exactly. Save both.
+            </p>
           </div>
         </div>
 

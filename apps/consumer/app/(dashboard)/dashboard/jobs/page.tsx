@@ -32,6 +32,8 @@ interface EnrichedJob {
   second_chance: boolean;
   fair_chance_reason: string | null;
   remote: boolean;
+  apply_url?: string | null;
+  employer_website?: string | null;
 }
 
 interface SavedJob {
@@ -379,24 +381,36 @@ function JobBoardPage() {
               onChange={(e) =>
                 setContext({ ...context, targetRole: e.target.value })
               }
-              placeholder="e.g., Warehouse, Customer Service, CDL"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
+              }}
+              placeholder="e.g., Warehouse, CDL Driver, Forklift"
+              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch focus:border-sage-600 transition-colors"
             />
-            {/* Quick picks */}
+            <p className="text-xs text-muted mt-1">
+              You can combine terms -- e.g., &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;
+            </p>
+            {/* Quick picks — click to set or append */}
             <div className="flex flex-wrap gap-2 mt-2">
-              {COMMON_ROLES.slice(0, 5).map((role) => (
-                <button
-                  key={role}
-                  onClick={() => setContext({ ...context, targetRole: role })}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                    context.targetRole === role
-                      ? "bg-sage-100 border-sage-300 text-sage-700"
-                      : "bg-gray-50 border-gray-200 text-muted hover:border-sage-300"
-                  }`}
-                >
-                  {role}
-                </button>
-              ))}
+              {COMMON_ROLES.slice(0, 6).map((role) => {
+                const isActive = context.targetRole === role;
+                return (
+                  <button
+                    key={role}
+                    onClick={() => setContext({
+                      ...context,
+                      targetRole: isActive ? "" : role,
+                    })}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      isActive
+                        ? "bg-sage-100 border-sage-300 text-sage-700"
+                        : "bg-gray-50 border-gray-200 text-muted hover:border-sage-300"
+                    }`}
+                  >
+                    {role}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -407,8 +421,11 @@ function JobBoardPage() {
               onChange={(e) =>
                 setContext({ ...context, location: e.target.value })
               }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
+              }}
               placeholder="City, State (e.g., Milwaukee, WI)"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch focus:border-sage-600 transition-colors"
             />
           </div>
 
@@ -552,6 +569,18 @@ function JobBoardPage() {
                 {/* Expanded details */}
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                    {/* Company / salary / type meta row */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <span className="font-medium text-foreground">{job.company}</span>
+                      {job.salary && (
+                        <span className="text-sage-600 font-medium">{job.salary}</span>
+                      )}
+                      {job.employment_type && (
+                        <span className="text-muted">{job.employment_type}</span>
+                      )}
+                      {job.remote && <span className="text-sky-600 font-medium">Remote</span>}
+                    </div>
+
                     {/* Full description */}
                     <p className="text-sm text-foreground leading-relaxed">
                       {job.description}
@@ -560,8 +589,8 @@ function JobBoardPage() {
                     {/* Fair chance reason */}
                     {job.fair_chance_reason && (
                       <div className="bg-sage-50 rounded-lg px-3 py-2 border border-sage-200">
-                        <p className="text-xs text-sage-700">
-                          {job.fair_chance_reason}
+                        <p className="text-xs font-medium text-sage-700">
+                          Fair-chance employer -- {job.fair_chance_reason}
                         </p>
                       </div>
                     )}
@@ -570,7 +599,7 @@ function JobBoardPage() {
                     {job.requirements.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-foreground mb-1.5 uppercase tracking-wide">
-                          Requirements
+                          What they&apos;re looking for
                         </h4>
                         <ul className="text-sm text-muted space-y-1">
                           {job.requirements.map((r, i) => (
@@ -601,6 +630,37 @@ function JobBoardPage() {
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+
+                    {/* Apply link */}
+                    {(job.apply_url || job.employer_website) && (
+                      <div className="bg-sky-50 rounded-lg px-3 py-2 border border-sky-200">
+                        <p className="text-xs text-sky-700 mb-1">
+                          Apply directly -- always confirm the posting is still open before you apply.
+                        </p>
+                        {job.apply_url && (
+                          <a
+                            href={job.apply_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-medium text-sky-600 underline underline-offset-2 hover:text-sky-700 break-all"
+                          >
+                            View full listing &amp; apply &#8599;
+                          </a>
+                        )}
+                        {!job.apply_url && job.employer_website && (
+                          <a
+                            href={job.employer_website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-medium text-sky-600 underline underline-offset-2 hover:text-sky-700"
+                          >
+                            {job.employer_website} &#8599;
+                          </a>
+                        )}
                       </div>
                     )}
 

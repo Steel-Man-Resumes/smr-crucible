@@ -40,6 +40,8 @@ interface JSearchJob {
   job_posted_at_datetime_utc: string;
   job_is_remote: boolean;
   employer_website: string | null;
+  job_apply_link?: string | null;
+  job_google_link?: string | null;
   job_highlights?: {
     Qualifications?: string[];
     Responsibilities?: string[];
@@ -61,6 +63,8 @@ interface EnrichedJob {
   second_chance: boolean;
   fair_chance_reason: string | null;
   remote: boolean;
+  apply_url: string | null;
+  employer_website: string | null;
 }
 
 // ─── Cache Helpers ──────────────────────────────────────────────────────────
@@ -177,7 +181,7 @@ interface CareerOneStopJob {
   Company?: string;
   Location?: string;
   AccquisitionDate?: string;
-  URL?: string;
+  URL?: string | null;
 }
 
 async function fetchCareerOneStopJobs(
@@ -220,6 +224,8 @@ async function fetchCareerOneStopJobs(
         second_chance: fair,
         fair_chance_reason: fair ? "Known fair-chance employer" : null,
         remote: false,
+        apply_url: j.URL || null,
+        employer_website: null,
       };
     });
   } catch (err) {
@@ -255,6 +261,8 @@ async function enrichJobsWithAI(
         ? "This company has publicly committed to fair-chance hiring."
         : null,
       remote: j.job_is_remote,
+      apply_url: j.job_apply_link || j.job_google_link || null,
+      employer_website: j.employer_website || null,
     };
   });
 

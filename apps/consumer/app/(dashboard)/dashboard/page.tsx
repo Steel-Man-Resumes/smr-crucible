@@ -372,6 +372,54 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* How the Refinery works -- shown when forge data is available but no resume yet */}
+      {onboarding.state === "needs_resume" && !isAdmin && hasForgeData && (
+        <section className="bg-sky-50 rounded-2xl p-6 border border-sky-200">
+          <h2 className="font-semibold text-foreground mb-3">Here&apos;s how the Refinery works</h2>
+          <p className="text-sm text-muted mb-4">
+            Your Forge results are saved as your profile -- a database the tools use to work
+            smarter for you. The more you use it, the more it knows what you need.
+          </p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="w-6 h-6 rounded-full bg-sage-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+                1
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Find a job on the board</p>
+                <p className="text-xs text-muted leading-relaxed">
+                  Real listings, fair-chance employers shown first. Search by role, location, or both.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="w-6 h-6 rounded-full bg-sage-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+                2
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Build a targeted resume for that specific job</p>
+                <p className="text-xs text-muted leading-relaxed">
+                  The Resume Builder reads the job description and builds a resume matched to its exact
+                  requirements -- using your Forge profile. Do this for as many jobs as you want.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 opacity-55">
+              <span className="w-6 h-6 rounded-full bg-gray-400 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+                3
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Everything else unlocks</p>
+                <p className="text-xs text-muted leading-relaxed">
+                  Interview practice, disclosure strategy, application tracking -- all unlock after your first
+                  targeted resume. The grayed-out tools below unlock automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Primary CTA when no resume yet */}
       {onboarding.state === "needs_resume" && !isAdmin && (
         <section>
@@ -386,16 +434,16 @@ export default function DashboardPage() {
               <p className="text-sm text-sage-100">
                 {forgeData.career_paths?.[0]?.title
                   ? `Search for "${forgeData.career_paths[0].title}" and other roles that fit.`
-                  : "Search real job listings from employers hiring now."}
+                  : "Real listings, fair-chance employers highlighted. Search by role and location."}
               </p>
             </Link>
             <Link
-              href="/dashboard/resume-builder"
+              href="/dashboard/jobs"
               className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
             >
-              <h3 className="font-semibold text-lg mb-1">Build a Resume</h3>
+              <h3 className="font-semibold text-lg mb-1">Build a Targeted Resume</h3>
               <p className="text-sm text-sky-100">
-                Start building a resume from your Forge results.
+                Find a job first -- then we build a resume tailored to its exact description using your profile.
               </p>
             </Link>
           </div>

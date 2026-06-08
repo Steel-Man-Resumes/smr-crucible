@@ -207,19 +207,21 @@ export function formatResumeDownload(doc: ResumeDocument): string {
 
   // Summary
   if (doc.summary.trim()) {
-    lines.push("PROFESSIONAL SUMMARY", "-".repeat(40), doc.summary.trim(), "");
+    lines.push("PROFESSIONAL SUMMARY", doc.summary.trim(), "");
   }
 
   // Experience
   const filledExp = doc.experience.filter((e) => e.title.trim());
   if (filledExp.length) {
-    lines.push("PROFESSIONAL EXPERIENCE", "-".repeat(40));
+    lines.push("PROFESSIONAL EXPERIENCE", "");
     for (const entry of filledExp) {
-      lines.push(entry.title.toUpperCase());
-      const dateLine = [entry.company, [entry.startDate, entry.endDate || "Present"].filter(Boolean).join(" - ")].filter(Boolean).join(" | ");
-      if (dateLine) lines.push(dateLine);
+      // "TITLE | Company, Dates" -- 2 pipe parts so DOCX builder renders title bold
+      const dates = [entry.startDate, entry.endDate || "Present"].filter(Boolean).join(" - ");
+      const companyDates = [entry.company, dates].filter(Boolean).join(", ");
+      const titleLine = companyDates ? `${entry.title} | ${companyDates}` : entry.title;
+      lines.push(titleLine);
       for (const b of entry.bullets) {
-        if (b.trim()) lines.push(`  * ${b.trim()}`);
+        if (b.trim()) lines.push(`- ${b.trim()}`);
       }
       lines.push("");
     }
@@ -228,10 +230,12 @@ export function formatResumeDownload(doc: ResumeDocument): string {
   // Education
   const filledEd = doc.education.filter((e) => e.credential.trim());
   if (filledEd.length) {
-    lines.push("EDUCATION & CERTIFICATIONS", "-".repeat(40));
+    lines.push("EDUCATION & CERTIFICATIONS", "");
     for (const entry of filledEd) {
-      const parts = [entry.credential, entry.institution, entry.year].filter(Boolean);
-      lines.push(parts.join(" | "));
+      // Avoid 3+ pipe parts (would trigger competency renderer in DOCX builder)
+      const credInst = [entry.credential, entry.institution].filter(Boolean).join(" | ");
+      const line = entry.year ? `${credInst}  ${entry.year}` : credInst;
+      lines.push(line);
     }
     lines.push("");
   }
@@ -239,7 +243,7 @@ export function formatResumeDownload(doc: ResumeDocument): string {
   // Skills
   const filledSkills = doc.skills.filter((s) => s.trim());
   if (filledSkills.length) {
-    lines.push("SKILLS", "-".repeat(40), filledSkills.join(" | "), "");
+    lines.push("SKILLS", filledSkills.join(" | "), "");
   }
 
   lines.push("Built with The Refinery - steelmanresumes.com");

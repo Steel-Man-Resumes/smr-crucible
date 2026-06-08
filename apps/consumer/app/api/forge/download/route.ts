@@ -244,8 +244,13 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       continue;
     }
 
-    // Skill/competency lines (3+ pipe separators or bullet separators)
-    if ((trimmed.includes(" | ") || trimmed.includes(" \u2022 ")) && trimmed.split(/[|•]/).length >= 3) {
+    // Skill/competency lines: 4+ pipe/bullet parts, OR 3 short parts (skill names)
+    // Avoids catching job-title lines ("TITLE | Company, Dates") or education lines
+    const pipeParts = trimmed.split(/[|•]/).map((p) => p.trim()).filter(Boolean);
+    const isCompetencyLine =
+      (trimmed.includes(" | ") || trimmed.includes(" \u2022 ")) &&
+      (pipeParts.length >= 4 || (pipeParts.length === 3 && pipeParts.every((p) => p.length <= 22)));
+    if (isCompetencyLine) {
       children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -264,7 +269,7 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       continue;
     }
 
-    // Job title lines (TITLE | Company | Location | Dates)
+        // Job title lines (TITLE | Company | Location | Dates)
     if (trimmed.includes("|") && !trimmed.includes("@")) {
       const parts = trimmed.split("|").map((p) => p.trim());
       const runs: TextRun[] = [];
