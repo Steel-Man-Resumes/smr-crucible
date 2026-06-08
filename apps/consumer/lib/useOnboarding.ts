@@ -32,6 +32,7 @@ export interface OnboardingData {
   state: OnboardingState;
   contact: UserContact | null;
   resumeCount: number;
+  forgeComplete: boolean;
   refresh: () => void;
 }
 
@@ -40,11 +41,13 @@ export function useOnboarding(): OnboardingData {
   const [state, setState] = useState<OnboardingState>("loading");
   const [contact, setContact] = useState<UserContact | null>(null);
   const [resumeCount, setResumeCount] = useState(0);
+  const [forgeComplete, setForgeComplete] = useState(false);
 
   const refresh = useCallback(() => {
     // Admin = god mode, skip checks
     if (tier === "admin") {
       setState("full_access");
+      setForgeComplete(true);
       return;
     }
 
@@ -59,6 +62,7 @@ export function useOnboarding(): OnboardingData {
 
       const profileComplete = profileRes?.isComplete === true;
       const contactData = profileRes?.contact || null;
+      const hasForge = profileRes?.hasForgeOutput === true || tier === "partner";
 
       // Count only resumes that are job-targeted (not auto-created Forge imports)
       const allResumes = artifactsRes?.data || [];
@@ -70,6 +74,7 @@ export function useOnboarding(): OnboardingData {
 
       setContact(contactData);
       setResumeCount(jobTargetedResumes.length);
+      setForgeComplete(hasForge);
 
       if (!profileComplete) {
         setState("needs_profile");
@@ -96,5 +101,5 @@ export function useOnboarding(): OnboardingData {
     return () => window.removeEventListener("forge-synced", handler);
   }, [refresh]);
 
-  return { state, contact, resumeCount, refresh };
+  return { state, contact, resumeCount, forgeComplete, refresh };
 }

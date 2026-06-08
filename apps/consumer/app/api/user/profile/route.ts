@@ -77,8 +77,10 @@ export async function GET() {
 
   // Determine if profile is "complete" (has name + phone minimum)
   const isComplete = !!(contact.name.trim() && contact.phone.trim());
+  // Whether the user has ever completed the Forge (consumer_profile exists with forge_output)
+  const hasForgeOutput = !!(profile?.forge_output);
 
-  return NextResponse.json({ contact, isComplete });
+  return NextResponse.json({ contact, isComplete, hasForgeOutput });
 }
 
 /** PATCH — Save/update user contact info */

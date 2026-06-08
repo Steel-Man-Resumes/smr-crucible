@@ -85,6 +85,19 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const onboarding = useOnboarding();
 
+  // Gate: client users who have never done the Forge get sent there first.
+  // Excludes Settings so they can still manage their account.
+  useEffect(() => {
+    if (
+      userTier === "client" &&
+      onboarding.state !== "loading" &&
+      !onboarding.forgeComplete &&
+      pathname !== "/dashboard/settings"
+    ) {
+      window.location.href = "https://forge.steelmanresumes.com";
+    }
+  }, [userTier, onboarding.state, onboarding.forgeComplete, pathname]);
+
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
     // Access code redemption
