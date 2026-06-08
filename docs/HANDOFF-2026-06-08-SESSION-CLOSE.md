@@ -1,7 +1,8 @@
 # SMR Crucible -- Session Handoff
 **Date**: 2026-06-08
-**Session focus**: Refinery UX overhaul, unlock gate fixes, intelligence architecture pivot, disclosure coaching skill file
+**Session focus**: Refinery UX overhaul, unlock gates, intelligence layer, skill library foundation, research repository, inter-AI comms
 **Deploy status**: ALL changes pushed to `main`, live at forge/refinery.steelmanresumes.com
+**Commits this session**: 992af08, a5d5d19, a15e856, 159c6af, 3fb8701, ce474ee, + research repo commit
 
 ---
 
@@ -279,56 +280,120 @@ apps/consumer/components/JourneyProgressBanner.tsx      -- NEW
 apps/consumer/components/resume/ResumeWorkspace.tsx    -- tailoringNotes panel, full_description pass, resume-saved event, createdFrom fix
 apps/consumer/components/resume/resumeModel.ts         -- "job" added to createdFrom union type
 apps/consumer/lib/useOnboarding.ts                     -- disclosureComplete, event listeners, 3-fetch parallel
-apps/consumer/lib/skills/disclosure-coaching.md        -- NEW (first skill file)
+apps/consumer/lib/skills/disclosure-coaching.md        -- NEW (skill file 1 of 20)
+apps/consumer/lib/skills/career-narrative.md           -- NEW (skill file 2 of 20)
+apps/consumer/lib/skills/ai-comms/PROTOCOL.md          -- NEW (inter-AI communication system)
+apps/consumer/lib/skills/ai-comms/log/2026-06-08-cc-intelligence-layer.md -- NEW (first session log)
+apps/consumer/lib/skills/research/README.md            -- NEW (research repository + submission format)
+apps/consumer/app/api/user/context/route.ts            -- NEW (full journey context endpoint)
+apps/consumer/lib/use-user-context.ts                  -- NEW (client hook)
+apps/consumer/lib/assistant-prompt.ts                  -- buildFullUserSection() + userFullContext field
+apps/consumer/app/(dashboard)/layout.tsx               -- useUserContext() wired, rich context to AssistantChat
+apps/consumer/app/api/assistant/route.ts               -- skill file loader (fs-based, page-aware)
 ```
 
 ---
 
-## Next Session Priorities (in order)
+## Architecture Summary (current state, 2026-06-08 end of session)
 
-### P0 -- Must test
-1. Verify dev test account unlocks after going to Settings + saving name/phone + building a resume
-2. Verify unlock toast fires
-3. Verify "What we tailored" panel appears after resume generation
-4. Verify full job descriptions showing in expanded cards
+### Intelligence Stack
+```
+User opens t.ROY drawer
+  → layout fetches /api/user/context (auth'd, assembles full journey snapshot)
+  → useUserContext() returns { profile, forge, resumes, disclosurePlan, applications, journey }
+  → AssistantChat receives userFullContext in context prop
+  → User sends message
+  → /api/assistant receives context
+  → buildSystemPrompt() calls buildFullUserSection() → rich system prompt block
+  → loadSkillsForContext() reads relevant .md files from lib/skills/ (server-side fs)
+  → Anthropic gets: identity + full journey + doctrine files + research
+  → t.ROY responds with full knowledge of who it's talking to
+```
 
-### P1 -- Intelligence layer
-5. Build `/api/user/context` endpoint
-6. Update `AssistantChat` to fetch and use full context on every conversation start
-7. Write `career-narrative.md` skill file (Troy's Steel Man doctrine in depth)
-8. Write `reentry-employment.md` skill file (industry landscape)
-9. Write `legal-rights.md` skill file (legal scaffolding)
-10. Wire skill files into `context-library.ts` with page-based activation
+### Skills Library (2 of 20 complete)
+```
+lib/skills/
+  disclosure-coaching.md    (Troy's 4 beliefs + 4-part structure + industry matrix + legal)
+  career-narrative.md       (anti-fragility doctrine + 5-part arc + gap handling + turning point)
+  ai-comms/
+    PROTOCOL.md             (reading protocol + doctrine index + platform reference + never-do list)
+    log/
+      2026-06-08-cc-...md   (session log with open items + handoff)
+  research/
+    README.md               (format spec + research priorities + integration protocol)
+```
 
-### P2 -- Forge/Refinery data sync fix
-11. Find the Forge completion flow (likely in `app/forge/` routes)
-12. Add authenticated `/api/forge/save` call at Forge completion
-13. This eliminates the cross-domain localStorage problem permanently
-14. Profile completeness will then be automatic after Forge completion
+### Skill Loading Routing (current)
+| Page | Files Loaded |
+|------|-------------|
+| dashboard | career-narrative.md + (disclosure-coaching.md if hasCriminalRecord) |
+| jobs | career-narrative.md + (disclosure-coaching.md if hasCriminalRecord) |
+| resume-builder | career-narrative.md + (disclosure-coaching.md if hasCriminalRecord) |
+| output | career-narrative.md |
+| disclosure | disclosure-coaching.md + career-narrative.md |
+| disclosure-rehearsal | disclosure-coaching.md + career-narrative.md |
+| interview | disclosure-coaching.md + career-narrative.md |
 
-### P3 -- Remaining skill files (continue)
-15. Continue through the 20-skill library in Troy-priority order
+### Research Repository
+```
+lib/skills/research/
+  README.md    (format spec + P1/P2/P3 priorities + what's already covered)
+```
+Any AI can drop a research brief here using the standard format. CC integrates it into skill files.
 
 ---
 
-## Reference: Commit Log This Session
+## Next Session Priorities (updated)
+
+### P0 -- Must test first
+1. Verify intelligence layer: open t.ROY on the Refinery dashboard with admin account, confirm it references journey state by name
+2. Verify dev test account unlock: Settings → name + phone → job board → build resume → toast fires
+3. Verify skill files are loading (check that t.ROY references disclosure doctrine on the disclosure page)
+
+### P1 -- Skills library (Troy priority: quality over speed)
+4. `reentry-employment.md` -- industry landscape, offense-type matching, WI-first
+5. `legal-rights.md` -- ban-the-box, EEOC, illegal questions, WI specifics
+6. `resume-strategy.md` -- ATS, keyword mirroring, action verbs, quantification
+
+### P2 -- Research missions (send other AIs)
+7. `research/wisconsin-employment-law.md` -- WI expungement 973.015, Milwaukee BTB ordinance, certificates of relief
+8. `research/ban-the-box-current-state.md` -- 100+ jurisdictions, 2026 state
+9. `research/industry-hiring-by-offense.md` -- disqualifying vs. hireable by industry + offense type
+
+### P3 -- Platform fixes
+10. Forge → Refinery localStorage sync fix (server-side `/api/forge/save` at Forge completion)
+11. Wire research/ folder into skill loader (so integrated research briefs auto-load by page)
+12. SMR A2P Twilio registration (separate from TMG -- approved 2026-06-08)
+
+---
+
+## Reference: All Commits This Session
 
 ```
 992af08  refinery: disclosure planner UX overhaul + journey progress banner
 a5d5d19  refinery: fix unlock gates + add progressive tool reveal
 a15e856  refinery: job descriptions + resume tailoring transparency + unlock root fix
+159c6af  docs: verbose session handoff for intelligence architecture pivot
+3fb8701  refinery: intelligence layer -- t.ROY now sees the user's full journey
+ce474ee  refinery: career-narrative.md + inter-AI comms system + skill routing update
+[next]   refinery: research repository + handoff update
 ```
 
 ---
 
 ## Notes for Next Instance
 
-- Troy's admin account (troyrichardcarr@gmail.com) bypasses ALL gates. Use this for testing the full tool suite.
-- Dev test account (d3vt3st3rt.roy) needs Settings profile save before unlock works.
-- The skills library lives at `apps/consumer/lib/skills/` -- add new files there.
-- The context-library.ts at `apps/consumer/lib/context-library.ts` is where skills get loaded -- next instance should extend it.
-- Troy wants the platform to be "nearly god-like" in intelligence. The skill files are the foundation. Write them at the level of a best-in-class domain expert, not a Wikipedia summary. Troy's personal coaching frameworks go in first, then layer research and best practices.
-- Troy's principle: "Just giving somebody a perfect anything is never enough. That person has to own it." Every skill file should encode coaching methodology (Socratic, ownership-building) not just content delivery.
-- Never use em dashes. Double hyphens (--) only.
-- Never use emojis in professional content.
-- "Justice-impacted" -- never "second-chance," "ex-con," "felon," "offender."
+**Read first**: `apps/consumer/lib/skills/ai-comms/PROTOCOL.md` -- it has the full doctrine index, platform quick reference, and t.ROY never-do list. Then the most recent log entry in `ai-comms/log/`.
+
+**Troy's standing rules**:
+- Atomic commits per feature, never accumulate
+- Never use em dashes -- double hyphens (--)
+- Never use emojis in professional content
+- "Justice-impacted" always
+- Deploy = `git push origin main`
+- Admin account: troyrichardcarr@gmail.com (god mode, bypasses all gates)
+- Dev test: d3vt3st3rt.roy@gmail.com / D3vt3st3rt.r0y1!2@3#
+
+**What Troy cares about most**: The intelligence of the platform. Quality over speed on skill files. The skills library is the domain expertise that makes t.ROY feel like Troy's voice, not a chatbot. Each skill file should be written at the level of a best-in-class practitioner -- Troy's doctrine first, research second.
+
+**The ownership doctrine** (Troy's core principle, non-negotiable): A perfect anything given to someone who doesn't own it fails. Every skill file must encode coaching methodology that builds ownership, not content delivery that bypasses it.
