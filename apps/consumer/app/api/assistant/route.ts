@@ -16,6 +16,7 @@ import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt } from "@/lib/sanitize";
+import { MODEL_CHAT } from "@/lib/ai/models";
 import fs from "fs";
 import path from "path";
 import {
@@ -59,16 +60,30 @@ function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string 
   if (files.length === 0) return "";
 
   const sections: string[] = [];
+  const missing: string[] = [];
   for (const file of files) {
     const filePath = path.join(SKILLS_DIR, file);
     try {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, "utf-8");
         sections.push(`\n\n## SKILL LIBRARY: ${file.replace(".md", "").toUpperCase().replace(/-/g, " ")}\n\n${content}`);
+      } else {
+        missing.push(file);
       }
-    } catch {
-      // Non-fatal -- skill files are enhancements, not required
+    } catch (err) {
+      missing.push(file);
+      console.error(`[skills] read failed for ${file}:`, err instanceof Error ? err.message : err);
     }
+  }
+
+  // Loud, not silent: if the doctrine files are not on disk in production, the
+  // whole intelligence layer is coaching blind. Surface it in the runtime logs
+  // instead of returning "" as if nothing was expected.
+  if (missing.length > 0) {
+    console.error(
+      `[skills] MISSING ${missing.length}/${files.length} skill file(s) under ${SKILLS_DIR}: ${missing.join(", ")}. ` +
+        `t.ROY is coaching WITHOUT this doctrine -- check next.config outputFileTracingIncludes.`
+    );
   }
 
   return sections.join("\n");
@@ -149,11 +164,17 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
   const startTime = Date.now();
 
+  // Depth on demand: client coaching stays text-message short (the format rules
+  // still cap it), but partner/observer evidence mode needs room for full
+  // citations. A flat 200 truncated those answers mid-citation.
+  const responseMaxTokens =
+    context.audience === "observer" || context.audience === "partner" ? 1200 : 400;
+
   const result = streamText({
-    model: anthropic("claude-sonnet-4-20250514"),
+    model: anthropic(MODEL_CHAT),
     system: systemPrompt,
     messages,
-    maxTokens: 200,
+    maxTokens: responseMaxTokens,
     temperature: 0.7,
     async onFinish({ text, usage }) {
       const latencyMs = Date.now() - startTime;
@@ -165,7 +186,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
           sessionId: sessionId ?? null,
           contextPage: context.currentPage,
           modelProvider: "anthropic",
-          modelId: "claude-sonnet-4-20250514",
+          modelId: MODEL_CHAT,
           input: messages[messages.length - 1]?.content ?? "",
           explanation: `Assistant responded on ${context.currentPage} page. ${
             context.readinessStage

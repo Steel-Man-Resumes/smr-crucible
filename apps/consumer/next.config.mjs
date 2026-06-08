@@ -1,6 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@crucible/core", "@crucible/consumer-ui"],
+  // The assistant route reads skill/doctrine .md files at runtime via fs. They
+  // are NOT imported anywhere, so Next's file tracer has no static reference and
+  // will not bundle them into the serverless function -- t.ROY then silently
+  // loads zero doctrine in production (it works in local dev only because cwd
+  // happens to have the files). Force them into the Lambda. See lib/skills/.
+  experimental: {
+    outputFileTracingIncludes: {
+      "/api/assistant": ["./lib/skills/**/*"],
+    },
+  },
   webpack: (config) => {
     // Worker-only deps in @crucible/core — not used by consumer app
     // tesseract.js not installed — handled gracefully at runtime
