@@ -32,10 +32,16 @@ export async function POST(req: Request) {
 
   const client = await pool.connect();
   try {
-    await client.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
-      hash,
-      session.user.id,
-    ]);
+    const result = await client.query(
+      `UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id`,
+      [hash, session.user.id]
+    );
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: "Could not save password. Please sign out and sign in again." },
+        { status: 404 }
+      );
+    }
   } finally {
     client.release();
   }
