@@ -56,6 +56,7 @@ interface EnrichedJob {
   location: string;
   salary: string | null;
   description: string;
+  full_description: string;
   requirements: string[];
   benefits: string[];
   employment_type: string;
@@ -217,6 +218,7 @@ async function fetchCareerOneStopJobs(
         location: j.Location || location,
         salary: null,
         description: "",
+        full_description: "",
         requirements: [],
         benefits: [],
         employment_type: "",
@@ -252,6 +254,7 @@ async function enrichJobsWithAI(
       location: [j.job_city, j.job_state].filter(Boolean).join(", "),
       salary,
       description: truncateDescription(j.job_description, 200),
+      full_description: truncateDescription(j.job_description, 2000),
       requirements: j.job_highlights?.Qualifications?.slice(0, 3) ?? [],
       benefits: j.job_highlights?.Benefits?.slice(0, 3) ?? [],
       employment_type: j.job_employment_type || "Full-time",

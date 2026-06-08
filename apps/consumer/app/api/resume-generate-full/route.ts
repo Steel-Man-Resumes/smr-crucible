@@ -120,7 +120,13 @@ Return this exact JSON structure:
       "year": "2020"
     }
   ],
-  "skills": ["skill1", "skill2", "skill3"]
+  "skills": ["skill1", "skill2", "skill3"],
+  "tailoring_notes": [
+    "Plain-language note about what we specifically changed or emphasized for this job -- max 4 notes",
+    "Reference the user's actual strengths/skills when relevant -- 'Your leadership background anchors bullet 1'",
+    "Note any job-specific language we incorporated -- 'Used their term: distribution operations'",
+    "Keep each note under 15 words. No corporate speak."
+  ]
 }
 
 ABSOLUTE RULES:
@@ -194,7 +200,7 @@ ${contactName || "Candidate"}`;
         targetJob: job.title || "",
         targetCompany: job.company || "",
         jobListingUrl: "",
-        createdFrom: "forge" as const,
+        createdFrom: "job" as const,
       },
       contact: {
         name: contact?.name || "",
@@ -297,7 +303,11 @@ ${contactName || "Candidate"}`;
       console.error("Decision log failed (career-package):", err);
     }
 
-    return NextResponse.json({ resume, coverLetter: coverLetterText, disclosureBrief });
+    const tailoringNotes: string[] = Array.isArray(parsed.tailoring_notes)
+      ? parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4)
+      : [];
+
+    return NextResponse.json({ resume, coverLetter: coverLetterText, disclosureBrief, tailoringNotes });
   } catch (error: any) {
     console.error("Career package generation error:", error);
     return NextResponse.json(

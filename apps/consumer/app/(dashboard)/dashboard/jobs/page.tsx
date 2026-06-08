@@ -25,6 +25,7 @@ interface EnrichedJob {
   location: string;
   salary: string | null;
   description: string;
+  full_description?: string;
   requirements: string[];
   benefits: string[];
   employment_type: string;
@@ -582,9 +583,14 @@ function JobBoardPage() {
                     </div>
 
                     {/* Full description */}
-                    <p className="text-sm text-foreground leading-relaxed">
-                      {job.description}
-                    </p>
+                    <div className="text-sm text-foreground leading-relaxed space-y-2">
+                      {(job.full_description || job.description)
+                        .split(/\n{2,}/)
+                        .filter(Boolean)
+                        .map((para, i) => (
+                          <p key={i}>{para.trim()}</p>
+                        ))}
+                    </div>
 
                     {/* Fair chance reason */}
                     {job.fair_chance_reason && (

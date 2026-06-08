@@ -66,6 +66,7 @@ export function ResumeWorkspace() {
   // Full resume generation (from job board)
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [tailoringNotes, setTailoringNotes] = useState<string[]>([]);
 
   // The saved job application this resume is being tailored for, if any. When
   // set, the saved resume artifact is linked to it (Stage 3 journey gate).
@@ -286,7 +287,8 @@ export function ResumeWorkspace() {
             job: {
               title: job.title,
               company: job.company,
-              description: job.description,
+              // Use full description if available for better tailoring
+              description: (job as any).full_description || job.description,
               requirements: job.requirements,
             },
             contact: contactInfo,
@@ -300,10 +302,11 @@ export function ResumeWorkspace() {
           throw new Error(errData.error || "Generation failed");
         }
 
-        const { resume, coverLetter, disclosureBrief: brief } = await res.json();
+        const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes } = await res.json();
         setDoc(resume as ResumeDocument);
         if (coverLetter) setCoverLetterText(coverLetter);
         if (brief) setDisclosureBrief(brief);
+        if (notes?.length) setTailoringNotes(notes);
         setPackageTab("resume");
         setGeneratingFull(false);
 
@@ -866,6 +869,31 @@ ${bodyHtml}
           </button>
         </div>
       </div>
+
+      {/* What we tailored for this job */}
+      {tailoringNotes.length > 0 && (
+        <div className="mb-4 bg-sage-50 rounded-xl border border-sage-200 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-sage-600 flex-shrink-0">
+              <path d="M8 1l2 4.5H15l-4 3 1.5 5L8 11 3.5 13.5 5 8.5 1 5.5h5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+            <span className="text-xs font-bold text-sage-800 uppercase tracking-wider">
+              What we tailored for this job
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {tailoringNotes.map((note, i) => (
+              <li key={i} className="text-xs text-sage-700 flex gap-2">
+                <span className="text-sage-400 flex-shrink-0">--</span>
+                {note}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-sage-600 mt-2 italic">
+            Use these points in your disclosure and interview prep -- they are where your profile and this job connect.
+          </p>
+        </div>
+      )}
 
       {/* Career Package tabs — shown when cover letter or disclosure brief exists */}
       {(coverLetterText || disclosureBrief) && (
