@@ -49,6 +49,11 @@ const GOAL_OPTIONS = [
     label: "Give back to my community",
     description: "I've been through it — I want to help others who are too.",
   },
+  {
+    id: "flexibility",
+    label: "I need a flexible schedule",
+    description: "Appointments, family, programs. My job has to work around my life.",
+  },
 ];
 
 export default function GoalsPage() {

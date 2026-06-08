@@ -615,12 +615,61 @@ export default function OutputPage() {
         )}
       </section>
 
-      {/* Actions */}
-      <section className="border-t border-border pt-8 mb-8">
+      {/* What's next -- journey explainer + CTA */}
+      <section className="border-t border-border pt-8">
+
+        {/* 3-step journey indicator */}
+        <div className="flex items-center gap-1 mb-6">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-6 h-6 rounded-full bg-sage-600 flex items-center justify-center flex-shrink-0">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <span className="text-xs font-semibold text-sage-700 whitespace-nowrap">The Forge</span>
+          </div>
+          <div className="flex-1 h-px bg-sage-300 mx-1" />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-6 h-6 rounded-full border-2 border-sage-600 text-sage-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">2</div>
+            <span className="text-xs font-semibold text-foreground whitespace-nowrap">Create account</span>
+          </div>
+          <div className="flex-1 h-px bg-border mx-1" />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-6 h-6 rounded-full border-2 border-border text-muted flex items-center justify-center flex-shrink-0 text-xs font-bold">3</div>
+            <span className="text-xs font-semibold text-muted whitespace-nowrap">The Refinery</span>
+          </div>
+        </div>
+
+        {/* Journey explanation */}
+        <div className="bg-sage-50 rounded-2xl p-6 border border-sage-200 mb-4">
+          <h3 className="font-bold text-foreground text-lg mb-3 leading-snug">
+            You&apos;re done with this part. You won&apos;t come back here.
+          </h3>
+          <p className="text-sm text-muted leading-relaxed mb-3">
+            When you create your free account, everything you just built is automatically
+            waiting in The Refinery: your resume, your career narrative, your strengths,
+            your documents -- all pre-loaded, nothing to re-enter.
+          </p>
+          <p className="text-sm text-muted leading-relaxed">
+            The Refinery is where the real work happens. Target your resume for specific jobs,
+            practice interview questions, plan your disclosure strategy, and browse a job board
+            filtered for fair-chance employers -- all built on what you just created here.
+          </p>
+        </div>
+
+        {/* Primary CTA */}
+        <button
+          onClick={() => router.push("/login?from=forge")}
+          className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-semibold text-base hover:bg-sage-700 transition-colors min-h-touch mb-2"
+        >
+          {rc.refineryCta}
+        </button>
+        <p className="text-xs text-muted text-center mb-6">{rc.refinerySubtext}</p>
+
+        {/* Secondary: downloads */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => {
-              // Download analysis as text file
               const text = formatOutputAsText(output, narrative);
               const blob = new Blob([text], { type: "text/plain" });
               const url = URL.createObjectURL(blob);
@@ -630,36 +679,11 @@ export default function OutputPage() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="flex-1 px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+            className="flex-1 px-4 py-3 bg-white border border-border text-muted rounded-xl text-sm font-medium hover:border-sage-300 hover:text-foreground transition-colors"
           >
-            Download Analysis
-          </button>
-          <button
-            onClick={() => router.push("/login?from=forge")}
-            className="flex-1 px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-          >
-            {rc.refineryCta}
+            Download analysis (.txt)
           </button>
         </div>
-      </section>
-
-      {/* Post-value account creation -- readiness-aware CTA */}
-      <section className="bg-sage-50 rounded-2xl p-6 border border-sage-200 text-center">
-        <h3 className="font-semibold text-foreground mb-2">
-          {rc.refineryHeading}
-        </h3>
-        <p className="text-sm text-muted mb-4 max-w-md mx-auto">
-          {rc.refineryBody}
-        </p>
-        <button
-          onClick={() => router.push("/login?from=forge")}
-          className="px-8 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-        >
-          {rc.refineryCta}
-        </button>
-        <p className="text-xs text-muted mt-3">
-          {rc.refinerySubtext}
-        </p>
       </section>
     </main>
   );

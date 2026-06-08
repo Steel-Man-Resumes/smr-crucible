@@ -85,7 +85,7 @@ function WelcomePageInner() {
   const searchParams = useSearchParams();
   const { session, updateSession, clearSession } = useForgeSession();
 
-  const isDemo = searchParams.get("demo") === "true" || session.isDemo === true;
+  const isDemo = searchParams.get("demo") === "true";
   const audience = session.audience || "client";
 
   const [selected, setSelected] = useState<string>(
@@ -96,7 +96,11 @@ function WelcomePageInner() {
   const [acknowledged, setAcknowledged] = useState(false);
 
   // Track page visit + set demo mode from URL param
+  // Also clear stale demo sessions when arriving in real (non-demo) mode
   useEffect(() => {
+    if (searchParams.get("demo") !== "true" && session.isDemo) {
+      clearSession();
+    }
     const updates: Partial<typeof session> = {
       lastPageVisited: "welcome",
       pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "welcome"])),
