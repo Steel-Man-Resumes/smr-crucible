@@ -143,8 +143,16 @@ function LoginForm() {
         setSending(false);
         return;
       }
+      // New accounts with no Forge data go to /intro, not /dashboard
+      const createCallback = (() => {
+        try {
+          const s = localStorage.getItem("forge_session");
+          const session = s ? JSON.parse(s) : null;
+          return session?.forgeOutput ? callbackUrl : "/intro";
+        } catch { return "/intro"; }
+      })();
       const result = await signIn("password-login", {
-        email: email.trim(), password, callbackUrl, redirect: false,
+        email: email.trim(), password, callbackUrl: createCallback, redirect: false,
       });
       if (result?.error) {
         setError("Account created. Try signing in.");
@@ -332,31 +340,34 @@ function LoginForm() {
           </button>
         </form>
 
-        {/* Mode switchers */}
-        <div className="mt-6 space-y-3 text-center">
+        {/* Mode switchers — one clear secondary action per mode */}
+        <div className="mt-6 text-center space-y-2">
           {mode === "sign-in" && (
             <>
-              <button
-                type="button"
-                onClick={() => { window.location.href = `/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`; }}
-                className="text-xs text-muted hover:text-sage-600 transition-colors block mx-auto"
-              >
-                Forgot password? Reset it by email
-              </button>
-              <button
-                type="button"
-                onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
-                className="text-xs text-muted hover:text-sage-600 transition-colors block mx-auto"
-              >
-                No password? Send a magic sign-in link
-              </button>
               <button
                 type="button"
                 onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
                 className="text-sm text-sage-600 hover:text-sage-700 transition-colors block mx-auto"
               >
-                New here? Create an account
+                New here? Create a free account
               </button>
+              <div className="flex items-center justify-center gap-3 text-xs text-muted">
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = `/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`; }}
+                  className="hover:text-sage-600 transition-colors"
+                >
+                  Forgot password?
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
+                  className="hover:text-sage-600 transition-colors"
+                >
+                  Email me a sign-in link
+                </button>
+              </div>
             </>
           )}
 
@@ -373,17 +384,7 @@ function LoginForm() {
           {mode === "magic-link" && (
             <>
               <p className="text-xs text-muted">
-                We&apos;ll email you a one-time sign-in link. This signs you in,
-                but it does not change your password.
-              </p>
-              <p className="text-xs text-muted">
-                Need a new password?{" "}
-                <Link
-                  href={`/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
-                  className="text-sage-600 hover:text-sage-700 font-medium"
-                >
-                  Reset it here.
-                </Link>
+                We&apos;ll email a one-time link. It signs you in without changing your password.
               </p>
               <button
                 type="button"
@@ -394,40 +395,6 @@ function LoginForm() {
               </button>
             </>
           )}
-        </div>
-
-        {/* Ways to sign in — always visible */}
-        <div className="mt-8 pt-6 border-t border-border">
-          <p className="text-xs text-muted text-center mb-3 font-medium">Ways to sign in</p>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <button
-              type="button"
-              onClick={() => { setMode("sign-in"); setError(""); }}
-              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
-                mode === "sign-in" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
-              }`}
-            >
-              Password
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
-              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
-                mode === "magic-link" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
-              }`}
-            >
-              Magic Link
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
-              className={`text-xs py-2 px-2 rounded-lg transition-colors ${
-                mode === "create" ? "bg-sage-100 text-sage-700 font-medium" : "text-muted hover:bg-gray-50"
-              }`}
-            >
-              New Account
-            </button>
-          </div>
         </div>
 
         {isDev && (
