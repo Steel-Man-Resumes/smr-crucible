@@ -34,19 +34,26 @@ const SKILLS_DIR = path.join(process.cwd(), "lib", "skills");
 function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string {
   const files: string[] = [];
 
-  // Disclosure page always gets the full disclosure coaching file
+  // Career narrative is the philosophical foundation -- load on dashboard + narrative-heavy pages
+  if (["dashboard", "output", "jobs", "resume-builder"].includes(page)) {
+    files.push("career-narrative.md");
+  }
+
+  // Disclosure page gets full disclosure coaching + career narrative (they're deeply connected)
   if (page === "disclosure" || page === "disclosure-rehearsal") {
     files.push("disclosure-coaching.md");
+    files.push("career-narrative.md");
   }
 
-  // Interview prep also gets disclosure coaching (same doctrine applies)
+  // Interview prep gets both (disclosure doctrine + narrative arc both apply)
   if (page === "interview") {
     files.push("disclosure-coaching.md");
+    files.push("career-narrative.md");
   }
 
-  // Justice-impacted users get disclosure context on resume + dashboard pages too
-  if (hasCriminalRecord && (page === "dashboard" || page === "resume-builder" || page === "jobs")) {
-    files.push("disclosure-coaching.md");
+  // Justice-impacted users get disclosure context on resume + overview pages too
+  if (hasCriminalRecord && (page === "dashboard" || page === "resume-builder")) {
+    if (!files.includes("disclosure-coaching.md")) files.push("disclosure-coaching.md");
   }
 
   if (files.length === 0) return "";
