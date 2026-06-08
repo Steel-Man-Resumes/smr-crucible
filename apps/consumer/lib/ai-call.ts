@@ -3,21 +3,25 @@
  *
  * Troy's locked decision (2026-06-07): coaching/generation quality comes from
  * Anthropic, with OpenAI as a resilience fallback (the same failover doctrine
- * used across t.ROY). Primary: claude-sonnet-4-6. Fallback: gpt-4o.
+ * used across t.ROY). Default model: MODEL_CHAT (Sonnet 4.6). Fallback: gpt-4o.
  *
  * The single switch point for all 8 consumer AI routes -- callers use callAI()
- * unchanged. MOCK_AI is handled upstream in the routes (mock-ai.ts), so this
- * helper is only reached on real calls.
+ * unchanged. A caller may pass an explicit `model` (e.g. MODEL_DEEP for the
+ * high-stakes one-shot synthesis routes) without changing any other call site.
+ * MOCK_AI is handled upstream in the routes (mock-ai.ts), so this helper is only
+ * reached on real calls.
  *
  * AI_PROVIDER / AI_MODEL are the decision-log labels for the PRIMARY path. On a
  * fallback to OpenAI the underlying call differs from these labels; that is the
  * rare exception path and is logged to the server console.
  */
 
+import { MODEL_CHAT, FALLBACK_CHAT } from "./ai/models";
+
 export const AI_PROVIDER = "anthropic";
-export const AI_MODEL = "claude-sonnet-4-6";
+export const AI_MODEL = MODEL_CHAT;
 export const AI_FALLBACK_PROVIDER = "openai";
-export const AI_FALLBACK_MODEL = "gpt-4o";
+export const AI_FALLBACK_MODEL = FALLBACK_CHAT;
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -26,14 +30,15 @@ type Msg = { role: string; content: string };
 async function callAnthropic(
   system: string,
   messages: Msg[],
-  maxTokens: number
+  maxTokens: number,
+  model: string
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
   // Anthropic takes `system` as a top-level field; messages must be user/assistant only.
   const body = {
-    model: AI_MODEL,
+    model,
     max_tokens: maxTokens,
     ...(system ? { system } : {}),
     messages: messages
@@ -103,14 +108,15 @@ async function callOpenAI(
 export async function callAI(
   system: string,
   messages: Msg[],
-  maxTokens = 2048
+  maxTokens = 2048,
+  model: string = AI_MODEL
 ): Promise<string> {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   if (hasAnthropic) {
     try {
-      return await callAnthropic(system, messages, maxTokens);
+      return await callAnthropic(system, messages, maxTokens, model);
     } catch (err) {
       if (!hasOpenAI) throw err;
       console.error(

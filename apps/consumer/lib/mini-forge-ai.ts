@@ -8,6 +8,7 @@
 
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "./mock-ai";
 import { RESEARCH_CONTEXT } from "./research-context";
+import { MODEL_FAST } from "./ai/models";
 
 export interface MiniForgeIntake {
   readiness_stage?: string;
@@ -40,7 +41,7 @@ export async function processMiniForge(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: MODEL_FAST,
       max_tokens: 2048,
       system: MINI_FORGE_SYSTEM,
       messages: [{ role: "user", content: prompt }],
