@@ -21,6 +21,7 @@
 
 import { RESEARCH_CONTEXT } from "./research-context";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import type { UserFullContext } from "./use-user-context";
 
 export interface AssistantContext {
   /** Current page the user is on */
@@ -57,6 +58,8 @@ export interface AssistantContext {
   pagesCompleted?: string[];
   /** Whether user has Forge output */
   forgeComplete?: boolean;
+  /** Full user journey context from /api/user/context */
+  userFullContext?: UserFullContext | null;
 }
 
 function buildAudienceDirective(audience?: string): string {
@@ -298,6 +301,116 @@ PROACTIVE: Only help if asked. This is admin territory — don't be chatty.`,
   return parts.join("\n");
 }
 
+function labelOf(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const s = o.title ?? o.name ?? o.label;
+    if (typeof s === "string") return s;
+  }
+  return "";
+}
+
+function buildFullUserSection(ctx: UserFullContext): string {
+  const lines: string[] = [];
+
+  // Identity
+  const name = ctx.profile.name || "this user";
+  const loc = [ctx.profile.city, ctx.profile.state].filter(Boolean).join(", ");
+  lines.push(`## WHO YOU ARE TALKING TO RIGHT NOW`);
+  lines.push(`Name: ${name}${loc ? ` -- Location: ${loc}` : ""}`);
+  lines.push(`Journey stage: ${ctx.journey.onboardingState}${ctx.journey.disclosureComplete ? " + disclosure complete" : ""}`);
+
+  // Forge output
+  if (ctx.forge) {
+    lines.push(`\n### THEIR FORGE STORY`);
+    if (ctx.forge.headline) lines.push(`Headline: ${ctx.forge.headline}`);
+    if (ctx.forge.summary) lines.push(`Narrative: ${ctx.forge.summary.slice(0, 600)}`);
+    if (ctx.forge.readinessStage) lines.push(`Readiness: ${ctx.forge.readinessStage}`);
+
+    const strengths = ctx.forge.strengths.slice(0, 4);
+    if (strengths.length) {
+      lines.push(`Core strengths:`);
+      strengths.forEach((s) => {
+        if (typeof s === "object" && s !== null) {
+          const so = s as { title: string; evidence: string };
+          lines.push(`  -- ${so.title}: ${so.evidence}`);
+        }
+      });
+    }
+
+    const skills = ctx.forge.skills.slice(0, 8).map(labelOf).filter(Boolean);
+    if (skills.length) lines.push(`Skills: ${skills.join(", ")}`);
+
+    const paths = ctx.forge.careerPaths.slice(0, 4).map(labelOf).filter(Boolean);
+    if (paths.length) lines.push(`Career paths identified: ${paths.join(", ")}`);
+
+    if (ctx.forge.goals?.length) lines.push(`Goals: ${ctx.forge.goals.join(", ")}`);
+    if (ctx.forge.goalNarrative) lines.push(`In their own words: "${ctx.forge.goalNarrative.slice(0, 300)}"`);
+    if (ctx.forge.barriers?.length) lines.push(`Other barriers: ${ctx.forge.barriers.map((b) => b.replace(/_/g, " ")).join(", ")}`);
+    if (ctx.forge.hasCriminalRecord) lines.push(`Has a criminal record (do NOT name specifics in responses -- say "the situation you described")`);
+  }
+
+  // Resumes built
+  const jobResumes = ctx.resumes.filter((r) => r.createdFrom === "job");
+  if (ctx.resumes.length === 0) {
+    lines.push(`\n### WHAT THEY'VE BUILT\nNo resumes yet.`);
+  } else {
+    lines.push(`\n### WHAT THEY'VE BUILT`);
+    lines.push(`Resumes: ${ctx.resumes.length} total, ${jobResumes.length} job-targeted`);
+    ctx.resumes.slice(0, 3).forEach((r) => {
+      const job = r.targetJob || "untitled";
+      const co = r.targetCompany || "unknown company";
+      const age = r.createdAt ? Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000) : null;
+      lines.push(`  -- "${job}" at "${co}"${age !== null ? ` (${age === 0 ? "today" : `${age}d ago`})` : ""}`);
+    });
+    const latest = ctx.resumes[0];
+    if (latest?.targetJob) lines.push(`Most recent target: ${latest.targetJob}${latest.targetCompany ? ` at ${latest.targetCompany}` : ""}`);
+  }
+
+  // Disclosure plan
+  if (ctx.disclosurePlan.exists) {
+    lines.push(`\n### DISCLOSURE PLAN`);
+    if (ctx.disclosurePlan.targetJob) lines.push(`Plan built for: ${ctx.disclosurePlan.targetJob}`);
+    if (ctx.disclosurePlan.timingAdvice) lines.push(`Timing advice: ${ctx.disclosurePlan.timingAdvice}`);
+    if (ctx.disclosurePlan.scriptExcerpt) lines.push(`Script opening: "${ctx.disclosurePlan.scriptExcerpt.slice(0, 200)}..."`);
+    lines.push(`Status: plan exists -- has the user practiced out loud? That's the next question.`);
+  } else if (ctx.journey.onboardingState === "full_access") {
+    lines.push(`\n### DISCLOSURE PLAN\nNot built yet -- this is the next important step.`);
+  }
+
+  // Applications pipeline
+  if (ctx.applications.length > 0) {
+    lines.push(`\n### APPLICATIONS IN PIPELINE`);
+    ctx.applications.forEach((a) => {
+      lines.push(`  -- ${a.company} (${a.role}): ${a.status}${a.resumeTailored ? ", resume tailored" : ", no tailored resume yet"}`);
+    });
+  }
+
+  // Interview practice
+  if (ctx.journey.interviewSessionCount === 0 && ctx.journey.disclosureComplete) {
+    lines.push(`\n### COACHING NOTE\nDisclosure plan is built but interview practice hasn't started. That's the critical gap -- the script means nothing until they've said it out loud under pressure.`);
+  } else if (ctx.journey.interviewSessionCount > 0) {
+    lines.push(`\n### INTERVIEW PRACTICE\n${ctx.journey.interviewSessionCount} practice session(s) completed.`);
+  }
+
+  // What they haven't done (proactive coaching intelligence)
+  const gaps: string[] = [];
+  if (!ctx.journey.forgeComplete) gaps.push("Forge not completed -- no narrative or skills baseline yet");
+  if (ctx.journey.onboardingState === "needs_profile") gaps.push("Profile (name + phone) not saved");
+  if (ctx.journey.onboardingState === "needs_resume") gaps.push("No job-targeted resume built yet");
+  if (ctx.journey.onboardingState === "full_access" && !ctx.journey.disclosureComplete) gaps.push("Disclosure plan not built -- this is high-leverage work");
+  if (ctx.journey.disclosureComplete && ctx.journey.interviewSessionCount === 0) gaps.push("Disclosure plan built but never practiced out loud");
+  if (ctx.journey.applicationCount === 0 && ctx.journey.onboardingState === "full_access") gaps.push("No applications submitted yet");
+
+  if (gaps.length) {
+    lines.push(`\n### WHAT THEY HAVEN'T DONE YET`);
+    gaps.forEach((g) => lines.push(`  -- ${g}`));
+  }
+
+  return lines.join("\n");
+}
+
 export function buildSystemPrompt(context: AssistantContext): string {
   return `You are t.ROY — the AI assistant for Steel Man Resumes. You're not a chatbot. You're Troy's voice in digital form. Your name is "t.ROY" (little t, big ROY) — spoken aloud it sounds like "little teeroy." Troy built a smaller version of himself to be here when he can't be.
 
@@ -394,16 +507,11 @@ ${context.isDemo ? `\nDEMO MODE ACTIVE: The user is watching a demo walkthrough 
 
 ## PSYCHIC AWARENESS
 
-You are NOT a generic chatbot waiting for questions. You KNOW this user's journey. You know what page they're on, what they've entered, what they haven't done yet, and what they're probably feeling.
+You are NOT a generic chatbot waiting for questions. You know this user's entire journey -- what they've built, what they haven't touched, what the gaps are, and what the next move is. Act on it.
 
-Act on what you know:
-- If they have a resume with warehouse experience, reference it: "Your warehouse background actually maps to logistics, supply chain, and operations management roles."
-- If they disclosed a criminal record and are in a specific location, know the relevant ban-the-box laws.
-- If they selected "stability" as a goal and have a family, connect those dots.
-- If they've completed 5 pages, acknowledge their progress: "You've done a lot of work here. Most people don't get this far."
-- If they're on the story page and haven't typed anything yet, they might be hesitant. Don't push — just be there.
+NEVER wait to be asked something obvious. If someone opens the chat on the resume page, don't say "How can I help?" -- say something specific about what you see in their journey.
 
-NEVER wait to be asked something obvious. If someone opens the chat on the resume page, don't say "How can I help?" — say something useful about what they're doing RIGHT NOW.
+${context.userFullContext ? buildFullUserSection(context.userFullContext) : "No full context loaded -- work from current page signals only."}
 
 ## FORMAT — THIS IS CRITICAL
 - MAXIMUM 2-3 sentences per response. Think text message, not email.

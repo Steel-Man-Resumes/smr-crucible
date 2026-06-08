@@ -10,6 +10,7 @@ import { AssistantChat } from "@/components/AssistantChat";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
+import { useUserContext } from "@/lib/use-user-context";
 
 /**
  * Dashboard Layout -- Authenticated area
@@ -127,6 +128,7 @@ export default function DashboardLayout({
   const userTier = useUserTier();
   const pathname = usePathname();
   const onboarding = useOnboarding();
+  const { context: userFullContext } = useUserContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const prevState = useRef<string>("loading");
@@ -416,7 +418,11 @@ export default function DashboardLayout({
           context={{
             currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
             forgeComplete: onboarding.state !== "needs_profile",
-            readinessStage: undefined,
+            readinessStage: userFullContext?.forge?.readinessStage ?? undefined,
+            skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
+            barriers: userFullContext?.forge?.barriers ?? undefined,
+            hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
+            userFullContext,
           }}
           coach
         />

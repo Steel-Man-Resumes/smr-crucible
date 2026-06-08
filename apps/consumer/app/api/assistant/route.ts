@@ -16,6 +16,8 @@ import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt } from "@/lib/sanitize";
+import fs from "fs";
+import path from "path";
 import {
   getUserDailyLimit,
   incrementUserUsage,
@@ -24,6 +26,46 @@ import {
 } from "@crucible/core";
 
 export const maxDuration = 30;
+
+const SKILLS_DIR = path.join(process.cwd(), "lib", "skills");
+
+// Maps pages + states to the skill files most relevant for that context.
+// Files are loaded once per request, never cached across requests (content evolves).
+function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string {
+  const files: string[] = [];
+
+  // Disclosure page always gets the full disclosure coaching file
+  if (page === "disclosure" || page === "disclosure-rehearsal") {
+    files.push("disclosure-coaching.md");
+  }
+
+  // Interview prep also gets disclosure coaching (same doctrine applies)
+  if (page === "interview") {
+    files.push("disclosure-coaching.md");
+  }
+
+  // Justice-impacted users get disclosure context on resume + dashboard pages too
+  if (hasCriminalRecord && (page === "dashboard" || page === "resume-builder" || page === "jobs")) {
+    files.push("disclosure-coaching.md");
+  }
+
+  if (files.length === 0) return "";
+
+  const sections: string[] = [];
+  for (const file of files) {
+    const filePath = path.join(SKILLS_DIR, file);
+    try {
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, "utf-8");
+        sections.push(`\n\n## SKILL LIBRARY: ${file.replace(".md", "").toUpperCase().replace(/-/g, " ")}\n\n${content}`);
+      }
+    } catch {
+      // Non-fatal -- skill files are enhancements, not required
+    }
+  }
+
+  return sections.join("\n");
+}
 
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";
@@ -76,7 +118,9 @@ export async function POST(request: Request) {
     return new Response("No context provided", { status: 400 });
   }
 
-  const baseSystemPrompt = buildSystemPrompt(context);
+  const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
+  const skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
+  const baseSystemPrompt = buildSystemPrompt(context) + skillsContext;
   const allowRoleplayOverride =
     !!userId &&
     context.currentPage === "disclosure-rehearsal" &&
