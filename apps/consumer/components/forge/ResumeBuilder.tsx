@@ -21,6 +21,7 @@ import {
 } from "@/components/resume/resumeModel";
 import { ResumeEditor } from "@/components/resume/ResumeEditor";
 import { printResumePdf } from "@/components/resume/resumePrint";
+import { ParserPreview } from "@/components/resume/ParserPreview";
 
 interface ResumeBuilderProps {
   initialDoc: ResumeDocument;
@@ -208,6 +209,9 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
           }
           actionsHint=".docx opens in Word. PDF keeps the formatting. Continue when it looks right -- we carry this through the rest of your Forge."
         />
+
+        {/* Parser preview -- "what a machine reads", the honest ATS view. */}
+        <ParserPreview doc={doc} />
 
         {/* User Readiness -- a coaching checklist, never a score (doctrine). */}
         <div className="mt-8 bg-white border border-border rounded-2xl p-5 max-w-2xl">
