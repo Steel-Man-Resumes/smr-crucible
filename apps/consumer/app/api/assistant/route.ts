@@ -17,8 +17,7 @@ import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt } from "@/lib/sanitize";
 import { MODEL_CHAT } from "@/lib/ai/models";
-import fs from "fs";
-import path from "path";
+import { loadSkillsForContext } from "@/lib/skills-loader";
 import {
   getUserDailyLimit,
   incrementUserUsage,
@@ -27,67 +26,6 @@ import {
 } from "@crucible/core";
 
 export const maxDuration = 30;
-
-const SKILLS_DIR = path.join(process.cwd(), "lib", "skills");
-
-// Maps pages + states to the skill files most relevant for that context.
-// Files are loaded once per request, never cached across requests (content evolves).
-function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string {
-  const files: string[] = [];
-
-  // Career narrative is the philosophical foundation -- load on dashboard + narrative-heavy pages
-  if (["dashboard", "output", "jobs", "resume-builder"].includes(page)) {
-    files.push("career-narrative.md");
-  }
-
-  // Disclosure page gets full disclosure coaching + career narrative (they're deeply connected)
-  if (page === "disclosure" || page === "disclosure-rehearsal") {
-    files.push("disclosure-coaching.md");
-    files.push("career-narrative.md");
-  }
-
-  // Interview prep gets both (disclosure doctrine + narrative arc both apply)
-  if (page === "interview") {
-    files.push("disclosure-coaching.md");
-    files.push("career-narrative.md");
-  }
-
-  // Justice-impacted users get disclosure context on resume + overview pages too
-  if (hasCriminalRecord && (page === "dashboard" || page === "resume-builder")) {
-    if (!files.includes("disclosure-coaching.md")) files.push("disclosure-coaching.md");
-  }
-
-  if (files.length === 0) return "";
-
-  const sections: string[] = [];
-  const missing: string[] = [];
-  for (const file of files) {
-    const filePath = path.join(SKILLS_DIR, file);
-    try {
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, "utf-8");
-        sections.push(`\n\n## SKILL LIBRARY: ${file.replace(".md", "").toUpperCase().replace(/-/g, " ")}\n\n${content}`);
-      } else {
-        missing.push(file);
-      }
-    } catch (err) {
-      missing.push(file);
-      console.error(`[skills] read failed for ${file}:`, err instanceof Error ? err.message : err);
-    }
-  }
-
-  // Loud, not silent: if the doctrine files are not on disk in production, the
-  // whole intelligence layer is coaching blind. Surface it in the runtime logs
-  // instead of returning "" as if nothing was expected.
-  if (missing.length > 0) {
-    console.error(
-      `[skills] MISSING ${missing.length}/${files.length} skill file(s) under ${SKILLS_DIR}: ${missing.join(", ")}. ` +
-        `t.ROY is coaching WITHOUT this doctrine -- check next.config outputFileTracingIncludes.`
-    );
-  }
-
-  return sections.join("\n");
-}
 
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";

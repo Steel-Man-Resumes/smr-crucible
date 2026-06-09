@@ -13,6 +13,8 @@ import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
 import { sanitizeForPrompt } from "@/lib/sanitize";
+import { loadSkillsForContext } from "@/lib/skills-loader";
+import { MODEL_CHAT } from "@/lib/ai/models";
 import {
   getUserProfile,
   buildCoachSystemPrompt,
@@ -24,7 +26,7 @@ import {
 
 export const maxDuration = 30;
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = MODEL_CHAT;
 const RATE_LIMIT_MESSAGE =
   "You've used all your free coach messages for today. Come back tomorrow, or enter a partner code in Settings for more.";
 
@@ -73,7 +75,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  const systemPrompt = buildCoachSystemPrompt(profile);
+  // Bring Troy's doctrine (disclosure + career-narrative) into the authenticated
+  // coach -- buildCoachSystemPrompt gives profile awareness; the skill files give
+  // the coaching methodology. currentPage rides in the chat body context.
+  const ctx = (body?.context ?? {}) as { currentPage?: string };
+  const page = typeof ctx.currentPage === "string" ? ctx.currentPage : "dashboard";
+  const hasCriminalRecord = profile.barriers.includes("criminal_record");
+  const skillsContext = loadSkillsForContext(page, hasCriminalRecord);
+  const systemPrompt = buildCoachSystemPrompt(profile) + skillsContext;
 
   // Persist the newest user turn for cross-session memory (latest message only).
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
