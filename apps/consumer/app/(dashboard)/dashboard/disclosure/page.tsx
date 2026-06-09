@@ -18,6 +18,7 @@ import { useSearchParams } from "next/navigation";
 import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
+import { useUserContext } from "@/lib/use-user-context";
 
 type PlannerStep = "assess" | "plan" | "rehearse";
 
@@ -111,6 +112,8 @@ function DisclosurePlannerPage() {
   const [recording, setRecording] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const { context } = useUserContext();
+  const forgeLoadedRef = useRef(false);
 
   // Auto-scroll chat to bottom on new messages
   useEffect(() => {
@@ -119,44 +122,48 @@ function DisclosurePlannerPage() {
     }
   }, [rehearsalMessages, rehearsing, step]);
 
-  // Load criminal record + Forge context from localStorage
+  // Load Forge context from the SERVER (not fragile cross-domain localStorage).
+  // Strengths/skills/career paths come from the user's saved Forge analysis; the
+  // record details stay user-entered and editable (and more private). Runs once
+  // when context first arrives so it never overwrites the user's own edits.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (!stored) return;
-      const session = JSON.parse(stored);
-
-      // Criminal record
-      if (session.criminalRecord) {
-        setRecord((prev) => ({ ...prev, ...session.criminalRecord }));
+    if (!context || forgeLoadedRef.current) return;
+    forgeLoadedRef.current = true;
+    const f = context.forge;
+    if (f) {
+      setForge({
+        headline: f.headline ?? undefined,
+        summary: f.summary ?? undefined,
+        strengths: (f.strengths ?? []).map((s) => ({
+          title: s.title,
+          evidence: s.evidence,
+        })),
+        skills: (f.skills ?? []).map((s) =>
+          typeof s === "string"
+            ? { name: s, category: "" }
+            : { name: s.name, category: s.category ?? "" }
+        ),
+        careerPaths: (f.careerPaths ?? []).map((c) =>
+          typeof c === "string"
+            ? { title: c, match_reason: "" }
+            : {
+                title: c.title,
+                industry: (c as any).industry,
+                match_reason: (c as any).match_reason ?? "",
+              }
+        ),
+      });
+      if (!targetJob && f.careerPaths?.length) {
+        const top = f.careerPaths[0];
+        setTargetJob(typeof top === "string" ? top : top.title);
       }
-
-      // State from location preference
-      if (session.preferences?.location) {
-        const stateMatch = session.preferences.location.match(/,\s*([A-Z]{2})\b/);
-        if (stateMatch) {
-          setRecord((prev) => ({ ...prev, state: stateMatch[1] }));
-        }
-      }
-
-      // Forge output: narrative, strengths, skills, career paths
-      if (session.forgeOutput) {
-        const o = session.forgeOutput;
-        setForge({
-          headline: o.narrative?.headline,
-          summary: o.narrative?.summary,
-          strengths: o.narrative?.strengths || [],
-          skills: o.skills || [],
-          careerPaths: o.career_paths || [],
-        });
-
-        // Pre-fill target job from top career path
-        if (o.career_paths?.[0]?.title) {
-          setTargetJob(o.career_paths[0].title);
-        }
-      }
-    } catch {}
-  }, []);
+    }
+    // Pre-fill state from the user's saved location (still editable).
+    if (context.profile?.state) {
+      setRecord((prev) => (prev.state ? prev : { ...prev, state: context.profile.state }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context]);
 
   // Load URL params (from dashboard CTA or disclosure brief)
   useEffect(() => {
