@@ -13,20 +13,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   type ResumeDocument,
   createEmptyResume,
-  scoreResume,
   formatResumeDownload,
   migrateLegacyResume,
 } from "./resumeModel";
 import { parseForgeToResume, parseRushToResume } from "./resumeParsers";
-import { ResumePreview } from "./ResumePreview";
-import { SectionWrapper } from "./SectionWrapper";
-import {
-  ContactSection,
-  SummarySection,
-  ExperienceSection,
-  EducationSection,
-  SkillsSection,
-} from "./sections";
+import { ResumeEditor } from "./ResumeEditor";
 
 interface SavedResume {
   id: string;
@@ -42,7 +33,6 @@ export function ResumeWorkspace() {
 
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
-  const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const [showSetup, setShowSetup] = useState(true);
 
   // Persistence
@@ -624,9 +614,6 @@ ${bodyHtml}
     router.replace("/dashboard/application-tailor", { scroll: false });
   }
 
-  // Scoring
-  const { overall, sections } = scoreResume(doc);
-
   // --- Full resume generation loading state ---
   if (generatingFull) {
     return (
@@ -1035,98 +1022,20 @@ ${bodyHtml}
         </div>
       )}
 
-      {/* Resume editor — only shown on resume tab */}
-      {packageTab !== "resume" ? null : <>
-
-      {/* Mobile toggle */}
-      <div className="flex gap-1 mb-4 lg:hidden bg-gray-100 p-1 rounded-lg">
-        <button
-          onClick={() => setMobileView("edit")}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-            mobileView === "edit"
-              ? "bg-white shadow-sm text-foreground"
-              : "text-muted"
-          }`}
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => setMobileView("preview")}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-            mobileView === "preview"
-              ? "bg-white shadow-sm text-foreground"
-              : "text-muted"
-          }`}
-        >
-          Preview ({overall}%)
-        </button>
-      </div>
-
-      {/* Split layout */}
-      <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6">
-        {/* Editor panel */}
-        <div
-          className={`space-y-3 ${mobileView === "preview" ? "hidden lg:block" : ""}`}
-        >
-          <SectionWrapper
-            score={sections.find((s) => s.section === "contact")!}
-            defaultOpen={!doc.contact.name}
-          >
-            <ContactSection doc={doc} update={updateDoc} />
-          </SectionWrapper>
-
-          <SectionWrapper
-            score={sections.find((s) => s.section === "summary")!}
-            defaultOpen={!doc.summary.trim()}
-          >
-            <SummarySection
-              doc={doc}
-              update={updateDoc}
-              onAiAssist={requestSummarySuggestion}
-              generating={generating}
-            />
-            {aiSuggestion && !doc.summary.trim() && (
-              <div className="mt-3 bg-sage-50 rounded-xl p-3 border border-sage-200">
-                <p className="text-sm text-foreground mb-2">{aiSuggestion}</p>
-                <p className="text-xs text-muted mb-2">
-                  Starting point. Edit it to sound like you.
-                </p>
-                <button
-                  onClick={() => {
-                    updateDoc((d) => ({ ...d, summary: aiSuggestion }));
-                    setAiSuggestion(null);
-                  }}
-                  className="text-sm text-sage-600 font-medium"
-                >
-                  Use this
-                </button>
-              </div>
-            )}
-          </SectionWrapper>
-
-          <SectionWrapper
-            score={sections.find((s) => s.section === "experience")!}
-            defaultOpen
-          >
-            <ExperienceSection doc={doc} update={updateDoc} />
-          </SectionWrapper>
-
-          <SectionWrapper
-            score={sections.find((s) => s.section === "education")!}
-          >
-            <EducationSection doc={doc} update={updateDoc} />
-          </SectionWrapper>
-
-          <SectionWrapper
-            score={sections.find((s) => s.section === "skills")!}
-            defaultOpen={doc.skills.length > 0}
-          >
-            <SkillsSection doc={doc} update={updateDoc} />
-          </SectionWrapper>
-
-          {/* Action bar -- sticky so it stays visible while editing */}
-          <div className="sticky bottom-0 bg-white border-t border-border pt-3 pb-3 -mx-1 px-1 mt-3">
-            <div className="flex flex-wrap gap-2 items-center">
+      {/* Resume editor -- only shown on resume tab */}
+      {packageTab !== "resume" ? null : (
+        <ResumeEditor
+          doc={doc}
+          onChange={updateDoc}
+          onSummaryAssist={requestSummarySuggestion}
+          summaryGenerating={generating}
+          summarySuggestion={aiSuggestion}
+          onUseSummarySuggestion={() => {
+            updateDoc((d) => ({ ...d, summary: aiSuggestion! }));
+            setAiSuggestion(null);
+          }}
+          actions={
+            <>
               <button
                 onClick={() => save(false)}
                 className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
@@ -1145,27 +1054,11 @@ ${bodyHtml}
               >
                 Save as PDF
               </button>
-            </div>
-            <p className="text-[11px] text-muted mt-1.5">
-              .docx = editable in Word. PDF = keeps the formatting exactly. Save both.
-            </p>
-          </div>
-        </div>
-
-        {/* Preview panel */}
-        <div
-          className={`${mobileView === "edit" ? "hidden lg:block" : ""}`}
-        >
-          <div className="lg:sticky lg:top-20">
-            <ResumePreview
-              doc={doc}
-              sections={sections}
-              overall={overall}
-            />
-          </div>
-        </div>
-      </div>
-      </>}
+            </>
+          }
+          actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."
+        />
+      )}
     </div>
   );
 }
