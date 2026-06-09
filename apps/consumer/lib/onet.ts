@@ -42,7 +42,7 @@ export async function getToolsForTitle(title: string): Promise<string[]> {
     // 1) Keyword search -> best-matching O*NET-SOC code.
     const searchRes = await fetch(
       `${ONET_BASE}/online/search?keyword=${encodeURIComponent(title.trim())}&end=1`,
-      { headers, signal: AbortSignal.timeout(5000) }
+      { headers, signal: AbortSignal.timeout(3000) }
     );
     if (!searchRes.ok) return [];
     const searchJson: any = await searchRes.json();
@@ -52,7 +52,7 @@ export async function getToolsForTitle(title: string): Promise<string[]> {
     // 2) Tools & technology for that occupation.
     const ttRes = await fetch(
       `${ONET_BASE}/online/occupations/${encodeURIComponent(code)}/details/tools_technology`,
-      { headers, signal: AbortSignal.timeout(5000) }
+      { headers, signal: AbortSignal.timeout(3000) }
     );
     if (!ttRes.ok) return [];
     const ttJson: any = await ttRes.json();
