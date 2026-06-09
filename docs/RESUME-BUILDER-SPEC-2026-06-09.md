@@ -135,3 +135,41 @@ Net effect: even a user who uploads a polished resume gets "we read it -- now le
 - **Models**: `lib/ai/models.ts` -- `MODEL_DEEP` for synthesis/assessment, never hardcode.
 - **Skills/doctrine**: `lib/skills/career-narrative/`; loaded via `lib/skills-loader.ts`. THE FOOTGUN: skill `.md` reach prod only via `next.config.mjs` `outputFileTracingIncludes` (per-route); verify `GET /api/health/skills` -> `{ok:true}`.
 - **Unified PDF pattern**: build HTML + `window.open().print()` with the Georgia/sage styling (already in disclosure/interview/vault).
+
+---
+
+## 11. LOCKED REVISION -- after external review (Troy + CC, 2026-06-09)
+
+An external research pass (ChatGPT, well-sourced) was assessed against this spec and the platform doctrine. Verdict: it **confirms the core thesis** ("add what they lack: truth-preserving narrative extraction from the user's real life") and contributes concrete mechanisms worth adopting. It was filtered hard to avoid feature/API bloat. **This section supersedes the phase content in section 8 and the open items in section 9; sections 1-7 and 10 stand.**
+
+### 11.1 Locked decisions (Troy, 2026-06-09)
+1. **Quality rubric = strength meter + readiness checklist.** Keep the existing completeness meter, reframed toward "Resume Strength" (ATS parse-safety, evidence density, no unsupported claims, length/structure). Render "User Readiness" as a COACHING CHECKLIST -- never a numeric grade (doctrine: not scored/graded).
+2. **Proof material = structured evidence only.** Store the bullet-workshop facts behind each bullet (what / tool-process / how often / how many / what improved) as resume evidence. Interview Practice regenerates talking points from it. NEVER store a free-form narrative or transcript (privacy doctrine).
+3. **O*NET is the one external API in MVP.** All others deferred or rejected (see 11.3).
+
+### 11.2 Gems adopted (folded into existing phases -- NO new phases)
+- **Truth gate (core principle):** no generated bullet ships without traceable evidence from what the user said/imported. Missing evidence -> the engine asks a question (progressive-intake), never invents. Enforced in the bullet workshop. [7.2/7.3]
+- **Bullet workshop:** weak -> strong via a fixed prompt set -- did what / tool-process-system / how often / how many (people, orders, shifts, units, dollars, hours) / what improved. The concrete form of "gold-mining." [7.3]
+- **O*NET memory-jogging (MVP):** map the user's job title -> O*NET-SOC, pull common tools/technology + tasks, use them to jog memory ("operators in your role often used RF scanners, pallet jacks, WMS -- did you?"). `lib/onet.ts` wrapper, server-side, **FAIL-OPEN** to AI-suggested tools if O*NET is down/unmatched. Needs an O*NET Web Services account -> env key (per-project, entered via nano -> Vercel; activation gate). [7.3]
+- **"Gather Your Info" recovery links (MVP):** in the Forge ingest/assess stage, surface IRS Wage & Income Transcript + The Work Number free Employment Data Report + Credly, for users who cannot recall employers/dates (verified free + actionable, June 2026). Treat IRS/Work Number as sensitive: link out, never store their reports. [7.2]
+- **User Readiness checklist:** can you explain every bullet? do you have a proof story? do you know why this resume fits this job? what is your next action (apply / revise / gather proof / pick a better-fit role)? [7.3/7.5]
+- **Interview handoff:** each bullet links to its structured proof evidence; Interview Practice consumes it. [7.5]
+- **Disclosure-safe guardrail:** the builder may FLAG a possible disclosure issue and route to the Disclosure Planner; it never writes disclosure into the resume. [7.2/7.3]
+- **Base -> version diff:** the Application Tailor shows "what changed and why" vs the base (sharpens the existing tailoringNotes). [Tailor]
+- **Parser preview:** show "what a machine reads from your resume" (name, contact, titles, employers, dates, skills, education, certs) instead of a fake ATS score. Honest + teaching. [7.5]
+- **JD structured extraction:** from a pasted posting, extract required/preferred skills, tools, certs, PHYSICAL requirements, SCHEDULE constraints, keywords -- via our own MODEL_DEEP (no paid API). Audience-aware (shift/physical work). [Tailor]
+- **ATS-safe (explicit) + TXT/plain-text export:** single-column, standard headings, no tables/graphics; we mostly meet this -- make it intentional and verified. Add plain-text export (reuse `formatResumeDownload`) alongside DOCX/PDF. [7.5]
+
+### 11.3 Out of scope for MVP (the anti-drift fence -- do NOT build these now)
+- External APIs other than O*NET: CareerOneStop, **Lightcast (rejected -- paid for prod + redundant with our AI)**, BLS OEWS, USAJOBS/federal resumes, ESCO/multilingual, Affinda/RChilli/Textkernel parsers (we already have `/api/parse`).
+- "Evidence bank" as a new DB subsystem -- realize the concept via the Forge base + `/api/user/context`.
+- Browser extension; a dedicated job tracker (we already have Applications); numeric "scores"; a separate "10-second recruiter view" widget.
+
+### 11.4 Revised phased plan (supersedes section 8)
+- **7.2 Forge builder spine** -- ingest (+ "Gather Your Info" recovery links) -> assess/triage -> extract -> build (`<ResumeEditor>`, done in 7.1) -> carry-forward. Standalone route, works pre-auth. Truth gate + disclosure-safe guardrail wired in. Rewire the dashboard `needs_resume` onboarding to the Forge builder; refocus the Application Tailor to assume a base resume.
+- **7.3 Extraction intelligence** -- the truth-gated bullet workshop, O*NET memory-jogging (fail-open), adaptive depth/triage ("most attention to those who need it most"), justice-impacted reframing (career-narrative skill), the User Readiness checklist.
+- **7.4 Dual surface** -- standalone route + public-site link-in + logged-out -> save/account; base resume feeds `/api/user/context` + the Tailor's default.
+- **7.5 Deliverable + connectedness** -- parser preview, TXT export + ATS-safe verified, base->version diff in the Tailor, interview handoff (bullet -> structured proof -> Interview Practice), fix the vault `toText` resume case, base-vs-tailored distinction in Materials.
+
+### 11.5 Differentiation (vendor/funder framing)
+Resume tools compete on workflow (Teal), ATS/output (Rezi, Jobscan), or templates (Kickresume). Forge/Refinery combines the useful parts -- JD-matching, clean ATS-safe output, versioning (we already have the job tracker + verified-employer matching) -- and adds what none of them center: **truth-preserving extraction from a real life**, plus **user readiness** (can they tell the story?). For justice-impacted users specifically: record-history recovery (IRS / The Work Number), gap reframing (anti-fragility as credential), and disclosure handled safely in its own lane.
