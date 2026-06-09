@@ -13,11 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
-import {
-  getCareerPaths,
-  getSkillNames,
-  getStrengthTitles,
-} from "@/lib/forge-output";
+import { useUserContext } from "@/lib/use-user-context";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -121,36 +117,40 @@ function InterviewPracticePage() {
     strengths: string[];
     narrative: string;
   } | null>(null);
+  const { context } = useUserContext();
+  const forgeLoadedRef = useRef(false);
 
-  // Load target role and context from Forge session
+  // Load target role + Forge context from the SERVER (not fragile cross-domain
+  // localStorage, which is empty on refinery.* for users whose Forge was saved
+  // server-side at signup). Runs once when context first arrives so it never
+  // overwrites the user's own edits or a role passed in via URL.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        const careerPaths = getCareerPaths(session.forgeOutput);
-        if (careerPaths[0]?.title) {
-          setConfig((prev) => ({
-            ...prev,
-            targetRole: careerPaths[0].title,
-          }));
-        }
-        const ctx: { skills: string[]; strengths: string[]; narrative: string } = {
-          skills: [],
-          strengths: [],
-          narrative: "",
-        };
-        ctx.skills = getSkillNames(session.forgeOutput, 10);
-        ctx.strengths = getStrengthTitles(session.forgeOutput, 6);
-        if (session.forgeOutput?.narrative?.summary) {
-          ctx.narrative = session.forgeOutput.narrative.summary;
-        }
-        if (ctx.skills.length || ctx.strengths.length || ctx.narrative) {
-          setForgeContext(ctx);
-        }
-      }
-    } catch {}
-  }, []);
+    if (!context || forgeLoadedRef.current) return;
+    forgeLoadedRef.current = true;
+    const f = context.forge;
+    if (!f) return;
+
+    const top = f.careerPaths?.[0];
+    const role = top ? (typeof top === "string" ? top : top.title) : "";
+    if (role) {
+      setConfig((prev) => (prev.targetRole ? prev : { ...prev, targetRole: role }));
+    }
+
+    const skills = (f.skills ?? [])
+      .map((s) => (typeof s === "string" ? s : s.name))
+      .filter(Boolean)
+      .slice(0, 10);
+    const strengths = (f.strengths ?? [])
+      .map((s) => s.title)
+      .filter(Boolean)
+      .slice(0, 6);
+    const narrative = f.summary ?? "";
+
+    if (skills.length || strengths.length || narrative) {
+      setForgeContext({ skills, strengths, narrative });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context]);
 
   // Load URL params (from dashboard CTA)
   useEffect(() => {
