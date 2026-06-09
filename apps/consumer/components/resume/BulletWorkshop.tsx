@@ -17,6 +17,10 @@
 import { useState, useEffect } from "react";
 import type { BulletEvidence } from "./resumeModel";
 
+// Cache tool suggestions per job title for the page session, so re-opening the
+// workshop on bullets of the same job doesn't re-spend a suggest_tools call.
+const TOOL_CACHE = new Map<string, string[]>();
+
 interface BulletWorkshopProps {
   jobTitle: string;
   company?: string;
@@ -46,7 +50,13 @@ export function BulletWorkshop({
 
   // Memory-joggers for the tools question (O*NET, fail-open to AI).
   useEffect(() => {
-    if (!jobTitle?.trim()) return;
+    const key = jobTitle?.trim().toLowerCase();
+    if (!key) return;
+    const cached = TOOL_CACHE.get(key);
+    if (cached) {
+      setToolHints(cached);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -57,7 +67,9 @@ export function BulletWorkshop({
         });
         if (res.ok) {
           const d = await res.json();
-          if (!cancelled && Array.isArray(d.tools)) setToolHints(d.tools.slice(0, 10));
+          const tools = Array.isArray(d.tools) ? d.tools.slice(0, 10) : [];
+          TOOL_CACHE.set(key, tools);
+          if (!cancelled) setToolHints(tools);
         }
       } catch {
         /* fail quiet -- joggers are optional */

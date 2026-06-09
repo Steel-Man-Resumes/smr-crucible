@@ -14,6 +14,13 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   assistant: 20,
   "rush-resume": 5,
   "generate-docs": 5,
+  // The bullet workshop is the most call-intensive pre-auth surface: a
+  // suggest_tools per modal open + a write_bullet per generation, so a single
+  // user building one resume easily makes 20-40 calls. It needs a far higher
+  // per-IP/day ceiling than the one-shot endpoints. NOTE: this is per-IP, so
+  // shared IPs (reentry-program labs, libraries) share it -- raise it further
+  // for those contexts if users report being cut off.
+  "forge-resume-assist": 100,
 };
 
 export interface RateLimitResult {
