@@ -671,8 +671,9 @@ ${bodyHtml}
           Application Tailor
         </h1>
         <p className="text-body text-muted mb-8">
-          Build a resume for a specific job. We&apos;ll guide you through each
-          section.
+          Aim your base resume at a specific job. We tailor your resume, cover
+          letter, and disclosure plan to the exact posting -- using your Forge
+          profile.
         </p>
 
         {/* Saved resumes */}
@@ -804,28 +805,42 @@ ${bodyHtml}
           </div>
         </div>
 
-        {/* Start options */}
+        {/* Start options -- the Tailor aims a BASE resume at the job.
+            Base resumes are built in the Forge; "start from scratch" links out. */}
         <div className="space-y-3">
-          {forgeAvailable && (
-            <button
-              onClick={importFromForge}
-              disabled={!doc.meta.targetJob.trim()}
-              className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
-            >
-              Import from The Forge &amp; Start Building
-            </button>
+          {forgeAvailable ? (
+            <>
+              <button
+                onClick={importFromForge}
+                disabled={!doc.meta.targetJob.trim()}
+                className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+              >
+                Tailor from my Forge profile
+              </button>
+              <a
+                href="/resume"
+                className="block w-full text-center px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-base font-medium hover:bg-sage-50 transition-colors min-h-touch"
+              >
+                Build a fresh base resume in the Forge
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href="/resume"
+                className="block w-full text-center px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              >
+                Build your base resume in the Forge first
+              </a>
+              <button
+                onClick={startFresh}
+                disabled={!doc.meta.targetJob.trim()}
+                className="w-full px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-base font-medium hover:bg-sage-50 disabled:opacity-50 transition-colors min-h-touch"
+              >
+                Or start a blank resume here
+              </button>
+            </>
           )}
-          <button
-            onClick={startFresh}
-            disabled={!doc.meta.targetJob.trim()}
-            className={`w-full px-6 py-4 rounded-xl text-base font-medium transition-colors min-h-touch ${
-              forgeAvailable
-                ? "bg-white border-2 border-sage-600 text-sage-600 hover:bg-sage-50"
-                : "bg-sage-600 text-white hover:bg-sage-700 disabled:bg-gray-300"
-            }`}
-          >
-            {forgeAvailable ? "Start from Scratch" : "Start Building"}
-          </button>
         </div>
       </div>
     );

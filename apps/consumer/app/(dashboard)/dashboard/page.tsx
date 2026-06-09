@@ -372,13 +372,13 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* How the Refinery works -- shown when forge data is available but no resume yet */}
+      {/* How the Refinery works -- shown when forge data is available but no tailored resume yet */}
       {onboarding.state === "needs_resume" && !isAdmin && hasForgeData && (
         <section className="bg-sky-50 rounded-2xl p-6 border border-sky-200">
           <h2 className="font-semibold text-foreground mb-3">Here&apos;s how the Refinery works</h2>
           <p className="text-sm text-muted mb-4">
-            Your Forge results are saved as your profile -- a database the tools use to work
-            smarter for you. The more you use it, the more it knows what you need.
+            Your Forge profile is your base resume -- one strong, structured record of your real
+            experience. The Refinery aims it at real jobs and gets smarter the more you use it.
           </p>
           <div className="space-y-3">
             <div className="flex items-start gap-3">
@@ -386,9 +386,9 @@ export default function DashboardPage() {
                 1
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Find a job on the board</p>
+                <p className="text-sm font-semibold text-foreground">Start from your base resume</p>
                 <p className="text-xs text-muted leading-relaxed">
-                  Real listings, fair-chance employers shown first. Search by role, location, or both.
+                  Your one strong, structured resume, built from your Forge. Refine it anytime in the Forge builder.
                 </p>
               </div>
             </div>
@@ -397,10 +397,10 @@ export default function DashboardPage() {
                 2
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Build a targeted resume for that specific job</p>
+                <p className="text-sm font-semibold text-foreground">Tailor it to a specific job</p>
                 <p className="text-xs text-muted leading-relaxed">
-                  The Application Tailor reads the job description and builds a resume matched to its exact
-                  requirements -- using your Forge profile. Do this for as many jobs as you want.
+                  The Application Tailor aims your base resume at the posting&apos;s exact requirements, using your
+                  Forge profile. This unlocks the rest -- do it for as many jobs as you want.
                 </p>
               </div>
             </div>
@@ -411,8 +411,8 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm font-semibold text-foreground">Everything else unlocks</p>
                 <p className="text-xs text-muted leading-relaxed">
-                  Interview practice, disclosure strategy, application tracking -- all unlock after your first
-                  targeted resume. The grayed-out tools below unlock automatically.
+                  Interview practice, disclosure strategy, and application tracking all unlock after your first
+                  tailored resume. The grayed-out tools below open automatically.
                 </p>
               </div>
             </div>
@@ -430,20 +430,20 @@ export default function DashboardPage() {
                 : "/dashboard/jobs"}
               className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
             >
-              <h3 className="font-semibold text-lg mb-1">Find a Job</h3>
+              <h3 className="font-semibold text-lg mb-1">Find a Job to Tailor For</h3>
               <p className="text-sm text-sage-100">
                 {forgeData.career_paths?.[0]?.title
-                  ? `Search for "${forgeData.career_paths[0].title}" and other roles that fit.`
-                  : "Real listings, fair-chance employers highlighted. Search by role and location."}
+                  ? `Search "${forgeData.career_paths[0].title}" and other roles that fit, then tailor your resume to one. That unlocks the rest.`
+                  : "Real listings, fair-chance employers first. Pick one and tailor your resume to it -- that unlocks the rest."}
               </p>
             </Link>
             <Link
-              href="/dashboard/jobs"
+              href="/resume"
               className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
             >
-              <h3 className="font-semibold text-lg mb-1">Build a Targeted Resume</h3>
+              <h3 className="font-semibold text-lg mb-1">Build Your Base Resume</h3>
               <p className="text-sm text-sky-100">
-                Find a job first -- then we build a resume tailored to its exact description using your profile.
+                Your one strong resume, built from your real experience. Refine it in the Forge builder anytime.
               </p>
             </Link>
           </div>
