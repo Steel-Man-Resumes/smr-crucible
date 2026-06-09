@@ -197,6 +197,20 @@ function DisclosurePlannerPage() {
       : "";
   }
 
+  // Forge strengths are fully editable here -- nothing is locked (Troy doctrine).
+  function updateStrength(index: number, field: "title" | "evidence", value: string) {
+    setForge((prev) => ({
+      ...prev,
+      strengths: prev.strengths.map((s, i) => (i === index ? { ...s, [field]: value } : s)),
+    }));
+  }
+  function addStrength() {
+    setForge((prev) => ({ ...prev, strengths: [...prev.strengths, { title: "", evidence: "" }] }));
+  }
+  function removeStrength(index: number) {
+    setForge((prev) => ({ ...prev, strengths: prev.strengths.filter((_, i) => i !== index) }));
+  }
+
   async function generatePlan(refinementNote?: string, answersOverride?: IntakeAnswer[]) {
     const answers = answersOverride ?? intakeAnswers;
     setGenerating(true);
@@ -213,7 +227,7 @@ function DisclosurePlannerPage() {
             ? {
                 headline: forge.headline,
                 summary: forge.summary,
-                strengths: forge.strengths,
+                strengths: forge.strengths.filter((s) => s.title.trim()),
                 skills: forge.skills.slice(0, 8),
               }
             : undefined,
@@ -452,8 +466,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               Lead with your strengths
             </h2>
             <p className="text-xs text-sage-600 mb-3">
-              From your Forge career analysis — the foundation of your
-              disclosure pivot.
+              From your Forge career analysis -- edit anytime, add your own, or
+              go deeper. These are what you pivot to after you disclose.
             </p>
 
             {forge.headline && (
@@ -462,30 +476,51 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               </p>
             )}
 
-            {forge.strengths.length > 0 && (
-              <div className="space-y-2">
-                {forge.strengths.map((s, i) => (
-                  <div
-                    key={i}
-                    className="bg-white rounded-xl px-4 py-3 border border-sage-100"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-sage-500 font-bold text-sm mt-0.5 flex-shrink-0">
-                        {i + 1}.
-                      </span>
-                      <div>
-                        <span className="text-sm font-medium text-foreground">
-                          {s.title}
-                        </span>
-                        <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                          {s.evidence}
-                        </p>
-                      </div>
+            <div className="space-y-2">
+              {forge.strengths.map((s, i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-xl px-4 py-3 border border-sage-100"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-sage-500 font-bold text-sm mt-2.5 flex-shrink-0">
+                      {i + 1}.
+                    </span>
+                    <div className="flex-1 space-y-1.5">
+                      <input
+                        value={s.title}
+                        onChange={(e) => updateStrength(i, "title", e.target.value)}
+                        placeholder="A strength (e.g., Reliable under pressure)"
+                        className="w-full px-3 py-2 rounded-lg border border-sage-200 text-sm font-medium text-foreground bg-white focus:border-sage-500 transition-colors"
+                      />
+                      <textarea
+                        value={s.evidence}
+                        onChange={(e) => updateStrength(i, "evidence", e.target.value)}
+                        placeholder="The proof -- a specific example an employer would believe."
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-lg border border-sage-200 text-xs text-muted bg-white focus:border-sage-500 transition-colors resize-y"
+                      />
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => removeStrength(i)}
+                      title="Remove this strength"
+                      className="text-muted hover:text-red-500 text-xl leading-none mt-1 flex-shrink-0"
+                    >
+                      &times;
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addStrength}
+              className="mt-3 text-sm font-medium text-sage-700 hover:text-sage-900 transition-colors"
+            >
+              + Add a strength
+            </button>
 
             <p className="text-xs text-sage-600 mt-3 italic">
               Good disclosure follows a simple pattern: acknowledge briefly,
@@ -527,29 +562,34 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
         )}
 
-        {/* Privacy consent gate — Tier 2 */}
+        {/* Personalized vs generic -- motivate the deeper path */}
         {!consentGiven && !showConsentGate && (
           <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-8">
             <h3 className="font-semibold text-sky-900 mb-2">
-              Your resume was built with public data only.
+              Build a plan around you, or grab a generic template
             </h3>
             <p className="text-sm text-sky-700 leading-relaxed mb-3">
-              To prepare you for what the employer will actually be thinking — even the
-              questions they can&apos;t legally ask — we need some details about your record.
-              This gives you a real strategy, not generic advice.
+              Answer a few questions about your record, your strengths, and the job
+              you want, and I build a disclosure plan for your exact situation -- the
+              words to say, when to say them, and your rights in your state. Skip it
+              and you get a generic template you will have to rewrite yourself.
             </p>
-            <div className="flex gap-3">
+            <p className="text-xs text-sky-600 mb-4">
+              Your details are never put on paper, never shared, and you can delete
+              them anytime.
+            </p>
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowConsentGate(true)}
                 className="px-4 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 transition-colors"
               >
-                I want a personalized plan
+                Build my personalized plan
               </button>
               <button
                 onClick={() => setConsentGiven(true)}
                 className="px-4 py-2.5 text-sky-600 text-sm font-medium hover:text-sky-800 transition-colors"
               >
-                Skip — use basic guidance
+                Use a generic template
               </button>
             </div>
           </div>
@@ -774,6 +814,16 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           }}
         />
 
+        {generating && (
+          <div className="mt-4 flex items-center gap-3 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200">
+            <div className="w-4 h-4 border-2 border-sage-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            <p className="text-sm text-sage-800">
+              Building your plan around what you shared -- this usually takes
+              about 30 seconds.
+            </p>
+          </div>
+        )}
+
         {rateLimitError && (
           <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mt-4">
             <p className="text-sm text-amber-800">{rateLimitError}</p>
@@ -820,6 +870,20 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               Adjust
             </button>
           </div>
+        </div>
+
+        {/* Persistent confirmation -- the plan is saved to Materials */}
+        <div className="flex items-center justify-between gap-3 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 mb-6">
+          <p className="text-sm text-sage-800">
+            <span className="font-semibold">Saved to your Materials.</span> Come
+            back to it anytime -- it is private to your account.
+          </p>
+          <a
+            href="/dashboard/vault"
+            className="text-sm font-medium text-sage-700 hover:text-sage-900 whitespace-nowrap"
+          >
+            View Materials
+          </a>
         </div>
 
         {/* Adjust panel -- inline refinement, never a full reset */}
