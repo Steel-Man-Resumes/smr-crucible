@@ -28,7 +28,7 @@ async function handlePost(request: Request) {
   }
 
   try {
-    const { record, timing, targetJob, forgeContext, refinementNote } = await request.json();
+    const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers } = await request.json();
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -50,6 +50,20 @@ async function handlePost(request: Request) {
         parts.push(`Top skills: ${sanitizeArray(forgeContext.skills.map((s: any) => s.name))}`);
       }
       candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
+    }
+
+    // Enriched progressive-intake answers -- the user's own words about how they
+    // want to tell their story. Used to personalize the script + pivot; never
+    // stored as an artifact (doctrine: keep the frame, not the user's words).
+    let intakeBlock = "";
+    if (Array.isArray(intakeAnswers) && intakeAnswers.length) {
+      const lines = intakeAnswers
+        .filter((a: any) => a && typeof a.answer === "string" && a.answer.trim())
+        .map((a: any) => `- ${sanitizeForPrompt(a.question, 200)}: ${sanitizeForPrompt(a.answer, 600)}`)
+        .join("\n");
+      if (lines) {
+        intakeBlock = `\n\nIN THEIR OWN WORDS (how they want to tell their story -- weave this into the script and the pivot so it sounds like them; do not quote verbatim):\n${lines}`;
+      }
     }
 
     // Build research-backed context
@@ -77,7 +91,7 @@ THEIR SITUATION:
 - Most recent: ${sanitizeForPrompt(record.most_recent)}
 - Probation/parole: ${sanitizeForPrompt(record.supervision)}
 - State/Jurisdiction: ${jurisdiction}
-- Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}
+- Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}${intakeBlock}
 
 JURISDICTION-SPECIFIC CONTEXT:
 ${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin ban-the-box: state/county government employers cannot ask about criminal history on applications. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement eligibility: WI §973.015 allows expungement for offenses committed under age 25, or for misdemeanors/minor felonies with no prior felony convictions. Process takes 6-18 months. Provide this specific guidance.` : `Research the specific ban-the-box laws, fair chance ordinances, and expungement options for ${jurisdiction}. Be specific — generic guidance is not enough.`}

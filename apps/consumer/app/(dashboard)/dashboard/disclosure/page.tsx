@@ -19,8 +19,10 @@ import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
+import { ProgressiveIntake, type IntakeQuestion } from "@/components/ProgressiveIntake";
+import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
 
-type PlannerStep = "assess" | "plan" | "rehearse";
+type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
 
 interface RecordInfo {
   type: string;
@@ -105,6 +107,7 @@ function DisclosurePlannerPage() {
   const [rateLimitError, setRateLimitError] = useState("");
   const [targetJob, setTargetJob] = useState("");
   const [forge, setForge] = useState<ForgeContext>(EMPTY_FORGE);
+  const [intakeAnswers, setIntakeAnswers] = useState<IntakeAnswer[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [adjustPanelOpen, setAdjustPanelOpen] = useState(false);
   const [adjustQuery, setAdjustQuery] = useState("");
@@ -194,7 +197,8 @@ function DisclosurePlannerPage() {
       : "";
   }
 
-  async function generatePlan(refinementNote?: string) {
+  async function generatePlan(refinementNote?: string, answersOverride?: IntakeAnswer[]) {
+    const answers = answersOverride ?? intakeAnswers;
     setGenerating(true);
     setRateLimitError("");
     try {
@@ -214,6 +218,7 @@ function DisclosurePlannerPage() {
               }
             : undefined,
           refinementNote: refinementNote || undefined,
+          intakeAnswers: answers.length ? answers : undefined,
         }),
       });
       if (res.status === 429) {
@@ -223,6 +228,7 @@ function DisclosurePlannerPage() {
         const data = await res.json();
         setPlan(data);
         setStep("plan");
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
         if (!refinementNote) setShowCelebration(true);
 
         // Persist the disclosure plan (the user's deliverable -- a frame, not
@@ -697,11 +703,89 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         )}
 
         <button
-          onClick={() => generatePlan()}
-          disabled={generating || !record.type}
+          onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); setStep("deepen"); }}
+          disabled={!record.type}
           className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
         >
-          {generating ? "Building your plan..." : "Build My Disclosure Plan"}
+          Next: a few quick questions
+        </button>
+      </div>
+    );
+  }
+
+  // --- Step 1.5: Deepen -- progressive intake (Phase 2 anchor) ---
+  if (step === "deepen") {
+    const intakeContext: IntakeContext = {
+      targetJob: targetJob || undefined,
+      headline: forge.headline,
+      strengths: forge.strengths.map((s) => s.title),
+      skills: forge.skills.map((s) => s.name),
+      hasRecord: !!record.type,
+    };
+    const initialQuestions: IntakeQuestion[] = [
+      {
+        id: "story",
+        label:
+          "In your own words, what do you most want an employer to understand about you?",
+        placeholder: "No wrong answers -- a sentence or two is plenty.",
+        multiline: true,
+      },
+      {
+        id: "since",
+        label: "What have you done since then that you are proud of?",
+        placeholder:
+          "Work, school, recovery, family, a habit you changed -- anything that shows who you are now.",
+        multiline: true,
+      },
+      {
+        id: "worry",
+        label: "What worries you most about bringing up your record?",
+        placeholder: "Naming the worry helps us prepare for it.",
+        multiline: true,
+      },
+    ];
+    return (
+      <div className="max-w-2xl">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl font-bold text-foreground">
+            A few questions, so this plan is really yours
+          </h1>
+          <button
+            onClick={() => setStep("assess")}
+            className="text-sm text-muted hover:text-foreground"
+          >
+            Back
+          </button>
+        </div>
+        <p className="text-sm text-muted mb-6">
+          The more real you get here, the more your plan sounds like you and not a
+          template. I will read your answers and may ask a follow-up or two.
+        </p>
+
+        <ProgressiveIntake
+          topic="disclosure"
+          context={intakeContext}
+          initialQuestions={initialQuestions}
+          submitLabel={generating ? "Building your plan..." : "Build my disclosure plan"}
+          busy={generating}
+          onComplete={(answers) => {
+            setIntakeAnswers(answers);
+            generatePlan(undefined, answers);
+          }}
+        />
+
+        {rateLimitError && (
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mt-4">
+            <p className="text-sm text-amber-800">{rateLimitError}</p>
+          </div>
+        )}
+
+        <button
+          onClick={() => generatePlan()}
+          disabled={generating}
+          className="mt-4 text-sm text-muted hover:text-foreground transition-colors disabled:opacity-50"
+        >
+          Skip the questions and build a basic plan
         </button>
       </div>
     );
