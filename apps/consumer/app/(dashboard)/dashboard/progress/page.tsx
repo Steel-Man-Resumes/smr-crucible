@@ -9,7 +9,7 @@
  *   3. Activity Scoreboard — milestones + counts (existing)
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   getQuickWins,
@@ -51,66 +51,65 @@ interface ProgressData {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+const DEFAULT_PROGRESS: ProgressData = {
+  forge_completed: false,
+  skills_identified: 0,
+  strengths_found: 0,
+  career_paths: 0,
+  barriers_addressed: 0,
+  resumes_built: 0,
+  resume_bullets_written: 0,
+  disclosure_plans_created: 0,
+  interviews_started: 0,
+  interviews_completed: 0,
+  job_searches: 0,
+  resources_viewed: 0,
+  applications_sent: 0,
+  total_sessions: 0,
+};
+
+interface UpcomingItem {
+  date: string;
+  company: string;
+  role: string;
+  status: string;
+}
+
 export default function ProgressPage() {
-  const [progress, setProgress] = useState<ProgressData>({
-    forge_completed: false,
-    skills_identified: 0,
-    strengths_found: 0,
-    career_paths: 0,
-    barriers_addressed: 0,
-    resumes_built: 0,
-    resume_bullets_written: 0,
-    disclosure_plans_created: 0,
-    interviews_started: 0,
-    interviews_completed: 0,
-    job_searches: 0,
-    resources_viewed: 0,
-    applications_sent: 0,
-    total_sessions: 0,
-  });
+  const [progress, setProgress] = useState<ProgressData>(DEFAULT_PROGRESS);
   const [barriers, setBarriers] = useState<string[]>([]);
   const [readinessStage, setReadinessStage] =
     useState<ReadinessStage>("unknown");
   const [quickWins, setQuickWins] = useState<QuickWin[]>([]);
   const [roadmapNodes, setRoadmapNodes] = useState<RoadmapNode[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
 
-  // Load all data
-  useEffect(() => {
+  // Read the latest progress from localStorage (the tools write here as the user
+  // works). Pulled out so it can re-run LIVE -- on focus, tab change, and the save
+  // events the tools fire -- instead of only once on mount (Phase 5).
+  const loadProgress = useCallback(() => {
     const data: Partial<ProgressData> = {};
     let userBarriers: string[] = [];
     let stage: ReadinessStage = "unknown";
 
-    // Load Forge data
     try {
       const stored = localStorage.getItem("forge_session");
       if (stored) {
         const session = JSON.parse(stored);
-
-        if (session.readinessStage) {
-          stage = session.readinessStage;
-        }
-        if (session.challenges) {
-          userBarriers = session.challenges;
-        }
-
+        if (session.readinessStage) stage = session.readinessStage;
+        if (session.challenges) userBarriers = session.challenges;
         if (session.forgeOutput) {
           data.forge_completed = true;
-
           data.skills_identified = getSkillNames(session.forgeOutput, 200).length;
           data.strengths_found = getStrengthTitles(session.forgeOutput, 200).length;
           data.career_paths = getCareerPaths(session.forgeOutput).length;
-          if (session.forgeOutput.barriers) {
-            data.barriers_addressed = session.forgeOutput.barriers.length;
-          }
+          if (session.forgeOutput.barriers) data.barriers_addressed = session.forgeOutput.barriers.length;
         }
       }
     } catch {}
 
-    // Load Refinery progress
     try {
-      const tracker = JSON.parse(
-        localStorage.getItem("consumer_progress") || "{}"
-      );
+      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
       data.resumes_built = tracker.resumes_built || 0;
       data.resume_bullets_written = tracker.resume_bullets_written || 0;
       data.disclosure_plans_created = tracker.disclosure_plans_created || 0;
@@ -122,12 +121,11 @@ export default function ProgressPage() {
       data.total_sessions = tracker.total_sessions || 1;
     } catch {}
 
-    const merged = { ...progress, ...data };
+    const merged = { ...DEFAULT_PROGRESS, ...data };
     setProgress(merged);
     setBarriers(userBarriers);
     setReadinessStage(stage);
 
-    // Generate quick wins
     const ctx: QuickWinContext = {
       readinessStage: stage,
       barriers: userBarriers,
@@ -144,7 +142,6 @@ export default function ProgressPage() {
     };
     setQuickWins(getQuickWins(ctx));
 
-    // Generate roadmap
     setRoadmapNodes(
       generateRoadmap({
         forgeCompleted: !!data.forge_completed,
@@ -160,21 +157,59 @@ export default function ProgressPage() {
         },
       })
     );
+  }, []);
 
-    // Track this session
+  // Pull the upcoming timeline (application follow-ups) from the server (Phase 5).
+  const loadUpcoming = useCallback(() => {
+    fetch("/api/user/context")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !Array.isArray(d.applications)) return;
+        const items: UpcomingItem[] = d.applications
+          .filter((a: any) => a && a.followUpAt)
+          .map((a: any) => ({
+            date: a.followUpAt,
+            company: a.company || "",
+            role: a.role || "",
+            status: a.status || "saved",
+          }))
+          .sort((x: UpcomingItem, y: UpcomingItem) => x.date.localeCompare(y.date));
+        setUpcoming(items);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Mount: load once, track the session, and wire LIVE refresh so the page
+  // reflects work done elsewhere without a manual reload (Phase 5).
+  useEffect(() => {
+    loadProgress();
+    loadUpcoming();
+
     try {
-      const tracker = JSON.parse(
-        localStorage.getItem("consumer_progress") || "{}"
-      );
+      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
       tracker.total_sessions = (tracker.total_sessions || 0) + 1;
       tracker.last_session = new Date().toISOString();
-      if (!tracker.first_session) {
-        tracker.first_session = new Date().toISOString();
-      }
+      if (!tracker.first_session) tracker.first_session = new Date().toISOString();
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    const refresh = () => {
+      loadProgress();
+      loadUpcoming();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const events = ["focus", "resume-saved", "disclosure-saved", "interview-saved", "application-saved", "job-search"];
+    events.forEach((e) => window.addEventListener(e, refresh));
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("storage", refresh);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, refresh));
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [loadProgress, loadUpcoming]);
 
   const roadmapProgress = getRoadmapProgress(roadmapNodes);
   const totalActions =
@@ -206,6 +241,63 @@ export default function ProgressPage() {
           </div>
         </section>
       )}
+
+      {/* ── Upcoming timeline (Phase 5) ─────────────────────────────────── */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-foreground">Upcoming</h2>
+          <Link
+            href="/dashboard/applications"
+            className="text-sm font-medium text-sage-700 hover:text-sage-900"
+          >
+            Manage applications
+          </Link>
+        </div>
+        {upcoming.length > 0 ? (
+          <div className="space-y-2">
+            {upcoming.map((item, i) => {
+              const d = new Date(item.date);
+              const valid = !isNaN(d.getTime());
+              const overdue = valid && d.getTime() < Date.now();
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-border"
+                >
+                  <div className={`flex-shrink-0 w-14 text-center ${overdue ? "text-amber-700" : "text-sage-700"}`}>
+                    <div className="text-xs font-semibold uppercase">
+                      {valid ? d.toLocaleDateString("en-US", { month: "short" }) : "--"}
+                    </div>
+                    <div className="text-lg font-bold leading-none">
+                      {valid ? d.getDate() : "--"}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground block truncate">
+                      Follow up{item.company ? ` -- ${item.company}` : ""}
+                    </span>
+                    <span className="text-xs text-muted block truncate">
+                      {[item.role, item.status].filter(Boolean).join(" · ")}
+                    </span>
+                  </div>
+                  {overdue && (
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                      due
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-white px-5 py-8 text-center">
+            <p className="text-sm text-muted">
+              No follow-ups scheduled yet. Save a job and set a follow-up date in
+              Applications, and it will show up here.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* ── Career Roadmap ──────────────────────────────────────────────── */}
       {roadmapNodes.length > 0 && (
