@@ -19,6 +19,17 @@ import {
 } from "@crucible/core";
 import { buildForgeResumeContent } from "@/lib/forge-to-resume";
 
+/** Did the user build a structured base resume in the Forge (Phase 7)? */
+function isStructuredResumeDoc(d: any): boolean {
+  return (
+    !!d &&
+    typeof d === "object" &&
+    d.formatVersion === 2 &&
+    typeof d.contact === "object" &&
+    Array.isArray(d.experience)
+  );
+}
+
 export async function persistForgeSession(
   userId: string,
   body: Record<string, any>
@@ -41,13 +52,18 @@ export async function persistForgeSession(
     startedAt: body.startedAt,
   });
 
-  // Auto-create (or update) a resume artifact from Forge data (non-fatal).
-  if (body.forgeOutput) {
+  // Auto-create (or update) the base resume artifact (non-fatal). Prefer the
+  // exact structured doc the user built in the Forge (Phase 7) -- it preserves
+  // their edits and the bullet-workshop evidence -- and fall back to re-deriving
+  // from resumeText + forgeOutput for legacy sessions.
+  if (body.forgeOutput || isStructuredResumeDoc(body.resumeDoc)) {
     try {
-      const resumeContent = buildForgeResumeContent({
-        resumeText: body.resumeText,
-        forgeOutput: body.forgeOutput,
-      });
+      const resumeContent = isStructuredResumeDoc(body.resumeDoc)
+        ? body.resumeDoc
+        : buildForgeResumeContent({
+            resumeText: body.resumeText,
+            forgeOutput: body.forgeOutput,
+          });
 
       const existing = await listArtifacts(userId, { type: "resume" });
       const forgeResume = existing.find(
