@@ -199,7 +199,6 @@ function SecondChanceBoardPage() {
                 onToggle={() =>
                   setExpanded(expanded === item.id ? null : item.id)
                 }
-                hasRecord={barriers.includes("criminal_record")}
               />
             ))}
           </div>
@@ -240,18 +239,19 @@ function OpportunityCard({
   matched,
   expanded,
   onToggle,
-  hasRecord,
 }: {
   opportunity: SecondChanceOpportunity;
   matched: boolean;
   expanded: boolean;
   onToggle: () => void;
-  hasRecord: boolean;
 }) {
   const searchHref = `/dashboard/jobs?q=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
-  const interviewHref = `/dashboard/interview?role=${encodeURIComponent(
+  const resumeHref = `/dashboard/resume-builder?role=${encodeURIComponent(
+    opportunity.searchTerm
+  )}`;
+  const employersHref = `/dashboard/employers?q=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
 
@@ -342,25 +342,17 @@ function OpportunityCard({
           Search live jobs
         </Link>
         <Link
-          href="/dashboard/resume-builder"
+          href={resumeHref}
           className="inline-flex min-h-touch items-center justify-center rounded-xl border border-sage-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sage-50"
         >
-          Build resume
+          Build a resume
         </Link>
         <Link
-          href={interviewHref}
+          href={employersHref}
           className="inline-flex min-h-touch items-center justify-center rounded-xl border border-sky-200 bg-white px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
         >
-          Practice interview
+          Verified employers
         </Link>
-        {hasRecord && (
-          <Link
-            href="/dashboard/disclosure"
-            className="inline-flex min-h-touch items-center justify-center rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-50"
-          >
-            Plan disclosure
-          </Link>
-        )}
       </div>
 
       <button

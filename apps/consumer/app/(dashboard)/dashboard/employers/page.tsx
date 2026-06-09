@@ -6,7 +6,8 @@
  * roles, why they're a fit, honest caveats, and a direct apply link.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { TierGate } from "@/components/TierGate";
 
 interface Employer {
@@ -22,6 +23,8 @@ interface Employer {
 }
 
 function EmployersList() {
+  const searchParams = useSearchParams();
+  const q = (searchParams.get("q") || "").trim().toLowerCase();
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loading, setLoading] = useState(true);
   const [industry, setIndustry] = useState<string>("all");
@@ -40,7 +43,19 @@ function EmployersList() {
     return Array.from(set).sort();
   }, [employers]);
 
-  const shown = industry === "all" ? employers : employers.filter((e) => e.industry === industry);
+  const shown = useMemo(() => {
+    let list = industry === "all" ? employers : employers.filter((e) => e.industry === industry);
+    if (q) {
+      list = list.filter((e) =>
+        [e.name, e.industry, e.location, e.roleTypes, e.whyGoodFit]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      );
+    }
+    return list;
+  }, [employers, industry, q]);
 
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 py-12 text-muted">Loading verified employers...</div>;
@@ -53,6 +68,21 @@ function EmployersList() {
         Wisconsin employers our team verified as open to people with records. Each one was
         checked against real fair-chance hiring signals. Read the notes -- some have honest caveats.
       </p>
+
+      {q && (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3">
+          <p className="text-sm text-sage-800">
+            Showing employers matching{" "}
+            <span className="font-semibold">&ldquo;{searchParams.get("q")}&rdquo;</span> from your lane.
+          </p>
+          <a
+            href="/dashboard/employers"
+            className="text-sm font-medium text-sage-700 hover:text-sage-900 whitespace-nowrap"
+          >
+            Show all
+          </a>
+        </div>
+      )}
 
       {employers.length === 0 ? (
         <div className="text-center text-muted bg-white border border-border rounded-xl px-5 py-12">
@@ -81,6 +111,15 @@ function EmployersList() {
           )}
 
           <div className="space-y-3">
+            {shown.length === 0 && (
+              <div className="text-center text-muted bg-white border border-border rounded-xl px-5 py-10">
+                No verified employers match this lane yet.{" "}
+                <a href="/dashboard/employers" className="text-sage-700 font-medium hover:text-sage-900">
+                  Show all
+                </a>
+                .
+              </div>
+            )}
             {shown.map((e) => (
               <div key={e.id} className="bg-white border border-border rounded-xl p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -133,7 +172,7 @@ function EmployersList() {
 export default function EmployersPage() {
   return (
     <TierGate requiredTier="client">
-      <EmployersList />
+      <Suspense><EmployersList /></Suspense>
     </TierGate>
   );
 }
