@@ -54,6 +54,30 @@ async function handlePost(request: Request) {
       const jobLabel = [resume.targetJob, resume.targetCompany].filter(Boolean).join(" at ");
       applicationBlock += `\n\nTHE CANDIDATE'S ACTUAL RESUME${jobLabel ? ` (tailored for ${sanitizeForPrompt(jobLabel, 160)})` : ""} -- ask about THIS real experience by name (specific jobs, tools, results), not hypotheticals:\n${sanitizeForPrompt(resume.text, 2800)}`;
     }
+    // Interview handoff (Phase 7.5): the bullet-workshop proof behind their
+    // bullets. Probe these for depth and build model answers from them.
+    if (Array.isArray(resume?.evidence) && resume.evidence.length) {
+      const proof = resume.evidence
+        .slice(0, 12)
+        .map((p: any) => {
+          const facts = [
+            p.did && `did: ${sanitizeForPrompt(p.did, 200)}`,
+            p.tools && `tools: ${sanitizeForPrompt(p.tools, 160)}`,
+            p.often && `how often: ${sanitizeForPrompt(p.often, 100)}`,
+            p.quantity && `how many: ${sanitizeForPrompt(p.quantity, 100)}`,
+            p.improved && `what improved: ${sanitizeForPrompt(p.improved, 200)}`,
+          ]
+            .filter(Boolean)
+            .join("; ");
+          const head = sanitizeForPrompt(p.bullet || p.role || "", 180);
+          return facts ? `- ${head} (${facts})` : `- ${head}`;
+        })
+        .filter((l: string) => l.trim().length > 3)
+        .join("\n");
+      if (proof) {
+        applicationBlock += `\n\nPROOF BEHIND THEIR BULLETS -- the concrete facts they gave for each accomplishment. Probe these for depth ("you said you trained 3 new hires -- walk me through that"), and build model answers from them. Never invent beyond these facts:\n${proof}`;
+      }
+    }
     if (typeof jobDescription === "string" && jobDescription.trim()) {
       applicationBlock += `\n\nTHE JOB POSTING THEY ARE APPLYING TO -- tailor your questions to THESE specific requirements:\n${sanitizeForPrompt(jobDescription, 2000)}`;
     }

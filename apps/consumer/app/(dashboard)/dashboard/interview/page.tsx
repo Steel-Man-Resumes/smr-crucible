@@ -14,6 +14,7 @@ import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
+import { formatResumeDownload } from "@/components/resume/resumeModel";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -245,13 +246,38 @@ function InterviewPracticePage() {
     setExchangeCount(newExchangeCount);
 
     const sel = resumes.find((r) => r.id === selectedResumeId);
-    const resumePayload = sel?.content
-      ? {
-          targetJob: sel.targetJob,
-          targetCompany: sel.targetCompany,
-          text: JSON.stringify(sel.content).slice(0, 2800),
-        }
-      : undefined;
+    let resumePayload:
+      | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
+      | undefined;
+    if (sel?.content) {
+      // Clean resume text (not raw JSON) for the prompt.
+      let text = "";
+      try {
+        text = formatResumeDownload(sel.content).slice(0, 2800);
+      } catch {
+        text = JSON.stringify(sel.content).slice(0, 2800);
+      }
+      // The bullet-workshop proof behind each bullet -- the interview handoff.
+      const proofPoints = Array.isArray(sel.content.experience)
+        ? sel.content.experience.flatMap((e: any) =>
+            (Array.isArray(e.evidence) ? e.evidence : []).map((ev: any) => ({
+              role: e.title || "",
+              bullet: ev.bullet || "",
+              did: ev.did || "",
+              tools: ev.tools || "",
+              often: ev.often || "",
+              quantity: ev.quantity || "",
+              improved: ev.improved || "",
+            }))
+          )
+        : [];
+      resumePayload = {
+        targetJob: sel.targetJob,
+        targetCompany: sel.targetCompany,
+        text,
+        evidence: proofPoints.slice(0, 12),
+      };
+    }
 
     try {
       const res = await fetch("/api/interview-practice", {
