@@ -11,6 +11,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { MODEL_DEEP } from "@/lib/ai/models";
 
 export const maxDuration = 30;
 
@@ -21,7 +22,7 @@ async function handlePost(request: Request) {
   }
 
   try {
-    const { messages, config, exchangeCount, forgeContext } = await request.json();
+    const { messages, config, exchangeCount, forgeContext, resume, jobDescription } = await request.json();
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -44,6 +45,17 @@ async function handlePost(request: Request) {
       if (parts.length) {
         candidateBlock = `\n\nCANDIDATE PROFILE (use this to ask relevant follow-up questions):\n${parts.join("\n")}`;
       }
+    }
+
+    // Phase 3: questions off the REAL application -- the specific tailored resume
+    // and (optionally) the actual job posting, not just generic Forge context.
+    let applicationBlock = "";
+    if (resume?.text) {
+      const jobLabel = [resume.targetJob, resume.targetCompany].filter(Boolean).join(" at ");
+      applicationBlock += `\n\nTHE CANDIDATE'S ACTUAL RESUME${jobLabel ? ` (tailored for ${sanitizeForPrompt(jobLabel, 160)})` : ""} -- ask about THIS real experience by name (specific jobs, tools, results), not hypotheticals:\n${sanitizeForPrompt(resume.text, 2800)}`;
+    }
+    if (typeof jobDescription === "string" && jobDescription.trim()) {
+      applicationBlock += `\n\nTHE JOB POSTING THEY ARE APPLYING TO -- tailor your questions to THESE specific requirements:\n${sanitizeForPrompt(jobDescription, 2000)}`;
     }
 
     const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
@@ -71,7 +83,7 @@ YOUR ROLE:
 - React naturally to their answers — acknowledge what they said before moving on
 - Don't be hostile, but don't be a pushover. Ask follow-ups a real interviewer would.
 - Keep your responses to 2-3 sentences max
-${candidateBlock}
+${candidateBlock}${applicationBlock}
 ${isDisclosure ? `DISCLOSURE ELEMENT:
 - At some point during the interview (around exchange 3-4), naturally bring up background checks
 - Say something like "We do run a background check as part of our process. Is there anything you'd like to share about that?"
@@ -81,7 +93,7 @@ ${isDisclosure ? `DISCLOSURE ELEMENT:
       // Generate feedback instead of continuing
       systemPrompt = `You were conducting a mock job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
 ${isDisclosure ? "The interview included a criminal record disclosure element." : ""}
-${candidateBlock}
+${candidateBlock}${applicationBlock}
 
 The interview is now over. Review the entire conversation and provide:
 1. A brief closing statement as the interviewer (1-2 sentences)
@@ -94,6 +106,10 @@ Return JSON:
     "strengths": ["2-3 specific things they did well"],
     "improvements": ["2-3 specific things to work on"],
     "overall": "1-2 sentence overall assessment. Encouraging but honest.",
+    "better_answers": [
+      { "question": "a real question from this interview they could have answered more strongly", "model_answer": "a stronger model answer, 2-4 sentences, built from THEIR real experience (use the resume) -- show, do not tell" }
+    ],
+    "frame": "1-2 sentences: the single posture or through-line to carry into the real interview for this role.",
     ${isDisclosure ? '"disclosure_notes": "How they handled the disclosure moment specifically. What worked, what to adjust."' : '"disclosure_notes": null'}
   }
 }
@@ -101,6 +117,7 @@ Return JSON:
 RULES:
 - Be specific — reference actual things they said
 - Focus on communication skills: confidence, clarity, brevity, pivot to strengths
+- For better_answers, model 1-2 stronger responses built from their real resume, in their own voice -- show them what good sounds like
 - 6th grade reading level
 - JSON only (after the closing statement)`;
     }
@@ -110,7 +127,7 @@ RULES:
       content: m.content,
     }));
 
-    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1500 : 300);
+    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined);
 
     if (shouldWrapUp) {
       // Log wrapup decision

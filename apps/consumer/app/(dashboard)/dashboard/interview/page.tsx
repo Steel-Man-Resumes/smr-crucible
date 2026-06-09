@@ -110,6 +110,14 @@ function InterviewPracticePage() {
   const [feedback, setFeedback] = useState<any>(null);
   const [rateLimitError, setRateLimitError] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
+  // Phase 3: interview against a SPECIFIC saved resume + optional job posting.
+  const [resumes, setResumes] = useState<
+    Array<{ id: string; targetJob: string | null; targetCompany: string | null; createdAt: string; content: any }>
+  >([]);
+  const [selectedResumeId, setSelectedResumeId] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [userNotes, setUserNotes] = useState("");
+  const [copiedSummary, setCopiedSummary] = useState(false);
 
   // Forge context for richer AI interaction
   const [forgeContext, setForgeContext] = useState<{
@@ -168,6 +176,30 @@ function InterviewPracticePage() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Phase 3: load the user's saved resumes so they can interview against a
+  // SPECIFIC tailored resume (default: most recent), not just generic Forge data.
+  useEffect(() => {
+    fetch("/api/artifacts?type=resume&limit=20")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then(({ data }) => {
+        const list = (data || []).map((a: any) => ({
+          id: a.id,
+          targetJob: a.target_context?.targetJob ?? a.content?.meta?.targetJob ?? null,
+          targetCompany: a.target_context?.targetCompany ?? a.content?.meta?.targetCompany ?? null,
+          createdAt: a.created_at ?? a.updated_at ?? "",
+          content: a.content ?? null,
+        }));
+        setResumes(list);
+        if (list.length) {
+          setSelectedResumeId((prev) => prev || list[0].id);
+          const r0 = list[0];
+          const label = [r0.targetJob, r0.targetCompany].filter(Boolean).join(" at ");
+          if (label) setConfig((prev) => (prev.targetRole ? prev : { ...prev, targetRole: label }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Auto-scroll chat
   useEffect(() => {
     if (chatRef.current) {
@@ -212,6 +244,15 @@ function InterviewPracticePage() {
     const newExchangeCount = exchangeCount + 1;
     setExchangeCount(newExchangeCount);
 
+    const sel = resumes.find((r) => r.id === selectedResumeId);
+    const resumePayload = sel?.content
+      ? {
+          targetJob: sel.targetJob,
+          targetCompany: sel.targetCompany,
+          text: JSON.stringify(sel.content).slice(0, 2800),
+        }
+      : undefined;
+
     try {
       const res = await fetch("/api/interview-practice", {
         method: "POST",
@@ -221,6 +262,8 @@ function InterviewPracticePage() {
           config,
           exchangeCount: newExchangeCount,
           forgeContext: forgeContext || undefined,
+          resume: resumePayload,
+          jobDescription: jobDescription.trim() || undefined,
         }),
       });
 
@@ -278,6 +321,71 @@ function InterviewPracticePage() {
     }
   }
 
+  // --- Phase 3 deliverable: analysis only, never a transcript ---
+  function buildSummaryText(): string {
+    const fb = feedback || {};
+    const out: string[] = ["INTERVIEW PRACTICE SUMMARY (analysis only -- no transcript)"];
+    if (config.targetRole) out.push(`Role: ${config.targetRole}`);
+    out.push(`Practice type: ${config.interviewType || "general"}`);
+    if (fb.frame) out.push(`\nFrame to carry: ${fb.frame}`);
+    if (Array.isArray(fb.strengths) && fb.strengths.length) out.push(`\nWhat I did well:\n- ${fb.strengths.join("\n- ")}`);
+    if (Array.isArray(fb.improvements) && fb.improvements.length) out.push(`\nTo work on:\n- ${fb.improvements.join("\n- ")}`);
+    if (Array.isArray(fb.better_answers) && fb.better_answers.length) {
+      out.push("\nStronger answers to model:");
+      for (const b of fb.better_answers) out.push(`Q: ${b.question}\nA: ${b.model_answer}`);
+    }
+    if (fb.overall) out.push(`\nOverall: ${fb.overall}`);
+    if (userNotes.trim()) out.push(`\nMy notes:\n${userNotes.trim()}`);
+    return out.join("\n");
+  }
+
+  async function copyPracticeSummary() {
+    try {
+      await navigator.clipboard.writeText(buildSummaryText());
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 2000);
+    } catch {
+      // Clipboard can fail (permissions) -- non-critical to the practice.
+    }
+  }
+
+  function downloadAnalysis() {
+    const fb = feedback || {};
+    const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const list = (arr: any[]) => (Array.isArray(arr) ? arr.map((x) => `<li>${esc(x)}</li>`).join("") : "");
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><title>Interview Analysis</title>
+<style>
+  @page { margin: 0.85in; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; font-size: 12pt; line-height: 1.6; }
+  h1 { font-size: 18pt; margin: 0 0 4pt; }
+  .subtitle { font-size: 9.5pt; color: #777; margin-bottom: 20pt; }
+  h2 { font-size: 10pt; font-weight: bold; color: #2d5a3d; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1pt solid #4D7C5A; padding-bottom: 3pt; margin: 20pt 0 8pt; }
+  ul { margin: 0 0 8pt; padding-left: 18pt; } li { margin-bottom: 4pt; }
+  blockquote { border-left: 3pt solid #4D7C5A; margin: 0 0 8pt; padding: 6pt 12pt; font-style: italic; color: #333; background: #f8f5f0; }
+  .q { font-weight: bold; margin: 8pt 0 2pt; }
+  .footer { margin-top: 32pt; border-top: 0.5pt solid #ddd; padding-top: 8pt; font-size: 8pt; color: #aaa; text-align: center; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+<h1>Interview Analysis${config.targetRole ? ` -- ${esc(config.targetRole)}` : ""}</h1>
+<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Practice frames only, no transcript</p>
+${fb.frame ? `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>` : ""}
+${Array.isArray(fb.strengths) && fb.strengths.length ? `<h2>What You Did Well</h2><ul>${list(fb.strengths)}</ul>` : ""}
+${Array.isArray(fb.improvements) && fb.improvements.length ? `<h2>Areas to Work On</h2><ul>${list(fb.improvements)}</ul>` : ""}
+${Array.isArray(fb.better_answers) && fb.better_answers.length ? `<h2>Stronger Answers to Model</h2>${fb.better_answers.map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`).join("")}` : ""}
+${fb.overall ? `<h2>Overall</h2><p>${esc(fb.overall)}</p>` : ""}
+${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br/>")}</p>` : ""}
+<div class="footer">This analysis is yours. We never store your interview words or recordings -- only the frames you practiced.</div>
+</body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
+  }
+
   // --- Setup ---
   if (step === "setup") {
     return (
@@ -304,6 +412,61 @@ function InterviewPracticePage() {
               }
               placeholder="e.g., Warehouse Associate, Customer Service Rep"
               className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+            />
+          </div>
+
+          {/* Phase 3: interview against a specific saved resume */}
+          {resumes.length > 0 && (
+            <div>
+              <label className="text-sm font-medium block mb-1">
+                Interview against which resume?{" "}
+                <span className="font-normal text-muted">
+                  (so questions match your real experience)
+                </span>
+              </label>
+              <select
+                value={selectedResumeId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedResumeId(id);
+                  const r = resumes.find((x) => x.id === id);
+                  const label = r ? [r.targetJob, r.targetCompany].filter(Boolean).join(" at ") : "";
+                  if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
+                }}
+                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white min-h-touch"
+              >
+                {resumes.map((r) => {
+                  const label = [r.targetJob, r.targetCompany].filter(Boolean).join(" at ");
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {label || `Resume from ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "your account"}`}
+                    </option>
+                  );
+                })}
+                <option value="">General (no specific resume)</option>
+              </select>
+              {selectedResumeId && (
+                <p className="text-xs text-sage-600 mt-1">
+                  Questions will be based on this resume -- the real jobs, tools, and results on it.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Phase 3: optional job posting */}
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Paste the job posting{" "}
+              <span className="font-normal text-muted">
+                (optional -- makes questions match the real role)
+              </span>
+            </label>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="Paste the description from the job you are applying to..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 resize-y"
             />
           </div>
 
@@ -451,6 +614,65 @@ function InterviewPracticePage() {
             </p>
           </div>
         )}
+
+        {/* The frame to carry (Phase 3) */}
+        {feedback.frame && (
+          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-4">
+            <h2 className="font-semibold text-sage-800 mb-2">The frame to carry in</h2>
+            <p className="text-sm text-sage-700 leading-relaxed">{feedback.frame}</p>
+          </div>
+        )}
+
+        {/* Stronger answers to model (Phase 3) */}
+        {Array.isArray(feedback.better_answers) && feedback.better_answers.length > 0 && (
+          <div className="bg-white rounded-2xl p-5 border border-border mb-4">
+            <h2 className="font-semibold text-foreground mb-3">Stronger answers to model</h2>
+            <div className="space-y-4">
+              {feedback.better_answers.map((b: any, i: number) => (
+                <div key={i}>
+                  <p className="text-sm font-medium text-foreground mb-1">{b.question}</p>
+                  <p className="text-sm text-muted leading-relaxed border-l-4 border-sage-300 pl-3 italic">
+                    {b.model_answer}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Your notes -- stay on your device (Phase 3) */}
+        <div className="bg-white rounded-2xl p-5 border border-border mb-4">
+          <h2 className="font-semibold text-foreground mb-2">Your notes</h2>
+          <p className="text-xs text-muted mb-2">
+            Jot what you want to remember. These stay on your device -- we never store your words.
+          </p>
+          <textarea
+            value={userNotes}
+            onChange={(e) => setUserNotes(e.target.value)}
+            placeholder="What clicked? What do you want to do differently next time?"
+            rows={3}
+            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 resize-y"
+          />
+        </div>
+
+        {/* Deliverable actions (Phase 3) -- analysis only, never a transcript */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <button
+            onClick={downloadAnalysis}
+            className="px-4 py-2.5 border-2 border-border rounded-xl text-sm font-medium hover:border-sage-300 transition-colors flex items-center gap-1.5"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Save analysis PDF
+          </button>
+          <button
+            onClick={copyPracticeSummary}
+            className="px-4 py-2.5 text-sage-700 text-sm font-medium hover:text-sage-900 transition-colors"
+          >
+            {copiedSummary ? "Copied!" : "Copy a practice summary for any AI"}
+          </button>
+        </div>
 
         <div className="flex gap-3">
           <button
