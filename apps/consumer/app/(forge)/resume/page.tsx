@@ -16,6 +16,9 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
+import { parseTextToResume } from "@/components/resume/resumeParsers";
+import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
+import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -54,6 +57,9 @@ export default function ResumeIntakePage() {
   const [parsedEmail, setParsedEmail] = useState<string>("");
   const [parsedPhone, setParsedPhone] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
+  // Phase 7: once ingest yields material, drop the user into the structured
+  // base-resume builder (the Build stage) instead of routing straight on.
+  const [builderDoc, setBuilderDoc] = useState<ResumeDocument | null>(null);
 
   // All hooks must be declared before any conditional returns (rules-of-hooks)
   const handleFile = useCallback(
@@ -113,6 +119,26 @@ export default function ResumeIntakePage() {
     },
     [handleFile]
   );
+
+  // Parse ingested text into a structured ResumeDocument and enter the Build
+  // stage. seed (from /api/parse) wins over regex-detected contact when present.
+  const enterBuilder = useCallback(
+    (text: string, seed?: { name?: string; email?: string; phone?: string }) => {
+      setBuilderDoc(parseTextToResume(text, seed));
+    },
+    []
+  );
+
+  // Phase 7: the structured builder owns the screen once ingest produced material.
+  if (builderDoc) {
+    return (
+      <ResumeBuilder
+        initialDoc={builderDoc}
+        onComplete={finishBuilder}
+        onBack={() => setBuilderDoc(null)}
+      />
+    );
+  }
 
   // Demo mode: show pre-filled resume and continue
   if (isDemo) {
@@ -193,8 +219,14 @@ export default function ResumeIntakePage() {
     );
   }
 
-  function handleContinue() {
-    updateSession({ lastPageVisited: "resume" });
+  // Persist the finished base resume into the Forge session (structured doc +
+  // a refreshed plain-text copy for the downstream analysis), then continue.
+  function finishBuilder(doc: ResumeDocument) {
+    updateSession({
+      resumeDoc: doc,
+      resumeText: formatResumeDownload(doc),
+      lastPageVisited: "resume",
+    });
     router.push("/goals");
   }
 
@@ -208,17 +240,14 @@ export default function ResumeIntakePage() {
     const previewText = session.resumeText || "";
 
     const commitAndContinue = () => {
-      if (parsedEmail || parsedPhone) {
-        const contactLine = [parsedPhone, parsedEmail].filter(Boolean).join(" | ");
-        if (contactLine && !previewText.includes(parsedEmail || "___") && !previewText.includes(parsedPhone || "___")) {
-          const nameHeader = parsedName || "";
-          updateSession({
-            resumeText: nameHeader + "\n" + contactLine + "\n\n" + previewText.replace(new RegExp("^" + nameHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\n?"), ""),
-          });
-        }
-      }
-      handleContinue();
-    }
+      // Contact is seeded into the builder's doc.contact below, so hand the
+      // extracted text + parsed contact straight to the Build stage.
+      enterBuilder(previewText, {
+        name: parsedName || undefined,
+        email: parsedEmail || undefined,
+        phone: parsedPhone || undefined,
+      });
+    };
 
     return (
       <FlowPage
@@ -386,6 +415,43 @@ export default function ResumeIntakePage() {
               15-20 minutes. We guide you through every section. Worth doing right.
             </p>
           </button>
+
+          {/* Record-history recovery -- for users who can't recall employers/dates */}
+          <div className="mt-2 bg-white rounded-xl p-4 border border-border">
+            <p className="text-sm font-medium text-foreground mb-1">
+              Can&apos;t remember where you worked, or when?
+            </p>
+            <p className="text-xs text-muted mb-3">
+              These free, official sources can remind you. They open on the
+              provider&apos;s own site -- we never see or store them.
+            </p>
+            <div className="space-y-2">
+              <a
+                href="https://www.irs.gov/individuals/get-transcript"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+              >
+                IRS Wage &amp; Income Transcript -- every employer that reported your wages
+              </a>
+              <a
+                href="https://www.theworknumber.com/employees"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+              >
+                The Work Number -- your free annual Employment Data Report
+              </a>
+              <a
+                href="https://www.credly.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+              >
+                Credly -- digital badges and certifications you&apos;ve earned
+              </a>
+            </div>
+          </div>
         </div>
       </FlowPage>
     );
@@ -585,12 +651,12 @@ export default function ResumeIntakePage() {
 
   // --- Path E: Paste text ---
   if (activePath === "paste") {
-    return <PasteResume onComplete={handleContinue} onBack={() => setActivePath(null)} />;
+    return <PasteResume onComplete={(text) => enterBuilder(text)} onBack={() => setActivePath(null)} />;
   }
 
   // --- Path D: Guided AI Builder (hidden fallback) ---
   if (activePath === "guided") {
-    return <GuidedBuilder onComplete={handleContinue} onBack={() => setActivePath(null)} />;
+    return <GuidedBuilder onComplete={(text) => enterBuilder(text)} onBack={() => setActivePath(null)} />;
   }
 
   return null;
@@ -618,7 +684,7 @@ function GuidedBuilder({
   onComplete,
   onBack,
 }: {
-  onComplete: () => void;
+  onComplete: (text: string) => void;
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
@@ -659,14 +725,16 @@ function GuidedBuilder({
       case "skills":       setStep("education"); break;
       case "education":    setStep("extras"); break;
       case "extras":       setStep("review"); break;
-      case "review":
+      case "review": {
+        const text = assembleResume();
         updateSession({
-          resumeText: assembleResume(),
+          resumeText: text,
           resumeMethod: "guided",
           lastPageVisited: "resume",
         });
-        onComplete();
+        onComplete(text);
         break;
+      }
     }
   }
 
@@ -1150,7 +1218,7 @@ function PasteResume({
   onComplete,
   onBack,
 }: {
-  onComplete: () => void;
+  onComplete: (text: string) => void;
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
@@ -1160,10 +1228,10 @@ function PasteResume({
     if (!text.trim()) return;
     updateSession({
       resumeText: text.trim(),
-      resumeMethod: "paste" as any,
+      resumeMethod: "paste",
       lastPageVisited: "resume",
     });
-    onComplete();
+    onComplete(text.trim());
   }
 
   return (

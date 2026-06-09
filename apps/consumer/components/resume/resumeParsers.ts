@@ -113,6 +113,37 @@ export function parseRushToResume(rushResult: any, targetJob: string): ResumeDoc
   return doc;
 }
 
+// --- Raw text -> ResumeDocument (Forge base-resume builder, Phase 7) ---
+
+/**
+ * Parse raw resume TEXT (paste, OCR/upload, or guided-builder output) straight
+ * into a structured ResumeDocument for the Forge base-resume builder.
+ *
+ * Unlike parseForgeToResume, this runs at INTAKE time -- it does not require a
+ * completed forgeOutput. Incarceration content is stripped (cleanText) so the
+ * base resume stays disclosure-safe; disclosure is handled in its own lane.
+ *
+ * contactSeed (from /api/parse's profile) wins over the line-by-line regex when
+ * present -- the parse API reads contact info more reliably than heuristics.
+ */
+export function parseTextToResume(
+  text: string,
+  contactSeed?: { name?: string; email?: string; phone?: string }
+): ResumeDocument {
+  const doc = createEmptyResume("forge");
+  if (text?.trim()) {
+    const parsed = parseResumeText(cleanText(text));
+    doc.contact = parsed.contact;
+    if (parsed.experience.length) doc.experience = parsed.experience;
+    if (parsed.education.length) doc.education = parsed.education;
+    if (parsed.skills.length) doc.skills = parsed.skills;
+  }
+  if (contactSeed?.name?.trim()) doc.contact.name = contactSeed.name.trim();
+  if (contactSeed?.email?.trim()) doc.contact.email = contactSeed.email.trim();
+  if (contactSeed?.phone?.trim()) doc.contact.phone = contactSeed.phone.trim();
+  return doc;
+}
+
 // --- Raw Resume Text Parser ---
 
 function parseResumeText(text: string): {
@@ -138,7 +169,7 @@ function parseResumeText(text: string): {
 
     // Detect section headers
     if (upper.match(/^(PROFESSIONAL\s+)?SUMMARY/)) { currentSection = "summary"; continue; }
-    if (upper.match(/^(PROFESSIONAL\s+|WORK\s+)?EXPERIENCE/)) { currentSection = "experience"; continue; }
+    if (upper.match(/^(PROFESSIONAL\s+|WORK\s+|EMPLOYMENT\s+)?(EXPERIENCE|HISTORY)/)) { currentSection = "experience"; continue; }
     if (upper.match(/^EDUCATION|^CERTIF/)) { currentSection = "education"; continue; }
     if (upper.match(/^(CORE\s+)?SKILLS|^COMPETENC/)) { currentSection = "skills"; continue; }
     if (upper.match(/^OBJECTIVE|^REFERENCE/)) { currentSection = "skip"; continue; }

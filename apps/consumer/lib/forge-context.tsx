@@ -2,6 +2,7 @@
 
 import { useState, createContext, useContext, useCallback } from "react";
 import type { ReactNode } from "react";
+import type { ResumeDocument } from "@/components/resume/resumeModel";
 
 // --- Forge Session Context ---
 // Tracks user progress through the Forge flow without requiring auth.
@@ -18,7 +19,10 @@ export interface ForgeSessionData {
   // Page 2: Resume
   resumeText?: string;
   resumeFileName?: string;
-  resumeMethod?: "upload" | "import" | "external" | "guided" | "rush";
+  resumeMethod?: "upload" | "import" | "external" | "guided" | "rush" | "paste";
+  /** Structured base resume built in the Forge (Phase 7). Carried into the
+   *  analysis and saved as the base the Application Tailor aims at jobs. */
+  resumeDoc?: ResumeDocument;
 
   // Page 3: Goals
   goals?: string[];
