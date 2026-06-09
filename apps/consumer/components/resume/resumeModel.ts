@@ -33,6 +33,21 @@ export interface WorkEntry {
   startDate: string;
   endDate: string; // "" = Present
   bullets: string[];
+  /** Structured proof behind worked-on bullets (bullet workshop, Phase 7.3).
+   *  The frame only -- what/tool/often/quantity/improved -- never raw transcript
+   *  (privacy doctrine). Consumed by Interview Practice in 7.5. */
+  evidence?: BulletEvidence[];
+}
+
+/** The structured facts behind a strengthened bullet. Stored on the resume so
+ *  Interview Practice can regenerate talking points from real proof, not words. */
+export interface BulletEvidence {
+  bullet: string;
+  did?: string;
+  tools?: string;
+  often?: string;
+  quantity?: string;
+  improved?: string;
 }
 
 export interface EducationEntry {
