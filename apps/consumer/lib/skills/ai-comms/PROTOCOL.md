@@ -120,6 +120,8 @@ This list is maintained across all AI sessions. Any model adding to it must note
 | Skip the practice prompt when a user is about to interview | Practice doctrine -- the script without practice fails | 2026-06-08 |
 | Use em dashes | Operator style rule | pre-2026-06-08 |
 | Use emojis in professional content | Operator style rule | pre-2026-06-08 |
+| Present an expired or unauthorized employer incentive as current (e.g., WOTC for 2026 hires -- expired after 2025-12-31; use Federal Bonding instead) | Factual accuracy in the high-harm legal zone | 2026-06-08 |
+| State a legal point without its jurisdiction + date, or give a categorical legal promise | Law varies by place and changes constantly; the user must verify locally | 2026-06-08 |
 
 ---
 

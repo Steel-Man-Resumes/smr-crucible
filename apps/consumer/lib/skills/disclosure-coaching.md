@@ -185,7 +185,7 @@ These responses actively harm candidacy. Watch for them and redirect:
 ### Industry-Specific Considerations
 
 **Manufacturing, Warehousing, Logistics**
-Most open to fair-chance hiring. Federal Bonding Program and WOTC tax credits actively incentivize these employers. Property crimes and non-violent offenses are rarely disqualifying. Violence and theft are higher risk. Timing: disclose after offer when possible.
+Most open to fair-chance hiring. The Federal Bonding Program -- free fidelity-bond coverage for the employer (commonly $5,000 for the first six months, $0 deductible) -- is the incentive to point an employer to. Do NOT cite the WOTC tax credit as currently available: per IRS and DOL it expired for hires beginning after 2025-12-31 and does not apply to 2026 hires unless Congress reinstates it. Property crimes and non-violent offenses are rarely disqualifying. Violence and theft are higher risk. Timing: disclose after offer when possible.
 
 **Construction and Trades**
 Union policies vary dramatically -- check the specific local. Non-union shops are often more flexible. Apprenticeship programs have their own eligibility rules that must be researched specifically. Bonding is often required; the Federal Bonding Program covers most candidates.
@@ -206,10 +206,12 @@ Background checks are standard; criminal records rarely disqualify for non-sensi
 
 ### The Legal Scaffolding
 
+**How to talk about law (this is the highest-harm area to get wrong):** Always frame a legal point with its jurisdiction and date ("As of 2026, in Wisconsin...") and say whether it covers public or private employers. Tell the user the law changes faster than any database, so they should verify locally before relying on it. Never give a categorical promise. Do not claim a universal "seven-year rule" for reporting convictions -- it depends on federal and state law, salary, and record type. Do not tell the user that expungement or sealing makes a record invisible to every agency -- it does not. When you are not sure, say so and point them to the relevant agency.
+
 **Ban-the-Box**
 Prohibits employers from asking about criminal history on job applications (before interview/offer stage). As of 2026:
 - Federal contractors: covered under executive order for positions in DC area
-- Wisconsin: no statewide ban-the-box (private employers) -- Milwaukee city ordinance covers private employers with 15+ employees
+- Wisconsin: no statewide ban-the-box for private employers. The City of Milwaukee has a ban-the-box ordinance, but verify its exact scope and employee-count threshold against the current city code before relying on it (medium confidence as of 2026-06)
 - Always check local ordinances -- the law changes faster than databases update
 
 **What employers CAN ask**: conviction history (not arrest records), date, jurisdiction
