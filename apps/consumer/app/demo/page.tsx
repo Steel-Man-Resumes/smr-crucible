@@ -653,8 +653,8 @@ function SceneReveal({ progress }: { progress: number }) {
 function SceneRefinery({ progress }: { progress: number }) {
   const tools = [
     {
-      name: "Resume Builder",
-      desc: "Build targeted resumes with AI",
+      name: "Application Tailor",
+      desc: "Tailor a resume to any job, with AI",
       color: "bg-[#f4f7f4] border-[#c2d1c0]",
       textColor: "text-[#557553]",
     },
@@ -731,7 +731,7 @@ function SceneRefinery({ progress }: { progress: number }) {
         {phase === "resume" && (
           <FadeIn delay={0}>
             <h2 className="text-lg font-bold text-[#2c2418] mb-4 px-2">
-              Resume Builder
+              Application Tailor
             </h2>
             <div className="grid lg:grid-cols-[1fr_340px] gap-4">
               {/* Editor side */}

@@ -66,7 +66,7 @@ const DASHBOARD_FEATURES = [
 const WHAT_CLIENTS_GET = [
   { tool: "The Forge", desc: "10-minute career intake -- resume, cover letter, strengths analysis, career paths, resources" },
   { tool: "Job Board", desc: "Verified fair-chance employer listings -- real companies, manually checked" },
-  { tool: "Resume Builder", desc: "Targeted resume versions for specific jobs, with AI guidance at each step" },
+  { tool: "Application Tailor", desc: "Targeted resume, cover letter, and disclosure for a specific job, with AI guidance at each step" },
   { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },
   { tool: "Interview Practice", desc: "Text or voice mock interviews, including disclosure-specific questions" },
   { tool: "Applications Tracker", desc: "Track every application -- company, status, which resume version, follow-up emails" },

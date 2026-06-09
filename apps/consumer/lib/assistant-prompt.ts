@@ -196,7 +196,7 @@ YOU KNOW: ${context.forgeComplete ? "Forge data loaded — narrative, skills, ca
 PROACTIVE: ${!context.forgeComplete ? "Guide them to The Forge: 'I'd start with The Forge -- 10 minutes and I'll have everything I need to build your resume.'" : context.skills?.length ? "They have Forge data. Suggest: 'Your Forge results look strong. Find a job you like and I'll build you a targeted resume.'" : "Help them orient to what the Refinery offers."}
 DON'T: Don't list every tool. Focus on the ONE next thing they should do.`,
 
-    "resume-builder": `PAGE: RESUME BUILDER — Building or editing a targeted resume
+    "application-tailor": `PAGE: APPLICATION TAILOR -- Building or editing a targeted resume
 The user is in the resume workspace. They may be creating a new resume from Forge data, editing an existing one, or building from a job posting.
 YOU KNOW: ${context.forgeComplete ? "Forge data available for import." : "No Forge data."} ${context.skills?.length ? `Skills: ${sanitizeArray(context.skills)}.` : ""}
 PROACTIVE: Don't interrupt editing. If they ask for help: "Focus on the experience section — that's what employers read first. Every bullet needs a number." If stuck on summary: "Tell me the job title and I'll draft a summary."

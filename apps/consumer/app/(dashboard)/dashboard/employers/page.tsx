@@ -236,7 +236,7 @@ function EmployersList() {
                         </a>
                       ) : (
                         <a
-                          href="/dashboard/resume-builder"
+                          href="/dashboard/application-tailor"
                           className="text-sm font-medium text-sage-700 hover:text-sage-900 underline"
                         >
                           Build a resume first

@@ -135,8 +135,8 @@ const RULES: WinRule[] = [
         "Your Forge data is already loaded — skills, experience, and a professional summary are ready. You refine it, not start from scratch.",
       action: {
         type: "link",
-        label: "Open Resume Builder",
-        href: "/dashboard/resume-builder",
+        label: "Open Application Tailor",
+        href: "/dashboard/application-tailor",
       },
       category: "skill-building",
     },
@@ -320,8 +320,8 @@ const RULES: WinRule[] = [
         "A generic resume gets ignored. Pick one job you really want and customize your resume to match what they're looking for.",
       action: {
         type: "link",
-        label: "Open Resume Builder",
-        href: "/dashboard/resume-builder",
+        label: "Open Application Tailor",
+        href: "/dashboard/application-tailor",
       },
       category: "skill-building",
     },

@@ -723,7 +723,7 @@ function JobBoardPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           sessionStorage.setItem("resume_target_job", JSON.stringify(job));
-                          window.location.href = "/dashboard/resume-builder?from=job";
+                          window.location.href = "/dashboard/application-tailor?from=job";
                         }}
                         className="px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-lg hover:bg-sky-700 transition-colors"
                       >

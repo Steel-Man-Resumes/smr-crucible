@@ -47,7 +47,7 @@ const PIPELINE: {
     bgColor: "bg-gray-50",
     suggestion: {
       text: "Build a targeted resume for this job",
-      href: "/dashboard/resume-builder",
+      href: "/dashboard/application-tailor",
     },
   },
   {

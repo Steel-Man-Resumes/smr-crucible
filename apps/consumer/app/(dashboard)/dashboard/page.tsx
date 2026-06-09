@@ -7,7 +7,7 @@
  *
  * Client states:
  * 1. needs_profile → Profile setup form
- * 2. needs_resume  → Job Board + Resume Builder only, locked cards for rest
+ * 2. needs_resume  → Job Board + Application Tailor only, locked cards for rest
  * 3. full_access   → Everything unlocked
  *
  * Partner: methodology review mode — bypass Forge gate, show tool landscape + deep links.
@@ -44,9 +44,9 @@ const ALL_TOOLS: ToolCard[] = [
     minState: "needs_resume",
   },
   {
-    href: "/dashboard/resume-builder",
-    title: "Resume Builder",
-    description: "Build a targeted resume for any job. We help you every step.",
+    href: "/dashboard/application-tailor",
+    title: "Application Tailor",
+    description: "Tailor your resume to a specific job -- with a matching cover letter and disclosure brief.",
     color: "bg-sky-50 border-sky-200",
     accent: "text-sky-600",
     minState: "needs_resume",
@@ -126,7 +126,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_TOOL_HREF: Record<string, string> = {
-  resume: "/dashboard/resume-builder",
+  resume: "/dashboard/application-tailor",
   disclosure_plan: "/dashboard/disclosure",
   interview_prep: "/dashboard/interview",
   job_match: "/dashboard/jobs",
@@ -399,7 +399,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm font-semibold text-foreground">Build a targeted resume for that specific job</p>
                 <p className="text-xs text-muted leading-relaxed">
-                  The Resume Builder reads the job description and builds a resume matched to its exact
+                  The Application Tailor reads the job description and builds a resume matched to its exact
                   requirements -- using your Forge profile. Do this for as many jobs as you want.
                 </p>
               </div>
@@ -631,9 +631,9 @@ function PartnerDashboard() {
       research: "Stages of Change (Prochaska), Narrative Identity (McAdams), Giordano's hooks-for-change",
     },
     {
-      title: "Resume Builder",
-      href: "/dashboard/resume-builder",
-      description: "AI-generated resumes targeted to specific jobs. Pulls from Forge data — every resume is grounded in the client's actual skills and story, not a template.",
+      title: "Application Tailor",
+      href: "/dashboard/application-tailor",
+      description: "Targeted resume, cover letter, and disclosure brief for a specific job. Pulls from the client's Forge profile -- every version is grounded in their actual skills and story, not a template.",
       research: "ATS optimization, Bandura mastery experiences",
     },
     {

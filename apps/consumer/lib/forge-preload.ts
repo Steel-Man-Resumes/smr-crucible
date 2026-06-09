@@ -13,7 +13,7 @@ import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ForgePreload {
-  // Resume Builder: pre-populated skeleton
+  // Application Tailor: pre-populated skeleton
   resumeSkeleton: {
     professionalSummary: string;
     skills: string[];

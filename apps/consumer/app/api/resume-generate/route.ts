@@ -1,7 +1,7 @@
 /**
  * Resume Generation Helper API
  *
- * Provides AI suggestions for the Resume Builder.
+ * Provides AI suggestions for the Application Tailor.
  * Does NOT auto-generate — gives starting points the user edits.
  * Each suggestion logged to decision_log.
  */

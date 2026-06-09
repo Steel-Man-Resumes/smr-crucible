@@ -466,18 +466,18 @@ export default function RushPage() {
               </button>
             </div>
 
-            {/* Continue editing in Resume Builder */}
+            {/* Continue editing in the Application Tailor */}
             <button
               onClick={() => {
                 try {
                   sessionStorage.setItem("rush_result", JSON.stringify(result));
                   sessionStorage.setItem("rush_target", targetJob);
                 } catch {}
-                router.push("/dashboard/resume-builder?from=rush");
+                router.push("/dashboard/application-tailor?from=rush");
               }}
               className="w-full px-6 py-3 bg-white border-2 border-sage-300 text-sage-700 rounded-xl text-sm font-medium hover:bg-sage-50 transition-colors mb-4"
             >
-              Continue editing in Resume Builder
+              Continue editing in the Application Tailor
             </button>
 
             {/* Interview Warning */}

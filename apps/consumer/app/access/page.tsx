@@ -78,7 +78,7 @@ References available upon request`;
 // ── Tools ───────────────────────────────────────────────────────
 const TOOLS = [
   { name: "Job Board", desc: "Real local listings with fair-chance employer flags and AI-simplified descriptions" },
-  { name: "Resume Builder", desc: "Job-targeted, built from Forge output with no blank-page friction" },
+  { name: "Application Tailor", desc: "Job-targeted resume, cover letter, and disclosure -- built from Forge output, no blank-page friction" },
   { name: "Disclosure Coach", desc: "Jurisdiction-specific timing, legal rights, and a natural conversation script" },
   { name: "Interview Prep", desc: "Adaptive AI mock interviews with structured written feedback" },
   { name: "Fair-Chance Lanes", desc: "Fair-chance opportunity lanes connected to live job search, resumes, disclosure, and interview prep" },
@@ -233,7 +233,7 @@ export default function AccessPage() {
             <div>
               <div style={{ fontSize:"17px", fontWeight:700, color:"#1c1c1a", marginBottom:"8px" }}>The Refinery &mdash; <span style={{ color:"#4a6741" }}>refinery.steelmanresumes.com</span></div>
               <p style={{ fontSize:"15px", color:"#4a4a48", lineHeight:1.75, margin:0 }}>
-                The authenticated workspace. Once signed in, the person builds their future here -- not receives it. Job Board, Resume Builder, Disclosure Coach, Interview Prep, Application Tracker. Every action is logged. Every step is measurable.
+                The authenticated workspace. Once signed in, the person builds their future here -- not receives it. Job Board, Application Tailor, Disclosure Coach, Interview Prep, Application Tracker. Every action is logged. Every step is measurable.
               </p>
             </div>
           </div>

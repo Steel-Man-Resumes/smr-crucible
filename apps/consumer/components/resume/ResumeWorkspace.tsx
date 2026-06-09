@@ -385,7 +385,7 @@ export function ResumeWorkspace() {
         // Already tailored: open it for editing rather than regenerating (no AI spend).
         if (app.resume_artifact_id) {
           setTargetApplicationId(app.id);
-          router.replace(`/dashboard/resume-builder?id=${app.resume_artifact_id}`, { scroll: false });
+          router.replace(`/dashboard/application-tailor?id=${app.resume_artifact_id}`, { scroll: false });
           return;
         }
         await runCareerPackage(
@@ -454,7 +454,7 @@ export function ResumeWorkspace() {
             setArtifactId(data.id);
             lastSaved.current = contentStr;
             setSaveStatus("saved");
-            router.replace(`/dashboard/resume-builder?id=${data.id}`, {
+            router.replace(`/dashboard/application-tailor?id=${data.id}`, {
               scroll: false,
             });
             setSavedResumes((prev) => [data, ...prev]);
@@ -611,7 +611,7 @@ ${bodyHtml}
   // --- Load existing resume ---
   function loadResume(id: string) {
     setArtifactId(null);
-    router.replace(`/dashboard/resume-builder?id=${id}`, { scroll: false });
+    router.replace(`/dashboard/application-tailor?id=${id}`, { scroll: false });
   }
 
   // --- New resume ---
@@ -621,7 +621,7 @@ ${bodyHtml}
     lastSaved.current = "";
     setSaveStatus("idle");
     setShowSetup(true);
-    router.replace("/dashboard/resume-builder", { scroll: false });
+    router.replace("/dashboard/application-tailor", { scroll: false });
   }
 
   // Scoring
@@ -656,7 +656,7 @@ ${bodyHtml}
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Resume Builder
+          Application Tailor
         </h1>
         <div className="bg-warm-50 rounded-2xl p-6 border border-warm-200 text-center mt-6">
           <p className="text-sm text-earth-700 mb-4">{genError}</p>
@@ -681,7 +681,7 @@ ${bodyHtml}
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          Resume Builder
+          Application Tailor
         </h1>
         <p className="text-body text-muted mb-8">
           Build a resume for a specific job. We&apos;ll guide you through each

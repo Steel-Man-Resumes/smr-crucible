@@ -23,7 +23,7 @@ const NAV_SECTIONS = [
     label: "Dashboard",
     routes: [
       { path: "/dashboard", label: "Dashboard" },
-      { path: "/resume-builder", label: "Resume Builder" },
+      { path: "/application-tailor", label: "Application Tailor" },
       { path: "/disclosure", label: "Disclosure" },
       { path: "/interview", label: "Interview" },
       { path: "/jobs", label: "Jobs" },

@@ -222,7 +222,7 @@ ${body}
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {isResume ? (
                             <Link
-                              href={`/dashboard/resume-builder?id=${a.id}`}
+                              href={`/dashboard/application-tailor?id=${a.id}`}
                               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sage-600 text-white hover:bg-sage-700"
                             >
                               Open in builder

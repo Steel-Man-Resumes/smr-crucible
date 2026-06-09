@@ -14,7 +14,7 @@ import Link from "next/link";
 const STAGES = [
   { n: 1, label: "Foundation", href: "/intro" },
   { n: 2, label: "Target", href: "/dashboard/jobs" },
-  { n: 3, label: "Materials", href: "/dashboard/resume-builder" },
+  { n: 3, label: "Materials", href: "/dashboard/application-tailor" },
   { n: 4, label: "Approach", href: "/dashboard/disclosure" },
   { n: 5, label: "Practice", href: "/dashboard/interview" },
   { n: 6, label: "Apply", href: "/dashboard/applications" },

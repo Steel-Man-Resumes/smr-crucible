@@ -38,6 +38,14 @@ const nextConfig = {
         destination: "/login",
         permanent: false,
       },
+      {
+        // Renamed 2026-06-09: "Resume Builder" -> "Application Tailor".
+        // Keeps old deep-links (saved-artifact ?id=, bookmarks) alive. Next
+        // forwards the query string to the destination automatically.
+        source: "/dashboard/resume-builder",
+        destination: "/dashboard/application-tailor",
+        permanent: false,
+      },
     ];
   },
   async headers() {

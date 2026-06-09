@@ -14,7 +14,7 @@ const CLIENT_MESSAGES: Record<string, string> = {
     "Your Forge results are loaded. Find a job you like and I'll build your resume for it.",
   "dashboard-no-forge":
     "I'm t.ROY. Start with The Forge -- 10 minutes, and I'll have everything I need to build you a great resume.",
-  "resume-builder":
+  "application-tailor":
     "Every bullet needs a number. Focus on what you accomplished, not what you were assigned. I'll help.",
   jobs:
     "Fair-chance employers are highlighted first. They're not doing you a favor -- they know the value. Find one that fits.",
@@ -69,8 +69,8 @@ const DEMO_MESSAGES: Record<string, string> = {
 const PARTNER_MESSAGES: Record<string, string> = {
   dashboard:
     "The Refinery is where persistent career work happens. Clients build targeted resumes, practice interviews, and plan disclosure strategies. Each tool connects to the next.",
-  "resume-builder":
-    "The Resume Builder scaffolds from Forge data. CAR-format bullets with quantified achievements. Fading scaffold tracks iteration number for each user.",
+  "application-tailor":
+    "The Application Tailor scaffolds from Forge data. CAR-format bullets with quantified achievements. Fading scaffold tracks iteration number for each user.",
   jobs:
     "Real job listings from JSearch API. Fair-chance employers highlighted via known employer list + AI enrichment. 6-hour cache prevents API abuse.",
   disclosure:
@@ -98,7 +98,7 @@ const PARTNER_MESSAGES: Record<string, string> = {
 const OBSERVER_MESSAGES: Record<string, string> = {
   dashboard:
     "The Refinery implements persistent scaffolded career services (Wood, Bruner, Ross, 1976). Progressive unlock ensures users build skills before advancing. Each tool's output feeds the next.",
-  "resume-builder":
+  "application-tailor":
     "TORI-competitive resume generation with research-backed prompts. Generative identity framing (Maruna, 2001) transforms duties into achievements. Multi-level detection adapts output to user sophistication.",
   jobs:
     "Fair-chance employer matching uses JSearch API with AI enrichment. Ban-the-box compliance checking, WOTC tax credit awareness, and second-chance employer database.",

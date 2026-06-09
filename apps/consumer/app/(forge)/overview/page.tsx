@@ -146,7 +146,7 @@ const JOURNEY = [
   },
   {
     stage: "Stage 3",
-    name: "Resume Builder",
+    name: "Application Tailor",
     time: "Ongoing",
     what: "Build job-targeted resume versions for specific listings. The AI tailors language to the job description while preserving your story.",
     tech: "Refinery Artifact system: each resume is versioned, stored with metadata (target job, company, application ID), and linked to the job application tracker.",

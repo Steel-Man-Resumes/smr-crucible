@@ -248,7 +248,7 @@ function OpportunityCard({
   const searchHref = `/dashboard/jobs?q=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
-  const resumeHref = `/dashboard/resume-builder?role=${encodeURIComponent(
+  const resumeHref = `/dashboard/application-tailor?role=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
   const employersHref = `/dashboard/employers?q=${encodeURIComponent(
