@@ -95,6 +95,9 @@ function JobBoardPage() {
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
+  const [fairChanceOnly, setFairChanceOnly] = useState(false);
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [roleFromResume, setRoleFromResume] = useState(false);
 
   // Load saved/hidden state
   useEffect(() => {
@@ -142,7 +145,13 @@ function JobBoardPage() {
     const f = userContext.forge;
 
     const top = f?.careerPaths?.[0];
-    const role = top ? (typeof top === "string" ? top : top.title) : "";
+    const careerRole = top ? (typeof top === "string" ? top : top.title) : "";
+    // Phase 4C: prefer the user's most recent tailored resume's target role over
+    // the generic Forge career path -- it is the job they actually built toward.
+    const resumeRole =
+      ((userContext as any).resumes ?? []).find((r: any) => r && r.targetJob)?.targetJob || "";
+    const role = resumeRole || careerRole;
+    if (resumeRole) setRoleFromResume(true);
     const loc = [userContext.profile?.city, userContext.profile?.state]
       .filter(Boolean)
       .join(", ");
@@ -312,7 +321,12 @@ function JobBoardPage() {
 
   // ─── Derived ────────────────────────────────────────────────────────────
 
-  const visibleJobs = jobs.filter((j) => !hiddenJobs.has(j.id));
+  const visibleJobs = jobs.filter((j) => {
+    if (hiddenJobs.has(j.id)) return false;
+    if (fairChanceOnly && !j.second_chance) return false;
+    if (remoteOnly && !j.remote) return false;
+    return true;
+  });
   const hiddenCount = jobs.length - visibleJobs.length;
   const savedCount = savedJobs.size;
 
@@ -397,6 +411,11 @@ function JobBoardPage() {
             <p className="text-xs text-muted mt-1">
               You can combine terms -- e.g., &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;
             </p>
+            {roleFromResume && context.targetRole && (
+              <p className="text-xs text-sage-600 mt-1">
+                Seeded from your most recent resume -- edit it anytime.
+              </p>
+            )}
             {/* Quick picks — click to set or append */}
             <div className="flex flex-wrap gap-2 mt-2">
               {COMMON_ROLES.slice(0, 6).map((role) => {
@@ -445,6 +464,28 @@ function JobBoardPage() {
           </button>
         </div>
       </div>
+
+      {/* Phase 4C: result filters -- refine the listings you already pulled */}
+      {jobs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs font-medium text-muted">Filter:</span>
+          <button
+            onClick={() => setFairChanceOnly((v) => !v)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${fairChanceOnly ? "bg-sage-600 text-white border-sage-600" : "bg-white border-border text-muted hover:border-sage-300"}`}
+          >
+            Fair chance only
+          </button>
+          <button
+            onClick={() => setRemoteOnly((v) => !v)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${remoteOnly ? "bg-sky-600 text-white border-sky-600" : "bg-white border-border text-muted hover:border-sky-300"}`}
+          >
+            Remote only
+          </button>
+          <span className="text-xs text-muted ml-auto">
+            {visibleJobs.length} of {jobs.length} shown
+          </span>
+        </div>
+      )}
 
       {/* Rate limit warning */}
       {rateLimitError && (
