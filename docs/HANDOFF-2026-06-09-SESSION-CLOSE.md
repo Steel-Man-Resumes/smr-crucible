@@ -9,20 +9,23 @@
 
 ## >> THE NEXT MOVE (start here, do not miss a beat)
 
-You are mid-flight on **Phase 1 of the approved Refinery overhaul**. Read, in order:
-1. This file.
-2. `docs/REFINERY-OVERHAUL-PLAN-2026-06-09.md` -- the full plan Troy APPROVED. The 7 phases are the roadmap. Sequencing is locked: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7.
+**Phase 1 is COMPLETE (continuation session 2026-06-09).** Next up is **Phase 2 -- Disclosure Planner overhaul**. Read, in order:
+1. This file (esp. the "Phase 1 COMPLETE" section just below).
+2. `docs/REFINERY-OVERHAUL-PLAN-2026-06-09.md` -- the full plan Troy APPROVED. Sequencing is locked: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7. Phase 2 spec is section 5 "Phase 2".
 3. `apps/consumer/lib/skills/ai-comms/log/` -- the two most recent entries.
 
-**Phase 1 = the intelligence backbone.** It has two parts:
-- (1A) Every Refinery tool reads the user's Forge context from the SERVER (`useUserContext()` -> `/api/user/context`), not `localStorage["forge_session"]`. DONE for the disclosure page (commit `5686bdd`). **STILL TODO: the interview page and the job board.**
-- (1B) The reusable **progressive-intake engine** (AI asks tailored follow-up questions based on the user's answers + context). NOT STARTED. This is the piece Troy is most excited about ("award-winning intelligence").
+**Phase 2's first task = wire `<ProgressiveIntake>` into the disclosure planner** (`app/(dashboard)/dashboard/disclosure/page.tsx`), its intended first consumer. The engine is built and verified; Phase 2 is where it goes live. Phase 2 also: motivating generic-vs-personalized choice, editable Forge data, fix the build flow (land ON the finished plan, not the top; explicit "Saved to Materials"), wire the existing voice rehearsal, PDF export, remove the copy button.
 
-**Your literal first task:** mirror the disclosure change onto two pages:
-- `app/(dashboard)/dashboard/interview/page.tsx` -- reads `localStorage.getItem("forge_session")` around line 128. Replace with `useUserContext()` (see the exact pattern in `disclosure/page.tsx`, the `forgeLoadedRef` useEffect added in `5686bdd`). NOTE for Phase 3: interview must ALSO feed the user's SPECIFIC tailored resume + the target job description (today it only feeds generic Forge skills/strengths). Phase 1 is just the server-context swap; Phase 3 adds the real resume/job.
-- `app/(dashboard)/dashboard/jobs/page.tsx` -- reads `localStorage.getItem("forge_session")` around line 135. Same swap.
+### Phase 1 COMPLETE -- what shipped this continuation (3 commits, pushed to main)
 
-Then build the progressive-intake engine (design sketch at the bottom of this file).
+- (1A) **Every Refinery tool now reads Forge from the SERVER**, not `localStorage["forge_session"]`. Disclosure was done in `5686bdd`; this session finished the set:
+  - `636b0df` -- interview page -> `useUserContext()`. NOTE for Phase 3: interview must ALSO feed the user's SPECIFIC tailored resume + the target job description (today still only generic Forge skills/strengths). Phase 1 was just the server-context swap.
+  - `122a026` -- job board -> `useUserContext()`. Privacy: `/api/user/context` does NOT expose the record TYPE, so the optional `recordType` search hint was dropped (only `hasRecord` drives fair-chance filtering). Phase 4 adds richer filters + resume-work-history seeding.
+- (1B) **Progressive-intake engine** (`1e1a3e9`) -- the reusable "intelligent" intake. Contract for wiring it in:
+  - **API:** `POST /api/intake/followups` body `{ topic, context, answersSoFar, round }` -> `{ questions: string[], done: boolean }`. Uses `MODEL_DEEP` (Opus 4.8). Hard-caps at 2 follow-up rounds; fails OPEN (returns `done:true`) on any error so it never traps the user. Mock-gated for dev.
+  - **Component:** `<ProgressiveIntake topic context initialQuestions onComplete submitLabel maxFollowUpRounds busy />` from `@/components/ProgressiveIntake`. Renders initial questions, loops AI follow-ups, returns the enriched `IntakeAnswer[]` via `onComplete`. Every Forge-seeded field is editable (pass `seedValue` + optional `seedNote`); nothing is locked.
+  - **Pure logic:** `lib/intake-engine.ts` (`buildFollowupsSystemPrompt`, `buildAnswersBlock`, `parseFollowups`). Parser fails SAFE; verified by a 12-check tsx harness this session.
+  - This route does NOT read skill files, so it needs NO `outputFileTracingIncludes` entry (footgun avoided). Live end-to-end verification happens when it is wired into disclosure in Phase 2.
 
 **The build/deploy/verify loop (NON-NEGOTIABLE -- this is how we caught everything):**
 ```
