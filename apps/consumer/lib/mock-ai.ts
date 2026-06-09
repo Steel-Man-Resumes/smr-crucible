@@ -202,6 +202,13 @@ export const MOCK_FOLLOW_UP = {
   body: "Hi,\n\nI wanted to follow up on my application for the Warehouse Associate role I submitted last week. I'm still very interested and would welcome the chance to talk about how my eight years of warehouse experience could help your team.\n\nPlease let me know if there's anything else you need from me. Thank you for your time.\n\nBest,\nJordan Williams",
 };
 
+// Progressive-intake follow-ups (Jordan persona). The route returns these on the
+// first round and signals done on later rounds, so the dev loop terminates.
+export const MOCK_INTAKE_FOLLOWUPS = [
+  "You mentioned training new hires -- what is one thing you taught them that you are genuinely proud of?",
+  "When you picture the right job, what does a good shift schedule look like for you and your family?",
+];
+
 export const MOCK_RESUME = `Jordan M. Williams
 Milwaukee, WI | (414) 555-0192 | jordan.williams@email.com
 
