@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
+import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
@@ -294,6 +295,7 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      <AdminTestModeBanner />
       {/* Top bar */}
       <nav className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-border">
         <div className="px-4 sm:px-6">
