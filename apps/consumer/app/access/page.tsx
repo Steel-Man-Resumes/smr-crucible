@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 
 // ── Confetti ────────────────────────────────────────────────────
 const CONFETTI_COLORS = ["#4a9e3f","#2d5a27","#a8c89e","#c4a962","#7ab876","#e8f0e4","#ffffff","#d4edca"];
@@ -93,6 +94,18 @@ const S = {
 };
 
 export default function AccessPage() {
+  return (
+    <Suspense>
+      <AccessPageInner />
+    </Suspense>
+  );
+}
+
+function AccessPageInner() {
+  const searchParams = useSearchParams();
+  const partnerCode  = (searchParams.get("code") || "BAKER2026").toUpperCase();
+  const isBaker      = partnerCode === "BAKER2026";
+
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const rafRef      = useRef<number>(0);
@@ -272,14 +285,23 @@ export default function AccessPage() {
         <h2 style={{ fontSize:"22px", fontWeight:700, color:"#1c1c1a", margin:"0 0 20px" }}>No setup required. Your email is pre-authorized.</h2>
 
         <div style={{ background:"#fff", borderRadius:"16px", border:"1px solid #e8e4dc", overflow:"hidden", marginBottom:"16px" }}>
+          {isBaker ? (
+            <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Sign-in Email</div>
+              <div style={{ fontSize:"16px", fontWeight:600, color:"#1c1c1a", marginBottom:"4px" }}>latonyabakergoe@gmail.com</div>
+              <div style={{ fontSize:"13px", color:"#7a7a78" }}>This address is pre-authorized. Sign in at refinery.steelmanresumes.com and you will receive a one-click magic link. Partner tier activates automatically -- no code needed.</div>
+            </div>
+          ) : (
+            <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Sign In</div>
+              <div style={{ fontSize:"14px", color:"#4a4a48", lineHeight:1.6 }}>
+                Create a free account (or sign in) at <strong>forge.steelmanresumes.com</strong>, then go to Settings and enter your partner code below to unlock full access.
+              </div>
+            </div>
+          )}
           <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
-            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Sign-in Email</div>
-            <div style={{ fontSize:"16px", fontWeight:600, color:"#1c1c1a", marginBottom:"4px" }}>latonyabakergoe@gmail.com</div>
-            <div style={{ fontSize:"13px", color:"#7a7a78" }}>This address is pre-authorized. Sign in at refinery.steelmanresumes.com and you will receive a one-click magic link. Partner tier activates automatically -- no code needed.</div>
-          </div>
-          <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
-            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Partner Code (for your team)</div>
-            <div style={{ fontSize:"22px", fontWeight:800, color:"#1c1c1a", letterSpacing:"0.06em", fontFamily:"monospace", marginBottom:"4px" }}>BAKER2026</div>
+            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Partner Code</div>
+            <div style={{ fontSize:"22px", fontWeight:800, color:"#1c1c1a", letterSpacing:"0.06em", fontFamily:"monospace", marginBottom:"4px" }}>{partnerCode}</div>
             <div style={{ fontSize:"13px", color:"#7a7a78" }}>Anyone on your staff or in your program can redeem this code after creating an account to unlock partner-tier access. No expiry, no redemption limit.</div>
           </div>
           <div style={{ padding:"20px 24px" }}>

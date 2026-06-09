@@ -22,6 +22,7 @@ import { getNextStep, invalidateNextStep } from "../src/computeNextStep";
 const SENTINEL_ORG = "00000000-0000-0000-0000-000000000000";
 const ADMIN_EMAIL = "troyrichardcarr@gmail.com"; // Troy -- primary admin
 const BAKER_EMAIL = "latonyabakergoe@gmail.com"; // partner pre-auth (auth.ts)
+const MARIANNE_EMAIL = "marianne@expowisconsin.org"; // Marianne Oleson, Co-ED EXPO of Wisconsin
 const DEMO_CLIENT_EMAIL = "demo-client@steelmanresumes.demo";
 
 async function upsertUserByEmail(email: string, name: string, tier: string): Promise<string> {
@@ -69,7 +70,12 @@ async function upsertCode(code: string, partnerName: string, partnerUserId: stri
   const baker = await getOne<{ id: string }>(`SELECT id FROM access_code WHERE code = 'BAKER2026'`);
   done.push("codes BAKER2026 (linked to Baker) + JFW2026");
 
-  // 4. DEMO cohort -- one sharing client with progress in Baker's cohort
+  // 4. Marianne Oleson -- EXPO of Wisconsin partner + code
+  const marianneId = await upsertUserByEmail(MARIANNE_EMAIL, "Marianne Oleson", "partner");
+  await upsertCode("EXPO2026", "EXPO of Wisconsin", marianneId);
+  done.push("code EXPO2026 (linked to Marianne Oleson / EXPO of Wisconsin)");
+
+  // 5. DEMO cohort -- one sharing client with progress in Baker's cohort
   const demoId = await upsertUserByEmail(DEMO_CLIENT_EMAIL, "Demo Client (sample)", "client");
   await query(`UPDATE users SET onboarding_tour_complete = true, onboarding_tour_deferrals = 0 WHERE id = $1`, [demoId]);
   await query(
