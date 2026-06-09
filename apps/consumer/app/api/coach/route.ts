@@ -15,6 +15,7 @@ import { auth } from "@/auth";
 import { sanitizeForPrompt } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_CHAT } from "@/lib/ai/models";
+import { webSearchTool } from "@/lib/tools/web-search";
 import {
   getUserProfile,
   buildCoachSystemPrompt,
@@ -96,8 +97,10 @@ export async function POST(request: Request) {
     model: anthropic(MODEL),
     system: systemPrompt,
     messages,
-    maxTokens: profile.coachLength === "brief" ? 220 : 600,
+    maxTokens: profile.coachLength === "brief" ? 400 : 700,
     temperature: Math.min(Math.max(profile.coachCreativity / 100, 0), 1),
+    tools: { web_search: webSearchTool },
+    maxSteps: 3,
     async onFinish({ text, usage }) {
       try {
         await appendCoachMessage(userId, "assistant", text);
