@@ -12,8 +12,10 @@ import type {
   ResumeDocument,
   WorkEntry,
   EducationEntry,
+  BulletEvidence,
 } from "./resumeModel";
 import { createWorkEntry, createEducationEntry } from "./resumeModel";
+import { BulletWorkshop } from "./BulletWorkshop";
 
 type Updater = (fn: (prev: ResumeDocument) => ResumeDocument) => void;
 
@@ -202,6 +204,7 @@ export function ExperienceSection({
           key={entry.id}
           entry={entry}
           index={idx}
+          targetJob={doc.meta.targetJob}
           onChange={(changes) => updateEntry(entry.id, changes)}
           onRemove={() => removeEntry(entry.id)}
         />
@@ -219,15 +222,25 @@ export function ExperienceSection({
 function WorkEntryEditor({
   entry,
   index,
+  targetJob,
   onChange,
   onRemove,
 }: {
   entry: WorkEntry;
   index: number;
+  targetJob?: string;
   onChange: (changes: Partial<WorkEntry>) => void;
   onRemove: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [workshopBi, setWorkshopBi] = useState<number | null>(null);
+
+  function acceptWorkshop(bi: number, bullet: string, evidence: BulletEvidence) {
+    const nextBullets = [...entry.bullets];
+    nextBullets[bi] = bullet;
+    onChange({ bullets: nextBullets, evidence: [...(entry.evidence || []), evidence] });
+    setWorkshopBi(null);
+  }
 
   function addBullet() {
     onChange({ bullets: [...entry.bullets, ""] });
@@ -322,20 +335,29 @@ function WorkEntryEditor({
               What you did (start with action verbs)
             </label>
             {entry.bullets.map((bullet, bi) => (
-              <div key={bi} className="flex gap-1.5">
+              <div key={bi} className="flex gap-1.5 items-start">
                 <span className="text-xs text-muted mt-2.5 w-4 flex-shrink-0">
                   {bi + 1}.
                 </span>
-                <input
-                  value={bullet}
-                  onChange={(e) => updateBullet(bi, e.target.value)}
-                  placeholder={
-                    bi === 0
-                      ? '[Action verb] + [what you did] + [result]. Example: "Trained 5 new workers on safety procedures"'
-                      : "Describe what you accomplished..."
-                  }
-                  className={`${inputSmall} flex-1`}
-                />
+                <div className="flex-1">
+                  <input
+                    value={bullet}
+                    onChange={(e) => updateBullet(bi, e.target.value)}
+                    placeholder={
+                      bi === 0
+                        ? '[Action verb] + [what you did] + [result]. Example: "Trained 5 new workers on safety procedures"'
+                        : "Describe what you accomplished..."
+                    }
+                    className={`${inputSmall} w-full`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWorkshopBi(bi)}
+                    className="text-[11px] text-sage-600 hover:text-sage-700 mt-0.5"
+                  >
+                    Strengthen with help
+                  </button>
+                </div>
                 {entry.bullets.length > 1 && (
                   <button
                     onClick={() => removeBullet(bi)}
@@ -353,6 +375,19 @@ function WorkEntryEditor({
             >
               + Add bullet
             </button>
+
+            {workshopBi !== null && (
+              <BulletWorkshop
+                jobTitle={entry.title}
+                company={entry.company}
+                targetJob={targetJob}
+                initialBullet={entry.bullets[workshopBi] || ""}
+                onAccept={(bullet, evidence) =>
+                  acceptWorkshop(workshopBi, bullet, evidence)
+                }
+                onClose={() => setWorkshopBi(null)}
+              />
+            )}
           </div>
         </div>
       )}

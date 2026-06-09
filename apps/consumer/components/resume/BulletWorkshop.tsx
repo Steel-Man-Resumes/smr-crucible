@@ -1,0 +1,282 @@
+"use client";
+
+/**
+ * <BulletWorkshop> -- the truth-gated bullet workshop (Phase 7.3).
+ *
+ * Turns a weak/empty resume bullet into a strong one by asking the fixed
+ * gold-mining prompt set (did what / tool-process / how often / how many / what
+ * improved), then sending ONLY those facts to /api/forge/resume-assist
+ * (pre-auth) to write one TRUE, justice-reframed bullet. Nothing is invented --
+ * the model writes only from what the user said.
+ *
+ * O*NET (fail-open) jogs memory on the tools question. The structured answers
+ * are returned as BulletEvidence so the resume can carry proof behind the bullet
+ * (Interview Practice consumes it in 7.5).
+ */
+
+import { useState, useEffect } from "react";
+import type { BulletEvidence } from "./resumeModel";
+
+interface BulletWorkshopProps {
+  jobTitle: string;
+  company?: string;
+  targetJob?: string;
+  initialBullet?: string;
+  onAccept: (bullet: string, evidence: BulletEvidence) => void;
+  onClose: () => void;
+}
+
+export function BulletWorkshop({
+  jobTitle,
+  company,
+  targetJob,
+  initialBullet,
+  onAccept,
+  onClose,
+}: BulletWorkshopProps) {
+  const [did, setDid] = useState(initialBullet?.trim() || "");
+  const [tools, setTools] = useState("");
+  const [often, setOften] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [improved, setImproved] = useState("");
+  const [draft, setDraft] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [toolHints, setToolHints] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  // Memory-joggers for the tools question (O*NET, fail-open to AI).
+  useEffect(() => {
+    if (!jobTitle?.trim()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/forge/resume-assist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "suggest_tools", jobTitle }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          if (!cancelled && Array.isArray(d.tools)) setToolHints(d.tools.slice(0, 10));
+        }
+      } catch {
+        /* fail quiet -- joggers are optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobTitle]);
+
+  function addTool(t: string) {
+    setTools((prev) => {
+      const have = prev
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (have.includes(t.toLowerCase())) return prev;
+      return prev.trim() ? `${prev.replace(/,\s*$/, "")}, ${t}` : t;
+    });
+  }
+
+  async function generate() {
+    setGenerating(true);
+    setError("");
+    try {
+      const res = await fetch("/api/forge/resume-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "write_bullet",
+          jobTitle,
+          company,
+          targetJob,
+          answers: { did, tools, often, quantity, improved },
+        }),
+      });
+      const d = await res.json();
+      if (res.ok && d.bullet) setDraft(d.bullet);
+      else setError(d.error || "Could not write that yet. Add a little more and try again.");
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function accept() {
+    const finalBullet = (draft || "").trim();
+    if (!finalBullet) return;
+    onAccept(finalBullet, { bullet: finalBullet, did, tools, often, quantity, improved });
+  }
+
+  const canGenerate = !!(did.trim() || tools.trim() || quantity.trim() || improved.trim());
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="text-lg font-bold text-foreground">Make this stronger</h3>
+          <button
+            onClick={onClose}
+            className="text-muted hover:text-foreground text-2xl leading-none px-1"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+        <p className="text-xs text-muted mb-4">
+          Answer in your own words. We use only what you tell us -- nothing invented.
+          {jobTitle ? ` For your ${jobTitle} role.` : ""}
+        </p>
+
+        <div className="space-y-3">
+          <Field
+            label="What did you actually do?"
+            value={did}
+            onChange={setDid}
+            placeholder="e.g., loaded trucks and kept track of inventory"
+            textarea
+          />
+          <div>
+            <Field
+              label="What tools, equipment, or systems did you use?"
+              value={tools}
+              onChange={setTools}
+              placeholder="e.g., forklift, RF scanner, Excel"
+            />
+            {toolHints.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-[11px] text-muted mr-0.5">Common for this role -- tap if it fits:</span>
+                {toolHints.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => addTool(t)}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-sage-50 text-sage-700 border border-sage-200 hover:bg-sage-100 transition-colors"
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Field
+            label="How often?"
+            value={often}
+            onChange={setOften}
+            placeholder="e.g., every shift, daily, during peak season"
+          />
+          <Field
+            label="How many? (people, orders, shifts, units, dollars, hours)"
+            value={quantity}
+            onChange={setQuantity}
+            placeholder="e.g., 3 new hires, 200 orders a day"
+          />
+          <Field
+            label="What got better because of you?"
+            value={improved}
+            onChange={setImproved}
+            placeholder="e.g., fewer mistakes, faster loading, kept the team on schedule"
+            textarea
+          />
+        </div>
+
+        {error && <p className="text-sm text-amber-700 mt-3">{error}</p>}
+
+        {draft !== null && (
+          <div className="mt-4 bg-sage-50 border border-sage-200 rounded-xl p-3">
+            <p className="text-[11px] font-semibold text-sage-700 uppercase tracking-wide mb-1">
+              Your stronger bullet
+            </p>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={3}
+              className="w-full text-sm bg-white border border-sage-200 rounded-lg px-3 py-2 resize-y focus:border-sage-600 focus:outline-none"
+            />
+            <p className="text-[11px] text-muted mt-1">
+              Edit it to sound like you. Everything here is true to what you said.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4 items-center">
+          <button
+            onClick={generate}
+            disabled={generating || !canGenerate}
+            className="px-4 py-2.5 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+          >
+            {generating ? "Writing..." : draft !== null ? "Rewrite" : "Write a strong bullet"}
+          </button>
+          {draft !== null && (
+            <button
+              onClick={accept}
+              className="px-4 py-2.5 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-sm font-medium hover:bg-sage-50 transition-colors min-h-touch"
+            >
+              Use this bullet
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="px-3 py-2.5 text-muted hover:text-foreground text-sm min-h-touch ml-auto"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  textarea?: boolean;
+}) {
+  // Associate label with input (id/htmlFor) for screen readers + testability.
+  const id = "bw-" + label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const cls =
+    "w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 focus:outline-none transition-colors";
+  return (
+    <div>
+      <label htmlFor={id} className="text-xs font-medium text-foreground block mb-1">
+        {label}
+      </label>
+      {textarea ? (
+        <textarea
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+          className={`${cls} resize-y`}
+        />
+      ) : (
+        <input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`${cls} min-h-touch`}
+        />
+      )}
+    </div>
+  );
+}
+
+export default BulletWorkshop;

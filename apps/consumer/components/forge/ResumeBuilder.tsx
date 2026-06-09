@@ -30,11 +30,38 @@ interface ResumeBuilderProps {
   onBack: () => void;
 }
 
+/** Coaching self-check (never scored -- doctrine). Owning the story is half the job. */
+const READINESS_ITEMS = [
+  "I can explain every bullet on this resume out loud.",
+  "I have a real story behind my strongest experience.",
+  "I know why this resume fits the jobs I'm going for.",
+  "I know my next step (apply, gather proof, or pick a better-fit role).",
+];
+
+/** Heuristic triage: flag thin jobs + weak/unquantified bullets so we can nudge
+ *  the workshop where it's most needed -- "most attention to those who need it
+ *  most" without a second AI call. */
+function assessResume(doc: ResumeDocument): { weak: number; thin: number; show: boolean } {
+  let weak = 0;
+  let thin = 0;
+  for (const e of doc.experience) {
+    const filled = e.bullets.filter((b) => b.trim());
+    if (e.title.trim() && filled.length < 2) thin++;
+    for (const b of filled) {
+      if (b.trim().length < 40 && !/\d/.test(b)) weak++;
+    }
+  }
+  return { weak, thin, show: weak + thin > 0 };
+}
+
 export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderProps) {
   const [doc, setDoc] = useState<ResumeDocument>(initialDoc);
   const [generating, setGenerating] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [ready, setReady] = useState<Record<number, boolean>>({});
+
+  const assessment = assessResume(doc);
 
   // --- AI summary assist (optional -- the editor works fully without it) ---
   async function requestSummarySuggestion() {
@@ -43,15 +70,16 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
       const existingBullets = doc.experience
         .flatMap((e) => e.bullets)
         .filter((b) => b.trim());
-      const res = await fetch("/api/resume-generate", {
+      // Pre-auth endpoint: the Forge builder works logged-out, so it cannot use
+      // /api/resume-generate (auth-gated -> 401). /api/forge/* is unprotected.
+      const res = await fetch("/api/forge/resume-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "suggest_summary",
           targetJob: doc.meta.targetJob,
-          targetCompany: doc.meta.targetCompany,
           existingBullets,
           skills: doc.skills.slice(0, 10),
-          action: "suggest_summary",
         }),
       });
       if (res.ok) {
@@ -112,6 +140,20 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
           aim at specific jobs later.
         </p>
 
+        {assessment.show && (
+          <div className="mb-5 bg-warm-50 border border-warm-200 rounded-xl p-4">
+            <p className="text-sm font-medium text-earth-700 mb-0.5">
+              A few lines could be stronger.
+            </p>
+            <p className="text-xs text-earth-600 leading-relaxed">
+              The best resumes show what you did, with real numbers. Tap{" "}
+              <span className="font-medium">Strengthen with help</span> under any
+              bullet -- we ask a few questions and turn your answer into a strong
+              line. We only ever use what you tell us.
+            </p>
+          </div>
+        )}
+
         <ResumeEditor
           doc={doc}
           onChange={setDoc}
@@ -147,6 +189,30 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
           }
           actionsHint=".docx opens in Word. PDF keeps the formatting. Continue when it looks right -- we carry this through the rest of your Forge."
         />
+
+        {/* User Readiness -- a coaching checklist, never a score (doctrine). */}
+        <div className="mt-8 bg-white border border-border rounded-2xl p-5 max-w-2xl">
+          <h2 className="font-semibold text-foreground mb-1">
+            Before you go: are you ready to use this?
+          </h2>
+          <p className="text-xs text-muted mb-3">
+            Not a grade -- a gut check. The resume is half of it; owning it is the
+            other half.
+          </p>
+          <div className="space-y-2">
+            {READINESS_ITEMS.map((item, i) => (
+              <label key={i} className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ready[i] || false}
+                  onChange={() => setReady((r) => ({ ...r, [i]: !r[i] }))}
+                  className="mt-0.5 accent-sage-600 w-4 h-4 flex-shrink-0"
+                />
+                <span className="text-sm text-foreground">{item}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
