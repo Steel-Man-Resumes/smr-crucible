@@ -122,6 +122,18 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
     }
   }
 
+  // Plain-text export -- the most ATS-safe format (single column, no tables).
+  function downloadTxt() {
+    const blob = new Blob([formatResumeDownload(doc)], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const slug = (doc.contact.name || "resume").replace(/\s+/g, "_");
+    a.download = `${slug}_Resume_SteelMan.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="min-h-screen pt-16 pb-12">
       <div className="max-w-5xl mx-auto px-4">
@@ -184,6 +196,13 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                 className="px-4 py-3 bg-white border-2 border-sky-500 text-sky-600 rounded-xl font-medium hover:bg-sky-50 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
+              </button>
+              <button
+                onClick={downloadTxt}
+                title="Plain text -- the safest format for online application boxes"
+                className="px-4 py-3 bg-white border-2 border-border text-muted rounded-xl font-medium hover:bg-gray-50 transition-colors min-h-touch text-sm"
+              >
+                Download .txt
               </button>
             </>
           }

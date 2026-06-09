@@ -9,11 +9,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
+import { printResumePdf } from "@/components/resume/resumePrint";
 
 interface Artifact {
   id: string;
   artifact_type: string;
-  target_context: { targetJob?: string; targetCompany?: string } | null;
+  target_context: {
+    targetJob?: string;
+    targetCompany?: string;
+    source?: string;
+    createdFrom?: string;
+  } | null;
   content: any;
   updated_at: string;
 }
@@ -36,6 +43,7 @@ function title(a: Artifact): string {
   const co = a.target_context?.targetCompany;
   if (job && co) return `${job} -- ${co}`;
   if (job) return job;
+  if (a.artifact_type === "resume") return "Base resume";
   return fmt(a.updated_at);
 }
 
@@ -67,9 +75,26 @@ function toText(a: Artifact): string {
         .filter(Boolean)
         .join("\n\n");
     }
+    case "resume":
+      try {
+        return formatResumeDownload(c as ResumeDocument);
+      } catch {
+        return "";
+      }
     default:
       return "";
   }
+}
+
+/** A base resume (built in the Forge) vs a job-tailored one. */
+function isBaseResume(a: Artifact): boolean {
+  return (
+    a.artifact_type === "resume" &&
+    !a.target_context?.targetJob &&
+    (a.target_context?.source === "forge" ||
+      (a.content as any)?.meta?.createdFrom === "forge" ||
+      (a.content as any)?.meta?.createdFrom === "fresh")
+  );
 }
 
 export default function VaultPage() {
@@ -220,20 +245,19 @@ ${body}
                           <p className="text-xs text-muted mt-0.5">Updated {fmt(a.updated_at)}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {isResume ? (
+                          <button
+                            onClick={() => setExpanded(open ? null : a.id)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-border hover:bg-sage-50"
+                          >
+                            {open ? "Hide" : "View"}
+                          </button>
+                          {isResume && (
                             <Link
                               href={`/dashboard/application-tailor?id=${a.id}`}
                               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sage-600 text-white hover:bg-sage-700"
                             >
-                              Open in builder
+                              {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
                             </Link>
-                          ) : (
-                            <button
-                              onClick={() => setExpanded(open ? null : a.id)}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-border hover:bg-sage-50"
-                            >
-                              {open ? "Hide" : "View"}
-                            </button>
                           )}
                           {confirmDelete === a.id ? (
                             <>
@@ -256,13 +280,18 @@ ${body}
                         </div>
                       </div>
 
-                      {open && !isResume && (
+                      {open && (
                         <div className="mt-3 border-t border-border pt-3">
                           <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">
                             {toText(a)}
                           </p>
                           <div className="flex items-center gap-3 mt-3">
-                            <button onClick={() => downloadPDF(a)} className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700">
+                            <button
+                              onClick={() =>
+                                isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
+                              }
+                              className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700"
+                            >
                               Save PDF
                             </button>
                           </div>
