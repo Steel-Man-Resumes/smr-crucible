@@ -34,6 +34,8 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [sending, setSending] = useState(false);
@@ -129,13 +131,23 @@ function LoginForm() {
     if (!email.trim() || !password || !confirmPassword) return;
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!name.trim() || !phone.trim()) { setError("Please add your name and phone -- they go on the resumes you build."); return; }
     setError(""); setSending(true); storeCode();
+
+    // Carry the Forge work onto the new account server-side. The forge_session
+    // lives in forge.* localStorage and is lost crossing to the authed origin,
+    // so we hand it to the register call to persist against the new user.
+    let forge: unknown = null;
+    try {
+      const s = localStorage.getItem("forge_session");
+      forge = s ? JSON.parse(s) : null;
+    } catch { forge = null; }
 
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -224,7 +236,7 @@ function LoginForm() {
 
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
-    || (mode === "create" && !confirmPassword);
+    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim()));
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 pb-16">
@@ -299,6 +311,43 @@ function LoginForm() {
                 disabled={sending}
               />
             </div>
+          )}
+
+          {/* Name + phone — create mode (these go on the resume + unlock the tools) */}
+          {mode === "create" && (
+            <>
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">
+                  Your name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="First and last name"
+                  autoComplete="name"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  disabled={sending}
+                />
+              </div>
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-foreground mb-1">
+                  Phone
+                </label>
+                <input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(555) 555-5555"
+                  autoComplete="tel"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  disabled={sending}
+                />
+                <p className="text-[11px] text-muted mt-1">These go on the resumes you build. You can change them anytime.</p>
+              </div>
+            </>
           )}
 
           {/* Partner code — collapsible */}
