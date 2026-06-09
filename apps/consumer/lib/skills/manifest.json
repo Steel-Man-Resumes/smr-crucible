@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "description": "Index of t.ROY / coach doctrine skills. THIS FILE IS THE SOURCE OF TRUTH for what skills exist and when they load. Adding a skill = add an entry here + a folder `<id>/SKILL.md` (optionally with companion data: facts.json, scripts, examples). No code change needed -- lib/skills-loader.ts reads this. Activation: a skill loads when the current page is in `pages` (any user), or in `pagesIfCriminalRecord` when the user disclosed a record, or when `always` is true.",
+  "skills": [
+    {
+      "id": "career-narrative",
+      "title": "Career Narrative",
+      "file": "career-narrative/SKILL.md",
+      "summary": "Anti-fragility doctrine, the 5-part narrative arc, gap handling, the turning-point story. The philosophical foundation every other skill builds on.",
+      "always": false,
+      "pages": ["dashboard", "output", "jobs", "resume-builder", "disclosure", "disclosure-rehearsal", "interview"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "disclosure-coaching",
+      "title": "Disclosure Coaching",
+      "file": "disclosure-coaching/SKILL.md",
+      "summary": "Troy's disclosure doctrine: timing strategy, the 4-part structure, follow-up handling, anti-patterns, and industry + legal scaffolding (with the WOTC / legal-claim discipline).",
+      "always": false,
+      "pages": ["disclosure", "disclosure-rehearsal", "interview"],
+      "pagesIfCriminalRecord": ["dashboard", "resume-builder"]
+    }
+  ]
+}

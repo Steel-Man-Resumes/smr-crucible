@@ -8,7 +8,11 @@ const nextConfig = {
   // happens to have the files). Force them into the Lambda. See lib/skills/.
   experimental: {
     outputFileTracingIncludes: {
+      // Every route that reads skill doctrine off disk needs the files traced
+      // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
       "/api/assistant": ["./lib/skills/**/*"],
+      "/api/coach": ["./lib/skills/**/*"],
+      "/api/health/skills": ["./lib/skills/**/*"],
     },
   },
   webpack: (config) => {

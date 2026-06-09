@@ -1,13 +1,17 @@
 /**
- * Shared skill-doctrine loader.
+ * Shared skill-doctrine loader -- manifest-driven.
  *
- * Reads the relevant doctrine .md files (career-narrative, disclosure-coaching,
- * ...) off disk and returns them as a system-prompt block. Used by BOTH coaching
- * surfaces so they share ONE doctrine source and cannot drift:
+ * Reads lib/skills/manifest.json (the source of truth for which skills exist and
+ * when they activate), then loads the relevant SKILL.md files into a system-prompt
+ * block. Used by BOTH coaching surfaces so they share one doctrine source and
+ * cannot drift:
  *   - /api/assistant  (t.ROY, the pre-auth Forge surface)
  *   - /api/coach      (the authenticated, profile-aware Refinery coach)
  *
- * The files are bundled into the Lambda via next.config's
+ * Adding a skill is data-only: add a manifest entry + a `<id>/SKILL.md` folder
+ * (optionally with companion files). No change here is needed.
+ *
+ * The files are bundled into each reading route's Lambda via next.config's
  * outputFileTracingIncludes (they are read at runtime, not imported). Verify
  * delivery in production with GET /api/health/skills.
  */
@@ -16,66 +20,95 @@ import fs from "fs";
 import path from "path";
 
 const SKILLS_DIR = path.join(process.cwd(), "lib", "skills");
+const MANIFEST_PATH = path.join(SKILLS_DIR, "manifest.json");
 
-/** Which doctrine files are relevant for a given page + user. */
-function relevantFiles(page: string, hasCriminalRecord: boolean): string[] {
-  const files: string[] = [];
+export interface SkillEntry {
+  id: string;
+  title: string;
+  /** Path relative to lib/skills, e.g. "career-narrative/SKILL.md". */
+  file: string;
+  summary?: string;
+  always?: boolean;
+  pages?: string[];
+  pagesIfCriminalRecord?: string[];
+}
 
-  // Career narrative is the philosophical foundation -- load on narrative-heavy pages.
-  if (["dashboard", "output", "jobs", "resume-builder"].includes(page)) {
-    files.push("career-narrative.md");
+interface Manifest {
+  version?: number;
+  skills: SkillEntry[];
+}
+
+function readManifest(): Manifest | null {
+  try {
+    const m = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf-8")) as Manifest;
+    return m && Array.isArray(m.skills) ? m : null;
+  } catch (err) {
+    console.error(
+      `[skills] manifest read/parse failed at ${MANIFEST_PATH}:`,
+      err instanceof Error ? err.message : err
+    );
+    return null;
   }
+}
 
-  // Disclosure + interview pages get the disclosure doctrine and the narrative arc.
-  if (page === "disclosure" || page === "disclosure-rehearsal" || page === "interview") {
-    files.push("disclosure-coaching.md", "career-narrative.md");
+/** Pure: which skill entries activate for a page + record status. */
+export function selectSkills(
+  skills: SkillEntry[],
+  page: string,
+  hasCriminalRecord: boolean
+): SkillEntry[] {
+  return skills.filter((s) => {
+    if (s.always) return true;
+    if (s.pages?.includes(page)) return true;
+    if (hasCriminalRecord && s.pagesIfCriminalRecord?.includes(page)) return true;
+    return false;
+  });
+}
+
+/** Strip a leading YAML frontmatter block so it does not pollute the prompt. */
+function stripFrontmatter(md: string): string {
+  if (md.startsWith("---")) {
+    const end = md.indexOf("\n---", 3);
+    if (end !== -1) {
+      const nl = md.indexOf("\n", end + 1);
+      return nl !== -1 ? md.slice(nl + 1) : md;
+    }
   }
-
-  // Justice-impacted users get disclosure context on resume/overview pages too.
-  if (hasCriminalRecord && (page === "dashboard" || page === "resume-builder")) {
-    files.push("disclosure-coaching.md");
-  }
-
-  return Array.from(new Set(files));
+  return md;
 }
 
 export function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string {
-  const files = relevantFiles(page, hasCriminalRecord);
-  if (files.length === 0) return "";
+  const manifest = readManifest();
+  if (!manifest) return "";
+
+  const active = selectSkills(manifest.skills, page, hasCriminalRecord);
+  if (active.length === 0) return "";
 
   const sections: string[] = [];
   const missing: string[] = [];
 
-  for (const file of files) {
-    const filePath = path.join(SKILLS_DIR, file);
+  for (const skill of active) {
+    const filePath = path.join(SKILLS_DIR, skill.file);
     try {
       if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, "utf-8");
-        sections.push(
-          `\n\n## SKILL LIBRARY: ${file
-            .replace(".md", "")
-            .toUpperCase()
-            .replace(/-/g, " ")}\n\n${content}`
-        );
+        const content = stripFrontmatter(fs.readFileSync(filePath, "utf-8"));
+        sections.push(`\n\n## SKILL LIBRARY: ${skill.title.toUpperCase()}\n\n${content}`);
       } else {
-        missing.push(file);
+        missing.push(skill.file);
       }
     } catch (err) {
-      missing.push(file);
+      missing.push(skill.file);
       console.error(
-        `[skills] read failed for ${file}:`,
+        `[skills] read failed for ${skill.file}:`,
         err instanceof Error ? err.message : err
       );
     }
   }
 
-  // Loud, not silent: if the doctrine files are not on disk in production, the
-  // coach is running blind. Surface it in the runtime logs instead of returning
-  // "" as if nothing was expected.
   if (missing.length > 0) {
     console.error(
-      `[skills] MISSING ${missing.length}/${files.length} skill file(s) under ${SKILLS_DIR}: ${missing.join(", ")}. ` +
-        `Coaching WITHOUT this doctrine -- check next.config outputFileTracingIncludes.`
+      `[skills] MISSING ${missing.length}/${active.length} skill file(s) under ${SKILLS_DIR}: ${missing.join(", ")}. ` +
+        `Coaching WITHOUT this doctrine -- check next.config outputFileTracingIncludes + manifest paths.`
     );
   }
 

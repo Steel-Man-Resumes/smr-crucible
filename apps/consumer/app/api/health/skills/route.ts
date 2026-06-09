@@ -1,11 +1,9 @@
 /**
  * GET /api/health/skills -- deterministic skill-delivery probe.
  *
- * The assistant route loads doctrine .md files from lib/skills via fs at runtime.
- * Those files are only present in the serverless bundle if next.config's
- * outputFileTracingIncludes actually traced them. This endpoint reports, from
- * INSIDE the running Lambda, which files shipped -- so skill delivery is
- * verified in production instead of assumed.
+ * Reads the skills manifest and reports, from INSIDE the running Lambda, whether
+ * the manifest and every SKILL.md it references actually shipped. This is how we
+ * verify skill delivery in production instead of assuming the deploy bundled it.
  *
  * Public on purpose: filenames + booleans only, no file contents, no secrets.
  * Not in the middleware matcher, so it stays unauthenticated.
@@ -18,39 +16,40 @@ import path from "path";
 export const dynamic = "force-dynamic";
 
 const SKILLS_DIR = path.join(process.cwd(), "lib", "skills");
-
-// Keep in sync with loadSkillsForContext() in app/api/assistant/route.ts.
-const EXPECTED = ["career-narrative.md", "disclosure-coaching.md"];
+const MANIFEST_PATH = path.join(SKILLS_DIR, "manifest.json");
 
 export function GET() {
-  const present: string[] = [];
-  const missing: string[] = [];
-  for (const f of EXPECTED) {
-    try {
-      if (fs.existsSync(path.join(SKILLS_DIR, f))) present.push(f);
-      else missing.push(f);
-    } catch {
-      missing.push(f);
-    }
-  }
+  let manifestOk = false;
+  let skills: { id: string; file: string; present: boolean }[] = [];
+  let error: string | null = null;
 
-  let shipped: string[] = [];
   try {
-    shipped = fs.readdirSync(SKILLS_DIR).filter((n) => n.endsWith(".md"));
-  } catch {
-    /* dir was not traced into the bundle at all */
+    const m = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf-8")) as {
+      skills: { id: string; file: string }[];
+    };
+    manifestOk = Array.isArray(m.skills);
+    skills = (m.skills ?? []).map((s) => ({
+      id: s.id,
+      file: s.file,
+      present: fs.existsSync(path.join(SKILLS_DIR, s.file)),
+    }));
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
   }
 
-  const ok = missing.length === 0 && shipped.length > 0;
+  const missing = skills.filter((s) => !s.present).map((s) => s.file);
+  const ok = manifestOk && skills.length > 0 && missing.length === 0;
+
   return NextResponse.json({
     ok,
-    expected: EXPECTED,
-    present,
+    manifestOk,
+    skillCount: skills.length,
+    skills,
     missing,
-    shippedMdFiles: shipped,
     skillsDir: SKILLS_DIR,
+    error,
     note: ok
-      ? "Skill doctrine files are present in the production Lambda."
-      : "MISSING skill files -- outputFileTracingIncludes is not bundling them.",
+      ? "Manifest + all skill files present in the production Lambda."
+      : "Skill delivery problem -- see manifestOk / missing / error.",
   });
 }
