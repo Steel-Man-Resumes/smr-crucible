@@ -4,7 +4,7 @@
  * My Materials (W5 vault) -- one place for everything the user has created:
  * resumes, cover letters, follow-ups, disclosure plans, and practice records.
  * Reuses the existing refinery_artifact store (private to the account, encrypted
- * at rest). View / copy / download / delete; resumes open in the builder.
+ * at rest). View, save as PDF, or delete; resumes open in the builder.
  */
 
 import { useEffect, useState } from "react";
@@ -76,7 +76,6 @@ export default function VaultPage() {
   const [items, setItems] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   function load() {
@@ -88,31 +87,91 @@ export default function VaultPage() {
   }
   useEffect(load, []);
 
-  async function copy(a: Artifact) {
-    const text = toText(a);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const t = document.createElement("textarea");
-      t.value = text;
-      document.body.appendChild(t);
-      t.select();
-      document.execCommand("copy");
-      t.remove();
-    }
-    setCopiedId(a.id);
-    setTimeout(() => setCopiedId((c) => (c === a.id ? null : c)), 1500);
-  }
+  // Phase 6: one formatted PDF export for every artifact type (print window),
+  // matching the disclosure/interview deliverables. Replaces copy + .txt.
+  function downloadPDF(a: Artifact) {
+    const c = a.content || {};
+    const esc = (s: any) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const paras = (s: any) =>
+      String(s ?? "")
+        .split(/\n{2,}/)
+        .filter(Boolean)
+        .map((p) => `<p>${esc(p).replace(/\n/g, "<br/>")}</p>`)
+        .join("");
+    const ul = (arr: any[]) =>
+      Array.isArray(arr) && arr.length ? `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
 
-  function download(a: Artifact) {
-    const blob = new Blob([toText(a)], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const slug = (a.target_context?.targetJob || a.artifact_type).replace(/\s+/g, "_");
-    link.href = url;
-    link.download = `${slug}_${a.artifact_type}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    let body = "";
+    switch (a.artifact_type) {
+      case "cover_letter":
+        body = paras(c.text);
+        break;
+      case "follow_up":
+        body =
+          (c.subject ? `<h2>Subject</h2><p>${esc(c.subject)}</p>` : "") +
+          (c.body ? `<h2>Message</h2>${paras(c.body)}` : "");
+        break;
+      case "disclosure_plan":
+        body = [
+          c.timing_advice && `<h2>When to Disclose</h2><p>${esc(c.timing_advice)}</p>`,
+          c.legal_context && `<h2>Your Rights</h2><p>${esc(c.legal_context)}</p>`,
+          c.script && `<h2>What to Say</h2><blockquote>${esc(c.script)}</blockquote>`,
+          Array.isArray(c.tips) && c.tips.length && `<h2>Key Tips</h2>${ul(c.tips)}`,
+        ]
+          .filter(Boolean)
+          .join("");
+        break;
+      case "interview_prep": {
+        const fb = c.feedback || {};
+        body = [
+          c.role && `<p class="meta">Practice role: ${esc(c.role)} (${esc(c.frame || "general")})</p>`,
+          fb.frame && `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>`,
+          Array.isArray(fb.strengths) && fb.strengths.length && `<h2>What You Did Well</h2>${ul(fb.strengths)}`,
+          Array.isArray(fb.improvements) && fb.improvements.length && `<h2>Areas to Work On</h2>${ul(fb.improvements)}`,
+          Array.isArray(fb.better_answers) &&
+            fb.better_answers.length &&
+            `<h2>Stronger Answers to Model</h2>${fb.better_answers
+              .map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`)
+              .join("")}`,
+          fb.overall && `<h2>Overall</h2><p>${esc(fb.overall)}</p>`,
+        ]
+          .filter(Boolean)
+          .join("");
+        break;
+      }
+      default:
+        body = paras(toText(a));
+    }
+    if (!body) body = paras(toText(a));
+
+    const typeLabel = (GROUPS.find((g) => g.type === a.artifact_type)?.label || "Document").replace(/s$/, "");
+    const date = fmt(a.updated_at) || new Date().toLocaleDateString();
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>${esc(title(a))}</title>
+<style>
+  @page { margin: 0.85in; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; font-size: 12pt; line-height: 1.6; }
+  h1 { font-size: 18pt; margin: 0 0 4pt; }
+  .subtitle { font-size: 9.5pt; color: #777; margin-bottom: 20pt; }
+  .meta { font-size: 10pt; color: #555; margin: 0 0 12pt; }
+  h2 { font-size: 10pt; font-weight: bold; color: #2d5a3d; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1pt solid #4D7C5A; padding-bottom: 3pt; margin: 20pt 0 8pt; }
+  p { margin: 0 0 9pt; } ul { margin: 0 0 9pt; padding-left: 18pt; } li { margin-bottom: 5pt; }
+  blockquote { border-left: 3pt solid #4D7C5A; margin: 0 0 9pt; padding: 8pt 14pt; font-style: italic; color: #333; background: #f8f5f0; }
+  .q { font-weight: bold; margin: 8pt 0 2pt; }
+  .footer { margin-top: 34pt; border-top: 0.5pt solid #ddd; padding-top: 8pt; font-size: 8pt; color: #aaa; text-align: center; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+<h1>${esc(title(a))}</h1>
+<p class="subtitle">${esc(typeLabel)} &bull; Built with The Refinery &bull; steelmanresumes.com &bull; ${esc(date)}</p>
+${body}
+<div class="footer">This is yours, private to your account. Never shared without your permission.</div>
+</body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
   }
 
   async function remove(id: string) {
@@ -130,7 +189,7 @@ export default function VaultPage() {
       <h1 className="text-2xl font-bold text-foreground">My Materials</h1>
       <p className="text-muted mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
-        unless you choose to. You can download or delete anything anytime.
+        unless you choose to. Save anything as a PDF, or delete it, anytime.
       </p>
 
       {items.length === 0 && (
@@ -203,11 +262,8 @@ export default function VaultPage() {
                             {toText(a)}
                           </p>
                           <div className="flex items-center gap-3 mt-3">
-                            <button onClick={() => copy(a)} className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700">
-                              {copiedId === a.id ? "Copied" : "Copy"}
-                            </button>
-                            <button onClick={() => download(a)} className="px-3 py-1.5 bg-white border border-border text-xs font-medium rounded-lg hover:bg-sage-50">
-                              Download .txt
+                            <button onClick={() => downloadPDF(a)} className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700">
+                              Save PDF
                             </button>
                           </div>
                         </div>
