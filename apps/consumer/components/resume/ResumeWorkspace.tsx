@@ -18,6 +18,7 @@ import {
 } from "./resumeModel";
 import { parseForgeToResume, parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
+import { printResumePdf } from "./resumePrint";
 
 interface SavedResume {
   id: string;
@@ -531,49 +532,7 @@ export function ResumeWorkspace() {
     }
   }
 
-  // --- Print / save as PDF ---
-  function printResumePdf() {
-    const text = formatResumeDownload(doc);
-    const name = doc.contact.name || "Resume";
-    const job = doc.meta.targetJob || "";
-    const company = doc.meta.targetCompany || "";
-
-    const lines = text.split("\n");
-    let bodyHtml = "";
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t) { bodyHtml += "<br>"; continue; }
-      if (/^[A-Z &]+$/.test(t) && t.length > 3 && !t.includes("|")) {
-        bodyHtml += `<div class="section-header">${t}</div>`;
-      } else if (t.startsWith("- ") || t.startsWith("* ")) {
-        bodyHtml += `<div class="bullet">${t.slice(2)}</div>`;
-      } else {
-        bodyHtml += `<div class="body-line">${t}</div>`;
-      }
-    }
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} -- Resume${job ? ` for ${job}` : ""}</title>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;margin:0;padding:0.5in 0.5in 0.5in 0.5in}
-  .name{font-family:Georgia,serif;font-size:16pt;font-weight:bold;text-align:center;background:#1B2A4A;color:#fff;padding:8px 0;letter-spacing:0.05em}
-  .subtitle{text-align:center;background:#1B2A4A;color:#B8C9E0;font-size:8pt;padding:3px 0 6px}
-  .section-header{font-family:Georgia,serif;font-size:9pt;font-weight:bold;color:#1B2A4A;border-bottom:1.5px solid #1B2A4A;margin:12px 0 4px;padding-bottom:2px;text-transform:uppercase;letter-spacing:0.1em}
-  .bullet{margin:2px 0 2px 14px;font-size:8.5pt;line-height:1.45}
-  .bullet::before{content:"\\2022  ";color:#1B2A4A;font-weight:bold}
-  .body-line{margin:2px 0;font-size:8.5pt;line-height:1.4}
-  br{display:block;margin:3px 0}
-  @media print{@page{size:letter;margin:0.4in 0.45in}}
-</style></head>
-<body>
-<div class="name">${name.toUpperCase()}</div>
-${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" -- ")}</div>` : ""}
-${bodyHtml}
-<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
-</body></html>`;
-
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); }
-  }
+  // Print / save as PDF -- shared helper (components/resume/resumePrint.ts).
 
   // --- Import from Forge ---
   function importFromForge() {
@@ -722,7 +681,10 @@ ${bodyHtml}
                         className="flex-1 text-left px-4 py-3"
                       >
                         <span className="text-sm font-medium text-foreground">
-                          {r.target_context?.targetJob || "Untitled resume"}
+                          {r.target_context?.targetJob ||
+                            ((r.target_context as any)?.source === "forge"
+                              ? "Base resume"
+                              : "Untitled resume")}
                         </span>
                         {r.target_context?.targetCompany && (
                           <span className="text-xs text-muted ml-2">
@@ -1064,7 +1026,7 @@ ${bodyHtml}
                 Download .docx
               </button>
               <button
-                onClick={printResumePdf}
+                onClick={() => printResumePdf(doc)}
                 className="px-4 py-3 bg-white border-2 border-sky-500 text-sky-600 rounded-xl font-medium hover:bg-sky-50 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
