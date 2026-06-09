@@ -29,7 +29,7 @@ Every page in that chain returns 200 on prod. Every routing hop was read in code
 
 ## 1. Will it work?
 
-**Yes, with high confidence on everything I verified on the live site, and one issue found + fixed during this pass.**
+**Yes, with high confidence on everything I verified on the live site, and two real issues found + fixed during this pass.**
 
 Verified on production with real-browser (Playwright) walks this session:
 - Pre-auth builder: paste -> structured build -> edit -> carry-forward to /goals (incl. "WORK HISTORY" parsing).
@@ -37,7 +37,9 @@ Verified on production with real-browser (Playwright) walks this session:
 - Assess nudge + readiness checklist + parser preview render and read the parsed fields.
 - Authenticated: dashboard onboarding/Tailor refocus, vault resume rendering + Save PDF, interview page loads.
 
-**Issue found this pass (now fixed):** one cold-start function timeout on `/api/forge/resume-assist` `suggest_tools` right after your O*NET creds went live -- the cold path now makes real O*NET calls (slow while approval is pending) on top of the AI fallback. Diagnosed from runtime logs (a `-` status = platform timeout, not a thrown error). I tightened the O*NET fetch timeouts (5s -> 3s). Reassurance: the critical `write_bullet` path never touches O*NET, and `suggest_tools` fails quiet in the UI (you just don't see tool chips that one time) -- the workshop never breaks. Five consecutive calls after the blip returned 200.
+**Issue 1 -- rate limit far too low (the important one).** `/api/forge/resume-assist` had no entry in `FORGE_IP_LIMITS`, so it inherited the default of **10 calls per IP per day**. The workshop makes a `suggest_tools` call per modal open and a `write_bullet` per generation, so one person building one resume easily exceeds 10 -- and worse, the limit is per-IP, so several users on a shared library or program computer (common for this population) share those 10. They would hit "you've used all your free AI calls" mid-build. Fixed: raised it to **100/day**, and added client-side caching of tool suggestions per job title so re-opening the workshop on the same job doesn't re-spend a call. (Caveat in section 3 on heavy shared-IP contexts.)
+
+**Issue 2 -- a one-off cold-start timeout.** A single platform timeout on `suggest_tools` right after your O*NET creds went live -- the cold path now makes real O*NET calls (slow while approval is pending) on top of the AI fallback. Diagnosed from runtime logs (a `-` status = platform timeout, not a thrown error). Tightened the O*NET fetch timeouts (5s -> 3s). The critical `write_bullet` path never touches O*NET, and `suggest_tools` fails quiet in the UI -- the workshop never breaks regardless.
 
 **What you will exercise that I traced but did not fully walk:** the deep middle of the Forge (the `/goals -> /processing` AI analysis and `/output -> account creation`). The pages render, the routing is correct, and the only thing my changes altered there is that the analysis now receives a *cleaner* `resumeText` (the formatted structured resume instead of raw OCR/JSON) -- strictly an improvement. Worth a real run-through, which your test will be.
 
@@ -67,6 +69,7 @@ Honest list (none are breakage; they're edges to know about):
 
 - **Demo + Rush skip the structured builder** (by design). Rush users' base resume is re-derived from text at signup, not the rich structured doc. Fine, but if you want rush users to also get a structured base, that's a future tweak.
 - **O*NET is pending approval**, so tool-jogging runs on AI right now (`source:"ai"`). It flips to real O*NET data automatically once approved. Nothing to do.
+- **Shared-IP rate limit:** the workshop's per-IP/day ceiling is now 100 (was a buggy 10). Generous for an individual and fine for a lightly-shared IP, but a busy program lab or library where 8-10 people build resumes in one day could still exhaust it. If users in those settings report being cut off, raise `FORGE_IP_LIMITS["forge-resume-assist"]` or move shared sites onto authenticated (per-user) limits.
 - **The Application Tailor's `tailoringNotes`** already explain "what we tailored," which covers the base->version-diff intent; a deeper field-by-field diff was deliberately not built (marginal).
 - **Accessibility:** I added `htmlFor` label association to the workshop fields, but the older resume section editors (contact/summary/etc.) still use unlabeled inputs -- a pre-existing gap worth a sweep someday.
 - **Marketing site** had stale "Resume Builder" naming in a few more places than the homepage (I fixed home, /refinery, SystemDiagram); there may be other pages (guides, FAQ) still using old framing -- a copy sweep is a judgment call for you, not a bug.
