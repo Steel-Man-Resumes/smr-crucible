@@ -14,7 +14,7 @@ import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
+import { useUserContext } from "@/lib/use-user-context";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +78,8 @@ export default function JobBoardPageWrapper() {
 function JobBoardPage() {
   const searchParams = useSearchParams();
   const autoSearched = useRef(false);
+  const forgeLoadedRef = useRef(false);
+  const { context: userContext } = useUserContext();
   const [context, setContext] = useState<UserContext>({
     targetRole: "",
     location: "",
@@ -129,31 +131,35 @@ function JobBoardPage() {
     loadSavedJobs();
   }, []);
 
-  // Load context from Forge session
+  // Load context from the SERVER (not fragile cross-domain localStorage, which is
+  // empty on refinery.* for users whose Forge was saved server-side at signup).
+  // Runs once when context arrives; never overrides a role/location the user set
+  // or that came from a URL param. Record details stay private -- /api/user/context
+  // exposes only the hasRecord flag (drives fair-chance filtering), not the type.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        const ctx: Partial<UserContext> = {};
+    if (!userContext || forgeLoadedRef.current) return;
+    forgeLoadedRef.current = true;
+    const f = userContext.forge;
 
-        const careerPaths = getCareerPaths(session.forgeOutput);
-        if (careerPaths[0]?.title) {
-          ctx.targetRole = careerPaths[0].title;
-        }
-        if (session.preferences?.location) {
-          ctx.location = session.preferences.location;
-        }
-        ctx.skills = getSkillNames(session.forgeOutput, 10);
-        if (session.challenges?.includes("criminal_record")) {
-          ctx.hasRecord = true;
-          ctx.recordType = session.criminalRecord?.type;
-        }
+    const top = f?.careerPaths?.[0];
+    const role = top ? (typeof top === "string" ? top : top.title) : "";
+    const loc = [userContext.profile?.city, userContext.profile?.state]
+      .filter(Boolean)
+      .join(", ");
+    const skills = (f?.skills ?? [])
+      .map((s) => (typeof s === "string" ? s : s.name))
+      .filter(Boolean)
+      .slice(0, 10);
 
-        setContext((prev) => ({ ...prev, ...ctx }));
-      }
-    } catch {}
-  }, []);
+    setContext((prev) => ({
+      ...prev,
+      targetRole: prev.targetRole || role,
+      location: prev.location || loc,
+      skills: skills.length ? skills : prev.skills,
+      hasRecord: f?.hasCriminalRecord ?? prev.hasRecord,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userContext]);
 
   // Auto-search from URL param (e.g., ?q=Warehouse+Associate from dashboard CTA)
   useEffect(() => {
