@@ -261,7 +261,9 @@ export function formatResumeDownload(doc: ResumeDocument): string {
     lines.push("SKILLS", filledSkills.join(" | "), "");
   }
 
-  lines.push("Built with The Refinery - steelmanresumes.com");
+  // No platform branding on employer-facing exports (Troy 2026-06-10): the
+  // service is publicly justice-impacted-branded, so a footer is an indirect
+  // disclosure. In-app surfaces may brand; the user's documents never do.
   return lines.join("\n");
 }
 
