@@ -44,3 +44,18 @@ Build order (same loop as the overhaul: build-verify -> commit -> deploy -> **au
 
 ## Standing rules
 Atomic commits per feature; never em dashes (use `--`); no emojis; "justice-impacted" always; build green (types+lint) before commit; verify prod, do not assume.
+
+---
+
+## Session close -- 2026-06-09 (Marianne Oleson / EXPO of Wisconsin access)
+
+**What happened this session (separate from Phase 7 build):**
+- Meeting: Dr. Baker + Marianne Oleson (Co-Executive Director, EXPO of Wisconsin) reviewed MKE Reentry Hub prototype. Baker left; Troy + Marianne continued.
+- Marianne was stunned by Forge + Refinery. Has a workforce development cohort starting week of 2026-06-16. Wants Troy to present.
+- Provisioned Marianne as partner user (marianne@expowisconsin.org) + EXPO2026 access code in prod DB via seed-universe.ts (commit 6bb0e95).
+- Made /access page dynamic: accepts `?code=` query param via useSearchParams + Suspense wrapper. forge.steelmanresumes.com/access?code=EXPO2026 now works. Baker's page unchanged.
+- Gmail draft r3808869368907902735 queued for Troy to send.
+
+**Key near-miss:** Troy dictated "Mary Ann" -- her actual name is Marianne Oleson. Always confirm name/org before building or emailing. Troy provided the correction with her title, email, and full collaboration context.
+
+**Deployment:** `git push origin main` (commit 6bb0e95). Vercel auto-building.
