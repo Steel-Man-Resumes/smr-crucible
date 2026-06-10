@@ -26,13 +26,13 @@ Legend: [x] shipped+verified -- [~] shipped, awaiting Troy's hands-on test -- [ 
 - [ ] Phase C: adaptive UI / progressive disclosure + relationship depth (Task 15)
 
 ## 3. Identity & Data Integrity
-- [ ] Contact clobber fix (merge-preserve), Tailor contact from base doc + confirm line, phone normalization (Task 2) -- foundation for update_identity
+- [~] Contact clobber fix (jsonb merge-preserve), Tailor document identity from the BASE resume (localStorage -> server artifact -> profile fallback, cross-device), phone normalized at one choke point (`e0b4bdf`) -- foundation for update_identity
 - [ ] Tailor loads the structured base resume server-side (cross-device; evidence reaches generation) (Task 12 block)
 - [ ] DATA-ARCHITECTURE.md: one Neon, per-tool domains, event spine + nightly DB-intelligence agent auditing invariants into Troy's brief (Task 17)
 
 ## 4. Pilot & Licensing (the seats)
 - [ ] Seats v1: seat_limit per partner code (~10/agency), durable seats, seat-holders = full-journey clients, code-aware Forge limits (kills the classroom 429), admin minting UI (codes + seats + variables) (Task 1) -- **P0 before Jun 16**
-- [ ] Legal disclaimer on every disclosure output + non-WI prompt softening (Task 3) -- **P0**
+- [~] Legal disclaimer "coaching, not legal advice" on plan view + plan PDF + vault PDF + Tailor brief; non-WI jurisdictions now general-info-only (no hallucinated statutes) (`b49898d`)
 - [ ] Certification retest vs the v2 test folder -- Troy walks it (Task 4, blocked by 1+2+3)
 
 ## 5. Jobs (real jobs first)
@@ -59,10 +59,20 @@ Legend: [x] shipped+verified -- [~] shipped, awaiting Troy's hands-on test -- [ 
 - [ ] Conference: demo script (agency moment + voice moment), 3 hardware rehearsals, load test 50-concurrent, Mini Forge tablet QA, fallback drills (Task 16)
 - [ ] OSS Aug 15: .env.example complete, seed docs, key handling, repo-public checklist; freeze Aug 4 (Task 16)
 
+## 10. Experience, Compliance & Security (Troy directive 2026-06-10 -- "every feasible angle")
+- [ ] Ask Troy spotlight: the ONLY floating button (ContactTroyButton folds into the drawer/footer); labeled prominent trigger; state-based "10x" example prompts via getQuickPrompts(journey state) -- PREVIEW BRANCH, Troy eyeballs first (Task 18)
+- [ ] i18n: Spanish + Hmong text toggle (dictionaries for chrome, AI-translate for coaching; resumes stay application-language) (Task 19)
+- [ ] Accessibility + compliance: WCAG 2.1 AA sweep, reduced-motion, mental-health-aware copy, data-practice review (incl. the decorative consent gate) + compliance posture doc (Task 20)
+- [ ] White-hat defensive security audit: authn/session, per-route authz/IDOR sweep, prompt-injection surfaces, secrets, headers/CSP, deps, data exposure -- written report + fixes ("show me your best work") (Task 21)
+- [ ] Auth portability for native apps (TWA/Capacitor token strategy, API-first check) (Task 22)
+- [ ] SEO (smr-website + indexing posture) + EEO language review (Task 23)
+- [ ] Edge-case catalog + adversarial prep for Troy's ChatGPT red-team (garbage/hostile input, prompt injection via pasted text, PII dumps, crisis content, shared-computer localStorage, race conditions, graceful-unknown-task) (Task 24)
+- [ ] Headshot GUIDANCE skill (advice + external-tool prompt; NO face-image storage -- privacy doctrine) (folded into Task 11)
+
 ---
 
 ## Shipped ledger (Fable sessions, 2026-06-09/10)
-`8099849` analysis report -- `351dac6` agency reassessment -- `c339525` truth gate all lanes -- `283f3df` export branding off -- `cc119e6` DEEP tiers + failover guards -- `d9b6151` HANDOFF -- `6a93138` skills wave 1 (verified live: skillCount 14/14)
+`8099849` analysis report -- `351dac6` agency reassessment -- `c339525` truth gate all lanes -- `283f3df` export branding off -- `cc119e6` DEEP tiers + failover guards -- `d9b6151` HANDOFF -- `6a93138` skills wave 1 (verified live: skillCount 14/14) -- `e0b4bdf` identity single-source -- `b49898d` legal disclaimers
 
 ## Working agreement (Troy <-> Fable)
 - Increments ship small with a one-line "what to test" per commit; Troy's hands-on retest (Task 4) gates the cohort.
