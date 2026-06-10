@@ -129,19 +129,19 @@ Return this exact JSON structure:
   ]
 }
 
-ABSOLUTE RULES:
+ABSOLUTE RULES (the truth gate -- violating any = failure):
 1. Target this resume SPECIFICALLY at ${jobTitle} at ${jobCompany}.
-2. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform every duty into an achievement.
-3. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
-4. Numbers in EVERY bullet. Estimate conservatively from industry context if source has no numbers.
-5. Every bullet starts with a strong action verb.
-6. 3-5 bullets per role, each with measurable impact.
-7. 9-12 skills that match the job posting.
-8. NEVER mention incarceration, criminal records, justice involvement, parole, probation.
-9. NEVER fabricate companies or job titles. But DO quantify achievements from context.
-10. If a title/company pairing doesn't make sense, FIX IT.
-11. Use years only (no months).
-12. Return ONLY the JSON object.`;
+2. TRUTH GATE: use ONLY facts present in the person's background above. NEVER invent a number, metric, tool, certification, title, employer, or result they did not provide. If a detail is missing, leave it out -- do not guess or pad. This resume must survive a background-checked interview.
+3. Numbers ONLY where the background states them, kept exactly as given (ranges stay ranges). A bullet with no stated quantity is written strong WITHOUT a number -- a true unquantified bullet beats an impressive false one.
+4. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform every duty into an achievement using only stated facts.
+5. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
+6. Every bullet starts with a strong action verb.
+7. 3-5 bullets per role -- but write fewer rather than padding with invented detail.
+8. 9-12 skills that match the job posting AND are supported by the background.
+9. Carry forward ALL education and certifications from the background -- a certification becomes its own education entry with the certification name as the credential. Never drop them; never add ones not stated.
+10. NEVER mention incarceration, criminal records, justice involvement, parole, probation.
+11. If a title/company pairing is clearly garbled, repair the pairing -- never invent a new employer or title.
+12. Use years only (no months). Use "--" never an em dash. Return ONLY the JSON object.`;
 
     const coverLetterPrompt = `${coverLetterResearch}
 
@@ -156,14 +156,15 @@ KEY SKILLS: ${skills}
 ${strengths ? `STRENGTHS: ${strengths}` : ""}
 
 RULES:
-- Address to the SPECIFIC company (${jobCompany}). NO [Company Name] placeholders. NO [Hiring Manager] — use "Dear Hiring Team" if unknown.
+- Address to the SPECIFIC company (${jobCompany}). NO [Company Name] placeholders. NO [Hiring Manager] -- use "Dear Hiring Team" if unknown.
 - 250-350 words.
+- TRUTH GATE: every claim must come from the background above. NEVER invent achievements, numbers, certifications, or personal facts (transportation, availability, physical capability, references). If the background does not state it, do not claim it -- even if the job posting asks for it.
 - Opening: who they are, what role, why this company specifically.
-- Middle: 2-3 specific achievements that match the job requirements. Include numbers.
-- Close: enthusiasm, availability, confidence.
+- Middle: 2-3 specific achievements from the background that match the job requirements. Use numbers only where the background states them.
+- Close: enthusiasm and confidence, grounded in what is true.
 - NEVER mention incarceration, criminal records, justice involvement. Not even obliquely.
 - NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
-- Write like a confident human, not an AI. No buzzwords.
+- Write like a confident human, not an AI. No buzzwords. Use "--" never an em dash.
 - Sign with the applicant's name.
 
 FORMAT:

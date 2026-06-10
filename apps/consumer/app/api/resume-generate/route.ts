@@ -65,16 +65,17 @@ RULES:
 - Write at a 6th grade reading level
 - Be specific, not generic
 - No buzzwords like "results-driven" or "detail-oriented"
-- Keep it honest and grounded
+- Keep it honest and grounded -- only claim what their skills and experience above support; never invent numbers or experience
 - NEVER mention incarceration, criminal records, justice involvement, or any disqualifying information
+- Use "--" never an em dash
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
       prompt = `Suggest one experience bullet point for a ${sanitizedTargetJob} resume.
 Their skills: ${sanitizedSkills || "general"}.
 Existing bullets: ${sanitizedBullets || "none yet"}.${forgeBlock}
 
-Write ONE bullet starting with an action verb. Include a number or result if possible.
-No buzzwords. Keep it honest. One sentence only.
+Write ONE bullet starting with an action verb. Include a number or result ONLY if their input above provides one -- never invent quantities.
+No buzzwords. Keep it honest. One sentence only. Use "--" never an em dash.
 NEVER mention incarceration, criminal records, or any disqualifying information.`;
     } else {
       return NextResponse.json(

@@ -140,28 +140,25 @@ async function generateResume(input: GenerateDocsInput): Promise<string> {
 
 You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
 
-YOUR JOB: Take whatever the user gives you — even a terrible, bare-bones resume — and produce a polished, compelling, achievement-driven resume that gets interviews.
+YOUR JOB: Take whatever the user gives you -- even a terrible, bare-bones resume -- and produce a polished, compelling, TRUE resume that gets interviews and survives them.
 
-ABSOLUTE RULES (violating any = failure):
-1. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into an achievement.
-2. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
-3. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
-4. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
-5. Numbers in EVERY bullet. Revenue, percentages, headcount, volume, timelines, cost savings. If the source data has no numbers, ESTIMATE CONSERVATIVELY from industry context:
-   - Warehouse associate: 100-200+ orders/day, 40-60 person team, 8K-12K units
-   - Retail cashier: $2K-5K nightly deposit, 150+ transactions/shift
-   - Restaurant: 200+ covers/shift, 8-12 person line
-   - Forklift operator: 50-80 pallets/shift
-   - CNA: 8-12 patient load, 95%+ compliance
-6. Past roles = past tense. Current role = present tense. No exceptions.
-7. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
-8. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
-9. Keep to ONE PAGE (400-600 words). Every word fights for its seat.
+ABSOLUTE RULES (the truth gate -- violating any = failure):
+1. TRUTH GATE: use ONLY facts the source data states. NEVER invent a number, metric, tool, certification, employer, title, or result. NEVER estimate, infer, or borrow "industry typical" figures. If a detail is missing, write the bullet strong without it. This person's resume must survive a background-checked interview -- a true unquantified bullet beats an impressive false one.
+2. Numbers ONLY where the source states them, kept exactly as given (ranges stay ranges).
+3. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into achievement language built from stated facts.
+4. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
+5. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
+6. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
+7. Past roles = past tense. Current role = present tense. No exceptions.
+8. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
+9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
+10. Keep to ONE PAGE (400-600 words). Every word fights for its seat.
+11. Use "--" never an em dash anywhere in the output.
 
-DATA CLEANING — FIX INPUT ERRORS:
-- If a job title doesn't match the company (e.g., retail cashier work attributed to a printing company), FIX IT. Use context clues to determine the real employer and role.
+DATA CLEANING -- FIX INPUT ERRORS:
+- If a job title doesn't match the company (e.g., retail cashier work attributed to a printing company), repair the pairing using context clues. Never invent a new employer or role.
 - If dates look wrong or overlapping, use the most logical interpretation.
-- If the resume is bare/terrible, don't produce a bare/terrible output. Infer reasonable achievements from the job title + industry. A warehouse worker who worked 3 years ACHIEVED things — figure out what they likely were.
+- If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
 
 ${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
 
@@ -255,19 +252,20 @@ JOB TITLE | Company Name | City, State | Start Year - End Year
 
 EDUCATION
 Institution Name, City, State | Start Year - End Year
-Relevant coursework or focus area if it adds value.
+Relevant coursework or focus area if it adds value (only what the source states).
 
 CERTIFICATIONS
-- Cert name (current/year)
-- Cert name (current/year)
+- Cert name (year, only if the source states it)
+- Cert name (year, only if the source states it)
 
 CRITICAL REMINDERS:
-- If the input resume is bare or poorly written, DO NOT produce bare output. Infer achievements from job title + duration + industry. A 5-year warehouse worker ACCOMPLISHED things.
-- If a job title/company pairing doesn't make sense (retail work at a printing company), FIX IT using context.
-- Transform EVERY duty into an achievement with numbers.
+- TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded -- real facts, strong verbs, zero invention.
+- If a job title/company pairing doesn't make sense (retail work at a printing company), repair the pairing using context. Never invent a new employer or role.
+- Transform duties into achievement language using only the source's facts and stated scale.
+- CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
 - NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: build a FUNCTIONAL resume with skill-area sections and CAR bullets from strengths data.
-- Certifications get their OWN section — never buried in education.`;
+- If no work history exists: build a FUNCTIONAL resume with skill-area sections and bullets from the strengths data provided -- nothing beyond it.
+- Certifications get their OWN section -- never buried in education.`;
 
   return await callClaude(system, prompt, 4500);
 }
@@ -291,7 +289,8 @@ RULES:
 - 250-350 words. Professional tone with warmth.
 - NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information in the cover letter. Disclosure happens in person during interviews, never on paper.
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
-- Never fabricate achievements or experience.`;
+- TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
+- Use "--" never an em dash.`;
 
   const parts: string[] = [];
 
