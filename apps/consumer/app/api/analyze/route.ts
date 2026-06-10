@@ -18,9 +18,14 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
-import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { MODEL_DEEP } from "@/lib/ai/models";
 
 export const maxDuration = 120;
+
+// The Career Intelligence Report is a DEEP task (models.ts doctrine): the
+// full narrative synthesis is the Forge's flagship one-shot output.
+const AI_MODEL = MODEL_DEEP;
 
 interface ForgeInput {
   resumeText?: string;
@@ -293,7 +298,7 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string
 ): Promise<Record<string, unknown>> {
-  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000);
+  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in AI response");
   return JSON.parse(jsonMatch[0]);

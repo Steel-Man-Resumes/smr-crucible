@@ -13,12 +13,17 @@ import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
-import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { MODEL_DEEP } from "@/lib/ai/models";
 
 export const maxDuration = 120;
 
+// Tailored resume generation is a DEEP task (models.ts doctrine): one-shot,
+// high-stakes, quality changes a real outcome. Latency is acceptable here.
+const AI_MODEL = MODEL_DEEP;
+
 async function callClaude(prompt: string, maxTokens = 2000): Promise<string> {
-  return callAI("", [{ role: "user", content: prompt }], maxTokens);
+  return callAI("", [{ role: "user", content: prompt }], maxTokens, MODEL_DEEP);
 }
 
 async function handlePost(request: Request) {
@@ -31,7 +36,7 @@ async function handlePost(request: Request) {
     const body = await request.json();
     const { forgeOutput, resumeText, job, contact, challenges, criminalRecord } = body;
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
     }
 

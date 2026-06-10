@@ -13,9 +13,14 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
-import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { MODEL_DEEP } from "@/lib/ai/models";
 
 export const maxDuration = 30;
+
+// A disclosure plan is a DEEP task (models.ts doctrine): one-shot synthesis
+// where quality changes a real outcome for the user.
+const AI_MODEL = MODEL_DEEP;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -30,7 +35,7 @@ async function handlePost(request: Request) {
   try {
     const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers } = await request.json();
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
@@ -117,7 +122,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
 - 6th grade reading level
 - JSON only`;
 
-    const text = await callAI("", [{ role: "user", content: prompt }], 1500);
+    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 

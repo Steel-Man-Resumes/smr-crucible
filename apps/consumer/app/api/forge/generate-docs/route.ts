@@ -10,9 +10,14 @@
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
-import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { MODEL_DEEP } from "@/lib/ai/models";
 
 export const maxDuration = 120;
+
+// Forge resume + cover letter generation is a DEEP task (models.ts doctrine):
+// one-shot documents whose quality changes a real outcome.
+const AI_MODEL = MODEL_DEEP;
 
 interface GenerateDocsInput {
   narrative?: {
@@ -117,7 +122,7 @@ async function callClaude(
   userMessage: string,
   maxTokens = 4000
 ): Promise<string> {
-  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens);
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP);
 }
 
 // --- Resume Generation ---
