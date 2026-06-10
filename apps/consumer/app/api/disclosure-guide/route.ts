@@ -99,15 +99,15 @@ THEIR SITUATION:
 - Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}${intakeBlock}
 
 JURISDICTION-SPECIFIC CONTEXT:
-${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin ban-the-box: state/county government employers cannot ask about criminal history on applications. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement eligibility: WI §973.015 allows expungement for offenses committed under age 25, or for misdemeanors/minor felonies with no prior felony convictions. Process takes 6-18 months. Provide this specific guidance.` : `Research the specific ban-the-box laws, fair chance ordinances, and expungement options for ${jurisdiction}. Be specific — generic guidance is not enough.`}
+${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin ban-the-box: state/county government employers cannot ask about criminal history on applications. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement eligibility: WI s.973.015 allows expungement for offenses committed under age 25, or for misdemeanors/minor felonies with no prior felony convictions. Process takes 6-18 months. Provide this specific guidance (this block is curated and current -- you may cite it).` : `Jurisdiction is ${jurisdiction}. You cannot look up current law, so describe protections GENERALLY: many states and cities have ban-the-box / fair-chance rules that limit when employers may ask about records, and most states have some record-clearing process. Do NOT cite specific statute numbers, ordinance names, or eligibility rules for ${jurisdiction} unless you are certain they are real and current -- a wrong citation harms the user. Instead, name the general protection type and direct them to verify with a local reentry legal aid organization.`}
 
 GENERATE a disclosure plan as JSON:
 {
   "timing_advice": "When they should disclose and why, specific to their situation and jurisdiction. Apply the ban-the-box rules for their state.",
-  "legal_context": "Relevant laws and rights specific to their jurisdiction. Ban-the-box status, expungement eligibility under state law, what employers can/cannot ask. Be specific — cite the actual statute or ordinance where you can.",
+  "legal_context": "Rights and protections relevant to their jurisdiction, framed as general information to verify -- not legal advice. Cite a specific statute ONLY from the curated context above; otherwise describe the protection generally and point to local legal aid.",
   "script": "A natural, conversational script they can use. Under 30 seconds spoken. Acknowledges the past, pivots to growth and value. If candidate strengths are provided, reference them specifically in the pivot. Must sound human, not rehearsed.",
   "tips": [
-    "tip 1 — specific, actionable",
+    "tip 1 -- specific, actionable",
     "tip 2",
     "tip 3",
     "tip 4"
@@ -116,10 +116,11 @@ GENERATE a disclosure plan as JSON:
 
 ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${sanitizeForPrompt(refinementNote, 500)}\n` : ""}RULES:
 - Be honest but empowering
+- This is career coaching, not legal advice -- never present legal information as advice, and never invent statutes or eligibility rules
 - The script should acknowledge the record briefly, then pivot to what they've done since and what they bring
 - For felonies 10+ years old, note that many employers care less about old records
 - Never minimize what happened, but always connect to growth
-- 6th grade reading level
+- 6th grade reading level. Use "--" never an em dash
 - JSON only`;
 
     const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP);

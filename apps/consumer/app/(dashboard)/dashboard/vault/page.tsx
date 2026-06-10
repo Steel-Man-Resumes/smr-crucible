@@ -139,6 +139,8 @@ export default function VaultPage() {
         break;
       case "disclosure_plan":
         body = [
+          // Non-negotiable framing on every disclosure output (master plan s.16)
+          `<p class="meta"><strong>This is career coaching, not legal advice.</strong> For legal guidance, contact a reentry attorney or free legal aid in your area.</p>`,
           c.timing_advice && `<h2>When to Disclose</h2><p>${esc(c.timing_advice)}</p>`,
           c.legal_context && `<h2>Your Rights</h2><p>${esc(c.legal_context)}</p>`,
           c.script && `<h2>What to Say</h2><blockquote>${esc(c.script)}</blockquote>`,

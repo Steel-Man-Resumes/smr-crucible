@@ -314,6 +314,7 @@ function DisclosurePlannerPage() {
 <body>
 <h1>Disclosure Plan${targetJob ? ` -- ${targetJob}` : ""}</h1>
 <p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date}</p>
+<div class="callout"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.</div>
 <div class="callout">Disclosure is a conversation, not a checkbox. It happens face-to-face, where you control the narrative with your voice and your presence.</div>
 ${plan.timing_advice ? `<h2>When to Disclose</h2><p>${plan.timing_advice}</p>` : ""}
 ${plan.legal_context ? `<h2>Your Legal Rights</h2><p>${plan.legal_context}</p>` : ""}
@@ -870,6 +871,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               Adjust
             </button>
           </div>
+        </div>
+
+        {/* Non-negotiable framing: coaching, never legal advice (master plan s.16) */}
+        <div className="bg-warm-50 rounded-xl px-4 py-3 border border-warm-200 mb-4">
+          <p className="text-xs text-earth-700 leading-relaxed">
+            <span className="font-semibold">This is career coaching, not legal advice.</span>{" "}
+            Laws change and every situation is different -- for legal guidance,
+            contact a reentry attorney or free legal aid in your area.
+          </p>
         </div>
 
         {/* Persistent confirmation -- the plan is saved to Materials */}
