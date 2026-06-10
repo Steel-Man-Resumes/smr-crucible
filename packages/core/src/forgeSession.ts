@@ -39,7 +39,12 @@ export async function saveForgeSession(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id) DO UPDATE SET
        readiness_stage = COALESCE(EXCLUDED.readiness_stage, consumer_profile.readiness_stage),
-       profile_data = EXCLUDED.profile_data,
+       -- MERGE, never replace: profile_data also carries keys other writers own
+       -- (contact from register/profile PATCH). A forge re-sync must update the
+       -- forge fields it brings and PRESERVE everything else -- replacing the
+       -- whole object silently wiped saved contact info (identity-desync bug,
+       -- Fable analysis 2026-06-10).
+       profile_data = COALESCE(consumer_profile.profile_data, '{}'::jsonb) || EXCLUDED.profile_data,
        narrative_data = EXCLUDED.narrative_data,
        preferences = EXCLUDED.preferences,
        skills = EXCLUDED.skills,

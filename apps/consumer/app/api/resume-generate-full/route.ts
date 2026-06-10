@@ -15,6 +15,7 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { formatPhoneUS } from "@/lib/phone";
 
 export const maxDuration = 120;
 
@@ -210,7 +211,8 @@ ${contactName || "Candidate"}`;
       },
       contact: {
         name: contact?.name || "",
-        phone: contact?.phone || "",
+        // Server-side choke point: a tailored document never ships a raw digit string
+        phone: formatPhoneUS(contact?.phone),
         email: contact?.email || "",
         city: contact?.city || "",
         state: contact?.state || "",

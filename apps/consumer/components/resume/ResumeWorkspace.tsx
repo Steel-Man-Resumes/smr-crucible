@@ -230,6 +230,10 @@ export function ResumeWorkspace() {
         let contactInfo: any = {};
         let challenges: string[] = [];
         let criminalRecord: any = null;
+        // The contact the user typed on their BASE resume -- the authoritative
+        // identity for DOCUMENTS (the account profile/session name may be a
+        // nickname or persona; the resume's own name is what employers see).
+        let baseDocContact: any = null;
 
         // Try localStorage first
         try {
@@ -240,6 +244,9 @@ export function ResumeWorkspace() {
             resumeText = session.resumeText;
             challenges = session.challenges || [];
             criminalRecord = session.criminalRecord || null;
+            if (session.resumeDoc?.contact?.name) {
+              baseDocContact = session.resumeDoc.contact;
+            }
           }
         } catch {}
 
@@ -259,7 +266,23 @@ export function ResumeWorkspace() {
           } catch {}
         }
 
-        // Try to get contact from profile API
+        // Server-side base resume artifact: the cross-device source of the
+        // document identity (works when localStorage is empty -- shared or new
+        // computers, common for this population).
+        if (!baseDocContact) {
+          try {
+            const artRes = await fetch("/api/artifacts?type=resume&limit=20");
+            if (artRes.ok) {
+              const { data } = await artRes.json();
+              const base = (data || []).find(
+                (a: any) => (a.target_context as any)?.source === "forge" && a.content?.contact?.name
+              );
+              if (base) baseDocContact = base.content.contact;
+            }
+          } catch {}
+        }
+
+        // Account profile fills whatever the base resume doesn't carry.
         try {
           const profileRes = await fetch("/api/user/profile");
           if (profileRes.ok) {
@@ -267,6 +290,19 @@ export function ResumeWorkspace() {
             if (profileContact) contactInfo = profileContact;
           }
         } catch {}
+
+        // Document identity: base resume contact wins field-by-field; profile
+        // is the fallback. (Identity-desync fix, Fable analysis 2026-06-10.
+        // The generated doc's Contact section stays fully editable as always.)
+        if (baseDocContact) {
+          contactInfo = {
+            name: baseDocContact.name || contactInfo.name || "",
+            phone: baseDocContact.phone || contactInfo.phone || "",
+            email: baseDocContact.email || contactInfo.email || "",
+            city: baseDocContact.city || contactInfo.city || "",
+            state: baseDocContact.state || contactInfo.state || "",
+          };
+        }
 
         // Call the career package generation API
         const res = await fetch("/api/resume-generate-full", {
@@ -986,6 +1022,11 @@ export function ResumeWorkspace() {
 
             <p className="text-sm text-muted mb-4">
               {disclosureBrief.upgradeMessage}
+            </p>
+
+            <p className="text-xs text-earth-700 bg-warm-50 border border-warm-200 rounded-lg px-3 py-2 mb-4">
+              <span className="font-semibold">This is career coaching, not legal advice.</span>{" "}
+              For legal guidance, contact a reentry attorney or free legal aid in your area.
             </p>
 
             <a

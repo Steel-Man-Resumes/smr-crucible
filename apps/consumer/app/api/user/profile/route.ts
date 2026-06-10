@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { query, getOne } from "@crucible/core";
+import { formatPhoneUS } from "@/lib/phone";
 
 export interface UserContact {
   name: string;
@@ -56,13 +57,15 @@ export async function GET() {
     if (c.state) contact.state = c.state;
   }
 
-  // Source 3: Forge resume parsing (if contact wasn't explicitly saved)
-  // Check existing resume artifacts for parsed contact
+  // Source 3: Forge resume parsing (if contact wasn't explicitly saved).
+  // Prefer the BASE resume (source='forge') -- it holds what the user typed
+  // about themselves; a tailored artifact's contact is derived and circular.
   if (!contact.phone || !contact.city) {
     const artifact = await getOne<{ content: Record<string, any> }>(
       `SELECT content FROM refinery_artifact
        WHERE user_id = $1 AND artifact_type = 'resume'
-       ORDER BY updated_at DESC LIMIT 1`,
+       ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
+       LIMIT 1`,
       [userId]
     );
     if (artifact?.content?.contact) {
@@ -74,6 +77,9 @@ export async function GET() {
       if (!contact.state && rc.state) contact.state = rc.state;
     }
   }
+
+  // One display format everywhere a phone is shown (legacy rows may hold raw digits)
+  contact.phone = formatPhoneUS(contact.phone);
 
   // Determine if profile is "complete" (has name + phone minimum)
   const isComplete = !!(contact.name.trim() && contact.phone.trim());
@@ -98,7 +104,7 @@ export async function PATCH(request: Request) {
 
   const contact: UserContact = {
     name: (body.name || "").trim(),
-    phone: (body.phone || "").trim(),
+    phone: formatPhoneUS(body.phone),
     email: (body.email || "").trim(),
     city: (body.city || "").trim(),
     state: (body.state || "").trim(),
