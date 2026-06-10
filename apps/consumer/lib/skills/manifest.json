@@ -1,14 +1,122 @@
 {
-  "version": 1,
-  "description": "Index of t.ROY / coach doctrine skills. THIS FILE IS THE SOURCE OF TRUTH for what skills exist and when they load. Adding a skill = add an entry here + a folder `<id>/SKILL.md` (optionally with companion data: facts.json, scripts, examples). No code change needed -- lib/skills-loader.ts reads this. Activation: a skill loads when the current page is in `pages` (any user), or in `pagesIfCriminalRecord` when the user disclosed a record, or when `always` is true.",
+  "version": 2,
+  "description": "Index of t.ROY / coach doctrine skills. THIS FILE IS THE SOURCE OF TRUTH for what skills exist and when they load. Adding a skill = add an entry here + a folder `<id>/SKILL.md` (optionally with companion data: facts.json, scripts, examples). No code change needed -- lib/skills-loader.ts reads this. Activation: a skill loads when the current page is in `pages` (any user), or in `pagesIfCriminalRecord` when the user disclosed a record, or when `always` is true. Page ids: forge = intro/welcome/resume/goals/story/preferences/processing/output/rush; dashboard = dashboard/application-tailor/jobs/disclosure/disclosure-rehearsal/interview/vault/employers/resources/applications/progress/settings.",
   "skills": [
+    {
+      "id": "agency-corrections",
+      "title": "Agency & Corrections",
+      "file": "agency-corrections/SKILL.md",
+      "summary": "t.ROY is an agent, not a chatbot: the correction ladder (fix now -> route to the edit surface -> regenerate -> tool-apply with confirm-card -> file to Troy), filing standards, power boundaries, identity-propagation rule.",
+      "always": true,
+      "pages": [],
+      "pagesIfCriminalRecord": []
+    },
     {
       "id": "career-narrative",
       "title": "Career Narrative",
       "file": "career-narrative/SKILL.md",
       "summary": "Anti-fragility doctrine, the 5-part narrative arc, gap handling, the turning-point story. The philosophical foundation every other skill builds on.",
       "always": false,
-      "pages": ["dashboard", "output", "jobs", "resume-builder", "disclosure", "disclosure-rehearsal", "interview"],
+      "pages": ["dashboard", "output", "jobs", "resume", "application-tailor", "disclosure", "disclosure-rehearsal", "interview"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "truth-gate",
+      "title": "The Truth Gate",
+      "file": "truth-gate/SKILL.md",
+      "summary": "The first law: nothing generated asserts a fact the user did not provide. Why it is absolute for this population, what strength-without-invention looks like, how to decline invention requests.",
+      "always": false,
+      "pages": ["resume", "application-tailor", "output", "vault", "rush"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "bullet-mining",
+      "title": "Bullet Mining",
+      "file": "bullet-mining/SKILL.md",
+      "summary": "The five gold-mining questions (did/tools/often/how many/improved), mining technique (chase the 'just', translate don't transcribe), the bullet formula, identity payoff.",
+      "always": false,
+      "pages": ["resume", "application-tailor"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "inside-experience-reframe",
+      "title": "Inside Experience Reframe",
+      "file": "inside-experience-reframe/SKILL.md",
+      "summary": "Work/training while incarcerated is REAL experience: translation patterns (facility kitchen -> institutional kitchen), the two failure modes (erasure and exposure), never carceral words on paper.",
+      "always": false,
+      "pages": ["resume", "output"],
+      "pagesIfCriminalRecord": ["application-tailor", "interview", "vault"]
+    },
+    {
+      "id": "gap-navigation",
+      "title": "Gap Navigation",
+      "file": "gap-navigation/SKILL.md",
+      "summary": "Gaps handled structurally on paper (years-only, hybrid layouts, fill with what was true, never explain) and verbally in interviews (the rehearsed three-beat answer).",
+      "always": false,
+      "pages": ["resume", "application-tailor", "interview"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "application-tailoring",
+      "title": "Application Tailoring",
+      "file": "application-tailoring/SKILL.md",
+      "summary": "One base, many aims: what tailoring changes (summary, emphasis, skill selection) and never changes (facts, certs, education), posting extraction, fit honesty, logistics truthfulness, cover-letter bar.",
+      "always": false,
+      "pages": ["application-tailor", "jobs"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "ats-and-formats",
+      "title": "ATS Safety & Formats",
+      "file": "ats-and-formats/SKILL.md",
+      "summary": "Honest ATS mechanics (parse-safety over score theater), single-column structure, true-keyword strategy, PDF/DOCX/TXT doctrine, export hygiene (user's brand only, no em dashes).",
+      "always": false,
+      "pages": ["resume", "application-tailor", "vault"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "strong-background-professional",
+      "title": "Strong Background, Real Record",
+      "file": "strong-background-professional/SKILL.md",
+      "summary": "Coaching high-capability users with records: fast recognition, upgrading good resumes to the Steel Man bar, professional-stakes disclosure (licensing, deep checks, the network knows), dignity rules.",
+      "always": false,
+      "pages": [],
+      "pagesIfCriminalRecord": ["dashboard", "resume", "application-tailor", "disclosure", "disclosure-rehearsal", "interview"]
+    },
+    {
+      "id": "stage-adaptation",
+      "title": "Stage Adaptation",
+      "file": "stage-adaptation/SKILL.md",
+      "summary": "Prochaska stages operationalized: exploring/preparing/acting/maintaining, depth and tone per stage, identity-evidence coaching (Giordano), never fake-promote or gatekeep.",
+      "always": false,
+      "pages": ["intro", "welcome", "goals", "story", "preferences", "output", "dashboard", "progress"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "predictive-next-step",
+      "title": "Predictive Helpfulness",
+      "file": "predictive-next-step/SKILL.md",
+      "summary": "The coach who moves first: the where/what-changed/what's-next loop, the proactive playbook (resume->job, job->tailor, plan->rehearse, 5-day follow-up), one offer at a time, constraint-checked, channel respect.",
+      "always": false,
+      "pages": ["dashboard", "jobs", "applications", "progress"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "job-search-doctrine",
+      "title": "Job Search Doctrine",
+      "file": "job-search-doctrine/SKILL.md",
+      "summary": "Real jobs first with real pay; rate the MATCH never the person; fair-chance as an honest 3-tier overlay (verified/public-signal/unknown) woven under live listings; overlap floats to top; transportation reality; search craft.",
+      "always": false,
+      "pages": ["jobs", "employers", "resources", "applications"],
+      "pagesIfCriminalRecord": []
+    },
+    {
+      "id": "rejection-recovery",
+      "title": "Rejection Recovery",
+      "file": "rejection-recovery/SKILL.md",
+      "summary": "Triage after a no: acknowledge, right-size, read the pattern for the failing stage, smallest next true step; disclosure-shaped rejections; protecting the user's story; crisis boundaries; banking wins.",
+      "always": false,
+      "pages": ["dashboard", "applications", "progress", "interview"],
       "pagesIfCriminalRecord": []
     },
     {
@@ -18,7 +126,7 @@
       "summary": "Troy's disclosure doctrine: timing strategy, the 4-part structure, follow-up handling, anti-patterns, and industry + legal scaffolding (with the WOTC / legal-claim discipline).",
       "always": false,
       "pages": ["disclosure", "disclosure-rehearsal", "interview"],
-      "pagesIfCriminalRecord": ["dashboard", "resume-builder"]
+      "pagesIfCriminalRecord": ["dashboard", "application-tailor"]
     }
   ]
 }
