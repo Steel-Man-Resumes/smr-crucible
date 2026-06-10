@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { code, partnerName, dailyLimit, maxRedemptions, expiresAt } = body;
+  const { code, partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
 
   if (!code || !partnerName) {
     return NextResponse.json(
@@ -30,11 +30,16 @@ export async function POST(req: Request) {
     );
   }
 
+  // Mintable tiers only -- 'client' = cohort seat code (keeps the redeemer's
+  // client journey; role stays with the code owner), 'partner' = org staff.
+  // 'admin'/'unlimited' are NEVER mintable from the API (escalation guard).
+  const mintTier = requestedTier === "client" ? "client" : "partner";
+
   try {
     const accessCode = await createAccessCode({
       code,
       partnerName,
-      tier: "partner",
+      tier: mintTier,
       dailyLimit: dailyLimit ?? 200,
       maxRedemptions: maxRedemptions ?? null,
       expiresAt: expiresAt ?? null,

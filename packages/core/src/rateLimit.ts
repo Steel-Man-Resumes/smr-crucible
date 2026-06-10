@@ -127,6 +127,7 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
          WHEN 'admin' THEN 0
          WHEN 'unlimited' THEN 1
          WHEN 'partner' THEN 2
+         WHEN 'client' THEN 3
        END
      LIMIT 1`,
     [userId]
@@ -134,6 +135,7 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
 
   if (!row) return DEFAULT_DAILY_LIMIT;
   if (row.tier === "admin" || row.tier === "unlimited") return 0; // 0 = unlimited
+  // 'partner' and 'client' codes both carry their minted daily_limit
   return row.daily_limit ?? 200;
 }
 

@@ -112,6 +112,19 @@ function AccessPageInner() {
   const [phase, setPhase]     = useState(0);
   const [copied, setCopied]   = useState(false);
 
+  // Carry the cohort code into pre-auth Forge requests (seats v1): the rate
+  // limiter reads this cookie and counts the session against the code's shared
+  // seat pool instead of the venue's single NAT IP (classrooms/labs/libraries).
+  // 60 days, parent domain so forge.* and refinery.* both see it.
+  useEffect(() => {
+    if (!/^[A-Z0-9]{4,20}$/.test(partnerCode)) return;
+    try {
+      const host = window.location.hostname;
+      const domain = host.endsWith("steelmanresumes.com") ? "; domain=.steelmanresumes.com" : "";
+      document.cookie = `smr_access_code=${partnerCode}; path=/; max-age=${60 * 24 * 60 * 60}; SameSite=Lax${domain}`;
+    } catch {}
+  }, [partnerCode]);
+
   // Staggered content reveal
   useEffect(() => {
     const timers = [100,500,800].map((ms,i) => setTimeout(() => setPhase(i+1), ms));

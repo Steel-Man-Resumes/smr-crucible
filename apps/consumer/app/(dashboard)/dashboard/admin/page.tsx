@@ -14,7 +14,13 @@ export default function AdminEvidenceDashboard() {
   const tier = useUserTier();
   const [data, setData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mintForm, setMintForm] = useState({ code: "", partnerName: "", dailyLimit: "200" });
+  const [mintForm, setMintForm] = useState({
+    code: "",
+    partnerName: "",
+    dailyLimit: "200",
+    tier: "client",
+    seats: "10",
+  });
   const [mintMsg, setMintMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,12 +51,20 @@ export default function AdminEvidenceDashboard() {
           code: mintForm.code.toUpperCase().trim(),
           partnerName: mintForm.partnerName.trim(),
           dailyLimit: parseInt(mintForm.dailyLimit) || 200,
+          tier: mintForm.tier === "partner" ? "partner" : "client",
+          // Seats = durable redemptions. Blank/0 = unlimited seats.
+          maxRedemptions: parseInt(mintForm.seats) > 0 ? parseInt(mintForm.seats) : null,
         }),
       });
       const json = await res.json();
       if (res.ok) {
-        setMintMsg(`Code ${json.accessCode.code} created for ${json.accessCode.partner_name}`);
-        setMintForm({ code: "", partnerName: "", dailyLimit: "200" });
+        const seatsLabel = json.accessCode.max_redemptions
+          ? `${json.accessCode.max_redemptions} seats`
+          : "unlimited seats";
+        setMintMsg(
+          `Code ${json.accessCode.code} created for ${json.accessCode.partner_name} (${json.accessCode.tier}, ${seatsLabel}, ${json.accessCode.daily_limit}/day each)`
+        );
+        setMintForm({ code: "", partnerName: "", dailyLimit: "200", tier: "client", seats: "10" });
         // Reload data
         fetch("/api/admin/evidence").then((r) => r.json()).then(setData).catch(() => {});
       } else {
@@ -76,15 +90,20 @@ export default function AdminEvidenceDashboard() {
         </Link>
       </div>
 
-      {/* Mint a partner code */}
+      {/* Mint access codes -- cohort seat codes + partner staff codes */}
       <section className="bg-white rounded-xl border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Mint Partner Code</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-1">Mint Access Code</h2>
+        <p className="text-xs text-muted mb-4">
+          Cohort seat code = members keep the full client journey; each redemption uses one durable
+          seat; the whole group shares a seat-sized Forge pool (works on one classroom WiFi).
+          Partner staff code = grants the partner role for dashboards.
+        </p>
         <form onSubmit={mintCode} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-muted block mb-1">Code (uppercase A-Z 0-9)</label>
             <input
               className="w-full border border-border rounded-lg px-3 py-2 text-sm font-mono uppercase"
-              placeholder="JFW2026"
+              placeholder="EXPOCREW"
               value={mintForm.code}
               onChange={(e) => setMintForm((f) => ({ ...f, code: e.target.value }))}
               required
@@ -94,14 +113,35 @@ export default function AdminEvidenceDashboard() {
             <label className="text-xs text-muted block mb-1">Partner Name</label>
             <input
               className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-              placeholder="Justice Forward WI"
+              placeholder="EXPO of Wisconsin"
               value={mintForm.partnerName}
               onChange={(e) => setMintForm((f) => ({ ...f, partnerName: e.target.value }))}
               required
             />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Daily AI Limit</label>
+            <label className="text-xs text-muted block mb-1">Type</label>
+            <select
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+              value={mintForm.tier}
+              onChange={(e) => setMintForm((f) => ({ ...f, tier: e.target.value }))}
+            >
+              <option value="client">Cohort seat code (client journey)</option>
+              <option value="partner">Partner staff code (dashboard role)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">Seats (blank or 0 = unlimited)</label>
+            <input
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+              type="number"
+              min="0"
+              value={mintForm.seats}
+              onChange={(e) => setMintForm((f) => ({ ...f, seats: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">Daily AI Limit (per member)</label>
             <input
               className="w-full border border-border rounded-lg px-3 py-2 text-sm"
               type="number"

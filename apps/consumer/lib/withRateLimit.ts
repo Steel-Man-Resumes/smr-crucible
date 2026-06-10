@@ -15,6 +15,7 @@ import {
   getUserTier,
   incrementUserUsage,
   incrementIpUsage,
+  validateAccessCode,
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
@@ -108,7 +109,41 @@ export function withRateLimit(
       return handler(request);
     }
 
-    // IP mode
+    // IP mode -- with cohort-code awareness (seats v1, 2026-06-10).
+    //
+    // Classrooms, program labs, and libraries share ONE NAT IP, so the per-IP
+    // bucket 429'd the 6th person mid-Forge. A session that entered via
+    // /access?code=X carries the code in a cookie; a VALID code switches the
+    // bucket to a per-code pool sized by its seats. The code is org-shared by
+    // design, so the pool is shared and bounded -- a leaked code grants a
+    // bounded pool, never unlimited calls.
+    const code = getAccessCodeCookie(request);
+    if (code) {
+      try {
+        const v = await validateAccessCode(code);
+        if (v.valid && v.accessCode) {
+          const baseLimit = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
+          // Pool = per-person limit x seats (default 10 seats, capped at 50).
+          const seats = Math.min(Math.max(v.accessCode.max_redemptions ?? 10, 1), 50);
+          const codeLimit = baseLimit * seats;
+          const codeCount = await incrementIpUsage(`code:${v.accessCode.code}`, opts.endpoint);
+          if (codeCount > codeLimit) {
+            return NextResponse.json(
+              {
+                error:
+                  "Your organization's group has used today's shared AI calls for this tool. Try again tomorrow, or ask your coordinator to raise the code's limit.",
+              },
+              { status: 429 }
+            );
+          }
+          return handler(request);
+        }
+      } catch {
+        // Validation hiccup -> fall through to the normal IP bucket. Never let
+        // the code path make rate limiting fail open OR closed unexpectedly.
+      }
+    }
+
     const ip = getClientIp(request);
     const limit = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
 
@@ -124,4 +159,14 @@ export function withRateLimit(
 
     return handler(request);
   };
+}
+
+/** Read the cohort access code from the request cookie (set by /access).
+ *  Strict shape check -- this value reaches a DB query parameterized, but we
+ *  still refuse anything that isn't a plausible code. */
+function getAccessCodeCookie(request: Request): string | null {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  const match = cookie.match(/(?:^|;\s*)smr_access_code=([A-Za-z0-9]{4,20})(?:;|$)/);
+  return match ? match[1].toUpperCase() : null;
 }

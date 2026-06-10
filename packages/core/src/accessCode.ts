@@ -11,7 +11,9 @@ export interface AccessCode {
   id: string;
   code: string;
   partner_name: string;
-  tier: "partner" | "unlimited" | "admin";
+  /** 'client' = cohort seat code: grants daily_limit + the code-shared Forge
+   *  bucket WITHOUT elevating role (seat-holders keep the client journey). */
+  tier: "client" | "partner" | "unlimited" | "admin";
   daily_limit: number | null;
   max_redemptions: number | null;
   times_redeemed: number;
@@ -32,7 +34,7 @@ export interface AccessCodeRedemption {
 interface CreateAccessCodeOpts {
   code: string;
   partnerName: string;
-  tier?: "partner" | "unlimited" | "admin";
+  tier?: "client" | "partner" | "unlimited" | "admin";
   dailyLimit?: number | null;
   maxRedemptions?: number | null;
   expiresAt?: string | null;
@@ -102,7 +104,7 @@ export async function validateAccessCode(
     return { valid: false, reason: "Code has expired" };
   }
   if (ac.max_redemptions && ac.times_redeemed >= ac.max_redemptions) {
-    return { valid: false, reason: "Code has reached its limit" };
+    return { valid: false, reason: "This code's seats are all taken -- ask your organization for another code" };
   }
 
   return { valid: true, accessCode: ac };
@@ -131,15 +133,39 @@ export async function redeemAccessCode(
     return { success: false, error: "You've already used this code" };
   }
 
-  // Insert redemption + increment counter
-  await query(
-    `INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)`,
-    [userId, ac.id]
-  );
-  await query(
-    `UPDATE access_code SET times_redeemed = times_redeemed + 1, updated_at = now() WHERE id = $1`,
+  // Atomically CLAIM a seat first -- the conditional UPDATE is the gate, so two
+  // simultaneous redemptions can never exceed max_redemptions (no TOCTOU race).
+  // A redemption is a durable seat (Troy 2026-06-10): claimed once, kept.
+  const claimed = await query<{ id: string }>(
+    `UPDATE access_code
+     SET times_redeemed = times_redeemed + 1, updated_at = now()
+     WHERE id = $1
+       AND is_active = true
+       AND (max_redemptions IS NULL OR times_redeemed < max_redemptions)
+     RETURNING id`,
     [ac.id]
   );
+  if (claimed.length === 0) {
+    return {
+      success: false,
+      error: "This code's seats are all taken -- ask your organization for another code",
+    };
+  }
+
+  try {
+    await query(
+      `INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)`,
+      [userId, ac.id]
+    );
+  } catch {
+    // Refund the seat if the redemption row failed (e.g., double-click race on
+    // the same user) so the counter never drifts from reality.
+    await query(
+      `UPDATE access_code SET times_redeemed = GREATEST(times_redeemed - 1, 0), updated_at = now() WHERE id = $1`,
+      [ac.id]
+    ).catch(() => {});
+    return { success: false, error: "You've already used this code" };
+  }
 
   emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000",

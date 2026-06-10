@@ -57,12 +57,15 @@ export async function syncUserTierFromCodes(
          WHEN 'admin' THEN 0
          WHEN 'unlimited' THEN 1
          WHEN 'partner' THEN 2
+         WHEN 'client' THEN 3
        END
      LIMIT 1`,
     [userId]
   );
 
-  // Map 'unlimited' to 'partner' for display tier (unlimited is a rate-limit concept)
+  // Map 'unlimited' to 'partner' for display tier (unlimited is a rate-limit concept).
+  // 'client'-tier codes (cohort seats) deliberately do NOT elevate role -- the
+  // seat-holder keeps the client journey; only their rate limit changes.
   const codeTier = row?.tier;
   let effectiveTier: UserTier = "client";
   if (codeTier === "admin") effectiveTier = "admin";
