@@ -16,6 +16,8 @@ import {
   incrementUserUsage,
   incrementIpUsage,
   validateAccessCode,
+  logPartnerUsage,
+  ensureUserAttribution,
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
@@ -106,6 +108,15 @@ export function withRateLimit(
         );
       }
 
+      // Partner tracking (fire-and-forget, never blocks the response): a signed-in
+      // user carrying an org's code gets bound to that org on first tool use
+      // (first code wins) and the call is logged to the funder/compliance ledger.
+      const authedCode = getAccessCodeCookie(request);
+      if (authedCode) {
+        void ensureUserAttribution(userId, authedCode).catch(() => {});
+        void logPartnerUsage({ code: authedCode, userId, endpoint: opts.endpoint });
+      }
+
       return handler(request);
     }
 
@@ -136,6 +147,8 @@ export function withRateLimit(
               { status: 429 }
             );
           }
+          // Anonymous front-door Forge use, attributed to the org from day one.
+          void logPartnerUsage({ code: v.accessCode.code, endpoint: opts.endpoint });
           return handler(request);
         }
       } catch {

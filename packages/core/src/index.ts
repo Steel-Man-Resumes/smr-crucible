@@ -15,6 +15,7 @@ export * from './userTier';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './outcomeAggregate';
+export * from './partnerTracking';
 export * from './getUserProfile';
 export * from './computeNextStep';
 export * from './coachPrompt';

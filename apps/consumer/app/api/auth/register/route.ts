@@ -15,8 +15,16 @@
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { query, getOne } from "@crucible/core";
+import { query, getOne, ensureUserAttribution } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
+
+/** Read the org access code the user entered with (set as a cookie by /access). */
+function accessCodeFromCookie(request: Request): string | null {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  const m = cookie.match(/(?:^|;\s*)smr_access_code=([A-Za-z0-9]{4,20})(?:;|$)/);
+  return m ? m[1].toUpperCase() : null;
+}
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -128,6 +136,17 @@ export async function POST(request: Request) {
         }
       } catch (e: any) {
         console.error("[register] contact persist failed:", e?.message || e);
+      }
+    }
+
+    // Partner tracking: bind this new account to the org whose code it arrived
+    // with, so funder/compliance data collects from day one (best-effort).
+    const orgCode = accessCodeFromCookie(request);
+    if (orgCode && newUserId) {
+      try {
+        await ensureUserAttribution(newUserId, orgCode);
+      } catch (e: any) {
+        console.error("[register] org attribution failed:", e?.message || e);
       }
     }
 

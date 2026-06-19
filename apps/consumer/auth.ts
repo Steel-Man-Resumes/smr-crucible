@@ -11,6 +11,11 @@ const isDev = process.env.NODE_ENV === "development";
 
 // Emails that receive partner tier automatically on sign-in (no code required)
 const PARTNER_PRE_AUTH = ["latonyabakergoe@gmail.com"];
+// Pre-authorized partners sign in directly (no /access cookie), so bind them to
+// their org's code on sign-in for funder/compliance attribution (first code wins).
+const PARTNER_PRE_AUTH_CODE: Record<string, string> = {
+  "latonyabakergoe@gmail.com": "BAKER2026",
+};
 
 const providers: any[] = [
   Resend({
@@ -200,12 +205,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (current > 1) {
             token.tier = "partner";
             if (token.sub) {
+              const orgCode = PARTNER_PRE_AUTH_CODE[email] || null;
               pool.connect().then(async (c) => {
                 try {
                   await c.query(
                     `UPDATE users SET tier = 'partner' WHERE id = $1 AND tier NOT IN ('admin', 'unlimited', 'partner')`,
                     [token.sub]
                   );
+                  // Attribute to the org (first code wins) for tracking.
+                  if (orgCode) {
+                    await c.query(
+                      `WITH ins AS (
+                         INSERT INTO access_code_redemption (user_id, access_code_id)
+                         SELECT $1, ac.id FROM access_code ac
+                         WHERE ac.code = $2 AND ac.is_active = true
+                           AND NOT EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = $1)
+                         ON CONFLICT DO NOTHING
+                         RETURNING access_code_id
+                       )
+                       UPDATE access_code SET times_redeemed = times_redeemed + 1, updated_at = now()
+                       WHERE id IN (SELECT access_code_id FROM ins)`,
+                      [token.sub, orgCode]
+                    );
+                  }
                 } finally { c.release(); }
               }).catch(() => {});
             }
