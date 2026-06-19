@@ -105,6 +105,13 @@ function AccessPageInner() {
   const searchParams = useSearchParams();
   const partnerCode  = (searchParams.get("code") || "BAKER2026").toUpperCase();
   const isBaker      = partnerCode === "BAKER2026";
+  // Generic partner personalization via URL-encoded query params, with the
+  // Baker launch kept as the built-in default. ?name= greets the org/person in
+  // the hero; ?contact= addresses the closing note by first name.
+  const orgName      = (searchParams.get("name") || "").trim();
+  const contactName  = (searchParams.get("contact") || "").trim();
+  const heroName     = isBaker ? "Dr. Baker." : (orgName ? `${orgName}.` : "Welcome.");
+  const closingLead  = isBaker ? "Dr. Baker" : (contactName || orgName || "Friend");
 
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
@@ -207,7 +214,7 @@ function AccessPageInner() {
           <span style={{ ...S.eyebrow, ...fadeIn(phase>=1) }}>Steel Man Resumes</span>
 
           <h1 style={{ ...fadeIn(phase>=1,"0.1s"), fontSize:"clamp(48px,9vw,80px)", fontWeight:800, color:"#fff", lineHeight:1.05, letterSpacing:"-0.025em", margin:"0 0 20px" }}>
-            You&rsquo;re In,<br/><span style={{ color:"#c8e8c0" }}>Dr. Baker.</span>
+            You&rsquo;re In,<br/><span style={{ color:"#c8e8c0" }}>{heroName}</span>
           </h1>
 
           <p style={{ ...fadeIn(phase>=2), fontSize:"18px", color:"#c8ddc4", lineHeight:1.75, maxWidth:"460px", margin:"0 auto 16px", fontFamily:"Georgia, serif" }}>
@@ -370,7 +377,9 @@ function AccessPageInner() {
         {/* ── SECTION: Closing Note ── */}
         <div style={{ background:"#fff", borderRadius:"16px", padding:"32px", border:"1px solid #e8e4dc", marginBottom:"48px" }}>
           <p style={{ fontSize:"15.5px", color:"#3a3a38", lineHeight:1.85, marginBottom:"16px", fontFamily:"Georgia, serif" }}>
-            Dr. Baker, the scholarship and organizational instinct you bring to this work -- the ability to see both the human in front of you and the systems that have failed them -- is exactly what this technology needs at the table.
+            {isBaker
+              ? "Dr. Baker, the scholarship and organizational instinct you bring to this work -- the ability to see both the human in front of you and the systems that have failed them -- is exactly what this technology needs at the table."
+              : `${closingLead}, the instinct that brings you to this work -- the ability to see both the person in front of you and the systems that have failed them -- is exactly what this technology needs at the table.`}
           </p>
           <p style={{ fontSize:"15.5px", color:"#3a3a38", lineHeight:1.85, marginBottom:"0", fontFamily:"Georgia, serif" }}>
             I built Steel Man Resumes for the person who ran a correctional kitchen for three years, earned every supervisor&rsquo;s trust, and still could not clear a background check box on a job application. Your population knows that person. What you are building makes the technology matter.
