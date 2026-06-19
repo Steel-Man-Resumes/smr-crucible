@@ -108,10 +108,21 @@ function AccessPageInner() {
   // Generic partner personalization via URL-encoded query params, with the
   // Baker launch kept as the built-in default. ?name= greets the org/person in
   // the hero; ?contact= addresses the closing note by first name.
+  // Greeting derives from the CODE itself so links already distributed
+  // (bare ?code=X, no name param) still personalize correctly. ?name= and
+  // ?contact= override the map when present.
+  const PARTNER_NAMES: Record<string, string> = {
+    BAKER2026: "Dr. Baker", BAKERCREW: "Dr. Baker",
+    JFW2026: "Justice Forward WI", JFWCREW: "Justice Forward WI",
+    EXPO2026: "EXPO of Wisconsin", EXPOCREW: "EXPO of Wisconsin",
+    GUESTHOUSE2026: "Guest House of Milwaukee", GUESTHOUSECREW: "Guest House of Milwaukee",
+    OFS2026: "Operation Fresh Start",
+  };
   const orgName      = (searchParams.get("name") || "").trim();
   const contactName  = (searchParams.get("contact") || "").trim();
-  const heroName     = isBaker ? "Dr. Baker." : (orgName ? `${orgName}.` : "Welcome.");
-  const closingLead  = isBaker ? "Dr. Baker" : (contactName || orgName || "Friend");
+  const displayName  = orgName || PARTNER_NAMES[partnerCode] || "";
+  const heroName     = displayName ? `${displayName}.` : "Welcome.";
+  const closingLead  = contactName || displayName || "Friend";
 
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
