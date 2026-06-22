@@ -51,6 +51,8 @@ async function air(method: string, path: string, body?: unknown) {
     offset = page.offset;
   } while (offset);
 
+  const n = (v: unknown) => Number(v ?? 0) || 0; // driver returns COUNTs as strings
+
   let upserts = 0;
   for (const o of rows) {
     const fields = {
@@ -58,19 +60,19 @@ async function air(method: string, path: string, body?: unknown) {
       Organization: o.partner_name,
       Tier: o.tier,
       Active: o.is_active,
-      "Seats Used": o.seats_used,
-      "Seats Total": o.seats_total ?? undefined,
-      Participants: o.attributed_users,
-      "Tool Uses": o.tool_calls,
-      "Forge Started": o.funnel.forge_sessions_started,
-      "Forge Completed": o.funnel.forge_sessions_completed,
-      "Refinery Users": o.funnel.refinery_users,
-      Applications: o.funnel.applications_logged,
-      Interviews: o.funnel.interviews,
-      Offers: o.funnel.offers,
-      Hires: o.funnel.hires,
-      "Forge Completion %": o.forge_completion_rate,
-      "Placement %": o.placement_rate,
+      "Seats Used": n(o.seats_used),
+      "Seats Total": o.seats_total == null ? undefined : n(o.seats_total),
+      Participants: n(o.attributed_users),
+      "Tool Uses": n(o.tool_calls),
+      "Forge Started": n(o.funnel.forge_sessions_started),
+      "Forge Completed": n(o.funnel.forge_sessions_completed),
+      "Refinery Users": n(o.funnel.refinery_users),
+      Applications: n(o.funnel.applications_logged),
+      Interviews: n(o.funnel.interviews),
+      Offers: n(o.funnel.offers),
+      Hires: n(o.funnel.hires),
+      "Forge Completion %": n(o.forge_completion_rate),
+      "Placement %": n(o.placement_rate),
       "Last Activity": o.last_activity ?? undefined,
       Updated: new Date().toISOString(),
     };
@@ -89,11 +91,11 @@ async function air(method: string, path: string, body?: unknown) {
           Date: today,
           Code: o.code,
           Organization: o.partner_name,
-          Participants: o.attributed_users,
-          "Tool Uses": o.tool_calls,
-          "Forge Completed": o.funnel.forge_sessions_completed,
-          Hires: o.funnel.hires,
-          "Placement %": o.placement_rate,
+          Participants: n(o.attributed_users),
+          "Tool Uses": n(o.tool_calls),
+          "Forge Completed": n(o.funnel.forge_sessions_completed),
+          Hires: n(o.funnel.hires),
+          "Placement %": n(o.placement_rate),
         },
       }],
     });
