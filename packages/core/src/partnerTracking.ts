@@ -138,3 +138,93 @@ export async function getPartnerTrackingRows(): Promise<OrgTrackingRow[]> {
 
   return rows;
 }
+
+/**
+ * Push the per-org tracking rows into Airtable. Shared by the on-demand CLI
+ * script and the nightly cron route so both write identical shapes:
+ *   - "Organizations" table: one row per org, upserted on the Code field.
+ *   - "Snapshots" table: one dated row per org per run (trend history).
+ * No PII. Returns how many orgs were written.
+ */
+export async function syncPartnerTrackingToAirtable(opts: {
+  apiKey: string;
+  baseId: string;
+  orgsTable?: string;
+  snapshotsTable?: string;
+}): Promise<{ orgs: number }> {
+  const { apiKey, baseId } = opts;
+  const ORGS = opts.orgsTable ?? "Organizations";
+  const SNAPS = opts.snapshotsTable ?? "Snapshots";
+
+  async function air(method: string, path: string, body?: unknown) {
+    const res = await fetch(`https://api.airtable.com/v0/${baseId}/${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error(`Airtable ${method} ${path} -> ${res.status} ${await res.text()}`);
+    return res.json();
+  }
+
+  const rows = await getPartnerTrackingRows();
+  const today = new Date().toISOString().slice(0, 10);
+  const num = (v: unknown) => Number(v ?? 0) || 0; // driver returns COUNTs as strings
+
+  // Map existing Organizations rows by Code for upsert.
+  const existing: Record<string, string> = {};
+  let offset: string | undefined;
+  do {
+    const page: any = await air(
+      "GET",
+      `${encodeURIComponent(ORGS)}?pageSize=100${offset ? `&offset=${offset}` : ""}`
+    );
+    for (const r of page.records) if (r.fields.Code) existing[r.fields.Code] = r.id;
+    offset = page.offset;
+  } while (offset);
+
+  for (const o of rows) {
+    const fields = {
+      Code: o.code,
+      Organization: o.partner_name,
+      Tier: o.tier,
+      Active: o.is_active,
+      "Seats Used": num(o.seats_used),
+      "Seats Total": o.seats_total == null ? undefined : num(o.seats_total),
+      Participants: num(o.attributed_users),
+      "Tool Uses": num(o.tool_calls),
+      "Forge Started": num(o.funnel.forge_sessions_started),
+      "Forge Completed": num(o.funnel.forge_sessions_completed),
+      "Refinery Users": num(o.funnel.refinery_users),
+      Applications: num(o.funnel.applications_logged),
+      Interviews: num(o.funnel.interviews),
+      Offers: num(o.funnel.offers),
+      Hires: num(o.funnel.hires),
+      "Forge Completion %": num(o.forge_completion_rate),
+      "Placement %": num(o.placement_rate),
+      "Last Activity": o.last_activity ?? undefined,
+      Updated: new Date().toISOString(),
+    };
+    if (existing[o.code]) {
+      await air("PATCH", encodeURIComponent(ORGS), { records: [{ id: existing[o.code], fields }] });
+    } else {
+      await air("POST", encodeURIComponent(ORGS), { records: [{ fields }] });
+    }
+    await air("POST", encodeURIComponent(SNAPS), {
+      records: [{
+        fields: {
+          Snapshot: `${today} ${o.code}`,
+          Date: today,
+          Code: o.code,
+          Organization: o.partner_name,
+          Participants: num(o.attributed_users),
+          "Tool Uses": num(o.tool_calls),
+          "Forge Completed": num(o.funnel.forge_sessions_completed),
+          Hires: num(o.funnel.hires),
+          "Placement %": num(o.placement_rate),
+        },
+      }],
+    });
+  }
+
+  return { orgs: rows.length };
+}
