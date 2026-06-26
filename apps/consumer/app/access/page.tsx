@@ -117,6 +117,7 @@ function AccessPageInner() {
     EXPO2026: "EXPO of Wisconsin", EXPOCREW: "EXPO of Wisconsin",
     GUESTHOUSE2026: "Guest House of Milwaukee", GUESTHOUSECREW: "Guest House of Milwaukee",
     OFS2026: "Operation Fresh Start",
+    MWOCREW: "My Way Out",
   };
   const orgName      = (searchParams.get("name") || "").trim();
   const contactName  = (searchParams.get("contact") || "").trim();
