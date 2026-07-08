@@ -80,23 +80,23 @@ export default function ForgeLayout({ children }: { children: ReactNode }) {
   return (
     <ForgeProvider>
       {/* Top bar — branding left, exit right */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 font-term">
         <a
           href="https://steelmanresumes.com"
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/80 backdrop-blur border border-border text-sm font-medium text-foreground hover:text-sage-600 transition-colors min-h-touch"
+          className="t-focus inline-flex items-center gap-2 px-3 py-2 bg-t-panel/90 backdrop-blur border border-t-line text-sm font-medium text-t-white hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-touch"
         >
-          Steel Man Resumes
+          steel man resumes
         </a>
         <a
           href="https://steelmanresumes.com"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/80 backdrop-blur border border-border text-sm text-muted hover:text-foreground hover:bg-white transition-colors min-h-touch"
+          className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur border border-t-line text-sm text-t-phos-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-touch"
           aria-label="Leave this page"
         >
-          Leave this page
+          leave this page
         </a>
       </div>
       <ForgeProgress />
-      <div className="min-h-screen pb-32 sm:pb-8">{children}</div>
+      <div className="min-h-screen bg-t-bg pb-32 sm:pb-8">{children}</div>
 
       {/* Contact Troy — engagement-gated */}
       <ForgeContactTroy />

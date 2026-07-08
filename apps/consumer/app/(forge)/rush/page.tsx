@@ -13,7 +13,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { GhostGuide } from "@crucible/consumer-ui";
+import { GhostGuide, TBtn } from "@crucible/consumer-ui";
 
 type Step = "input" | "processing" | "result";
 
@@ -205,27 +205,27 @@ export default function RushPage() {
   // --- INPUT STEP ---
   if (step === "input") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 font-term bg-t-bg">
         <div className="w-full max-w-lg">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-foreground mb-2">
+            <h1 className="text-2xl font-bold text-t-white mb-2">
               Rush Resume
             </h1>
-            <p className="text-body text-foreground">
+            <p className="text-base text-t-phos">
               Get a resume out the door in 60 seconds.
             </p>
           </div>
 
           {/* Disclaimer */}
-          <div className="bg-warm-50 rounded-xl px-4 py-3 mb-6 border border-warm-200">
-            <p className="text-sm text-earth-700 leading-relaxed">
-              <span className="font-semibold">Straight up:</span> Rush Mode
+          <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
+            <p className="text-sm text-t-phos leading-relaxed">
+              <span className="font-semibold text-t-amber-bright">Straight up:</span> Rush Mode
               gives you the weakest possible version of your resume &mdash;
               just enough to submit an application today. It won&apos;t prepare
               you for the interview. For that, use{" "}
               <button
                 onClick={() => router.push("/intro")}
-                className="text-sage-600 underline underline-offset-2 hover:text-sage-700 font-medium"
+                className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber font-medium"
               >
                 The Forge
               </button>
@@ -239,14 +239,14 @@ export default function RushPage() {
           />
 
           {error && (
-            <div className="bg-red-50 rounded-xl px-4 py-3 mb-4 border border-red-200">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-t-panel px-4 py-3 mb-4 border border-t-red">
+              <p className="text-sm text-t-red">{error}</p>
             </div>
           )}
 
           {/* Resume input */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label className="block text-sm font-medium text-t-white mb-1">
               Your current resume
             </label>
             <textarea
@@ -254,15 +254,15 @@ export default function RushPage() {
               onChange={(e) => setResumeText(e.target.value)}
               placeholder="Paste your resume text here..."
               rows={8}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors resize-none"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
             />
             <div className="flex items-center gap-3 mt-2">
-              <span className="text-xs text-muted">or</span>
+              <span className="text-xs text-t-phos-dim">or</span>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="text-xs text-sage-600 hover:text-sage-700 underline underline-offset-2"
+                className="text-xs text-t-amber-bright hover:text-t-amber underline underline-offset-2"
               >
                 {uploading ? "Reading file..." : "Upload a file (PDF, DOCX, TXT)"}
               </button>
@@ -277,62 +277,62 @@ export default function RushPage() {
                 }}
               />
               {uploading && (
-                <div className="w-4 h-4 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-t-amber border-t-transparent animate-spin" />
               )}
             </div>
           </div>
 
           {/* Target job */}
           <div className="mb-3">
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Target job title <span className="text-red-400">*</span>
+            <label className="block text-sm font-medium text-t-white mb-1">
+              Target job title <span className="text-t-red">*</span>
             </label>
             <input
               type="text"
               value={targetJob}
               onChange={(e) => setTargetJob(e.target.value)}
               placeholder='e.g., "Warehouse Associate" or "Customer Service Rep"'
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
 
           {/* Target company (optional) */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label className="block text-sm font-medium text-t-white mb-1">
               Target company{" "}
-              <span className="text-xs text-muted font-normal">(optional)</span>
+              <span className="text-xs text-t-phos-dim font-normal">(optional)</span>
             </label>
             <input
               type="text"
               value={targetCompany}
               onChange={(e) => setTargetCompany(e.target.value)}
               placeholder='e.g., "Amazon" or "local restaurant"'
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
 
           {/* Job description (optional) */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label className="block text-sm font-medium text-t-white mb-1">
               Paste the job description{" "}
-              <span className="text-xs text-muted font-normal">(optional — makes it way better)</span>
+              <span className="text-xs text-t-phos-dim font-normal">(optional — makes it way better)</span>
             </label>
             <textarea
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
               placeholder="Copy and paste the job posting here. The AI will tailor your resume to match what they're looking for."
               rows={5}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors resize-none"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
             />
           </div>
 
-          <button
+          <TBtn
             onClick={handleSubmit}
             disabled={!resumeText.trim() || !targetJob.trim()}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch text-lg"
+            className="w-full text-lg"
           >
-            Build My Resume
-          </button>
+            build my resume
+          </TBtn>
         </div>
       </div>
     );
@@ -341,19 +341,19 @@ export default function RushPage() {
   // --- PROCESSING STEP ---
   if (step === "processing") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
         <div className="w-full max-w-md text-center">
           <div className="w-16 h-16 mx-auto mb-6 relative">
-            <div className="absolute inset-0 border-4 border-sage-200 rounded-full" />
-            <div className="absolute inset-0 border-4 border-sage-600 rounded-full border-t-transparent animate-spin" />
+            <div className="absolute inset-0 border-4 border-t-line" />
+            <div className="absolute inset-0 border-4 border-t-amber border-t-transparent animate-spin" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Building your resume</h1>
-          <p className="text-body text-sage-600 transition-opacity duration-500">
+          <h1 className="text-2xl font-bold mb-2 text-t-white">Building your resume</h1>
+          <p className="text-base text-t-amber-bright transition-opacity duration-500">
             {PROCESSING_MESSAGES[processingMsg]}
           </p>
-          <div className="w-full h-1.5 bg-sage-100 rounded-full mt-8 overflow-hidden">
+          <div className="w-full h-1.5 bg-t-line mt-8 overflow-hidden">
             <div
-              className="h-full bg-sage-500 rounded-full transition-all duration-1000 ease-out"
+              className="h-full bg-t-amber transition-all duration-1000 ease-out"
               style={{
                 width: `${Math.min(90, ((processingMsg + 1) / PROCESSING_MESSAGES.length) * 100)}%`,
               }}
@@ -366,13 +366,13 @@ export default function RushPage() {
 
   // --- RESULT STEP ---
   return (
-    <div className="min-h-screen px-4 py-8">
+    <div className="min-h-screen px-4 py-8 font-term bg-t-bg">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground mb-2">
+          <h1 className="text-2xl font-bold text-t-white mb-2">
             Your Rush Resume
           </h1>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-t-phos-dim">
             For: {targetJob}
             {targetCompany ? ` at ${targetCompany}` : ""}
           </p>
@@ -382,29 +382,29 @@ export default function RushPage() {
           <>
             {/* Professional Summary */}
             <section className="mb-6">
-              <h2 className="text-lg font-bold text-foreground mb-2">
+              <h2 className="text-lg font-bold text-t-white mb-2">
                 Professional Summary
               </h2>
-              <p className="text-body text-foreground bg-sage-50 rounded-xl p-5 border border-sage-200 leading-relaxed">
+              <p className="text-base text-t-phos bg-t-panel p-5 border border-t-line leading-relaxed">
                 {result.summary}
               </p>
             </section>
 
             {/* Experience Bullets */}
             <section className="mb-6">
-              <h2 className="text-lg font-bold text-foreground mb-2">
+              <h2 className="text-lg font-bold text-t-white mb-2">
                 Experience
               </h2>
               <div className="space-y-3">
                 {result.bullets.map((b, i) => (
                   <div
                     key={i}
-                    className="bg-white rounded-xl p-4 border border-border"
+                    className="bg-t-panel p-4 border border-t-line"
                   >
-                    <p className="text-sm text-foreground font-medium">
+                    <p className="text-sm text-t-white font-medium">
                       {b.text}
                     </p>
-                    <p className="text-xs text-muted mt-1 italic">
+                    <p className="text-xs text-t-phos-dim mt-1 italic">
                       Based on: &ldquo;{b.original}&rdquo;
                     </p>
                   </div>
@@ -415,14 +415,14 @@ export default function RushPage() {
             {/* Skills */}
             {result.skills.length > 0 && (
               <section className="mb-6">
-                <h2 className="text-lg font-bold text-foreground mb-2">
+                <h2 className="text-lg font-bold text-t-white mb-2">
                   Skills
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {result.skills.map((skill, i) => (
                     <span
                       key={i}
-                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-sage-100 text-sage-700"
+                      className="px-3 py-1.5 text-sm font-medium border border-t-line bg-t-panel-2 text-t-phos"
                     >
                       {skill}
                     </span>
@@ -434,9 +434,9 @@ export default function RushPage() {
             {/* Tip */}
             {result.tips && (
               <section className="mb-8">
-                <div className="bg-warm-50 rounded-xl p-4 border border-warm-200">
-                  <p className="text-sm text-earth-700">
-                    <span className="font-medium">Tip: </span>
+                <div className="bg-t-panel p-4 border border-t-line">
+                  <p className="text-sm text-t-phos">
+                    <span className="font-medium text-t-amber-bright">Tip: </span>
                     {result.tips}
                   </p>
                 </div>
@@ -448,19 +448,19 @@ export default function RushPage() {
               <button
                 onClick={handleDownloadDocx}
                 disabled={downloading}
-                className="flex-1 px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+                className="t-focus flex-1 px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
                 {downloading ? "Preparing..." : "Download .docx"}
               </button>
               <button
                 onClick={handleCopy}
-                className="flex-1 px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+                className="t-focus flex-1 px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
               >
                 {copied ? "Copied!" : "Copy Text"}
               </button>
               <button
                 onClick={handleDownloadTxt}
-                className="flex-1 px-6 py-4 bg-white border-2 border-border text-muted rounded-xl font-medium hover:bg-gray-50 transition-colors min-h-touch"
+                className="t-focus flex-1 px-6 py-4 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors min-h-touch"
               >
                 Download .txt
               </button>
@@ -475,15 +475,15 @@ export default function RushPage() {
                 } catch {}
                 router.push("/dashboard/application-tailor?from=rush");
               }}
-              className="w-full px-6 py-3 bg-white border-2 border-sage-300 text-sage-700 rounded-xl text-sm font-medium hover:bg-sage-50 transition-colors mb-4"
+              className="t-focus w-full px-6 py-3 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors mb-4"
             >
               Continue editing in the Application Tailor
             </button>
 
             {/* Interview Warning */}
-            <div className="bg-warm-50 rounded-xl px-4 py-3 mb-6 border border-warm-200">
-              <p className="text-sm text-earth-700 leading-relaxed">
-                <span className="font-semibold">This gets you in the door, not through the interview.</span>{" "}
+            <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
+              <p className="text-sm text-t-phos leading-relaxed">
+                <span className="font-semibold text-t-amber-bright">This gets you in the door, not through the interview.</span>{" "}
                 Rush Mode rewrites what you gave it — nothing more. It doesn&apos;t
                 know your strengths, your story, or what makes you different.
                 An interviewer will ask about all of that.
@@ -491,16 +491,16 @@ export default function RushPage() {
             </div>
 
             {/* Save + Go Deeper CTA */}
-            <div className="bg-sage-50 rounded-2xl p-6 border border-sage-200 text-center">
-              <h3 className="font-bold text-foreground mb-2">
+            <div className="bg-t-panel-2 p-6 border border-t-amber text-center">
+              <h3 className="font-bold text-t-white mb-2">
                 Ready to actually prepare?
               </h3>
-              <p className="text-sm text-muted leading-relaxed mb-4">
+              <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
                 The Forge builds your real narrative — strengths, career paths,
                 resources for your situation, and documents that hold up in an
                 interview. Takes about 10 minutes.
               </p>
-              <button
+              <TBtn
                 onClick={() => {
                   updateSession({
                     resumeText,
@@ -509,10 +509,10 @@ export default function RushPage() {
                   });
                   router.push("/welcome");
                 }}
-                className="px-8 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch text-lg"
+                className="text-lg"
               >
-                Go to The Forge
-              </button>
+                go to The Forge
+              </TBtn>
             </div>
           </>
         )}

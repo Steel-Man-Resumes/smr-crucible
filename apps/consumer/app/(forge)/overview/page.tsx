@@ -12,6 +12,7 @@
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { useEffect } from "react";
+import { TBtn } from "@crucible/consumer-ui";
 
 const STATS = [
   { value: "70M+", label: "Americans with a criminal record" },
@@ -134,7 +135,7 @@ const JOURNEY = [
     time: "~10 minutes",
     what: "Upload a resume or describe your work history. Answer a few questions about goals, barriers, readiness, and record. The Forge outputs: a resume, a cover letter, career paths matched to your background, and a resource plan -- all in plain language.",
     tech: "Claude Sonnet (Anthropic) with a custom prompt scaffold that enforces the 10 behavioral rules. Resume parsed via OCR + NLP. Output hashed and logged.",
-    color: "warm",
+    color: "amber",
   },
   {
     stage: "Stage 2",
@@ -142,7 +143,7 @@ const JOURNEY = [
     time: "5 minutes",
     what: "Fill in your contact info. Browse the verified fair-chance employer board -- real companies, real listings, manually verified to hire justice-impacted people.",
     tech: "Employers sourced from Airtable (SMR Employers base), imported to Neon PostgreSQL. Fair-chance verification is a manual human step -- not automated.",
-    color: "sage",
+    color: "phos",
   },
   {
     stage: "Stage 3",
@@ -150,7 +151,7 @@ const JOURNEY = [
     time: "Ongoing",
     what: "Build job-targeted resume versions for specific listings. The AI tailors language to the job description while preserving your story.",
     tech: "Refinery Artifact system: each resume is versioned, stored with metadata (target job, company, application ID), and linked to the job application tracker.",
-    color: "sky",
+    color: "steel",
   },
   {
     stage: "Stage 4",
@@ -158,7 +159,7 @@ const JOURNEY = [
     time: "15-30 minutes",
     what: "Plan when and how to talk about your record with specific employers. The planner walks through timing, framing, and what to say -- grounded in actual Ban-the-Box law and fair-chance employer research.",
     tech: "Structured coaching dialogue with t.ROY. Output saved as a disclosure_plan artifact. Nothing in the practice transcript is stored.",
-    color: "warm",
+    color: "amber",
   },
   {
     stage: "Stage 5",
@@ -166,7 +167,7 @@ const JOURNEY = [
     time: "Ongoing",
     what: "Text or live voice mock interviews tailored to your target role. Behavioral, situational, and disclosure-specific questions. Real-time feedback on framing, specificity, and narrative arc.",
     tech: "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). Practice audio is never stored -- only the frame used and whether the point landed.",
-    color: "sage",
+    color: "phos",
   },
   {
     stage: "Stage 6",
@@ -174,9 +175,15 @@ const JOURNEY = [
     time: "Ongoing",
     what: "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to My Materials.",
     tech: "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. My Materials = the vault of all your generated documents.",
-    color: "sky",
+    color: "steel",
   },
 ];
+
+const BADGE_COLOR: Record<string, string> = {
+  amber: "border-t-amber text-t-amber-bright",
+  phos: "border-t-phos text-t-phos",
+  steel: "border-t-steel text-t-steel",
+};
 
 export default function OverviewPage() {
   const router = useRouter();
@@ -190,24 +197,24 @@ export default function OverviewPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-t-bg font-term">
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         {/* Header */}
         <div className="mb-12">
-          <p className="text-sm font-medium text-sage-600 mb-3 uppercase tracking-wide">
+          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase tracking-wide">
             Full Technical + Research Overview
           </p>
-          <h1 className="text-3xl font-bold text-foreground mb-4 leading-tight">
+          <h1 className="text-3xl font-bold text-t-white mb-4 leading-tight">
             The tool that didn&apos;t exist.
           </h1>
-          <p className="text-body text-foreground leading-relaxed text-lg mb-4">
+          <p className="text-lg text-t-phos leading-relaxed mb-4">
             Justice-impacted people face a hiring system that treats their record
             as a disqualifier -- not a data point. No tool combined AI career
             analysis, record-aware legal navigation, and disclosure coaching in
             one place. Until now.
           </p>
-          <p className="text-sm text-muted leading-relaxed">
+          <p className="text-sm text-t-phos-dim leading-relaxed">
             This page is the complete documentation of what this platform is,
             how it works, what research grounds it, and how every decision was
             made. Open source. Nothing hidden. Designed to be read by scholars,
@@ -217,21 +224,21 @@ export default function OverviewPage() {
 
         {/* The numbers */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-5">The gap</h2>
+          <h2 className="text-xl font-bold text-t-white mb-5">The gap</h2>
           <div className="grid grid-cols-2 gap-4">
             {STATS.map((s, i) => (
               <div
                 key={i}
-                className={`rounded-xl p-5 border ${
+                className={`p-5 border ${
                   i === 3
-                    ? "col-span-2 bg-sage-600 border-sage-600 text-white"
-                    : "bg-sage-50 border-sage-200"
+                    ? "col-span-2 bg-t-panel-2 border-t-amber"
+                    : "bg-t-panel border-t-line"
                 }`}
               >
-                <p className={`text-2xl font-bold mb-1 ${i === 3 ? "text-white" : "text-sage-700"}`}>
+                <p className="text-2xl font-bold mb-1 text-t-amber-bright">
                   {s.value}
                 </p>
-                <p className={`text-sm leading-snug ${i === 3 ? "text-sage-100" : "text-muted"}`}>
+                <p className="text-sm leading-snug text-t-phos-dim">
                   {s.label}
                 </p>
               </div>
@@ -241,40 +248,25 @@ export default function OverviewPage() {
 
         {/* The full journey */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">The full journey</h2>
-          <p className="text-sm text-muted mb-5">
+          <h2 className="text-xl font-bold text-t-white mb-2">The full journey</h2>
+          <p className="text-sm text-t-phos-dim mb-5">
             Six stages. One platform. Every stage builds on the last.
             Free at every step.
           </p>
           <div className="space-y-4">
             {JOURNEY.map((item) => (
-              <div
-                key={item.stage}
-                className={`rounded-xl p-5 border ${
-                  item.color === "warm"
-                    ? "bg-warm-50 border-warm-200"
-                    : item.color === "sage"
-                    ? "bg-sage-50 border-sage-200"
-                    : "bg-sky-50 border-sky-200"
-                }`}
-              >
+              <div key={item.stage} className="p-5 border border-t-line bg-t-panel">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    item.color === "warm"
-                      ? "bg-warm-200 text-earth-800"
-                      : item.color === "sage"
-                      ? "bg-sage-200 text-sage-800"
-                      : "bg-sky-200 text-sky-800"
-                  }`}>
+                  <span className={`text-xs font-bold px-2 py-0.5 border ${BADGE_COLOR[item.color]}`}>
                     {item.stage}
                   </span>
-                  <span className="text-xs text-muted">{item.time}</span>
+                  <span className="text-xs text-t-phos-dim">{item.time}</span>
                 </div>
-                <h3 className="font-bold text-foreground mb-1">{item.name}</h3>
-                <p className="text-sm text-foreground leading-relaxed mb-3">{item.what}</p>
-                <div className="bg-white/60 rounded-lg p-3 border border-white">
-                  <p className="text-xs text-muted leading-relaxed">
-                    <span className="font-semibold text-foreground">Under the hood: </span>
+                <h3 className="font-bold text-t-white mb-1">{item.name}</h3>
+                <p className="text-sm text-t-phos leading-relaxed mb-3">{item.what}</p>
+                <div className="bg-t-bg/60 p-3 border border-t-line">
+                  <p className="text-xs text-t-phos-dim leading-relaxed">
+                    <span className="font-semibold text-t-white">Under the hood: </span>
                     {item.tech}
                   </p>
                 </div>
@@ -285,10 +277,10 @@ export default function OverviewPage() {
 
         {/* t.ROY behavioral protocol */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             The behavioral protocol
           </h2>
-          <p className="text-sm text-muted mb-5">
+          <p className="text-sm text-t-phos-dim mb-5">
             t.ROY follows 10 non-negotiable rules on every interaction.
             These are not personality guidelines -- they are hard constraints
             derived from peer-reviewed research and Troy&apos;s decade of direct
@@ -296,14 +288,14 @@ export default function OverviewPage() {
           </p>
           <div className="space-y-3">
             {TROY_RULES.map((r, i) => (
-              <div key={i} className="border border-border rounded-xl p-4">
+              <div key={i} className="border border-t-line p-4">
                 <div className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-sage-100 text-sage-700 text-xs font-bold flex items-center justify-center">
+                  <span className="flex-shrink-0 w-6 h-6 bg-t-panel-2 border border-t-line text-t-amber-bright text-xs font-bold flex items-center justify-center">
                     {i + 1}
                   </span>
                   <div>
-                    <p className="font-semibold text-foreground text-sm mb-1">{r.rule}</p>
-                    <p className="text-xs text-muted leading-relaxed">{r.why}</p>
+                    <p className="font-semibold text-t-white text-sm mb-1">{r.rule}</p>
+                    <p className="text-xs text-t-phos-dim leading-relaxed">{r.why}</p>
                   </div>
                 </div>
               </div>
@@ -313,18 +305,18 @@ export default function OverviewPage() {
 
         {/* What makes it different */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-5">
+          <h2 className="text-xl font-bold text-t-white mb-5">
             What makes it different
           </h2>
           <div className="space-y-3">
             {DIFFERENTIATORS.map((diff, i) => (
               <div key={i} className="flex gap-3 items-start">
                 <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-5 h-5 rounded-full bg-sage-100 flex items-center justify-center">
+                  <div className="w-5 h-5 bg-t-panel-2 border border-t-line flex items-center justify-center">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                       <path
                         d="M2.5 6L5 8.5L9.5 3.5"
-                        stroke="#4a7c59"
+                        stroke="#D4A84B"
                         strokeWidth="1.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -333,8 +325,8 @@ export default function OverviewPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{diff.us}</p>
-                  <p className="text-xs text-muted mt-0.5">vs. {diff.them}</p>
+                  <p className="text-sm font-medium text-t-white">{diff.us}</p>
+                  <p className="text-xs text-t-phos-dim mt-0.5">vs. {diff.them}</p>
                 </div>
               </div>
             ))}
@@ -343,10 +335,10 @@ export default function OverviewPage() {
 
         {/* Privacy model */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             The privacy model
           </h2>
-          <p className="text-body text-foreground leading-relaxed mb-4">
+          <p className="text-base text-t-phos leading-relaxed mb-4">
             Surveillance trauma is real. Many justice-impacted people have
             been monitored, recorded, and reported on without their knowledge
             or consent for years. This platform is designed to actively undo
@@ -375,9 +367,9 @@ export default function OverviewPage() {
                 detail: "Settings > Privacy > Delete all data removes everything server-side and clears localStorage. The deletion is immediate and irreversible.",
               },
             ].map((item, i) => (
-              <div key={i} className="border border-border rounded-xl p-4">
-                <p className="font-semibold text-foreground text-sm mb-1">{item.title}</p>
-                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              <div key={i} className="border border-t-line p-4">
+                <p className="font-semibold text-t-white text-sm mb-1">{item.title}</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">{item.detail}</p>
               </div>
             ))}
           </div>
@@ -385,10 +377,10 @@ export default function OverviewPage() {
 
         {/* Research */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             The research foundation
           </h2>
-          <p className="text-sm text-muted mb-5">
+          <p className="text-sm text-t-phos-dim mb-5">
             Every design decision is grounded in peer-reviewed research.
             The behavioral protocol, the copy reading level, the narrative arc
             of the Forge output, and the privacy model all trace to specific
@@ -396,10 +388,10 @@ export default function OverviewPage() {
           </p>
           <div className="space-y-4">
             {RESEARCH.map((cite, i) => (
-              <div key={i} className="border border-border rounded-xl p-5">
-                <p className="font-semibold text-foreground text-sm mb-1">{cite.finding}</p>
-                <p className="text-xs text-sage-600 font-medium mb-2">{cite.source}</p>
-                <p className="text-sm text-muted leading-relaxed">{cite.detail}</p>
+              <div key={i} className="border border-t-line p-5">
+                <p className="font-semibold text-t-white text-sm mb-1">{cite.finding}</p>
+                <p className="text-xs text-t-amber-bright font-medium mb-2">{cite.source}</p>
+                <p className="text-sm text-t-phos-dim leading-relaxed">{cite.detail}</p>
               </div>
             ))}
           </div>
@@ -407,16 +399,16 @@ export default function OverviewPage() {
 
         {/* Architecture */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             Architecture and accountability
           </h2>
-          <p className="text-body text-foreground leading-relaxed mb-4">
+          <p className="text-base text-t-phos leading-relaxed mb-4">
             Every AI recommendation is logged with an input hash, model ID,
             explanation, and latency. Full audit trail. No black box. Built
             for funder reporting, compliance review, and program evaluation.
           </p>
-          <div className="bg-gray-50 rounded-xl px-5 py-4 font-mono text-xs text-muted border border-border mb-4">
-            <p className="text-gray-500 mb-2">// Every AI decision logged:</p>
+          <div className="bg-t-panel-2 px-5 py-4 text-xs text-t-phos-dim border border-t-line mb-4">
+            <p className="text-t-phos-dim/70 mb-2">// Every AI decision logged:</p>
             <p>decision_log &#123;</p>
             <p className="pl-4">input_hash: sha256(user_input)[0:16]</p>
             <p className="pl-4">model_id: &quot;claude-sonnet-4-20250514&quot;</p>
@@ -434,19 +426,19 @@ export default function OverviewPage() {
               "Airtable -- verified employer data source (manually curated, imported to PostgreSQL)",
             ].map((item, i) => (
               <div key={i} className="flex gap-2 items-start">
-                <span className="text-sage-600 flex-shrink-0 font-mono text-xs mt-0.5">--</span>
-                <p className="text-muted leading-relaxed">{item}</p>
+                <span className="text-t-amber flex-shrink-0 text-xs mt-0.5">--</span>
+                <p className="text-t-phos-dim leading-relaxed">{item}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* For partners */}
-        <section className="mb-12 border border-sage-200 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+        <section className="mb-12 border border-t-line p-6">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             For partner organizations
           </h2>
-          <p className="text-sm text-muted leading-relaxed mb-4">
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
             Reentry programs, workforce development orgs, legal aid societies,
             and job centers can integrate Steel Man Resumes into their client
             workflow. Access codes unlock higher AI usage limits and allow
@@ -459,20 +451,20 @@ export default function OverviewPage() {
               { label: "No vendor lock-in", detail: "AGPL-3.0 license. The source code is public. You can self-host a private instance for your program." },
               { label: "To get an access code", detail: "Email Steel Man Resumes LLC directly. Free for nonprofits and community organizations during the launch period." },
             ].map((item, i) => (
-              <div key={i} className="border border-border rounded-xl p-4">
-                <p className="font-semibold text-foreground mb-1">{item.label}</p>
-                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              <div key={i} className="border border-t-line p-4">
+                <p className="font-semibold text-t-white mb-1">{item.label}</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">{item.detail}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* For funders */}
-        <section className="mb-12 border border-warm-200 rounded-2xl p-6 bg-warm-50">
-          <h2 className="text-xl font-bold text-foreground mb-2">
+        <section className="mb-12 border border-t-line p-6 bg-t-panel">
+          <h2 className="text-xl font-bold text-t-white mb-2">
             For funders
           </h2>
-          <p className="text-sm text-muted leading-relaxed mb-4">
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
             Steel Man Resumes LLC (WI) is currently transitioning to a nonprofit
             structure. The platform is AGPL-3.0 open source and free to all users.
             No revenue is generated from user data.
@@ -484,55 +476,55 @@ export default function OverviewPage() {
               { label: "Target population", detail: "Justice-impacted adults in Wisconsin (initial), Midwest (expansion), national (AGPL self-host). Primary focus: people within 90 days of release or recently released." },
               { label: "No paywall -- by design", detail: "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status." },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-warm-200">
-                <p className="font-semibold text-foreground mb-1">{item.label}</p>
-                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              <div key={i} className="bg-t-panel-2 p-4 border border-t-line">
+                <p className="font-semibold text-t-white mb-1">{item.label}</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">{item.detail}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* Built by someone who lived it */}
-        <section className="mb-12 bg-sage-600 rounded-2xl p-6 text-white">
-          <p className="text-sm font-semibold text-sage-200 mb-2 uppercase tracking-wide">
+        <section className="mb-12 bg-t-panel-2 border border-t-amber p-6">
+          <p className="text-sm font-semibold text-t-amber-bright mb-2 uppercase tracking-wide">
             Built by someone who lived it
           </p>
-          <p className="text-base leading-relaxed mb-3">
+          <p className="text-base text-t-white leading-relaxed mb-3">
             Steel Man Resumes was built by Troy Carr -- a justice-impacted
             workforce advocate with a decade of direct service navigating the
             same system these tools are designed to help people survive.
           </p>
-          <p className="text-sm text-sage-200 leading-relaxed mb-3">
+          <p className="text-sm text-t-phos leading-relaxed mb-3">
             The platform reflects what he wished existed when he was in it:
             one place that understood records, didn&apos;t treat gaps as
             disqualifiers, and gave plain-language guidance instead of generic
             advice designed for people who have never been incarcerated.
           </p>
-          <p className="text-sm text-sage-200 leading-relaxed">
+          <p className="text-sm text-t-phos leading-relaxed">
             The research is real. The behavioral rules are real. The employers
             are verified. The privacy model was designed with surveillance
             trauma in mind because Troy has lived that too.
           </p>
-          <p className="text-xs text-sage-300 mt-4">
+          <p className="text-xs text-t-phos-dim mt-4">
             Steel Man Resumes LLC -- Wisconsin -- AGPL-3.0 open source
           </p>
         </section>
 
         {/* CTAs */}
         <div className="space-y-3">
-          <button
+          <TBtn
             onClick={() => {
               updateSession({ isDemo: true, audience: "observer" });
               router.push("/welcome?demo=true");
             }}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-semibold hover:bg-sage-700 transition-colors min-h-touch"
+            className="w-full"
           >
-            See The Forge in action (demo mode)
-          </button>
+            see The Forge in action (demo mode)
+          </TBtn>
 
           <button
             onClick={() => router.push("/intro")}
-            className="w-full px-4 py-3 text-muted text-sm hover:text-foreground transition-colors"
+            className="t-focus w-full px-4 py-3 text-t-phos-dim text-sm hover:text-t-amber-bright transition-colors"
           >
             &larr; Back to the intro
           </button>

@@ -127,9 +127,9 @@ export default function StoryPage() {
 
       {/* The trade -- why it's worth sharing */}
       {!isDemo && (
-        <div className="bg-warm-50 rounded-xl px-4 py-3 mb-4 border border-warm-200">
-          <p className="text-sm text-earth-700 leading-relaxed">
-            <span className="font-semibold">Here&apos;s the deal:</span> if you
+        <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
+          <p className="text-sm text-t-phos leading-relaxed">
+            <span className="font-semibold text-t-amber-bright">Here&apos;s the deal:</span> if you
             tell me about your record, I find the specific laws that protect you
             and resources in your area. If you skip it, I still work with
             everything else. Your call.
@@ -138,8 +138,8 @@ export default function StoryPage() {
       )}
 
       {isDemo && (
-        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
+          <p className="text-sm text-t-amber-bright font-medium">
             Demo mode — sample barriers pre-filled
           </p>
         </div>
@@ -152,18 +152,18 @@ export default function StoryPage() {
             <button
               key={opt.id}
               onClick={() => toggleChallenge(opt.id)}
-              className={`w-full text-left px-5 py-3.5 rounded-xl border-2 transition-all min-h-touch ${
+              className={`t-focus w-full text-left px-5 py-3.5 border transition-all min-h-touch ${
                 isSelected
-                  ? "border-sage-600 bg-sage-50"
-                  : "border-border bg-white hover:border-sage-300"
+                  ? "border-t-amber bg-t-panel-2"
+                  : "border-t-line bg-t-panel hover:border-t-phos-dim"
               }`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
+                  className={`flex-shrink-0 w-5 h-5 border flex items-center justify-center ${
                     isSelected
-                      ? "border-sage-600 bg-sage-600"
-                      : "border-muted"
+                      ? "border-t-amber bg-t-amber"
+                      : "border-t-phos-dim"
                   }`}
                 >
                   {isSelected && (
@@ -176,7 +176,7 @@ export default function StoryPage() {
                     >
                       <path
                         d="M2.5 6L5 8.5L9.5 3.5"
-                        stroke="white"
+                        stroke="#14100a"
                         strokeWidth="1.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -184,7 +184,7 @@ export default function StoryPage() {
                     </svg>
                   )}
                 </div>
-                <span className="font-medium">{opt.label}</span>
+                <span className="font-medium text-t-white">{opt.label}</span>
               </div>
             </button>
           );
@@ -193,8 +193,8 @@ export default function StoryPage() {
 
       {/* Criminal record structured input */}
       {hasCriminalRecord && (
-        <div className="bg-warm-50 rounded-2xl p-5 border border-warm-200 mb-6 space-y-4">
-          <p className="text-sm text-foreground font-medium">
+        <div className="bg-t-panel p-5 border border-t-line mb-6 space-y-4">
+          <p className="text-sm text-t-white font-medium">
             This helps us find resources specific to your situation.
           </p>
 
@@ -249,9 +249,9 @@ export default function StoryPage() {
           />
 
           <div>
-            <label className="text-sm font-medium text-foreground block mb-1.5">
+            <label className="text-sm font-medium text-t-white block mb-1.5">
               Anything else you want to share?{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              <span className="font-normal text-t-phos-dim">(optional)</span>
             </label>
             <textarea
               value={crimRecord.context}
@@ -260,7 +260,7 @@ export default function StoryPage() {
               }
               placeholder="In your own words — whatever feels right to say."
               rows={3}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors resize-y"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
             />
           </div>
         </div>
@@ -274,9 +274,9 @@ export default function StoryPage() {
           if (!opt) return null;
           return (
             <div key={id} className="mb-4">
-              <label className="text-sm font-medium text-foreground block mb-1.5">
+              <label className="text-sm font-medium text-t-white block mb-1.5">
                 Tell us about your {opt.label.toLowerCase()}{" "}
-                <span className="font-normal text-muted">(optional)</span>
+                <span className="font-normal text-t-phos-dim">(optional)</span>
               </label>
               <textarea
                 value={narratives[id] || ""}
@@ -285,7 +285,7 @@ export default function StoryPage() {
                 }
                 placeholder="In your own words — whatever you want us to know."
                 rows={2}
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors resize-y"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
               />
             </div>
           );
@@ -309,13 +309,13 @@ function SelectField({
 }) {
   return (
     <div>
-      <label className="text-sm font-medium text-foreground block mb-1.5">
+      <label className="text-sm font-medium text-t-white block mb-1.5">
         {label}
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch appearance-none"
+        className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch appearance-none"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>

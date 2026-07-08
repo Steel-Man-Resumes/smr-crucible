@@ -15,7 +15,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { GhostGuide } from "@crucible/consumer-ui";
+import { GhostGuide, TBtn } from "@crucible/consumer-ui";
 
 interface Strength {
   title: string;
@@ -259,16 +259,16 @@ export default function OutputPage() {
   // If no output, redirect back
   if (!session.forgeOutput) {
     return (
-      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center">
-        <h1 className="text-2xl font-bold mb-4">
+      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center font-term bg-t-bg">
+        <h1 className="text-2xl font-bold mb-4 text-t-white">
           Let&apos;s build your story first
         </h1>
-        <p className="text-body text-muted mb-6">
+        <p className="text-base text-t-phos-dim mb-6">
           It looks like we haven&apos;t analyzed your information yet.
         </p>
         <button
           onClick={() => router.push("/welcome")}
-          className="px-8 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 transition-colors min-h-touch"
+          className="t-focus px-8 py-4 bg-t-amber text-[#14100a] text-lg font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Start The Forge
         </button>
@@ -277,20 +277,20 @@ export default function OutputPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
+    <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12 font-term">
       <GhostGuide
         message={getOpusMessage("output", audience, isDemo)}
         pageId="output"
       />
 
       {isDemo && (
-        <div className="bg-amber-50 rounded-xl px-5 py-4 mb-8 border border-amber-200 text-center">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-5 py-4 mb-8 border border-t-amber text-center">
+          <p className="text-sm text-t-amber-bright font-medium">
             This is a sample output — try it with your own data
           </p>
           <button
             onClick={() => router.push("/welcome")}
-            className="mt-2 text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700"
+            className="mt-2 text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
             Start your own Forge session
           </button>
@@ -300,37 +300,37 @@ export default function OutputPage() {
       {/* Section jump nav */}
       <nav className="flex flex-wrap gap-2 justify-center mb-10" aria-label="Jump to section">
         {strengths.length > 0 && (
-          <a href="#strengths" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+          <a href="#strengths" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
             {rc.strengthsHeading}
           </a>
         )}
         {skills.length > 0 && (
-          <a href="#skills" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+          <a href="#skills" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
             Skills
           </a>
         )}
         {careerPaths.length > 0 && (
-          <a href="#careers" className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-sage-50 border border-sage-200 rounded-lg hover:bg-sage-100 transition-colors">
+          <a href="#careers" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
             {rc.careersHeading}
           </a>
         )}
-        <a href="#documents" className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors">
+        <a href="#documents" className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors">
           {rc.docsHeading}
         </a>
       </nav>
 
       {/* Header / Narrative */}
       <section className="mb-12 text-center">
-        <h1 className="text-3xl font-bold text-foreground mb-4">
+        <h1 className="text-3xl font-bold text-t-white mb-4">
           {narrative.headline || "Your Story, Reforged"}
         </h1>
         {narrative.summary && (
-          <p className="text-body text-foreground leading-relaxed max-w-xl mx-auto mb-4">
+          <p className="text-base text-t-phos leading-relaxed max-w-xl mx-auto mb-4">
             {narrative.summary}
           </p>
         )}
         {narrative.reflection && (
-          <p className="text-sm text-sage-600 italic max-w-md mx-auto">
+          <p className="text-sm text-t-amber-bright italic max-w-md mx-auto">
             {narrative.reflection}
           </p>
         )}
@@ -339,17 +339,17 @@ export default function OutputPage() {
       {/* Strengths */}
       {strengths.length > 0 && (
         <section id="strengths" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-foreground mb-4">
+          <h2 className="text-xl font-bold text-t-white mb-4">
             {rc.strengthsHeading}
           </h2>
           <div className="space-y-3">
             {strengths.map((s, i) => (
               <div
                 key={i}
-                className="bg-sage-50 rounded-xl p-5 border border-sage-200"
+                className="bg-t-panel p-5 border border-t-line"
               >
-                <h3 className="font-semibold text-sage-800">{s.title}</h3>
-                <p className="text-sm text-sage-700 mt-1">{s.evidence}</p>
+                <h3 className="font-semibold text-t-amber-bright">{s.title}</h3>
+                <p className="text-sm text-t-phos mt-1">{s.evidence}</p>
               </div>
             ))}
           </div>
@@ -359,34 +359,34 @@ export default function OutputPage() {
       {/* Skills */}
       {skills.length > 0 && (
         <section id="skills" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-foreground mb-4">
+          <h2 className="text-xl font-bold text-t-white mb-4">
             Skills We Found
           </h2>
           <div className="flex flex-wrap gap-2">
             {skills.map((s, i) => (
               <span
                 key={i}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                className={`px-3 py-1.5 text-sm font-medium border bg-t-panel-2 ${
                   s.category === "hard"
-                    ? "bg-sky-100 text-sky-700"
+                    ? "border-t-steel text-t-steel"
                     : s.category === "soft"
-                      ? "bg-warm-100 text-warm-700"
-                      : "bg-sage-100 text-sage-700"
+                      ? "border-t-amber text-t-amber-bright"
+                      : "border-t-phos text-t-phos"
                 }`}
               >
                 {s.name}
               </span>
             ))}
           </div>
-          <div className="flex gap-4 mt-3 text-xs text-muted">
+          <div className="flex gap-4 mt-3 text-xs text-t-phos-dim">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-sky-300" /> Technical
+              <span className="w-2 h-2 bg-t-steel" /> Technical
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-warm-300" /> People
+              <span className="w-2 h-2 bg-t-amber" /> People
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-sage-300" />{" "}
+              <span className="w-2 h-2 bg-t-phos" />{" "}
               Transferable
             </span>
           </div>
@@ -396,40 +396,40 @@ export default function OutputPage() {
       {/* Barriers with Resources */}
       {barriers.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-xl font-bold text-foreground mb-4">
+          <h2 className="text-xl font-bold text-t-white mb-4">
             Your Hurdles, and What Can Help
           </h2>
           <div className="space-y-4">
             {barriers.map((b, i) => (
               <div
                 key={i}
-                className="bg-warm-50 rounded-xl p-5 border border-warm-200"
+                className="bg-t-panel p-5 border border-t-line"
               >
-                <h3 className="font-semibold text-earth-800 capitalize">
+                <h3 className="font-semibold text-t-white capitalize">
                   {b.type.replace(/_/g, " ")}
                 </h3>
                 {b.user_narrative && (
-                  <p className="text-sm text-earth-600 mt-1 italic">
+                  <p className="text-sm text-t-phos-dim mt-1 italic">
                     &ldquo;{b.user_narrative}&rdquo;
                   </p>
                 )}
                 {b.legal_notes && (
-                  <p className="text-sm text-sky-700 mt-2 bg-sky-50 rounded-lg px-3 py-2">
+                  <p className="text-sm text-t-steel mt-2 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
                     {b.legal_notes}
                   </p>
                 )}
                 {b.resources.length > 0 && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-xs font-medium text-muted uppercase tracking-wide">
+                    <p className="text-xs font-medium text-t-phos-dim uppercase tracking-wide">
                       Resources
                     </p>
                     {b.resources.map((r, j) => (
                       <div
                         key={j}
-                        className="bg-white rounded-lg px-4 py-3 border border-border"
+                        className="bg-t-panel-2 px-4 py-3 border border-t-line"
                       >
-                        <p className="font-medium text-sm">{r.name}</p>
-                        <p className="text-xs text-muted mt-0.5">
+                        <p className="font-medium text-sm text-t-white">{r.name}</p>
+                        <p className="text-xs text-t-phos-dim mt-0.5">
                           {r.description}
                         </p>
                       </div>
@@ -445,39 +445,39 @@ export default function OutputPage() {
       {/* Career Paths */}
       {careerPaths.length > 0 && (
         <section id="careers" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-foreground mb-4">
+          <h2 className="text-xl font-bold text-t-white mb-4">
             {rc.careersHeading}
           </h2>
           <div className="space-y-4">
             {careerPaths.map((cp, i) => (
               <div
                 key={i}
-                className="bg-white rounded-xl p-5 border border-border"
+                className="bg-t-panel p-5 border border-t-line"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="font-semibold text-foreground">
+                    <h3 className="font-semibold text-t-white">
                       {cp.title}
                     </h3>
                     {cp.industry && (
-                      <p className="text-sm text-muted">{cp.industry}</p>
+                      <p className="text-sm text-t-phos-dim">{cp.industry}</p>
                     )}
                   </div>
                   {cp.salary_range && (
-                    <span className="text-sm font-medium text-sage-600 whitespace-nowrap">
+                    <span className="text-sm font-medium text-t-amber-bright whitespace-nowrap">
                       {cp.salary_range}
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-foreground mt-2">
+                <p className="text-sm text-t-phos mt-2">
                   {cp.match_reason}
                 </p>
                 {cp.next_steps.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs font-medium text-muted uppercase tracking-wide mb-1">
+                    <p className="text-xs font-medium text-t-phos-dim uppercase tracking-wide mb-1">
                       Next Steps
                     </p>
-                    <ol className="text-sm text-muted space-y-1 list-decimal list-inside">
+                    <ol className="text-sm text-t-phos-dim space-y-1 list-decimal list-inside">
                       {cp.next_steps.map((step, j) => (
                         <li key={j}>{step}</li>
                       ))}
@@ -492,34 +492,34 @@ export default function OutputPage() {
 
       {/* Your Documents */}
       <section id="documents" className="mb-10 scroll-mt-20">
-        <h2 className="text-xl font-bold text-foreground mb-4">
+        <h2 className="text-xl font-bold text-t-white mb-4">
           {rc.docsHeading}
         </h2>
 
         {docState === "generating" && (
-          <div className="bg-sage-50 rounded-2xl p-8 border border-sage-200 text-center">
+          <div className="bg-t-panel p-8 border border-t-line text-center">
             <div className="w-10 h-10 mx-auto mb-4 relative">
-              <div className="absolute inset-0 border-3 border-sage-200 rounded-full" />
-              <div className="absolute inset-0 border-3 border-sage-600 rounded-full border-t-transparent animate-spin" />
+              <div className="absolute inset-0 border-[3px] border-t-line" />
+              <div className="absolute inset-0 border-[3px] border-t-amber border-t-transparent animate-spin" />
             </div>
-            <p className="text-sm font-medium text-sage-700">
+            <p className="text-sm font-medium text-t-amber-bright">
               Generating your resume and cover letter...
             </p>
-            <p className="text-xs text-muted mt-1">
+            <p className="text-xs text-t-phos-dim mt-1">
               This usually takes 30-60 seconds
             </p>
           </div>
         )}
 
         {docState === "error" && (
-          <div className="bg-warm-50 rounded-2xl p-6 border border-warm-200 text-center">
-            <p className="text-sm text-earth-700 mb-3">{docError}</p>
+          <div className="bg-t-panel p-6 border border-t-red text-center">
+            <p className="text-sm text-t-phos mb-3">{docError}</p>
             <button
               onClick={() => {
                 setDocState("idle");
                 generateDocs();
               }}
-              className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Try Again
             </button>
@@ -530,20 +530,20 @@ export default function OutputPage() {
           <div className="space-y-4">
             {/* Resume */}
             {resumeText && (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
+              <div className="bg-t-panel border border-t-line overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
                   <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-sage-800 text-sm">Resume</h3>
-                    <div className="flex rounded-lg border border-sage-200 overflow-hidden text-xs">
+                    <h3 className="font-semibold text-t-white text-sm">Resume</h3>
+                    <div className="flex border border-t-line overflow-hidden text-xs">
                       <button
                         onClick={() => setResumeViewMode("preview")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-sage-600 text-white" : "bg-white text-sage-600 hover:bg-sage-50"}`}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-t-amber text-[#14100a]" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
                       >
                         Preview
                       </button>
                       <button
                         onClick={() => setResumeViewMode("text")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-sage-600 text-white" : "bg-white text-sage-600 hover:bg-sage-50"}`}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-t-amber text-[#14100a]" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
                       >
                         Plain text
                       </button>
@@ -552,30 +552,30 @@ export default function OutputPage() {
                   <div className="flex gap-2 flex-wrap justify-end">
                     <button
                       onClick={() => handleCopy(resumeText, "resume")}
-                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
                     >
                       {copied === "resume" ? "Copied!" : "Copy"}
                     </button>
                     <button
                       onClick={handlePrintResumePdf}
-                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
                     >
                       Save as PDF
                     </button>
                     <button
                       onClick={() => handleDownload("resume")}
                       disabled={downloading === "resume"}
-                      className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors disabled:opacity-50"
+                      className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                     >
                       {downloading === "resume" ? "Downloading..." : "Download .docx"}
                     </button>
                   </div>
                 </div>
-                <div className={resumeViewMode === "preview" ? "p-4 overflow-y-auto max-h-[600px]" : "p-5 max-h-80 overflow-y-auto"}>
+                <div className={resumeViewMode === "preview" ? "p-4 overflow-y-auto max-h-[600px] bg-t-bg" : "p-5 max-h-80 overflow-y-auto"}>
                   {resumeViewMode === "preview" ? (
                     <ResumePreview text={resumeText} />
                   ) : (
-                    <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                    <pre className="text-sm text-t-phos whitespace-pre-wrap font-sans leading-relaxed">
                       {resumeText}
                     </pre>
                   )}
@@ -585,22 +585,22 @@ export default function OutputPage() {
 
             {/* Cover Letter */}
             {coverLetterText && (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
-                  <h3 className="font-semibold text-sage-800 text-sm">
+              <div className="bg-t-panel border border-t-line overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
+                  <h3 className="font-semibold text-t-white text-sm">
                     Cover Letter
                   </h3>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleCopy(coverLetterText, "cover")}
-                      className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
                     >
                       {copied === "cover" ? "Copied!" : "Copy"}
                     </button>
                     <button
                       onClick={() => handleDownload("cover_letter")}
                       disabled={downloading === "cover_letter"}
-                      className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors disabled:opacity-50"
+                      className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                     >
                       {downloading === "cover_letter"
                         ? "Downloading..."
@@ -609,7 +609,7 @@ export default function OutputPage() {
                   </div>
                 </div>
                 <div className="p-5 max-h-80 overflow-y-auto">
-                  <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                  <pre className="text-sm text-t-phos whitespace-pre-wrap font-sans leading-relaxed">
                     {coverLetterText}
                   </pre>
                 </div>
@@ -617,24 +617,24 @@ export default function OutputPage() {
             )}
 
             <div className="mt-2 text-center space-y-1">
-              <p className="text-xs text-muted">
-                <strong>Save as PDF</strong> -- preserves the exact formatting you see above. Best for sharing and submitting.
-                &nbsp;<strong>Download .docx</strong> -- opens in Word or Google Docs so you can edit if anything needs adjusting.
+              <p className="text-xs text-t-phos-dim">
+                <strong className="text-t-phos">Save as PDF</strong> -- preserves the exact formatting you see above. Best for sharing and submitting.
+                &nbsp;<strong className="text-t-phos">Download .docx</strong> -- opens in Word or Google Docs so you can edit if anything needs adjusting.
               </p>
-              <p className="text-xs text-muted">{rc.docsSubtext}</p>
+              <p className="text-xs text-t-phos-dim">{rc.docsSubtext}</p>
             </div>
           </div>
         )}
 
         {docState === "idle" && (
-          <div className="bg-sage-50 rounded-2xl p-6 border border-sage-200 text-center">
-            <p className="text-sm text-muted mb-3">
+          <div className="bg-t-panel p-6 border border-t-line text-center">
+            <p className="text-sm text-t-phos-dim mb-3">
               Ready to generate your resume and cover letter from the analysis
               above.
             </p>
             <button
               onClick={generateDocs}
-              className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Generate Documents
             </button>
@@ -643,41 +643,41 @@ export default function OutputPage() {
       </section>
 
       {/* What's next -- journey explainer + CTA */}
-      <section className="border-t border-border pt-8">
+      <section className="border-t border-t-line pt-8">
 
         {/* 3-step journey indicator */}
         <div className="flex items-center gap-1 mb-6">
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 rounded-full bg-sage-600 flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 bg-t-amber flex items-center justify-center flex-shrink-0">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#14100a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <span className="text-xs font-semibold text-sage-700 whitespace-nowrap">The Forge</span>
+            <span className="text-xs font-semibold text-t-amber-bright whitespace-nowrap">The Forge</span>
           </div>
-          <div className="flex-1 h-px bg-sage-300 mx-1" />
+          <div className="flex-1 h-px bg-t-amber/50 mx-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 rounded-full border-2 border-sage-600 text-sage-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">2</div>
-            <span className="text-xs font-semibold text-foreground whitespace-nowrap">Create account</span>
+            <div className="w-6 h-6 border border-t-amber text-t-amber-bright flex items-center justify-center flex-shrink-0 text-xs font-bold">2</div>
+            <span className="text-xs font-semibold text-t-white whitespace-nowrap">Create account</span>
           </div>
-          <div className="flex-1 h-px bg-border mx-1" />
+          <div className="flex-1 h-px bg-t-line mx-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 rounded-full border-2 border-border text-muted flex items-center justify-center flex-shrink-0 text-xs font-bold">3</div>
-            <span className="text-xs font-semibold text-muted whitespace-nowrap">The Refinery</span>
+            <div className="w-6 h-6 border border-t-line text-t-phos-dim flex items-center justify-center flex-shrink-0 text-xs font-bold">3</div>
+            <span className="text-xs font-semibold text-t-phos-dim whitespace-nowrap">The Refinery</span>
           </div>
         </div>
 
         {/* Journey explanation */}
-        <div className="bg-sage-50 rounded-2xl p-6 border border-sage-200 mb-4">
-          <h3 className="font-bold text-foreground text-lg mb-3 leading-snug">
+        <div className="bg-t-panel p-6 border border-t-line mb-4">
+          <h3 className="font-bold text-t-white text-lg mb-3 leading-snug">
             You&apos;re done with this part. You won&apos;t come back here.
           </h3>
-          <p className="text-sm text-muted leading-relaxed mb-3">
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
             When you create your free account, everything you just built is automatically
             waiting in The Refinery: your resume, your career narrative, your strengths,
             your documents -- all pre-loaded, nothing to re-enter.
           </p>
-          <p className="text-sm text-muted leading-relaxed">
+          <p className="text-sm text-t-phos-dim leading-relaxed">
             The Refinery is where the real work happens. Target your resume for specific jobs,
             practice interview questions, plan your disclosure strategy, and browse a job board
             filtered for fair-chance employers -- all built on what you just created here.
@@ -685,19 +685,16 @@ export default function OutputPage() {
         </div>
 
         {/* Primary CTA */}
-        <button
-          onClick={() => router.push("/login?from=forge")}
-          className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-semibold text-base hover:bg-sage-700 transition-colors min-h-touch mb-2"
-        >
-          {rc.refineryCta}
-        </button>
-        <p className="text-xs text-muted text-center mb-6">{rc.refinerySubtext}</p>
+        <TBtn onClick={() => router.push("/login?from=forge")} className="w-full text-base mb-2">
+          {rc.refineryCta.toLowerCase()}
+        </TBtn>
+        <p className="text-xs text-t-phos-dim text-center mb-6">{rc.refinerySubtext}</p>
 
         {/* Secondary: downloads */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={handlePrintAnalysisPdf}
-            className="flex-1 px-4 py-3 bg-white border border-border text-muted rounded-xl text-sm font-medium hover:border-sage-300 hover:text-foreground transition-colors"
+            className="t-focus flex-1 px-4 py-3 bg-transparent border border-t-line text-t-phos-dim text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
           >
             Print / save analysis as PDF
           </button>

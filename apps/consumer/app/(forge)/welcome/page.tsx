@@ -167,8 +167,8 @@ function WelcomePageInner() {
       />
 
       {isDemo && (
-        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
+          <p className="text-sm text-t-amber-bright font-medium">
             Demo mode — sample data pre-filled. Watch how t.ROY guides each step.
           </p>
         </div>
@@ -182,14 +182,14 @@ function WelcomePageInner() {
 
       {/* t.ROY acknowledges the selection */}
       {acknowledged && selected && TROY_RESPONSES[selected] && (
-        <div className="mt-4 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 flex items-start gap-3 animate-in fade-in duration-300">
+        <div className="mt-4 bg-t-panel px-4 py-3 border border-t-line flex items-start gap-3 animate-in fade-in duration-300">
           <svg
             width="20"
             height="20"
             viewBox="0 0 16 16"
             fill="none"
             aria-hidden="true"
-            className="flex-shrink-0 mt-0.5 text-sage-500"
+            className="flex-shrink-0 mt-0.5 text-t-amber"
           >
             <path
               d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
@@ -198,7 +198,7 @@ function WelcomePageInner() {
               fill="none"
             />
           </svg>
-          <p className="text-sm text-sage-700 leading-relaxed">
+          <p className="text-sm text-t-phos leading-relaxed">
             {TROY_RESPONSES[selected]}
           </p>
         </div>

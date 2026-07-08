@@ -135,15 +135,15 @@ export default function ProcessingPage() {
 
   if (error) {
     return (
-      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center">
-        <h1 className="text-2xl font-bold mb-4">Something went wrong</h1>
-        <p className="text-body text-muted mb-6 max-w-md">{error}</p>
+      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center font-term bg-t-bg">
+        <h1 className="text-2xl font-bold mb-4 text-t-white">Something went wrong</h1>
+        <p className="text-base text-t-phos-dim mb-6 max-w-md">{error}</p>
         <button
           onClick={() => {
             setError(null);
             hasStarted.current = false;
           }}
-          className="px-8 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 transition-colors min-h-touch"
+          className="t-focus px-8 py-4 bg-t-amber text-[#14100a] text-lg font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Try Again
         </button>
@@ -152,7 +152,7 @@ export default function ProcessingPage() {
   }
 
   return (
-    <div className="flow-center min-h-screen flex flex-col items-center justify-center">
+    <div className="flow-center min-h-screen flex flex-col items-center justify-center font-term">
       <div className="w-full max-w-flow text-center">
         <GhostGuide
           message={getOpusMessage("processing", audience, isDemo)}
@@ -161,20 +161,20 @@ export default function ProcessingPage() {
         {/* Processing animation */}
         <div className="mb-8">
           <div className="w-16 h-16 mx-auto mb-6 relative">
-            <div className="absolute inset-0 border-4 border-sage-200 rounded-full" />
-            <div className="absolute inset-0 border-4 border-sage-600 rounded-full border-t-transparent animate-spin" />
+            <div className="absolute inset-0 border-4 border-t-line" />
+            <div className="absolute inset-0 border-4 border-t-amber border-t-transparent animate-spin" />
           </div>
 
-          <h1 className="text-2xl font-bold mb-2">Building your story</h1>
-          <p className="text-body text-sage-600 transition-opacity duration-500">
+          <h1 className="text-2xl font-bold mb-2 text-t-white">Building your story</h1>
+          <p className="text-base text-t-amber-bright transition-opacity duration-500">
             {PROCESSING_STEPS[currentStep]}
           </p>
         </div>
 
         {/* Progress bar */}
-        <div className="w-full h-1.5 bg-sage-100 rounded-full mb-10 overflow-hidden">
+        <div className="w-full h-1.5 bg-t-line mb-10 overflow-hidden">
           <div
-            className="h-full bg-sage-500 rounded-full transition-all duration-1000 ease-out"
+            className="h-full bg-t-amber transition-all duration-1000 ease-out"
             style={{
               width: `${Math.min(95, ((currentStep + 1) / PROCESSING_STEPS.length) * 100)}%`,
             }}
@@ -182,15 +182,15 @@ export default function ProcessingPage() {
         </div>
 
         {/* Engagement content */}
-        <div className="bg-warm-50 rounded-2xl p-6 mb-8 min-h-[80px] flex items-center justify-center">
-          <p className="text-sm text-earth-700 leading-relaxed transition-opacity duration-500">
+        <div className="bg-t-panel border border-t-line p-6 mb-8 min-h-[80px] flex items-center justify-center">
+          <p className="text-sm text-t-phos leading-relaxed transition-opacity duration-500">
             {ENGAGEMENT_FACTS[currentFact]}
           </p>
         </div>
 
         {/* Pennebaker micro-dose: optional reflection */}
-        <div className="bg-white rounded-2xl p-5 border border-border">
-          <p className="text-sm font-medium text-foreground mb-3">
+        <div className="bg-t-panel p-5 border border-t-line">
+          <p className="text-sm font-medium text-t-white mb-3">
             {reflectionPrompt}
           </p>
           <textarea
@@ -198,9 +198,9 @@ export default function ProcessingPage() {
             onChange={(e) => setReflection(e.target.value)}
             placeholder="Take a moment to think... (optional)"
             rows={2}
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors resize-none"
+            className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
           />
-          <p className="text-xs text-muted mt-2">
+          <p className="text-xs text-t-phos-dim mt-2">
             Just for you — this isn&apos;t saved or analyzed.
           </p>
         </div>

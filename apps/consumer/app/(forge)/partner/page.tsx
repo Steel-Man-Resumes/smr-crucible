@@ -15,6 +15,7 @@
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { useEffect } from "react";
+import { TBtn } from "@crucible/consumer-ui";
 
 const CLIENT_WORKFLOW = [
   {
@@ -109,23 +110,23 @@ export default function PartnerPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-t-bg font-term">
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         {/* Header */}
         <div className="mb-12">
-          <p className="text-sm font-medium text-sage-600 mb-3 uppercase tracking-wide">
+          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase tracking-wide">
             For Partner Organizations
           </p>
-          <h1 className="text-3xl font-bold text-foreground mb-4 leading-tight">
+          <h1 className="text-3xl font-bold text-t-white mb-4 leading-tight">
             Run this with your clients.
           </h1>
-          <p className="text-body text-foreground leading-relaxed text-lg mb-3">
+          <p className="text-lg text-t-phos leading-relaxed mb-3">
             Steel Man Resumes is built to plug into reentry programs, workforce
             development orgs, AJC offices, and legal aid societies. Your clients
             use the tools. You see their progress -- with their consent.
           </p>
-          <p className="text-sm text-muted leading-relaxed">
+          <p className="text-sm text-t-phos-dim leading-relaxed">
             This page covers the operational picture: how your workflow looks,
             what the partner dashboard gives you, how access codes work, and
             what your clients actually receive.
@@ -134,17 +135,17 @@ export default function PartnerPage() {
 
         {/* How the workflow runs */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">How it works with your program</h2>
-          <p className="text-sm text-muted mb-5">Five steps from referral to funder report.</p>
+          <h2 className="text-xl font-bold text-t-white mb-2">How it works with your program</h2>
+          <p className="text-sm text-t-phos-dim mb-5">Five steps from referral to funder report.</p>
           <div className="space-y-4">
             {CLIENT_WORKFLOW.map((item) => (
               <div key={item.step} className="flex gap-4 items-start">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sage-600 text-white flex items-center justify-center font-bold text-sm">
+                <div className="flex-shrink-0 w-8 h-8 bg-t-panel-2 border border-t-amber text-t-amber-bright flex items-center justify-center font-bold text-sm">
                   {item.step}
                 </div>
                 <div className="pt-0.5">
-                  <p className="font-semibold text-foreground text-sm mb-0.5">{item.title}</p>
-                  <p className="text-sm text-muted leading-relaxed">{item.detail}</p>
+                  <p className="font-semibold text-t-white text-sm mb-0.5">{item.title}</p>
+                  <p className="text-sm text-t-phos-dim leading-relaxed">{item.detail}</p>
                 </div>
               </div>
             ))}
@@ -153,15 +154,15 @@ export default function PartnerPage() {
 
         {/* What your clients get */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-2">What your clients get</h2>
-          <p className="text-sm text-muted mb-5">Every tool, free, no paywall.</p>
+          <h2 className="text-xl font-bold text-t-white mb-2">What your clients get</h2>
+          <p className="text-sm text-t-phos-dim mb-5">Every tool, free, no paywall.</p>
           <div className="space-y-2">
             {WHAT_CLIENTS_GET.map((item, i) => (
-              <div key={i} className="flex gap-3 p-4 bg-sage-50 border border-sage-200 rounded-xl items-start">
-                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-sage-500 mt-1.5" />
+              <div key={i} className="flex gap-3 p-4 bg-t-panel border border-t-line items-start">
+                <div className="flex-shrink-0 w-2 h-2 bg-t-amber mt-1.5" />
                 <div>
-                  <span className="font-semibold text-foreground text-sm">{item.tool}</span>
-                  <span className="text-sm text-muted"> -- {item.desc}</span>
+                  <span className="font-semibold text-t-white text-sm">{item.tool}</span>
+                  <span className="text-sm text-t-phos-dim"> -- {item.desc}</span>
                 </div>
               </div>
             ))}
@@ -169,26 +170,26 @@ export default function PartnerPage() {
         </section>
 
         {/* Partner dashboard */}
-        <section className="mb-12 border border-sage-200 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-foreground mb-2">Your partner dashboard</h2>
-          <p className="text-sm text-muted leading-relaxed mb-5">
+        <section className="mb-12 border border-t-line p-6">
+          <h2 className="text-xl font-bold text-t-white mb-2">Your partner dashboard</h2>
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-5">
             Once you have a partner account and your clients have opted in,
             you get a real-time view of your cohort.
           </p>
           <div className="space-y-3">
             {DASHBOARD_FEATURES.map((item, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-border">
-                <p className="font-semibold text-foreground text-sm mb-1">{item.feature}</p>
-                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              <div key={i} className="bg-t-panel p-4 border border-t-line">
+                <p className="font-semibold text-t-white text-sm mb-1">{item.feature}</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">{item.detail}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* Access codes */}
-        <section className="mb-12 bg-warm-50 border border-warm-200 rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-foreground mb-2">Access codes</h2>
-          <p className="text-sm text-muted leading-relaxed mb-4">
+        <section className="mb-12 bg-t-panel border border-t-line p-6">
+          <h2 className="text-xl font-bold text-t-white mb-2">Access codes</h2>
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
             Your organization gets one partner access code. Your clients
             enter it at sign-up to unlock higher AI usage limits and link
             their account to your cohort.
@@ -200,9 +201,9 @@ export default function PartnerPage() {
               { label: "How to get one", detail: "Email steelmanresumes@gmail.com with your organization name and program type. Free for nonprofits and community organizations. Typically set up within 24 hours." },
               { label: "No expiration by default", detail: "Codes stay active as long as your program is running. You can request a new one if you need separate tracking for different cohorts." },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-warm-200">
-                <p className="font-semibold text-foreground text-sm mb-1">{item.label}</p>
-                <p className="text-xs text-muted leading-relaxed">{item.detail}</p>
+              <div key={i} className="bg-t-panel-2 p-4 border border-t-line">
+                <p className="font-semibold text-t-white text-sm mb-1">{item.label}</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">{item.detail}</p>
               </div>
             ))}
           </div>
@@ -210,12 +211,12 @@ export default function PartnerPage() {
 
         {/* FAQ */}
         <section className="mb-12">
-          <h2 className="text-xl font-bold text-foreground mb-5">Common questions</h2>
+          <h2 className="text-xl font-bold text-t-white mb-5">Common questions</h2>
           <div className="space-y-3">
             {PARTNER_FAQ.map((item, i) => (
-              <div key={i} className="border border-border rounded-xl p-4">
-                <p className="font-semibold text-foreground text-sm mb-1">{item.q}</p>
-                <p className="text-sm text-muted leading-relaxed">{item.a}</p>
+              <div key={i} className="border border-t-line p-4">
+                <p className="font-semibold text-t-white text-sm mb-1">{item.q}</p>
+                <p className="text-sm text-t-phos-dim leading-relaxed">{item.a}</p>
               </div>
             ))}
           </div>
@@ -223,26 +224,27 @@ export default function PartnerPage() {
 
         {/* CTAs */}
         <div className="space-y-3">
-          <button
+          <TBtn
             onClick={() => {
               updateSession({ isDemo: true, audience: "partner" });
               router.push("/welcome?demo=true");
             }}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-semibold hover:bg-sage-700 transition-colors min-h-touch"
+            className="w-full"
           >
-            See what your clients experience (demo)
-          </button>
+            see what your clients experience (demo)
+          </TBtn>
 
-          <button
+          <TBtn
             onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}
-            className="w-full px-6 py-4 bg-white text-sage-600 border-2 border-sage-200 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch"
+            variant="ghost"
+            className="w-full"
           >
-            Sign in to the partner dashboard
-          </button>
+            sign in to the partner dashboard
+          </TBtn>
 
           <button
             onClick={() => router.push("/intro")}
-            className="w-full px-4 py-3 text-muted text-sm hover:text-foreground transition-colors"
+            className="t-focus w-full px-4 py-3 text-t-phos-dim text-sm hover:text-t-amber-bright transition-colors"
           >
             &larr; Back
           </button>

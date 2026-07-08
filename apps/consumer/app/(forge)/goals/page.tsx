@@ -125,8 +125,8 @@ export default function GoalsPage() {
 
       {/* Why we ask */}
       {!isDemo && (
-        <div className="bg-sage-50 rounded-xl px-4 py-3 mb-4 border border-sage-200">
-          <p className="text-sm text-sage-700 leading-relaxed">
+        <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
+          <p className="text-sm text-t-phos leading-relaxed">
             This isn&apos;t a form, it&apos;s a filter. &ldquo;Stability&rdquo; and
             &ldquo;growth&rdquo; lead to different jobs. I need to know what
             matters so I don&apos;t waste your time.
@@ -135,8 +135,8 @@ export default function GoalsPage() {
       )}
 
       {isDemo && (
-        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
+          <p className="text-sm text-t-amber-bright font-medium">
             Demo mode — sample goals pre-selected
           </p>
         </div>
@@ -151,7 +151,7 @@ export default function GoalsPage() {
 
       {/* Helper when nothing is selected */}
       {!canContinue && (
-        <p className="text-sm text-muted text-center mt-2">
+        <p className="text-sm text-t-phos-dim text-center mt-2">
           Pick at least one, or describe what you&apos;re looking for below.
         </p>
       )}
@@ -162,7 +162,7 @@ export default function GoalsPage() {
           !isDemo && (
             <button
               onClick={() => setShowNarrative(true)}
-              className="text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700"
+              className="text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
             >
               Want to say more about what you&apos;re looking for?
             </button>
@@ -171,7 +171,7 @@ export default function GoalsPage() {
           <div className="space-y-2">
             <label
               htmlFor="goal-narrative"
-              className="text-sm font-medium text-foreground"
+              className="text-sm font-medium text-t-white"
             >
               {isDemo ? "Sample goal narrative" : "Tell us more in your own words"}
             </label>
@@ -182,7 +182,7 @@ export default function GoalsPage() {
               placeholder="e.g., I want to work with my hands, or I'm interested in healthcare, or I want to start my own business someday..."
               rows={3}
               readOnly={isDemo}
-              className={`w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y ${isDemo ? "bg-gray-50 cursor-default" : ""}`}
+              className={`w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y ${isDemo ? "bg-t-panel-2 cursor-default" : ""}`}
             />
           </div>
         )}
@@ -191,7 +191,7 @@ export default function GoalsPage() {
         {!isDemo && (selected.length > 0 || showNarrative) && !showHookPrompt && (
           <button
             onClick={() => setShowHookPrompt(true)}
-            className="text-sm text-sage-600 underline underline-offset-2 hover:text-sage-700 block"
+            className="text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber block"
           >
             What would make work feel like yours?
           </button>
@@ -200,11 +200,11 @@ export default function GoalsPage() {
           <div className="space-y-2">
             <label
               htmlFor="hook-narrative"
-              className="text-sm font-medium text-foreground"
+              className="text-sm font-medium text-t-white"
             >
               {isDemo ? "What would make work feel real to you?" : "What would make work feel like yours?"}
             </label>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-t-phos-dim">
               A mentor, a mission, using your story to help others — anything that would make getting up worth it.
             </p>
             <textarea
@@ -214,7 +214,7 @@ export default function GoalsPage() {
               placeholder="e.g., I want to help people going through what I went through. Or: I want to build something I can show my kids."
               rows={2}
               readOnly={isDemo}
-              className={`w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y ${isDemo ? "bg-gray-50 cursor-default" : ""}`}
+              className={`w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y ${isDemo ? "bg-t-panel-2 cursor-default" : ""}`}
             />
           </div>
         )}

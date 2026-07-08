@@ -56,23 +56,23 @@ export function ResumeEditor({
   return (
     <>
       {/* Mobile toggle */}
-      <div className="flex gap-1 mb-4 lg:hidden bg-gray-100 p-1 rounded-lg">
+      <div className="flex gap-1 mb-4 lg:hidden bg-t-panel border border-t-line p-1">
         <button
           onClick={() => setMobileView("edit")}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
             mobileView === "edit"
-              ? "bg-white shadow-sm text-foreground"
-              : "text-muted"
+              ? "bg-t-amber text-[#14100a]"
+              : "text-t-phos-dim"
           }`}
         >
           Edit
         </button>
         <button
           onClick={() => setMobileView("preview")}
-          className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
             mobileView === "preview"
-              ? "bg-white shadow-sm text-foreground"
-              : "text-muted"
+              ? "bg-t-amber text-[#14100a]"
+              : "text-t-phos-dim"
           }`}
         >
           Preview ({overall}%)
@@ -103,14 +103,14 @@ export function ResumeEditor({
               generating={summaryGenerating}
             />
             {summarySuggestion && !doc.summary.trim() && onUseSummarySuggestion && (
-              <div className="mt-3 bg-sage-50 rounded-xl p-3 border border-sage-200">
-                <p className="text-sm text-foreground mb-2">{summarySuggestion}</p>
-                <p className="text-xs text-muted mb-2">
+              <div className="mt-3 bg-t-panel p-3 border border-t-line">
+                <p className="text-sm text-t-phos mb-2">{summarySuggestion}</p>
+                <p className="text-xs text-t-phos-dim mb-2">
                   Starting point. Edit it to sound like you.
                 </p>
                 <button
                   onClick={onUseSummarySuggestion}
-                  className="text-sm text-sage-600 font-medium"
+                  className="text-sm text-t-amber-bright font-medium"
                 >
                   Use this
                 </button>
@@ -140,10 +140,10 @@ export function ResumeEditor({
 
           {/* Action bar -- sticky so it stays visible while editing */}
           {actions && (
-            <div className="sticky bottom-0 bg-white border-t border-border pt-3 pb-3 -mx-1 px-1 mt-3">
+            <div className="sticky bottom-0 bg-t-bg border-t border-t-line pt-3 pb-3 -mx-1 px-1 mt-3">
               <div className="flex flex-wrap gap-2 items-center">{actions}</div>
               {actionsHint && (
-                <p className="text-[11px] text-muted mt-1.5">{actionsHint}</p>
+                <p className="text-[11px] text-t-phos-dim mt-1.5">{actionsHint}</p>
               )}
             </div>
           )}

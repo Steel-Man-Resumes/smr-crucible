@@ -11,12 +11,12 @@ interface SecurityContentProps {
 
 export function SecurityContent({ showUserControls }: SecurityContentProps) {
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-8 font-term">
       <div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Your Data is Private
         </h1>
-        <p className="text-body text-muted">
+        <p className="text-base text-t-phos-dim leading-relaxed">
           We built this tool for people who need to trust it. Here&apos;s
           exactly how we protect you.
         </p>
@@ -46,8 +46,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
 
       {/* Who Can See Your Data */}
       <Section title="Who Can See Your Data">
-        <div className="bg-sage-50 rounded-xl p-4 border border-sage-200 mb-4">
-          <p className="text-sm font-bold text-sage-800">
+        <div className="bg-t-panel p-4 border border-t-line mb-4">
+          <p className="text-sm font-bold text-t-amber-bright">
             You. That&apos;s it.
           </p>
         </div>
@@ -145,7 +145,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
 
       {/* What We Don't Do */}
       <Section title="What We Don&apos;t Do">
-        <div className="bg-warm-50 rounded-xl p-4 border border-warm-200">
+        <div className="bg-t-panel p-4 border border-t-line">
           <ul className="space-y-2">
             <DenyItem>No ads. Ever.</DenyItem>
             <DenyItem>No selling your data. Ever.</DenyItem>
@@ -164,7 +164,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
 
       {/* For Organizations */}
       <Section title="For Organizations">
-        <p className="text-sm text-muted mb-3">
+        <p className="text-sm text-t-phos-dim mb-3">
           If you&apos;re considering this platform for your clients:
         </p>
         <ul className="space-y-2">
@@ -193,10 +193,10 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
 
       {/* Technical Details */}
       <Section title="Technical Details">
-        <p className="text-xs text-muted mb-3">
+        <p className="text-xs text-t-phos-dim mb-3">
           For security professionals and compliance teams:
         </p>
-        <div className="bg-gray-50 rounded-xl p-4 border border-border text-xs text-muted space-y-1.5 font-mono">
+        <div className="bg-t-panel-2 p-4 border border-t-line text-xs text-t-phos-dim space-y-1.5">
           <p>Database: PostgreSQL on Neon (encrypted at rest, TLS in transit)</p>
           <p>Object Storage: Cloudflare R2 (S3-compatible, encrypted at rest)</p>
           <p>Auth: Auth.js v5, email magic link (no passwords stored)</p>
@@ -209,13 +209,13 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       </Section>
 
       {/* Contact */}
-      <div className="bg-sage-50 rounded-xl p-5 border border-sage-200 text-center">
-        <p className="text-sm text-foreground mb-1">
+      <div className="bg-t-panel p-5 border border-t-line text-center">
+        <p className="text-sm text-t-white mb-1">
           Questions about your data or privacy?
         </p>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-t-phos-dim">
           Ask t.ROY — he&apos;s on every page. Or email us at{" "}
-          <span className="font-medium text-foreground">
+          <span className="font-medium text-t-white">
             info@steelmanresumes.com
           </span>
         </p>
@@ -235,7 +235,7 @@ function Section({
 }) {
   return (
     <section>
-      <h2 className="text-lg font-bold text-foreground mb-3">{title}</h2>
+      <h2 className="text-lg font-bold text-t-white mb-3">{title}</h2>
       {children}
     </section>
   );
@@ -249,17 +249,17 @@ function BulletItem({
   bold?: boolean;
 }) {
   return (
-    <li className="flex gap-2 text-sm text-foreground leading-relaxed">
-      <span className="text-sage-500 flex-shrink-0 mt-0.5">&bull;</span>
-      <span className={bold ? "font-semibold" : ""}>{children}</span>
+    <li className="flex gap-2 text-sm text-t-phos leading-relaxed">
+      <span className="text-t-amber flex-shrink-0 mt-0.5">&bull;</span>
+      <span className={bold ? "font-semibold text-t-white" : ""}>{children}</span>
     </li>
   );
 }
 
 function DenyItem({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex gap-2 text-sm text-foreground leading-relaxed">
-      <span className="text-red-400 flex-shrink-0">
+    <li className="flex gap-2 text-sm text-t-phos leading-relaxed">
+      <span className="text-t-phos-dim flex-shrink-0">
         <svg
           width="16"
           height="16"
@@ -298,14 +298,14 @@ function ControlCard({
   destructive?: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl p-4 border border-border">
-      <h3 className="text-sm font-semibold text-foreground mb-1">{title}</h3>
-      <p className="text-xs text-muted leading-relaxed mb-3">{description}</p>
+    <div className="bg-t-panel p-4 border border-t-line">
+      <h3 className="text-sm font-semibold text-t-white mb-1">{title}</h3>
+      <p className="text-xs text-t-phos-dim leading-relaxed mb-3">{description}</p>
       {showButton && buttonLabel && (
         href ? (
           <a
             href={href}
-            className="text-xs font-medium text-sage-600 hover:text-sage-700"
+            className="text-xs font-medium text-t-amber-bright hover:text-t-amber"
           >
             {buttonLabel} &rarr;
           </a>
@@ -314,8 +314,8 @@ function ControlCard({
             onClick={onClick}
             className={`text-xs font-medium ${
               destructive
-                ? "text-red-600 hover:text-red-700"
-                : "text-sage-600 hover:text-sage-700"
+                ? "text-t-red hover:text-t-amber-bright"
+                : "text-t-amber-bright hover:text-t-amber"
             }`}
           >
             {buttonLabel}

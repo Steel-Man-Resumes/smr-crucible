@@ -136,31 +136,31 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
   }
 
   return (
-    <div className="min-h-screen pt-16 pb-12">
+    <div className="min-h-screen pt-16 pb-12 bg-t-bg font-term">
       <div className="max-w-5xl mx-auto px-4">
         <button
           onClick={onBack}
-          className="text-sm text-muted hover:text-foreground transition-colors mb-4 inline-flex items-center gap-1 min-h-touch"
+          className="t-focus text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors mb-4 inline-flex items-center gap-1 min-h-touch"
         >
           &larr; Start over
         </button>
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Here&apos;s your resume. Let&apos;s make it strong.
         </h1>
-        <p className="text-body text-muted mb-6 max-w-2xl">
+        <p className="text-base text-t-phos-dim mb-6 max-w-2xl">
           We organized what you gave us. Check every section and fix anything --
           it&apos;s all yours to edit. This becomes your base resume: the one we
           aim at specific jobs later.
         </p>
 
         {assessment.show && (
-          <div className="mb-5 bg-warm-50 border border-warm-200 rounded-xl p-4">
-            <p className="text-sm font-medium text-earth-700 mb-0.5">
+          <div className="mb-5 bg-t-panel border border-t-line p-4">
+            <p className="text-sm font-medium text-t-amber-bright mb-0.5">
               A few lines could be stronger.
             </p>
-            <p className="text-xs text-earth-600 leading-relaxed">
+            <p className="text-xs text-t-phos-dim leading-relaxed">
               The best resumes show what you did, with real numbers. Tap{" "}
-              <span className="font-medium">Strengthen with help</span> under any
+              <span className="font-medium text-t-phos">Strengthen with help</span> under any
               bullet -- we ask a few questions and turn your answer into a strong
               line. We only ever use what you tell us.
             </p>
@@ -181,27 +181,27 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
             <>
               <button
                 onClick={() => onComplete(doc)}
-                className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Looks good -- continue
               </button>
               <button
                 onClick={downloadDocx}
                 disabled={downloading}
-                className="px-4 py-3 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch text-sm disabled:opacity-50"
+                className="t-focus px-4 py-3 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch text-sm disabled:opacity-50"
               >
                 {downloading ? "Preparing..." : "Download .docx"}
               </button>
               <button
                 onClick={() => printResumePdf(doc)}
-                className="px-4 py-3 bg-white border-2 border-sky-500 text-sky-600 rounded-xl font-medium hover:bg-sky-50 transition-colors min-h-touch text-sm"
+                className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
               </button>
               <button
                 onClick={downloadTxt}
                 title="Plain text -- the safest format for online application boxes"
-                className="px-4 py-3 bg-white border-2 border-border text-muted rounded-xl font-medium hover:bg-gray-50 transition-colors min-h-touch text-sm"
+                className="t-focus px-4 py-3 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors min-h-touch text-sm"
               >
                 Download .txt
               </button>
@@ -214,11 +214,11 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
         <ParserPreview doc={doc} />
 
         {/* User Readiness -- a coaching checklist, never a score (doctrine). */}
-        <div className="mt-8 bg-white border border-border rounded-2xl p-5 max-w-2xl">
-          <h2 className="font-semibold text-foreground mb-1">
+        <div className="mt-8 bg-t-panel border border-t-line p-5 max-w-2xl">
+          <h2 className="font-semibold text-t-white mb-1">
             Before you go: are you ready to use this?
           </h2>
-          <p className="text-xs text-muted mb-3">
+          <p className="text-xs text-t-phos-dim mb-3">
             Not a grade -- a gut check. The resume is half of it; owning it is the
             other half.
           </p>
@@ -229,9 +229,9 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                   type="checkbox"
                   checked={ready[i] || false}
                   onChange={() => setReady((r) => ({ ...r, [i]: !r[i] }))}
-                  className="mt-0.5 accent-sage-600 w-4 h-4 flex-shrink-0"
+                  className="mt-0.5 accent-t-amber w-4 h-4 flex-shrink-0"
                 />
-                <span className="text-sm text-foreground">{item}</span>
+                <span className="text-sm text-t-phos">{item}</span>
               </label>
             ))}
           </div>

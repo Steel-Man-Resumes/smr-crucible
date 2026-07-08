@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { TBtn } from "@crucible/consumer-ui";
 
 const CATEGORIES = [
   { value: "housing", label: "Housing & Shelter" },
@@ -71,15 +72,15 @@ export default function GetListedPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12">
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 font-term bg-t-bg">
         <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 rounded-full bg-sage-100 flex items-center justify-center mx-auto mb-6">
+          <div className="w-16 h-16 bg-t-panel-2 border border-t-amber flex items-center justify-center mx-auto mb-6">
             <svg
               width="32"
               height="32"
               viewBox="0 0 32 32"
               fill="none"
-              className="text-sage-600"
+              className="text-t-amber"
             >
               <path
                 d="M8 16l6 6 10-10"
@@ -90,16 +91,16 @@ export default function GetListedPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">
+          <h1 className="text-2xl font-bold text-t-white mb-3">
             Thank you!
           </h1>
-          <p className="text-body text-muted mb-6 leading-relaxed">
+          <p className="text-base text-t-phos-dim mb-6 leading-relaxed">
             We&apos;ll review your submission and add your organization within
             48 hours. We may reach out if we need more information.
           </p>
           <Link
             href="/intro"
-            className="text-sm text-sage-600 hover:text-sage-700 font-medium"
+            className="text-sm text-t-amber-bright hover:text-t-amber font-medium"
           >
             &larr; Back to Steel Man Resumes
           </Link>
@@ -109,12 +110,12 @@ export default function GetListedPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background px-4 py-12">
+    <div className="min-h-screen bg-t-bg px-4 py-12 font-term">
       <div className="max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Get Your Organization Listed
         </h1>
-        <p className="text-body text-muted mb-8 leading-relaxed">
+        <p className="text-base text-t-phos-dim mb-8 leading-relaxed">
           We&apos;re building a network of verified resources for people
           rebuilding their careers in Milwaukee and Waukesha. If your
           organization offers support services, we want to connect people to
@@ -133,13 +134,13 @@ export default function GetListedPage() {
 
           {/* Category */}
           <div>
-            <label className="text-sm font-medium block mb-1">
-              Category <span className="text-red-400">*</span>
+            <label className="text-sm font-medium text-t-white block mb-1">
+              Category <span className="text-t-red">*</span>
             </label>
             <select
               value={form.category}
               onChange={(e) => update("category", e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             >
               <option value="">Select a category</option>
               {CATEGORIES.map((c) => (
@@ -177,22 +178,22 @@ export default function GetListedPage() {
 
           {/* Description */}
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               Describe Your Services{" "}
-              <span className="text-red-400">*</span>
+              <span className="text-t-red">*</span>
             </label>
             <textarea
               value={form.description}
               onChange={(e) => update("description", e.target.value)}
               placeholder="What services do you offer? Who can access them? Any eligibility requirements?"
               rows={4}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white resize-none"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none resize-none"
             />
           </div>
 
-          <hr className="border-border" />
+          <hr className="t-rule" />
 
-          <p className="text-xs text-muted">
+          <p className="text-xs text-t-phos-dim">
             We&apos;ll use this to reach you if we have questions.
           </p>
 
@@ -217,8 +218,8 @@ export default function GetListedPage() {
 
           {/* Errors */}
           {errors.length > 0 && (
-            <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-              <ul className="text-sm text-red-700 space-y-1">
+            <div className="bg-t-panel p-4 border border-t-red">
+              <ul className="text-sm text-t-red space-y-1">
                 {errors.map((e, i) => (
                   <li key={i}>{e}</li>
                 ))}
@@ -227,15 +228,11 @@ export default function GetListedPage() {
           )}
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
-          >
-            {submitting ? "Submitting..." : "Submit for Review"}
-          </button>
+          <TBtn type="submit" disabled={submitting} className="w-full">
+            {submitting ? "submitting..." : "submit for review"}
+          </TBtn>
 
-          <p className="text-xs text-muted text-center">
+          <p className="text-xs text-t-phos-dim text-center">
             We verify every submission. Your organization will be live within
             48 hours.
           </p>
@@ -264,15 +261,15 @@ function Field({
 }) {
   return (
     <div>
-      <label className="text-sm font-medium block mb-1">
-        {label} {required && <span className="text-red-400">*</span>}
+      <label className="text-sm font-medium text-t-white block mb-1">
+        {label} {required && <span className="text-t-red">*</span>}
       </label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+        className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
       />
     </div>
   );

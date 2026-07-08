@@ -40,24 +40,24 @@ export default function ForgeAccumulator() {
   if (itemCount === 0) return null;
 
   return (
-    <div className="bg-sage-50/60 rounded-xl px-4 py-3 mb-4 border border-sage-100">
+    <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line font-term">
       <div className="flex items-center gap-2 mb-2">
         <div className="flex gap-1">
           {[hasResume, hasGoals, hasChallenges, hasPreferences].map((filled, i) => (
             <div
               key={i}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                filled ? "bg-sage-500" : "bg-sage-200"
+              className={`w-2 h-2 transition-colors ${
+                filled ? "bg-t-amber" : "bg-t-line"
               }`}
             />
           ))}
         </div>
-        <span className="text-xs font-medium text-sage-600">
-          Building your story
+        <span className="text-xs font-medium text-t-phos-dim">
+          building your story
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-sage-600">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-t-phos">
         {session.readinessStage && (
           <span>{READINESS_LABELS[session.readinessStage] || session.readinessStage}</span>
         )}

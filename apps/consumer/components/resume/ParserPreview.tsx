@@ -27,22 +27,22 @@ export function ParserPreview({ doc }: { doc: ResumeDocument }) {
   const edu = doc.education.filter((e) => e.credential.trim());
 
   return (
-    <div className="mt-6 border border-border rounded-2xl bg-white max-w-2xl overflow-hidden">
+    <div className="mt-6 border border-t-line bg-t-panel max-w-2xl overflow-hidden font-term">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3 text-left min-h-touch"
+        className="t-focus w-full flex items-center justify-between px-5 py-3 text-left min-h-touch"
       >
-        <span className="font-semibold text-foreground">
+        <span className="font-semibold text-t-white">
           What a machine reads from your resume
         </span>
-        <span className="text-muted text-sm">{open ? "Hide" : "Show"}</span>
+        <span className="text-t-phos-dim text-sm">{open ? "Hide" : "Show"}</span>
       </button>
       {open && (
-        <div className="px-5 pb-4 border-t border-border pt-3 text-sm space-y-2.5">
-          <p className="text-xs text-muted">
+        <div className="px-5 pb-4 border-t border-t-line pt-3 text-sm space-y-2.5">
+          <p className="text-xs text-t-phos-dim">
             Most employers scan resumes with software before a person sees them.
             This is what it pulls out. If something important says{" "}
-            <span className="text-amber-600 font-medium">not found</span>, fix it
+            <span className="text-t-amber-bright font-medium">not found</span>, fix it
             in the sections above.
           </p>
           <Row label="Name">{name || <Missing />}</Row>
@@ -54,7 +54,7 @@ export function ParserPreview({ doc }: { doc: ResumeDocument }) {
               <ul className="space-y-0.5">
                 {jobs.map((e) => (
                   <li key={e.id}>
-                    {e.title.trim() || <span className="text-amber-600">(no title)</span>}
+                    {e.title.trim() || <span className="text-t-amber-bright">(no title)</span>}
                     {e.company.trim() ? ` -- ${e.company.trim()}` : ""}
                     {e.startDate.trim() || e.endDate.trim()
                       ? ` (${[e.startDate.trim(), e.endDate.trim() || "Present"]
@@ -79,16 +79,16 @@ export function ParserPreview({ doc }: { doc: ResumeDocument }) {
 }
 
 function Missing() {
-  return <span className="text-amber-600">not found</span>;
+  return <span className="text-t-amber-bright">not found</span>;
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[104px_1fr] gap-2">
-      <span className="text-[11px] font-medium text-muted uppercase tracking-wide pt-0.5">
+      <span className="text-[11px] font-medium text-t-phos-dim uppercase tracking-wide pt-0.5">
         {label}
       </span>
-      <span className="text-foreground">{children}</span>
+      <span className="text-t-phos">{children}</span>
     </div>
   );
 }

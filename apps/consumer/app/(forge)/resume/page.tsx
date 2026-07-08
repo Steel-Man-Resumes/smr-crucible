@@ -163,14 +163,14 @@ export default function ResumeIntakePage() {
           message={getOpusMessage("resume", audience, true)}
           pageId="resume"
         />
-        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
+          <p className="text-sm text-t-amber-bright font-medium">
             Demo mode — sample resume pre-loaded
           </p>
         </div>
-        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
-          <p className="text-sm text-sage-700 font-medium mb-2">Sample: Jordan Mitchell</p>
-          <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+        <div className="bg-t-panel p-5 border border-t-line">
+          <p className="text-sm text-t-phos font-medium mb-2">Sample: Jordan Mitchell</p>
+          <p className="text-xs text-t-phos-dim whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
             {DEMO_SESSION.resumeText?.slice(0, 500)}...
           </p>
         </div>
@@ -196,7 +196,7 @@ export default function ResumeIntakePage() {
             onClick={() => {
               updateSession({ resumeText: undefined, resumeMethod: undefined });
             }}
-            className="text-sage-600 underline underline-offset-2 hover:text-sage-700"
+            className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
             I want to use a different resume
           </button>
@@ -206,11 +206,11 @@ export default function ResumeIntakePage() {
           message={getOpusMessage("resume", audience, false)}
           pageId="resume"
         />
-        <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
-          <p className="text-sm text-sage-700 font-medium mb-2">
+        <div className="bg-t-panel p-5 border border-t-line">
+          <p className="text-sm text-t-phos font-medium mb-2">
             From Rush Mode
           </p>
-          <p className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+          <p className="text-xs text-t-phos-dim whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
             {session.resumeText.slice(0, 500)}
             {session.resumeText.length > 500 ? "..." : ""}
           </p>
@@ -262,35 +262,35 @@ export default function ResumeIntakePage() {
         }}
       >
         {/* Full resume preview */}
-        <div className="bg-sage-50 rounded-xl border border-sage-200 mb-4 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-sage-200 bg-sage-100">
-            <p className="text-xs font-semibold text-sage-700 uppercase tracking-wide">
+        <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
+            <p className="text-xs font-semibold text-t-phos uppercase tracking-wide">
               What we read from your file
             </p>
-            <p className="text-xs text-sage-500">{previewText.length} characters</p>
+            <p className="text-xs text-t-phos-dim">{previewText.length} characters</p>
           </div>
           <div className="p-4 max-h-72 overflow-y-auto">
-            <pre className="text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">
+            <pre className="text-xs text-t-phos whitespace-pre-wrap leading-relaxed">
               {previewText}
             </pre>
           </div>
         </div>
 
         {/* Explicit re-do option */}
-        <div className="bg-warm-50 rounded-xl p-4 border border-warm-200 mb-4">
-          <p className="text-sm text-earth-700 mb-2">
+        <div className="bg-t-panel p-4 border border-t-line mb-4">
+          <p className="text-sm text-t-phos mb-2">
             Doesn&apos;t look right? Text garbled, cut off, or missing sections?
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => { setUploadSuccess(false); setActivePath("upload"); }}
-              className="flex-1 px-4 py-2.5 bg-white border border-warm-300 text-earth-700 rounded-lg text-sm font-medium hover:bg-warm-100 transition-colors"
+              className="t-focus flex-1 px-4 py-2.5 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
             >
               Re-upload a different file
             </button>
             <button
               onClick={() => { setUploadSuccess(false); setActivePath("paste"); }}
-              className="flex-1 px-4 py-2.5 bg-white border border-warm-300 text-earth-700 rounded-lg text-sm font-medium hover:bg-warm-100 transition-colors"
+              className="t-focus flex-1 px-4 py-2.5 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
             >
               Paste the text instead
             </button>
@@ -299,17 +299,17 @@ export default function ResumeIntakePage() {
 
         {/* Optional contact info -- only show fields that are missing */}
         {(!parsedEmail || !parsedPhone) && (
-          <div className="bg-white rounded-xl p-5 border border-border">
-            <p className="text-sm font-medium text-foreground mb-1">
+          <div className="bg-t-panel p-5 border border-t-line">
+            <p className="text-sm font-medium text-t-white mb-1">
               Missing anything?
             </p>
-            <p className="text-xs text-muted mb-3">
+            <p className="text-xs text-t-phos-dim mb-3">
               Not required -- but these go on your resume when you download it.
             </p>
             <div className="space-y-3">
               {!parsedPhone && (
                 <div>
-                  <label className="text-xs font-medium text-muted block mb-1">
+                  <label className="text-xs font-medium text-t-phos-dim block mb-1">
                     Phone number
                   </label>
                   <input
@@ -317,13 +317,13 @@ export default function ResumeIntakePage() {
                     value={parsedPhone}
                     onChange={(e) => setParsedPhone(e.target.value)}
                     placeholder="(555) 123-4567"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                    className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   />
                 </div>
               )}
               {!parsedEmail && (
                 <div>
-                  <label className="text-xs font-medium text-muted block mb-1">
+                  <label className="text-xs font-medium text-t-phos-dim block mb-1">
                     Email address
                   </label>
                   <input
@@ -331,7 +331,7 @@ export default function ResumeIntakePage() {
                     value={parsedEmail}
                     onChange={(e) => setParsedEmail(e.target.value)}
                     placeholder="you@email.com"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                    className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   />
                 </div>
               )}
@@ -358,40 +358,40 @@ export default function ResumeIntakePage() {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setActivePath("paste")}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-300 bg-sage-50 hover:border-sage-400 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
-            <span className="font-medium">Paste your resume text</span>
-            <p className="text-sm text-muted mt-0.5">
+            <span className="font-medium text-t-white">Paste your resume text</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">
               Copy from an email, notes app, or anywhere and paste it here
             </p>
           </button>
 
           <button
             onClick={() => setActivePath("upload")}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium">Upload a file or image</span>
-            <p className="text-sm text-muted mt-0.5">
+            <span className="font-medium text-t-white">Upload a file or image</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">
               PDF, Word, photo of a paper copy, or phone camera screenshot
             </p>
           </button>
 
           <button
             onClick={() => setActivePath("import")}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium">Download from LinkedIn or Indeed</span>
-            <p className="text-sm text-muted mt-0.5">
+            <span className="font-medium text-t-white">Download from LinkedIn or Indeed</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">
               We&apos;ll show you how to get your resume from these platforms
             </p>
           </button>
 
           <button
             onClick={() => setActivePath("external")}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium">Build one with a free tool first</span>
-            <p className="text-sm text-muted mt-0.5">
+            <span className="font-medium text-t-white">Build one with a free tool first</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">
               Links to Canva, Google Docs, Indeed. Come back when you&apos;re done.
             </p>
           </button>
@@ -399,29 +399,29 @@ export default function ResumeIntakePage() {
           {/* Divider */}
           <div className="relative my-1">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+              <div className="w-full border-t border-t-line" />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-3 text-xs text-muted">Starting from nothing?</span>
+              <span className="bg-t-bg px-3 text-xs text-t-phos-dim">Starting from nothing?</span>
             </div>
           </div>
 
           <button
             onClick={handleNoResume}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-200 bg-sage-50/40 hover:border-sage-400 hover:bg-sage-50 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium">Build one from scratch, step by step</span>
-            <p className="text-sm text-muted mt-0.5">
+            <span className="font-medium text-t-white">Build one from scratch, step by step</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">
               15-20 minutes. We guide you through every section. Worth doing right.
             </p>
           </button>
 
           {/* Record-history recovery -- for users who can't recall employers/dates */}
-          <div className="mt-2 bg-white rounded-xl p-4 border border-border">
-            <p className="text-sm font-medium text-foreground mb-1">
+          <div className="mt-2 bg-t-panel p-4 border border-t-line">
+            <p className="text-sm font-medium text-t-white mb-1">
               Can&apos;t remember where you worked, or when?
             </p>
-            <p className="text-xs text-muted mb-3">
+            <p className="text-xs text-t-phos-dim mb-3">
               These free, official sources can remind you. They open on the
               provider&apos;s own site -- we never see or store them.
             </p>
@@ -430,7 +430,7 @@ export default function ResumeIntakePage() {
                 href="https://www.irs.gov/individuals/get-transcript"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+                className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
                 IRS Wage &amp; Income Transcript -- every employer that reported your wages
               </a>
@@ -438,7 +438,7 @@ export default function ResumeIntakePage() {
                 href="https://www.theworknumber.com/employees"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+                className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
                 The Work Number -- your free annual Employment Data Report
               </a>
@@ -446,7 +446,7 @@ export default function ResumeIntakePage() {
                 href="https://www.credly.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-sm text-sky-600 hover:text-sky-700 underline underline-offset-2"
+                className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
                 Credly -- digital badges and certifications you&apos;ve earned
               </a>
@@ -474,16 +474,16 @@ export default function ResumeIntakePage() {
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`w-full border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all min-h-[200px] flex flex-col items-center justify-center gap-4 ${
+          className={`t-focus w-full border border-dashed p-10 text-center cursor-pointer transition-all min-h-[200px] flex flex-col items-center justify-center gap-4 ${
             dragOver
-              ? "border-sage-500 bg-sage-50"
-              : "border-border hover:border-sage-300 hover:bg-sage-50/50"
+              ? "border-t-amber bg-t-panel-2"
+              : "border-t-line bg-t-panel hover:border-t-phos-dim"
           } ${uploading ? "pointer-events-none opacity-60" : ""}`}
         >
           {uploading ? (
             <>
-              <div className="w-8 h-8 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
-              <p className="text-muted">Reading your file...</p>
+              <div className="w-8 h-8 border-2 border-t-amber border-t-transparent animate-spin" />
+              <p className="text-t-phos-dim">Reading your file...</p>
             </>
           ) : (
             <>
@@ -492,7 +492,7 @@ export default function ResumeIntakePage() {
                 height="40"
                 viewBox="0 0 40 40"
                 fill="none"
-                className="text-muted"
+                className="text-t-phos-dim"
                 aria-hidden="true"
               >
                 <path
@@ -510,10 +510,10 @@ export default function ResumeIntakePage() {
                 />
               </svg>
               <div>
-                <p className="font-medium text-foreground">
+                <p className="font-medium text-t-white">
                   Drop your file here, or tap to browse
                 </p>
-                <p className="text-sm text-muted mt-1">
+                <p className="text-sm text-t-phos-dim mt-1">
                   PDF, Word, image, or screenshot
                 </p>
               </div>
@@ -531,11 +531,11 @@ export default function ResumeIntakePage() {
         />
 
         {uploadError && (
-          <div className="mt-4 p-4 rounded-xl bg-warm-50 border border-warm-200">
-            <p className="text-sm text-warm-700">{uploadError}</p>
+          <div className="mt-4 p-4 bg-t-panel border border-t-red">
+            <p className="text-sm text-t-red">{uploadError}</p>
             <button
               onClick={handleNoResume}
-              className="text-sm text-sage-600 underline mt-2"
+              className="text-sm text-t-amber-bright underline mt-2"
             >
               Or build one with our help instead
             </button>
@@ -557,9 +557,9 @@ export default function ResumeIntakePage() {
         onAction={() => setActivePath("upload")}
       >
         <div className="space-y-4">
-          <div className="bg-white rounded-xl p-5 border border-border">
-            <h3 className="font-semibold mb-2">From LinkedIn</h3>
-            <ol className="text-sm text-muted space-y-1.5 list-decimal list-inside">
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white mb-2">From LinkedIn</h3>
+            <ol className="text-sm text-t-phos-dim space-y-1.5 list-decimal list-inside">
               <li>Go to your LinkedIn profile</li>
               <li>
                 Click the &quot;More&quot; button below your profile photo
@@ -569,16 +569,16 @@ export default function ResumeIntakePage() {
             </ol>
           </div>
 
-          <div className="bg-white rounded-xl p-5 border border-border">
-            <h3 className="font-semibold mb-2">From Indeed</h3>
-            <ol className="text-sm text-muted space-y-1.5 list-decimal list-inside">
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white mb-2">From Indeed</h3>
+            <ol className="text-sm text-t-phos-dim space-y-1.5 list-decimal list-inside">
               <li>
                 Go to{" "}
                 <a
                   href="https://profile.indeed.com/resume"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sky-600 underline"
+                  className="text-t-steel underline"
                 >
                   profile.indeed.com/resume
                 </a>
@@ -606,7 +606,7 @@ export default function ResumeIntakePage() {
         footer={
           <button
             onClick={handleNoResume}
-            className="text-sage-600 underline underline-offset-2"
+            className="text-t-amber-bright underline underline-offset-2"
           >
             I&apos;d rather build one here with help
           </button>
@@ -635,13 +635,13 @@ export default function ResumeIntakePage() {
               href={builder.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all"
+              className="t-focus block w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all"
             >
-              <span className="font-medium text-sky-600">{builder.name}</span>
-              <span className="ml-1 text-muted text-sm">
+              <span className="font-medium text-t-steel">{builder.name}</span>
+              <span className="ml-1 text-t-phos-dim text-sm">
                 &#8599;
               </span>
-              <p className="text-sm text-muted mt-0.5">{builder.note}</p>
+              <p className="text-sm text-t-phos-dim mt-0.5">{builder.note}</p>
             </a>
           ))}
         </div>
@@ -801,9 +801,9 @@ function GuidedBuilder({
   }
 
   const inputClass =
-    "w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch";
+    "w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch";
   const textareaClass =
-    "w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y min-h-[140px]";
+    "w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[140px]";
 
   // --- Intro ---
   if (step === "intro") {
@@ -817,21 +817,21 @@ function GuidedBuilder({
         onBack={goBack}
       >
         <div className="space-y-4">
-          <div className="bg-sage-50 rounded-xl p-5 border border-sage-200">
-            <p className="text-sm text-foreground leading-relaxed mb-3">
-              This takes <strong>15-20 minutes</strong> if you do it right. That&apos;s not a lot
+          <div className="bg-t-panel p-5 border border-t-line">
+            <p className="text-sm text-t-phos leading-relaxed mb-3">
+              This takes <strong className="text-t-white">15-20 minutes</strong> if you do it right. That&apos;s not a lot
               of time to invest in something this important -- but it only works if you take it
               seriously.
             </p>
-            <p className="text-sm text-muted leading-relaxed">
+            <p className="text-sm text-t-phos-dim leading-relaxed">
               We go section by section: contact info, work history, skills, education.
               Answer each question in your own words. Don&apos;t try to make it sound
               fancy. Just tell us what&apos;s true.
             </p>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-border">
-            <p className="text-xs font-medium text-foreground mb-1">A note on gaps</p>
-            <p className="text-xs text-muted leading-relaxed">
+          <div className="bg-t-panel-2 p-4 border border-t-line">
+            <p className="text-xs font-medium text-t-white mb-1">A note on gaps</p>
+            <p className="text-xs text-t-phos-dim leading-relaxed">
               If you have gaps in your history -- incarceration, family obligations, health,
               or anything else -- you don&apos;t need to hide or explain them here.
               Just include what you have. The Forge helps you figure out how to
@@ -877,14 +877,14 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
         footer={
-          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+          <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
             Skip for now
           </button>
         }
       >
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Phone</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Phone</label>
             <input
               value={answers.phone}
               onChange={(e) => set("phone", e.target.value)}
@@ -895,7 +895,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Email</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Email</label>
             <input
               value={answers.email}
               onChange={(e) => set("email", e.target.value)}
@@ -905,7 +905,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">City, State</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">City, State</label>
             <input
               value={answers.city}
               onChange={(e) => set("city", e.target.value)}
@@ -932,7 +932,7 @@ function GuidedBuilder({
       >
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Job title</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
             <input
               value={answers.job1Title}
               onChange={(e) => set("job1Title", e.target.value)}
@@ -942,7 +942,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Company or organization</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
             <input
               value={answers.job1Company}
               onChange={(e) => set("job1Company", e.target.value)}
@@ -951,7 +951,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">When? (approximate is fine)</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">When? (approximate is fine)</label>
             <input
               value={answers.job1Dates}
               onChange={(e) => set("job1Dates", e.target.value)}
@@ -1003,17 +1003,17 @@ function GuidedBuilder({
         <div className="flex flex-col gap-3">
           <button
             onClick={() => { set("addJob2", true); setStep("job2-info"); }}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-sage-300 bg-sage-50 hover:border-sage-400 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
-            <span className="font-medium">Yes -- add another job</span>
-            <p className="text-sm text-muted mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
+            <span className="font-medium text-t-white">Yes -- add another job</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
           </button>
           <button
             onClick={() => { set("addJob2", false); setStep("skills"); }}
-            className="w-full text-left px-5 py-4 rounded-xl border-2 border-border bg-white hover:border-sage-300 transition-all min-h-touch"
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium">No -- that's my history</span>
-            <p className="text-sm text-muted mt-0.5">Continue to skills and certifications</p>
+            <span className="font-medium text-t-white">No -- that's my history</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">Continue to skills and certifications</p>
           </button>
         </div>
       </FlowPage>
@@ -1034,7 +1034,7 @@ function GuidedBuilder({
       >
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Job title</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
             <input
               value={answers.job2Title}
               onChange={(e) => set("job2Title", e.target.value)}
@@ -1044,7 +1044,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">Company or organization</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
             <input
               value={answers.job2Company}
               onChange={(e) => set("job2Company", e.target.value)}
@@ -1053,7 +1053,7 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted block mb-1">When?</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">When?</label>
             <input
               value={answers.job2Dates}
               onChange={(e) => set("job2Dates", e.target.value)}
@@ -1102,7 +1102,7 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
         footer={
-          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+          <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
             Skip for now
           </button>
         }
@@ -1130,7 +1130,7 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
         footer={
-          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+          <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
             Skip for now
           </button>
         }
@@ -1158,7 +1158,7 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
         footer={
-          <button onClick={goNext} className="text-muted text-sm underline underline-offset-2">
+          <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
             Skip -- that&apos;s everything
           </button>
         }
@@ -1188,20 +1188,20 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
       >
-        <div className="bg-sage-50 rounded-xl border border-sage-200 overflow-hidden mb-4">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-sage-200 bg-sage-100">
-            <p className="text-xs font-semibold text-sage-700 uppercase tracking-wide">
+        <div className="bg-t-panel border border-t-line overflow-hidden mb-4">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
+            <p className="text-xs font-semibold text-t-phos uppercase tracking-wide">
               Your resume draft
             </p>
-            <p className="text-xs text-sage-500">{assembled.length} characters</p>
+            <p className="text-xs text-t-phos-dim">{assembled.length} characters</p>
           </div>
           <div className="p-4 max-h-80 overflow-y-auto">
-            <pre className="text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">
+            <pre className="text-xs text-t-phos whitespace-pre-wrap leading-relaxed">
               {assembled}
             </pre>
           </div>
         </div>
-        <p className="text-xs text-muted">
+        <p className="text-xs text-t-phos-dim">
           This is the raw material for the Forge analysis. The AI transforms it
           into a structured career narrative -- you&apos;ll see the full output at the end.
         </p>
@@ -1244,7 +1244,7 @@ function PasteResume({
       showBack
       onBack={onBack}
       footer={
-        <p className="text-xs text-muted">
+        <p className="text-xs text-t-phos-dim">
           Minimum 20 characters. Just get the basics in there.
         </p>
       }
@@ -1254,11 +1254,11 @@ function PasteResume({
         onChange={(e) => setText(e.target.value)}
         placeholder={"Paste your resume here...\n\nExample:\nJohn Smith\nForklift Operator with 5 years experience\n\nWork History:\nWarehouse Associate, Amazon, 2019-2024\n- Operated forklift and pallet jack\n- Trained new team members"}
         rows={10}
-        className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y min-h-[200px]"
+        className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[200px]"
         autoFocus
       />
       {text.length > 0 && text.trim().length < 20 && (
-        <p className="text-xs text-warm-600 mt-2">
+        <p className="text-xs text-t-amber-bright mt-2">
           Keep going. We need a little more to work with.
         </p>
       )}

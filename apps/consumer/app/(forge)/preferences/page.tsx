@@ -98,8 +98,8 @@ export default function PreferencesPage() {
       {!isDemo && <ForgeAccumulator />}
 
       {isDemo && (
-        <div className="bg-amber-50 rounded-xl px-4 py-3 mb-4 border border-amber-200">
-          <p className="text-sm text-amber-800 font-medium">
+        <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
+          <p className="text-sm text-t-amber-bright font-medium">
             Demo mode — sample preferences pre-selected
           </p>
         </div>
@@ -107,7 +107,7 @@ export default function PreferencesPage() {
       <div className="space-y-8">
         {/* Schedule */}
         <div>
-          <h3 className="font-medium text-foreground mb-3">
+          <h3 className="font-medium text-t-white mb-3">
             What schedule works for you?
           </h3>
           <CardSelect
@@ -119,7 +119,7 @@ export default function PreferencesPage() {
 
         {/* Environment */}
         <div>
-          <h3 className="font-medium text-foreground mb-3">
+          <h3 className="font-medium text-t-white mb-3">
             What kind of work environment?
           </h3>
           <CardSelect
@@ -131,7 +131,7 @@ export default function PreferencesPage() {
 
         {/* Commute */}
         <div>
-          <h3 className="font-medium text-foreground mb-3">
+          <h3 className="font-medium text-t-white mb-3">
             How far can you travel to work?
           </h3>
           <CardSelect
@@ -145,17 +145,17 @@ export default function PreferencesPage() {
         <div>
           <label
             htmlFor="location-input"
-            className="font-medium text-foreground block mb-2"
+            className="font-medium text-t-white block mb-2"
           >
             Where are you located?{" "}
-            <span className="font-normal text-muted text-sm">(optional)</span>
+            <span className="font-normal text-t-phos-dim text-sm">(optional)</span>
           </label>
           <input
             id="location-input"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="e.g., Milwaukee, WI or just a zip code"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
         </div>
       </div>
