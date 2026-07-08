@@ -446,33 +446,33 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
   // --- Step 1: Assess ---
   if (step === "assess") {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Disclosure Planner
         </h1>
         <GhostGuide message={getOpusMessage("disclosure")} pageId="disclosure" />
-        <p className="text-body text-muted mb-2">
+        <p className="text-base text-t-phos-dim mb-2">
           Knowing when and how to talk about your record makes all the
           difference. Let&apos;s build a plan together.
         </p>
-        <p className="text-sm text-muted mb-8">
+        <p className="text-sm text-t-phos-dim mb-8">
           Disclosure happens in person, face-to-face — never on paper. This
           tool helps you prepare and practice what to say.
         </p>
 
         {/* Lead with your strengths — from Forge */}
         {hasForgeData && (
-          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-8">
-            <h2 className="font-semibold text-sage-800 mb-1">
+          <div className="bg-t-panel p-5 border border-t-line mb-8">
+            <h2 className="font-semibold text-t-amber-bright mb-1">
               Lead with your strengths
             </h2>
-            <p className="text-xs text-sage-600 mb-3">
+            <p className="text-xs text-t-phos-dim mb-3">
               From your Forge career analysis -- edit anytime, add your own, or
               go deeper. These are what you pivot to after you disclose.
             </p>
 
             {forge.headline && (
-              <p className="text-sm font-medium text-foreground mb-3">
+              <p className="text-sm font-medium text-t-white mb-3">
                 {forge.headline}
               </p>
             )}
@@ -481,10 +481,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               {forge.strengths.map((s, i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-xl px-4 py-3 border border-sage-100"
+                  className="bg-t-panel-2 px-4 py-3 border border-t-line"
                 >
                   <div className="flex items-start gap-2">
-                    <span className="text-sage-500 font-bold text-sm mt-2.5 flex-shrink-0">
+                    <span className="text-t-amber font-bold text-sm mt-2.5 flex-shrink-0">
                       {i + 1}.
                     </span>
                     <div className="flex-1 space-y-1.5">
@@ -492,21 +492,21 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                         value={s.title}
                         onChange={(e) => updateStrength(i, "title", e.target.value)}
                         placeholder="A strength (e.g., Reliable under pressure)"
-                        className="w-full px-3 py-2 rounded-lg border border-sage-200 text-sm font-medium text-foreground bg-white focus:border-sage-500 transition-colors"
+                        className="w-full px-3 py-2 border border-t-line text-sm font-medium text-t-white bg-t-panel focus:border-t-amber focus:outline-none transition-colors"
                       />
                       <textarea
                         value={s.evidence}
                         onChange={(e) => updateStrength(i, "evidence", e.target.value)}
                         placeholder="The proof -- a specific example an employer would believe."
                         rows={2}
-                        className="w-full px-3 py-2 rounded-lg border border-sage-200 text-xs text-muted bg-white focus:border-sage-500 transition-colors resize-y"
+                        className="w-full px-3 py-2 border border-t-line text-xs text-t-phos-dim bg-t-panel focus:border-t-amber focus:outline-none transition-colors resize-y"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => removeStrength(i)}
                       title="Remove this strength"
-                      className="text-muted hover:text-red-500 text-xl leading-none mt-1 flex-shrink-0"
+                      className="text-t-phos-dim hover:text-t-red text-xl leading-none mt-1 flex-shrink-0"
                     >
                       &times;
                     </button>
@@ -518,12 +518,12 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             <button
               type="button"
               onClick={addStrength}
-              className="mt-3 text-sm font-medium text-sage-700 hover:text-sage-900 transition-colors"
+              className="mt-3 text-sm font-medium text-t-amber-bright hover:text-t-amber transition-colors"
             >
               + Add a strength
             </button>
 
-            <p className="text-xs text-sage-600 mt-3 italic">
+            <p className="text-xs text-t-phos-dim mt-3 italic">
               Good disclosure follows a simple pattern: acknowledge briefly,
               then pivot to these strengths. Your record is one chapter —
               these are the rest of the book.
@@ -533,9 +533,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Target job */}
         <div className="mb-6">
-          <label className="text-sm font-medium block mb-1">
+          <label className="text-sm font-medium text-t-white block mb-1">
             Target job{" "}
-            <span className="font-normal text-muted">
+            <span className="font-normal text-t-phos-dim">
               (so we can tailor your plan)
             </span>
           </label>
@@ -547,48 +547,48 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                 ? `e.g., ${forge.careerPaths[0].title}`
                 : "e.g., Warehouse Associate, CNC Operator"
             }
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
           />
         </div>
 
         {/* Target company (from URL param) */}
         {targetCompany && (
           <div className="mb-6">
-            <label className="text-sm font-medium block mb-1">Target employer</label>
+            <label className="text-sm font-medium text-t-white block mb-1">Target employer</label>
             <input
               value={targetCompany}
               onChange={(e) => setTargetCompany(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
           </div>
         )}
 
         {/* Personalized vs generic -- motivate the deeper path */}
         {!consentGiven && !showConsentGate && (
-          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-8">
-            <h3 className="font-semibold text-sky-900 mb-2">
+          <div className="bg-t-panel p-5 border border-t-steel mb-8">
+            <h3 className="font-semibold text-t-steel mb-2">
               Build a plan around you, or grab a generic template
             </h3>
-            <p className="text-sm text-sky-700 leading-relaxed mb-3">
+            <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
               Answer a few questions about your record, your strengths, and the job
               you want, and I build a disclosure plan for your exact situation -- the
               words to say, when to say them, and your rights in your state. Skip it
               and you get a generic template you will have to rewrite yourself.
             </p>
-            <p className="text-xs text-sky-600 mb-4">
+            <p className="text-xs text-t-phos-dim mb-4">
               Your details are never put on paper, never shared, and you can delete
               them anytime.
             </p>
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowConsentGate(true)}
-                className="px-4 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 transition-colors"
+                className="t-focus px-4 py-2.5 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 transition-colors"
               >
                 Build my personalized plan
               </button>
               <button
                 onClick={() => setConsentGiven(true)}
-                className="px-4 py-2.5 text-sky-600 text-sm font-medium hover:text-sky-800 transition-colors"
+                className="px-4 py-2.5 text-t-steel text-sm font-medium hover:opacity-80 transition-colors"
               >
                 Use a generic template
               </button>
@@ -597,15 +597,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         )}
 
         {showConsentGate && !consentGiven && (
-          <div className="bg-white rounded-2xl p-6 border-2 border-sky-300 mb-8">
-            <h3 className="font-bold text-foreground mb-4 text-lg">
+          <div className="bg-t-panel p-6 border border-t-steel mb-8">
+            <h3 className="font-bold text-t-white mb-4 text-lg">
               Before we continue
             </h3>
 
-            <div className="space-y-4 text-sm text-foreground leading-relaxed mb-6">
+            <div className="space-y-4 text-sm text-t-phos leading-relaxed mb-6">
               <div>
-                <p className="font-semibold mb-1">What we&apos;ll ask:</p>
-                <ul className="text-muted space-y-1 ml-4">
+                <p className="font-semibold text-t-white mb-1">What we&apos;ll ask:</p>
+                <ul className="text-t-phos-dim space-y-1 ml-4">
                   <li>Type of conviction and approximate date</li>
                   <li>Current supervision status</li>
                   <li>State where it occurred</li>
@@ -613,8 +613,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               </div>
 
               <div>
-                <p className="font-semibold mb-1">What we do with it:</p>
-                <ul className="text-muted space-y-1 ml-4">
+                <p className="font-semibold text-t-white mb-1">What we do with it:</p>
+                <ul className="text-t-phos-dim space-y-1 ml-4">
                   <li>Craft a disclosure script specific to this employer</li>
                   <li>Prepare you for follow-up questions they&apos;ll likely ask</li>
                   <li>Identify legal protections in your state</li>
@@ -622,16 +622,16 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               </div>
 
               <div>
-                <p className="font-semibold mb-1">What we NEVER do:</p>
-                <ul className="text-muted space-y-1 ml-4">
+                <p className="font-semibold text-t-white mb-1">What we NEVER do:</p>
+                <ul className="text-t-phos-dim space-y-1 ml-4">
                   <li>Put any of this on your resume or cover letter</li>
                   <li>Share it with anyone — ever</li>
                   <li>Store it longer than you want — delete anytime in Settings</li>
                 </ul>
               </div>
 
-              <div className="bg-sage-50 rounded-xl p-4 border border-sage-200">
-                <p className="text-xs text-sage-700 leading-relaxed">
+              <div className="bg-t-panel-2 p-4 border border-t-line">
+                <p className="text-xs text-t-phos leading-relaxed">
                   Research shows candidates who prepare their disclosure are significantly
                   more likely to receive a job offer compared to those who don&apos;t address
                   it or improvise in the moment. (Bushway & Apel, 2012; Maruna, 2001)
@@ -645,7 +645,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                   setConsentGiven(true);
                   setShowConsentGate(false);
                 }}
-                className="px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 I understand — let&apos;s prepare
               </button>
@@ -654,7 +654,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                   setConsentGiven(true);
                   setShowConsentGate(false);
                 }}
-                className="px-4 py-3 text-muted text-sm hover:text-foreground transition-colors min-h-touch"
+                className="px-4 py-3 text-t-phos-dim text-sm hover:text-t-white transition-colors min-h-touch"
               >
                 Not now — basic guidance
               </button>
@@ -666,7 +666,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         <div className={`space-y-4 mb-8 ${!consentGiven ? "opacity-40 pointer-events-none" : ""}`}>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label className="text-sm font-medium text-t-white block mb-1">
                 Type of charge
               </label>
               <select
@@ -674,7 +674,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                 onChange={(e) =>
                   setRecord({ ...record, type: e.target.value })
                 }
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white min-h-touch"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
                 <option value="">Select...</option>
                 <option value="misdemeanor">Misdemeanor</option>
@@ -683,7 +683,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label className="text-sm font-medium text-t-white block mb-1">
                 How long ago?
               </label>
               <select
@@ -691,7 +691,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                 onChange={(e) =>
                   setRecord({ ...record, most_recent: e.target.value })
                 }
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white min-h-touch"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
                 <option value="">Select...</option>
                 <option value="<1 year">Less than 1 year</option>
@@ -704,9 +704,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
 
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               Your state{" "}
-              <span className="font-normal text-muted">
+              <span className="font-normal text-t-phos-dim">
                 (for ban-the-box laws)
               </span>
             </label>
@@ -720,14 +720,14 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               }
               placeholder="e.g., WI, IL, MI"
               maxLength={2}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
           </div>
         </div>
 
         {/* When do you plan to disclose? */}
         <div className="mb-8">
-          <h2 className="font-medium text-foreground mb-3">
+          <h2 className="font-medium text-t-white mb-3">
             When are you thinking about disclosing?
           </h2>
           <CardSelect
@@ -738,15 +738,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         </div>
 
         {rateLimitError && (
-          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mb-4">
-            <p className="text-sm text-amber-800">{rateLimitError}</p>
+          <div className="bg-t-panel p-4 border border-t-amber mb-4">
+            <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
           </div>
         )}
 
         <button
           onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); setStep("deepen"); }}
           disabled={!record.type}
-          className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+          className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
         >
           Next: a few quick questions
         </button>
@@ -786,19 +786,19 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       },
     ];
     return (
-      <div className="max-w-2xl">
+      <div className="max-w-2xl font-term">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-t-white">
             A few questions, so this plan is really yours
           </h1>
           <button
             onClick={() => setStep("assess")}
-            className="text-sm text-muted hover:text-foreground"
+            className="text-sm text-t-phos-dim hover:text-t-white"
           >
             Back
           </button>
         </div>
-        <p className="text-sm text-muted mb-6">
+        <p className="text-sm text-t-phos-dim mb-6">
           The more real you get here, the more your plan sounds like you and not a
           template. I will read your answers and may ask a follow-up or two.
         </p>
@@ -816,9 +816,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         />
 
         {generating && (
-          <div className="mt-4 flex items-center gap-3 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200">
-            <div className="w-4 h-4 border-2 border-sage-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-            <p className="text-sm text-sage-800">
+          <div className="mt-4 flex items-center gap-3 bg-t-panel px-4 py-3 border border-t-line">
+            <div className="w-4 h-4 border-2 border-t-amber border-t-transparent animate-spin flex-shrink-0" />
+            <p className="text-sm text-t-phos">
               Building your plan around what you shared -- this usually takes
               about 30 seconds.
             </p>
@@ -826,15 +826,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         )}
 
         {rateLimitError && (
-          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mt-4">
-            <p className="text-sm text-amber-800">{rateLimitError}</p>
+          <div className="bg-t-panel p-4 border border-t-amber mt-4">
+            <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
           </div>
         )}
 
         <button
           onClick={() => generatePlan()}
           disabled={generating}
-          className="mt-4 text-sm text-muted hover:text-foreground transition-colors disabled:opacity-50"
+          className="mt-4 text-sm text-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
         >
           Skip the questions and build a basic plan
         </button>
@@ -849,15 +849,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       {showCelebration && (
         <MilestoneCelebration onDone={() => setShowCelebration(false)} />
       )}
-      <div className="max-w-2xl">
+      <div className="max-w-2xl font-term">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-t-white">
             Your Disclosure Plan
           </h1>
           <div className="flex items-center gap-3">
             <button
               onClick={downloadPlan}
-              className="text-sm font-medium text-sage-700 hover:text-sage-900 flex items-center gap-1.5 transition-colors"
+              className="text-sm font-medium text-t-amber-bright hover:text-t-amber flex items-center gap-1.5 transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" strokeLinecap="round" strokeLinejoin="round"/>
@@ -866,7 +866,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             </button>
             <button
               onClick={() => { setAdjustPanelOpen((o) => !o); setAdjustQuery(""); }}
-              className="text-sm text-muted hover:text-foreground transition-colors"
+              className="text-sm text-t-phos-dim hover:text-t-white transition-colors"
             >
               Adjust
             </button>
@@ -874,23 +874,23 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         </div>
 
         {/* Non-negotiable framing: coaching, never legal advice (master plan s.16) */}
-        <div className="bg-warm-50 rounded-xl px-4 py-3 border border-warm-200 mb-4">
-          <p className="text-xs text-earth-700 leading-relaxed">
-            <span className="font-semibold">This is career coaching, not legal advice.</span>{" "}
+        <div className="bg-t-panel px-4 py-3 border border-t-line mb-4">
+          <p className="text-xs text-t-phos leading-relaxed">
+            <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
             Laws change and every situation is different -- for legal guidance,
             contact a reentry attorney or free legal aid in your area.
           </p>
         </div>
 
         {/* Persistent confirmation -- the plan is saved to Materials */}
-        <div className="flex items-center justify-between gap-3 bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 mb-6">
-          <p className="text-sm text-sage-800">
+        <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
+          <p className="text-sm text-t-amber-bright">
             <span className="font-semibold">Saved to your Materials.</span> Come
             back to it anytime -- it is private to your account.
           </p>
           <a
             href="/dashboard/vault"
-            className="text-sm font-medium text-sage-700 hover:text-sage-900 whitespace-nowrap"
+            className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
           >
             View Materials
           </a>
@@ -898,9 +898,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Adjust panel -- inline refinement, never a full reset */}
         {adjustPanelOpen && (
-          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
-            <h3 className="font-semibold text-sky-900 mb-1">What would you like to change?</h3>
-            <p className="text-xs text-sky-700 mb-3">
+          <div className="bg-t-panel p-5 border border-t-steel mb-6">
+            <h3 className="font-semibold text-t-steel mb-1">What would you like to change?</h3>
+            <p className="text-xs text-t-phos-dim mb-3">
               Pick a quick option or describe it yourself -- we will refine your plan without starting over.
             </p>
             <div className="flex flex-wrap gap-2 mb-3">
@@ -914,10 +914,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                 <button
                   key={chip}
                   onClick={() => setAdjustQuery(chip)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  className={`t-focus px-3 py-1.5 text-xs font-medium border transition-colors ${
                     adjustQuery === chip
-                      ? "bg-sky-600 text-white border-sky-600"
-                      : "bg-white text-sky-700 border-sky-300 hover:border-sky-500"
+                      ? "bg-t-steel text-[#14100a] border-t-steel"
+                      : "bg-t-panel text-t-steel border-t-line hover:border-t-steel"
                   }`}
                 >
                   {chip}
@@ -929,19 +929,19 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               onChange={(e) => setAdjustQuery(e.target.value)}
               placeholder="Or describe what to adjust..."
               rows={2}
-              className="w-full px-4 py-3 rounded-xl border-2 border-sky-200 text-sm bg-white focus:border-sky-500 resize-none mb-3"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-steel focus:outline-none resize-none mb-3"
             />
             <div className="flex items-center gap-3">
               <button
                 onClick={refinePlan}
                 disabled={!adjustQuery.trim() || adjusting}
-                className="px-5 py-2.5 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 disabled:bg-gray-300 transition-colors"
+                className="t-focus px-5 py-2.5 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-colors"
               >
                 {adjusting ? "Refining..." : "Refine My Plan"}
               </button>
               <button
                 onClick={() => { setAdjustPanelOpen(false); setStep("assess"); }}
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="text-sm text-t-phos-dim hover:text-t-white transition-colors"
               >
                 Start over instead
               </button>
@@ -950,9 +950,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         )}
 
         {/* In-person philosophy callout */}
-        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 mb-6">
-          <p className="text-sm text-amber-800">
-            <span className="font-semibold">Remember:</span> Disclosure is a
+        <div className="bg-t-panel-2 p-4 border border-t-amber mb-6">
+          <p className="text-sm text-t-phos">
+            <span className="font-semibold text-t-amber-bright">Remember:</span> Disclosure is a
             conversation, not a checkbox. It happens face-to-face, where you
             control the narrative with your voice and your presence.
           </p>
@@ -960,11 +960,11 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Strengths to pivot to */}
         {forge.strengths.length > 0 && (
-          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-6">
-            <h2 className="font-semibold text-sage-800 mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-6">
+            <h2 className="font-semibold text-t-amber-bright mb-2">
               Your pivot points
             </h2>
-            <p className="text-xs text-sage-600 mb-3">
+            <p className="text-xs text-t-phos-dim mb-3">
               After a brief acknowledgment, pivot to these. They are real,
               they are yours, and they are what the employer needs to hear.
             </p>
@@ -972,7 +972,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               {forge.strengths.map((s, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white border border-sage-200 text-sm text-foreground font-medium"
+                  className="inline-flex items-center px-3 py-1.5 bg-t-panel-2 border border-t-line text-sm text-t-white font-medium"
                 >
                   {s.title}
                 </span>
@@ -983,9 +983,9 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Timing guidance */}
         {plan.timing_advice && (
-          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
-            <h2 className="font-semibold text-sky-800 mb-2">When to disclose</h2>
-            <p className="text-sm text-sky-700 leading-relaxed">
+          <div className="bg-t-panel p-5 border border-t-steel mb-6">
+            <h2 className="font-semibold text-t-steel mb-2">When to disclose</h2>
+            <p className="text-sm text-t-phos leading-relaxed">
               {plan.timing_advice}
             </p>
           </div>
@@ -993,11 +993,11 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Legal context */}
         {plan.legal_context && (
-          <div className="bg-warm-50 rounded-2xl p-5 border border-warm-200 mb-6">
-            <h2 className="font-semibold text-earth-800 mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-6">
+            <h2 className="font-semibold text-t-white mb-2">
               Know your rights
             </h2>
-            <p className="text-sm text-earth-700 leading-relaxed">
+            <p className="text-sm text-t-phos leading-relaxed">
               {plan.legal_context}
             </p>
           </div>
@@ -1005,14 +1005,14 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* The script */}
         {plan.script && (
-          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-6">
-            <h2 className="font-semibold text-sage-800 mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-6">
+            <h2 className="font-semibold text-t-amber-bright mb-2">
               What to say
             </h2>
-            <blockquote className="text-sm text-foreground leading-relaxed italic border-l-4 border-sage-400 pl-4">
+            <blockquote className="text-sm text-t-white leading-relaxed italic border-l-2 border-t-amber pl-4">
               &ldquo;{plan.script}&rdquo;
             </blockquote>
-            <p className="text-xs text-muted mt-3">
+            <p className="text-xs text-t-phos-dim mt-3">
               This is a starting point. Practice it out loud until it sounds
               natural in your voice.
             </p>
@@ -1021,12 +1021,12 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         {/* Tips */}
         {plan.tips && plan.tips.length > 0 && (
-          <div className="bg-white rounded-2xl p-5 border border-border mb-6">
-            <h2 className="font-semibold text-foreground mb-2">Key tips</h2>
+          <div className="bg-t-panel p-5 border border-t-line mb-6">
+            <h2 className="font-semibold text-t-white mb-2">Key tips</h2>
             <ul className="space-y-2">
               {plan.tips.map((tip: string, i: number) => (
-                <li key={i} className="text-sm text-muted flex gap-2">
-                  <span className="text-sage-500 flex-shrink-0">•</span>
+                <li key={i} className="text-sm text-t-phos-dim flex gap-2">
+                  <span className="text-t-amber flex-shrink-0">•</span>
                   {tip}
                 </li>
               ))}
@@ -1042,7 +1042,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               : "Hi there. Thanks for coming in today. So, tell me a little about yourself and why you're interested in this position.";
             setRehearsalMessages([{ role: "assistant", content: opener }]);
           }}
-          className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+          className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Practice the Conversation
         </button>
@@ -1053,20 +1053,20 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
   // --- Step 3: Rehearse ---
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl font-term">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-t-white">
             Practice Mode
           </h1>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-t-phos-dim">
             Practice disclosing with a simulated hiring manager
             {targetJob ? ` for a ${targetJob} role` : ""}.
           </p>
         </div>
         <button
           onClick={() => setStep("plan")}
-          className="text-sm text-muted hover:text-foreground"
+          className="text-sm text-t-phos-dim hover:text-t-white"
         >
           Back to plan
         </button>
@@ -1074,15 +1074,15 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
       {/* Strength reminders — compact chips above the chat */}
       {forge.strengths.length > 0 && (
-        <div className="bg-sage-50 rounded-xl px-4 py-3 border border-sage-200 mb-4">
-          <p className="text-xs text-sage-700 font-medium mb-1.5">
+        <div className="bg-t-panel px-4 py-3 border border-t-line mb-4">
+          <p className="text-xs text-t-amber-bright font-medium mb-1.5">
             Pivot to your strengths:
           </p>
           <div className="flex flex-wrap gap-1.5">
             {forge.strengths.map((s, i) => (
               <span
                 key={i}
-                className="text-xs px-2 py-1 rounded-md bg-white border border-sage-200 text-sage-800"
+                className="text-xs px-2 py-1 bg-t-panel-2 border border-t-line text-t-phos"
               >
                 {s.title}
               </span>
@@ -1092,7 +1092,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       )}
 
       {/* Chat */}
-      <div className="bg-white rounded-2xl border border-border mb-4">
+      <div className="bg-t-panel border border-t-line mb-4">
         <div className="p-5 space-y-4 max-h-[400px] overflow-y-auto">
           {rehearsalMessages.map((msg, i) => (
             <div
@@ -1100,10 +1100,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-sage-600 text-white rounded-br-sm"
-                    : "bg-gray-100 text-foreground rounded-bl-sm"
+                    ? "bg-t-amber text-[#14100a]"
+                    : "bg-t-panel-2 text-t-white border border-t-line"
                 }`}
               >
                 {msg.content}
@@ -1112,10 +1112,10 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           ))}
           {rehearsing && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1">
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.2s]" />
+              <div className="bg-t-panel-2 border border-t-line px-4 py-3 flex gap-1">
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce" />
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.1s]" />
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.2s]" />
               </div>
             </div>
           )}
@@ -1127,16 +1127,16 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             e.preventDefault();
             sendRehearsalMessage();
           }}
-          className="flex gap-2 p-4 border-t border-border"
+          className="flex gap-2 p-4 border-t border-t-line"
         >
           <button
             type="button"
             onClick={startVoice}
             title={recording ? "Stop recording" : "Speak your response"}
-            className={`p-3 rounded-xl border-2 transition-colors min-h-touch flex-shrink-0 ${
+            className={`t-focus p-3 border transition-colors min-h-touch flex-shrink-0 ${
               recording
-                ? "bg-red-50 border-red-400 text-red-600 animate-pulse"
-                : "border-border text-muted hover:border-sage-400 hover:text-sage-600"
+                ? "bg-t-panel-2 border-t-red text-t-red animate-pulse"
+                : "border-t-line text-t-phos-dim hover:border-t-amber hover:text-t-amber-bright"
             }`}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1150,13 +1150,13 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             value={rehearsalInput}
             onChange={(e) => setRehearsalInput(e.target.value)}
             placeholder={recording ? "Listening..." : "Respond to the interviewer..."}
-            className="flex-1 px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 min-h-touch"
+            className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             disabled={rehearsing}
           />
           <button
             type="submit"
             disabled={rehearsing || !rehearsalInput.trim()}
-            className="px-4 py-3 bg-sage-600 text-white rounded-xl hover:bg-sage-700 disabled:bg-gray-300 min-h-touch"
+            className="t-focus px-4 py-3 bg-t-amber text-[#14100a] font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
             Send
           </button>
@@ -1164,12 +1164,12 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       </div>
 
       {rateLimitError && (
-        <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mb-4">
-          <p className="text-sm text-amber-800">{rateLimitError}</p>
+        <div className="bg-t-panel p-4 border border-t-amber mb-4">
+          <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
         </div>
       )}
 
-      <p className="text-xs text-muted text-center">
+      <p className="text-xs text-t-phos-dim text-center">
         This is a safe space to rehearse, and we never save your words from this
         practice. Your disclosure plan is saved privately to your account so you
         can come back and refine it, and it is never shared unless you choose to
@@ -1177,11 +1177,11 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       </p>
 
       {/* t.ROY nudge */}
-      <div className="mt-6 bg-sage-50 rounded-xl p-4 border border-sage-200 text-center">
-        <p className="text-sm font-medium text-sage-800 mb-1">
+      <div className="mt-6 bg-t-panel px-4 py-4 border border-t-line text-center">
+        <p className="text-sm font-medium text-t-amber-bright mb-1">
           Want live coaching on your response?
         </p>
-        <p className="text-xs text-sage-600">
+        <p className="text-xs text-t-phos-dim">
           Ask t.ROY -- the AI assistant available on every page. It knows your
           Forge profile and can help you sharpen your pivot in real time.
           Hit the &ldquo;Ask t.ROY&rdquo; button to open it.
@@ -1200,7 +1200,7 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
   const particles = Array.from({ length: 38 }, (_, i) => ({
     id: i,
     x: 5 + (i % 12) * 8 + Math.sin(i * 1.3) * 4,
-    color: ["#4D7C5A","#8FA876","#C4A35A","#D4B896","#E8E0D0","#6B9E7A","#A8C5B0"][i % 7],
+    color: ["#D4A84B","#E8C060","#9FBF8F","#6D8562","#E9E6DA","#7FA3B5"][i % 6],
     delay: (i % 8) * 0.07,
     dur: 1.4 + (i % 5) * 0.22,
     size: 5 + (i % 4),
@@ -1208,7 +1208,7 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
   }));
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden font-term">
       {particles.map((p) => (
         <div
           key={p.id}
@@ -1219,7 +1219,6 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
             width: p.size,
             height: p.size * 1.6,
             backgroundColor: p.color,
-            borderRadius: 2,
             opacity: 0,
             animation: `smr-confetti ${p.dur}s ${p.delay}s ease-in forwards`,
             transform: `rotate(${p.rotate}deg)`,
@@ -1232,19 +1231,18 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
       >
         <div
           style={{
-            background: "white",
-            border: "1.5px solid #4D7C5A",
-            borderRadius: 12,
+            background: "#10140F",
+            border: "1px solid #D4A84B",
             padding: "14px 28px",
             textAlign: "center",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            boxShadow: "3px 3px 0 #000",
             animation: "smr-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards",
           }}
         >
-          <p style={{ fontWeight: 700, color: "#2d5a3d", fontSize: 15, margin: 0 }}>
+          <p style={{ fontWeight: 700, color: "#E8C060", fontSize: 15, margin: 0 }}>
             Disclosure Plan Built
           </p>
-          <p style={{ color: "#4D7C5A", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
+          <p style={{ color: "#9FBF8F", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
             Saved to your materials
           </p>
         </div>

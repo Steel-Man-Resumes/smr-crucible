@@ -135,21 +135,21 @@ export function ProgressiveIntake({
   const buttonLabel = canDeepen ? "Continue" : submitLabel;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-term">
       {rounds.map((round, roundIndex) => (
         <div key={roundIndex} className="space-y-4">
           {roundIndex > 0 && (
             <div className="flex items-center gap-2">
-              <span className="h-px flex-1 bg-sage-200" />
-              <span className="text-xs font-medium text-sage-700 uppercase tracking-wide">
+              <span className="h-px flex-1 bg-t-line" />
+              <span className="text-xs font-medium text-t-amber-bright uppercase tracking-wide">
                 A couple of follow-ups, based on what you shared
               </span>
-              <span className="h-px flex-1 bg-sage-200" />
+              <span className="h-px flex-1 bg-t-line" />
             </div>
           )}
           {round.map((q) => (
             <div key={q.id}>
-              <label htmlFor={q.id} className="text-sm font-medium block mb-1">
+              <label htmlFor={q.id} className="text-sm font-medium text-t-white block mb-1">
                 {q.label}
               </label>
               {q.multiline ? (
@@ -159,7 +159,7 @@ export function ProgressiveIntake({
                   onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
                   placeholder={q.placeholder}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors resize-y"
+                  className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
                 />
               ) : (
                 <input
@@ -167,29 +167,29 @@ export function ProgressiveIntake({
                   value={answers[q.id] ?? ""}
                   onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
                   placeholder={q.placeholder}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch focus:border-sage-600 transition-colors"
+                  className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
                 />
               )}
               {q.seedValue && (
-                <p className="text-xs text-sage-600 mt-1">{q.seedNote ?? SEED_NOTE_DEFAULT}</p>
+                <p className="text-xs text-t-phos-dim mt-1">{q.seedNote ?? SEED_NOTE_DEFAULT}</p>
               )}
             </div>
           ))}
         </div>
       ))}
 
-      {error && <p className="text-sm text-amber-700">{error}</p>}
+      {error && <p className="text-sm text-t-amber-bright">{error}</p>}
 
       <div className="flex items-center gap-3">
         <button
           onClick={handleAdvance}
           disabled={thinking || busy || !currentAnswered}
-          className="px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+          className="t-focus px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
         >
           {thinking ? "Reading your answers..." : buttonLabel}
         </button>
         {thinking && (
-          <div className="w-5 h-5 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
         )}
       </div>
     </div>
