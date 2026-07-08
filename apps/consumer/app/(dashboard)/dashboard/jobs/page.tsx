@@ -331,12 +331,12 @@ function JobBoardPage() {
   const savedCount = savedJobs.size;
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold text-foreground mb-2">
+    <div className="max-w-3xl font-term">
+      <h1 className="text-2xl font-bold text-t-white mb-2">
         Job Board
       </h1>
       <GhostGuide message={getOpusMessage("jobs")} pageId="jobs" />
-      <p className="text-body text-muted mb-6">
+      <p className="text-base text-t-phos-dim mb-6">
         Real job listings updated daily. Fair-chance employers highlighted.
         Everything stays right here in your dashboard.
       </p>
@@ -344,10 +344,10 @@ function JobBoardPage() {
       {/* Cross-link into the curated fair-chance lanes (completes the loop) */}
       <Link
         href="/dashboard/resources"
-        className="flex items-center justify-between gap-3 bg-sage-50 border border-sage-200 rounded-xl px-4 py-3 mb-6 hover:bg-sage-100 transition-colors"
+        className="t-focus flex items-center justify-between gap-3 bg-t-panel border border-t-line px-4 py-3 mb-6 hover:border-t-phos-dim transition-colors"
       >
-        <span className="text-sm text-sage-800">
-          <span className="font-semibold">Not sure where to start?</span>{" "}
+        <span className="text-sm text-t-phos">
+          <span className="font-semibold text-t-white">Not sure where to start?</span>{" "}
           Explore curated fair-chance lanes for your field.
         </span>
         <svg
@@ -355,7 +355,7 @@ function JobBoardPage() {
           height="16"
           viewBox="0 0 16 16"
           fill="none"
-          className="text-sage-600 flex-shrink-0"
+          className="text-t-amber flex-shrink-0"
           aria-hidden="true"
         >
           <path
@@ -370,20 +370,20 @@ function JobBoardPage() {
 
       {/* Saved jobs summary */}
       {savedCount > 0 && (
-        <div className="bg-sage-50 rounded-xl p-4 border border-sage-200 mb-6">
+        <div className="bg-t-panel p-4 border border-t-line mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-sm font-semibold text-sage-700">
+              <span className="text-sm font-semibold text-t-amber-bright">
                 {savedCount} saved job{savedCount !== 1 ? "s" : ""}
               </span>
-              <span className="text-xs text-muted ml-2">
+              <span className="text-xs text-t-phos-dim ml-2">
                 {Array.from(savedJobs.values()).filter(
                   (j) => j.status === "applied"
                 ).length}{" "}
                 applied
               </span>
             </div>
-            <span className="text-xs text-muted">
+            <span className="text-xs text-t-phos-dim">
               Application tracking coming soon
             </span>
           </div>
@@ -391,10 +391,10 @@ function JobBoardPage() {
       )}
 
       {/* Search form */}
-      <div className="bg-white rounded-2xl p-5 border border-border mb-6">
+      <div className="bg-t-panel p-5 border border-t-line mb-6">
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               What kind of work?
             </label>
             <input
@@ -406,13 +406,13 @@ function JobBoardPage() {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
               }}
               placeholder="e.g., Warehouse, CDL Driver, Forklift"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch focus:border-sage-600 transition-colors"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
-            <p className="text-xs text-muted mt-1">
+            <p className="text-xs text-t-phos-dim mt-1">
               You can combine terms -- e.g., &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;
             </p>
             {roleFromResume && context.targetRole && (
-              <p className="text-xs text-sage-600 mt-1">
+              <p className="text-xs text-t-amber-bright mt-1">
                 Seeded from your most recent resume -- edit it anytime.
               </p>
             )}
@@ -427,10 +427,10 @@ function JobBoardPage() {
                       ...context,
                       targetRole: isActive ? "" : role,
                     })}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    className={`t-focus text-xs px-3 py-1.5 border transition-colors ${
                       isActive
-                        ? "bg-sage-100 border-sage-300 text-sage-700"
-                        : "bg-gray-50 border-gray-200 text-muted hover:border-sage-300"
+                        ? "bg-t-panel-2 border-t-amber text-t-amber-bright"
+                        : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"
                     }`}
                   >
                     {role}
@@ -441,7 +441,7 @@ function JobBoardPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium block mb-1">Where?</label>
+            <label className="text-sm font-medium text-t-white block mb-1">Where?</label>
             <input
               value={context.location}
               onChange={(e) =>
@@ -451,14 +451,14 @@ function JobBoardPage() {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
               }}
               placeholder="City, State (e.g., Milwaukee, WI)"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch focus:border-sage-600 transition-colors"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
           </div>
 
           <button
             onClick={searchJobs}
             disabled={searching || (!context.targetRole && !context.location)}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+            className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
             {searching ? "Searching real listings..." : "Find Jobs"}
           </button>
@@ -468,20 +468,20 @@ function JobBoardPage() {
       {/* Phase 4C: result filters -- refine the listings you already pulled */}
       {jobs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs font-medium text-muted">Filter:</span>
+          <span className="text-xs font-medium text-t-phos-dim">Filter:</span>
           <button
             onClick={() => setFairChanceOnly((v) => !v)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${fairChanceOnly ? "bg-sage-600 text-white border-sage-600" : "bg-white border-border text-muted hover:border-sage-300"}`}
+            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${fairChanceOnly ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
             Fair chance only
           </button>
           <button
             onClick={() => setRemoteOnly((v) => !v)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${remoteOnly ? "bg-sky-600 text-white border-sky-600" : "bg-white border-border text-muted hover:border-sky-300"}`}
+            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${remoteOnly ? "bg-t-steel text-[#14100a] border-t-steel font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
             Remote only
           </button>
-          <span className="text-xs text-muted ml-auto">
+          <span className="text-xs text-t-phos-dim ml-auto">
             {visibleJobs.length} of {jobs.length} shown
           </span>
         </div>
@@ -489,18 +489,18 @@ function JobBoardPage() {
 
       {/* Rate limit warning */}
       {rateLimitError && (
-        <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200 mb-6">
-          <p className="text-sm text-amber-800">{rateLimitError}</p>
+        <div className="bg-t-panel p-5 border border-t-amber mb-6">
+          <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
         </div>
       )}
 
       {/* Fair chance info box */}
       {fairChanceInfo && (
-        <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
-          <h2 className="font-semibold text-sky-800 mb-2">
+        <div className="bg-t-panel p-5 border border-t-steel mb-6">
+          <h2 className="font-semibold text-t-steel mb-2">
             Fair-Chance Hiring in Your Area
           </h2>
-          <p className="text-sm text-sky-700 leading-relaxed">
+          <p className="text-sm text-t-phos leading-relaxed">
             {fairChanceInfo}
           </p>
         </div>
@@ -508,8 +508,8 @@ function JobBoardPage() {
 
       {/* Loading */}
       {searching && (
-        <div className="flex items-center gap-3 py-12 justify-center text-muted">
-          <div className="w-5 h-5 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
+          <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
           Searching real job listings...
         </div>
       )}
@@ -517,10 +517,10 @@ function JobBoardPage() {
       {/* No results */}
       {!searching && searched && visibleJobs.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-muted mb-3">
+          <p className="text-t-phos-dim mb-3">
             No listings found for this search right now. Try:
           </p>
-          <ul className="text-sm text-muted space-y-1">
+          <ul className="text-sm text-t-phos-dim space-y-1">
             <li>A broader role (e.g., &quot;General Labor&quot; instead of a specific title)</li>
             <li>A different location or just &quot;Milwaukee, WI&quot;</li>
             <li>Searching again in a day — new jobs post every day</li>
@@ -530,7 +530,7 @@ function JobBoardPage() {
 
       {/* CareerOneStop attribution -- required by DOL API terms when their data is shown */}
       {source === "careeronestop" && visibleJobs.length > 0 && (
-        <div className="flex items-center gap-2 mb-4 text-xs text-muted">
+        <div className="flex items-center gap-2 mb-4 text-xs text-t-phos-dim">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/cos-logo-star.svg" alt="CareerOneStop" className="h-5 w-auto" />
           <span>
@@ -551,7 +551,7 @@ function JobBoardPage() {
             return (
               <div
                 key={job.id}
-                className="bg-white rounded-xl border border-border overflow-hidden transition-shadow hover:shadow-sm"
+                className="bg-t-panel border border-t-line overflow-hidden transition-colors hover:border-t-phos-dim"
               >
                 {/* Header — always visible */}
                 <button
@@ -563,25 +563,25 @@ function JobBoardPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="font-semibold text-foreground">
+                        <h3 className="font-semibold text-t-white">
                           {job.title}
                         </h3>
                         {job.second_chance && (
-                          <span className="text-[10px] font-medium bg-sage-100 text-sage-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          <span className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5 whitespace-nowrap">
                             Fair Chance
                           </span>
                         )}
                         {job.remote && (
-                          <span className="text-[10px] font-medium bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          <span className="text-[10px] font-medium border border-t-steel text-t-steel px-2 py-0.5 whitespace-nowrap">
                             Remote
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-muted">{job.company}</p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted flex-wrap">
+                      <p className="text-sm text-t-phos-dim">{job.company}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-t-phos-dim flex-wrap">
                         {job.location && <span>{job.location}</span>}
                         {job.salary && (
-                          <span className="font-medium text-sage-600">
+                          <span className="font-medium text-t-amber-bright">
                             {job.salary}
                           </span>
                         )}
@@ -595,7 +595,7 @@ function JobBoardPage() {
                       width="16"
                       height="16"
                       viewBox="0 0 16 16"
-                      className={`text-muted flex-shrink-0 mt-1 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      className={`text-t-phos-dim flex-shrink-0 mt-1 transition-transform ${isExpanded ? "rotate-180" : ""}`}
                     >
                       <path
                         d="M4 6l4 4 4-4"
@@ -609,28 +609,28 @@ function JobBoardPage() {
                   </div>
 
                   {/* Brief description — always visible */}
-                  <p className="text-sm text-muted mt-2 leading-relaxed line-clamp-2">
+                  <p className="text-sm text-t-phos-dim mt-2 leading-relaxed line-clamp-2">
                     {job.description}
                   </p>
                 </button>
 
                 {/* Expanded details */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                  <div className="px-4 pb-4 space-y-4 border-t border-t-line pt-4">
                     {/* Company / salary / type meta row */}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                      <span className="font-medium text-foreground">{job.company}</span>
+                      <span className="font-medium text-t-white">{job.company}</span>
                       {job.salary && (
-                        <span className="text-sage-600 font-medium">{job.salary}</span>
+                        <span className="text-t-amber-bright font-medium">{job.salary}</span>
                       )}
                       {job.employment_type && (
-                        <span className="text-muted">{job.employment_type}</span>
+                        <span className="text-t-phos-dim">{job.employment_type}</span>
                       )}
-                      {job.remote && <span className="text-sky-600 font-medium">Remote</span>}
+                      {job.remote && <span className="text-t-steel font-medium">Remote</span>}
                     </div>
 
                     {/* Full description */}
-                    <div className="text-sm text-foreground leading-relaxed space-y-2">
+                    <div className="text-sm text-t-phos leading-relaxed space-y-2">
                       {(job.full_description || job.description)
                         .split(/\n{2,}/)
                         .filter(Boolean)
@@ -641,8 +641,8 @@ function JobBoardPage() {
 
                     {/* Fair chance reason */}
                     {job.fair_chance_reason && (
-                      <div className="bg-sage-50 rounded-lg px-3 py-2 border border-sage-200">
-                        <p className="text-xs font-medium text-sage-700">
+                      <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
+                        <p className="text-xs font-medium text-t-amber-bright">
                           Fair-chance employer -- {job.fair_chance_reason}
                         </p>
                       </div>
@@ -651,13 +651,13 @@ function JobBoardPage() {
                     {/* Requirements */}
                     {job.requirements.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-foreground mb-1.5 uppercase tracking-wide">
+                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase tracking-wide">
                           What they&apos;re looking for
                         </h4>
-                        <ul className="text-sm text-muted space-y-1">
+                        <ul className="text-sm text-t-phos-dim space-y-1">
                           {job.requirements.map((r, i) => (
                             <li key={i} className="flex gap-2">
-                              <span className="text-sage-500 flex-shrink-0">
+                              <span className="text-t-amber flex-shrink-0">
                                 &bull;
                               </span>
                               {r}
@@ -670,13 +670,13 @@ function JobBoardPage() {
                     {/* Benefits */}
                     {job.benefits.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-foreground mb-1.5 uppercase tracking-wide">
+                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase tracking-wide">
                           Benefits
                         </h4>
-                        <ul className="text-sm text-muted space-y-1">
+                        <ul className="text-sm text-t-phos-dim space-y-1">
                           {job.benefits.map((b, i) => (
                             <li key={i} className="flex gap-2">
-                              <span className="text-sage-500 flex-shrink-0">
+                              <span className="text-t-amber flex-shrink-0">
                                 &bull;
                               </span>
                               {b}
@@ -688,8 +688,8 @@ function JobBoardPage() {
 
                     {/* Apply link */}
                     {(job.apply_url || job.employer_website) && (
-                      <div className="bg-sky-50 rounded-lg px-3 py-2 border border-sky-200">
-                        <p className="text-xs text-sky-700 mb-1">
+                      <div className="bg-t-panel-2 px-3 py-2 border border-t-steel">
+                        <p className="text-xs text-t-phos mb-1">
                           Apply directly -- always confirm the posting is still open before you apply.
                         </p>
                         {job.apply_url && (
@@ -698,7 +698,7 @@ function JobBoardPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-xs font-medium text-sky-600 underline underline-offset-2 hover:text-sky-700 break-all"
+                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80 break-all"
                           >
                             View full listing &amp; apply &#8599;
                           </a>
@@ -709,7 +709,7 @@ function JobBoardPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-xs font-medium text-sky-600 underline underline-offset-2 hover:text-sky-700"
+                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
                           >
                             {job.employer_website} &#8599;
                           </a>
@@ -725,7 +725,7 @@ function JobBoardPage() {
                           sessionStorage.setItem("resume_target_job", JSON.stringify(job));
                           window.location.href = "/dashboard/application-tailor?from=job";
                         }}
-                        className="px-4 py-2 bg-sky-600 text-white text-sm font-medium rounded-lg hover:bg-sky-700 transition-colors"
+                        className="t-focus px-4 py-2 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 transition-colors"
                       >
                         Build a Resume for This Job
                       </button>
@@ -735,7 +735,7 @@ function JobBoardPage() {
                             e.stopPropagation();
                             saveJob(job);
                           }}
-                          className="px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+                          className="t-focus px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
                         >
                           Save Job
                         </button>
@@ -746,7 +746,7 @@ function JobBoardPage() {
                               e.stopPropagation();
                               markApplied(job.id);
                             }}
-                            className="px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+                            className="t-focus px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
                           >
                             Mark Applied
                           </button>
@@ -755,13 +755,13 @@ function JobBoardPage() {
                               e.stopPropagation();
                               unsaveJob(job.id);
                             }}
-                            className="text-xs text-muted hover:text-foreground"
+                            className="text-xs text-t-phos-dim hover:text-t-white"
                           >
                             Unsave
                           </button>
                         </>
                       ) : (
-                        <span className="text-xs font-medium text-sage-600 bg-sage-100 px-3 py-1.5 rounded-full">
+                        <span className="text-xs font-medium text-t-amber-bright border border-t-amber px-3 py-1.5">
                           Applied
                         </span>
                       )}
@@ -771,7 +771,7 @@ function JobBoardPage() {
                           e.stopPropagation();
                           dismissJob(job.id);
                         }}
-                        className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+                        className="text-xs text-t-phos-dim hover:text-t-white ml-auto"
                       >
                         Not for me
                       </button>
@@ -787,14 +787,14 @@ function JobBoardPage() {
             <div className="flex justify-center pt-2">
               <button
                 onClick={() => setHiddenJobs(new Set())}
-                className="text-xs text-muted hover:text-foreground underline underline-offset-2"
+                className="text-xs text-t-phos-dim hover:text-t-white underline underline-offset-2"
               >
                 Show {hiddenCount} hidden job{hiddenCount !== 1 ? "s" : ""}
               </button>
             </div>
           )}
 
-          <p className="text-xs text-muted text-center py-4">
+          <p className="text-xs text-t-phos-dim text-center py-4">
             Listings sourced from real job boards. Updated daily.
             Always confirm details directly with the employer.
           </p>
@@ -802,28 +802,28 @@ function JobBoardPage() {
       )}
 
       {/* How it works — always visible at bottom */}
-      <div className="mt-8 pt-6 border-t border-border">
-        <h2 className="text-sm font-semibold text-foreground mb-3">
+      <div className="mt-8 pt-6 border-t border-t-line">
+        <h2 className="text-sm font-semibold text-t-white mb-3">
           How This Works
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
-            <span className="text-sm font-medium block">Real Listings</span>
-            <span className="text-xs text-muted">
+          <div className="p-3 bg-t-panel border border-t-line">
+            <span className="text-sm font-medium text-t-white block">Real Listings</span>
+            <span className="text-xs text-t-phos-dim">
               Every job here is a real posting from employers hiring right now
               in your area.
             </span>
           </div>
-          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
-            <span className="text-sm font-medium block">Fair Chance First</span>
-            <span className="text-xs text-muted">
+          <div className="p-3 bg-t-panel border border-t-line">
+            <span className="text-sm font-medium text-t-white block">Fair Chance First</span>
+            <span className="text-xs text-t-phos-dim">
               Companies known to hire people with records are highlighted and
               shown first.
             </span>
           </div>
-          <div className="p-3 bg-warm-50 rounded-xl border border-warm-200">
-            <span className="text-sm font-medium block">Save &amp; Track</span>
-            <span className="text-xs text-muted">
+          <div className="p-3 bg-t-panel border border-t-line">
+            <span className="text-sm font-medium text-t-white block">Save &amp; Track</span>
+            <span className="text-xs text-t-phos-dim">
               Save jobs you like. Mark when you apply. Build your resume and
               practice interviews for each one.
             </span>
