@@ -1,18 +1,38 @@
 # SMR Crucible -- Handoff
 
-> **NEW CHAT: START HERE -> Wave C (app terminal reskin), 2026-07-08.**
+> **NEW CHAT: START HERE -> Wave C continuation (app terminal reskin), 2026-07-08.**
+> C1 (foundation), C2 (Forge flow, all 13 steps), and C5 (auth + /access) are
+> **SHIPPED + prod-verified**. C3 (Refinery dashboard) is **partial**: the
+> dashboard shell (nav/sidebar/mobile drawer) + home page + the cross-cutting
+> journey components are done; the ~13 individual tool pages are NOT. C4
+> (/walkthrough) is **not started**. Full detail in the "2026-07-08 (Sonnet
+> 5)" section below -- read it before touching anything, it has the exact
+> file list, the design decisions made (badge-color trio, what NOT to
+> retheme, the `border-t-line` Tailwind-collision gotcha), and the priority
+> order for what's left.
+>
+> **Next session, in priority order:**
+> 1. `app/(dashboard)/dashboard/settings/page.tsx` (735 lines -- coach
+>    settings, consent toggles, partner code entry; high user-facing value).
+> 2. The core tool pages: `disclosure` (1265 lines), `interview` (1015),
+>    `jobs` (835) -- these plus `application-tailor`'s `ResumeWorkspace`
+>    (`components/resume/ResumeWorkspace.tsx`, 1082 lines, shares code with
+>    the Forge's `ResumeEditor`/`sections/*` gap noted below) are the actual
+>    daily-use surface.
+> 3. Remaining smaller pages: `employers`, `applications`, `resources`,
+>    `vault`, `progress`, `partner`, `admin`, `evidence`, `methodology`.
+> 4. `components/resume/sections/*` + `SectionWrapper` + the live
+>    `ResumePreview` pane inside `ResumeEditor` -- deferred in C2, shared by
+>    both the Forge builder and the Refinery Application Tailor, so fixing
+>    it once covers both.
+> 5. C4 (`/walkthrough`) + OG share image (IMG-12).
+>
 > Read `~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md` section 2
-> "Wave C -- App reskin (smr-crucible consumer)" for the task list (C1-C5).
-> Wave A (design system) + Wave B (all marketing pages) just shipped in the
-> sister repo `smr-website` -- **that repo is now the reference
-> implementation.** Read its `docs/DESIGN-SYSTEM.md` (tokens, component
-> inventory, migration rule) and skim 2-3 of its Wave B pages
-> (`src/app/page.tsx`, `src/app/forge/page.tsx`) before writing any code here
-> -- match the established look exactly, don't reinvent it. Its
-> `src/components/terminal/` kit (TerminalPanel, TBtn, PromptLine,
-> AsciiDiagram, ImageSlot, LogoBoot) is the pattern to port into
-> `apps/consumer`, per C1's own instruction ("prefer a `packages/` shared
-> ui-tokens file both repos can vendor").
+> "Wave C -- App reskin (smr-crucible consumer)" for the original task list.
+> `smr-website`'s `docs/DESIGN-SYSTEM.md` is still the canonical token spec --
+> this app's copy lives at `apps/consumer/app/terminal.css` +
+> `packages/consumer-ui/src/terminal/` (ported, not a build-time link; keep
+> hex values in sync by hand if the locked palette ever changes).
 >
 > **This app's CSP already has `unsafe-eval`** (`apps/consumer/next.config.mjs`),
 > so `next dev` is interactive here -- unlike smr-website, where dev mode
@@ -28,7 +48,34 @@
 > tightening (dropping `unsafe-eval`, scoping `connect-src`) is a separate
 > later item (Wave D3), not in scope here.
 
-**Last updated:** 2026-06-10 (Fable session -- analysis + P0 batch start)
+**Last updated:** 2026-07-08 (Sonnet 5 -- Wave C terminal reskin session)
+
+## 2026-07-08 (Sonnet 5) -- Wave C: C1, C2, C5 SHIPPED; C3 partial (dashboard shell + home)
+
+Picked up the master plan's Wave C (app terminal reskin) cold, no prior context in this session. Worked packet-by-packet per the plan's own working rules: atomic commits, build-verify each, push + poll the live URL after each coherent chunk (not after every single commit -- see note below on why).
+
+**C1 -- foundation, SHIPPED (`f7566ce`).** Ported the Hand-Forged Terminal system from `smr-website` into this app: `apps/consumer/app/terminal.css` (same CSS custom properties, vendored not linked) + `t-*` Tailwind colors + `font-term` in `tailwind.config.ts`. New `packages/consumer-ui/src/terminal/` kit (TerminalPanel, TBtn, PromptLine, AsciiDiagram, ImageSlot, LogoBoot) -- **TBtn here has a `disabled` prop the smr-website original doesn't**, added because this app's forms are gated on validation state constantly (smr-website's marketing CTAs never needed it). Retethemed the shared `consumer-ui` primitives every Forge/Refinery page is built on: FlowPage, CardSelect, GhostGuide, ProgressIndicator, AssistantDrawer, ExitButton, TextInput, TextArea, CustomImage, theme.ts. This was deliberately additive/scoped (old warm-earth Tailwind classes still work) -- see the caution below about why I didn't flip the global base immediately.
+
+**C2 -- Forge flow, SHIPPED (`c28896e`), prod-verified live at forge.steelmanresumes.com/intro.** All 13 `(forge)` route pages: intro, welcome, resume (upload/paste/guided-builder/rush-passthrough paths), goals, story, preferences, processing, output, overview, rush, partner, get-listed, security. Plus `ForgeLayout` (top bar), `ForgeAccumulator`, `SecurityContent` (shared with `/dashboard/security` -- free win there), and the Resume Build-stage shell (`ResumeBuilder`, `ResumeEditor`'s split-pane chrome, `ParserPreview`).
+
+**Deliberately NOT retethemed (do this again next time, it's correct):** `ResumePreview` components and the print/PDF HTML generator functions in `output/page.tsx` and `components/resume/` -- these render **actual downloadable resumes that go to employers**. They must keep looking like normal professional documents (navy header, serif, white paper), not get the phosphor-terminal look. Only the app chrome *around* them changed.
+
+**Known gap left in C2:** `components/resume/sections/*` (ContactSection, SummarySection, ExperienceSection, EducationSection, SkillsSection), `SectionWrapper`, and the live `ResumePreview` pane inside `ResumeEditor` are still old-skin. This is the actual form-field editing UI inside the resume builder. Deferred because it's deep and **shared with the Refinery Application Tailor** (`ResumeWorkspace.tsx`, 1082 lines) -- fixing it once during the C3 pass covers both surfaces, so do it there, not by going back into C2.
+
+**C5 -- auth + /access, SHIPPED (`130d2e2`).** Login, forgot-password, reset-password, check-email. `/access` (the partner "you're in" landing page) was previously **fully inline-styled** (no Tailwind classes at all) with its own green/cream party palette, confetti canvas, and Georgia serif -- recolored every hex value to the locked token palette (confetti particles now draw from `CONFETTI_COLORS = [amber, amber-bright, phos, phos-dim, iron-white, steel]`), dropped the serif, square corners, kept the exact same confetti/reveal/copy-resume mechanics untouched. Did not convert it to Tailwind classes (too much diff risk for a page with canvas-driven layout math); just swapped values.
+
+**C3 -- Refinery dashboard, PARTIAL (`07ae323`).** Shipped the shell (`(dashboard)/layout.tsx`: top bar, sidebar nav w/ locked-item styling, mobile drawer, unlock toast) and the dashboard home page (`dashboard/page.tsx`: all four audience views -- client/partner/observer/admin -- plus ProfileSetup and MiniForgeBanner). Also the cross-cutting components every dashboard page inherits: `NextStepCard` + `StageProgressBar` (the 7-stage journey arc -- the emotional/functional heart of the dashboard), `JourneyProgressBanner`, `TierGate`, `AdminTestModeBanner`. **NOT done:** the ~13 individual tool pages (disclosure 1265 lines, interview 1015, jobs 835, settings 735, progress 609, applications 465, methodology 359, evidence 377, resources 366, vault 312, employers 281, admin 276, partner 210) and `ResumeWorkspace` (Application Tailor, 1082 lines). Priority order for next session is in the banner at the top of this file.
+
+**C4 -- /walkthrough, NOT STARTED.** Master plan flags it needs Troy to eyeball playback timing regardless (never human-verified even before this wave), so it's lowest-urgency of what's left.
+
+**Why I held pushes rather than pushing after every single commit (a deliberate deviation from the plan's literal "one packet = one atomic commit, push after each"):** the plan's own rule was written for `smr-website`, where pages are independent and Header/Footer retheming doesn't break unmigrated page content. Here, `FlowPage` is the literal parent container ~40% of Forge pages nest their content inside -- pushing C1 alone (dark shared components, light bespoke page boxes still using `bg-white`/`text-foreground`) would have shown real users (job seekers, mid-Forge) a jarringly broken half-skin for however long it took to finish C2. I committed locally after C1, kept working, and only pushed once C1+C2 together formed a coherent, fully-navigable Forge flow. Same logic applied between C3's shell/home (pushed once internally consistent) and the still-old-skin tool pages it links to -- that boundary is safe because dashboard tool pages are separate page loads a user consciously navigates to, not nested inside each other's containers the way FlowPage/CardSelect are.
+
+**Tailwind gotcha hit once, worth flagging:** our custom color tokens are literally named with a `t-` prefix baked in (`t-line`, `t-amber`, etc.), which collides syntactically with Tailwind's directional border utilities (`border-t-*` = "border-top-color"). `border-t-line` alone is fine (resolves as the full custom color name, confirmed against smr-website's already-working prod usage). But writing a DIRECTIONAL top-only override to one of our named colors (e.g., for a spinner: full border one color, top overridden to another) as `border-t-t-amber` is technically probably correct per Tailwind's matcher but needlessly ambiguous-looking -- used an arbitrary value (`border-t-[#D4A84B]`) instead to remove all doubt. Search for this pattern if you add more spinners.
+
+**Verification:** `npm run build -w apps/consumer` clean after every packet (0 errors). Prod-verified via `curl` grep for `font-term` against `forge.steelmanresumes.com/intro` and `/welcome` (both showed it after ~60s propagation). **Note:** `/login` and `/access` did NOT show up via the same curl check even ~4 minutes after push -- turned out to be a false alarm: both wrap their content in `<Suspense>` with no fallback (needed for `useSearchParams()`), so the actual form never appears in the raw server HTML either before or after this change, only after client-side hydration. Confirmed the real deployment state via the Vercel API (`list_deployments`/`get_deployment` MCP tools) instead: `state: READY`, `target: production`, `alias` includes both `forge.steelmanresumes.com` and `refinery.steelmanresumes.com`, `aliasError: null`. Trust the API over `curl` for any page built on `useSearchParams()` + bare `Suspense`.
+
+---
+
 **2026-06-10 P0 batch (green-lit by Troy, "truth gate first"):** SHIPPED + pushed: `c339525` truth gate in every generation lane (fabrication table deleted from generate-docs; evidence-only rules in resume-generate-full incl. cert/education carry-forward via education entries; cover letters barred from inventing numbers/personal facts; "--" never em dash in all generation prompts) -> `283f3df` "Built with The Refinery" footer removed from exported resumes (disclosure leak; Troy: brand in-app only) -> `cc119e6` analyze/generate-docs/resume-generate-full/disclosure-guide now MODEL_DEEP per doctrine + stale OPENAI-only guards accept either provider. All build-verified (95/95 pages); live-behavior verification = fresh e2e retest, pending. **REMAINING in batch:** seats v1 (access_code.seat_limit ~10/agency: EXPO2026/BAKER2026/JFW; role!=rate-tier so seat-holders stay `client`; code-aware pre-auth forge limits replacing shared-IP buckets; admin UI minting codes+seats+variables -- Troy decision), identity single-source fix (saveForgeSession merge-preserve contact; Tailor contact from base doc w/ editable confirm; phone normalization), "coaching not legal advice" disclaimer on all disclosure outputs. Decisions log + architecture: `docs/FABLE-REASSESSMENT-AGENCY-2026-06-10.md` (t.ROY agency three-phase plan; confirm-card guardrail; disclosure voice full parity; skills-library catalog ~35-40 model-independent skill.md files; DB stays ONE Neon with per-tool domains + event spine + nightly DB-intelligence agent -- multiple physical DBs rejected as desync factory).
 **Last session (Opus 4.8):** Full journey instrumentation DONE + verified -- Stages 3 (resume), 4 (disclosure), 5 (interview), and 6 (apply/follow-up) all now persist real signals, so `computeNextStep` walks the whole 0 -> 6 ladder + the follow-up loop on live data (13/13 + 10/10 + 5/5 against the live DB). **Troy's privacy decision (2026-06-07):** keep data stored so the page is progressive and the tools work as designed, but revise the wording to be honest + reassuring + secure. For interview practice specifically: teach frames, not scripts -- store the FRAME practiced and whether the meaning landed (the coach's feedback), never the user's words/transcript/audio. **Cutover decision (Troy):** brand-new SMR universe -- new dedicated Neon (migrated, verified) + new keys + new accounts, completely separate + monitorable. See the "2026-06-07 (session 2)" section below.
 **2026-06-16 (Opus 4.8) -- cinematic walkthrough SHIPPED + LIVE:** New self-running demo at `/walkthrough` (commit `09ff57f`, pushed to main, prod-verified 200 at `forge.steelmanresumes.com/walkthrough`, deploy promoted after ~1 min). Built for the **Mary Ann / Expo Wisconsin** partner share (she accepted a walkthrough invite; partner-audience distributor for a 3-week-program pilot). It is a virtual-camera "interactive slideshow" (Troy's words: zoom/pan to guide attention, like a video but not), NOT new full-screen scene cuts. **Key decisions (Troy, via AskUserQuestion): crisp DOM mockups** (sharp at any zoom, never stale -- chosen over screenshots which blur on zoom), **built-in Jordan persona** for the before/after (self-contained, no consent gate -- real-client PDF deferred), **self-running shareable link** only (presenter mode deferred). Files: `apps/consumer/app/walkthrough/{page.tsx,screens.tsx,storyboard.ts,layout.tsx}`. Engine = deterministic region->CSS-transform math clamped to the stage, 1280x800 letterboxed to any viewport; 16-beat data-driven storyboard (all tuning in `storyboard.ts`); reuses `lib/demo-data.ts` (Jordan) + partner-voice captions; controls Space/arrows/edge-tap/dots/R; respects prefers-reduced-motion; fully static (no API/auth/DB). The older `app/demo/page.tsx` was left untouched as a fallback. **Reused, did not rebuild** -- the `docs/DEMO-SYSTEM-PLAN-2026-06-05.md` asset inventory + existing `/demo` markup saved most of the work (archive-first paid off). Verified: tsc 0 errors, prod build passes, `/walkthrough` prerenders static, all 9 screens render. **Open follow-ups (not built):** Troy to eyeball the camera animation/timing (I verified build+render+deploy, not playback); OG share image; swap Jordan for a consented real-client before/after PDF. **NEXT for Troy:** send Mary Ann the link.
