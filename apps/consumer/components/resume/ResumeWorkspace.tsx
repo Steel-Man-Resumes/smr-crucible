@@ -612,20 +612,20 @@ export function ResumeWorkspace() {
   // --- Full resume generation loading state ---
   if (generatingFull) {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Building Your Career Package
         </h1>
-        <div className="bg-sage-50 rounded-2xl p-8 border border-sage-200 text-center mt-6">
+        <div className="bg-t-panel p-8 border border-t-line text-center mt-6">
           <div className="w-12 h-12 mx-auto mb-4 relative">
-            <div className="absolute inset-0 border-3 border-sage-200 rounded-full" />
-            <div className="absolute inset-0 border-3 border-sage-600 rounded-full border-t-transparent animate-spin" />
+            <div className="absolute inset-0 border-[3px] border-t-line" />
+            <div className="absolute inset-0 border-[3px] border-t-amber border-t-transparent animate-spin" />
           </div>
-          <p className="text-sm font-medium text-sage-700">
+          <p className="text-sm font-medium text-t-amber-bright">
             Building your package for {doc.meta.targetJob || "this job"}
             {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...
           </p>
-          <p className="text-xs text-muted mt-2">
+          <p className="text-xs text-t-phos-dim mt-2">
             Targeted resume + cover letter + disclosure brief. Takes 20-40 seconds.
           </p>
         </div>
@@ -636,19 +636,19 @@ export function ResumeWorkspace() {
   // --- Generation error state ---
   if (genError && !showSetup) {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
-        <div className="bg-warm-50 rounded-2xl p-6 border border-warm-200 text-center mt-6">
-          <p className="text-sm text-earth-700 mb-4">{genError}</p>
+        <div className="bg-t-panel p-6 border border-t-red text-center mt-6">
+          <p className="text-sm text-t-phos mb-4">{genError}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => {
                 setGenError(null);
                 setShowSetup(true);
               }}
-              className="px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Start Manually
             </button>
@@ -661,11 +661,11 @@ export function ResumeWorkspace() {
   // --- Setup screen (target + import options) ---
   if (showSetup) {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
-        <p className="text-body text-muted mb-8">
+        <p className="text-base text-t-phos-dim mb-8">
           Aim your base resume at a specific job. We tailor your resume, cover
           letter, and disclosure plan to the exact posting -- using your Forge
           profile.
@@ -675,12 +675,12 @@ export function ResumeWorkspace() {
         {savedResumes.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-foreground">
+              <h2 className="text-sm font-medium text-t-white">
                 My Resumes
               </h2>
               <button
                 onClick={startNewResume}
-                className="text-sm text-sage-600 hover:text-sage-700 font-medium"
+                className="text-sm text-t-amber-bright hover:text-t-amber font-medium"
               >
                 + New Resume
               </button>
@@ -689,22 +689,22 @@ export function ResumeWorkspace() {
               {savedResumes.map((r) => (
                 <div
                   key={r.id}
-                  className="rounded-xl border border-border bg-white hover:border-sage-300 transition-colors"
+                  className="border border-t-line bg-t-panel hover:border-t-phos-dim transition-colors"
                 >
                   {confirmDeleteId === r.id ? (
                     <div className="px-4 py-3 flex items-center justify-between gap-3">
-                      <span className="text-sm text-foreground">Delete this resume?</span>
+                      <span className="text-sm text-t-white">Delete this resume?</span>
                       <div className="flex gap-2">
                         <button
                           onClick={() => deleteResume(r.id)}
                           disabled={deletingId === r.id}
-                          className="text-xs font-medium text-white bg-red-500 px-3 py-1.5 rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                          className="t-focus text-xs font-medium text-[#14100a] bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
                         >
                           {deletingId === r.id ? "Deleting..." : "Delete"}
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(null)}
-                          className="text-xs text-muted hover:text-foreground px-2"
+                          className="text-xs text-t-phos-dim hover:text-t-white px-2"
                         >
                           Cancel
                         </button>
@@ -716,14 +716,14 @@ export function ResumeWorkspace() {
                         onClick={() => loadResume(r.id)}
                         className="flex-1 text-left px-4 py-3"
                       >
-                        <span className="text-sm font-medium text-foreground">
+                        <span className="text-sm font-medium text-t-white">
                           {r.target_context?.targetJob ||
                             ((r.target_context as any)?.source === "forge"
                               ? "Base resume"
                               : "Untitled resume")}
                         </span>
                         {r.target_context?.targetCompany && (
-                          <span className="text-xs text-muted ml-2">
+                          <span className="text-xs text-t-phos-dim ml-2">
                             at {r.target_context.targetCompany}
                           </span>
                         )}
@@ -733,7 +733,7 @@ export function ResumeWorkspace() {
                           e.stopPropagation();
                           setConfirmDeleteId(r.id);
                         }}
-                        className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                        className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0"
                         title="Delete resume"
                       >
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -751,7 +751,7 @@ export function ResumeWorkspace() {
         {/* Target job */}
         <div className="space-y-4 mb-6">
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               What job are you applying for?
             </label>
             <input
@@ -763,13 +763,13 @@ export function ResumeWorkspace() {
                 }))
               }
               placeholder="e.g., Warehouse Associate, CNA, Forklift Operator"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               Where?{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              <span className="font-normal text-t-phos-dim">(optional)</span>
             </label>
             <input
               value={doc.meta.targetCompany}
@@ -780,13 +780,13 @@ export function ResumeWorkspace() {
                 }))
               }
               placeholder="e.g., Amazon, local hospital, specific company"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               Job listing link{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              <span className="font-normal text-t-phos-dim">(optional)</span>
             </label>
             <input
               value={doc.meta.jobListingUrl}
@@ -798,7 +798,7 @@ export function ResumeWorkspace() {
               }
               placeholder="Paste the URL from Indeed, LinkedIn, or any job board"
               type="url"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
         </div>
@@ -811,13 +811,13 @@ export function ResumeWorkspace() {
               <button
                 onClick={importFromForge}
                 disabled={!doc.meta.targetJob.trim()}
-                className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+                className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] text-base font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
                 Tailor from my Forge profile
               </button>
               <a
                 href="/resume"
-                className="block w-full text-center px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-base font-medium hover:bg-sage-50 transition-colors min-h-touch"
+                className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
               >
                 Build a fresh base resume in the Forge
               </a>
@@ -826,14 +826,14 @@ export function ResumeWorkspace() {
             <>
               <a
                 href="/resume"
-                className="block w-full text-center px-6 py-4 bg-sage-600 text-white rounded-xl text-base font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-[#14100a] text-base font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Build your base resume in the Forge first
               </a>
               <button
                 onClick={startFresh}
                 disabled={!doc.meta.targetJob.trim()}
-                className="w-full px-6 py-4 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-base font-medium hover:bg-sage-50 disabled:opacity-50 transition-colors min-h-touch"
+                className="t-focus w-full px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
               >
                 Or start a blank resume here
               </button>
@@ -846,24 +846,24 @@ export function ResumeWorkspace() {
 
   // --- Workspace ---
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl font-term">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-bold text-foreground truncate">
+          <h1 className="text-lg font-bold text-t-white truncate">
             {doc.meta.targetJob || "Resume"}
           </h1>
           {doc.meta.targetCompany && (
-            <p className="text-xs text-muted">at {doc.meta.targetCompany}</p>
+            <p className="text-xs text-t-phos-dim">at {doc.meta.targetCompany}</p>
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {saveStatus === "error" && (
-            <span className="text-xs text-red-500">Save failed</span>
+            <span className="text-xs text-t-red">Save failed</span>
           )}
           <button
             onClick={startNewResume}
-            className="text-xs text-muted hover:text-foreground"
+            className="text-xs text-t-phos-dim hover:text-t-white"
           >
             + New
           </button>
@@ -872,24 +872,24 @@ export function ResumeWorkspace() {
 
       {/* What we tailored for this job */}
       {tailoringNotes.length > 0 && (
-        <div className="mb-4 bg-sage-50 rounded-xl border border-sage-200 px-4 py-3">
+        <div className="mb-4 bg-t-panel border border-t-line px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-sage-600 flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-t-amber flex-shrink-0">
               <path d="M8 1l2 4.5H15l-4 3 1.5 5L8 11 3.5 13.5 5 8.5 1 5.5h5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
-            <span className="text-xs font-bold text-sage-800 uppercase tracking-wider">
+            <span className="text-xs font-bold text-t-amber-bright uppercase tracking-wider">
               What we tailored for this job
             </span>
           </div>
           <ul className="space-y-1">
             {tailoringNotes.map((note, i) => (
-              <li key={i} className="text-xs text-sage-700 flex gap-2">
-                <span className="text-sage-400 flex-shrink-0">--</span>
+              <li key={i} className="text-xs text-t-phos flex gap-2">
+                <span className="text-t-phos-dim flex-shrink-0">--</span>
                 {note}
               </li>
             ))}
           </ul>
-          <p className="text-[10px] text-sage-600 mt-2 italic">
+          <p className="text-[10px] text-t-phos-dim mt-2 italic">
             Use these points in your disclosure and interview prep -- they are where your profile and this job connect.
           </p>
         </div>
@@ -897,11 +897,11 @@ export function ResumeWorkspace() {
 
       {/* Career Package tabs — shown when cover letter or disclosure brief exists */}
       {(coverLetterText || disclosureBrief) && (
-        <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
+        <div className="flex gap-1 mb-4 bg-t-panel border border-t-line p-1">
           <button
             onClick={() => setPackageTab("resume")}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-              packageTab === "resume" ? "bg-white shadow-sm text-foreground" : "text-muted"
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              packageTab === "resume" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
             }`}
           >
             Resume
@@ -909,8 +909,8 @@ export function ResumeWorkspace() {
           {coverLetterText && (
             <button
               onClick={() => setPackageTab("cover-letter")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-                packageTab === "cover-letter" ? "bg-white shadow-sm text-foreground" : "text-muted"
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                packageTab === "cover-letter" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
               }`}
             >
               Cover Letter
@@ -919,8 +919,8 @@ export function ResumeWorkspace() {
           {disclosureBrief && (
             <button
               onClick={() => setPackageTab("disclosure")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-                packageTab === "disclosure" ? "bg-white shadow-sm text-foreground" : "text-muted"
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                packageTab === "disclosure" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
               }`}
             >
               Disclosure
@@ -931,9 +931,9 @@ export function ResumeWorkspace() {
 
       {/* Cover Letter panel */}
       {packageTab === "cover-letter" && coverLetterText && (
-        <div className="bg-white rounded-2xl border border-border overflow-hidden mb-6">
-          <div className="flex items-center justify-between px-5 py-3 bg-sage-50 border-b border-border">
-            <h3 className="font-semibold text-sage-800 text-sm">
+        <div className="bg-t-panel border border-t-line overflow-hidden mb-6">
+          <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
+            <h3 className="font-semibold text-t-white text-sm">
               Cover Letter for {doc.meta.targetCompany || doc.meta.targetJob}
             </h3>
             <div className="flex gap-2">
@@ -943,20 +943,20 @@ export function ResumeWorkspace() {
                   setCoverLetterCopied(true);
                   setTimeout(() => setCoverLetterCopied(false), 2000);
                 }}
-                className="px-3 py-1.5 text-xs font-medium text-sage-600 bg-white border border-sage-200 rounded-lg hover:bg-sage-50 transition-colors"
+                className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
               >
                 {coverLetterCopied ? "Copied!" : "Copy"}
               </button>
               <button
                 onClick={() => downloadDocx("cover_letter", coverLetterText)}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-sage-600 rounded-lg hover:bg-sage-700 transition-colors"
+                className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors"
               >
                 Download .docx
               </button>
             </div>
           </div>
           <div className="p-6">
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+            <pre className="text-sm text-t-phos whitespace-pre-wrap font-sans leading-relaxed">
               {coverLetterText}
             </pre>
           </div>
@@ -967,15 +967,15 @@ export function ResumeWorkspace() {
       {packageTab === "disclosure" && disclosureBrief && (
         <div className="space-y-4 mb-6">
           {!disclosureBrief.hasRecord && (
-            <div className="bg-white rounded-2xl p-6 border border-border text-center">
-              <h3 className="font-semibold text-foreground mb-2">Disclosure Planner</h3>
-              <p className="text-sm text-muted mb-4">
+            <div className="bg-t-panel p-6 border border-t-line text-center">
+              <h3 className="font-semibold text-t-white mb-2">Disclosure Planner</h3>
+              <p className="text-sm text-t-phos-dim mb-4">
                 No criminal record was detected from your Forge session.
                 If you need help preparing a disclosure strategy, the full Disclosure Planner can help.
               </p>
               <a
                 href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
-                className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Open Disclosure Planner
               </a>
@@ -983,55 +983,55 @@ export function ResumeWorkspace() {
           )}
           {disclosureBrief.hasRecord && <>
           {/* Confidence meter */}
-          <div className="bg-white rounded-2xl p-6 border border-border">
+          <div className="bg-t-panel p-6 border border-t-line">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground">Disclosure Readiness</h3>
+              <h3 className="font-semibold text-t-white">Disclosure Readiness</h3>
               <span className={`text-sm font-medium ${
-                disclosureBrief.confidenceLevel === "high" ? "text-sage-600" :
-                disclosureBrief.confidenceLevel === "medium" ? "text-amber-600" : "text-red-500"
+                disclosureBrief.confidenceLevel === "high" ? "text-t-amber-bright" :
+                disclosureBrief.confidenceLevel === "medium" ? "text-t-steel" : "text-t-red"
               }`}>
                 {disclosureBrief.confidencePercent}%
               </span>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-3 mb-4">
+            <div className="w-full bg-t-line h-3 mb-4">
               <div
-                className={`rounded-full h-3 transition-all ${
-                  disclosureBrief.confidenceLevel === "high" ? "bg-sage-500" :
-                  disclosureBrief.confidenceLevel === "medium" ? "bg-amber-400" : "bg-red-400"
+                className={`h-3 transition-all ${
+                  disclosureBrief.confidenceLevel === "high" ? "bg-t-amber" :
+                  disclosureBrief.confidenceLevel === "medium" ? "bg-t-steel" : "bg-t-red"
                 }`}
                 style={{ width: `${disclosureBrief.confidencePercent}%` }}
               />
             </div>
 
             {disclosureBrief.briefScript && (
-              <div className="bg-sage-50 rounded-xl p-4 border border-sage-200 mb-4">
-                <p className="text-xs font-medium text-sage-600 uppercase tracking-wide mb-2">
+              <div className="bg-t-panel-2 p-4 border border-t-line mb-4">
+                <p className="text-xs font-medium text-t-amber-bright uppercase tracking-wide mb-2">
                   Starting script
                 </p>
-                <p className="text-sm text-foreground leading-relaxed italic">
+                <p className="text-sm text-t-white leading-relaxed italic">
                   &ldquo;{disclosureBrief.briefScript}&rdquo;
                 </p>
               </div>
             )}
 
             {disclosureBrief.timingAdvice && (
-              <p className="text-sm text-muted mb-4">
+              <p className="text-sm text-t-phos-dim mb-4">
                 {disclosureBrief.timingAdvice}
               </p>
             )}
 
-            <p className="text-sm text-muted mb-4">
+            <p className="text-sm text-t-phos-dim mb-4">
               {disclosureBrief.upgradeMessage}
             </p>
 
-            <p className="text-xs text-earth-700 bg-warm-50 border border-warm-200 rounded-lg px-3 py-2 mb-4">
-              <span className="font-semibold">This is career coaching, not legal advice.</span>{" "}
+            <p className="text-xs text-t-phos bg-t-panel-2 border border-t-line px-3 py-2 mb-4">
+              <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
               For legal guidance, contact a reentry attorney or free legal aid in your area.
             </p>
 
             <a
               href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
-              className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+              className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Open Disclosure Planner for {disclosureBrief.targetCompany || "this role"}
             </a>
@@ -1056,19 +1056,19 @@ export function ResumeWorkspace() {
             <>
               <button
                 onClick={() => save(false)}
-                className="px-5 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
               </button>
               <button
                 onClick={() => downloadDocx("resume", formatResumeDownload(doc))}
-                className="px-4 py-3 bg-white border-2 border-sage-600 text-sage-600 rounded-xl font-medium hover:bg-sage-50 transition-colors min-h-touch text-sm"
+                className="t-focus px-4 py-3 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch text-sm"
               >
                 Download .docx
               </button>
               <button
                 onClick={() => printResumePdf(doc)}
-                className="px-4 py-3 bg-white border-2 border-sky-500 text-sky-600 rounded-xl font-medium hover:bg-sky-50 transition-colors min-h-touch text-sm"
+                className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
               </button>
