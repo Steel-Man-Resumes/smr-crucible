@@ -1,31 +1,23 @@
 # SMR Crucible -- Handoff
 
-> **NEW CHAT: START HERE -> Wave C continuation (app terminal reskin), 2026-07-08.**
-> C1 (foundation), C2 (Forge flow, all 13 steps), and C5 (auth + /access) are
-> **SHIPPED + prod-verified**. C3 (Refinery dashboard) is **partial**: the
-> dashboard shell (nav/sidebar/mobile drawer) + home page + the cross-cutting
-> journey components are done; the ~13 individual tool pages are NOT. C4
-> (/walkthrough) is **not started**. Full detail in the "2026-07-08 (Sonnet
-> 5)" section below -- read it before touching anything, it has the exact
-> file list, the design decisions made (badge-color trio, what NOT to
-> retheme, the `border-t-line` Tailwind-collision gotcha), and the priority
-> order for what's left.
+> **NEW CHAT: START HERE -> Wave C nearly done, 2026-07-08.**
+> C1 (foundation), C2 (Forge flow, all 13 steps), C3 (Refinery dashboard --
+> shell + all ~16 tool pages + every shared/deep component), and C5 (auth +
+> /access) are **SHIPPED + build-verified** (C1/C2/C5 also prod-verified live).
+> **Only C4 (`/walkthrough` demo reskin + OG share image) is left.** Full
+> detail in the two "2026-07-08 (Sonnet 5)" sections below -- read them
+> before touching anything, they have the exact file list, the design
+> decisions made (badge-color trio, what NOT to retheme, the `border-t-line`
+> Tailwind-collision gotcha).
 >
-> **Next session, in priority order:**
-> 1. `app/(dashboard)/dashboard/settings/page.tsx` (735 lines -- coach
->    settings, consent toggles, partner code entry; high user-facing value).
-> 2. The core tool pages: `disclosure` (1265 lines), `interview` (1015),
->    `jobs` (835) -- these plus `application-tailor`'s `ResumeWorkspace`
->    (`components/resume/ResumeWorkspace.tsx`, 1082 lines, shares code with
->    the Forge's `ResumeEditor`/`sections/*` gap noted below) are the actual
->    daily-use surface.
-> 3. Remaining smaller pages: `employers`, `applications`, `resources`,
->    `vault`, `progress`, `partner`, `admin`, `evidence`, `methodology`.
-> 4. `components/resume/sections/*` + `SectionWrapper` + the live
->    `ResumePreview` pane inside `ResumeEditor` -- deferred in C2, shared by
->    both the Forge builder and the Refinery Application Tailor, so fixing
->    it once covers both.
-> 5. C4 (`/walkthrough`) + OG share image (IMG-12).
+> **Next session:**
+> 1. C4 -- `/walkthrough` (the marketing demo/tour route) + the OG share
+>    image (IMG-12 in the master plan). This is genuinely the only remaining
+>    item. Master plan flags it needs Troy to eyeball playback timing
+>    regardless (never human-verified even pre-wave), so budget for that.
+> 2. Once C4 ships, Wave C as a whole is complete -- update the master plan
+>    doc (`~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md`) and
+>    `~/todash` memory to reflect full completion, not just Wave A+B.
 >
 > Read `~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md` section 2
 > "Wave C -- App reskin (smr-crucible consumer)" for the original task list.
@@ -48,7 +40,7 @@
 > tightening (dropping `unsafe-eval`, scoping `connect-src`) is a separate
 > later item (Wave D3), not in scope here.
 
-**Last updated:** 2026-07-08 (Sonnet 5 -- Wave C terminal reskin session)
+**Last updated:** 2026-07-08 (Sonnet 5 -- Wave C terminal reskin session, C3 completed)
 
 ## 2026-07-08 (Sonnet 5) -- Wave C: C1, C2, C5 SHIPPED; C3 partial (dashboard shell + home)
 
@@ -73,6 +65,26 @@ Picked up the master plan's Wave C (app terminal reskin) cold, no prior context 
 **Tailwind gotcha hit once, worth flagging:** our custom color tokens are literally named with a `t-` prefix baked in (`t-line`, `t-amber`, etc.), which collides syntactically with Tailwind's directional border utilities (`border-t-*` = "border-top-color"). `border-t-line` alone is fine (resolves as the full custom color name, confirmed against smr-website's already-working prod usage). But writing a DIRECTIONAL top-only override to one of our named colors (e.g., for a spinner: full border one color, top overridden to another) as `border-t-t-amber` is technically probably correct per Tailwind's matcher but needlessly ambiguous-looking -- used an arbitrary value (`border-t-[#D4A84B]`) instead to remove all doubt. Search for this pattern if you add more spinners.
 
 **Verification:** `npm run build -w apps/consumer` clean after every packet (0 errors). Prod-verified via `curl` grep for `font-term` against `forge.steelmanresumes.com/intro` and `/welcome` (both showed it after ~60s propagation). **Note:** `/login` and `/access` did NOT show up via the same curl check even ~4 minutes after push -- turned out to be a false alarm: both wrap their content in `<Suspense>` with no fallback (needed for `useSearchParams()`), so the actual form never appears in the raw server HTML either before or after this change, only after client-side hydration. Confirmed the real deployment state via the Vercel API (`list_deployments`/`get_deployment` MCP tools) instead: `state: READY`, `target: production`, `alias` includes both `forge.steelmanresumes.com` and `refinery.steelmanresumes.com`, `aliasError: null`. Trust the API over `curl` for any page built on `useSearchParams()` + bare `Suspense`.
+
+## 2026-07-08 (Sonnet 5, same-day continuation) -- C3 finished: every dashboard tool page + deep resume-editor internals
+
+Troy: "keep going, finish the dashboard pages." Picked up exactly where the above session left off (mid-edit on `ResumeWorkspace.tsx`) and worked straight through the rest of C3's priority list to full completion. Same working rules throughout: retheme -> `npm run build -w apps/consumer` (0 errors every time) -> atomic commit -> `git push origin main` immediately (dashboard tool pages are independent route loads, not nested containers, so no reason to batch pushes the way C1+C2 had to be).
+
+**Shipped this continuation, in order (9 commits, `93d7489`..`d710d43`):**
+- `ResumeWorkspace.tsx` (Application Tailor core, 1082 lines) -- finished the "Workspace" return block: header, tailoring-notes callout, cover-letter/disclosure/resume tab switcher, cover letter panel, disclosure brief panel + confidence meter, and the `ResumeEditor` action buttons (Save/.docx/.pdf).
+- `employers`, `partner` (Partner Dashboard cohort table), `admin` (access-code minting + funnel stats + case studies), `evidence` (research citations, competitive matrix, ADRs, JBS compliance, decision-log schema) + shared `DisclosureSection` collapsible.
+- `methodology` (tier-aware research playbook + 10 behavioral rules) + `applications` (5-stage pipeline board -- stage colors remapped from the old sky/warm/sage family to steel/amber/phos since there's no longer a rainbow of decorative hues to draw from).
+- `resources` (Fair-Chance Lanes opportunity cards) + `vault` (My Materials artifact list -- `downloadPDF()`'s print HTML generator left untouched, same document exception as everywhere else).
+- `progress` (Quick Wins cards, upcoming-followups timeline, 4-phase career roadmap with lit node states, stat cards, activity rows) -- this was the last dashboard *route*.
+- Closed the C2-deferred gap: `SectionWrapper.tsx`, `ResumePreview.tsx` (only the completeness bar above the simulated page -- the page itself stays white/serif on purpose, see below), `sections.tsx` (Contact/Summary/Experience/Education/Skills field editors, 562 lines), `BulletWorkshop.tsx` (the AI bullet-strengthening modal, 294 lines).
+
+**Every dashboard route and every reachable shared component in the consumer app is now on the terminal skin.** Nothing left in C3's scope. The only remaining item in all of Wave C is C4 (`/walkthrough`).
+
+**Reconfirmed the document-exception rule, and it held up cleanly across every new page:** anything that renders (or simulates) an actual downloadable/printable artifact -- resume DOCX/PDF, disclosure plan PDF, interview analysis PDF, the live `ResumePreview` "page on a desk" pane -- stays in clean/professional print styling. `ResumePreview.tsx` is a good example of the boundary: its outer completeness bar is app chrome (now terminal-styled), but the simulated white page + everything inside it (including the red-dashed "missing section" coaching hints, which render *on* the page) stayed untouched, because it's a live mirror of what the actual export looks like -- retheming it would make the preview lie about the download.
+
+**New color-mapping decisions made this session (add to the running palette-usage notes):** where the old app used a wider decorative hue family (sky/warm/earth/gray on top of sage) for non-semantic categorization -- pipeline stages in `applications`, quick-win categories in `progress`, competitiveness/stat cards in `evidence`/`admin` -- collapsed everything to the three non-error locked accents (amber/steel/phos) plus phos-dim as a fourth neutral when a 4th distinct bucket was unavoidable (quick-win "wellbeing" category). Red (`t-red`) stayed reserved for actual errors/destructive actions/overdue-warnings only, never decorative categorization -- held the line on this the whole session.
+
+**Verification:** `npm run build -w apps/consumer` clean (0 errors) after every one of the 9 commits. Not prod-curl-verified this round (all dashboard tool pages require auth to view, so a curl check would only ever see the login redirect regardless of skin state) -- rely on the build + the established Vercel-API-over-curl lesson from the prior session if a live check is ever needed.
 
 ---
 
