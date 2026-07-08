@@ -39,6 +39,13 @@ const nextConfig = {
         permanent: false,
       },
       {
+        // Retired 2026-07-07 (Troy's standing decision): /walkthrough is the
+        // one demo surface. Old /demo links keep working.
+        source: "/demo",
+        destination: "/walkthrough",
+        permanent: true,
+      },
+      {
         // Renamed 2026-06-09: "Resume Builder" -> "Application Tailor".
         // Keeps old deep-links (saved-artifact ?id=, bookmarks) alive. Next
         // forwards the query string to the destination automatically.
