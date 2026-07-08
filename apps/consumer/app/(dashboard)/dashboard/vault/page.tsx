@@ -208,19 +208,19 @@ ${body}
   }
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-muted">Loading your materials...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading your materials...</div>;
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-foreground">My Materials</h1>
-      <p className="text-muted mt-1 mb-6">
+    <div className="max-w-3xl mx-auto px-4 py-10 font-term">
+      <h1 className="text-2xl font-bold text-t-white">My Materials</h1>
+      <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
         unless you choose to. Save anything as a PDF, or delete it, anytime.
       </p>
 
       {items.length === 0 && (
-        <div className="text-center text-muted bg-white border border-border rounded-xl px-5 py-12">
+        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it
           will show up here.
         </div>
@@ -232,7 +232,7 @@ ${body}
           if (group.length === 0) return null;
           return (
             <section key={g.type}>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-t-phos-dim mb-3">
                 {g.label} ({group.length})
               </h2>
               <div className="space-y-3">
@@ -240,40 +240,40 @@ ${body}
                   const isResume = a.artifact_type === "resume";
                   const open = expanded === a.id;
                   return (
-                    <div key={a.id} className="bg-white border border-border rounded-xl p-4">
+                    <div key={a.id} className="bg-t-panel border border-t-line p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <h3 className="font-medium text-foreground truncate">{title(a)}</h3>
-                          <p className="text-xs text-muted mt-0.5">Updated {fmt(a.updated_at)}</p>
+                          <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
+                          <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             onClick={() => setExpanded(open ? null : a.id)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-border hover:bg-sage-50"
+                            className="t-focus px-3 py-1.5 text-xs font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
                           >
                             {open ? "Hide" : "View"}
                           </button>
                           {isResume && (
                             <Link
                               href={`/dashboard/application-tailor?id=${a.id}`}
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sage-600 text-white hover:bg-sage-700"
+                              className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-[#14100a] hover:bg-t-amber-bright"
                             >
                               {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
                             </Link>
                           )}
                           {confirmDelete === a.id ? (
                             <>
-                              <button onClick={() => remove(a.id)} className="px-2 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700">
+                              <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-[#14100a] hover:opacity-90">
                                 Delete
                               </button>
-                              <button onClick={() => setConfirmDelete(null)} className="text-xs text-muted hover:text-foreground">
+                              <button onClick={() => setConfirmDelete(null)} className="text-xs text-t-phos-dim hover:text-t-white">
                                 Cancel
                               </button>
                             </>
                           ) : (
                             <button
                               onClick={() => setConfirmDelete(a.id)}
-                              className="text-xs text-gray-400 hover:text-red-600"
+                              className="text-xs text-t-phos-dim hover:text-t-red"
                               title="Delete"
                             >
                               Delete
@@ -283,8 +283,8 @@ ${body}
                       </div>
 
                       {open && (
-                        <div className="mt-3 border-t border-border pt-3">
-                          <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">
+                        <div className="mt-3 border-t border-t-line pt-3">
+                          <p className="text-sm text-t-phos whitespace-pre-line leading-relaxed">
                             {toText(a)}
                           </p>
                           <div className="flex items-center gap-3 mt-3">
@@ -292,7 +292,7 @@ ${body}
                               onClick={() =>
                                 isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
                               }
-                              className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700"
+                              className="t-focus px-3 py-1.5 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright"
                             >
                               Save PDF
                             </button>

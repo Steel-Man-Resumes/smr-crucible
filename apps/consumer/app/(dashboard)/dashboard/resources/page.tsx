@@ -103,19 +103,19 @@ function SecondChanceBoardPage() {
   const topMatchIds = new Set(ranked.slice(0, 3).map((item) => item.id));
 
   return (
-    <div className="max-w-5xl space-y-8">
+    <div className="max-w-5xl space-y-8 font-term">
       <header className="max-w-3xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Fair-Chance Lanes
         </h1>
         <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
-        <p className="text-body text-muted leading-relaxed">
+        <p className="text-base text-t-phos-dim leading-relaxed">
           Start with job lanes and employers more likely to evaluate people
           individually, then move into live listings, targeted resumes,
           interview practice, and disclosure planning.
         </p>
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-900 leading-relaxed">
+        <div className="mt-4 border border-t-amber bg-t-panel-2 px-4 py-3">
+          <p className="text-sm text-t-amber-bright leading-relaxed">
             Fair-chance does not mean automatic approval. Background checks
             still vary by role, location, timing, and the relationship between
             the record and the job.
@@ -124,26 +124,26 @@ function SecondChanceBoardPage() {
       </header>
 
       {(careerTitles.length > 0 || barriers.includes("criminal_record")) && (
-        <section className="rounded-xl border border-sage-200 bg-sage-50 p-4">
-          <h2 className="font-semibold text-sage-800 mb-2">
+        <section className="border border-t-line bg-t-panel p-4">
+          <h2 className="font-semibold text-t-amber-bright mb-2">
             Matched From Your Forge Results
           </h2>
           <div className="flex flex-wrap gap-2">
             {careerTitles.slice(0, 4).map((title) => (
               <span
                 key={title}
-                className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-sage-700 border border-sage-200"
+                className="bg-t-panel-2 px-3 py-1.5 text-xs font-medium text-t-phos border border-t-line"
               >
                 {title}
               </span>
             ))}
             {barriers.includes("criminal_record") && (
-              <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-sage-700 border border-sage-200">
+              <span className="bg-t-panel-2 px-3 py-1.5 text-xs font-medium text-t-phos border border-t-line">
                 record-aware matching
               </span>
             )}
             {location && (
-              <span className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-sage-700 border border-sage-200">
+              <span className="bg-t-panel-2 px-3 py-1.5 text-xs font-medium text-t-phos border border-t-line">
                 {location}
               </span>
             )}
@@ -154,10 +154,10 @@ function SecondChanceBoardPage() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-foreground">
+            <h2 className="text-lg font-bold text-t-white">
               Opportunity Lanes
             </h2>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-t-phos-dim">
               Use these as starting points, then search live openings.
             </p>
           </div>
@@ -167,7 +167,7 @@ function SecondChanceBoardPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search role or employer"
-              className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-sage-500 focus:ring-2 focus:ring-sage-100"
+              className="w-full border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white outline-none focus:border-t-amber"
             />
           </label>
         </div>
@@ -177,10 +177,10 @@ function SecondChanceBoardPage() {
             <button
               key={id}
               onClick={() => setCategory(id)}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`t-focus whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors border ${
                 category === id
-                  ? "bg-sage-600 text-white"
-                  : "bg-white text-muted border border-border hover:border-sage-300 hover:text-foreground"
+                  ? "bg-t-amber text-[#14100a] border-t-amber font-bold"
+                  : "bg-t-panel text-t-phos-dim border-t-line hover:border-t-phos-dim hover:text-t-white"
               }`}
             >
               {CATEGORY_LABELS[id]}
@@ -203,28 +203,28 @@ function SecondChanceBoardPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-white p-8 text-center">
-            <p className="text-sm text-muted">
+          <div className="border border-t-line bg-t-panel p-8 text-center">
+            <p className="text-sm text-t-phos-dim">
               No board lanes match that filter. Try a broader role term.
             </p>
           </div>
         )}
       </section>
 
-      <section className="rounded-xl border border-border bg-white p-5">
+      <section className="border border-t-line bg-t-panel p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-semibold text-foreground">
+            <h2 className="font-semibold text-t-white">
               Still need local support before work?
             </h2>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-t-phos-dim">
               Housing, transport, IDs, legal aid, and crisis help can still
               decide whether a job is realistic this week.
             </p>
           </div>
           <a
             href="tel:211"
-            className="inline-flex min-h-touch items-center justify-center rounded-xl bg-sage-600 px-5 py-3 text-sm font-medium text-white hover:bg-sage-700"
+            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-5 py-3 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
           >
             Call 211
           </a>
@@ -256,23 +256,23 @@ function OpportunityCard({
   )}`;
 
   return (
-    <article className="rounded-xl border border-border bg-white p-5">
+    <article className="border border-t-line bg-t-panel p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-foreground">
+            <h3 className="font-semibold text-t-white">
               {opportunity.title}
             </h3>
             {matched && (
-              <span className="rounded-full bg-sage-100 px-2 py-0.5 text-[10px] font-semibold text-sage-700">
+              <span className="border border-t-amber px-2 py-0.5 text-[10px] font-semibold text-t-amber-bright">
                 matched
               </span>
             )}
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+            <span className="border border-t-line px-2 py-0.5 text-[10px] font-semibold text-t-phos-dim">
               {opportunity.hiringSignal}
             </span>
           </div>
-          <p className="text-sm text-muted leading-relaxed">
+          <p className="text-sm text-t-phos-dim leading-relaxed">
             {opportunity.whyItFits}
           </p>
         </div>
@@ -282,31 +282,31 @@ function OpportunityCard({
         {opportunity.roles.slice(0, 4).map((role) => (
           <span
             key={role}
-            className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
+            className="border border-t-steel bg-t-panel-2 px-2.5 py-1 text-xs font-medium text-t-steel"
           >
             {role}
           </span>
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-        <p className="text-xs text-amber-900">
+      <div className="mt-4 border border-t-amber bg-t-panel-2 px-3 py-2">
+        <p className="text-xs text-t-amber-bright">
           <span className="font-semibold">Watch out: </span>
           {opportunity.watchOut}
         </p>
       </div>
 
       {expanded && (
-        <div className="mt-4 space-y-4 border-t border-border pt-4">
+        <div className="mt-4 space-y-4 border-t border-t-line pt-4">
           <div>
-            <h4 className="mb-2 text-xs font-semibold uppercase text-muted">
+            <h4 className="mb-2 text-xs font-semibold uppercase text-t-phos-dim">
               Employer Examples
             </h4>
             <div className="flex flex-wrap gap-2">
               {opportunity.employerExamples.map((employer) => (
                 <span
                   key={employer}
-                  className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
+                  className="bg-t-panel-2 px-2.5 py-1 text-xs text-t-phos-dim border border-t-line"
                 >
                   {employer}
                 </span>
@@ -315,19 +315,19 @@ function OpportunityCard({
           </div>
 
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase text-muted">
+            <h4 className="mb-1 text-xs font-semibold uppercase text-t-phos-dim">
               Best Move
             </h4>
-            <p className="text-sm text-foreground leading-relaxed">
+            <p className="text-sm text-t-phos leading-relaxed">
               {opportunity.bestMove}
             </p>
           </div>
 
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase text-muted">
+            <h4 className="mb-1 text-xs font-semibold uppercase text-t-phos-dim">
               Source Note
             </h4>
-            <p className="text-xs text-muted leading-relaxed">
+            <p className="text-xs text-t-phos-dim leading-relaxed">
               {opportunity.sourceNote}
             </p>
           </div>
@@ -337,19 +337,19 @@ function OpportunityCard({
       <div className="mt-5 flex flex-wrap gap-2">
         <Link
           href={searchHref}
-          className="inline-flex min-h-touch items-center justify-center rounded-xl bg-sage-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-sage-700"
+          className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
         >
           Search live jobs
         </Link>
         <Link
           href={resumeHref}
-          className="inline-flex min-h-touch items-center justify-center rounded-xl border border-sage-200 bg-white px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sage-50"
+          className="t-focus inline-flex min-h-touch items-center justify-center border border-t-amber bg-transparent px-4 py-2.5 text-sm font-bold text-t-amber-bright hover:bg-t-amber/10"
         >
           Build a resume
         </Link>
         <Link
           href={employersHref}
-          className="inline-flex min-h-touch items-center justify-center rounded-xl border border-sky-200 bg-white px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
+          className="t-focus inline-flex min-h-touch items-center justify-center border border-t-steel bg-transparent px-4 py-2.5 text-sm font-bold text-t-steel hover:bg-t-steel/10"
         >
           Verified employers
         </Link>
@@ -357,7 +357,7 @@ function OpportunityCard({
 
       <button
         onClick={onToggle}
-        className="mt-4 text-sm font-medium text-muted hover:text-foreground"
+        className="mt-4 text-sm font-medium text-t-phos-dim hover:text-t-white"
       >
         {expanded ? "Hide details" : "Show details"}
       </button>
