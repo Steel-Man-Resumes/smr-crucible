@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import { TBtn } from "@crucible/consumer-ui";
 
 export default function ResetPasswordPage() {
   return (
@@ -68,16 +69,16 @@ function ResetPasswordForm() {
 
   if (invalidLink) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
         <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">
+          <h1 className="text-2xl font-bold text-t-white mb-2">
             Invalid reset link
           </h1>
-          <p className="text-body text-muted mb-6">
+          <p className="text-base text-t-phos-dim mb-6">
             This link is missing required information. Request a new password
             reset email.
           </p>
-          <Link href="/forgot-password" className="text-sm text-sage-600 hover:text-sage-700">
+          <Link href="/forgot-password" className="text-sm text-t-amber-bright hover:text-t-amber">
             Request a new link
           </Link>
         </div>
@@ -87,40 +88,37 @@ function ResetPasswordForm() {
 
   if (status === "done") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
         <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">
+          <h1 className="text-2xl font-bold text-t-white mb-2">
             Password reset
           </h1>
-          <p className="text-body text-muted mb-6">
+          <p className="text-base text-t-phos-dim mb-6">
             Your password has been updated. You can sign in now.
           </p>
-          <button
-            onClick={signInNow}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
-          >
-            Sign in
-          </button>
+          <TBtn onClick={signInNow} className="w-full">
+            sign in
+          </TBtn>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-t-white">
             Choose a new password
           </h1>
-          <p className="text-sm text-muted mt-1">
+          <p className="text-sm text-t-phos-dim mt-1">
             This will update the password for {email}.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
               New password
             </label>
             <input
@@ -131,13 +129,13 @@ function ResetPasswordForm() {
               placeholder="New password (8+ characters)"
               required
               autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
               disabled={status === "saving"}
             />
           </div>
 
           <div>
-            <label htmlFor="confirm" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
               Confirm password
             </label>
             <input
@@ -148,20 +146,20 @@ function ResetPasswordForm() {
               placeholder="Confirm password"
               required
               autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
               disabled={status === "saving"}
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-t-red">{error}</p>}
 
-          <button
+          <TBtn
             type="submit"
             disabled={status === "saving" || !password || !confirmPassword}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
+            className="w-full"
           >
-            {status === "saving" ? "Saving..." : "Reset Password"}
-          </button>
+            {status === "saving" ? "saving..." : "reset password"}
+          </TBtn>
         </form>
       </div>
     </main>

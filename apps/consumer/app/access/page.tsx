@@ -3,9 +3,11 @@
 import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 
-// ── Confetti ────────────────────────────────────────────────────
-const CONFETTI_COLORS = ["#4a9e3f","#2d5a27","#a8c89e","#c4a962","#7ab876","#e8f0e4","#ffffff","#d4edca"];
+// ── Confetti -- Hand-Forged Terminal palette only ──────────────────
+const CONFETTI_COLORS = ["#D4A84B","#E8C060","#9FBF8F","#6D8562","#E9E6DA","#7FA3B5"];
 interface Particle { x:number; y:number; size:number; color:string; rotation:number; rotationSpeed:number; speedX:number; speedY:number; opacity:number; isRect:boolean; }
+
+const MONO = 'ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
 // ── Sample resume text ──────────────────────────────────────────
 const SAMPLE_RESUME = `James "Jimmy" Wallace
@@ -88,9 +90,9 @@ const TOOLS = [
 
 // ── Styles ──────────────────────────────────────────────────────
 const S = {
-  eyebrow: { fontSize:"11px", fontWeight:700, letterSpacing:"0.2em", textTransform:"uppercase" as const, color:"#a8c89e", display:"block", marginBottom:"20px" },
-  sectionLabel: { fontSize:"11px", fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"12px", display:"block" },
-  divider: { border:"none", borderTop:"1px solid #e8e4dc", margin:"40px 0" },
+  eyebrow: { fontSize:"11px", fontWeight:700, letterSpacing:"0.2em", textTransform:"uppercase" as const, color:"#9FBF8F", display:"block", marginBottom:"20px" },
+  sectionLabel: { fontSize:"11px", fontWeight:700, letterSpacing:"0.16em", textTransform:"uppercase" as const, color:"#E8C060", marginBottom:"12px", display:"block" },
+  divider: { border:"none", borderTop:"1px dashed #2A3324", margin:"40px 0" },
 };
 
 export default function AccessPage() {
@@ -215,32 +217,33 @@ function AccessPageInner() {
   });
 
   return (
-    <div style={{ fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background:"#f2efe8", minHeight:"100vh" }}>
+    <div style={{ fontFamily:MONO, background:"#0B0E0C", minHeight:"100vh" }}>
+      <div className="t-scanline" aria-hidden="true" />
 
       {/* ── HERO (full-viewport confetti section) ── */}
-      <div style={{ position:"relative", minHeight:"100vh", background:"linear-gradient(155deg,#122510 0%,#1e3d18 35%,#2d5a27 70%,#3a6e2f 100%)", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ position:"relative", minHeight:"100vh", background:"linear-gradient(155deg,#0B0E0C 0%,#10140F 45%,#151A13 100%)", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center" }}>
         <canvas ref={canvasRef} style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:1 }} />
-        <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse 70% 60% at 50% 40%,rgba(74,158,63,0.15) 0%,transparent 70%)", pointerEvents:"none", zIndex:1 }} />
+        <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse 70% 60% at 50% 40%,rgba(212,168,75,0.12) 0%,transparent 70%)", pointerEvents:"none", zIndex:1 }} />
 
         <div style={{ position:"relative", zIndex:2, textAlign:"center", padding:"48px 24px", maxWidth:"640px", width:"100%" }}>
-          <span style={{ ...S.eyebrow, ...fadeIn(phase>=1) }}>Steel Man Resumes</span>
+          <span style={{ ...S.eyebrow, ...fadeIn(phase>=1) }}>$ steel man resumes</span>
 
-          <h1 style={{ ...fadeIn(phase>=1,"0.1s"), fontSize:"clamp(48px,9vw,80px)", fontWeight:800, color:"#fff", lineHeight:1.05, letterSpacing:"-0.025em", margin:"0 0 20px" }}>
-            You&rsquo;re In,<br/><span style={{ color:"#c8e8c0" }}>{heroName}</span>
+          <h1 style={{ ...fadeIn(phase>=1,"0.1s"), fontSize:"clamp(40px,8vw,68px)", fontWeight:800, color:"#E9E6DA", lineHeight:1.1, letterSpacing:"-0.01em", margin:"0 0 20px" }}>
+            You&rsquo;re In,<br/><span style={{ color:"#E8C060" }}>{heroName}</span>
           </h1>
 
-          <p style={{ ...fadeIn(phase>=2), fontSize:"18px", color:"#c8ddc4", lineHeight:1.75, maxWidth:"460px", margin:"0 auto 16px", fontFamily:"Georgia, serif" }}>
+          <p style={{ ...fadeIn(phase>=2), fontSize:"18px", color:"#9FBF8F", lineHeight:1.75, maxWidth:"460px", margin:"0 auto 16px" }}>
             Your platform access is live. Everything below will orient you before you begin -- then a single link at the bottom takes you into the full experience.
           </p>
 
-          <p style={{ ...fadeIn(phase>=2,"0.1s"), fontSize:"13px", color:"rgba(200,221,196,0.55)", margin:"0 auto 48px" }}>
+          <p style={{ ...fadeIn(phase>=2,"0.1s"), fontSize:"13px", color:"rgba(109,133,98,0.75)", margin:"0 auto 48px" }}>
             Scroll to explore &darr;
           </p>
 
           {/* scroll cue arrow */}
           <div style={{ ...fadeIn(phase>=3,"0.2s") }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ margin:"0 auto", display:"block", opacity:0.5 }}>
-              <path d="M12 5v14M5 12l7 7 7-7" stroke="#a8c89e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ margin:"0 auto", display:"block", opacity:0.6 }}>
+              <path d="M12 5v14M5 12l7 7 7-7" stroke="#9FBF8F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
         </div>
@@ -251,20 +254,20 @@ function AccessPageInner() {
 
         {/* ── SECTION: What You're About to Experience ── */}
         <span style={S.sectionLabel}>What You&rsquo;re About to Experience</span>
-        <h2 style={{ fontSize:"28px", fontWeight:800, color:"#1c1c1a", letterSpacing:"-0.02em", margin:"0 0 20px", lineHeight:1.2 }}>
+        <h2 style={{ fontSize:"26px", fontWeight:800, color:"#E9E6DA", letterSpacing:"-0.01em", margin:"0 0 20px", lineHeight:1.25 }}>
           Two tools. One arc.<br/>From raw material to readiness.
         </h2>
 
-        <div style={{ background:"#fff", borderRadius:"16px", padding:"32px", marginBottom:"16px", border:"1px solid #e8e4dc" }}>
+        <div style={{ background:"#10140F", padding:"32px", marginBottom:"16px", border:"1px solid #2A3324" }}>
           <div style={{ display:"flex", gap:"16px", alignItems:"flex-start" }}>
-            <div style={{ width:"36px", height:"36px", borderRadius:"50%", background:"#2d5a27", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:"16px", flexShrink:0 }}>1</div>
+            <div style={{ width:"36px", height:"36px", background:"#D4A84B", color:"#14100a", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:"16px", flexShrink:0 }}>1</div>
             <div>
-              <div style={{ fontSize:"17px", fontWeight:700, color:"#1c1c1a", marginBottom:"8px" }}>The Forge &mdash; <span style={{ color:"#4a6741" }}>forge.steelmanresumes.com</span></div>
-              <p style={{ fontSize:"15px", color:"#4a4a48", lineHeight:1.75, margin:0 }}>
+              <div style={{ fontSize:"17px", fontWeight:700, color:"#E9E6DA", marginBottom:"8px" }}>The Forge &mdash; <span style={{ color:"#E8C060" }}>forge.steelmanresumes.com</span></div>
+              <p style={{ fontSize:"15px", color:"#9FBF8F", lineHeight:1.75, margin:0 }}>
                 The public front door. No account required. The Forge reads a person&rsquo;s raw work history -- gaps, correctional facility jobs, rough language and all -- and returns a professional narrative, career paths, barrier resources, and a resume starter in about 90 seconds.
               </p>
-              <div style={{ marginTop:"14px", padding:"14px 16px", background:"#f0f5ee", borderRadius:"10px", borderLeft:"3px solid #4a6741" }}>
-                <p style={{ fontSize:"14px", color:"#2d5a27", fontStyle:"italic", margin:0, lineHeight:1.65 }}>
+              <div style={{ marginTop:"14px", padding:"14px 16px", background:"#151A13", borderLeft:"3px solid #D4A84B" }}>
+                <p style={{ fontSize:"14px", color:"#E8C060", fontStyle:"italic", margin:0, lineHeight:1.65 }}>
                   The design intention: give the person a credible, dignified professional identity before they have to ask for one. For a population conditioned to apologize for their work history, that reframe is the psychological precondition for everything that follows.
                 </p>
               </div>
@@ -272,23 +275,23 @@ function AccessPageInner() {
           </div>
         </div>
 
-        <div style={{ background:"#fff", borderRadius:"16px", padding:"32px", marginBottom:"16px", border:"1px solid #e8e4dc" }}>
+        <div style={{ background:"#10140F", padding:"32px", marginBottom:"16px", border:"1px solid #2A3324" }}>
           <div style={{ display:"flex", gap:"16px", alignItems:"flex-start" }}>
-            <div style={{ width:"36px", height:"36px", borderRadius:"50%", background:"#2d5a27", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:"16px", flexShrink:0 }}>2</div>
+            <div style={{ width:"36px", height:"36px", background:"#D4A84B", color:"#14100a", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:"16px", flexShrink:0 }}>2</div>
             <div>
-              <div style={{ fontSize:"17px", fontWeight:700, color:"#1c1c1a", marginBottom:"8px" }}>The Refinery &mdash; <span style={{ color:"#4a6741" }}>refinery.steelmanresumes.com</span></div>
-              <p style={{ fontSize:"15px", color:"#4a4a48", lineHeight:1.75, margin:0 }}>
+              <div style={{ fontSize:"17px", fontWeight:700, color:"#E9E6DA", marginBottom:"8px" }}>The Refinery &mdash; <span style={{ color:"#E8C060" }}>refinery.steelmanresumes.com</span></div>
+              <p style={{ fontSize:"15px", color:"#9FBF8F", lineHeight:1.75, margin:0 }}>
                 The authenticated workspace. Once signed in, the person builds their future here -- not receives it. Job Board, Application Tailor, Disclosure Coach, Interview Prep, Application Tracker. Every action is logged. Every step is measurable.
               </p>
             </div>
           </div>
         </div>
 
-        <div style={{ background:"linear-gradient(135deg,#1e3d18,#2d5a27)", borderRadius:"14px", padding:"24px 28px", textAlign:"center", marginBottom:"16px" }}>
-          <p style={{ fontSize:"16px", color:"#fff", lineHeight:1.8, margin:0 }}>
-            <strong style={{ color:"#c8e8c0" }}>The Forge gives something to the user.</strong><br/>
+        <div style={{ background:"#151A13", border:"1px solid #D4A84B", padding:"24px 28px", textAlign:"center", marginBottom:"16px" }}>
+          <p style={{ fontSize:"16px", color:"#E9E6DA", lineHeight:1.8, margin:0 }}>
+            <strong style={{ color:"#E8C060" }}>The Forge gives something to the user.</strong><br/>
             The Refinery builds something with the user.<br/>
-            <span style={{ fontSize:"14px", color:"rgba(200,221,196,0.75)" }}>That arc is where the self-efficacy data lives -- and where the outcome story lives for your funders.</span>
+            <span style={{ fontSize:"14px", color:"#6D8562" }}>That arc is where the self-efficacy data lives -- and where the outcome story lives for your funders.</span>
           </p>
         </div>
 
@@ -296,15 +299,15 @@ function AccessPageInner() {
 
         {/* ── SECTION: Refinery Tools ── */}
         <span style={S.sectionLabel}>What&rsquo;s Waiting in the Refinery</span>
-        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#1c1c1a", margin:"0 0 20px" }}>Every tool is unlocked for you from your first sign-in.</h2>
+        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#E9E6DA", margin:"0 0 20px" }}>Every tool is unlocked for you from your first sign-in.</h2>
 
-        <div style={{ background:"#fff", borderRadius:"16px", overflow:"hidden", border:"1px solid #e8e4dc", marginBottom:"16px" }}>
+        <div style={{ background:"#10140F", overflow:"hidden", border:"1px solid #2A3324", marginBottom:"16px" }}>
           {TOOLS.map((tool, i) => (
-            <div key={tool.name} style={{ display:"flex", gap:"14px", padding:"16px 24px", borderBottom: i < TOOLS.length-1 ? "1px solid #f0ede6" : "none", alignItems:"flex-start" }}>
-              <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#4a6741", marginTop:"7px", flexShrink:0 }} />
+            <div key={tool.name} style={{ display:"flex", gap:"14px", padding:"16px 24px", borderBottom: i < TOOLS.length-1 ? "1px solid #2A3324" : "none", alignItems:"flex-start" }}>
+              <div style={{ width:"7px", height:"7px", background:"#D4A84B", marginTop:"8px", flexShrink:0 }} />
               <div>
-                <div style={{ fontSize:"14px", fontWeight:700, color:"#1c1c1a", marginBottom:"3px" }}>{tool.name}</div>
-                <div style={{ fontSize:"13.5px", color:"#6a6a68", lineHeight:1.55 }}>{tool.desc}</div>
+                <div style={{ fontSize:"14px", fontWeight:700, color:"#E9E6DA", marginBottom:"3px" }}>{tool.name}</div>
+                <div style={{ fontSize:"13.5px", color:"#6D8562", lineHeight:1.55 }}>{tool.desc}</div>
               </div>
             </div>
           ))}
@@ -314,35 +317,35 @@ function AccessPageInner() {
 
         {/* ── SECTION: Access Details ── */}
         <span style={S.sectionLabel}>Your Access</span>
-        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#1c1c1a", margin:"0 0 20px" }}>No setup required. Your email is pre-authorized.</h2>
+        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#E9E6DA", margin:"0 0 20px" }}>No setup required. Your email is pre-authorized.</h2>
 
-        <div style={{ background:"#fff", borderRadius:"16px", border:"1px solid #e8e4dc", overflow:"hidden", marginBottom:"16px" }}>
+        <div style={{ background:"#10140F", border:"1px solid #2A3324", overflow:"hidden", marginBottom:"16px" }}>
           {isBaker ? (
-            <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
-              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Sign-in Email</div>
-              <div style={{ fontSize:"16px", fontWeight:600, color:"#1c1c1a", marginBottom:"4px" }}>latonyabakergoe@gmail.com</div>
-              <div style={{ fontSize:"13px", color:"#7a7a78" }}>This address is pre-authorized. Sign in at refinery.steelmanresumes.com and you will receive a one-click magic link. Partner tier activates automatically -- no code needed.</div>
+            <div style={{ padding:"20px 24px", borderBottom:"1px solid #2A3324" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#E8C060", marginBottom:"6px" }}>Sign-in Email</div>
+              <div style={{ fontSize:"16px", fontWeight:600, color:"#E9E6DA", marginBottom:"4px" }}>latonyabakergoe@gmail.com</div>
+              <div style={{ fontSize:"13px", color:"#6D8562" }}>This address is pre-authorized. Sign in at refinery.steelmanresumes.com and you will receive a one-click magic link. Partner tier activates automatically -- no code needed.</div>
             </div>
           ) : (
-            <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
-              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Sign In</div>
-              <div style={{ fontSize:"14px", color:"#4a4a48", lineHeight:1.6 }}>
-                Create a free account (or sign in) at <strong>forge.steelmanresumes.com</strong>, then go to Settings and enter your partner code below to unlock full access.
+            <div style={{ padding:"20px 24px", borderBottom:"1px solid #2A3324" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#E8C060", marginBottom:"6px" }}>Sign In</div>
+              <div style={{ fontSize:"14px", color:"#9FBF8F", lineHeight:1.6 }}>
+                Create a free account (or sign in) at <strong style={{ color:"#E9E6DA" }}>forge.steelmanresumes.com</strong>, then go to Settings and enter your partner code below to unlock full access.
               </div>
             </div>
           )}
-          <div style={{ padding:"20px 24px", borderBottom:"1px solid #f0ede6" }}>
-            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Partner Code</div>
-            <div style={{ fontSize:"22px", fontWeight:800, color:"#1c1c1a", letterSpacing:"0.06em", fontFamily:"monospace", marginBottom:"4px" }}>{partnerCode}</div>
-            <div style={{ fontSize:"13px", color:"#7a7a78" }}>Anyone on your staff or in your program can redeem this code after creating an account to unlock partner-tier access. No expiry, no redemption limit.</div>
+          <div style={{ padding:"20px 24px", borderBottom:"1px solid #2A3324" }}>
+            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#E8C060", marginBottom:"6px" }}>Partner Code</div>
+            <div style={{ fontSize:"22px", fontWeight:800, color:"#E8C060", letterSpacing:"0.06em", marginBottom:"4px" }}>{partnerCode}</div>
+            <div style={{ fontSize:"13px", color:"#6D8562" }}>Anyone on your staff or in your program can redeem this code after creating an account to unlock partner-tier access. No expiry, no redemption limit.</div>
           </div>
           <div style={{ padding:"20px 24px" }}>
-            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741", marginBottom:"6px" }}>Your Tier</div>
-            <div style={{ display:"inline-flex", alignItems:"center", gap:"8px", background:"#f0f5ee", border:"1px solid #b8d4b0", borderRadius:"20px", padding:"6px 14px", marginBottom:"4px" }}>
-              <div style={{ width:"7px", height:"7px", borderRadius:"50%", background:"#4a6741" }} />
-              <span style={{ fontSize:"13px", fontWeight:700, color:"#2d5a27" }}>Partner</span>
+            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#E8C060", marginBottom:"6px" }}>Your Tier</div>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:"8px", background:"#151A13", border:"1px solid #D4A84B", padding:"6px 14px", marginBottom:"4px" }}>
+              <div style={{ width:"7px", height:"7px", background:"#D4A84B" }} />
+              <span style={{ fontSize:"13px", fontWeight:700, color:"#E8C060" }}>Partner</span>
             </div>
-            <div style={{ fontSize:"13px", color:"#7a7a78", marginTop:"6px" }}>Partner tier bypasses the standard onboarding gates -- all tools are accessible immediately. You see the full platform as it exists for your population, not just the public entry points.</div>
+            <div style={{ fontSize:"13px", color:"#6D8562", marginTop:"6px" }}>Partner tier bypasses the standard onboarding gates -- all tools are accessible immediately. You see the full platform as it exists for your population, not just the public entry points.</div>
           </div>
         </div>
 
@@ -350,27 +353,26 @@ function AccessPageInner() {
 
         {/* ── SECTION: Sample Resume ── */}
         <span style={S.sectionLabel}>Sample Resume -- Paste Into The Forge</span>
-        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#1c1c1a", margin:"0 0 12px" }}>No resume on hand? Use Jimmy.</h2>
-        <p style={{ fontSize:"15px", color:"#4a4a48", lineHeight:1.75, marginBottom:"20px" }}>
+        <h2 style={{ fontSize:"22px", fontWeight:700, color:"#E9E6DA", margin:"0 0 12px" }}>No resume on hand? Use Jimmy.</h2>
+        <p style={{ fontSize:"15px", color:"#9FBF8F", lineHeight:1.75, marginBottom:"20px" }}>
           This is a fictional but realistic scenario from your population -- a Milwaukee kitchen worker with a correctional facility job in his history, employment gaps, and a raw objective section. Copy it, paste it into The Forge on the next page, answer a few short questions about readiness and goals, and the full output generates in about 90 seconds.
         </p>
 
-        <div style={{ background:"#fff", border:"1.5px solid #d8d4cc", borderRadius:"14px", overflow:"hidden", marginBottom:"16px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderBottom:"1px solid #ede9e0", background:"#fafaf8" }}>
+        <div style={{ background:"#10140F", border:"1px solid #2A3324", overflow:"hidden", marginBottom:"16px" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderBottom:"1px solid #2A3324", background:"#151A13" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-              <div style={{ width:"10px", height:"10px", borderRadius:"2px", background:"#4a6741" }} />
-              <span style={{ fontSize:"12px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#4a6741" }}>Jimmy Wallace &mdash; Sample Resume</span>
+              <div style={{ width:"9px", height:"9px", background:"#D4A84B" }} />
+              <span style={{ fontSize:"12px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" as const, color:"#E8C060" }}>Jimmy Wallace &mdash; Sample Resume</span>
             </div>
             <button
               onClick={copyResume}
               style={{
-                background: copied ? "#2d5a27" : "#fff",
-                border: `1.5px solid ${copied ? "#2d5a27" : "#b8d4b0"}`,
-                borderRadius:"8px",
+                background: copied ? "#D4A84B" : "transparent",
+                border: `1px solid #D4A84B`,
                 padding:"7px 16px",
                 fontSize:"13px",
-                fontWeight:600,
-                color: copied ? "#fff" : "#2d5a27",
+                fontWeight:700,
+                color: copied ? "#14100a" : "#E8C060",
                 cursor:"pointer",
                 transition:"all 0.2s",
                 fontFamily:"inherit",
@@ -379,7 +381,7 @@ function AccessPageInner() {
               {copied ? "Copied!" : "Copy to Clipboard"}
             </button>
           </div>
-          <pre style={{ margin:0, padding:"20px 22px", fontFamily:"'Courier New', Courier, monospace", fontSize:"12px", lineHeight:1.8, color:"#2a2a2a", whiteSpace:"pre-wrap" as const, wordBreak:"break-word" as const, background:"#fafaf8", maxHeight:"340px", overflow:"auto" }}>
+          <pre style={{ margin:0, padding:"20px 22px", fontFamily:MONO, fontSize:"12px", lineHeight:1.8, color:"#9FBF8F", whiteSpace:"pre-wrap" as const, wordBreak:"break-word" as const, background:"#10140F", maxHeight:"340px", overflow:"auto" }}>
             {SAMPLE_RESUME}
           </pre>
         </div>
@@ -387,46 +389,45 @@ function AccessPageInner() {
         <hr style={S.divider}/>
 
         {/* ── SECTION: Closing Note ── */}
-        <div style={{ background:"#fff", borderRadius:"16px", padding:"32px", border:"1px solid #e8e4dc", marginBottom:"48px" }}>
-          <p style={{ fontSize:"15.5px", color:"#3a3a38", lineHeight:1.85, marginBottom:"16px", fontFamily:"Georgia, serif" }}>
+        <div style={{ background:"#10140F", padding:"32px", border:"1px solid #2A3324", marginBottom:"48px" }}>
+          <p style={{ fontSize:"15.5px", color:"#9FBF8F", lineHeight:1.85, marginBottom:"16px" }}>
             {isBaker
               ? "Dr. Baker, the scholarship and organizational instinct you bring to this work -- the ability to see both the human in front of you and the systems that have failed them -- is exactly what this technology needs at the table."
               : `${closingLead}, the instinct that brings you to this work -- the ability to see both the person in front of you and the systems that have failed them -- is exactly what this technology needs at the table.`}
           </p>
-          <p style={{ fontSize:"15.5px", color:"#3a3a38", lineHeight:1.85, marginBottom:"0", fontFamily:"Georgia, serif" }}>
+          <p style={{ fontSize:"15.5px", color:"#9FBF8F", lineHeight:1.85, marginBottom:"0" }}>
             I built Steel Man Resumes for the person who ran a correctional kitchen for three years, earned every supervisor&rsquo;s trust, and still could not clear a background check box on a job application. Your population knows that person. What you are building makes the technology matter.
           </p>
-          <div style={{ marginTop:"24px", paddingTop:"20px", borderTop:"1px solid #e8e4dc" }}>
-            <div style={{ fontSize:"15px", fontWeight:700, color:"#1c1c1a" }}>Troy Richard Carr</div>
-            <div style={{ fontSize:"13px", color:"#7a7a78", marginTop:"3px" }}>Steel Man Resumes &nbsp;&middot;&nbsp; The Midnight Garden LLC &nbsp;&middot;&nbsp; steelmanresumes.com</div>
+          <div style={{ marginTop:"24px", paddingTop:"20px", borderTop:"1px solid #2A3324" }}>
+            <div style={{ fontSize:"15px", fontWeight:700, color:"#E9E6DA" }}>Troy Richard Carr</div>
+            <div style={{ fontSize:"13px", color:"#6D8562", marginTop:"3px" }}>Steel Man Resumes &nbsp;&middot;&nbsp; The Midnight Garden LLC &nbsp;&middot;&nbsp; steelmanresumes.com</div>
           </div>
         </div>
 
         {/* ── CTA: Begin the Experience ── */}
         <div style={{ textAlign:"center", padding:"0 0 16px" }}>
-          <div style={{ fontSize:"12px", fontWeight:600, letterSpacing:"0.12em", textTransform:"uppercase" as const, color:"#7a8c77", marginBottom:"20px" }}>
+          <div style={{ fontSize:"12px", fontWeight:600, letterSpacing:"0.12em", textTransform:"uppercase" as const, color:"#6D8562", marginBottom:"20px" }}>
             You&rsquo;ve read the brief. Ready when you are.
           </div>
           <a
             href="https://forge.steelmanresumes.com/intro"
             style={{
               display:"inline-block",
-              background:"linear-gradient(145deg,#1e3d18,#2d5a27)",
-              color:"#fff",
+              background:"#D4A84B",
+              color:"#14100a",
               fontSize:"17px",
               fontWeight:700,
               padding:"18px 52px",
-              borderRadius:"50px",
               textDecoration:"none",
               letterSpacing:"0.01em",
-              boxShadow:"0 8px 32px rgba(45,90,39,0.38), 0 2px 8px rgba(0,0,0,0.12)",
+              boxShadow:"3px 3px 0 #000",
             }}
           >
-            Begin the Experience &rarr;
+            {"> "}Begin the Experience &rarr;
           </a>
-          <p style={{ fontSize:"13px", color:"#9a9a98", marginTop:"14px", lineHeight:1.6 }}>
+          <p style={{ fontSize:"13px", color:"#6D8562", marginTop:"18px", lineHeight:1.6 }}>
             Starts at The Forge &mdash; the same entry point your clients use.<br/>
-            When you&rsquo;re ready to sign in to the Refinery, go to <a href="https://refinery.steelmanresumes.com" style={{ color:"#4a6741", textDecoration:"none", fontWeight:600 }}>refinery.steelmanresumes.com</a>.
+            When you&rsquo;re ready to sign in to the Refinery, go to <a href="https://refinery.steelmanresumes.com" style={{ color:"#E8C060", textDecoration:"none", fontWeight:600 }}>refinery.steelmanresumes.com</a>.
           </p>
         </div>
 

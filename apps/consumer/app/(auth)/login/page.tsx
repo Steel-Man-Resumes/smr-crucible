@@ -14,6 +14,7 @@ import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { TBtn } from "@crucible/consumer-ui";
 
 export default function LoginPage() {
   return (
@@ -205,22 +206,22 @@ function LoginForm() {
   // ─── Magic link sent confirmation ─────────────────────────────────────
   if (magicLinkSent) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
         <div className="w-full max-w-sm text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-sage-100 flex items-center justify-center">
-            <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-sage-600">
-              <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" />
+          <div className="w-16 h-16 mx-auto mb-6 bg-t-panel-2 border border-t-amber flex items-center justify-center">
+            <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-t-amber">
+              <rect x="2" y="4" width="14" height="10" rx="0" stroke="currentColor" strokeWidth="1.3" />
               <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
-          <p className="text-body text-muted mb-6">
-            We sent a sign-in link to <span className="font-medium text-foreground">{email}</span>.
+          <h1 className="text-2xl font-bold text-t-white mb-2">Check your email</h1>
+          <p className="text-base text-t-phos-dim mb-6">
+            We sent a sign-in link to <span className="font-medium text-t-white">{email}</span>.
             Click the link in the email to sign in. It expires in 24 hours.
           </p>
           <button
             onClick={() => { setMagicLinkSent(false); setMode("sign-in"); }}
-            className="text-sm text-sage-600 hover:text-sage-700"
+            className="text-sm text-t-amber-bright hover:text-t-amber"
           >
             Back to sign in
           </button>
@@ -239,12 +240,12 @@ function LoginForm() {
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim()));
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 pb-16">
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 pb-16 font-term bg-t-bg">
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Steel Man Resumes</h1>
-          <p className="text-sm text-muted mt-1">
+          <h1 className="text-2xl font-bold text-t-white">Steel Man Resumes</h1>
+          <p className="text-sm text-t-phos-dim mt-1">
             {mode === "create"
               ? "Create your free account"
               : mode === "magic-link"
@@ -256,7 +257,7 @@ function LoginForm() {
         <form onSubmit={submitHandler} className="space-y-4">
           {/* Email — always visible, autoComplete for saved credentials */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-t-white mb-1">
               Email
             </label>
             <input
@@ -268,7 +269,7 @@ function LoginForm() {
               required
               autoComplete="email"
               autoFocus
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
               disabled={sending}
             />
           </div>
@@ -276,7 +277,7 @@ function LoginForm() {
           {/* Password — visible for sign-in and create modes */}
           {mode !== "magic-link" && (
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
+              <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
                 Password
               </label>
               <input
@@ -287,7 +288,7 @@ function LoginForm() {
                 placeholder={mode === "create" ? "Create a password (8+ characters)" : "Your password"}
                 required
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                 disabled={sending}
               />
             </div>
@@ -296,7 +297,7 @@ function LoginForm() {
           {/* Confirm password — create mode only */}
           {mode === "create" && (
             <div>
-              <label htmlFor="confirm" className="block text-sm font-medium text-foreground mb-1">
+              <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
                 Confirm Password
               </label>
               <input
@@ -307,7 +308,7 @@ function LoginForm() {
                 placeholder="Confirm your password"
                 required
                 autoComplete="new-password"
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                 disabled={sending}
               />
             </div>
@@ -317,7 +318,7 @@ function LoginForm() {
           {mode === "create" && (
             <>
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-t-white mb-1">
                   Your name
                 </label>
                 <input
@@ -327,12 +328,12 @@ function LoginForm() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="First and last name"
                   autoComplete="name"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   disabled={sending}
                 />
               </div>
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-foreground mb-1">
+                <label htmlFor="phone" className="block text-sm font-medium text-t-white mb-1">
                   Phone
                 </label>
                 <input
@@ -342,10 +343,10 @@ function LoginForm() {
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(555) 555-5555"
                   autoComplete="tel"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+                  className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   disabled={sending}
                 />
-                <p className="text-[11px] text-muted mt-1">These go on the resumes you build. You can change them anytime.</p>
+                <p className="text-[11px] text-t-phos-dim mt-1">These go on the resumes you build. You can change them anytime.</p>
               </div>
             </>
           )}
@@ -355,7 +356,7 @@ function LoginForm() {
             <button
               type="button"
               onClick={() => setShowCode(!showCode)}
-              className="text-xs text-sage-600 hover:text-sage-700 transition-colors"
+              className="text-xs text-t-amber-bright hover:text-t-amber transition-colors"
             >
               {showCode ? "Hide partner code" : "Have a partner code?"}
             </button>
@@ -365,28 +366,24 @@ function LoginForm() {
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="e.g., PARTNER123"
-                className="mt-2 w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch uppercase"
+                className="mt-2 w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={sending}
               />
             )}
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-t-red">{error}</p>}
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitDisabled}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
-          >
+          <TBtn type="submit" disabled={submitDisabled} className="w-full">
             {sending
-              ? "Working..."
+              ? "working..."
               : mode === "create"
-                ? "Create Account"
+                ? "create account"
                 : mode === "magic-link"
-                  ? "Send Magic Link"
-                  : "Sign In"}
-          </button>
+                  ? "send magic link"
+                  : "sign in"}
+          </TBtn>
         </form>
 
         {/* Mode switchers — one clear secondary action per mode */}
@@ -396,15 +393,15 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
-                className="text-sm text-sage-600 hover:text-sage-700 transition-colors block mx-auto"
+                className="text-sm text-t-amber-bright hover:text-t-amber transition-colors block mx-auto"
               >
                 New here? Create a free account
               </button>
-              <div className="flex items-center justify-center gap-3 text-xs text-muted">
+              <div className="flex items-center justify-center gap-3 text-xs text-t-phos-dim">
                 <button
                   type="button"
                   onClick={() => { window.location.href = `/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`; }}
-                  className="hover:text-sage-600 transition-colors"
+                  className="hover:text-t-amber-bright transition-colors"
                 >
                   Forgot password?
                 </button>
@@ -412,7 +409,7 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
-                  className="hover:text-sage-600 transition-colors"
+                  className="hover:text-t-amber-bright transition-colors"
                 >
                   Email me a sign-in link
                 </button>
@@ -424,7 +421,7 @@ function LoginForm() {
             <button
               type="button"
               onClick={() => { setMode("sign-in"); setError(""); setPassword(""); setConfirmPassword(""); }}
-              className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
+              className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
             >
               Already have an account? Sign in
             </button>
@@ -432,13 +429,13 @@ function LoginForm() {
 
           {mode === "magic-link" && (
             <>
-              <p className="text-xs text-muted">
+              <p className="text-xs text-t-phos-dim">
                 We&apos;ll email a one-time link. It signs you in without changing your password.
               </p>
               <button
                 type="button"
                 onClick={() => { setMode("sign-in"); setError(""); }}
-                className="text-sm text-sage-600 hover:text-sage-700 transition-colors"
+                className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
               >
                 Back to password sign-in
               </button>
@@ -447,8 +444,8 @@ function LoginForm() {
         </div>
 
         {isDev && (
-          <div className="mt-4 pt-4 border-t border-border">
-            <p className="text-xs font-semibold text-amber-800 mb-2">
+          <div className="mt-4 pt-4 border-t border-t-line">
+            <p className="text-xs font-semibold text-t-amber-bright mb-2">
               Development access
             </p>
             <div className="grid gap-2">
@@ -456,7 +453,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => handleDevLogin("client", true)}
                 disabled={sending}
-                className="w-full px-4 py-3 bg-amber-100 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-200 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                className="t-focus w-full px-4 py-3 bg-t-panel-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
               >
                 Fresh Client Run
               </button>
@@ -465,7 +462,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("client")}
                   disabled={sending}
-                  className="px-4 py-3 bg-white border border-amber-200 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                  className="t-focus px-4 py-3 bg-t-panel border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
                 >
                   Client Login
                 </button>
@@ -473,7 +470,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("admin")}
                   disabled={sending}
-                  className="px-4 py-3 bg-white border border-amber-200 text-amber-800 rounded-xl text-sm font-medium hover:bg-amber-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                  className="t-focus px-4 py-3 bg-t-panel border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
                 >
                   Admin Login
                 </button>
@@ -485,24 +482,24 @@ function LoginForm() {
                   window.location.href = "/intro";
                 }}
                 disabled={sending}
-                className="w-full px-4 py-3 bg-white border border-border text-muted rounded-xl text-sm font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 transition-colors min-h-touch"
+                className="t-focus w-full px-4 py-3 bg-transparent border border-t-line text-t-phos-dim text-sm font-medium hover:text-t-white hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
               >
                 Reset Local Flow Only
               </button>
             </div>
-            <p className="text-[11px] text-muted mt-2">
+            <p className="text-[11px] text-t-phos-dim mt-2">
               Local only. Skips email sends so you can run demos and debug passes quickly.
             </p>
           </div>
         )}
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-muted">
+          <p className="text-xs text-t-phos-dim">
             No credit card. No spam. Your data stays yours.
           </p>
-          <p className="text-xs text-muted mt-2">
+          <p className="text-xs text-t-phos-dim mt-2">
             Haven&apos;t started yet?{" "}
-            <a href="/intro" className="text-sage-600 hover:text-sage-700 font-medium">
+            <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
               Try The Forge
             </a>{" "}
             — free, no account needed.
