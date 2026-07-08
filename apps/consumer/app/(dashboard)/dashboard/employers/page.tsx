@@ -91,26 +91,26 @@ function EmployersList() {
   }, [employers, industry, q]);
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-muted">Loading verified employers...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading verified employers...</div>;
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-foreground">Verified Employers</h1>
-      <p className="text-muted mt-1 mb-5">
+    <div className="max-w-3xl mx-auto px-4 py-10 font-term">
+      <h1 className="text-2xl font-bold text-t-white">Verified Employers</h1>
+      <p className="text-t-phos-dim mt-1 mb-5">
         Wisconsin employers our team verified as open to people with records. Each one was
         checked against real fair-chance hiring signals. Read the notes -- some have honest caveats.
       </p>
 
       {q && (
-        <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3">
-          <p className="text-sm text-sage-800">
+        <div className="mb-5 flex items-center justify-between gap-3 border border-t-amber bg-t-panel-2 px-4 py-3">
+          <p className="text-sm text-t-amber-bright">
             Showing employers matching{" "}
             <span className="font-semibold">&ldquo;{searchParams.get("q")}&rdquo;</span> from your lane.
           </p>
           <a
             href="/dashboard/employers"
-            className="text-sm font-medium text-sage-700 hover:text-sage-900 whitespace-nowrap"
+            className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
           >
             Show all
           </a>
@@ -118,7 +118,7 @@ function EmployersList() {
       )}
 
       {employers.length === 0 ? (
-        <div className="text-center text-muted bg-white border border-border rounded-xl px-5 py-12">
+        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           No verified employers are published yet. Check back soon.
         </div>
       ) : (
@@ -127,7 +127,7 @@ function EmployersList() {
             <div className="mb-5 flex flex-wrap gap-2">
               <button
                 onClick={() => setIndustry("all")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border ${industry === "all" ? "bg-sage-600 text-white border-sage-600" : "bg-white border-border text-muted hover:bg-sage-50"}`}
+                className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
               >
                 All ({employers.length})
               </button>
@@ -135,7 +135,7 @@ function EmployersList() {
                 <button
                   key={ind}
                   onClick={() => setIndustry(ind)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full border ${industry === ind ? "bg-sage-600 text-white border-sage-600" : "bg-white border-border text-muted hover:bg-sage-50"}`}
+                  className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === ind ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
                 >
                   {ind}
                 </button>
@@ -145,20 +145,20 @@ function EmployersList() {
 
           <div className="space-y-3">
             {shown.length === 0 && (
-              <div className="text-center text-muted bg-white border border-border rounded-xl px-5 py-10">
+              <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-10">
                 No verified employers match this lane yet.{" "}
-                <a href="/dashboard/employers" className="text-sage-700 font-medium hover:text-sage-900">
+                <a href="/dashboard/employers" className="text-t-amber-bright font-medium hover:text-t-amber">
                   Show all
                 </a>
                 .
               </div>
             )}
             {shown.map((e) => (
-              <div key={e.id} className="bg-white border border-border rounded-xl p-5">
+              <div key={e.id} className="bg-t-panel border border-t-line p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="font-semibold text-foreground">{e.name}</h2>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted">
+                    <h2 className="font-semibold text-t-white">{e.name}</h2>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-t-phos-dim">
                       {e.industry && <span>{e.industry}</span>}
                       {e.location && <span>{e.location}</span>}
                     </div>
@@ -168,7 +168,7 @@ function EmployersList() {
                       href={e.applyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-shrink-0 px-4 py-2 rounded-xl bg-sage-600 text-white text-sm font-medium hover:bg-sage-700 min-h-touch"
+                      className="t-focus flex-shrink-0 px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright min-h-touch"
                     >
                       Apply
                     </a>
@@ -176,35 +176,35 @@ function EmployersList() {
                 </div>
 
                 {e.roleTypes && (
-                  <p className="text-sm text-foreground mt-3">
-                    <span className="text-muted">Roles: </span>
+                  <p className="text-sm text-t-phos mt-3">
+                    <span className="text-t-phos-dim">Roles: </span>
                     {e.roleTypes}
                   </p>
                 )}
                 {e.whyGoodFit && (
-                  <p className="text-sm text-foreground mt-2 leading-relaxed">{e.whyGoodFit}</p>
+                  <p className="text-sm text-t-phos mt-2 leading-relaxed">{e.whyGoodFit}</p>
                 )}
                 {e.caveats && (
-                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                  <p className="text-xs text-t-amber-bright bg-t-panel-2 border border-t-amber px-3 py-2 mt-3">
                     Heads up: {e.caveats}
                   </p>
                 )}
 
                 <button
                   onClick={() => setOpenApply(openApply === e.id ? null : e.id)}
-                  className="mt-3 text-sm font-medium text-sage-700 hover:text-sage-900"
+                  className="mt-3 text-sm font-medium text-t-amber-bright hover:text-t-amber"
                 >
                   {openApply === e.id ? "Hide" : "Prepare to apply"}
                 </button>
 
                 {openApply === e.id && (
-                  <div className="mt-3 rounded-xl border border-sage-200 bg-sage-50 p-4 space-y-3">
+                  <div className="mt-3 border border-t-line bg-t-panel-2 p-4 space-y-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-sage-700 mb-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-1">
                         Your details to paste
                       </p>
                       {me?.name || me?.email || me?.city || me?.state ? (
-                        <div className="text-sm text-foreground leading-relaxed">
+                        <div className="text-sm text-t-white leading-relaxed">
                           {me?.name && <div>{me.name}</div>}
                           {me?.email && <div>{me.email}</div>}
                           {(me?.city || me?.state) && (
@@ -212,32 +212,32 @@ function EmployersList() {
                           )}
                           <button
                             onClick={copyDetails}
-                            className="mt-2 text-xs font-medium text-sage-700 hover:text-sage-900 underline"
+                            className="mt-2 text-xs font-medium text-t-amber-bright hover:text-t-amber underline"
                           >
                             {copied ? "Copied!" : "Copy my details"}
                           </button>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted">
+                        <p className="text-sm text-t-phos-dim">
                           Add your name and contact info in Settings to paste them here.
                         </p>
                       )}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-sage-700 mb-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-1">
                         Your resume
                       </p>
                       {me?.hasResume ? (
                         <a
                           href="/dashboard/vault"
-                          className="text-sm font-medium text-sage-700 hover:text-sage-900 underline"
+                          className="text-sm font-medium text-t-amber-bright hover:text-t-amber underline"
                         >
                           Open My Materials to copy or download it
                         </a>
                       ) : (
                         <a
                           href="/dashboard/application-tailor"
-                          className="text-sm font-medium text-sage-700 hover:text-sage-900 underline"
+                          className="text-sm font-medium text-t-amber-bright hover:text-t-amber underline"
                         >
                           Build a resume first
                         </a>
@@ -248,12 +248,12 @@ function EmployersList() {
                         href={e.applyUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex min-h-touch items-center justify-center rounded-xl bg-sage-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-sage-700"
+                        className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
                       >
                         Open the application
                       </a>
                     )}
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-t-phos-dim">
                       We cannot fill the employer site for you, but everything you need is right
                       here. Tailor your resume to this role first if you can.
                     </p>
@@ -263,7 +263,7 @@ function EmployersList() {
             ))}
           </div>
 
-          <p className="text-xs text-muted mt-6">
+          <p className="text-xs text-t-phos-dim mt-6">
             Verified by the Steel Man team. Always confirm current openings directly with the employer.
           </p>
         </>

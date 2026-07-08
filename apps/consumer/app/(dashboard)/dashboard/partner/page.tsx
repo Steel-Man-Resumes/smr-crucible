@@ -85,14 +85,14 @@ export default function PartnerDashboardPage() {
 
   if (status === "forbidden") {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-2xl font-bold text-foreground mb-3">Partner Dashboard</h1>
-        <p className="text-muted">
+      <div className="max-w-2xl mx-auto px-4 py-12 font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-3">Partner Dashboard</h1>
+        <p className="text-t-phos-dim">
           This view is for partner organizations that distribute access codes to the
           people they support. If that is you and you are seeing this, your account is
           not yet linked to a partner code -- reach out and we will connect it.
         </p>
-        <Link href="/dashboard" className="inline-block mt-6 text-sage-600 hover:text-sage-700">
+        <Link href="/dashboard" className="inline-block mt-6 text-t-amber-bright hover:text-t-amber">
           &larr; Back to dashboard
         </Link>
       </div>
@@ -100,27 +100,27 @@ export default function PartnerDashboardPage() {
   }
 
   if (status === "loading") {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-muted">Loading your cohort...</div>;
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading your cohort...</div>;
   }
   if (status === "error" || !cohort) {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-muted">Could not load the cohort. Please try again.</div>;
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim font-term">Could not load the cohort. Please try again.</div>;
   }
 
   const { clients, pendingCount, totalJoined, summary } = cohort;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
+    <div className="max-w-5xl mx-auto px-4 py-10 font-term">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Partner Dashboard</h1>
-          <p className="text-muted mt-1">
+          <h1 className="text-2xl font-bold text-t-white">Partner Dashboard</h1>
+          <p className="text-t-phos-dim mt-1">
             Progress for the people you support who chose to share it.
           </p>
         </div>
         {clients.length > 0 && (
           <a
             href="/api/partner/cohort?format=csv"
-            className="inline-flex items-center px-4 py-2 rounded-xl bg-white border-2 border-sage-200 text-sage-700 text-sm font-medium hover:bg-sage-50 min-h-touch"
+            className="t-focus inline-flex items-center px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 min-h-touch"
           >
             Export CSV
           </a>
@@ -135,32 +135,32 @@ export default function PartnerDashboardPage() {
           { label: "Active this week", value: summary.activeThisWeek },
           { label: "Hired", value: summary.hired },
         ].map((s) => (
-          <div key={s.label} className="bg-sage-50 rounded-xl px-4 py-3 border border-sage-100">
-            <div className="text-2xl font-bold text-foreground">{s.value}</div>
-            <div className="text-xs text-muted mt-0.5">{s.label}</div>
+          <div key={s.label} className="bg-t-panel px-4 py-3 border border-t-line">
+            <div className="text-2xl font-bold text-t-amber-bright">{s.value}</div>
+            <div className="text-xs text-t-phos-dim mt-0.5">{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Privacy note */}
-      <p className="text-xs text-muted bg-gray-50 border border-border rounded-lg px-4 py-3 mb-6">
+      <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
         You only see clients who chose to share their progress with you. You never see their
         resume text, disclosure plans, or interview answers -- only where they are in the journey.
       </p>
 
       {/* Cohort table */}
       {clients.length === 0 ? (
-        <div className="text-muted bg-white border border-border rounded-xl px-5 py-8 text-center">
+        <div className="text-t-phos-dim bg-t-panel border border-t-line px-5 py-8 text-center">
           No one is sharing progress yet.
           {pendingCount > 0 && (
             <span> {pendingCount} {pendingCount === 1 ? "person has" : "people have"} joined with your code; they can turn on sharing from their own Settings.</span>
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto bg-white border border-border rounded-xl">
+        <div className="overflow-x-auto bg-t-panel border border-t-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-muted border-b border-border">
+              <tr className="text-left text-xs uppercase tracking-wide text-t-phos-dim border-b border-t-line">
                 <th className="px-4 py-3 font-semibold">Client</th>
                 <th className="px-4 py-3 font-semibold">Stage</th>
                 <th className="px-4 py-3 font-semibold">Next step</th>
@@ -172,24 +172,24 @@ export default function PartnerDashboardPage() {
             </thead>
             <tbody>
               {clients.map((c) => (
-                <tr key={c.userId} className="border-b border-border last:border-0">
+                <tr key={c.userId} className="border-b border-t-line last:border-0">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{c.name || "Client"}</div>
-                    {c.email && <div className="text-xs text-muted">{c.email}</div>}
+                    <div className="font-medium text-t-white">{c.name || "Client"}</div>
+                    {c.email && <div className="text-xs text-t-phos-dim">{c.email}</div>}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{c.currentStage} / 6</div>
-                    <div className="text-xs text-muted">{STAGE_LABELS[c.currentStage] ?? ""}</div>
+                    <div className="font-medium text-t-white">{c.currentStage} / 6</div>
+                    <div className="text-xs text-t-phos-dim">{STAGE_LABELS[c.currentStage] ?? ""}</div>
                   </td>
-                  <td className="px-4 py-3 text-muted max-w-[200px]">{c.nextStepAction || "--"}</td>
-                  <td className="px-4 py-3 text-center text-foreground">{c.applications}</td>
-                  <td className="px-4 py-3 text-center text-foreground">{c.practiceSessions}</td>
-                  <td className="px-4 py-3 text-muted">{fmtDate(c.lastActiveAt)}</td>
+                  <td className="px-4 py-3 text-t-phos-dim max-w-[200px]">{c.nextStepAction || "--"}</td>
+                  <td className="px-4 py-3 text-center text-t-white">{c.applications}</td>
+                  <td className="px-4 py-3 text-center text-t-white">{c.practiceSessions}</td>
+                  <td className="px-4 py-3 text-t-phos-dim">{fmtDate(c.lastActiveAt)}</td>
                   <td className="px-4 py-3">
                     {c.hired ? (
-                      <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">Hired</span>
+                      <span className="px-2 py-1 border border-t-phos text-t-phos text-xs font-medium">Hired</span>
                     ) : (
-                      <span className="text-xs text-muted">In progress</span>
+                      <span className="text-xs text-t-phos-dim">In progress</span>
                     )}
                   </td>
                 </tr>
@@ -200,7 +200,7 @@ export default function PartnerDashboardPage() {
       )}
 
       {clients.length > 0 && pendingCount > 0 && (
-        <p className="text-xs text-muted mt-4">
+        <p className="text-xs text-t-phos-dim mt-4">
           {pendingCount} more {pendingCount === 1 ? "person has" : "people have"} joined with your code but
           have not turned on sharing yet. They control that from their own Settings.
         </p>

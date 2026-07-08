@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
 import type { AggregateReport, ConsentedCaseStudy } from "@crucible/core";
+import { TBtn } from "@crucible/consumer-ui";
 
 interface AdminData {
   report: AggregateReport;
@@ -34,8 +35,8 @@ export default function AdminEvidenceDashboard() {
 
   if (tier !== "admin") {
     return (
-      <div className="max-w-2xl">
-        <p className="text-muted">Admin access required.</p>
+      <div className="max-w-2xl font-term">
+        <p className="text-t-phos-dim">Admin access required.</p>
       </div>
     );
   }
@@ -76,33 +77,33 @@ export default function AdminEvidenceDashboard() {
   }
 
   return (
-    <div className="max-w-4xl space-y-10">
+    <div className="max-w-4xl space-y-10 font-term">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Evidence Dashboard</h1>
-          <p className="text-muted text-sm mt-1">Admin view -- live outcomes + pilot data. Shows zeros until pilots run.</p>
+          <h1 className="text-2xl font-bold text-t-white">Evidence Dashboard</h1>
+          <p className="text-t-phos-dim text-sm mt-1">Admin view -- live outcomes + pilot data. Shows zeros until pilots run.</p>
         </div>
         <Link
           href="/dashboard/admin/health"
-          className="flex-shrink-0 px-4 py-2 rounded-xl bg-white border-2 border-sage-200 text-sage-700 text-sm font-medium hover:bg-sage-50"
+          className="t-focus flex-shrink-0 px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10"
         >
           System Health
         </Link>
       </div>
 
       {/* Mint access codes -- cohort seat codes + partner staff codes */}
-      <section className="bg-white rounded-xl border border-border p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-1">Mint Access Code</h2>
-        <p className="text-xs text-muted mb-4">
+      <section className="bg-t-panel border border-t-line p-6">
+        <h2 className="text-lg font-semibold text-t-white mb-1">Mint Access Code</h2>
+        <p className="text-xs text-t-phos-dim mb-4">
           Cohort seat code = members keep the full client journey; each redemption uses one durable
           seat; the whole group shares a seat-sized Forge pool (works on one classroom WiFi).
           Partner staff code = grants the partner role for dashboards.
         </p>
         <form onSubmit={mintCode} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-muted block mb-1">Code (uppercase A-Z 0-9)</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Code (uppercase A-Z 0-9)</label>
             <input
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm font-mono uppercase"
+              className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm uppercase focus:border-t-amber focus:outline-none"
               placeholder="EXPOCREW"
               value={mintForm.code}
               onChange={(e) => setMintForm((f) => ({ ...f, code: e.target.value }))}
@@ -110,9 +111,9 @@ export default function AdminEvidenceDashboard() {
             />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Partner Name</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Partner Name</label>
             <input
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm focus:border-t-amber focus:outline-none"
               placeholder="EXPO of Wisconsin"
               value={mintForm.partnerName}
               onChange={(e) => setMintForm((f) => ({ ...f, partnerName: e.target.value }))}
@@ -120,9 +121,9 @@ export default function AdminEvidenceDashboard() {
             />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Type</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Type</label>
             <select
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+              className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm focus:border-t-amber focus:outline-none"
               value={mintForm.tier}
               onChange={(e) => setMintForm((f) => ({ ...f, tier: e.target.value }))}
             >
@@ -131,9 +132,9 @@ export default function AdminEvidenceDashboard() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Seats (blank or 0 = unlimited)</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Seats (blank or 0 = unlimited)</label>
             <input
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm focus:border-t-amber focus:outline-none"
               type="number"
               min="0"
               value={mintForm.seats}
@@ -141,23 +142,18 @@ export default function AdminEvidenceDashboard() {
             />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Daily AI Limit (per member)</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Daily AI Limit (per member)</label>
             <input
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm focus:border-t-amber focus:outline-none"
               type="number"
               value={mintForm.dailyLimit}
               onChange={(e) => setMintForm((f) => ({ ...f, dailyLimit: e.target.value }))}
             />
           </div>
           <div className="sm:col-span-3 flex items-center gap-4">
-            <button
-              type="submit"
-              className="px-5 py-2 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors"
-            >
-              Mint Code
-            </button>
+            <TBtn type="submit" size="sm">mint code</TBtn>
             {mintMsg && (
-              <p className={`text-sm ${mintMsg.startsWith("Error") ? "text-red-600" : "text-sage-700"}`}>
+              <p className={`text-sm ${mintMsg.startsWith("Error") ? "text-t-red" : "text-t-amber-bright"}`}>
                 {mintMsg}
               </p>
             )}
@@ -166,14 +162,14 @@ export default function AdminEvidenceDashboard() {
       </section>
 
       {loading && (
-        <p className="text-muted text-sm">Loading...</p>
+        <p className="text-t-phos-dim text-sm">Loading...</p>
       )}
 
       {data && (
         <>
           {/* Platform funnel */}
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-4">Platform Funnel</h2>
+            <h2 className="text-lg font-semibold text-t-white mb-4">Platform Funnel</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Forge Sessions", value: data.report.platform_funnel.forge_sessions_started },
@@ -185,9 +181,9 @@ export default function AdminEvidenceDashboard() {
                 { label: "Hired", value: data.report.platform_funnel.hires },
                 { label: "Consented Cases", value: data.report.consented_case_count },
               ].map((stat) => (
-                <div key={stat.label} className="bg-sage-50 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-sage-700">{stat.value}</p>
-                  <p className="text-xs text-muted mt-1">{stat.label}</p>
+                <div key={stat.label} className="bg-t-panel border border-t-line p-4 text-center">
+                  <p className="text-2xl font-bold text-t-amber-bright">{stat.value}</p>
+                  <p className="text-xs text-t-phos-dim mt-1">{stat.label}</p>
                 </div>
               ))}
             </div>
@@ -196,28 +192,28 @@ export default function AdminEvidenceDashboard() {
           {/* Per-partner breakdown */}
           {data.report.by_partner.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-foreground mb-4">By Partner</h2>
+              <h2 className="text-lg font-semibold text-t-white mb-4">By Partner</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="bg-sage-50">
-                      <th className="text-left px-3 py-2 font-semibold border-b border-border">Partner</th>
-                      <th className="text-center px-3 py-2 font-semibold border-b border-border">Code</th>
-                      <th className="text-center px-3 py-2 font-semibold border-b border-border">Forge</th>
-                      <th className="text-center px-3 py-2 font-semibold border-b border-border">Refinery</th>
-                      <th className="text-center px-3 py-2 font-semibold border-b border-border">Apps</th>
-                      <th className="text-center px-3 py-2 font-semibold border-b border-border">Hired</th>
+                    <tr className="bg-t-panel-2">
+                      <th className="text-left px-3 py-2 font-semibold text-t-white border-b border-t-line">Partner</th>
+                      <th className="text-center px-3 py-2 font-semibold text-t-white border-b border-t-line">Code</th>
+                      <th className="text-center px-3 py-2 font-semibold text-t-white border-b border-t-line">Forge</th>
+                      <th className="text-center px-3 py-2 font-semibold text-t-white border-b border-t-line">Refinery</th>
+                      <th className="text-center px-3 py-2 font-semibold text-t-white border-b border-t-line">Apps</th>
+                      <th className="text-center px-3 py-2 font-semibold text-t-white border-b border-t-line">Hired</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.report.by_partner.map((p, i) => (
-                      <tr key={p.partner_code} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="px-3 py-2 border-b border-border font-medium">{p.partner_name}</td>
-                        <td className="px-3 py-2 border-b border-border text-center font-mono text-xs">{p.partner_code}</td>
-                        <td className="px-3 py-2 border-b border-border text-center">{p.funnel.forge_sessions_completed}</td>
-                        <td className="px-3 py-2 border-b border-border text-center">{p.funnel.refinery_users}</td>
-                        <td className="px-3 py-2 border-b border-border text-center">{p.funnel.applications_logged}</td>
-                        <td className="px-3 py-2 border-b border-border text-center font-medium text-sage-700">{p.funnel.hires}</td>
+                      <tr key={p.partner_code} className={i % 2 === 0 ? "bg-t-panel" : "bg-t-bg"}>
+                        <td className="px-3 py-2 border-b border-t-line font-medium text-t-white">{p.partner_name}</td>
+                        <td className="px-3 py-2 border-b border-t-line text-center text-xs text-t-phos-dim">{p.partner_code}</td>
+                        <td className="px-3 py-2 border-b border-t-line text-center text-t-phos">{p.funnel.forge_sessions_completed}</td>
+                        <td className="px-3 py-2 border-b border-t-line text-center text-t-phos">{p.funnel.refinery_users}</td>
+                        <td className="px-3 py-2 border-b border-t-line text-center text-t-phos">{p.funnel.applications_logged}</td>
+                        <td className="px-3 py-2 border-b border-t-line text-center font-medium text-t-amber-bright">{p.funnel.hires}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -229,25 +225,25 @@ export default function AdminEvidenceDashboard() {
           {/* Consented case studies */}
           {data.cases.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-foreground mb-4">
+              <h2 className="text-lg font-semibold text-t-white mb-4">
                 Consented Cases ({data.cases.length})
               </h2>
               <div className="space-y-3">
                 {data.cases.map((c) => (
-                  <div key={c.id} className="bg-white rounded-lg border border-border p-4 flex items-start justify-between gap-4">
+                  <div key={c.id} className="bg-t-panel border border-t-line p-4 flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-sm font-medium text-t-white">
                         {c.display_name ?? "Anonymous"}
                       </p>
-                      <p className="text-sm text-muted mt-0.5">{c.outcome_summary}</p>
+                      <p className="text-sm text-t-phos-dim mt-0.5">{c.outcome_summary}</p>
                       {c.partner_name && (
-                        <p className="text-xs text-sage-600 mt-1">via {c.partner_name}</p>
+                        <p className="text-xs text-t-amber-bright mt-1">via {c.partner_name}</p>
                       )}
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
+                    <span className={`px-2 py-0.5 text-xs font-medium flex-shrink-0 border ${
                       c.consent_scope === "outcome_named"
-                        ? "bg-sage-100 text-sage-700"
-                        : "bg-gray-100 text-gray-600"
+                        ? "border-t-amber text-t-amber-bright"
+                        : "border-t-line text-t-phos-dim"
                     }`}>
                       {c.consent_scope === "outcome_named" ? "Named" : "Anonymous"}
                     </span>
@@ -258,9 +254,9 @@ export default function AdminEvidenceDashboard() {
           )}
 
           {data.cases.length === 0 && data.report.platform_funnel.hires === 0 && (
-            <div className="bg-sage-50 rounded-xl p-6 text-center border border-sage-200">
-              <p className="text-foreground font-medium">Pilots not yet running</p>
-              <p className="text-muted text-sm mt-1">
+            <div className="bg-t-panel p-6 text-center border border-t-line">
+              <p className="text-t-white font-medium">Pilots not yet running</p>
+              <p className="text-t-phos-dim text-sm mt-1">
                 Mint a partner code above, send it to Shannon / JFW, and data will populate here as users progress.
               </p>
             </div>
@@ -268,7 +264,7 @@ export default function AdminEvidenceDashboard() {
         </>
       )}
 
-      <p className="text-xs text-muted">
+      <p className="text-xs text-t-phos-dim">
         Last loaded: {data ? new Date(data.report.as_of).toLocaleString() : "--"}
       </p>
     </div>
