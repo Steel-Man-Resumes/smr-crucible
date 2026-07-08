@@ -39,21 +39,21 @@ export function ResumePreview({ doc, sections, overall }: Props) {
 
   return (
     <div>
-      {/* Completeness bar -- outside the page card */}
-      <div className="flex items-center gap-3 mb-2">
-        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+      {/* Completeness bar -- outside the page card (app chrome, not the document) */}
+      <div className="flex items-center gap-3 mb-2 font-term">
+        <div className="flex-1 h-2 bg-t-line overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${
+            className={`h-full transition-all duration-500 ${
               overall >= 70
-                ? "bg-sage-600"
+                ? "bg-t-phos"
                 : overall >= 40
-                  ? "bg-amber-500"
-                  : "bg-red-400"
+                  ? "bg-t-amber"
+                  : "bg-t-red"
             }`}
             style={{ width: `${overall}%` }}
           />
         </div>
-        <span className="text-xs font-medium text-gray-500 tabular-nums w-8 flex-shrink-0">
+        <span className="text-xs font-medium text-t-phos-dim tabular-nums w-8 flex-shrink-0">
           {overall}%
         </span>
       </div>
