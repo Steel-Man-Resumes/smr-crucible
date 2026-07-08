@@ -415,12 +415,12 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
   // --- Setup ---
   if (step === "setup") {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Interview Practice
         </h1>
         <GhostGuide message={getOpusMessage("interview")} pageId="interview" />
-        <p className="text-body text-muted mb-8">
+        <p className="text-base text-t-phos-dim mb-8">
           Practice makes confidence. Choose your interview type and we&apos;ll
           simulate a real conversation.
         </p>
@@ -428,7 +428,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="space-y-6">
           {/* Target role */}
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               What role are you interviewing for?
             </label>
             <input
@@ -437,16 +437,16 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 setConfig({ ...config, targetRole: e.target.value })
               }
               placeholder="e.g., Warehouse Associate, Customer Service Rep"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
           </div>
 
           {/* Phase 3: interview against a specific saved resume */}
           {resumes.length > 0 && (
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label className="text-sm font-medium text-t-white block mb-1">
                 Interview against which resume?{" "}
-                <span className="font-normal text-muted">
+                <span className="font-normal text-t-phos-dim">
                   (so questions match your real experience)
                 </span>
               </label>
@@ -459,7 +459,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                   const label = r ? [r.targetJob, r.targetCompany].filter(Boolean).join(" at ") : "";
                   if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
                 }}
-                className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white min-h-touch"
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
                 {resumes.map((r) => {
                   const label = [r.targetJob, r.targetCompany].filter(Boolean).join(" at ");
@@ -472,7 +472,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 <option value="">General (no specific resume)</option>
               </select>
               {selectedResumeId && (
-                <p className="text-xs text-sage-600 mt-1">
+                <p className="text-xs text-t-amber-bright mt-1">
                   Questions will be based on this resume -- the real jobs, tools, and results on it.
                 </p>
               )}
@@ -481,9 +481,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
           {/* Phase 3: optional job posting */}
           <div>
-            <label className="text-sm font-medium block mb-1">
+            <label className="text-sm font-medium text-t-white block mb-1">
               Paste the job posting{" "}
-              <span className="font-normal text-muted">
+              <span className="font-normal text-t-phos-dim">
                 (optional -- makes questions match the real role)
               </span>
             </label>
@@ -492,17 +492,17 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               onChange={(e) => setJobDescription(e.target.value)}
               placeholder="Paste the description from the job you are applying to..."
               rows={3}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 resize-y"
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none resize-y"
             />
           </div>
 
           {/* Skills from Forge */}
           {forgeContext?.skills && forgeContext.skills.length > 0 && (
             <div>
-              <p className="text-xs text-muted mb-2">Your skills (from The Forge)</p>
+              <p className="text-xs text-t-phos-dim mb-2">Your skills (from The Forge)</p>
               <div className="flex flex-wrap gap-1.5">
                 {forgeContext.skills.map((s, i) => (
-                  <span key={i} className="px-2.5 py-1 rounded-full text-xs bg-sage-50 text-sage-700 border border-sage-200">
+                  <span key={i} className="px-2.5 py-1 text-xs bg-t-panel text-t-phos border border-t-line">
                     {s}
                   </span>
                 ))}
@@ -512,7 +512,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
           {/* Interview type */}
           <div>
-            <label className="text-sm font-medium block mb-3">
+            <label className="text-sm font-medium text-t-white block mb-3">
               What kind of practice do you need?
             </label>
             <CardSelect
@@ -531,7 +531,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {/* Disclosure toggle (for non-disclosure types) */}
           {config.interviewType &&
             config.interviewType !== "disclosure" && (
-              <label className="flex items-start gap-3 p-4 bg-warm-50 rounded-xl border border-warm-200 cursor-pointer">
+              <label className="flex items-start gap-3 p-4 bg-t-panel border border-t-line cursor-pointer">
                 <input
                   type="checkbox"
                   checked={config.includeDisclosure}
@@ -541,13 +541,13 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                       includeDisclosure: e.target.checked,
                     })
                   }
-                  className="mt-1 w-5 h-5 rounded accent-sage-600"
+                  className="mt-1 w-5 h-5 accent-t-amber"
                 />
                 <div>
-                  <span className="text-sm font-medium block">
+                  <span className="text-sm font-medium text-t-white block">
                     Include disclosure practice
                   </span>
-                  <span className="text-xs text-muted">
+                  <span className="text-xs text-t-phos-dim">
                     The interviewer will ask about your background at some point
                     during the conversation.
                   </span>
@@ -564,7 +564,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           <button
             onClick={startInterview}
             disabled={!config.interviewType}
-            className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+            className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
             Start Practice Interview
           </button>
@@ -576,25 +576,25 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
   // --- Feedback ---
   if (step === "feedback" && feedback) {
     return (
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-foreground mb-2">
+      <div className="max-w-2xl font-term">
+        <h1 className="text-2xl font-bold text-t-white mb-2">
           Interview Feedback
         </h1>
-        <p className="text-body text-muted mb-6">
+        <p className="text-base text-t-phos-dim mb-6">
           Here&apos;s how you did. Remember — this is about practice, not
           perfection.
         </p>
 
         {/* Strengths */}
         {feedback.strengths && (
-          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-4">
-            <h2 className="font-semibold text-sage-800 mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-4">
+            <h2 className="font-semibold text-t-amber-bright mb-2">
               What you did well
             </h2>
             <ul className="space-y-2">
               {feedback.strengths.map((s: string, i: number) => (
-                <li key={i} className="text-sm text-sage-700 flex gap-2">
-                  <span className="flex-shrink-0">+</span>
+                <li key={i} className="text-sm text-t-phos flex gap-2">
+                  <span className="flex-shrink-0 text-t-amber">+</span>
                   {s}
                 </li>
               ))}
@@ -604,13 +604,13 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {/* Areas to improve */}
         {feedback.improvements && (
-          <div className="bg-warm-50 rounded-2xl p-5 border border-warm-200 mb-4">
-            <h2 className="font-semibold text-earth-800 mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-4">
+            <h2 className="font-semibold text-t-white mb-2">
               Areas to work on
             </h2>
             <ul className="space-y-2">
               {feedback.improvements.map((s: string, i: number) => (
-                <li key={i} className="text-sm text-earth-700 flex gap-2">
+                <li key={i} className="text-sm text-t-phos-dim flex gap-2">
                   <span className="flex-shrink-0">-</span>
                   {s}
                 </li>
@@ -621,9 +621,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {/* Overall */}
         {feedback.overall && (
-          <div className="bg-sky-50 rounded-2xl p-5 border border-sky-200 mb-6">
-            <h2 className="font-semibold text-sky-800 mb-2">Overall</h2>
-            <p className="text-sm text-sky-700 leading-relaxed">
+          <div className="bg-t-panel p-5 border border-t-steel mb-6">
+            <h2 className="font-semibold text-t-steel mb-2">Overall</h2>
+            <p className="text-sm text-t-phos leading-relaxed">
               {feedback.overall}
             </p>
           </div>
@@ -631,11 +631,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {/* Disclosure-specific feedback */}
         {feedback.disclosure_notes && (
-          <div className="bg-white rounded-2xl p-5 border border-border mb-6">
-            <h2 className="font-semibold text-foreground mb-2">
+          <div className="bg-t-panel p-5 border border-t-line mb-6">
+            <h2 className="font-semibold text-t-white mb-2">
               Disclosure notes
             </h2>
-            <p className="text-sm text-muted leading-relaxed">
+            <p className="text-sm text-t-phos-dim leading-relaxed">
               {feedback.disclosure_notes}
             </p>
           </div>
@@ -643,21 +643,21 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {/* The frame to carry (Phase 3) */}
         {feedback.frame && (
-          <div className="bg-sage-50 rounded-2xl p-5 border border-sage-200 mb-4">
-            <h2 className="font-semibold text-sage-800 mb-2">The frame to carry in</h2>
-            <p className="text-sm text-sage-700 leading-relaxed">{feedback.frame}</p>
+          <div className="bg-t-panel-2 p-5 border border-t-amber mb-4">
+            <h2 className="font-semibold text-t-amber-bright mb-2">The frame to carry in</h2>
+            <p className="text-sm text-t-phos leading-relaxed">{feedback.frame}</p>
           </div>
         )}
 
         {/* Stronger answers to model (Phase 3) */}
         {Array.isArray(feedback.better_answers) && feedback.better_answers.length > 0 && (
-          <div className="bg-white rounded-2xl p-5 border border-border mb-4">
-            <h2 className="font-semibold text-foreground mb-3">Stronger answers to model</h2>
+          <div className="bg-t-panel p-5 border border-t-line mb-4">
+            <h2 className="font-semibold text-t-white mb-3">Stronger answers to model</h2>
             <div className="space-y-4">
               {feedback.better_answers.map((b: any, i: number) => (
                 <div key={i}>
-                  <p className="text-sm font-medium text-foreground mb-1">{b.question}</p>
-                  <p className="text-sm text-muted leading-relaxed border-l-4 border-sage-300 pl-3 italic">
+                  <p className="text-sm font-medium text-t-white mb-1">{b.question}</p>
+                  <p className="text-sm text-t-phos-dim leading-relaxed border-l-2 border-t-amber pl-3 italic">
                     {b.model_answer}
                   </p>
                 </div>
@@ -667,9 +667,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         )}
 
         {/* Your notes -- stay on your device (Phase 3) */}
-        <div className="bg-white rounded-2xl p-5 border border-border mb-4">
-          <h2 className="font-semibold text-foreground mb-2">Your notes</h2>
-          <p className="text-xs text-muted mb-2">
+        <div className="bg-t-panel p-5 border border-t-line mb-4">
+          <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
+          <p className="text-xs text-t-phos-dim mb-2">
             Jot what you want to remember. These stay on your device -- we never store your words.
           </p>
           <textarea
@@ -677,7 +677,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             onChange={(e) => setUserNotes(e.target.value)}
             placeholder="What clicked? What do you want to do differently next time?"
             rows={3}
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 resize-y"
+            className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none resize-y"
           />
         </div>
 
@@ -685,7 +685,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
             onClick={downloadAnalysis}
-            className="px-4 py-2.5 border-2 border-border rounded-xl text-sm font-medium hover:border-sage-300 transition-colors flex items-center gap-1.5"
+            className="t-focus px-4 py-2.5 border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors flex items-center gap-1.5"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" strokeLinecap="round" strokeLinejoin="round" />
@@ -694,7 +694,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           </button>
           <button
             onClick={copyPracticeSummary}
-            className="px-4 py-2.5 text-sage-700 text-sm font-medium hover:text-sage-900 transition-colors"
+            className="px-4 py-2.5 text-t-amber-bright text-sm font-medium hover:text-t-amber transition-colors"
           >
             {copiedSummary ? "Copied!" : "Copy a practice summary for any AI"}
           </button>
@@ -708,7 +708,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               setFeedback(null);
               setExchangeCount(0);
             }}
-            className="flex-1 px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors min-h-touch"
+            className="t-focus flex-1 px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
           >
             Practice Again
           </button>
@@ -717,7 +717,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               setStep("practice");
               setFeedback(null);
             }}
-            className="px-6 py-4 border-2 border-border rounded-xl font-medium hover:border-sage-300 transition-colors min-h-touch"
+            className="t-focus px-6 py-4 border border-t-line text-t-phos font-medium hover:border-t-phos-dim hover:text-t-white transition-colors min-h-touch"
           >
             Review Chat
           </button>
@@ -728,19 +728,19 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
   // --- Practice ---
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl font-term">
       {/* Video-call style header */}
-      <div className="bg-gray-900 rounded-2xl px-5 py-4 mb-4 flex items-center justify-between">
+      <div className="bg-t-panel-2 border border-t-line px-5 py-4 mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-10 h-10 bg-t-panel border border-t-line flex items-center justify-center text-t-white text-sm font-bold">
             HM
           </div>
           <div>
-            <p className="text-white text-sm font-medium flex items-center gap-2">
+            <p className="text-t-white text-sm font-medium flex items-center gap-2">
               Hiring Manager
-              <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+              <span className="w-2 h-2 bg-t-phos inline-block" />
             </p>
-            <p className="text-gray-400 text-xs">
+            <p className="text-t-phos-dim text-xs">
               {config.targetRole ? `${config.targetRole} interview` : "Interview in progress"}
             </p>
           </div>
@@ -751,14 +751,14 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             setMessages([]);
             setExchangeCount(0);
           }}
-          className="text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
+          className="t-focus text-sm text-t-phos-dim hover:text-t-white px-3 py-1.5 hover:bg-t-panel transition-colors"
         >
           End
         </button>
       </div>
 
       {/* Chat */}
-      <div className="bg-white rounded-2xl border border-border mb-4">
+      <div className="bg-t-panel border border-t-line mb-4">
         <div
           ref={chatRef}
           className="p-5 space-y-4 max-h-[500px] overflow-y-auto"
@@ -769,10 +769,10 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-sage-600 text-white rounded-br-sm"
-                    : "bg-gray-100 text-foreground rounded-bl-sm"
+                    ? "bg-t-amber text-[#14100a]"
+                    : "bg-t-panel-2 text-t-white border border-t-line"
                 }`}
               >
                 {msg.content}
@@ -781,10 +781,10 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           ))}
           {sending && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1">
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.2s]" />
+              <div className="bg-t-panel-2 border border-t-line px-4 py-3 flex gap-1">
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce" />
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.1s]" />
+                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.2s]" />
               </div>
             </div>
           )}
@@ -795,19 +795,19 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             e.preventDefault();
             sendMessage();
           }}
-          className="flex gap-2 p-4 border-t border-border"
+          className="flex gap-2 p-4 border-t border-t-line"
         >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your answer..."
-            className="flex-1 px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 min-h-touch"
+            className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             disabled={sending}
           />
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="px-4 py-3 bg-sage-600 text-white rounded-xl hover:bg-sage-700 disabled:bg-gray-300 min-h-touch"
+            className="t-focus px-4 py-3 bg-t-amber text-[#14100a] font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
             Send
           </button>
@@ -815,12 +815,12 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       </div>
 
       {rateLimitError && (
-        <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mt-4">
-          <p className="text-sm text-amber-800">{rateLimitError}</p>
+        <div className="bg-t-panel p-4 border border-t-amber mt-4">
+          <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
         </div>
       )}
 
-      <p className="text-xs text-muted text-center">
+      <p className="text-xs text-t-phos-dim text-center">
         This is a safe space to practice. We never save your words or
         recordings, only the frames you practice and whether your point lands, so
         the app can coach you and track your progress. Your practice is private
@@ -976,27 +976,27 @@ function VoicePracticePanel({
   }
 
   return (
-    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+    <div className="border border-t-steel bg-t-panel p-5 font-term">
       <audio ref={audioRef} autoPlay className="hidden" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-semibold text-sky-800">Live voice practice</h2>
-          <p className="text-sm text-sky-700">
+          <h2 className="font-semibold text-t-steel">Live voice practice</h2>
+          <p className="text-sm text-t-phos-dim">
             Talk out loud with a realtime AI interviewer using gpt-realtime-2.
           </p>
           {status === "live" && (
-            <p className="mt-1 text-xs font-medium text-sky-800">
+            <p className="mt-1 text-xs font-medium text-t-amber-bright">
               Live now. Speak naturally; end the session when you are done.
             </p>
           )}
           {status === "error" && error && (
-            <p className="mt-1 text-xs font-medium text-red-700">{error}</p>
+            <p className="mt-1 text-xs font-medium text-t-red">{error}</p>
           )}
         </div>
         {status === "live" ? (
           <button
             onClick={stopVoicePractice}
-            className="inline-flex min-h-touch items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50"
+            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
           >
             End voice session
           </button>
@@ -1004,7 +1004,7 @@ function VoicePracticePanel({
           <button
             onClick={startVoicePractice}
             disabled={!enabled || status === "connecting"}
-            className="inline-flex min-h-touch items-center justify-center rounded-xl bg-sky-600 px-5 py-3 text-sm font-medium text-white hover:bg-sky-700 disabled:bg-gray-300"
+            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-[#14100a] hover:opacity-90 disabled:opacity-40"
           >
             {status === "connecting" ? "Connecting..." : "Start live voice"}
           </button>
