@@ -6,6 +6,8 @@
  * - 3-4 options max per question
  * - Clear selected state
  * - Accessible labels
+ *
+ * Hand-Forged Terminal skin (Wave C, 2026-07-08).
  */
 
 "use client";
@@ -38,7 +40,7 @@ export function CardSelect({
   );
 
   return (
-    <div className="flex flex-col gap-3" role={multi ? "group" : "radiogroup"}>
+    <div className="flex flex-col gap-3 font-term" role={multi ? "group" : "radiogroup"}>
       {options.map((option) => {
         const isSelected = selectedSet.has(option.id);
         return (
@@ -47,17 +49,17 @@ export function CardSelect({
             onClick={() => onSelect(option.id)}
             role={multi ? "checkbox" : "radio"}
             aria-checked={isSelected}
-            className={`w-full text-left px-5 py-4 rounded-xl border-2 transition-all min-h-touch ${
+            className={`t-focus w-full text-left px-5 py-4 border transition-all min-h-touch ${
               isSelected
-                ? "border-sage-600 bg-sage-50 text-foreground"
-                : "border-border bg-white text-foreground hover:border-sage-300 hover:bg-sage-50/50"
+                ? "border-t-amber bg-t-panel-2 text-t-white"
+                : "border-t-line bg-t-panel text-t-white hover:border-t-phos-dim"
             }`}
           >
             <div className="flex items-center gap-3">
               {/* Selection indicator */}
               <div
-                className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  isSelected ? "border-sage-600 bg-sage-600" : "border-muted"
+                className={`flex-shrink-0 w-5 h-5 border flex items-center justify-center ${
+                  isSelected ? "border-t-amber bg-t-amber" : "border-t-phos-dim"
                 }`}
               >
                 {isSelected && (
@@ -70,7 +72,7 @@ export function CardSelect({
                   >
                     <path
                       d="M2.5 6L5 8.5L9.5 3.5"
-                      stroke="white"
+                      stroke="#14100a"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -82,7 +84,7 @@ export function CardSelect({
               <div>
                 <span className="font-medium">{option.label}</span>
                 {option.description && (
-                  <p className="text-sm text-muted mt-0.5">
+                  <p className="text-sm text-t-phos-dim mt-0.5">
                     {option.description}
                   </p>
                 )}

@@ -9,12 +9,14 @@
  * - Always has back navigation (except page 0)
  *
  * This is the core layout primitive for both Forge and Refinery flows.
+ * Hand-Forged Terminal skin (Wave C, 2026-07-08).
  */
 
 "use client";
 
 import type { ReactNode } from "react";
 import { TYPOGRAPHY } from "./theme";
+import { TBtn } from "./terminal";
 
 interface FlowPageProps {
   /** The main question or prompt for this page */
@@ -68,13 +70,13 @@ export function FlowPage({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-t-bg font-term">
       {/* Back navigation */}
       {showBack && (
         <div className="px-4 pt-4">
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-1 text-muted hover:text-foreground transition-colors min-h-touch px-2"
+            className="t-focus inline-flex items-center gap-1 text-t-phos-dim hover:text-t-amber-bright transition-colors min-h-touch px-2"
             aria-label="Go back"
           >
             <svg
@@ -92,7 +94,7 @@ export function FlowPage({
                 strokeLinejoin="round"
               />
             </svg>
-            Back
+            back
           </button>
         </div>
       )}
@@ -101,11 +103,11 @@ export function FlowPage({
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
         <div className="w-full max-w-flow">
           {/* Title */}
-          <h1 className="text-2xl font-bold text-foreground mb-3">{title}</h1>
+          <h1 className="text-2xl font-bold text-t-white leading-tight mb-3">{title}</h1>
 
           {/* Subtitle */}
           {subtitle && (
-            <p className="text-body text-muted mb-8">{subtitle}</p>
+            <p className="text-base text-t-phos-dim leading-relaxed mb-8">{subtitle}</p>
           )}
 
           {/* Interactive content */}
@@ -113,41 +115,13 @@ export function FlowPage({
 
           {/* Primary action */}
           {actionLabel && (
-            <button
+            <TBtn
               onClick={onAction}
               disabled={actionDisabled || loading}
-              className="w-full flex items-center justify-center px-6 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
+              className="w-full"
             >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      className="opacity-25"
-                    />
-                    <path
-                      d="M4 12a8 8 0 018-8"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      className="opacity-75"
-                    />
-                  </svg>
-                  Working...
-                </span>
-              ) : (
-                actionLabel
-              )}
-            </button>
+              {loading ? "working" : actionLabel}
+            </TBtn>
           )}
         </div>
       </div>
@@ -155,7 +129,7 @@ export function FlowPage({
       {/* Footer */}
       {footer && (
         <div className="px-4 pb-6 text-center">
-          <div className="text-sm text-muted max-w-flow mx-auto">{footer}</div>
+          <div className="text-sm text-t-phos-dim max-w-flow mx-auto">{footer}</div>
         </div>
       )}
     </div>

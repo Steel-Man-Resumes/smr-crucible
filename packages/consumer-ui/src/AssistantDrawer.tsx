@@ -7,6 +7,8 @@
  *
  * Behavioral rules (from DESIGN-BRIEF.md Section VI) are enforced
  * at the API level, not in this component.
+ *
+ * Hand-Forged Terminal skin (Wave C, 2026-07-08).
  */
 
 "use client";
@@ -57,7 +59,7 @@ export function AssistantDrawer({
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-40 inline-flex items-center gap-2 px-5 py-3 bg-sage-600 text-white rounded-full shadow-lg hover:bg-sage-700 transition-colors min-h-touch"
+          className="t-focus fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-40 inline-flex items-center gap-2 px-5 py-3 bg-t-amber text-[#14100a] font-term text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
           aria-label="Open assistant"
         >
           <svg
@@ -81,7 +83,7 @@ export function AssistantDrawer({
       {/* Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+          className="fixed inset-0 bg-black/50 z-40"
           onClick={() => setIsOpen(false)}
           aria-hidden="true"
         />
@@ -94,16 +96,18 @@ export function AssistantDrawer({
         role="dialog"
         aria-label="AI Assistant"
         aria-modal="true"
-        className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full max-w-md bg-t-panel border-l border-t-line shadow-2xl z-50 flex flex-col font-term transform transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Drawer header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold">How can I help?</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-t-line bg-t-panel">
+          <h2 className="text-base font-bold text-t-white">
+            <span className="text-t-phos-dim">{"> "}</span>how can I help?
+          </h2>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors min-h-touch min-w-[3rem] flex items-center justify-center"
+            className="t-focus p-2 text-t-phos-dim hover:text-t-amber-bright transition-colors min-h-touch min-w-[3rem] flex items-center justify-center"
             aria-label="Close assistant"
           >
             <svg

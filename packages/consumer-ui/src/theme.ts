@@ -1,41 +1,42 @@
 /**
  * Consumer Design System Theme Constants
  *
- * Grounded in WS4 (trauma-informed UX) requirements:
- * - 18px body minimum
- * - System font stack (no custom font downloads — performance budget)
+ * Hand-Forged Terminal system (Wave C, 2026-07-08) -- ported from
+ * ~/repos/smr-website/docs/DESIGN-SYSTEM.md. Grounded in WS4
+ * (trauma-informed UX) requirements:
+ * - 15-16px body minimum, monospace throughout
+ * - One monospace stack sitewide (no custom font downloads — performance budget)
  * - 6th grade reading level enforced at component level
  * - WCAG 2.2 AA contrast ratios (4.5:1 body, 3:1 large text)
- * - No red (triggers), no government blue
- * - Warm earth tones
+ * - No red except semantic errors, no rounded corners
  */
 
 export const FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  'ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
 export const COLORS = {
-  // Primary palette — warm, non-institutional
-  background: "#fdf8f0",
-  foreground: "#2c2418",
-  muted: "#8c7e6e",
-  border: "#e0cebc",
-  card: "#f9f3ea",
-  surface: "#ffffff",
+  // Hand-Forged Terminal palette
+  background: "#0B0E0C", // bench black
+  foreground: "#E9E6DA", // iron white
+  muted: "#6D8562", // dim phosphor
+  border: "#2A3324", // line
+  card: "#10140F", // panel
+  surface: "#151A13", // raised panel
 
-  // Accent — sage green (trust, growth, nature)
-  accent: "#557553",
-  accentHover: "#415d40",
-  accentLight: "#e0e8df",
+  // Accent — steel gold ("the metal")
+  accent: "#D4A84B",
+  accentHover: "#E8C060",
+  accentLight: "#9FBF8F", // phosphor green
 
-  // Status — no red, uses warm amber for warnings
-  success: "#557553",
-  info: "#3d89af",
-  warning: "#d67a2a",
-  error: "#c05e1f", // Warm amber, not red
+  // Status
+  success: "#9FBF8F",
+  info: "#7FA3B5",
+  warning: "#D4A84B",
+  error: "#C4573A", // semantic only, never decorative
 
   // Interactive
-  focus: "#557553",
-  disabled: "#c8bfb3",
+  focus: "#E9E6DA",
+  disabled: "#2A3324",
 } as const;
 
 export const SPACING = {

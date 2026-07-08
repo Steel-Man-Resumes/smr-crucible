@@ -3,10 +3,12 @@
  *
  * Always-visible hint on Forge pages. NOT the drawer — this is
  * a small, collapsible panel with a short contextual message
- * from The Ghost. "Ask me more" opens the AssistantDrawer.
+ * from t.ROY. "Ask me more" opens the AssistantDrawer.
  *
  * Accessibility: role="status" + aria-live="polite" so screen
  * readers announce the guidance without interrupting.
+ *
+ * Hand-Forged Terminal skin (Wave C, 2026-07-08).
  */
 
 "use client";
@@ -60,12 +62,12 @@ export function GhostGuide({
     <div
       role="status"
       aria-live="polite"
-      className="bg-sage-50 rounded-xl border border-sage-200 mb-6"
+      className="border border-t-line bg-t-panel mb-6 font-term"
     >
       {collapsed ? (
         <button
           onClick={toggleCollapse}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-sage-600 hover:text-sage-700 transition-colors"
+          className="t-focus w-full flex items-center gap-2 px-4 py-3 text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
           aria-label="Show guidance from t.ROY"
         >
           {/* Ghost icon */}
@@ -84,7 +86,7 @@ export function GhostGuide({
               fill="none"
             />
           </svg>
-          <span>Show t.ROY guidance</span>
+          <span>show t.ROY guidance</span>
         </button>
       ) : (
         <div className="px-4 py-3">
@@ -96,7 +98,7 @@ export function GhostGuide({
               viewBox="0 0 16 16"
               fill="none"
               aria-hidden="true"
-              className="flex-shrink-0 mt-0.5 text-sage-500"
+              className="flex-shrink-0 mt-0.5 text-t-amber"
             >
               <path
                 d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
@@ -107,23 +109,23 @@ export function GhostGuide({
             </svg>
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-sage-700 leading-relaxed">{message}</p>
+              <p className="text-sm text-t-phos leading-relaxed">{message}</p>
 
               <div className="flex items-center gap-3 mt-2">
                 {onExpand && (
                   <button
                     onClick={onExpand}
-                    className="text-xs text-sage-600 underline underline-offset-2 hover:text-sage-700 transition-colors"
+                    className="t-focus text-xs text-t-amber-bright underline underline-offset-2 hover:text-t-amber transition-colors"
                   >
                     {expandLabel}
                   </button>
                 )}
                 <button
                   onClick={toggleCollapse}
-                  className="text-xs text-sage-500 hover:text-sage-600 transition-colors"
+                  className="t-focus text-xs text-t-phos-dim hover:text-t-phos transition-colors"
                   aria-label="Hide guidance"
                 >
-                  Hide
+                  hide
                 </button>
               </div>
             </div>

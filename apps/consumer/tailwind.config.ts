@@ -68,6 +68,30 @@ const config: Config = {
           800: "#2a4d64",
           900: "#274155",
         },
+        // Hand-Forged Terminal system (Wave C, 2026-07-08) -- LOCKED, ported
+        // from smr-website/docs/DESIGN-SYSTEM.md. Mirrored as CSS custom
+        // properties in app/terminal.css; keep both in sync by hand.
+        "t-bg": "#0B0E0C",
+        "t-panel": "#10140F",
+        "t-panel-2": "#151A13",
+        "t-line": "#2A3324",
+        "t-amber": "#D4A84B",
+        "t-amber-bright": "#E8C060",
+        "t-phos": "#9FBF8F",
+        "t-phos-dim": "#6D8562",
+        "t-white": "#E9E6DA",
+        "t-red": "#C4573A",
+        "t-steel": "#7FA3B5",
+      },
+      fontFamily: {
+        term: [
+          "ui-monospace",
+          '"Cascadia Mono"',
+          "Consolas",
+          '"Liberation Mono"',
+          "Menlo",
+          "monospace",
+        ],
       },
       fontSize: {
         // 18px body minimum per design brief

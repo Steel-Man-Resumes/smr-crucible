@@ -11,3 +11,6 @@ export { ProgressIndicator } from "./ProgressIndicator";
 
 // Theme constants
 export { COLORS, FONT_STACK, SPACING, TYPOGRAPHY, PERFORMANCE } from "./theme";
+
+// Hand-Forged Terminal system (Wave C, 2026-07-08)
+export { TerminalPanel, TBtn, PromptLine, AsciiDiagram, ImageSlot, LogoBoot } from "./terminal";

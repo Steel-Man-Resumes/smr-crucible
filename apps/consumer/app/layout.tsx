@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./terminal.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AnalyticsWrapper } from "@/components/AnalyticsWrapper";

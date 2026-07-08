@@ -1,0 +1,130 @@
+/*
+ * Hand-Forged Terminal design system -- ported from smr-website
+ * (see ~/repos/smr-website/docs/DESIGN-SYSTEM.md for the canonical spec).
+ * Vendored copy, not a build-time link -- keep both files in sync by hand
+ * per ~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md Wave C1.
+ *
+ * Tokens are mirrored as `t-*` Tailwind colors in tailwind.config.ts.
+ */
+
+:root {
+  --t-bg: #0b0e0c;
+  --t-panel: #10140f;
+  --t-panel-2: #151a13;
+  --t-line: #2a3324;
+  --t-amber: #d4a84b;
+  --t-amber-bright: #e8c060;
+  --t-phos: #9fbf8f;
+  --t-phos-dim: #6d8562;
+  --t-white: #e9e6da;
+  --t-red: #c4573a;
+  --t-steel: #7fa3b5;
+  --t-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@keyframes t-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.t-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.05em;
+  background: var(--t-amber);
+  vertical-align: text-bottom;
+  animation: t-blink 1.1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-cursor {
+    animation: none;
+  }
+}
+
+.t-scanline {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.13) 0px,
+    rgba(0, 0, 0, 0.13) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.35;
+}
+
+.t-h2 {
+  font-family: var(--t-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--t-amber-bright);
+  line-height: 1.25;
+}
+.t-h2::before {
+  content: "== ";
+  color: var(--t-phos-dim);
+}
+.t-h2::after {
+  content: " ==";
+  color: var(--t-phos-dim);
+}
+
+.t-h3 {
+  font-family: var(--t-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--t-white);
+  line-height: 1.25;
+}
+.t-h3::before {
+  content: "> ";
+  color: var(--t-amber);
+}
+
+.t-rule {
+  border: none;
+  border-top: 1px dashed var(--t-line);
+}
+
+.t-ascii {
+  color: var(--t-phos-dim);
+  font-family: var(--t-mono);
+  font-size: 0.8rem;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.35;
+}
+
+.t-checklist {
+  padding-left: 0;
+  list-style: none;
+}
+.t-checklist li {
+  list-style: none;
+  margin: 0.35rem 0;
+}
+.t-checklist li::before {
+  content: "[ ] ";
+  color: var(--t-amber);
+}
+.t-checklist li.done::before {
+  content: "[x] ";
+  color: var(--t-phos);
+}
+
+.t-prompt {
+  font-family: var(--t-mono);
+  color: var(--t-phos-dim);
+}
+
+/* Standard focus ring for any custom interactive element not already using
+   the TBtn component. */
+.t-focus:focus-visible {
+  outline: 2px solid var(--t-white);
+  outline-offset: 2px;
+}

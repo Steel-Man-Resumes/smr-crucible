@@ -47,11 +47,11 @@ export function CustomImage({
         height={height}
         loading={priority ? "eager" : loading}
         decoding="async"
-        className="rounded-lg"
+        className="border border-t-line"
         // fetchPriority not yet in React types but supported by browsers
         {...(priority ? { fetchpriority: "high" } : {})}
       />
-      <figcaption className="text-xs text-muted mt-1">
+      <figcaption className="text-xs text-t-phos-dim font-term mt-1">
         Image: {source}
       </figcaption>
     </figure>
