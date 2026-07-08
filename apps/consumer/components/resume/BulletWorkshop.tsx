@@ -126,24 +126,24 @@ export function BulletWorkshop({
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center justify-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto p-5"
+        className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5 font-term"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold text-foreground">Make this stronger</h3>
+          <h3 className="text-lg font-bold text-t-white">Make this stronger</h3>
           <button
             onClick={onClose}
-            className="text-muted hover:text-foreground text-2xl leading-none px-1"
+            className="text-t-phos-dim hover:text-t-white text-2xl leading-none px-1"
             aria-label="Close"
           >
             &times;
           </button>
         </div>
-        <p className="text-xs text-muted mb-4">
+        <p className="text-xs text-t-phos-dim mb-4">
           Answer in your own words. We use only what you tell us -- nothing invented.
           {jobTitle ? ` For your ${jobTitle} role.` : ""}
         </p>
@@ -165,13 +165,13 @@ export function BulletWorkshop({
             />
             {toolHints.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-[11px] text-muted mr-0.5">Common for this role -- tap if it fits:</span>
+                <span className="text-[11px] text-t-phos-dim mr-0.5">Common for this role -- tap if it fits:</span>
                 {toolHints.map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => addTool(t)}
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-sage-50 text-sage-700 border border-sage-200 hover:bg-sage-100 transition-colors"
+                    className="text-[11px] px-2 py-0.5 bg-t-panel-2 text-t-phos border border-t-line hover:border-t-amber transition-colors"
                   >
                     {t}
                   </button>
@@ -200,20 +200,20 @@ export function BulletWorkshop({
           />
         </div>
 
-        {error && <p className="text-sm text-amber-700 mt-3">{error}</p>}
+        {error && <p className="text-sm text-t-amber-bright mt-3">{error}</p>}
 
         {draft !== null && (
-          <div className="mt-4 bg-sage-50 border border-sage-200 rounded-xl p-3">
-            <p className="text-[11px] font-semibold text-sage-700 uppercase tracking-wide mb-1">
+          <div className="mt-4 bg-t-panel-2 border border-t-amber p-3">
+            <p className="text-[11px] font-semibold text-t-amber-bright uppercase tracking-wide mb-1">
               Your stronger bullet
             </p>
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={3}
-              className="w-full text-sm bg-white border border-sage-200 rounded-lg px-3 py-2 resize-y focus:border-sage-600 focus:outline-none"
+              className="w-full text-sm bg-t-panel text-t-white border border-t-line px-3 py-2 resize-y focus:border-t-amber focus:outline-none"
             />
-            <p className="text-[11px] text-muted mt-1">
+            <p className="text-[11px] text-t-phos-dim mt-1">
               Edit it to sound like you. Everything here is true to what you said.
             </p>
           </div>
@@ -223,21 +223,21 @@ export function BulletWorkshop({
           <button
             onClick={generate}
             disabled={generating || !canGenerate}
-            className="px-4 py-2.5 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
+            className="t-focus px-4 py-2.5 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
           >
             {generating ? "Writing..." : draft !== null ? "Rewrite" : "Write a strong bullet"}
           </button>
           {draft !== null && (
             <button
               onClick={accept}
-              className="px-4 py-2.5 bg-white border-2 border-sage-600 text-sage-600 rounded-xl text-sm font-medium hover:bg-sage-50 transition-colors min-h-touch"
+              className="t-focus px-4 py-2.5 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
             >
               Use this bullet
             </button>
           )}
           <button
             onClick={onClose}
-            className="px-3 py-2.5 text-muted hover:text-foreground text-sm min-h-touch ml-auto"
+            className="px-3 py-2.5 text-t-phos-dim hover:text-t-white text-sm min-h-touch ml-auto"
           >
             Cancel
           </button>
@@ -263,10 +263,10 @@ function Field({
   // Associate label with input (id/htmlFor) for screen readers + testability.
   const id = "bw-" + label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const cls =
-    "w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 focus:outline-none transition-colors";
+    "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
   return (
     <div>
-      <label htmlFor={id} className="text-xs font-medium text-foreground block mb-1">
+      <label htmlFor={id} className="text-xs font-medium text-t-phos-dim block mb-1">
         {label}
       </label>
       {textarea ? (

@@ -21,9 +21,9 @@ type Updater = (fn: (prev: ResumeDocument) => ResumeDocument) => void;
 
 // Shared input style
 const input =
-  "w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-white focus:border-sage-600 focus:outline-none transition-colors min-h-touch";
+  "w-full px-3 py-2.5 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch";
 const inputSmall =
-  "w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 focus:outline-none transition-colors";
+  "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
 
 // ─── Contact Section ──────────────────────────────
 
@@ -35,9 +35,9 @@ export function ContactSection({
   update: Updater;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 font-term">
       <div>
-        <label className="text-xs font-medium text-foreground block mb-1">
+        <label className="text-xs font-medium text-t-phos-dim block mb-1">
           Full Name
         </label>
         <input
@@ -54,7 +54,7 @@ export function ContactSection({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1">
+          <label className="text-xs font-medium text-t-phos-dim block mb-1">
             Phone
           </label>
           <input
@@ -71,7 +71,7 @@ export function ContactSection({
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1">
+          <label className="text-xs font-medium text-t-phos-dim block mb-1">
             Email
           </label>
           <input
@@ -90,7 +90,7 @@ export function ContactSection({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1">
+          <label className="text-xs font-medium text-t-phos-dim block mb-1">
             City
           </label>
           <input
@@ -106,7 +106,7 @@ export function ContactSection({
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1">
+          <label className="text-xs font-medium text-t-phos-dim block mb-1">
             State
           </label>
           <input
@@ -144,7 +144,7 @@ export function SummarySection({
   generating: boolean;
 }) {
   return (
-    <div>
+    <div className="font-term">
       <textarea
         value={doc.summary}
         onChange={(e) => update((d) => ({ ...d, summary: e.target.value }))}
@@ -156,7 +156,7 @@ export function SummarySection({
         <button
           onClick={onAiAssist}
           disabled={generating}
-          className="mt-2 text-xs text-sage-600 hover:text-sage-700 underline underline-offset-2"
+          className="mt-2 text-xs text-t-amber-bright hover:text-t-amber underline underline-offset-2"
         >
           {generating ? "Thinking..." : "Help me write this"}
         </button>
@@ -198,7 +198,7 @@ export function ExperienceSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 font-term">
       {doc.experience.map((entry, idx) => (
         <WorkEntryEditor
           key={entry.id}
@@ -211,7 +211,7 @@ export function ExperienceSection({
       ))}
       <button
         onClick={addEntry}
-        className="w-full py-2.5 border-2 border-dashed border-border rounded-lg text-sm text-sage-600 hover:border-sage-400 hover:text-sage-700 transition-colors min-h-touch"
+        className="t-focus w-full py-2.5 border border-dashed border-t-line text-sm text-t-amber-bright hover:border-t-amber transition-colors min-h-touch"
       >
         + Add Position
       </button>
@@ -260,18 +260,18 @@ function WorkEntryEditor({
   const title = entry.title || entry.company || `Position ${index + 1}`;
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+    <div className="border border-t-line overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-t-panel-2">
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="text-sm font-medium text-foreground truncate text-left flex-1"
+          className="text-sm font-medium text-t-white truncate text-left flex-1"
         >
           {title}
         </button>
         <button
           onClick={onRemove}
-          className="text-xs text-gray-400 hover:text-red-500 ml-2 px-1"
+          className="text-xs text-t-phos-dim hover:text-t-red ml-2 px-1"
           title="Remove"
         >
           Remove
@@ -279,10 +279,10 @@ function WorkEntryEditor({
       </div>
 
       {!collapsed && (
-        <div className="px-3 py-3 space-y-2">
+        <div className="px-3 py-3 space-y-2 bg-t-panel">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] font-medium text-muted block mb-0.5">
+              <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
                 Job Title
               </label>
               <input
@@ -293,7 +293,7 @@ function WorkEntryEditor({
               />
             </div>
             <div>
-              <label className="text-[10px] font-medium text-muted block mb-0.5">
+              <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
                 Company
               </label>
               <input
@@ -306,7 +306,7 @@ function WorkEntryEditor({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] font-medium text-muted block mb-0.5">
+              <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
                 Start Date
               </label>
               <input
@@ -317,7 +317,7 @@ function WorkEntryEditor({
               />
             </div>
             <div>
-              <label className="text-[10px] font-medium text-muted block mb-0.5">
+              <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
                 End Date
               </label>
               <input
@@ -331,12 +331,12 @@ function WorkEntryEditor({
 
           {/* Bullets */}
           <div className="space-y-1.5 pt-1">
-            <label className="text-[10px] font-medium text-muted block">
+            <label className="text-[10px] font-medium text-t-phos-dim block">
               What you did (start with action verbs)
             </label>
             {entry.bullets.map((bullet, bi) => (
               <div key={bi} className="flex gap-1.5 items-start">
-                <span className="text-xs text-muted mt-2.5 w-4 flex-shrink-0">
+                <span className="text-xs text-t-phos-dim mt-2.5 w-4 flex-shrink-0">
                   {bi + 1}.
                 </span>
                 <div className="flex-1">
@@ -353,7 +353,7 @@ function WorkEntryEditor({
                   <button
                     type="button"
                     onClick={() => setWorkshopBi(bi)}
-                    className="text-[11px] text-sage-600 hover:text-sage-700 mt-0.5"
+                    className="text-[11px] text-t-amber-bright hover:text-t-amber mt-0.5"
                   >
                     Strengthen with help
                   </button>
@@ -361,7 +361,7 @@ function WorkEntryEditor({
                 {entry.bullets.length > 1 && (
                   <button
                     onClick={() => removeBullet(bi)}
-                    className="text-gray-300 hover:text-red-400 text-xs px-1 mt-1"
+                    className="text-t-phos-dim hover:text-t-red text-xs px-1 mt-1"
                     title="Remove bullet"
                   >
                     &times;
@@ -371,7 +371,7 @@ function WorkEntryEditor({
             ))}
             <button
               onClick={addBullet}
-              className="text-xs text-sage-600 hover:text-sage-700 mt-1"
+              className="text-xs text-t-amber-bright hover:text-t-amber mt-1"
             >
               + Add bullet
             </button>
@@ -428,7 +428,7 @@ export function EducationSection({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 font-term">
       {doc.education.map((entry) => (
         <div
           key={entry.id}
@@ -464,7 +464,7 @@ export function EducationSection({
           </div>
           <button
             onClick={() => removeEntry(entry.id)}
-            className="text-xs text-gray-400 hover:text-red-500 mt-2 px-1"
+            className="text-xs text-t-phos-dim hover:text-t-red mt-2 px-1"
           >
             &times;
           </button>
@@ -472,7 +472,7 @@ export function EducationSection({
       ))}
       <button
         onClick={addEntry}
-        className="w-full py-2.5 border-2 border-dashed border-border rounded-lg text-sm text-sage-600 hover:border-sage-400 hover:text-sage-700 transition-colors min-h-touch"
+        className="t-focus w-full py-2.5 border border-dashed border-t-line text-sm text-t-amber-bright hover:border-t-amber transition-colors min-h-touch"
       >
         + Add Education or Certification
       </button>
@@ -514,19 +514,19 @@ export function SkillsSection({
   }
 
   return (
-    <div>
+    <div className="font-term">
       {/* Skill chips */}
       {doc.skills.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
           {doc.skills.map((skill, i) => (
             <span
               key={i}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-sage-50 text-sage-700 border border-sage-200"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-t-panel-2 text-t-phos border border-t-line"
             >
               {skill}
               <button
                 onClick={() => removeSkill(i)}
-                className="text-sage-400 hover:text-red-500 ml-0.5"
+                className="text-t-phos-dim hover:text-t-red ml-0.5"
               >
                 &times;
               </button>
@@ -552,7 +552,7 @@ export function SkillsSection({
         <button
           onClick={addSkill}
           disabled={!newSkill.trim()}
-          className="px-3 py-2 bg-sage-600 text-white rounded-lg text-xs hover:bg-sage-700 disabled:bg-gray-300 min-h-touch"
+          className="t-focus px-3 py-2 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim min-h-touch"
         >
           Add
         </button>
