@@ -1,6 +1,32 @@
 # SMR Crucible -- Handoff
 
-> **NEW CHAT: START HERE ->** `docs/HANDOFF-2026-06-10-FABLE-SESSION-CLOSE.md` -- session close after the **P0 batch SHIPPED**: truth gate in every generation lane, identity single-source, legal disclaimers, export branding off, DEEP tiers, skills wave 1 (live 14/14), and seats v1 (migration 019 applied; `EXPOCREW`/`BAKERCREW`/`JFWCREW` seeded -- client tier, 10 seats, 200/day; cohort members enter via `/access?code=EXPOCREW`). **First moves for a fresh chat: reply-pull -> verify the last deploy promoted -> support Troy's certification retest (Task #4) -> then t.ROY Phase A (Task #5).** Direction + Troy's recorded decisions: `docs/FABLE-REASSESSMENT-AGENCY-2026-06-10.md`; the audit: `docs/FABLE-ANALYSIS-REPORT-2026-06-09.md`; live state by system: `docs/BUILD-CHECKLIST.md`. (TMG personal-agent build is a SEPARATE instance's lane: `~/todash/tmg/TROY-PERSONAL-AGENT-CHARTER-2026-06-10.md`.)
+> **NEW CHAT: START HERE -> Wave C (app terminal reskin), 2026-07-08.**
+> Read `~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md` section 2
+> "Wave C -- App reskin (smr-crucible consumer)" for the task list (C1-C5).
+> Wave A (design system) + Wave B (all marketing pages) just shipped in the
+> sister repo `smr-website` -- **that repo is now the reference
+> implementation.** Read its `docs/DESIGN-SYSTEM.md` (tokens, component
+> inventory, migration rule) and skim 2-3 of its Wave B pages
+> (`src/app/page.tsx`, `src/app/forge/page.tsx`) before writing any code here
+> -- match the established look exactly, don't reinvent it. Its
+> `src/components/terminal/` kit (TerminalPanel, TBtn, PromptLine,
+> AsciiDiagram, ImageSlot, LogoBoot) is the pattern to port into
+> `apps/consumer`, per C1's own instruction ("prefer a `packages/` shared
+> ui-tokens file both repos can vendor").
+>
+> **This app's CSP already has `unsafe-eval`** (`apps/consumer/next.config.mjs`),
+> so `next dev` is interactive here -- unlike smr-website, where dev mode
+> silently drops all click/keyboard handlers under its stricter CSP (that
+> repo's HANDOFF has the full writeup if you hit something that looks like
+> it). Don't need to route through `next build && next start` for basic
+> interactivity checks here, though prod-build verification before shipping
+> is still good practice regardless of app.
+>
+> **Skin only, per the plan's own guardrail:** journey engine, truth gate,
+> seats, tracking spine, and t.ROY plumbing are locked architecture -- this
+> wave changes CSS/markup, not behavior. Do not re-litigate them. CSP
+> tightening (dropping `unsafe-eval`, scoping `connect-src`) is a separate
+> later item (Wave D3), not in scope here.
 
 **Last updated:** 2026-06-10 (Fable session -- analysis + P0 batch start)
 **2026-06-10 P0 batch (green-lit by Troy, "truth gate first"):** SHIPPED + pushed: `c339525` truth gate in every generation lane (fabrication table deleted from generate-docs; evidence-only rules in resume-generate-full incl. cert/education carry-forward via education entries; cover letters barred from inventing numbers/personal facts; "--" never em dash in all generation prompts) -> `283f3df` "Built with The Refinery" footer removed from exported resumes (disclosure leak; Troy: brand in-app only) -> `cc119e6` analyze/generate-docs/resume-generate-full/disclosure-guide now MODEL_DEEP per doctrine + stale OPENAI-only guards accept either provider. All build-verified (95/95 pages); live-behavior verification = fresh e2e retest, pending. **REMAINING in batch:** seats v1 (access_code.seat_limit ~10/agency: EXPO2026/BAKER2026/JFW; role!=rate-tier so seat-holders stay `client`; code-aware pre-auth forge limits replacing shared-IP buckets; admin UI minting codes+seats+variables -- Troy decision), identity single-source fix (saveForgeSession merge-preserve contact; Tailor contact from base doc w/ editable confirm; phone normalization), "coaching not legal advice" disclaimer on all disclosure outputs. Decisions log + architecture: `docs/FABLE-REASSESSMENT-AGENCY-2026-06-10.md` (t.ROY agency three-phase plan; confirm-card guardrail; disclosure voice full parity; skills-library catalog ~35-40 model-independent skill.md files; DB stays ONE Neon with per-tool domains + event spine + nightly DB-intelligence agent -- multiple physical DBs rejected as desync factory).
