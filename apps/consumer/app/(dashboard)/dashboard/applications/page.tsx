@@ -38,13 +38,15 @@ const PIPELINE: {
   label: string;
   color: string;
   bgColor: string;
+  borderColor: string;
   suggestion: { text: string; href: string } | null;
 }[] = [
   {
     status: "saved",
     label: "Saved",
-    color: "text-gray-600",
-    bgColor: "bg-gray-50",
+    color: "text-t-phos-dim",
+    bgColor: "bg-t-panel",
+    borderColor: "border-t-line",
     suggestion: {
       text: "Build a targeted resume for this job",
       href: "/dashboard/application-tailor",
@@ -53,8 +55,9 @@ const PIPELINE: {
   {
     status: "applied",
     label: "Applied",
-    color: "text-sky-600",
-    bgColor: "bg-sky-50",
+    color: "text-t-steel",
+    bgColor: "bg-t-panel",
+    borderColor: "border-t-steel",
     suggestion: {
       text: "Prep your disclosure plan",
       href: "/dashboard/disclosure",
@@ -63,8 +66,9 @@ const PIPELINE: {
   {
     status: "heard_back",
     label: "Heard Back",
-    color: "text-amber-600",
-    bgColor: "bg-amber-50",
+    color: "text-t-amber-bright",
+    bgColor: "bg-t-panel",
+    borderColor: "border-t-amber",
     suggestion: {
       text: "Practice interviewing for this role",
       href: "/dashboard/interview",
@@ -73,8 +77,9 @@ const PIPELINE: {
   {
     status: "interviewing",
     label: "Interviewing",
-    color: "text-warm-600",
-    bgColor: "bg-warm-50",
+    color: "text-t-amber-bright",
+    bgColor: "bg-t-panel-2",
+    borderColor: "border-t-amber",
     suggestion: {
       text: "Review your disclosure script",
       href: "/dashboard/disclosure",
@@ -83,8 +88,9 @@ const PIPELINE: {
   {
     status: "offered",
     label: "Offered",
-    color: "text-sage-600",
-    bgColor: "bg-sage-50",
+    color: "text-t-phos",
+    bgColor: "bg-t-panel",
+    borderColor: "border-t-phos",
     suggestion: null,
   },
 ];
@@ -197,32 +203,32 @@ function ApplicationsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 py-12 justify-center text-muted">
-        <div className="w-5 h-5 border-2 border-sage-600 border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim font-term">
+        <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
         Loading applications...
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-foreground mb-2">
+    <div className="max-w-4xl font-term">
+      <h1 className="text-2xl font-bold text-t-white mb-2">
         Application Tracker
       </h1>
-      <p className="text-body text-muted mb-6">
+      <p className="text-base text-t-phos-dim mb-6">
         Track your job applications from saved to offered. Each step has tools
         to help you prepare.
       </p>
 
       {activeApps.length === 0 && archivedApps.length === 0 && (
         <div className="text-center py-16">
-          <p className="text-muted mb-4">
+          <p className="text-t-phos-dim mb-4">
             No applications yet. Save jobs from the Job Board to start
             tracking.
           </p>
           <Link
             href="/dashboard/jobs"
-            className="inline-flex items-center px-5 py-3 bg-sage-600 text-white text-sm font-medium rounded-xl hover:bg-sage-700 transition-colors"
+            className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
           >
             Find Jobs &rarr;
           </Link>
@@ -240,12 +246,12 @@ function ApplicationsPage() {
               return (
                 <div
                   key={stage.status}
-                  className={`flex-1 min-w-[80px] rounded-xl p-3 border border-border text-center ${stage.bgColor}`}
+                  className={`flex-1 min-w-[80px] p-3 border text-center ${stage.bgColor} ${stage.borderColor}`}
                 >
                   <span className={`text-xl font-bold block ${stage.color}`}>
                     {count}
                   </span>
-                  <span className="text-xs text-muted">{stage.label}</span>
+                  <span className="text-xs text-t-phos-dim">{stage.label}</span>
                 </div>
               );
             })}
@@ -272,18 +278,18 @@ function ApplicationsPage() {
                     {stageApps.map((app) => (
                       <div
                         key={app.id}
-                        className={`rounded-xl border border-border p-4 ${stage.bgColor}`}
+                        className={`border p-4 ${stage.bgColor} ${stage.borderColor}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-foreground">
+                            <h3 className="font-semibold text-t-white">
                               {app.job_title}
                             </h3>
-                            <p className="text-sm text-muted">{app.company}</p>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-muted flex-wrap">
+                            <p className="text-sm text-t-phos-dim">{app.company}</p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-t-phos-dim flex-wrap">
                               {app.location && <span>{app.location}</span>}
                               {app.salary && (
-                                <span className="font-medium text-sage-600">
+                                <span className="font-medium text-t-amber-bright">
                                   {app.salary}
                                 </span>
                               )}
@@ -299,7 +305,7 @@ function ApplicationsPage() {
                                   updateStatus(app.id, nextStage.status)
                                 }
                                 disabled={updating === app.id}
-                                className="px-3 py-1.5 bg-white border border-border text-xs font-medium rounded-lg hover:bg-sage-50 transition-colors disabled:opacity-50"
+                                className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim transition-colors disabled:opacity-50"
                               >
                                 {updating === app.id
                                   ? "..."
@@ -310,7 +316,7 @@ function ApplicationsPage() {
                               onClick={() =>
                                 updateStatus(app.id, "rejected")
                               }
-                              className="text-xs text-gray-400 hover:text-gray-600"
+                              className="text-xs text-t-phos-dim hover:text-t-red"
                               title="Remove"
                             >
                               <svg
@@ -334,7 +340,7 @@ function ApplicationsPage() {
                         {stage.suggestion && (
                           <Link
                             href={stage.suggestion.href}
-                            className="mt-3 flex items-center gap-2 px-3 py-2 bg-white/70 rounded-lg border border-border text-xs text-sage-600 hover:text-sage-700 hover:bg-white transition-colors"
+                            className="t-focus mt-3 flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs text-t-amber-bright hover:text-t-amber transition-colors"
                           >
                             <svg
                               width="12"
@@ -363,35 +369,35 @@ function ApplicationsPage() {
                               <button
                                 onClick={() => draftFollowUp(app.id)}
                                 disabled={followUpFor === app.id}
-                                className="inline-flex items-center gap-2 px-3 py-2 bg-white/70 rounded-lg border border-border text-xs font-medium text-sage-600 hover:text-sage-700 hover:bg-white transition-colors disabled:opacity-50"
+                                className="t-focus inline-flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs font-medium text-t-amber-bright hover:text-t-amber transition-colors disabled:opacity-50"
                               >
                                 {followUpFor === app.id
                                   ? "Drafting your follow-up..."
                                   : "Draft a follow-up message"}
                               </button>
                             ) : (
-                              <div className="bg-white rounded-lg border border-border p-3">
-                                <p className="text-xs font-semibold text-foreground">
+                              <div className="bg-t-panel-2 border border-t-line p-3">
+                                <p className="text-xs font-semibold text-t-white">
                                   Subject: {followUps[app.id].subject}
                                 </p>
-                                <p className="text-xs text-foreground whitespace-pre-line mt-2 leading-relaxed">
+                                <p className="text-xs text-t-phos whitespace-pre-line mt-2 leading-relaxed">
                                   {followUps[app.id].body}
                                 </p>
                                 <div className="flex items-center gap-3 mt-3">
                                   <button
                                     onClick={() => copyFollowUp(app.id)}
-                                    className="px-3 py-1.5 bg-sage-600 text-white text-xs font-medium rounded-lg hover:bg-sage-700"
+                                    className="t-focus px-3 py-1.5 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright"
                                   >
                                     {copiedId === app.id ? "Copied" : "Copy"}
                                   </button>
                                   <button
                                     onClick={() => draftFollowUp(app.id)}
                                     disabled={followUpFor === app.id}
-                                    className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                                    className="text-xs text-t-phos-dim hover:text-t-white disabled:opacity-50"
                                   >
                                     {followUpFor === app.id ? "..." : "Redraft"}
                                   </button>
-                                  <span className="text-[11px] text-muted ml-auto">
+                                  <span className="text-[11px] text-t-phos-dim ml-auto">
                                     Saved to your materials. Review before sending.
                                   </span>
                                 </div>
@@ -402,8 +408,8 @@ function ApplicationsPage() {
 
                         {/* Offered celebration */}
                         {stage.status === "offered" && (
-                          <div className="mt-3 bg-sage-100 rounded-lg px-3 py-2 border border-sage-200">
-                            <p className="text-xs text-sage-700 font-medium">
+                          <div className="mt-3 bg-t-panel-2 px-3 py-2 border border-t-phos">
+                            <p className="text-xs text-t-phos font-medium">
                               Congratulations! You earned this.
                             </p>
                           </div>
@@ -420,25 +426,25 @@ function ApplicationsPage() {
 
       {/* Archived */}
       {archivedApps.length > 0 && (
-        <section className="mt-10 pt-6 border-t border-border">
-          <h2 className="text-sm font-semibold text-muted mb-3">
+        <section className="mt-10 pt-6 border-t border-t-line">
+          <h2 className="text-sm font-semibold text-t-phos-dim mb-3">
             Archived ({archivedApps.length})
           </h2>
           <div className="space-y-2">
             {archivedApps.map((app) => (
               <div
                 key={app.id}
-                className="flex items-center justify-between rounded-lg px-3 py-2 bg-gray-50 border border-border opacity-60"
+                className="flex items-center justify-between px-3 py-2 bg-t-panel border border-t-line opacity-60"
               >
                 <div>
-                  <span className="text-sm text-foreground">
+                  <span className="text-sm text-t-white">
                     {app.job_title}
                   </span>
-                  <span className="text-xs text-muted ml-2">
+                  <span className="text-xs text-t-phos-dim ml-2">
                     {app.company}
                   </span>
                 </div>
-                <span className="text-xs text-muted capitalize">
+                <span className="text-xs text-t-phos-dim capitalize">
                   {app.status.replace("_", " ")}
                 </span>
               </div>
