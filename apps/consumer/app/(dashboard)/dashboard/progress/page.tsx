@@ -221,9 +221,9 @@ export default function ProgressPage() {
     progress.applications_sent;
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold text-foreground mb-2">Your Progress</h1>
-      <p className="text-body text-muted mb-8">
+    <div className="max-w-3xl font-term">
+      <h1 className="text-2xl font-bold text-t-white mb-2">Your Progress</h1>
+      <p className="text-base text-t-phos-dim mb-8">
         Every step counts. Here&apos;s what you&apos;ve accomplished and
         what to do next.
       </p>
@@ -231,7 +231,7 @@ export default function ProgressPage() {
       {/* ── Quick Wins ──────────────────────────────────────────────────── */}
       {quickWins.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-lg font-bold text-foreground mb-4">
+          <h2 className="text-lg font-bold text-t-white mb-4">
             What to Do Next
           </h2>
           <div className="space-y-3">
@@ -245,10 +245,10 @@ export default function ProgressPage() {
       {/* ── Upcoming timeline (Phase 5) ─────────────────────────────────── */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-foreground">Upcoming</h2>
+          <h2 className="text-lg font-bold text-t-white">Upcoming</h2>
           <Link
             href="/dashboard/applications"
-            className="text-sm font-medium text-sage-700 hover:text-sage-900"
+            className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
           >
             Manage applications
           </Link>
@@ -262,9 +262,9 @@ export default function ProgressPage() {
               return (
                 <div
                   key={i}
-                  className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-border"
+                  className="flex items-center gap-3 bg-t-panel px-4 py-3 border border-t-line"
                 >
-                  <div className={`flex-shrink-0 w-14 text-center ${overdue ? "text-amber-700" : "text-sage-700"}`}>
+                  <div className={`flex-shrink-0 w-14 text-center ${overdue ? "text-t-red" : "text-t-amber-bright"}`}>
                     <div className="text-xs font-semibold uppercase">
                       {valid ? d.toLocaleDateString("en-US", { month: "short" }) : "--"}
                     </div>
@@ -273,15 +273,15 @@ export default function ProgressPage() {
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium text-foreground block truncate">
+                    <span className="text-sm font-medium text-t-white block truncate">
                       Follow up{item.company ? ` -- ${item.company}` : ""}
                     </span>
-                    <span className="text-xs text-muted block truncate">
+                    <span className="text-xs text-t-phos-dim block truncate">
                       {[item.role, item.status].filter(Boolean).join(" · ")}
                     </span>
                   </div>
                   {overdue && (
-                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    <span className="text-[10px] font-semibold text-t-red border border-t-red px-2 py-0.5">
                       due
                     </span>
                   )}
@@ -290,8 +290,8 @@ export default function ProgressPage() {
             })}
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-white px-5 py-8 text-center">
-            <p className="text-sm text-muted">
+          <div className="border border-t-line bg-t-panel px-5 py-8 text-center">
+            <p className="text-sm text-t-phos-dim">
               No follow-ups scheduled yet. Save a job and set a follow-up date in
               Applications, and it will show up here.
             </p>
@@ -303,19 +303,19 @@ export default function ProgressPage() {
       {roadmapNodes.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-foreground">
+            <h2 className="text-lg font-bold text-t-white">
               Your Roadmap
             </h2>
-            <span className="text-sm text-muted">
+            <span className="text-sm text-t-phos-dim">
               {roadmapProgress.completed}/{roadmapProgress.total} steps
               ({roadmapProgress.percent}%)
             </span>
           </div>
 
           {/* Progress bar */}
-          <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden mb-6">
+          <div className="h-2 w-full bg-t-line overflow-hidden mb-6">
             <div
-              className="h-full bg-sage-500 rounded-full transition-all duration-500"
+              className="h-full bg-t-amber transition-all duration-500"
               style={{ width: `${roadmapProgress.percent}%` }}
             />
           </div>
@@ -333,7 +333,7 @@ export default function ProgressPage() {
 
               return (
                 <div key={phase}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-2">
                     {meta.label}
                   </h3>
                   <div className="space-y-2">
@@ -350,36 +350,36 @@ export default function ProgressPage() {
 
       {/* ── Summary Stats ───────────────────────────────────────────────── */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-4">
+        <h2 className="text-lg font-bold text-t-white mb-4">
           By the Numbers
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
             label="Skills Found"
             value={progress.skills_identified}
-            color="sage"
+            color="amber"
           />
           <StatCard
             label="Career Paths"
             value={progress.career_paths}
-            color="sky"
+            color="steel"
           />
           <StatCard
             label="Interviews"
             value={progress.interviews_completed}
-            color="warm"
+            color="phos"
           />
           <StatCard
             label="Actions Taken"
             value={totalActions}
-            color="earth"
+            color="amber"
           />
         </div>
       </section>
 
       {/* ── Refinery Activity ───────────────────────────────────────────── */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-3">
+        <h2 className="text-lg font-bold text-t-white mb-3">
           Activity Detail
         </h2>
         <div className="space-y-2">
@@ -418,8 +418,8 @@ export default function ProgressPage() {
       </section>
 
       {/* ── Encouragement ───────────────────────────────────────────────── */}
-      <div className="bg-warm-50 rounded-2xl p-5 border border-warm-200 text-center">
-        <p className="text-sm text-earth-700 leading-relaxed">
+      <div className="bg-t-panel p-5 border border-t-amber text-center">
+        <p className="text-sm text-t-phos leading-relaxed">
           {totalActions === 0
             ? "Your journey starts with one step. Check out the suggestions above — pick whichever one feels right."
             : totalActions < 5
@@ -437,33 +437,33 @@ export default function ProgressPage() {
 
 function QuickWinCard({ win }: { win: QuickWin }) {
   const categoryColors: Record<string, string> = {
-    foundation: "border-l-sage-500",
-    "skill-building": "border-l-sky-500",
-    action: "border-l-amber-500",
-    wellbeing: "border-l-red-400",
+    foundation: "border-l-t-amber",
+    "skill-building": "border-l-t-steel",
+    action: "border-l-t-phos",
+    wellbeing: "border-l-t-phos-dim",
   };
 
   return (
     <div
-      className={`bg-white rounded-xl p-4 border border-border border-l-4 ${
-        categoryColors[win.category] || "border-l-sage-500"
+      className={`bg-t-panel p-4 border border-t-line border-l-2 font-term ${
+        categoryColors[win.category] || "border-l-t-amber"
       }`}
     >
-      <h3 className="font-semibold text-foreground mb-1">{win.title}</h3>
-      <p className="text-sm text-muted leading-relaxed mb-3">
+      <h3 className="font-semibold text-t-white mb-1">{win.title}</h3>
+      <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
         {win.description}
       </p>
       {win.action.type === "link" && win.action.href ? (
         <Link
           href={win.action.href}
-          className="inline-flex items-center px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
           {win.action.label} &rarr;
         </Link>
       ) : win.action.type === "phone" && win.action.phone ? (
         <a
           href={`tel:${win.action.phone}`}
-          className="inline-flex items-center px-4 py-2 bg-sage-600 text-white text-sm font-medium rounded-lg hover:bg-sage-700 transition-colors"
+          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
           {win.action.label}
         </a>
@@ -477,22 +477,22 @@ function QuickWinCard({ win }: { win: QuickWin }) {
 function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
   const content = (
     <div
-      className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-colors ${
+      className={`flex items-center gap-3 px-4 py-3 border transition-colors font-term ${
         node.completed
-          ? "bg-sage-50 border-sage-200"
+          ? "bg-t-panel-2 border-t-amber"
           : node.current
-            ? "bg-white border-sage-400 shadow-sm"
-            : "bg-gray-50 border-border"
+            ? "bg-t-panel border-t-phos-dim"
+            : "bg-t-bg border-t-line"
       }`}
     >
       {/* Status indicator */}
       <div className="flex-shrink-0">
         {node.completed ? (
-          <div className="w-6 h-6 rounded-full bg-sage-500 flex items-center justify-center">
+          <div className="w-6 h-6 bg-t-amber flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M3 7l3 3 5-5"
-                stroke="white"
+                stroke="#14100a"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -500,11 +500,11 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
             </svg>
           </div>
         ) : node.current ? (
-          <div className="w-6 h-6 rounded-full border-2 border-sage-500 bg-white flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-sage-500 animate-pulse" />
+          <div className="w-6 h-6 border border-t-amber bg-t-panel flex items-center justify-center">
+            <div className="w-2 h-2 bg-t-amber animate-pulse" />
           </div>
         ) : (
-          <div className="w-6 h-6 rounded-full border-2 border-gray-200 bg-white" />
+          <div className="w-6 h-6 border border-t-line bg-t-panel" />
         )}
       </div>
 
@@ -513,15 +513,15 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
         <span
           className={`text-sm font-medium block ${
             node.completed
-              ? "text-sage-700"
+              ? "text-t-amber-bright"
               : node.current
-                ? "text-foreground"
-                : "text-muted"
+                ? "text-t-white"
+                : "text-t-phos-dim"
           }`}
         >
           {node.title}
         </span>
-        <span className="text-xs text-muted block">{node.description}</span>
+        <span className="text-xs text-t-phos-dim block">{node.description}</span>
       </div>
 
       {/* Arrow for actionable items */}
@@ -530,7 +530,7 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
           width="16"
           height="16"
           viewBox="0 0 16 16"
-          className="text-muted flex-shrink-0"
+          className="text-t-phos-dim flex-shrink-0"
         >
           <path
             d="M6 4l4 4-4 4"
@@ -561,17 +561,16 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  color: "sage" | "sky" | "warm" | "earth";
+  color: "amber" | "steel" | "phos";
 }) {
   const colors = {
-    sage: "bg-sage-50 border-sage-200 text-sage-700",
-    sky: "bg-sky-50 border-sky-200 text-sky-700",
-    warm: "bg-warm-50 border-warm-200 text-earth-700",
-    earth: "bg-warm-50 border-warm-200 text-earth-700",
+    amber: "bg-t-panel border-t-amber text-t-amber-bright",
+    steel: "bg-t-panel border-t-steel text-t-steel",
+    phos: "bg-t-panel border-t-phos text-t-phos",
   };
 
   return (
-    <div className={`rounded-xl p-4 border text-center ${colors[color]}`}>
+    <div className={`p-4 border text-center font-term ${colors[color]}`}>
       <span className="text-2xl font-bold block">{value}</span>
       <span className="text-xs">{label}</span>
     </div>
@@ -590,16 +589,16 @@ function ActivityRow({
   sub?: string;
 }) {
   return (
-    <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-border">
+    <div className="flex items-center justify-between bg-t-panel p-4 border border-t-line font-term">
       <div>
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-sm font-medium text-t-white">{label}</span>
         {sub && (
-          <span className="text-xs text-muted block mt-0.5">{sub}</span>
+          <span className="text-xs text-t-phos-dim block mt-0.5">{sub}</span>
         )}
       </div>
       <span
         className={`text-lg font-bold ${
-          value > 0 ? "text-sage-600" : "text-gray-300"
+          value > 0 ? "text-t-amber-bright" : "text-t-line"
         }`}
       >
         {value}
