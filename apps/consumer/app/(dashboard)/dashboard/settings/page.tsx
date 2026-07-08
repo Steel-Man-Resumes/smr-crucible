@@ -16,6 +16,7 @@ import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
+import { TBtn } from "@crucible/consumer-ui";
 
 interface UsageData {
   used: number;
@@ -189,9 +190,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-foreground mb-2">Settings</h1>
-      <p className="text-body text-muted mb-8">
+    <div className="max-w-2xl font-term">
+      <h1 className="text-2xl font-bold text-t-white mb-2">Settings</h1>
+      <p className="text-base text-t-phos-dim mb-8">
         Your data, your control. Manage your information and privacy.
       </p>
 
@@ -202,11 +203,11 @@ export default function SettingsPage() {
       {/* Admin Test Mode Toggle */}
       {isAdmin && (
         <section className="mb-8">
-          <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200">
+          <div className="bg-t-panel-2 p-5 border border-t-amber">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-amber-900">Admin Mode</h3>
-                <p className="text-sm text-amber-700 mt-1">
+                <h3 className="font-semibold text-t-amber-bright">Admin Mode</h3>
+                <p className="text-sm text-t-phos-dim mt-1">
                   {testMode
                     ? "Testing as a regular client. Toggle off to restore admin access."
                     : "You have full admin access. Toggle on to see the real user experience."}
@@ -221,10 +222,10 @@ export default function SettingsPage() {
                   }
                   window.location.reload();
                 }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors min-h-touch ${
+                className={`t-focus px-4 py-2 text-sm font-medium transition-colors min-h-touch ${
                   testMode
-                    ? "bg-amber-600 text-white hover:bg-amber-700"
-                    : "bg-white border-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                    ? "bg-t-amber text-[#14100a] hover:bg-t-amber-bright"
+                    : "bg-transparent border border-t-amber text-t-amber-bright hover:bg-t-amber/10"
                 }`}
               >
                 {testMode ? "Back to Admin" : "Test as Client"}
@@ -239,26 +240,26 @@ export default function SettingsPage() {
 
       {/* Daily Usage */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-4">
+        <h2 className="text-lg font-bold text-t-white mb-4">
           Daily Usage
         </h2>
-        <div className="bg-white rounded-2xl p-5 border border-border">
+        <div className="bg-t-panel p-5 border border-t-line">
           {usage ? (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">
+                <span className="text-sm font-medium text-t-white">
                   AI calls today
                 </span>
-                <span className="text-sm text-muted">
+                <span className="text-sm text-t-phos-dim">
                   {usage.limit === null
                     ? `${usage.used} used (unlimited)`
                     : `${usage.used} / ${usage.limit}`}
                 </span>
               </div>
               {usage.limit !== null && (
-                <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="w-full bg-t-line h-2">
                   <div
-                    className="bg-sage-600 rounded-full h-2 transition-all"
+                    className="bg-t-amber h-2 transition-all"
                     style={{
                       width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
                     }}
@@ -266,28 +267,28 @@ export default function SettingsPage() {
                 </div>
               )}
               {usage.remaining !== null && usage.remaining <= 5 && usage.remaining > 0 && (
-                <p className="text-xs text-amber-600 mt-2">
+                <p className="text-xs text-t-amber-bright mt-2">
                   {usage.remaining} AI call{usage.remaining === 1 ? "" : "s"} left today. Resets at midnight.
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted">Loading usage...</p>
+            <p className="text-sm text-t-phos-dim">Loading usage...</p>
           )}
         </div>
       </section>
 
       {/* Partner Access Code */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-4">
+        <h2 className="text-lg font-bold text-t-white mb-4">
           Partner Access Code
         </h2>
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl p-5 border border-border">
-            <h3 className="font-semibold text-foreground mb-2">
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white mb-2">
               Enter a code
             </h3>
-            <p className="text-sm text-muted mb-3">
+            <p className="text-sm text-t-phos-dim mb-3">
               If you got a code from a partner organization (like a job center or
               nonprofit), enter it here to unlock more AI calls per day.
             </p>
@@ -297,50 +298,46 @@ export default function SettingsPage() {
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
                 placeholder="PARTNER123"
-                className="flex-1 px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch uppercase"
+                className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={codeStatus === "redeeming"}
               />
-              <button
-                type="submit"
-                disabled={codeStatus === "redeeming" || !codeInput.trim()}
-                className="px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
-              >
-                {codeStatus === "redeeming" ? "..." : "Redeem"}
-              </button>
+              <TBtn type="submit" disabled={codeStatus === "redeeming" || !codeInput.trim()}>
+                {codeStatus === "redeeming" ? "..." : "redeem"}
+              </TBtn>
             </form>
             {codeStatus === "success" && (
-              <p className="text-sm text-sage-600 mt-2">
+              <p className="text-sm text-t-amber-bright mt-2">
                 Code redeemed! Your daily limit has been increased.
               </p>
             )}
             {codeStatus === "error" && (
-              <p className="text-sm text-red-600 mt-2">{codeError}</p>
+              <p className="text-sm text-t-red mt-2">{codeError}</p>
             )}
           </div>
 
           {/* Display active codes */}
           {redeemedCodes.length > 0 && (
-            <div className="bg-white rounded-2xl p-5 border border-border">
-              <h3 className="font-semibold text-foreground mb-3">
+            <div className="bg-t-panel p-5 border border-t-line">
+              <h3 className="font-semibold text-t-white mb-3">
                 Your active codes
               </h3>
               <div className="space-y-2">
                 {redeemedCodes.map((code, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                    className="flex items-center justify-between py-2 border-b border-t-line last:border-0"
                   >
                     <div>
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-sm font-medium text-t-white">
                         {code.partner_name}
                       </p>
-                      <p className="text-xs text-muted">
+                      <p className="text-xs text-t-phos-dim">
                         {code.tier === "unlimited" || code.tier === "admin"
                           ? "Unlimited calls"
                           : `${code.daily_limit ?? 200} calls/day`}
                       </p>
                     </div>
-                    <span className="text-xs text-muted">
+                    <span className="text-xs text-t-phos-dim">
                       {new Date(code.redeemed_at).toLocaleDateString()}
                     </span>
                   </div>
@@ -356,52 +353,52 @@ export default function SettingsPage() {
 
       {/* Privacy & Data */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-foreground mb-4">
+        <h2 className="text-lg font-bold text-t-white mb-4">
           Privacy & Data
         </h2>
 
         <div className="space-y-4">
           {/* How we handle your data */}
-          <div className="bg-white rounded-2xl p-5 border border-border">
-            <h3 className="font-semibold text-foreground mb-2">
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white mb-2">
               How we handle your data
             </h3>
-            <ul className="space-y-2 text-sm text-muted">
+            <ul className="space-y-2 text-sm text-t-phos-dim">
               <li className="flex gap-2">
-                <span className="text-sage-500 flex-shrink-0">•</span>
+                <span className="text-t-amber flex-shrink-0">•</span>
                 Your Forge data is stored locally on your device, not on our
                 servers
               </li>
               <li className="flex gap-2">
-                <span className="text-sage-500 flex-shrink-0">•</span>
+                <span className="text-t-amber flex-shrink-0">•</span>
                 AI conversations are processed but not permanently stored
               </li>
               <li className="flex gap-2">
-                <span className="text-sage-500 flex-shrink-0">•</span>
+                <span className="text-t-amber flex-shrink-0">•</span>
                 We never sell or share your personal information
               </li>
               <li className="flex gap-2">
-                <span className="text-sage-500 flex-shrink-0">•</span>
+                <span className="text-t-amber flex-shrink-0">•</span>
                 You can export or delete your data at any time
               </li>
             </ul>
           </div>
 
           {/* Export data */}
-          <div className="bg-white rounded-2xl p-5 border border-border">
+          <div className="bg-t-panel p-5 border border-t-line">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-foreground">
+                <h3 className="font-semibold text-t-white">
                   Download your data
                 </h3>
-                <p className="text-sm text-muted mt-1">
+                <p className="text-sm text-t-phos-dim mt-1">
                   Get a copy of everything we have stored about you.
                 </p>
               </div>
               <button
                 onClick={exportData}
                 disabled={exportStatus !== "idle"}
-                className="px-4 py-2 border-2 border-sage-300 text-sage-700 rounded-xl text-sm font-medium hover:bg-sage-50 disabled:opacity-50 transition-colors min-h-touch"
+                className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
               >
                 {exportStatus === "exporting"
                   ? "Preparing..."
@@ -413,13 +410,13 @@ export default function SettingsPage() {
           </div>
 
           {/* Delete data */}
-          <div className="bg-white rounded-2xl p-5 border border-red-200">
+          <div className="bg-t-panel p-5 border border-t-red">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-foreground">
+                <h3 className="font-semibold text-t-white">
                   Delete all your data
                 </h3>
-                <p className="text-sm text-muted mt-1">
+                <p className="text-sm text-t-phos-dim mt-1">
                   Permanently remove all stored data from this device. This
                   cannot be undone.
                 </p>
@@ -427,7 +424,7 @@ export default function SettingsPage() {
               {!showDeleteConfirm ? (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="px-4 py-2 border-2 border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 transition-colors min-h-touch"
+                  className="t-focus px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
                 >
                   Delete
                 </button>
@@ -435,14 +432,14 @@ export default function SettingsPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="px-3 py-2 text-sm text-muted hover:text-foreground min-h-touch"
+                    className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={deleteAllData}
                     disabled={deleting}
-                    className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors min-h-touch"
+                    className="t-focus px-4 py-2 bg-t-red text-[#14100a] text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
                   >
                     {deleting ? "Deleting..." : "Confirm Delete"}
                   </button>
@@ -455,17 +452,17 @@ export default function SettingsPage() {
 
       {/* About */}
       <section>
-        <h2 className="text-lg font-bold text-foreground mb-4">About</h2>
-        <div className="bg-white rounded-2xl p-5 border border-border">
-          <h3 className="font-semibold text-foreground mb-2">
+        <h2 className="text-lg font-bold text-t-white mb-4">About</h2>
+        <div className="bg-t-panel p-5 border border-t-line">
+          <h3 className="font-semibold text-t-white mb-2">
             Steel Man Resumes
           </h3>
-          <p className="text-sm text-muted leading-relaxed mb-3">
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
             Built by people who believe your past doesn&apos;t define your
             paycheck. The Forge and Refinery are tools designed to help you take
             the next step on your own terms.
           </p>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-t-phos-dim">
             All AI-powered features are designed with transparency, consent, and
             your dignity in mind.
           </p>
@@ -489,7 +486,7 @@ function SetPasswordSection() {
       return;
     }
     if (pw !== confirm) {
-      setErrorMsg("Passwords don\u2019t match.");
+      setErrorMsg("Passwords don’t match.");
       setStatus("error");
       return;
     }
@@ -522,14 +519,14 @@ function SetPasswordSection() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-foreground mb-4">
+      <h2 className="text-lg font-bold text-t-white mb-4">
         Password
       </h2>
-      <div className="bg-white rounded-2xl p-5 border border-border">
-        <h3 className="font-semibold text-foreground mb-2">
+      <div className="bg-t-panel p-5 border border-t-line">
+        <h3 className="font-semibold text-t-white mb-2">
           Set a password for quick login
         </h3>
-        <p className="text-sm text-muted mb-4">
+        <p className="text-sm text-t-phos-dim mb-4">
           Optional. Set a password so you can sign in without waiting for a magic link email every time.
         </p>
         <form onSubmit={handleSetPassword} className="space-y-3">
@@ -539,7 +536,7 @@ function SetPasswordSection() {
             onChange={(e) => setPw(e.target.value)}
             placeholder="New password (min 8 characters)"
             autoComplete="new-password"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
           <input
             type="password"
@@ -547,23 +544,19 @@ function SetPasswordSection() {
             onChange={(e) => setConfirm(e.target.value)}
             placeholder="Confirm password"
             autoComplete="new-password"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
           {status === "error" && (
-            <p className="text-sm text-red-600">{errorMsg}</p>
+            <p className="text-sm text-t-red">{errorMsg}</p>
           )}
           {status === "done" && (
-            <p className="text-sm text-sage-600">
+            <p className="text-sm text-t-amber-bright">
               Password set! You can now sign in with email + password.
             </p>
           )}
-          <button
-            type="submit"
-            disabled={status === "saving" || !pw || !confirm}
-            className="px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
-          >
-            {status === "saving" ? "Saving..." : "Set Password"}
-          </button>
+          <TBtn type="submit" disabled={status === "saving" || !pw || !confirm}>
+            {status === "saving" ? "saving..." : "set password"}
+          </TBtn>
         </form>
       </div>
     </section>
@@ -612,15 +605,15 @@ function AccountSection() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-foreground mb-4">Account</h2>
-      <div className="bg-white rounded-2xl p-5 border border-border">
+      <h2 className="text-lg font-bold text-t-white mb-4">Account</h2>
+      <div className="bg-t-panel p-5 border border-t-line">
         {/* Auth email */}
-        <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+        <div className="flex items-center justify-between pb-3 border-b border-t-line mb-3">
           <div>
-            <p className="text-xs text-muted uppercase tracking-wide">Signed in as</p>
-            <p className="text-sm font-medium text-foreground">{session?.user?.email || "—"}</p>
+            <p className="text-xs text-t-phos-dim uppercase tracking-wide">Signed in as</p>
+            <p className="text-sm font-medium text-t-white">{session?.user?.email || "—"}</p>
           </div>
-          <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">
+          <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
             {(session?.user as any)?.tier || "client"}
           </span>
         </div>
@@ -629,75 +622,71 @@ function AccountSection() {
         {!editing ? (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted uppercase tracking-wide">Resume Contact Info</p>
+              <p className="text-xs text-t-phos-dim uppercase tracking-wide">Resume Contact Info</p>
               <button
                 onClick={() => setEditing(true)}
-                className="text-xs text-sage-600 hover:text-sage-700 font-medium"
+                className="text-xs text-t-amber-bright hover:text-t-amber font-medium"
               >
                 Edit
               </button>
             </div>
             {contact ? (
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-muted">Name:</span> <span className="text-foreground">{contact.name || "—"}</span></div>
-                <div><span className="text-muted">Phone:</span> <span className="text-foreground">{contact.phone || "—"}</span></div>
-                <div><span className="text-muted">Email:</span> <span className="text-foreground">{contact.email || "—"}</span></div>
-                <div><span className="text-muted">Location:</span> <span className="text-foreground">{[contact.city, contact.state].filter(Boolean).join(", ") || "—"}</span></div>
+                <div><span className="text-t-phos-dim">Name:</span> <span className="text-t-white">{contact.name || "—"}</span></div>
+                <div><span className="text-t-phos-dim">Phone:</span> <span className="text-t-white">{contact.phone || "—"}</span></div>
+                <div><span className="text-t-phos-dim">Email:</span> <span className="text-t-white">{contact.email || "—"}</span></div>
+                <div><span className="text-t-phos-dim">Location:</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || "—"}</span></div>
               </div>
             ) : (
-              <p className="text-sm text-muted">No contact info set. Complete your profile on the dashboard.</p>
+              <p className="text-sm text-t-phos-dim">No contact info set. Complete your profile on the dashboard.</p>
             )}
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-3">
-            <p className="text-xs text-muted uppercase tracking-wide mb-1">Edit Resume Contact Info</p>
+            <p className="text-xs text-t-phos-dim uppercase tracking-wide mb-1">Edit Resume Contact Info</p>
             <input
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               placeholder="Full name"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+              className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
             <input
               value={editForm.phone}
               onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
               placeholder="Phone"
               type="tel"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+              className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
             <input
               value={editForm.email}
               onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               placeholder="Resume email"
               type="email"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+              className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
             <div className="grid grid-cols-2 gap-2">
               <input
                 value={editForm.city}
                 onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                 placeholder="City"
-                className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors"
+                className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
               />
               <input
                 value={editForm.state}
                 onChange={(e) => setEditForm({ ...editForm, state: e.target.value.toUpperCase() })}
                 placeholder="State"
                 maxLength={2}
-                className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-white focus:border-sage-600 transition-colors uppercase"
+                className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors uppercase"
               />
             </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-4 py-2 bg-sage-600 text-white rounded-lg text-sm font-medium hover:bg-sage-700 disabled:opacity-50 transition-colors"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
+            <div className="flex gap-2 items-center">
+              <TBtn type="submit" disabled={saving} size="sm">
+                {saving ? "saving..." : "save"}
+              </TBtn>
               <button
                 type="button"
                 onClick={() => { setEditing(false); setEditForm(contact || { name: "", phone: "", email: "", city: "", state: "" }); }}
-                className="px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
+                className="px-4 py-2 text-sm text-t-phos-dim hover:text-t-white transition-colors"
               >
                 Cancel
               </button>
@@ -707,24 +696,24 @@ function AccountSection() {
       </div>
 
       {/* Sign-in methods */}
-      <div className="bg-white rounded-2xl p-5 border border-border mt-4">
-        <h3 className="font-semibold text-foreground mb-3">Sign-in Methods</h3>
+      <div className="bg-t-panel p-5 border border-t-line mt-4">
+        <h3 className="font-semibold text-t-white mb-3">Sign-in Methods</h3>
         <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between py-2 border-b border-border">
+          <div className="flex items-center justify-between py-2 border-b border-t-line">
             <div>
-              <p className="font-medium text-foreground">Email & Password</p>
-              <p className="text-xs text-muted">Sign in with your email and a password you set</p>
+              <p className="font-medium text-t-white">Email & Password</p>
+              <p className="text-xs text-t-phos-dim">Sign in with your email and a password you set</p>
             </div>
-            <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">Active</span>
+            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">Active</span>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-border">
+          <div className="flex items-center justify-between py-2 border-b border-t-line">
             <div>
-              <p className="font-medium text-foreground">Magic Link</p>
-              <p className="text-xs text-muted">One-time sign-in link sent to your email. No password needed.</p>
+              <p className="font-medium text-t-white">Magic Link</p>
+              <p className="text-xs text-t-phos-dim">One-time sign-in link sent to your email. No password needed.</p>
             </div>
-            <span className="text-xs text-sage-600 bg-sage-100 px-2 py-1 rounded-full">Available</span>
+            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">Available</span>
           </div>
-          <p className="text-xs text-muted leading-relaxed pt-1">
+          <p className="text-xs text-t-phos-dim leading-relaxed pt-1">
             Lost your device? Use the magic link option on the sign-in page to get back in.
             You can set a new password anytime below.
           </p>

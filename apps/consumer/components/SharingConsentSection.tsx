@@ -47,15 +47,15 @@ export function SharingConsentSection() {
   }
 
   return (
-    <section className="mb-8">
-      <h2 className="text-lg font-bold text-foreground mb-4">Share your progress</h2>
-      <div className="bg-white border border-border rounded-xl p-5">
+    <section className="mb-8 font-term">
+      <h2 className="text-lg font-bold text-t-white mb-4">Share your progress</h2>
+      <div className="bg-t-panel border border-t-line p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-foreground mb-1">
+            <h3 className="font-semibold text-t-white mb-1">
               Let your support partner see your progress
             </h3>
-            <p className="text-sm text-muted leading-relaxed">
+            <p className="text-sm text-t-phos-dim leading-relaxed">
               If a partner organization gave you a code, you can let them see where you
               are in your journey -- your stage, how many jobs you have applied to, and
               when you were last active. They never see your resume, your disclosure plan,
@@ -69,18 +69,18 @@ export function SharingConsentSection() {
             role="switch"
             aria-checked={sharing}
             aria-label="Share my progress with my support partner"
-            className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              sharing ? "bg-sage-600" : "bg-gray-300"
+            className={`t-focus relative inline-flex h-7 w-12 flex-shrink-0 items-center border transition-colors disabled:opacity-50 ${
+              sharing ? "bg-t-amber border-t-amber" : "bg-t-panel-2 border-t-line"
             }`}
           >
             <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                sharing ? "translate-x-6" : "translate-x-1"
+              className={`inline-block h-5 w-5 transform transition-transform ${
+                sharing ? "translate-x-6 bg-[#14100a]" : "translate-x-1 bg-t-phos-dim"
               }`}
             />
           </button>
         </div>
-        <p className="text-xs text-muted mt-3">
+        <p className="text-xs text-t-phos-dim mt-3">
           {loading
             ? "Loading..."
             : sharing

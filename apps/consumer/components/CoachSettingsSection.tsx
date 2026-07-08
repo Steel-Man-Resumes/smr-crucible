@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { TBtn } from "@crucible/consumer-ui";
 
 type Style = "supportive" | "balanced" | "direct";
 type Length = "brief" | "full";
@@ -69,42 +70,42 @@ export function CoachSettingsSection() {
   }
 
   return (
-    <section className="mb-8">
-      <h2 className="text-lg font-bold text-foreground mb-1">Your Coach</h2>
-      <p className="text-sm text-muted mb-4">
+    <section className="mb-8 font-term">
+      <h2 className="text-lg font-bold text-t-white mb-1">Your Coach</h2>
+      <p className="text-sm text-t-phos-dim mb-4">
         Your coach guides you through your job search. Make it yours.
       </p>
 
-      <div className="bg-white rounded-2xl border border-border p-5 space-y-5">
+      <div className="bg-t-panel border border-t-line p-5 space-y-5">
         {/* Name */}
         <div>
-          <label className="text-sm font-medium block mb-1">Coach name</label>
+          <label className="text-sm font-medium text-t-white block mb-1">Coach name</label>
           <input
             value={s.coachName}
             onChange={(e) => update("coachName", e.target.value)}
             maxLength={40}
             placeholder="Guide"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
         </div>
 
         {/* Style */}
         <div>
-          <label className="text-sm font-medium block mb-2">Coaching style</label>
+          <label className="text-sm font-medium text-t-white block mb-2">Coaching style</label>
           <div className="grid grid-cols-3 gap-2">
             {STYLE_OPTIONS.map((o) => (
               <button
                 key={o.value}
                 type="button"
                 onClick={() => update("coachStyle", o.value)}
-                className={`rounded-xl border-2 p-3 text-left transition-colors ${
+                className={`t-focus border p-3 text-left transition-colors ${
                   s.coachStyle === o.value
-                    ? "border-sage-600 bg-sage-50"
-                    : "border-border bg-white hover:border-sage-300"
+                    ? "border-t-amber bg-t-panel-2"
+                    : "border-t-line bg-t-panel hover:border-t-phos-dim"
                 }`}
               >
-                <span className="block text-sm font-semibold text-foreground">{o.label}</span>
-                <span className="block text-xs text-muted mt-0.5">{o.hint}</span>
+                <span className="block text-sm font-semibold text-t-white">{o.label}</span>
+                <span className="block text-xs text-t-phos-dim mt-0.5">{o.hint}</span>
               </button>
             ))}
           </div>
@@ -113,17 +114,17 @@ export function CoachSettingsSection() {
         {/* Length + Focus toggles */}
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium block mb-2">Response length</label>
+            <label className="text-sm font-medium text-t-white block mb-2">Response length</label>
             <div className="flex gap-2">
               {(["brief", "full"] as Length[]).map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => update("coachLength", v)}
-                  className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-sm font-medium capitalize transition-colors ${
+                  className={`t-focus flex-1 border px-3 py-2.5 text-sm font-medium capitalize transition-colors ${
                     s.coachLength === v
-                      ? "border-sage-600 bg-sage-50 text-sage-700"
-                      : "border-border bg-white text-muted hover:border-sage-300"
+                      ? "border-t-amber bg-t-panel-2 text-t-amber-bright"
+                      : "border-t-line bg-t-panel text-t-phos-dim hover:border-t-phos-dim"
                   }`}
                 >
                   {v}
@@ -132,7 +133,7 @@ export function CoachSettingsSection() {
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium block mb-2">Focus</label>
+            <label className="text-sm font-medium text-t-white block mb-2">Focus</label>
             <div className="flex gap-2">
               {([
                 { v: "guide" as Focus, label: "Guide me" },
@@ -142,10 +143,10 @@ export function CoachSettingsSection() {
                   key={o.v}
                   type="button"
                   onClick={() => update("coachFocus", o.v)}
-                  className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={`t-focus flex-1 border px-3 py-2.5 text-sm font-medium transition-colors ${
                     s.coachFocus === o.v
-                      ? "border-sage-600 bg-sage-50 text-sage-700"
-                      : "border-border bg-white text-muted hover:border-sage-300"
+                      ? "border-t-amber bg-t-panel-2 text-t-amber-bright"
+                      : "border-t-line bg-t-panel text-t-phos-dim hover:border-t-phos-dim"
                   }`}
                 >
                   {o.label}
@@ -160,15 +161,15 @@ export function CoachSettingsSection() {
           <button
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
-            className="text-sm font-medium text-muted hover:text-foreground"
+            className="text-sm font-medium text-t-phos-dim hover:text-t-amber-bright"
           >
             {showAdvanced ? "Hide advanced" : "Advanced settings"}
           </button>
           {showAdvanced && (
             <div className="mt-3">
-              <label className="text-sm font-medium block mb-1">
+              <label className="text-sm font-medium text-t-white block mb-1">
                 How creative should your coach be?{" "}
-                <span className="text-muted font-normal">({s.coachCreativity})</span>
+                <span className="text-t-phos-dim font-normal">({s.coachCreativity})</span>
               </label>
               <input
                 type="range"
@@ -176,9 +177,9 @@ export function CoachSettingsSection() {
                 max={100}
                 value={s.coachCreativity}
                 onChange={(e) => update("coachCreativity", parseInt(e.target.value, 10))}
-                className="w-full accent-sage-600"
+                className="w-full accent-t-amber"
               />
-              <div className="flex justify-between text-xs text-muted">
+              <div className="flex justify-between text-xs text-t-phos-dim">
                 <span>Focused advice</span>
                 <span>More exploratory</span>
               </div>
@@ -188,16 +189,11 @@ export function CoachSettingsSection() {
 
         {/* Save */}
         <div className="flex items-center gap-3 pt-1">
-          <button
-            type="button"
-            onClick={save}
-            disabled={status === "saving"}
-            className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:opacity-60 transition-colors min-h-touch"
-          >
-            {status === "saving" ? "Saving..." : "Save"}
-          </button>
-          {status === "saved" && <span className="text-sm text-sage-600">Saved.</span>}
-          {status === "error" && <span className="text-sm text-red-600">Could not save.</span>}
+          <TBtn onClick={save} disabled={status === "saving"} size="sm">
+            {status === "saving" ? "saving..." : "save"}
+          </TBtn>
+          {status === "saved" && <span className="text-sm text-t-amber-bright">Saved.</span>}
+          {status === "error" && <span className="text-sm text-t-red">Could not save.</span>}
         </div>
       </div>
     </section>
