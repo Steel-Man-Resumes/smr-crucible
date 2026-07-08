@@ -21,6 +21,7 @@ import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
 import { JourneyHeader } from "@/components/JourneyHeader";
+import { TBtn } from "@crucible/consumer-ui";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -39,56 +40,56 @@ const ALL_TOOLS: ToolCard[] = [
     href: "/dashboard/jobs",
     title: "Job Board",
     description: "Find real job listings from fair-chance employers hiring now.",
-    color: "bg-sage-50 border-sage-200",
-    accent: "text-sage-600",
+    color: "bg-t-panel border-t-phos",
+    accent: "text-t-phos",
     minState: "needs_resume",
   },
   {
     href: "/dashboard/application-tailor",
     title: "Application Tailor",
     description: "Tailor your resume to a specific job -- with a matching cover letter and disclosure brief.",
-    color: "bg-sky-50 border-sky-200",
-    accent: "text-sky-600",
+    color: "bg-t-panel border-t-steel",
+    accent: "text-t-steel",
     minState: "needs_resume",
   },
   {
     href: "/dashboard/disclosure",
     title: "Disclosure Planner",
     description: "Plan when and how to talk about your record with employers.",
-    color: "bg-warm-50 border-warm-200",
-    accent: "text-warm-600",
+    color: "bg-t-panel border-t-amber",
+    accent: "text-t-amber-bright",
     minState: "full_access",
   },
   {
     href: "/dashboard/interview",
     title: "Interview Practice",
     description: "Text or live voice mock interviews tailored to your target role.",
-    color: "bg-sky-50 border-sky-200",
-    accent: "text-sky-600",
+    color: "bg-t-panel border-t-steel",
+    accent: "text-t-steel",
     minState: "full_access",
   },
   {
     href: "/dashboard/resources",
     title: "Fair-Chance Lanes",
     description: "Find realistic fair-chance job lanes and live search paths.",
-    color: "bg-warm-50 border-warm-200",
-    accent: "text-warm-600",
+    color: "bg-t-panel border-t-amber",
+    accent: "text-t-amber-bright",
     minState: "full_access",
   },
   {
     href: "/dashboard/applications",
     title: "Applications",
     description: "Track your job applications from saved to offered.",
-    color: "bg-sage-50 border-sage-200",
-    accent: "text-sage-600",
+    color: "bg-t-panel border-t-phos",
+    accent: "text-t-phos",
     minState: "full_access",
   },
   {
     href: "/dashboard/progress",
     title: "Progress",
     description: "See how far you've come.",
-    color: "bg-sage-50 border-sage-200",
-    accent: "text-sage-600",
+    color: "bg-t-panel border-t-phos",
+    accent: "text-t-phos",
     minState: "full_access",
   },
 ];
@@ -239,7 +240,7 @@ export default function DashboardPage() {
   if (onboarding.state === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-3 border-sage-200 border-t-sage-600 rounded-full animate-spin" />
+        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#D4A84B] animate-spin" />
       </div>
     );
   }
@@ -261,18 +262,18 @@ export default function DashboardPage() {
 
   // ─── State: needs_resume OR full_access ───────────────────────────────
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 font-term">
       <MiniForgeBanner />
       <JourneyHeader />
       {/* Welcome / Narrative */}
       <section>
         {hasForgeData ? (
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
-            <h1 className="text-2xl font-bold text-foreground mb-2">
+          <div className="bg-t-panel p-6 sm:p-8 border border-t-line">
+            <h1 className="text-2xl font-bold text-t-white mb-2">
               {forgeData.narrative?.headline || "Welcome back"}
             </h1>
             {forgeData.narrative?.summary && (
-              <p className="text-body text-muted leading-relaxed">
+              <p className="text-base text-t-phos-dim leading-relaxed">
                 {forgeData.narrative.summary}
               </p>
             )}
@@ -280,16 +281,16 @@ export default function DashboardPage() {
         ) : (
           <div className="max-w-lg mx-auto py-8">
             {/* t.ROY — clear gate */}
-            <div className="bg-sage-600 rounded-2xl p-6 text-white mb-6">
+            <div className="bg-t-panel-2 border border-t-amber p-6 mb-6">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-white">
+                <div className="w-10 h-10 bg-t-panel border border-t-line flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-t-amber">
                     <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-white/90 mb-1">t.ROY</p>
-                  <p className="text-sm text-white/80 leading-relaxed">
+                  <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY</p>
+                  <p className="text-sm text-t-phos leading-relaxed">
                     I&apos;m t.ROY. The Refinery is where the real work happens -- targeted
                     resumes, interview practice, disclosure strategy, job matching. But I
                     need your story first. The Forge takes about 10 minutes and gives me
@@ -299,29 +300,29 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-border text-center">
-              <h1 className="text-2xl font-bold text-foreground mb-3">
+            <div className="bg-t-panel p-6 sm:p-8 border border-t-line text-center">
+              <h1 className="text-2xl font-bold text-t-white mb-3">
                 Start with The Forge
               </h1>
-              <p className="text-body text-muted mb-2">
+              <p className="text-base text-t-phos-dim mb-2">
                 The Forge analyzes your resume, identifies your strengths, maps career
                 paths, and builds your narrative. Everything in The Refinery is built
                 on that foundation.
               </p>
-              <p className="text-sm text-muted mb-6">
+              <p className="text-sm text-t-phos-dim mb-6">
                 This isn&apos;t a resume template tool. It&apos;s a narrative engine that turns
                 your real story into career ammunition.
               </p>
               <Link
                 href="/intro"
-                className="inline-flex items-center justify-center px-8 py-4 bg-sage-600 text-white rounded-xl text-lg font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus inline-flex items-center justify-center px-8 py-4 bg-t-amber text-[#14100a] shadow-[3px_3px_0_#000] text-lg font-bold hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Start The Forge
               </Link>
-              <p className="text-xs text-muted mt-4">
+              <p className="text-xs text-t-phos-dim mt-4">
                 Free. ~10 minutes. No account needed until you&apos;re ready to save.
               </p>
-              <p className="text-xs text-muted mt-2">
+              <p className="text-xs text-t-phos-dim mt-2">
                 Already completed The Forge on another device? Your data syncs automatically.
               </p>
             </div>
@@ -332,17 +333,17 @@ export default function DashboardPage() {
       {/* Skills snapshot */}
       {forgeData.skills && forgeData.skills.length > 0 && (
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">Your Skills</h2>
+          <h2 className="text-lg font-bold text-t-white mb-3">Your Skills</h2>
           <div className="flex flex-wrap gap-2">
             {forgeData.skills.slice(0, 15).map((s, i) => (
               <span
                 key={i}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                className={`px-3 py-1.5 text-sm font-medium border bg-t-panel-2 ${
                   s.category === "hard"
-                    ? "bg-sky-100 text-sky-700"
+                    ? "border-t-steel text-t-steel"
                     : s.category === "soft"
-                      ? "bg-warm-100 text-warm-700"
-                      : "bg-sage-100 text-sage-700"
+                      ? "border-t-amber text-t-amber-bright"
+                      : "border-t-phos text-t-phos"
                 }`}
               >
                 {s.name}
@@ -355,17 +356,17 @@ export default function DashboardPage() {
       {/* Career paths */}
       {forgeData.career_paths && forgeData.career_paths.length > 0 && (
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-3">Career Paths</h2>
+          <h2 className="text-lg font-bold text-t-white mb-3">Career Paths</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             {forgeData.career_paths.slice(0, 4).map((cp, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-border">
+              <div key={i} className="bg-t-panel p-4 border border-t-line">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-foreground">{cp.title}</h3>
+                  <h3 className="font-semibold text-t-white">{cp.title}</h3>
                   {cp.salary_range && (
-                    <span className="text-xs font-medium text-sage-600 whitespace-nowrap">{cp.salary_range}</span>
+                    <span className="text-xs font-medium text-t-amber-bright whitespace-nowrap">{cp.salary_range}</span>
                   )}
                 </div>
-                <p className="text-sm text-muted mt-1 line-clamp-2">{cp.match_reason}</p>
+                <p className="text-sm text-t-phos-dim mt-1 line-clamp-2">{cp.match_reason}</p>
               </div>
             ))}
           </div>
@@ -374,43 +375,43 @@ export default function DashboardPage() {
 
       {/* How the Refinery works -- shown when forge data is available but no tailored resume yet */}
       {onboarding.state === "needs_resume" && !isAdmin && hasForgeData && (
-        <section className="bg-sky-50 rounded-2xl p-6 border border-sky-200">
-          <h2 className="font-semibold text-foreground mb-3">Here&apos;s how the Refinery works</h2>
-          <p className="text-sm text-muted mb-4">
+        <section className="bg-t-panel border border-t-steel p-6">
+          <h2 className="font-semibold text-t-white mb-3">Here&apos;s how the Refinery works</h2>
+          <p className="text-sm text-t-phos-dim mb-4">
             Your Forge profile is your base resume -- one strong, structured record of your real
             experience. The Refinery aims it at real jobs and gets smarter the more you use it.
           </p>
           <div className="space-y-3">
             <div className="flex items-start gap-3">
-              <span className="w-6 h-6 rounded-full bg-sage-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+              <span className="w-6 h-6 bg-t-amber text-[#14100a] text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
                 1
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Start from your base resume</p>
-                <p className="text-xs text-muted leading-relaxed">
+                <p className="text-sm font-semibold text-t-white">Start from your base resume</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">
                   Your one strong, structured resume, built from your Forge. Refine it anytime in the Forge builder.
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <span className="w-6 h-6 rounded-full bg-sage-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+              <span className="w-6 h-6 bg-t-amber text-[#14100a] text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
                 2
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Tailor it to a specific job</p>
-                <p className="text-xs text-muted leading-relaxed">
+                <p className="text-sm font-semibold text-t-white">Tailor it to a specific job</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">
                   The Application Tailor aims your base resume at the posting&apos;s exact requirements, using your
                   Forge profile. This unlocks the rest -- do it for as many jobs as you want.
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3 opacity-55">
-              <span className="w-6 h-6 rounded-full bg-gray-400 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+              <span className="w-6 h-6 bg-t-line text-t-phos-dim text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
                 3
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Everything else unlocks</p>
-                <p className="text-xs text-muted leading-relaxed">
+                <p className="text-sm font-semibold text-t-white">Everything else unlocks</p>
+                <p className="text-xs text-t-phos-dim leading-relaxed">
                   Interview practice, disclosure strategy, and application tracking all unlock after your first
                   tailored resume. The grayed-out tools below open automatically.
                 </p>
@@ -428,10 +429,10 @@ export default function DashboardPage() {
               href={forgeData.career_paths?.[0]?.title
                 ? `/dashboard/jobs?q=${encodeURIComponent(forgeData.career_paths[0].title)}`
                 : "/dashboard/jobs"}
-              className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+              className="block bg-t-panel border border-t-amber p-6 hover:bg-t-panel-2 transition-colors"
             >
-              <h3 className="font-semibold text-lg mb-1">Find a Job to Tailor For</h3>
-              <p className="text-sm text-sage-100">
+              <h3 className="font-semibold text-lg text-t-white mb-1">Find a Job to Tailor For</h3>
+              <p className="text-sm text-t-phos-dim">
                 {forgeData.career_paths?.[0]?.title
                   ? `Search "${forgeData.career_paths[0].title}" and other roles that fit, then tailor your resume to one. That unlocks the rest.`
                   : "Real listings, fair-chance employers first. Pick one and tailor your resume to it -- that unlocks the rest."}
@@ -439,10 +440,10 @@ export default function DashboardPage() {
             </Link>
             <Link
               href="/resume"
-              className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+              className="block bg-t-panel border border-t-steel p-6 hover:bg-t-panel-2 transition-colors"
             >
-              <h3 className="font-semibold text-lg mb-1">Build Your Base Resume</h3>
-              <p className="text-sm text-sky-100">
+              <h3 className="font-semibold text-lg text-t-white mb-1">Build Your Base Resume</h3>
+              <p className="text-sm text-t-phos-dim">
                 Your one strong resume, built from your real experience. Refine it in the Forge builder anytime.
               </p>
             </Link>
@@ -453,13 +454,13 @@ export default function DashboardPage() {
       {/* Saved work */}
       {totalArtifacts > 0 && (
         <section>
-          <h2 className="text-lg font-bold text-foreground mb-4">Your Saved Work</h2>
+          <h2 className="text-lg font-bold text-t-white mb-4">Your Saved Work</h2>
           <div className="flex flex-wrap gap-2 mb-4">
             {Object.entries(artifactCounts).map(([type, count]) => (
               <Link
                 key={type}
                 href={TYPE_TOOL_HREF[type] || "/dashboard"}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-sage-100 text-sage-700 hover:bg-sage-200 transition-colors"
+                className="px-3 py-1.5 text-sm font-medium border border-t-line bg-t-panel text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
               >
                 {count} {TYPE_LABELS[type] || type}
               </Link>
@@ -474,23 +475,23 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={a.id}
-                    className="flex items-center bg-white rounded-xl border border-border hover:border-sage-300 transition-colors"
+                    className="flex items-center bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
                   >
                     <Link
                       href={href}
                       className="flex-1 px-4 py-3"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground truncate">
+                        <span className="text-sm font-medium text-t-white truncate">
                           {a.target_context?.targetJob || TYPE_LABELS[a.artifact_type] || a.artifact_type}
                         </span>
-                        <span className="text-xs text-muted ml-2 flex-shrink-0">{timeAgo(a.updated_at)}</span>
+                        <span className="text-xs text-t-phos-dim ml-2 flex-shrink-0">{timeAgo(a.updated_at)}</span>
                       </div>
                     </Link>
                     <button
                       onClick={() => deleteArtifact(a.id)}
                       disabled={deletingArtifact === a.id}
-                      className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 disabled:opacity-50"
+                      className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0 disabled:opacity-50"
                       title="Delete"
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -516,20 +517,20 @@ export default function DashboardPage() {
         if (!targetJob || (hasDisclosure && hasInterview)) return null;
 
         return (
-          <section className="bg-sage-50 rounded-2xl p-6 border border-sage-200">
-            <h2 className="font-semibold text-foreground mb-3">
+          <section className="bg-t-panel border border-t-line p-6">
+            <h2 className="font-semibold text-t-white mb-3">
               What&apos;s Next
             </h2>
-            <p className="text-sm text-muted mb-4">
-              You built a resume for <span className="font-medium text-foreground">{targetJob}</span>
-              {targetCompany ? <> at <span className="font-medium text-foreground">{targetCompany}</span></> : ""}.
+            <p className="text-sm text-t-phos-dim mb-4">
+              You built a resume for <span className="font-medium text-t-white">{targetJob}</span>
+              {targetCompany ? <> at <span className="font-medium text-t-white">{targetCompany}</span></> : ""}.
               Keep preparing:
             </p>
             <div className="flex flex-wrap gap-3">
               {!hasDisclosure && (
                 <Link
                   href={`/dashboard/disclosure${targetCompany ? `?company=${encodeURIComponent(targetCompany)}` : ""}`}
-                  className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+                  className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
                 >
                   Plan your disclosure
                 </Link>
@@ -537,14 +538,14 @@ export default function DashboardPage() {
               {!hasInterview && (
                 <Link
                   href={`/dashboard/interview${targetJob ? `?role=${encodeURIComponent(targetJob)}` : ""}`}
-                  className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+                  className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
                 >
                   Practice {targetJob} interview
                 </Link>
               )}
               <Link
                 href="/dashboard/jobs"
-                className="px-4 py-2.5 bg-white border border-sage-200 rounded-xl text-sm font-medium text-sage-700 hover:bg-sage-50 transition-colors"
+                className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
               >
                 Find another job
               </Link>
@@ -555,7 +556,7 @@ export default function DashboardPage() {
 
       {/* Tool cards — all visible, locked ones greyed out */}
       <section>
-        <h2 className="text-lg font-bold text-foreground mb-4">Your Tools</h2>
+        <h2 className="text-lg font-bold text-t-white mb-4">Your Tools</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {ALL_TOOLS.map((tool) => {
             const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin);
@@ -568,16 +569,16 @@ export default function DashboardPage() {
               return (
                 <div
                   key={tool.href}
-                  className={`rounded-2xl p-5 border opacity-40 ${tool.color}`}
+                  className="p-5 border border-t-line bg-t-panel opacity-40"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className={`font-semibold mb-1 text-gray-400`}>{tool.title}</h3>
-                    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" className="text-gray-300 flex-shrink-0 mt-0.5">
+                    <h3 className="font-semibold mb-1 text-t-phos-dim">{tool.title}</h3>
+                    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" className="text-t-phos-dim flex-shrink-0 mt-0.5">
                       <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
                     </svg>
                   </div>
-                  <p className="text-sm text-gray-300 leading-relaxed">{tool.description}</p>
-                  <p className="text-xs text-gray-300 mt-2 italic">
+                  <p className="text-sm text-t-phos-dim leading-relaxed">{tool.description}</p>
+                  <p className="text-xs text-t-phos-dim mt-2 italic">
                     Build your first resume to unlock
                   </p>
                 </div>
@@ -588,17 +589,17 @@ export default function DashboardPage() {
               <Link
                 key={tool.href}
                 href={tool.href}
-                className={`block rounded-2xl p-5 border transition-all hover:shadow-md ${tool.color}`}
+                className={`block p-5 border transition-all hover:bg-t-panel-2 ${tool.color}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <h3 className={`font-semibold mb-1 ${tool.accent}`}>{tool.title}</h3>
                   {count > 0 && (
-                    <span className="text-xs font-medium text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                    <span className="text-xs font-medium text-t-amber-bright border border-t-amber px-2 py-0.5 flex-shrink-0">
                       {count} saved
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-muted leading-relaxed">{tool.description}</p>
+                <p className="text-sm text-t-phos-dim leading-relaxed">{tool.description}</p>
               </Link>
             );
           })}
@@ -606,11 +607,11 @@ export default function DashboardPage() {
       </section>
 
       {/* Data & Privacy */}
-      <section className="border-t border-border pt-8">
+      <section className="border-t border-t-line pt-8">
         <div className="flex gap-3">
           <Link
             href="/dashboard/settings"
-            className="text-sm text-muted hover:text-foreground bg-white rounded-xl px-4 py-3 border border-border transition-colors"
+            className="t-focus text-sm text-t-phos-dim hover:text-t-white bg-t-panel px-4 py-3 border border-t-line transition-colors"
           >
             Settings & privacy
           </Link>
@@ -663,19 +664,19 @@ function PartnerDashboard() {
   ];
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 font-term">
       {/* Header */}
-      <section className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+      <section className="bg-t-panel p-6 sm:p-8 border border-t-line">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-sage-600">
+          <div className="w-10 h-10 bg-t-panel-2 border border-t-line flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-t-amber">
               <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-sage-600 mb-1">t.ROY — Partner View</p>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Welcome to The Refinery</h1>
-            <p className="text-body text-muted leading-relaxed">
+            <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY — Partner View</p>
+            <h1 className="text-2xl font-bold text-t-white mb-2">Welcome to The Refinery</h1>
+            <p className="text-base text-t-phos-dim leading-relaxed">
               You&apos;re seeing this as a partner organization. The tools below are what your clients experience — each one is built on peer-reviewed research and designed specifically for justice-impacted people. Walk through any tool to see it in action, or go deeper into the methodology.
             </p>
           </div>
@@ -686,55 +687,50 @@ function PartnerDashboard() {
       <section className="grid sm:grid-cols-2 gap-4">
         <Link
           href="/dashboard/methodology"
-          className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+          className="block bg-t-panel border border-t-amber p-6 hover:bg-t-panel-2 transition-colors"
         >
-          <h3 className="font-semibold text-lg mb-1">Full Methodology Playbook</h3>
-          <p className="text-sm text-sage-100">
+          <h3 className="font-semibold text-lg text-t-white mb-1">Full Methodology Playbook</h3>
+          <p className="text-sm text-t-phos-dim">
             10 behavioral rules, research foundation, how each feature was designed. The full picture for program directors and case managers.
           </p>
         </Link>
         <Link
           href="/dashboard/evidence"
-          className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+          className="block bg-t-panel border border-t-steel p-6 hover:bg-t-panel-2 transition-colors"
         >
-          <h3 className="font-semibold text-lg mb-1">Evidence & Outcomes</h3>
-          <p className="text-sm text-sky-100">
+          <h3 className="font-semibold text-lg text-t-white mb-1">Evidence & Outcomes</h3>
+          <p className="text-sm text-t-phos-dim">
             Research citations, outcome data, differentiators. Built for funders, grant applications, and accreditation reviewers.
           </p>
         </Link>
       </section>
 
       {/* Try it with a client */}
-      <section className="bg-warm-50 rounded-2xl p-6 border border-warm-200">
-        <h2 className="font-semibold text-foreground mb-2">Try it with a client</h2>
-        <p className="text-sm text-muted mb-4">
+      <section className="bg-t-panel border border-t-line p-6">
+        <h2 className="font-semibold text-t-white mb-2">Try it with a client</h2>
+        <p className="text-sm text-t-phos-dim mb-4">
           The Forge takes about 10 minutes. Walk through it yourself or sit with a client while they do — you&apos;ll see exactly what they experience and what it produces.
         </p>
-        <Link
-          href="/intro"
-          className="inline-flex items-center px-5 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors"
-        >
-          Start The Forge
-        </Link>
+        <TBtn href="/intro" size="sm">start The Forge</TBtn>
       </section>
 
       {/* Tool-by-tool breakdown */}
       <section>
-        <h2 className="text-lg font-bold text-foreground mb-4">What each tool does</h2>
+        <h2 className="text-lg font-bold text-t-white mb-4">What each tool does</h2>
         <div className="space-y-3">
           {TOOL_OVERVIEW.map((tool) => (
             <Link
               key={tool.href}
               href={tool.href}
-              className="block bg-white rounded-xl p-5 border border-border hover:border-sage-300 transition-colors"
+              className="block bg-t-panel p-5 border border-t-line hover:border-t-phos-dim transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground mb-1">{tool.title}</h3>
-                  <p className="text-sm text-muted leading-relaxed mb-2">{tool.description}</p>
-                  <p className="text-xs text-sage-600 font-medium">Research basis: {tool.research}</p>
+                  <h3 className="font-semibold text-t-white mb-1">{tool.title}</h3>
+                  <p className="text-sm text-t-phos-dim leading-relaxed mb-2">{tool.description}</p>
+                  <p className="text-xs text-t-amber-bright font-medium">Research basis: {tool.research}</p>
                 </div>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-muted flex-shrink-0 mt-1">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-t-phos-dim flex-shrink-0 mt-1">
                   <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
@@ -744,10 +740,10 @@ function PartnerDashboard() {
       </section>
 
       {/* Settings */}
-      <section className="border-t border-border pt-8">
+      <section className="border-t border-t-line pt-8">
         <Link
           href="/dashboard/settings"
-          className="text-sm text-muted hover:text-foreground bg-white rounded-xl px-4 py-3 border border-border transition-colors"
+          className="t-focus text-sm text-t-phos-dim hover:text-t-white bg-t-panel px-4 py-3 border border-t-line transition-colors"
         >
           Settings & privacy
         </Link>
@@ -788,19 +784,19 @@ function ObserverDashboard() {
   ];
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 font-term">
       {/* Header */}
-      <section className="bg-white rounded-2xl p-6 sm:p-8 border border-border">
+      <section className="bg-t-panel p-6 sm:p-8 border border-t-line">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-sky-600">
+          <div className="w-10 h-10 bg-t-panel-2 border border-t-line flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-t-steel">
               <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-sky-600 mb-1">t.ROY — Evidence View</p>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Built on evidence. Designed for scrutiny.</h1>
-            <p className="text-body text-muted leading-relaxed">
+            <p className="text-sm font-medium text-t-steel mb-1">t.ROY — Evidence View</p>
+            <h1 className="text-2xl font-bold text-t-white mb-2">Built on evidence. Designed for scrutiny.</h1>
+            <p className="text-base text-t-phos-dim leading-relaxed">
               Every feature in this tool has a research basis. This view surfaces the citations, outcomes data, and design decisions. The full evidence deck is in the Evidence tab.
             </p>
           </div>
@@ -809,13 +805,13 @@ function ObserverDashboard() {
 
       {/* Key citations */}
       <section>
-        <h2 className="text-lg font-bold text-foreground mb-4">Five findings this tool is built on</h2>
+        <h2 className="text-lg font-bold text-t-white mb-4">Five findings this tool is built on</h2>
         <div className="space-y-3">
           {HEADLINE_CITATIONS.map((c, i) => (
-            <div key={i} className="bg-white rounded-xl p-5 border border-border">
-              <p className="font-semibold text-foreground mb-1">&ldquo;{c.finding}&rdquo;</p>
-              <p className="text-xs font-medium text-sky-600 mb-2">{c.source}</p>
-              <p className="text-sm text-muted leading-relaxed">{c.detail}</p>
+            <div key={i} className="bg-t-panel p-5 border border-t-line">
+              <p className="font-semibold text-t-white mb-1">&ldquo;{c.finding}&rdquo;</p>
+              <p className="text-xs font-medium text-t-steel mb-2">{c.source}</p>
+              <p className="text-sm text-t-phos-dim leading-relaxed">{c.detail}</p>
             </div>
           ))}
         </div>
@@ -825,43 +821,38 @@ function ObserverDashboard() {
       <section className="grid sm:grid-cols-2 gap-4">
         <Link
           href="/dashboard/evidence"
-          className="block bg-sky-600 text-white rounded-2xl p-6 hover:bg-sky-700 transition-colors"
+          className="block bg-t-panel border border-t-steel p-6 hover:bg-t-panel-2 transition-colors"
         >
-          <h3 className="font-semibold text-lg mb-1">Full Evidence Deck</h3>
-          <p className="text-sm text-sky-100">
+          <h3 className="font-semibold text-lg text-t-white mb-1">Full Evidence Deck</h3>
+          <p className="text-sm text-t-phos-dim">
             All citations, methodology notes, and outcome data. Structured for grant applications and academic review.
           </p>
         </Link>
         <Link
           href="/dashboard/methodology"
-          className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+          className="block bg-t-panel border border-t-amber p-6 hover:bg-t-panel-2 transition-colors"
         >
-          <h3 className="font-semibold text-lg mb-1">Design Methodology</h3>
-          <p className="text-sm text-sage-100">
+          <h3 className="font-semibold text-lg text-t-white mb-1">Design Methodology</h3>
+          <p className="text-sm text-t-phos-dim">
             How each behavioral rule translates into a feature. The 10 non-negotiables and why they exist.
           </p>
         </Link>
       </section>
 
       {/* Try it */}
-      <section className="bg-sky-50 rounded-2xl p-6 border border-sky-200">
-        <h2 className="font-semibold text-foreground mb-2">See it in action</h2>
-        <p className="text-sm text-muted mb-4">
+      <section className="bg-t-panel border border-t-line p-6">
+        <h2 className="font-semibold text-t-white mb-2">See it in action</h2>
+        <p className="text-sm text-t-phos-dim mb-4">
           The Forge demo runs with sample data — Jordan, a warehouse worker from Milwaukee navigating a felony record. Walk through all 8 pages and see what the tool produces.
         </p>
-        <Link
-          href="/intro"
-          className="inline-flex items-center px-5 py-3 bg-sky-600 text-white rounded-xl text-sm font-medium hover:bg-sky-700 transition-colors"
-        >
-          Launch demo
-        </Link>
+        <TBtn href="/intro" size="sm">launch demo</TBtn>
       </section>
 
       {/* Settings */}
-      <section className="border-t border-border pt-8">
+      <section className="border-t border-t-line pt-8">
         <Link
           href="/dashboard/settings"
-          className="text-sm text-muted hover:text-foreground bg-white rounded-xl px-4 py-3 border border-border transition-colors"
+          className="t-focus text-sm text-t-phos-dim hover:text-t-white bg-t-panel px-4 py-3 border border-t-line transition-colors"
         >
           Settings & privacy
         </Link>
@@ -918,92 +909,88 @@ function ProfileSetup({
   }
 
   return (
-    <div className="max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold text-foreground mb-2">
+    <div className="max-w-lg mx-auto font-term">
+      <h1 className="text-2xl font-bold text-t-white mb-2">
         {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
       </h1>
-      <p className="text-body text-muted mb-4">
+      <p className="text-base text-t-phos-dim mb-4">
         I analyzed your background in The Forge — now we put it to work.
         These details go on your resume header. Nothing else.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="text-sm font-medium block mb-1">Full Name *</label>
+          <label className="text-sm font-medium text-t-white block mb-1">Full Name *</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your full name (as it appears on a resume)"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             required
           />
-          <p className="text-xs text-muted mt-1">Top of every resume we build for you.</p>
+          <p className="text-xs text-t-phos-dim mt-1">Top of every resume we build for you.</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium block mb-1">Email</label>
+          <label className="text-sm font-medium text-t-white block mb-1">Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
-          <p className="text-xs text-muted mt-1">Resume header + how employers reach you.</p>
+          <p className="text-xs text-t-phos-dim mt-1">Resume header + how employers reach you.</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium block mb-1">Phone Number *</label>
+          <label className="text-sm font-medium text-t-white block mb-1">Phone Number *</label>
           <input
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="(414) 555-1234"
-            className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+            className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             required
           />
-          <p className="text-xs text-muted mt-1">Required on resumes. Employers call this number.</p>
+          <p className="text-xs text-t-phos-dim mt-1">Required on resumes. Employers call this number.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-sm font-medium block mb-1">City</label>
+            <label className="text-sm font-medium text-t-white block mb-1">City</label>
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
               placeholder="Milwaukee"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
           <div>
-            <label className="text-sm font-medium block mb-1">State</label>
+            <label className="text-sm font-medium text-t-white block mb-1">State</label>
             <input
               value={state}
               onChange={(e) => setState(e.target.value)}
               placeholder="WI"
               maxLength={2}
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch uppercase"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
             />
           </div>
-          <p className="text-xs text-muted col-span-2">For local job matching.</p>
+          <p className="text-xs text-t-phos-dim col-span-2">For local job matching.</p>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-t-red">{error}</p>}
 
-        <div className="bg-sage-50 rounded-xl p-4 border border-sage-200">
-          <p className="text-xs text-sage-700 leading-relaxed">
+        <div className="bg-t-panel p-4 border border-t-line">
+          <p className="text-xs text-t-phos leading-relaxed">
             This info goes on your resume and nowhere else. We don&apos;t sell, share, or spam.
             You can update or delete everything anytime in Settings.
           </p>
         </div>
 
-        <button
-          type="submit"
-          disabled={saving || !name.trim() || !phone.trim()}
-          className="w-full px-6 py-4 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 disabled:bg-gray-300 transition-colors min-h-touch"
-        >
-          {saving ? "Saving..." : "Save & Continue"}
-        </button>
+        <TBtn type="submit" disabled={saving || !name.trim() || !phone.trim()} className="w-full">
+          {saving ? "saving..." : "save & continue"}
+        </TBtn>
       </form>
     </div>
   );
@@ -1018,16 +1005,16 @@ function MiniForgeBanner() {
   if (searchParams.get("welcome") !== "mini-forge" || dismissed) return null;
 
   return (
-    <div className="bg-sage-50 border border-sage-200 rounded-xl p-5 flex items-start gap-4">
+    <div className="bg-t-panel border border-t-line p-5 flex items-start gap-4 font-term">
       <div className="flex-1">
-        <p className="font-semibold text-foreground">Welcome. You started this inside.</p>
-        <p className="text-sm text-muted mt-1">
+        <p className="font-semibold text-t-white">Welcome. You started this inside.</p>
+        <p className="text-sm text-t-phos-dim mt-1">
           Your career plan from The Mini Forge is loaded. Your tools are ready.
         </p>
       </div>
       <button
         onClick={() => setDismissed(true)}
-        className="text-muted hover:text-foreground text-sm shrink-0"
+        className="text-t-phos-dim hover:text-t-white text-sm shrink-0"
         aria-label="Dismiss"
       >
         Done

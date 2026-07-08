@@ -20,23 +20,23 @@ interface TierGateProps {
 
 function DefaultFallback() {
   return (
-    <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
-      <p className="text-lg font-semibold text-foreground mb-2">
+    <div className="border border-dashed border-t-line p-8 text-center font-term">
+      <p className="text-lg font-semibold text-t-white mb-2">
         Full access requires a partner code
       </p>
-      <p className="text-sm text-muted mb-4">
+      <p className="text-sm text-t-phos-dim mb-4">
         This tool is available to clients and partners. Try The Forge first — it&apos;s free and shows you what we do.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <a
           href="https://forge.steelmanresumes.com"
-          className="px-6 py-3 bg-sage-600 text-white rounded-xl font-medium hover:bg-sage-700 transition-colors"
+          className="t-focus px-6 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors"
         >
           Try The Forge
         </a>
         <a
           href="/dashboard/settings"
-          className="px-6 py-3 bg-white text-sage-600 border-2 border-sage-200 rounded-xl font-medium hover:bg-sage-50 transition-colors"
+          className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors"
         >
           Enter a Partner Code
         </a>

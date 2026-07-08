@@ -240,9 +240,9 @@ export default function DashboardLayout({
       if (!visible.length) return null;
 
       return (
-        <div key={gi} className={gi > 0 ? "mt-1 pt-3 border-t border-border/60" : ""}>
+        <div key={gi} className={gi > 0 ? "mt-1 pt-3 border-t border-t-line" : ""}>
           {group.label && (
-            <p className="px-3 mb-1 text-[10px] font-bold text-muted/70 uppercase tracking-widest">
+            <p className="px-3 mb-1 text-[10px] font-bold text-t-phos-dim uppercase tracking-widest">
               {group.label}
             </p>
           )}
@@ -262,7 +262,7 @@ export default function DashboardLayout({
               return (
                 <div
                   key={item.href}
-                  className="flex items-center justify-between px-3 py-2 text-sm text-gray-300 cursor-not-allowed select-none rounded-lg"
+                  className="flex items-center justify-between px-3 py-2 text-sm text-t-line cursor-not-allowed select-none"
                   title={lockReason}
                 >
                   <span>{item.label}</span>
@@ -278,10 +278,10 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 onClick={onItemClick}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`t-focus flex items-center px-3 py-2 text-sm font-medium border-l-2 transition-colors ${
                   isActive
-                    ? "bg-sage-100 text-foreground"
-                    : "text-muted hover:bg-sage-50 hover:text-foreground"
+                    ? "bg-t-panel-2 text-t-amber-bright border-t-amber"
+                    : "text-t-phos-dim border-transparent hover:bg-t-panel-2 hover:text-t-white"
                 }`}
               >
                 {item.label}
@@ -294,10 +294,10 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-t-bg font-term">
       <AdminTestModeBanner />
       {/* Top bar */}
-      <nav className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-border">
+      <nav className="sticky top-0 z-30 bg-t-panel/95 backdrop-blur border-b border-t-line">
         <div className="px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
 
@@ -305,14 +305,14 @@ export default function DashboardLayout({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="md:hidden p-2 -ml-2 text-muted hover:text-foreground transition-colors"
+                className="t-focus md:hidden p-2 -ml-2 text-t-phos-dim hover:text-t-amber-bright transition-colors"
                 aria-label="Open navigation"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <path fillRule="evenodd" d="M3 5h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2z" clipRule="evenodd" />
                 </svg>
               </button>
-              <Link href="/dashboard" className="font-bold text-lg text-foreground">
+              <Link href="/dashboard" className="font-bold text-lg text-t-white">
                 Steel Man
               </Link>
             </div>
@@ -323,19 +323,19 @@ export default function DashboardLayout({
                 href="https://forge.steelmanresumes.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
               >
                 The Forge
               </a>
               <Link
                 href="/dashboard/settings"
-                className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden sm:block text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
               >
                 Settings
               </Link>
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
               >
                 Sign Out
               </button>
@@ -348,7 +348,7 @@ export default function DashboardLayout({
       <div className="flex min-h-[calc(100vh-64px)]">
 
         {/* Left sidebar -- desktop only */}
-        <aside className="hidden md:block w-52 flex-shrink-0 border-r border-border bg-white">
+        <aside className="hidden md:block w-52 flex-shrink-0 border-r border-t-line bg-t-panel">
           <div className="sticky top-16 h-[calc(100vh-64px)] overflow-y-auto px-2 py-4 space-y-1">
             {renderNavItems()}
           </div>
@@ -364,28 +364,28 @@ export default function DashboardLayout({
       {/* Mobile drawer overlay */}
       {drawerOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
           onClick={() => setDrawerOpen(false)}
         />
       )}
 
       {/* Mobile drawer panel */}
       <div
-        className={`fixed left-0 top-0 bottom-0 w-72 bg-white z-50 shadow-xl overflow-y-auto transition-transform duration-200 md:hidden ${
+        className={`fixed left-0 top-0 bottom-0 w-72 bg-t-panel border-r border-t-line z-50 shadow-xl overflow-y-auto transition-transform duration-200 md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between px-4 h-16 border-b border-border">
+        <div className="flex items-center justify-between px-4 h-16 border-b border-t-line">
           <Link
             href="/dashboard"
             onClick={() => setDrawerOpen(false)}
-            className="font-bold text-lg text-foreground"
+            className="font-bold text-lg text-t-white"
           >
             Steel Man
           </Link>
           <button
             onClick={() => setDrawerOpen(false)}
-            className="p-2 text-muted hover:text-foreground transition-colors"
+            className="t-focus p-2 text-t-phos-dim hover:text-t-amber-bright transition-colors"
             aria-label="Close navigation"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -395,18 +395,18 @@ export default function DashboardLayout({
         </div>
         <div className="px-2 py-4 space-y-1">
           {renderNavItems(() => setDrawerOpen(false))}
-          <div className="mt-3 pt-3 border-t border-border/60 space-y-1">
+          <div className="mt-3 pt-3 border-t border-t-line space-y-1">
             <a
               href="https://forge.steelmanresumes.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-sage-50 rounded-lg transition-colors"
+              className="flex items-center px-3 py-2 text-sm text-t-phos-dim hover:text-t-white hover:bg-t-panel-2 transition-colors"
             >
               The Forge &#8599;
             </a>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="w-full flex items-center px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-sage-50 rounded-lg transition-colors text-left"
+              className="w-full flex items-center px-3 py-2 text-sm text-t-phos-dim hover:text-t-white hover:bg-t-panel-2 transition-colors text-left"
             >
               Sign Out
             </button>
@@ -433,7 +433,7 @@ export default function DashboardLayout({
       {/* Unlock toast */}
       {unlockToast && (
         <div className="fixed bottom-24 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="bg-sage-700 text-white text-sm font-medium px-5 py-3 rounded-full shadow-xl flex items-center gap-2">
+          <div className="bg-t-panel-2 border border-t-amber text-t-amber-bright text-sm font-medium px-5 py-3 shadow-[3px_3px_0_#000] flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M10 2H6a1 1 0 00-1 1v1H4a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V5a1 1 0 00-1-1h-1V3a1 1 0 00-1-1zM6 4h4v.5H6V4zM8 9a1.5 1.5 0 110 3 1.5 1.5 0 010-3z" fill="currentColor"/>
             </svg>

@@ -39,20 +39,20 @@ export function JourneyProgressBanner({ state }: Props) {
   if (!stage) return null;
 
   return (
-    <div className="mb-6 bg-white rounded-xl border border-border px-4 py-3">
+    <div className="mb-6 bg-t-panel border border-t-line px-4 py-3 font-term">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold text-muted uppercase tracking-widest">
+        <span className="text-[10px] font-bold text-t-phos-dim uppercase tracking-widest">
           Your Refinery Journey
         </span>
-        <span className="text-xs font-semibold text-sage-700">
+        <span className="text-xs font-semibold text-t-amber-bright">
           {stage.progress}% complete
         </span>
       </div>
 
       {/* Bar */}
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+      <div className="h-1.5 bg-t-line overflow-hidden mb-3">
         <div
-          className="h-full bg-sage-600 rounded-full transition-all duration-700"
+          className="h-full bg-t-amber transition-all duration-700"
           style={{ width: `${stage.progress}%` }}
         />
       </div>
@@ -65,12 +65,12 @@ export function JourneyProgressBanner({ state }: Props) {
           return (
             <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
               <div
-                className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors ${
+                className={`w-5 h-5 border text-[9px] font-bold flex items-center justify-center transition-colors ${
                   done
-                    ? "bg-sage-600 text-white"
+                    ? "bg-t-amber border-t-amber text-[#14100a]"
                     : active
-                      ? "bg-sage-100 text-sage-700 ring-2 ring-sage-400 ring-offset-1"
-                      : "bg-gray-100 text-gray-400"
+                      ? "bg-t-panel-2 border-t-amber text-t-amber-bright"
+                      : "bg-t-panel border-t-line text-t-phos-dim"
                 }`}
               >
                 {done ? (
@@ -90,10 +90,10 @@ export function JourneyProgressBanner({ state }: Props) {
               <span
                 className={`text-[9px] text-center leading-tight ${
                   done
-                    ? "text-sage-600 font-medium"
+                    ? "text-t-amber-bright font-medium"
                     : active
-                      ? "text-foreground font-semibold"
-                      : "text-gray-400"
+                      ? "text-t-white font-semibold"
+                      : "text-t-phos-dim"
                 }`}
               >
                 {label}
@@ -103,7 +103,7 @@ export function JourneyProgressBanner({ state }: Props) {
         })}
       </div>
 
-      <p className="text-[11px] text-muted text-center">{stage.next}</p>
+      <p className="text-[11px] text-t-phos-dim text-center">{stage.next}</p>
     </div>
   );
 }

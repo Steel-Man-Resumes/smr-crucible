@@ -34,16 +34,16 @@ export function NextStepCard({ next }: { next: NextStep }) {
   return (
     <Link
       href={next.href}
-      className="block bg-sage-600 text-white rounded-2xl p-6 hover:bg-sage-700 transition-colors"
+      className="t-focus block bg-t-amber text-[#14100a] shadow-[3px_3px_0_#000] p-6 hover:bg-t-amber-bright transition-colors font-term"
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-sage-100">
+        <p className="text-xs font-medium uppercase tracking-wide text-[#14100a]/70">
           Your next step
         </p>
-        <span className="text-xs font-medium text-sage-100/80">{stageLabel}</span>
+        <span className="text-xs font-medium text-[#14100a]/70">{stageLabel}</span>
       </div>
       <h2 className="text-xl font-bold mt-1 mb-2">{next.action}</h2>
-      <span className="inline-flex items-center text-sm font-medium text-white">
+      <span className="inline-flex items-center text-sm font-bold text-[#14100a]">
         Continue
         <svg
           width="16"

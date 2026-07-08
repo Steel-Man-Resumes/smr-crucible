@@ -29,13 +29,13 @@ function Badge({
 }) {
   const cls =
     state === "current"
-      ? "bg-white/20 text-white"
+      ? "bg-[#14100a]/20 text-[#14100a]"
       : state === "done"
-        ? "bg-sage-200 text-sage-700"
-        : "bg-gray-100 text-gray-400";
+        ? "bg-t-panel-2 text-t-amber-bright border border-t-amber"
+        : "bg-t-panel text-t-phos-dim border border-t-line";
   return (
     <span
-      className={`flex items-center justify-center w-5 h-5 rounded-full text-xs flex-shrink-0 ${cls}`}
+      className={`flex items-center justify-center w-5 h-5 text-xs flex-shrink-0 ${cls}`}
     >
       {state === "done" ? (
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -63,14 +63,14 @@ export function StageProgressBar({ currentStage }: { currentStage: number }) {
   return (
     <nav
       aria-label="Your journey"
-      className="bg-white rounded-2xl border border-border p-3 sm:p-4"
+      className="bg-t-panel border border-t-line p-3 sm:p-4 font-term"
     >
       {/* Mobile: compact step indicator */}
       <div className="sm:hidden flex items-center justify-between">
-        <span className="text-sm font-semibold text-foreground">
+        <span className="text-sm font-semibold text-t-white">
           {current > 6 ? "Journey complete" : `Step ${mobileIdx} of 6`}
         </span>
-        <span className="text-sm text-sage-600 font-medium">{mobileLabel}</span>
+        <span className="text-sm text-t-amber-bright font-medium">{mobileLabel}</span>
       </div>
 
       {/* Desktop: full arc */}
@@ -79,12 +79,12 @@ export function StageProgressBar({ currentStage }: { currentStage: number }) {
           const state: "done" | "current" | "upcoming" =
             s.n < current ? "done" : s.n === current ? "current" : "upcoming";
           const cls =
-            "flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors " +
+            "t-focus flex-1 min-w-0 flex items-center gap-2 px-3 py-2 text-sm transition-colors " +
             (state === "current"
-              ? "bg-sage-600 text-white font-semibold"
+              ? "bg-t-amber text-[#14100a] font-semibold"
               : state === "done"
-                ? "bg-sage-50 text-sage-700 hover:bg-sage-100"
-                : "bg-gray-50 text-muted");
+                ? "bg-t-panel-2 text-t-phos hover:text-t-amber-bright"
+                : "bg-t-bg text-t-phos-dim");
           const content = (
             <>
               <Badge state={state} n={s.n} />
