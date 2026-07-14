@@ -70,13 +70,13 @@ export function FlowPage({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-t-bg font-term">
+    <div className="min-h-screen flex flex-col bg-t-bg font-body">
       {/* Back navigation */}
       {showBack && (
         <div className="px-4 pt-4">
           <button
             onClick={onBack}
-            className="t-focus inline-flex items-center gap-1 text-t-phos-dim hover:text-t-amber-bright transition-colors min-h-touch px-2"
+            className="t-focus inline-flex items-center gap-1 text-t-bone-dim hover:text-t-amber-bright transition-colors min-h-touch px-2"
             aria-label="Go back"
           >
             <svg
@@ -107,7 +107,7 @@ export function FlowPage({
 
           {/* Subtitle */}
           {subtitle && (
-            <p className="text-base text-t-phos-dim leading-relaxed mb-8">{subtitle}</p>
+            <p className="text-base text-t-bone-dim leading-relaxed mb-8">{subtitle}</p>
           )}
 
           {/* Interactive content */}
@@ -129,7 +129,7 @@ export function FlowPage({
       {/* Footer */}
       {footer && (
         <div className="px-4 pb-6 text-center">
-          <div className="text-sm text-t-phos-dim max-w-flow mx-auto">{footer}</div>
+          <div className="text-sm text-t-bone-dim max-w-flow mx-auto">{footer}</div>
         </div>
       )}
     </div>

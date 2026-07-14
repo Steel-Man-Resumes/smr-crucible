@@ -1,25 +1,33 @@
 /*
- * Hand-Forged Terminal design system -- ported from smr-website
+ * Workshop Tape + lite trash-polka v2 -- ported from smr-website
  * (see ~/repos/smr-website/docs/DESIGN-SYSTEM.md for the canonical spec).
- * Vendored copy, not a build-time link -- keep both files in sync by hand
- * per ~/todash/smr/SMR-TERMINAL-REDESIGN-MASTER-PLAN-2026-07-07.md Wave C1.
+ * Vendored copy, not a build-time link -- keep both files in sync by hand.
  *
- * Tokens are mirrored as `t-*` Tailwind colors in tailwind.config.ts.
+ * Supersedes the v1 "Hand-Forged Terminal" hex values (2026-07-08). Same
+ * token names, new values -- conservative baseline remap, apps/consumer,
+ * 2026-07-14. Tokens are mirrored as `t-*` Tailwind colors in
+ * tailwind.config.ts.
  */
 
 :root {
-  --t-bg: #0b0e0c;
-  --t-panel: #10140f;
-  --t-panel-2: #151a13;
-  --t-line: #2a3324;
-  --t-amber: #d4a84b;
-  --t-amber-bright: #e8c060;
+  --t-bg: #121110;
+  --t-panel: #1a1815;
+  --t-panel-2: #201d18;
+  --t-panel-3: #28231c;
+  --t-line: #3a352c;
+  --t-amber: #c9973f;
+  --t-amber-bright: #e0bd6e;
   --t-phos: #9fbf8f;
   --t-phos-dim: #6d8562;
-  --t-white: #e9e6da;
-  --t-red: #c4573a;
-  --t-steel: #7fa3b5;
+  --t-white: #ece7d9;
+  --t-red: #ad2318;
+  --t-red-bright: #d9392a;
+  --t-bone-dim: #b9b3a0;
+  --t-steel: #b9b3a0;
+  --t-electric: #4fd1c5;
   --t-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  --t-display: "Arial Narrow", Oswald, "Roboto Condensed", sans-serif;
+  --t-body: Arial, Helvetica, sans-serif;
 }
 
 @keyframes t-blink {

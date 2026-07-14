@@ -109,7 +109,7 @@ export function GhostGuide({
             </svg>
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-t-phos leading-relaxed">{message}</p>
+              <p className="font-body text-sm text-t-white leading-relaxed">{message}</p>
 
               <div className="flex items-center gap-3 mt-2">
                 {onExpand && (

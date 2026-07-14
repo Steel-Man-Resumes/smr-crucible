@@ -242,7 +242,7 @@ export default function DashboardLayout({
       return (
         <div key={gi} className={gi > 0 ? "mt-1 pt-3 border-t border-t-line" : ""}>
           {group.label && (
-            <p className="px-3 mb-1 text-[10px] font-bold text-t-phos-dim uppercase tracking-widest">
+            <p className="px-3 mb-1 text-[10px] font-bold text-t-bone-dim uppercase tracking-widest">
               {group.label}
             </p>
           )}
@@ -281,7 +281,7 @@ export default function DashboardLayout({
                 className={`t-focus flex items-center px-3 py-2 text-sm font-medium border-l-2 transition-colors ${
                   isActive
                     ? "bg-t-panel-2 text-t-amber-bright border-t-amber"
-                    : "text-t-phos-dim border-transparent hover:bg-t-panel-2 hover:text-t-white"
+                    : "text-t-bone-dim border-transparent hover:bg-t-panel-2 hover:text-t-white"
                 }`}
               >
                 {item.label}
@@ -294,7 +294,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-t-bg font-term">
+    <div className="min-h-screen bg-t-bg font-body">
       <AdminTestModeBanner />
       {/* Top bar */}
       <nav className="sticky top-0 z-30 bg-t-panel/95 backdrop-blur border-b border-t-line">
@@ -305,7 +305,7 @@ export default function DashboardLayout({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="t-focus md:hidden p-2 -ml-2 text-t-phos-dim hover:text-t-amber-bright transition-colors"
+                className="t-focus md:hidden p-2 -ml-2 text-t-bone-dim hover:text-t-amber-bright transition-colors"
                 aria-label="Open navigation"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -323,19 +323,19 @@ export default function DashboardLayout({
                 href="https://forge.steelmanresumes.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
+                className="text-sm text-t-bone-dim hover:text-t-amber-bright transition-colors"
               >
                 The Forge
               </a>
               <Link
                 href="/dashboard/settings"
-                className="hidden sm:block text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
+                className="hidden sm:block text-sm text-t-bone-dim hover:text-t-amber-bright transition-colors"
               >
                 Settings
               </Link>
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
-                className="text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
+                className="text-sm text-t-bone-dim hover:text-t-amber-bright transition-colors"
               >
                 Sign Out
               </button>
@@ -385,7 +385,7 @@ export default function DashboardLayout({
           </Link>
           <button
             onClick={() => setDrawerOpen(false)}
-            className="t-focus p-2 text-t-phos-dim hover:text-t-amber-bright transition-colors"
+            className="t-focus p-2 text-t-bone-dim hover:text-t-amber-bright transition-colors"
             aria-label="Close navigation"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -400,13 +400,13 @@ export default function DashboardLayout({
               href="https://forge.steelmanresumes.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center px-3 py-2 text-sm text-t-phos-dim hover:text-t-white hover:bg-t-panel-2 transition-colors"
+              className="flex items-center px-3 py-2 text-sm text-t-bone-dim hover:text-t-white hover:bg-t-panel-2 transition-colors"
             >
               The Forge &#8599;
             </a>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="w-full flex items-center px-3 py-2 text-sm text-t-phos-dim hover:text-t-white hover:bg-t-panel-2 transition-colors text-left"
+              className="w-full flex items-center px-3 py-2 text-sm text-t-bone-dim hover:text-t-white hover:bg-t-panel-2 transition-colors text-left"
             >
               Sign Out
             </button>

@@ -173,7 +173,7 @@ export default function EvidencePage() {
                 <div key={i} className="flex gap-3 items-start">
                   <div className="flex-shrink-0 mt-1 w-5 h-5 bg-t-panel-2 border border-t-line flex items-center justify-center">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#D4A84B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#c9973f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <div>

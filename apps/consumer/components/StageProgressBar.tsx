@@ -83,8 +83,8 @@ export function StageProgressBar({ currentStage }: { currentStage: number }) {
             (state === "current"
               ? "bg-t-amber text-[#14100a] font-semibold"
               : state === "done"
-                ? "bg-t-panel-2 text-t-phos hover:text-t-amber-bright"
-                : "bg-t-bg text-t-phos-dim");
+                ? "bg-t-panel-2 text-t-bone-dim hover:text-t-amber-bright"
+                : "bg-t-bg text-t-bone-dim");
           const content = (
             <>
               <Badge state={state} n={s.n} />

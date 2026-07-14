@@ -1,5 +1,32 @@
 # SMR Crucible -- Handoff
 
+## 2026-07-14 (Sonnet 5) -- v2 palette conservative baseline remap (apps/consumer)
+
+Troy's ask: a **conservative ~40% baseline remap** of `apps/consumer`'s still-v1 "Hand-Forged Terminal" hex palette to the locked v2 "Workshop Tape + lite trash-polka" tokens that `smr-website` finished migrating to on 2026-07-13 -- explicitly **not** a full page-by-page redesign pass (that's separate Wave-2 work, out of scope tonight). Read `~/repos/smr-website/tailwind.config.js`, `src/app/terminal.css`, and `docs/DESIGN-SYSTEM.md` as the source of truth; copied exact hex values from there rather than trusting typed-out values in the brief.
+
+**Tokens (global, cascades everywhere via Tailwind classes):**
+- `apps/consumer/tailwind.config.ts` -- `t-*` colors updated to the locked v2 hex (`t-bg`, `t-panel`, `t-panel-2`, `t-line`, `t-amber`, `t-amber-bright`, `t-red`, `t-steel` all changed value; added missing `t-panel-3`, `t-red-bright`, `t-bone-dim`, `t-electric`). Added `font-display` and `font-body` families (only `font-term` existed before).
+- `apps/consumer/app/terminal.css` -- CSS custom-property mirror updated to match, by hand (no build-time link between the two files, this app's own long-standing convention).
+- `packages/consumer-ui/src/theme.ts` -- `COLORS` constant (unused in app code today, kept for documentation parity) updated to the same v2 hex.
+
+**The one universal violation fixed (mirrors smr-website's Wave 0 fix):** phosphor green (`text-t-phos`/`text-t-phos-dim`) was the v1 default body/link text color; locked v2 rule is phosphor is CLI-field/meta-label only. Fixed in shared chrome only (not per-page):
+- `packages/consumer-ui/src/{FlowPage,CardSelect,GhostGuide,ExitButton,CustomImage,terminal/ImageSlot}.tsx` -- body/description/message/caption text and link default color moved to `text-t-white` (primary) or `text-t-bone-dim` (secondary), `hover:text-t-amber-bright` kept where present. `FlowPage`'s and `CardSelect`'s root wrapper also moved `font-term` -> `font-body` (their content is real reading copy, not CLI fields) -- **this one change alone fixes body-text font/color for the majority of Forge one-question-per-screen pages**, since `FlowPage` is the shared layout primitive nearly all of them nest inside.
+- `apps/consumer/app/(dashboard)/layout.tsx` (Refinery top bar + sidebar + mobile drawer) and `apps/consumer/app/(forge)/layout.tsx` ("leave this page" exit link) -- same fix, root `font-term` -> `font-body` on the dashboard shell.
+- `apps/consumer/components/{JourneyProgressBanner,StageProgressBar,TierGate}.tsx` -- same fix for the shared journey-progress chrome shown above every dashboard page's content.
+- Deliberately left untouched (legitimate carve-outs per the locked spec): `TerminalPanel` title-bar labels, `PromptLine`, `AsciiDiagram`, `LogoBoot` boot lines, `TBtn`'s monospace button label, `TextInput`/`TextArea`'s monospace form-field styling (form fields are intentionally "CLI fields" per the locked design -- `.t-cli-field` black-box/phosphor treatment is structural, not a v1 mistake).
+
+**Spot-checked pages** (per the brief's named list, plus what the grep for "prominent" survivors turned up): `/intro` (Forge entry -- the single highest-traffic screen in the app), `/goals`, `/welcome`, `/(dashboard)/dashboard/disclosure`, `/(dashboard)/dashboard/evidence`, `/(dashboard)/dashboard/page.tsx` (Refinery home), `/(forge)/overview`. Playwright (WSL-native, `~/.cache/ms-playwright`) screenshots of `/intro`, `/goals`, `/welcome` before/after confirmed the fix renders correctly (body copy now bone/white sans-serif, no stray phosphor-green paragraphs) with no layout breakage.
+
+`/intro` and `/goals` had page-level (not shared-component) phosphor-as-body-text too -- fixed those two specifically since `/intro` is the single most prominent page in the whole app (first thing every user sees) and `/goals` was one of the explicitly-named spot-check targets; both were small, single-file, color/font-role-only edits. Also fixed a handful of stray raw v1 hex literals (inline `style={{...}}`, not Tailwind classes) found via grep in `dashboard/page.tsx`, `evidence/page.tsx`, `(forge)/overview/page.tsx`, and the disclosure-completion confetti block in `dashboard/disclosure/page.tsx`.
+
+**Known backlog, NOT fixed (by design -- matches smr-website's own "Wave 1 backlog" framing, don't re-litigate):** the ~30+ individual page files under `(dashboard)/dashboard/*` and `(auth)/*` (dashboard, disclosure, jobs, employers, applications, settings, progress, methodology, resources, vault, login, etc.) still use `text-t-phos`/`text-t-phos-dim` extensively as default body-copy color. The token remap doesn't visually break these (the phosphor hex value itself didn't change), but the role violation persists -- needs a real page-by-page pass, not tonight's conservative baseline. `app/access/page.tsx` (the partner "you're in" landing page) is a fully separate **inline-style, non-Tailwind** implementation with ~30 raw v1 hex references of its own -- flagged, not touched, needs its own dedicated pass.
+
+**Verify:** `npm run build` (workspace root script, `packages/core` tsc + `next build`) clean, 0 errors, 97 static pages generated, both before and after the page-level follow-up fixes. Grepped for the old raw hex values (`#D4A84B`, `#E8C060`, `#0B0E0C`, `#10140F`, `#151A13`, `#2A3324`, `#C4573A`, `#7FA3B5`) across `apps/consumer` + `packages/consumer-ui/src` -- clean except the documented `access/page.tsx` gap above.
+
+**Did not touch** (explicitly off-limits, in-flight parsing feature on the same branch): `app/api/parse/route.ts`, `lib/text-extraction.ts`, `next.config.mjs`.
+
+Committed locally, **not pushed** -- left for Troy's review per his instruction.
+
 > **NEW CHAT: START HERE -> Wave C nearly done, 2026-07-08.**
 > C1 (foundation), C2 (Forge flow, all 13 steps), C3 (Refinery dashboard --
 > shell + all ~16 tool pages + every shared/deep component), and C5 (auth +

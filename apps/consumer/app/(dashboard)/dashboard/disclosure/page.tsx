@@ -1200,7 +1200,7 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
   const particles = Array.from({ length: 38 }, (_, i) => ({
     id: i,
     x: 5 + (i % 12) * 8 + Math.sin(i * 1.3) * 4,
-    color: ["#D4A84B","#E8C060","#9FBF8F","#6D8562","#E9E6DA","#7FA3B5"][i % 6],
+    color: ["#c9973f","#e0bd6e","#9fbf8f","#6d8562","#ece7d9","#b9b3a0"][i % 6],
     delay: (i % 8) * 0.07,
     dur: 1.4 + (i % 5) * 0.22,
     size: 5 + (i % 4),
@@ -1231,18 +1231,18 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
       >
         <div
           style={{
-            background: "#10140F",
-            border: "1px solid #D4A84B",
+            background: "#1a1815",
+            border: "1px solid #c9973f",
             padding: "14px 28px",
             textAlign: "center",
             boxShadow: "3px 3px 0 #000",
             animation: "smr-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards",
           }}
         >
-          <p style={{ fontWeight: 700, color: "#E8C060", fontSize: 15, margin: 0 }}>
+          <p style={{ fontWeight: 700, color: "#e0bd6e", fontSize: 15, margin: 0 }}>
             Disclosure Plan Built
           </p>
-          <p style={{ color: "#9FBF8F", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
+          <p style={{ color: "#b9b3a0", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
             Saved to your materials
           </p>
         </div>

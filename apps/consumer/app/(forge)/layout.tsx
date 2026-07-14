@@ -89,7 +89,7 @@ export default function ForgeLayout({ children }: { children: ReactNode }) {
         </a>
         <a
           href="https://steelmanresumes.com"
-          className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur border border-t-line text-sm text-t-phos-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-touch"
+          className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur border border-t-line text-sm text-t-bone-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-touch"
           aria-label="Leave this page"
         >
           leave this page

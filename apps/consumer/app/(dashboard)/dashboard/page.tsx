@@ -240,7 +240,7 @@ export default function DashboardPage() {
   if (onboarding.state === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#D4A84B] animate-spin" />
+        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
       </div>
     );
   }

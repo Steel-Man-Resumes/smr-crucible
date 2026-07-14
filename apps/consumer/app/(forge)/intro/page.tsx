@@ -71,7 +71,7 @@ export default function IntroPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 font-term">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 font-body">
       <div className="w-full max-w-md">
         {/* t.ROY icon */}
         <div className="flex justify-center mb-6">
@@ -98,7 +98,7 @@ export default function IntroPage() {
         <div className="text-center mb-6 space-y-3">
           <h1 className="text-2xl font-bold text-t-white">I&apos;m t.ROY.</h1>
 
-          <p className="text-base text-t-phos leading-relaxed">
+          <p className="text-base text-t-white leading-relaxed">
             I find what you&apos;re good at, match it to jobs that fit, and
             handle the record stuff so you don&apos;t have to figure it out
             alone.
@@ -108,7 +108,7 @@ export default function IntroPage() {
         {/* Here's the deal */}
         <div className="bg-t-panel px-4 py-4 mb-6 border border-t-line">
           <p className="text-sm font-semibold text-t-white mb-2">Here&apos;s what happens:</p>
-          <ol className="text-sm text-t-phos space-y-1.5 list-decimal list-inside leading-relaxed">
+          <ol className="text-sm text-t-bone-dim space-y-1.5 list-decimal list-inside leading-relaxed">
             <li>You give me your resume (or we build one together)</li>
             <li>I ask a few questions about what you want and what&apos;s in your way</li>
             <li>You get: a resume, cover letter, career paths, and resources for your situation</li>
@@ -118,7 +118,7 @@ export default function IntroPage() {
 
         {/* Do the work warning */}
         <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
-          <p className="text-sm text-t-phos leading-relaxed">
+          <p className="text-sm text-t-bone-dim leading-relaxed">
             <span className="font-semibold text-t-amber-bright">Fair warning:</span> shortcuts are
             dangerous. A rushed resume gets you in the door, but you&apos;ll
             fall apart in the interview if you haven&apos;t done the work. The
@@ -129,7 +129,7 @@ export default function IntroPage() {
         {/* t.ROY callout — use it */}
         <div className="bg-t-panel-2 px-5 py-4 mb-6 border border-t-amber">
           <p className="text-sm font-bold text-t-white mb-1">One more thing.</p>
-          <p className="text-sm leading-relaxed text-t-phos-dim">
+          <p className="text-sm leading-relaxed text-t-bone-dim">
             You&apos;ll see a chat button on every page. That&apos;s me. Real
             Troy designed every word I say, and I&apos;m here to actually help
             -- not sell you something. If you get stuck, confused, or just
@@ -151,13 +151,13 @@ export default function IntroPage() {
               <span className="font-medium text-t-white block">
                 {PATHS[0].label}
               </span>
-              <span className="text-sm text-t-phos-dim mt-0.5 block">
+              <span className="text-sm text-t-bone-dim mt-0.5 block">
                 {PATHS[0].subtitle}
               </span>
             </button>
             <button
               onClick={() => router.push("/rush")}
-              className="t-focus mt-1.5 ml-5 text-xs text-t-phos-dim hover:text-t-amber-bright transition-colors"
+              className="t-focus mt-1.5 ml-5 text-xs text-t-bone-dim hover:text-t-amber-bright transition-colors"
             >
               Need to apply somewhere today?{" "}
               <span className="underline underline-offset-2">Rush Mode</span>{" "}
@@ -174,7 +174,7 @@ export default function IntroPage() {
               <span className="font-medium text-t-white block">
                 {path.label}
               </span>
-              <span className="text-sm text-t-phos-dim mt-0.5 block">
+              <span className="text-sm text-t-bone-dim mt-0.5 block">
                 {path.subtitle}
               </span>
             </button>

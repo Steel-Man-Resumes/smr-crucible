@@ -40,7 +40,7 @@ export function CardSelect({
   );
 
   return (
-    <div className="flex flex-col gap-3 font-term" role={multi ? "group" : "radiogroup"}>
+    <div className="flex flex-col gap-3 font-body" role={multi ? "group" : "radiogroup"}>
       {options.map((option) => {
         const isSelected = selectedSet.has(option.id);
         return (
@@ -84,7 +84,7 @@ export function CardSelect({
               <div>
                 <span className="font-medium">{option.label}</span>
                 {option.description && (
-                  <p className="text-sm text-t-phos-dim mt-0.5">
+                  <p className="text-sm text-t-bone-dim mt-0.5">
                     {option.description}
                   </p>
                 )}

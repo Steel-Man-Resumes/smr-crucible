@@ -70,7 +70,7 @@ export function JourneyProgressBanner({ state }: Props) {
                     ? "bg-t-amber border-t-amber text-[#14100a]"
                     : active
                       ? "bg-t-panel-2 border-t-amber text-t-amber-bright"
-                      : "bg-t-panel border-t-line text-t-phos-dim"
+                      : "bg-t-panel border-t-line text-t-bone-dim"
                 }`}
               >
                 {done ? (
@@ -93,7 +93,7 @@ export function JourneyProgressBanner({ state }: Props) {
                     ? "text-t-amber-bright font-medium"
                     : active
                       ? "text-t-white font-semibold"
-                      : "text-t-phos-dim"
+                      : "text-t-bone-dim"
                 }`}
               >
                 {label}
@@ -103,7 +103,7 @@ export function JourneyProgressBanner({ state }: Props) {
         })}
       </div>
 
-      <p className="text-[11px] text-t-phos-dim text-center">{stage.next}</p>
+      <p className="font-body text-[11px] text-t-bone-dim text-center">{stage.next}</p>
     </div>
   );
 }

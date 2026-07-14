@@ -68,22 +68,37 @@ const config: Config = {
           800: "#2a4d64",
           900: "#274155",
         },
-        // Hand-Forged Terminal system (Wave C, 2026-07-08) -- LOCKED, ported
-        // from smr-website/docs/DESIGN-SYSTEM.md. Mirrored as CSS custom
-        // properties in app/terminal.css; keep both in sync by hand.
-        "t-bg": "#0B0E0C",
-        "t-panel": "#10140F",
-        "t-panel-2": "#151A13",
-        "t-line": "#2A3324",
-        "t-amber": "#D4A84B",
-        "t-amber-bright": "#E8C060",
-        "t-phos": "#9FBF8F",
-        "t-phos-dim": "#6D8562",
-        "t-white": "#E9E6DA",
-        "t-red": "#C4573A",
-        "t-steel": "#7FA3B5",
+        // Workshop Tape + lite trash-polka v2 (2026-07-13) -- LOCKED, ported
+        // from smr-website/docs/DESIGN-SYSTEM.md (conservative baseline remap,
+        // apps/consumer, 2026-07-14). Supersedes the v1 Hand-Forged Terminal
+        // hex values -- same token names, new values, so every page already
+        // on t-* classes reskins immediately with zero className changes.
+        // Mirrored as CSS custom properties in app/terminal.css; keep both in
+        // sync by hand.
+        "t-bg": "#121110",
+        "t-panel": "#1a1815",
+        "t-panel-2": "#201d18",
+        "t-panel-3": "#28231c",
+        "t-line": "#3a352c",
+        "t-amber": "#c9973f",
+        "t-amber-bright": "#e0bd6e",
+        "t-phos": "#9fbf8f",
+        "t-phos-dim": "#6d8562",
+        "t-white": "#ece7d9",
+        "t-red": "#ad2318",
+        "t-red-bright": "#d9392a",
+        "t-bone-dim": "#b9b3a0",
+        // Legacy inline-link token from v1 pages not yet migrated to the new
+        // body/link roles -- value now matches t-bone-dim. Reach for
+        // t-bone-dim directly in new work.
+        "t-steel": "#b9b3a0",
+        // Rare 4th hue -- one-off campaign/launch moments only, never
+        // standing UI, never in the app proper.
+        "t-electric": "#4fd1c5",
       },
       fontFamily: {
+        display: ['"Arial Narrow"', "Oswald", '"Roboto Condensed"', "sans-serif"],
+        body: ["Arial", "Helvetica", "sans-serif"],
         term: [
           "ui-monospace",
           '"Cascadia Mono"',

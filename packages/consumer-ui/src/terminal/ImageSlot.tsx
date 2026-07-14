@@ -35,8 +35,8 @@ export function ImageSlot({
       role="img"
       aria-label={alt}
     >
-      <span className="font-term text-xs uppercase tracking-widest text-t-phos-dim">{assetId}</span>
-      <span className="max-w-xs font-term text-sm text-t-phos-dim">{alt}</span>
+      <span className="font-term text-xs uppercase tracking-widest text-t-bone-dim">{assetId}</span>
+      <span className="max-w-xs font-term text-sm text-t-bone-dim">{alt}</span>
     </div>
   );
 }

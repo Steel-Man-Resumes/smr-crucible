@@ -126,7 +126,7 @@ export default function GoalsPage() {
       {/* Why we ask */}
       {!isDemo && (
         <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
-          <p className="text-sm text-t-phos leading-relaxed">
+          <p className="text-sm text-t-white leading-relaxed">
             This isn&apos;t a form, it&apos;s a filter. &ldquo;Stability&rdquo; and
             &ldquo;growth&rdquo; lead to different jobs. I need to know what
             matters so I don&apos;t waste your time.

@@ -1,42 +1,42 @@
 /**
  * Consumer Design System Theme Constants
  *
- * Hand-Forged Terminal system (Wave C, 2026-07-08) -- ported from
- * ~/repos/smr-website/docs/DESIGN-SYSTEM.md. Grounded in WS4
- * (trauma-informed UX) requirements:
- * - 15-16px body minimum, monospace throughout
- * - One monospace stack sitewide (no custom font downloads — performance budget)
+ * Workshop Tape + lite trash-polka v2 -- ported from
+ * ~/repos/smr-website/docs/DESIGN-SYSTEM.md (conservative baseline remap,
+ * 2026-07-14; supersedes the v1 Hand-Forged Terminal hex values). Grounded
+ * in WS4 (trauma-informed UX) requirements:
+ * - 15-16px body minimum for CLI-styled form fields
  * - 6th grade reading level enforced at component level
  * - WCAG 2.2 AA contrast ratios (4.5:1 body, 3:1 large text)
- * - No red except semantic errors, no rounded corners
+ * - No red except semantic errors/rare emphasis, no rounded corners
  */
 
 export const FONT_STACK =
   'ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
 export const COLORS = {
-  // Hand-Forged Terminal palette
-  background: "#0B0E0C", // bench black
-  foreground: "#E9E6DA", // iron white
-  muted: "#6D8562", // dim phosphor
-  border: "#2A3324", // line
-  card: "#10140F", // panel
-  surface: "#151A13", // raised panel
+  // Workshop Tape v2 palette
+  background: "#121110", // shop floor black
+  foreground: "#ece7d9", // bone
+  muted: "#6d8562", // dim phosphor (CLI-adjacent decorative text only)
+  border: "#3a352c", // line
+  card: "#1a1815", // panel
+  surface: "#201d18", // raised panel
 
-  // Accent — steel gold ("the metal")
-  accent: "#D4A84B",
-  accentHover: "#E8C060",
-  accentLight: "#9FBF8F", // phosphor green
+  // Accent — amber steel ("the metal")
+  accent: "#c9973f",
+  accentHover: "#e0bd6e",
+  accentLight: "#9fbf8f", // phosphor green -- CLI fields only
 
   // Status
-  success: "#9FBF8F",
-  info: "#7FA3B5",
-  warning: "#D4A84B",
-  error: "#C4573A", // semantic only, never decorative
+  success: "#9fbf8f",
+  info: "#b9b3a0",
+  warning: "#c9973f",
+  error: "#ad2318", // semantic only, never decorative
 
   // Interactive
-  focus: "#E9E6DA",
-  disabled: "#2A3324",
+  focus: "#ece7d9",
+  disabled: "#3a352c",
 } as const;
 
 export const SPACING = {

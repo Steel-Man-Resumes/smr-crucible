@@ -51,7 +51,7 @@ export function CustomImage({
         // fetchPriority not yet in React types but supported by browsers
         {...(priority ? { fetchpriority: "high" } : {})}
       />
-      <figcaption className="text-xs text-t-phos-dim font-term mt-1">
+      <figcaption className="text-xs text-t-bone-dim font-term mt-1">
         Image: {source}
       </figcaption>
     </figure>

@@ -25,7 +25,7 @@ export function ExitButton({
     <div className="fixed top-4 right-4 z-50">
       <a
         href={href}
-        className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur-sm border border-t-line font-term text-sm text-t-phos-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-[3rem] shadow-[2px_2px_0_#000]"
+        className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur-sm border border-t-line font-term text-sm text-t-bone-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-[3rem] shadow-[2px_2px_0_#000]"
         aria-label={label}
       >
         <svg
