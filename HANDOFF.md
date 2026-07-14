@@ -1,5 +1,21 @@
 # SMR Crucible -- Handoff
 
+## 2026-07-14 -- t.ROY emblem badge replaces placeholder SVGs
+
+`packages/consumer-ui/src/AssistantDrawer.tsx` (drawer trigger) and
+`packages/consumer-ui/src/GhostGuide.tsx` (collapsed-state icon + inline avatar)
+had generic chat-bubble/ghost inline SVGs. Swapped both for a circular-masked
+WebP crop of the new t.ROY compass emblem (source: `t.ROY.png`, the icon created
+specifically for the SMR/Forge/Refinery world -- not used elsewhere). Compressed
+via smr-website's `scripts/compress-image.mjs` to 34KB, stored at
+`apps/consumer/public/images/t-roy-icon-badge.webp` (consumer-ui has no public
+dir; apps/consumer is its only current consumer, so the path resolves there).
+Commit `bb34cb4`.
+
+Checked `apps/consumer/components/ContactTroyButton.tsx` and confirmed it's a
+"Contact Troy" mailto (the human founder), not the t.ROY AI assistant --
+left it untouched, no icon change.
+
 ## 2026-07-14 (Sonnet 5) -- v2 palette conservative baseline remap (apps/consumer)
 
 Troy's ask: a **conservative ~40% baseline remap** of `apps/consumer`'s still-v1 "Hand-Forged Terminal" hex palette to the locked v2 "Workshop Tape + lite trash-polka" tokens that `smr-website` finished migrating to on 2026-07-13 -- explicitly **not** a full page-by-page redesign pass (that's separate Wave-2 work, out of scope tonight). Read `~/repos/smr-website/tailwind.config.js`, `src/app/terminal.css`, and `docs/DESIGN-SYSTEM.md` as the source of truth; copied exact hex values from there rather than trusting typed-out values in the brief.
