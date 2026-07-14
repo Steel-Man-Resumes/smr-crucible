@@ -13,16 +13,14 @@ const nextConfig = {
       "/api/assistant": ["./lib/skills/**/*"],
       "/api/coach": ["./lib/skills/**/*"],
       "/api/health/skills": ["./lib/skills/**/*"],
+      // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
+      // worker/core files in the serverless function instead of relying on CDN
+      // runtime downloads for executable assets.
+      "/api/parse": [
+        "../../node_modules/tesseract.js/**/*",
+        "../../node_modules/tesseract.js-core/**/*",
+      ],
     },
-  },
-  webpack: (config) => {
-    // Worker-only deps in @crucible/core — not used by consumer app
-    // tesseract.js not installed — handled gracefully at runtime
-    config.externals = [
-      ...(config.externals || []),
-      "tesseract.js",
-    ];
-    return config;
   },
   async redirects() {
     return [

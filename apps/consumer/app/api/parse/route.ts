@@ -25,10 +25,11 @@ async function handlePost(request: Request) {
       );
     }
 
-    // File size limit: 10MB
-    if (file.size > 10 * 1024 * 1024) {
+    // File size limit: high enough for phone photos/scanned PDFs, still bounded
+    // for serverless memory and OCR runtime.
+    if (file.size > 25 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "File too large (max 10MB)" },
+        { error: "File too large (max 25MB)" },
         { status: 413 }
       );
     }
