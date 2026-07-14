@@ -62,20 +62,12 @@ export function AssistantDrawer({
           className="t-focus fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-40 inline-flex items-center gap-2 px-5 py-3 bg-t-amber text-[#14100a] font-term text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
           aria-label="Open assistant"
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
+          <img
+            src="/images/t-roy-icon-badge.webp"
+            alt=""
             aria-hidden="true"
-          >
-            <path
-              d="M10 2C5.58 2 2 5.13 2 9c0 2.38 1.19 4.47 3 5.74V18l3.14-1.74C8.72 16.42 9.34 16.5 10 16.5c4.42 0 8-3.13 8-7S14.42 2 10 2z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              fill="none"
-            />
-          </svg>
+            className="w-5 h-5 rounded-full flex-shrink-0"
+          />
           {triggerLabel}
         </button>
       )}

@@ -70,43 +70,24 @@ export function GhostGuide({
           className="t-focus w-full flex items-center gap-2 px-4 py-3 text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
           aria-label="Show guidance from t.ROY"
         >
-          {/* Ghost icon */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
+          {/* t.ROY icon */}
+          <img
+            src="/images/t-roy-icon-badge.webp"
+            alt=""
             aria-hidden="true"
-            className="flex-shrink-0"
-          >
-            <path
-              d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              fill="none"
-            />
-          </svg>
+            className="w-4 h-4 rounded-full flex-shrink-0"
+          />
           <span>show t.ROY guidance</span>
         </button>
       ) : (
         <div className="px-4 py-3">
           <div className="flex items-start gap-3">
-            {/* Ghost avatar */}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-              className="flex-shrink-0 mt-0.5 text-t-amber"
-            >
-              <path
-                d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                fill="none"
-              />
-            </svg>
+            {/* t.ROY avatar */}
+            <img
+              src="/images/t-roy-icon-badge.webp"
+              alt="t.ROY"
+              className="w-5 h-5 rounded-full flex-shrink-0 mt-0.5"
+            />
 
             <div className="flex-1 min-w-0">
               <p className="font-body text-sm text-t-white leading-relaxed">{message}</p>
