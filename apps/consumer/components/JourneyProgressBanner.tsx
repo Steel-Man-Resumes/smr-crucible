@@ -1,25 +1,41 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { OnboardingState } from "@/lib/useOnboarding";
 
 const SKIP_PREFIXES = ["/dashboard/settings", "/dashboard/admin", "/dashboard/partner"];
 
-const STAGES: Record<string, { progress: number; activeStep: number; next: string }> = {
+// Each stage states the path (cta/href), the payoff (why bother), and the next
+// step -- a bare percentage tells the user nothing about how to move it.
+const STAGES: Record<
+  string,
+  { progress: number; activeStep: number; next: string; cta: string; href: string; payoff: string }
+> = {
   needs_profile: {
     progress: 25,
     activeStep: 1,
     next: "Complete your profile to unlock the full Refinery.",
+    cta: "Finish my profile",
+    href: "/dashboard",
+    payoff: "Takes about 2 minutes. Unlocks the job board and your saved materials.",
   },
   needs_resume: {
     progress: 50,
     activeStep: 2,
     next: "Find a job and build your targeted resume to unlock all tools.",
+    cta: "Open the job board",
+    href: "/dashboard/jobs",
+    payoff:
+      "Tailoring your resume to one real job unlocks interview practice, disclosure planning, and application tracking.",
   },
   full_access: {
     progress: 75,
     activeStep: 3,
     next: "Practice your disclosure and interview prep -- every rep builds confidence.",
+    cta: "Start practicing",
+    href: "/dashboard/interview",
+    payoff: "Everything is unlocked. The last 25% is reps -- practice until it feels easy.",
   },
 };
 
@@ -104,6 +120,17 @@ export function JourneyProgressBanner({ state }: Props) {
       </div>
 
       <p className="font-body text-[11px] text-t-bone-dim text-center">{stage.next}</p>
+      <div className="mt-2 flex flex-col items-center gap-1">
+        <Link
+          href={stage.href}
+          className="t-focus inline-block px-3 py-1.5 bg-t-amber text-white text-[11px] font-bold hover:bg-t-amber-bright transition-colors"
+        >
+          {stage.cta}
+        </Link>
+        <p className="font-body text-[10px] text-t-bone-dim text-center max-w-md">
+          {stage.payoff}
+        </p>
+      </div>
     </div>
   );
 }

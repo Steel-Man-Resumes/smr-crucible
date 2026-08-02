@@ -58,6 +58,7 @@ function assessResume(doc: ResumeDocument): { weak: number; thin: number; show: 
 export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderProps) {
   const [doc, setDoc] = useState<ResumeDocument>(initialDoc);
   const [generating, setGenerating] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [ready, setReady] = useState<Record<number, boolean>>({});
@@ -185,29 +186,51 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
               >
                 Looks good -- continue
               </button>
+              {/* Downloading here is premature -- the Forge makes this resume
+                  significantly better in the next steps. One small control,
+                  explained, for people who truly need it now. */}
               <button
-                onClick={downloadDocx}
-                disabled={downloading}
-                className="t-focus px-4 py-3 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch text-sm disabled:opacity-50"
+                onClick={() => setShowDownloads(!showDownloads)}
+                className="t-focus px-3 py-3 text-sm text-t-phos-dim hover:text-t-white transition-colors min-h-touch"
               >
-                {downloading ? "Preparing..." : "Download .docx"}
+                {showDownloads ? "Hide downloads" : "Need to download it now?"}
               </button>
-              <button
-                onClick={() => printResumePdf(doc)}
-                className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
-              >
-                Save as PDF
-              </button>
-              <button
-                onClick={downloadTxt}
-                title="Plain text -- the safest format for online application boxes"
-                className="t-focus px-4 py-3 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors min-h-touch text-sm"
-              >
-                Download .txt
-              </button>
+              {showDownloads && (
+                <div className="w-full bg-t-panel-2 border border-t-line p-3 mt-1">
+                  <p className="text-xs text-t-phos-dim leading-relaxed mb-2">
+                    Heads up: this is the <strong className="text-t-phos">before</strong> version.
+                    The next few steps turn it into a much stronger resume and
+                    cover letter -- that&apos;s the whole point of the Forge. If
+                    you need a copy right now (an appointment today, a program
+                    requirement), grab one, then come back and finish.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={downloadDocx}
+                      disabled={downloading}
+                      className="t-focus px-3 py-2 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors text-xs disabled:opacity-50"
+                    >
+                      {downloading ? "Preparing..." : ".docx (opens in Word)"}
+                    </button>
+                    <button
+                      onClick={() => printResumePdf(doc)}
+                      className="t-focus px-3 py-2 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors text-xs"
+                    >
+                      PDF (keeps formatting)
+                    </button>
+                    <button
+                      onClick={downloadTxt}
+                      title="Plain text -- the safest format for online application boxes"
+                      className="t-focus px-3 py-2 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors text-xs"
+                    >
+                      .txt (for online forms)
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           }
-          actionsHint=".docx opens in Word. PDF keeps the formatting. Continue when it looks right -- we carry this through the rest of your Forge."
+          actionsHint="Continue when it looks right -- we carry this through the rest of your Forge and make it stronger."
         />
 
         {/* Parser preview -- "what a machine reads", the honest ATS view. */}

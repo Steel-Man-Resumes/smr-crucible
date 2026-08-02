@@ -94,15 +94,79 @@ export default function IntroPage() {
           </div>
         </div>
 
-        {/* t.ROY introduction */}
+        {/* t.ROY introduction -- says plainly that this is AI, and good AI */}
         <div className="text-center mb-6 space-y-3">
           <h1 className="text-2xl font-bold text-t-white">I&apos;m t.ROY.</h1>
 
           <p className="text-base text-t-white leading-relaxed">
+            I&apos;m an AI -- the best available, aimed at one job: your career.
             I find what you&apos;re good at, match it to jobs that fit, and
             handle the record stuff so you don&apos;t have to figure it out
             alone.
           </p>
+          <p className="text-sm text-t-bone-dim leading-relaxed">
+            Real Troy designed every word I say. You can adjust how I work
+            later, in The Refinery.
+          </p>
+        </div>
+
+        {/* "Who are you?" -- the three paths, front and center */}
+        <p className="font-semibold text-t-white mb-4 text-lg">Who are you?</p>
+
+        <div className="flex flex-col gap-3 mb-8">
+          {/* Client path with Rush Mode escape valve */}
+          <div>
+            <button
+              onClick={() => handleSelect(PATHS[0])}
+              className="t-focus group w-full flex items-center justify-between gap-3 text-left px-5 py-4 border border-t-amber bg-t-panel hover:bg-t-panel-2 transition-all min-h-touch"
+            >
+              <span className="min-w-0">
+                <span className="font-semibold text-t-white block">
+                  {PATHS[0].label}
+                </span>
+                <span className="text-sm text-t-bone-dim mt-0.5 block">
+                  {PATHS[0].subtitle}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className="text-t-amber-bright text-lg flex-shrink-0 transition-transform group-hover:translate-x-1"
+              >
+                &rarr;
+              </span>
+            </button>
+            <button
+              onClick={() => router.push("/rush")}
+              className="t-focus mt-1.5 ml-5 text-xs text-t-bone-dim hover:text-t-amber-bright transition-colors"
+            >
+              Need to apply somewhere today?{" "}
+              <span className="underline underline-offset-2">Rush Mode</span>{" "}
+              <span className="text-t-red">(not recommended)</span>
+            </button>
+          </div>
+
+          {PATHS.slice(1).map((path) => (
+            <button
+              key={path.id}
+              onClick={() => handleSelect(path)}
+              className="t-focus group w-full flex items-center justify-between gap-3 text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim hover:bg-t-panel-2 transition-all min-h-touch"
+            >
+              <span className="min-w-0">
+                <span className="font-medium text-t-white block">
+                  {path.label}
+                </span>
+                <span className="text-sm text-t-bone-dim mt-0.5 block">
+                  {path.subtitle}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className="text-t-phos-dim text-lg flex-shrink-0 transition-transform group-hover:translate-x-1"
+              >
+                &rarr;
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Here's the deal */}
@@ -127,7 +191,7 @@ export default function IntroPage() {
         </div>
 
         {/* t.ROY callout — use it */}
-        <div className="bg-t-panel-2 px-5 py-4 mb-6 border border-t-amber">
+        <div className="bg-t-panel-2 px-5 py-4 border border-t-amber">
           <p className="text-sm font-bold text-t-white mb-1">One more thing.</p>
           <p className="text-sm leading-relaxed text-t-bone-dim">
             You&apos;ll see a chat button on every page. That&apos;s me. Real
@@ -135,50 +199,6 @@ export default function IntroPage() {
             -- not sell you something. If you get stuck, confused, or just
             want to talk it through -- use it. That&apos;s what it&apos;s for.
           </p>
-        </div>
-
-        {/* "Who are you?" prompt */}
-        <p className="font-medium text-t-white mb-4">Who are you?</p>
-
-        {/* Three path buttons */}
-        <div className="flex flex-col gap-3">
-          {/* Client path with Rush Mode escape valve */}
-          <div>
-            <button
-              onClick={() => handleSelect(PATHS[0])}
-              className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
-            >
-              <span className="font-medium text-t-white block">
-                {PATHS[0].label}
-              </span>
-              <span className="text-sm text-t-bone-dim mt-0.5 block">
-                {PATHS[0].subtitle}
-              </span>
-            </button>
-            <button
-              onClick={() => router.push("/rush")}
-              className="t-focus mt-1.5 ml-5 text-xs text-t-bone-dim hover:text-t-amber-bright transition-colors"
-            >
-              Need to apply somewhere today?{" "}
-              <span className="underline underline-offset-2">Rush Mode</span>{" "}
-              <span className="text-t-red">(not recommended)</span>
-            </button>
-          </div>
-
-          {PATHS.slice(1).map((path) => (
-            <button
-              key={path.id}
-              onClick={() => handleSelect(path)}
-              className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
-            >
-              <span className="font-medium text-t-white block">
-                {path.label}
-              </span>
-              <span className="text-sm text-t-bone-dim mt-0.5 block">
-                {path.subtitle}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
     </div>

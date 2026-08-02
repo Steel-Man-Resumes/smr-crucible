@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
+import { CompletionConfetti } from "@/components/CompletionConfetti";
 
 interface Strength {
   title: string;
@@ -278,6 +279,7 @@ export default function OutputPage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
+      {!isDemo && <CompletionConfetti />}
       <GhostGuide
         message={getOpusMessage("output", audience, isDemo)}
         pageId="output"

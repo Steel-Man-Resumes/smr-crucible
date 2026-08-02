@@ -9,6 +9,7 @@ import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
+import { GuidedTour } from "@/components/GuidedTour";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
@@ -59,21 +60,23 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard", label: "Overview", minTier: "observer", minState: "needs_profile" },
     ],
   },
+  // Nav order follows the core loop: find work FIRST (job board leads), then
+  // the advanced build tools. See Refinery walkthrough feedback C6/C10.
+  {
+    label: "Find Work",
+    items: [
+      { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "needs_profile" },
+    ],
+  },
   {
     label: "Build",
     items: [
       { href: "/dashboard/application-tailor", label: "Application Tailor", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
       { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access", requiresDisclosure: true },
-    ],
-  },
-  {
-    label: "Find Work",
-    items: [
-      { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "needs_profile" },
     ],
   },
   {
@@ -361,6 +364,9 @@ export function RefineryShell({
           {children}
         </main>
       </div>
+
+      {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
+      <GuidedTour />
 
       {/* Mobile drawer overlay */}
       {drawerOpen && (

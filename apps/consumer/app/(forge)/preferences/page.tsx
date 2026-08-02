@@ -56,10 +56,22 @@ export default function PreferencesPage() {
 
   const demoPrefs = DEMO_SESSION.preferences || {};
   const prefs = isDemo ? demoPrefs : (session.preferences || {});
-  const [schedule, setSchedule] = useState(prefs.schedule || "");
-  const [environment, setEnvironment] = useState(prefs.environment || "");
-  const [commute, setCommute] = useState(prefs.commute || "");
+  // Multi-select: people are often open to more than one schedule/environment.
+  // Stored as comma-joined strings to stay compatible with existing sessions.
+  const splitPref = (v?: string) =>
+    (v || "").split(", ").map((s) => s.trim()).filter(Boolean);
+  const [schedule, setSchedule] = useState<string[]>(splitPref(prefs.schedule));
+  const [environment, setEnvironment] = useState<string[]>(
+    splitPref(prefs.environment)
+  );
+  const [commute, setCommute] = useState<string[]>(splitPref(prefs.commute));
   const [location, setLocation] = useState(prefs.location || "");
+
+  const toggle =
+    (setter: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) =>
+      setter((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      );
 
   function handleContinue() {
     if (isDemo) {
@@ -70,9 +82,9 @@ export default function PreferencesPage() {
     } else {
       updateSession({
         preferences: {
-          schedule,
-          environment,
-          commute,
+          schedule: schedule.join(", "),
+          environment: environment.join(", "),
+          commute: commute.join(", "),
           location,
         },
         lastPageVisited: "preferences",
@@ -113,7 +125,8 @@ export default function PreferencesPage() {
           <CardSelect
             options={SCHEDULE_OPTIONS}
             selected={schedule}
-            onSelect={isDemo ? () => {} : setSchedule}
+            onSelect={isDemo ? () => {} : toggle(setSchedule)}
+            multi
           />
         </div>
 
@@ -125,7 +138,8 @@ export default function PreferencesPage() {
           <CardSelect
             options={ENVIRONMENT_OPTIONS}
             selected={environment}
-            onSelect={isDemo ? () => {} : setEnvironment}
+            onSelect={isDemo ? () => {} : toggle(setEnvironment)}
+            multi
           />
         </div>
 
@@ -137,7 +151,8 @@ export default function PreferencesPage() {
           <CardSelect
             options={COMMUTE_OPTIONS}
             selected={commute}
-            onSelect={isDemo ? () => {} : setCommute}
+            onSelect={isDemo ? () => {} : toggle(setCommute)}
+            multi
           />
         </div>
 

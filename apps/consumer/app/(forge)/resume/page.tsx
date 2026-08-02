@@ -19,6 +19,7 @@ import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { parseTextToResume } from "@/components/resume/resumeParsers";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
+import { SpeechInputButton } from "@/components/SpeechInputButton";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -671,7 +672,12 @@ export default function ResumeIntakePage() {
 
   // --- Path E: Paste text ---
   if (activePath === "paste") {
-    return <PasteResume onComplete={(text) => enterBuilder(text)} onBack={() => setActivePath(null)} />;
+    return (
+      <PasteResume
+        onComplete={(text, seed) => enterBuilder(text, seed)}
+        onBack={() => setActivePath(null)}
+      />
+    );
   }
 
   // --- Path D: Guided AI Builder (hidden fallback) ---
@@ -1234,32 +1240,76 @@ function GuidedBuilder({
 
 // --- Paste Resume sub-component ---
 
+// Prompt the user can hand to their own AI (ChatGPT/Claude/etc.), then paste
+// the reply back here. Server-side markdown stripping + AI parsing handles
+// whatever formatting their AI produces.
+const YOUR_AI_PROMPT = `Please write out my resume as plain text. Include my name, phone, email, and city. List every job I have held with the employer name, dates, and 2-4 bullet points describing what I actually did. Then list my skills and any education, certificates, or training. Do not invent anything -- only use what you know about me from our conversations or what I tell you now. Ask me questions first if you need more detail.`;
+
 function PasteResume({
   onComplete,
   onBack,
 }: {
-  onComplete: (text: string) => void;
+  onComplete: (text: string, seed?: { name?: string; email?: string; phone?: string }) => void;
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
   const [text, setText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [showAiHelp, setShowAiHelp] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  function handleSubmit() {
-    if (!text.trim()) return;
+  async function handleSubmit() {
+    const raw = text.trim();
+    if (!raw) return;
+    setParsing(true);
+
+    // Route through the server parser (markdown stripping + AI extraction) so
+    // resumes pasted from ChatGPT/Claude parse cleanly. Falls back to the raw
+    // text and the client-side parser if the server is unavailable.
+    let finalText = raw;
+    let seed: { name?: string; email?: string; phone?: string } | undefined;
+    try {
+      const formData = new FormData();
+      formData.append("text", raw);
+      const res = await fetch("/api/parse", { method: "POST", body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.resumeText) finalText = data.resumeText;
+        if (data.profile) {
+          seed = {
+            name: data.profile.full_name || undefined,
+            email: data.profile.email || undefined,
+            phone: data.profile.phone || undefined,
+          };
+        }
+      }
+    } catch {
+      /* fall back to raw text */
+    }
+
     updateSession({
-      resumeText: text.trim(),
+      resumeText: finalText,
       resumeMethod: "paste",
       lastPageVisited: "resume",
     });
-    onComplete(text.trim());
+    setParsing(false);
+    onComplete(finalText, seed);
+  }
+
+  async function copyPrompt() {
+    try {
+      await navigator.clipboard.writeText(YOUR_AI_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {}
   }
 
   return (
     <FlowPage
       title="Paste your resume"
       subtitle="Copy your resume text from anywhere and paste it below. Don't worry about formatting."
-      actionLabel="Continue"
-      actionDisabled={text.trim().length < 20}
+      actionLabel={parsing ? "Reading..." : "Continue"}
+      actionDisabled={text.trim().length < 20 || parsing}
       onAction={handleSubmit}
       showBack
       onBack={onBack}
@@ -1269,6 +1319,44 @@ function PasteResume({
         </p>
       }
     >
+      {/* Use-your-own-AI assist */}
+      <div className="mb-4 border border-t-line bg-t-panel">
+        <button
+          type="button"
+          onClick={() => setShowAiHelp(!showAiHelp)}
+          className="t-focus w-full flex items-center justify-between px-4 py-3 text-left min-h-touch"
+        >
+          <span className="text-sm font-medium text-t-white">
+            Already use ChatGPT or another AI? Have it write your resume, then paste it here.
+          </span>
+          <span className="text-t-phos-dim text-sm ml-2">{showAiHelp ? "Hide" : "Show"}</span>
+        </button>
+        {showAiHelp && (
+          <div className="px-4 pb-4 border-t border-t-line pt-3">
+            <p className="text-xs text-t-phos-dim mb-2">
+              Copy this prompt, give it to your AI, then paste its answer in the
+              box below. We handle the formatting.
+            </p>
+            <div className="bg-t-panel-2 border border-t-line p-3 text-xs text-t-phos leading-relaxed mb-2">
+              {YOUR_AI_PROMPT}
+            </div>
+            <button
+              type="button"
+              onClick={copyPrompt}
+              className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright transition-colors"
+            >
+              {copied ? "Copied!" : "Copy this prompt"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end mb-1.5">
+        <SpeechInputButton
+          compact
+          onText={(t) => setText((prev) => (prev ? `${prev.trim()}\n${t}` : t))}
+        />
+      </div>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}

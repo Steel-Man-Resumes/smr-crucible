@@ -17,31 +17,46 @@ async function handlePost(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
+    const pastedText = formData.get("text");
 
-    if (!file) {
+    if (!file && typeof pastedText !== "string") {
       return NextResponse.json(
         { error: "No file provided" },
         { status: 400 }
       );
     }
 
-    // File size limit: high enough for phone photos/scanned PDFs, still bounded
-    // for serverless memory and OCR runtime.
-    if (file.size > 25 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "File too large (max 25MB)" },
-        { status: 413 }
-      );
-    }
+    let resumeText: string | null;
+    let sourceName: string;
 
-    // Extract text from file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const resumeText = await extractTextFromBuffer(
-      buffer,
-      file.name,
-      file.type
-    );
+    if (file) {
+      // File size limit: high enough for phone photos/scanned PDFs, still bounded
+      // for serverless memory and OCR runtime.
+      if (file.size > 25 * 1024 * 1024) {
+        return NextResponse.json(
+          { error: "File too large (max 25MB)" },
+          { status: 413 }
+        );
+      }
+
+      // Extract text from file
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      resumeText = await extractTextFromBuffer(buffer, file.name, file.type);
+      sourceName = file.name;
+    } else {
+      // Pasted text path (incl. output copied from the user's own AI).
+      // Strip common markdown so ChatGPT/Claude-formatted resumes parse clean.
+      resumeText = String(pastedText)
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*\n]+)\*/g, "$1")
+        .replace(/__([^_]+)__/g, "$1")
+        .replace(/```[a-z]*\n?/g, "")
+        .replace(/^[-*+]\s+/gm, "- ")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+      sourceName = "pasted-text";
+    }
 
     if (resumeText && resumeText.length > 50_000) {
       return NextResponse.json(
@@ -81,7 +96,7 @@ async function handlePost(request: Request) {
       resumeText: cleanedText,
       profile: parsedProfile,
       charCount: cleanedText.length,
-      fileName: file.name,
+      fileName: sourceName,
     });
   } catch (error: any) {
     console.error("Parse error:", error);

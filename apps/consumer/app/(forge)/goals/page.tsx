@@ -17,6 +17,7 @@ import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import ForgeAccumulator from "@/components/ForgeAccumulator";
+import { SpeechInputButton } from "@/components/SpeechInputButton";
 
 const GOAL_OPTIONS = [
   {
@@ -67,11 +68,14 @@ export default function GoalsPage() {
   const [narrative, setNarrative] = useState(
     isDemo ? (DEMO_SESSION.goalNarrative || "") : (session.goalNarrative || "")
   );
-  const [showNarrative, setShowNarrative] = useState(isDemo && !!DEMO_SESSION.goalNarrative);
+  // Open by default -- collapsed text fields were never discovered (walkthrough 2026-08-02).
+  const [showNarrative, setShowNarrative] = useState(
+    isDemo ? !!DEMO_SESSION.goalNarrative : true
+  );
   const [hookNarrative, setHookNarrative] = useState(
     isDemo ? (DEMO_SESSION.hookNarrative || "") : (session.hookNarrative || "")
   );
-  const [showHookPrompt, setShowHookPrompt] = useState(false);
+  const [showHookPrompt, setShowHookPrompt] = useState(!isDemo);
 
   // Track page visit
   useEffect(() => {
@@ -169,12 +173,22 @@ export default function GoalsPage() {
           )
         ) : (
           <div className="space-y-2">
-            <label
-              htmlFor="goal-narrative"
-              className="text-sm font-medium text-t-white"
-            >
-              {isDemo ? "Sample goal narrative" : "Tell us more in your own words"}
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="goal-narrative"
+                className="text-sm font-medium text-t-white"
+              >
+                {isDemo ? "Sample goal narrative" : "Tell us more in your own words"}
+              </label>
+              {!isDemo && (
+                <SpeechInputButton
+                  compact
+                  onText={(t) =>
+                    setNarrative((prev) => (prev ? `${prev.trim()} ${t}` : t))
+                  }
+                />
+              )}
+            </div>
             <textarea
               id="goal-narrative"
               value={narrative}
@@ -198,12 +212,22 @@ export default function GoalsPage() {
         )}
         {(showHookPrompt || (isDemo && DEMO_SESSION.hookNarrative)) && (
           <div className="space-y-2">
-            <label
-              htmlFor="hook-narrative"
-              className="text-sm font-medium text-t-white"
-            >
-              {isDemo ? "What would make work feel real to you?" : "What would make work feel like yours?"}
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="hook-narrative"
+                className="text-sm font-medium text-t-white"
+              >
+                {isDemo ? "What would make work feel real to you?" : "What would make work feel like yours?"}
+              </label>
+              {!isDemo && (
+                <SpeechInputButton
+                  compact
+                  onText={(t) =>
+                    setHookNarrative((prev) => (prev ? `${prev.trim()} ${t}` : t))
+                  }
+                />
+              )}
+            </div>
             <p className="text-xs text-t-phos-dim">
               A mentor, a mission, using your story to help others — anything that would make getting up worth it.
             </p>
