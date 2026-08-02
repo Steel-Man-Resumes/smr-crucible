@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { ForgeProvider, useForgeSession } from "@/lib/forge-context";
 import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
-import { ContactTroyButton } from "@/components/ContactTroyButton";
 import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
 import { ShieldCheck, X } from "lucide-react";
 
@@ -67,17 +66,6 @@ function ForgeAssistant() {
   );
 }
 
-function ForgeContactTroy() {
-  const { session } = useForgeSession();
-
-  return (
-    <ContactTroyButton
-      pagesVisited={session.pagesVisited?.length || 0}
-      hasForgeOutput={!!session.forgeOutput}
-    />
-  );
-}
-
 export function ForgeShell({ children }: { children: ReactNode }) {
   return (
     <ForgeProvider>
@@ -102,9 +90,6 @@ export function ForgeShell({ children }: { children: ReactNode }) {
         <ForgeProgress />
       </header>
       <div className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">{children}</div>
-
-      {/* Contact Troy — engagement-gated */}
-      <ForgeContactTroy />
 
       {/* AI Assistant — available on every Forge page */}
       <ForgeAssistant />

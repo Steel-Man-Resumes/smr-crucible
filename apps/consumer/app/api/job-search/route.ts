@@ -116,15 +116,18 @@ async function cacheResults(
 
 // ─── JSearch API ────────────────────────────────────────────────────────────
 
+// Distinguishes "provider failed" (quota, outage, missing key) from a genuine
+// zero-result search, so failures can be surfaced to the user instead of
+// silently rendering as "no jobs found".
 async function fetchJSearchJobs(
   role: string,
   location: string,
   radiusMiles: number
-): Promise<JSearchJob[]> {
+): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number }> {
   const apiKey = process.env.JSEARCH_API_KEY;
   if (!apiKey) {
     console.error("JSEARCH_API_KEY not set");
-    return [];
+    return { jobs: [], failed: true };
   }
 
   const query = `${role} in ${location}`;
@@ -135,20 +138,25 @@ async function fetchJSearchJobs(
   url.searchParams.set("date_posted", "month");
   url.searchParams.set("radius", String(radiusMiles));
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      "X-RapidAPI-Key": apiKey,
-      "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
-    },
-  });
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        "X-RapidAPI-Key": apiKey,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+      },
+    });
 
-  if (!res.ok) {
-    console.error(`JSearch API error: ${res.status} ${res.statusText}`);
-    return [];
+    if (!res.ok) {
+      console.error(`JSearch API error: ${res.status} ${res.statusText}`);
+      return { jobs: [], failed: true, status: res.status };
+    }
+
+    const data = await res.json();
+    return { jobs: data.data ?? [], failed: false };
+  } catch (err) {
+    console.error("JSearch fetch failed:", err);
+    return { jobs: [], failed: true };
   }
-
-  const data = await res.json();
-  return data.data ?? [];
 }
 
 // ─── AI Enrichment ──────────────────────────────────────────────────────────
@@ -421,11 +429,12 @@ async function handlePost(request: Request) {
     }
 
     // 2. Fetch from JSearch
-    const rawJobs = await fetchJSearchJobs(
+    const jsearch = await fetchJSearchJobs(
       sanitizeForPrompt(targetRole) || "jobs",
       searchLocation,
       tenantGeo.searchRadiusMiles
     );
+    const rawJobs = jsearch.jobs;
 
     if (rawJobs.length === 0) {
       // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
@@ -442,6 +451,17 @@ async function handlePost(request: Request) {
           jobs: cosJobs,
           fair_chance_info: "",
           source: "careeronestop",
+        });
+      }
+      // Provider failed (quota/outage/key) vs. genuinely zero matches --
+      // never let a failure render as "no jobs found".
+      if (jsearch.failed) {
+        return NextResponse.json({
+          jobs: [],
+          fair_chance_info: "",
+          source: "jsearch",
+          error:
+            jsearch.status === 429 ? "provider_rate_limited" : "provider_unavailable",
         });
       }
       return NextResponse.json({
@@ -496,7 +516,11 @@ async function handlePost(request: Request) {
     });
   } catch (error) {
     console.error("Job search error:", error);
-    return NextResponse.json({ jobs: [], fair_chance_info: "" });
+    return NextResponse.json({
+      jobs: [],
+      fair_chance_info: "",
+      error: "search_failed",
+    });
   }
 }
 

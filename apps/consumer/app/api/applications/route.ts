@@ -152,6 +152,7 @@ export async function POST(request: Request) {
       employment_type: body.employment_type || null,
       source: body.source || "jsearch",
       source_id: body.source_id || null,
+      apply_url: body.apply_url || null,
       status: body.status || "saved",
       status_updated_at: new Date().toISOString(),
       applied_at:

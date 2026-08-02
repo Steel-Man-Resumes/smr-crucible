@@ -30,6 +30,9 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const isDev = process.env.NODE_ENV === "development";
   const fromForge = searchParams.get("from") === "forge";
+  const forPartner = (searchParams.get("callbackUrl") || "").includes(
+    "/dashboard/partner"
+  );
 
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   const [email, setEmail] = useState("");
@@ -282,6 +285,25 @@ function LoginForm() {
               participant creates their own account.
             </li>
           </ul>
+          {forPartner && (
+            <div className="mt-3 border-t border-t-line pt-3">
+              <p className="text-xs leading-relaxed text-t-bone-dim">
+                <strong className="text-t-white">
+                  Setting up a partner organization?
+                </strong>{" "}
+                If your organization is not on the platform yet, email{" "}
+                <a
+                  href="mailto:steelmanresumes@gmail.com?subject=Partner%20access%20request"
+                  className="font-medium text-t-amber-bright underline underline-offset-2"
+                >
+                  steelmanresumes@gmail.com
+                </a>{" "}
+                with your organization name and program type. Free for
+                nonprofits and community organizations -- typically set up
+                within 24 hours.
+              </p>
+            </div>
+          )}
         </section>
 
         <form onSubmit={submitHandler} className="space-y-4">

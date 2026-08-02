@@ -21,6 +21,7 @@ import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
 import { JourneyHeader } from "@/components/JourneyHeader";
+import { DashboardResumeCard } from "@/components/DashboardResumeCard";
 import { TBtn } from "@crucible/consumer-ui";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -329,6 +330,9 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {/* The resume itself -- front and center, collapsible */}
+      <DashboardResumeCard />
 
       {/* Skills snapshot */}
       {forgeData.skills && forgeData.skills.length > 0 && (

@@ -92,12 +92,31 @@ function JobBoardPage() {
   const [fairChanceInfo, setFairChanceInfo] = useState("");
   const [source, setSource] = useState("");
   const [rateLimitError, setRateLimitError] = useState("");
+  const [searchError, setSearchError] = useState("");
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
   const [fairChanceOnly, setFairChanceOnly] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [roleFromResume, setRoleFromResume] = useState(false);
+
+  // Restore the last search (query + results) so navigating away and back
+  // doesn't wipe the user's work. Kept for 6 hours to match the server cache.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("refinery_last_job_search");
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (!saved?.ts || Date.now() - saved.ts > 6 * 60 * 60 * 1000) return;
+      if (Array.isArray(saved.jobs) && saved.jobs.length > 0) {
+        setContext((prev) => ({ ...prev, ...(saved.context || {}) }));
+        setJobs(saved.jobs);
+        setFairChanceInfo(saved.fairChanceInfo || "");
+        setSource(saved.source || "");
+        setSearched(true);
+      }
+    } catch {}
+  }, []);
 
   // Load saved/hidden state
   useEffect(() => {
@@ -193,6 +212,7 @@ function JobBoardPage() {
     setSearching(true);
     setSearched(true);
     setRateLimitError("");
+    setSearchError("");
 
     try {
       const res = await fetch("/api/job-search", {
@@ -206,12 +226,43 @@ function JobBoardPage() {
         setRateLimitError(data.error);
       } else if (res.ok) {
         const data = await res.json();
-        setJobs(data.jobs || []);
-        setFairChanceInfo(data.fair_chance_info || "");
-        setSource(data.source || "");
+        if (data.error) {
+          // The job-data provider failed (quota/outage) -- say so plainly
+          // instead of showing a misleading "no jobs found".
+          setJobs([]);
+          setSearchError(
+            data.error === "provider_rate_limited"
+              ? "Our job-listing provider hit its limit for right now. This is on our side, not yours -- your search was fine. Try again in a little while."
+              : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
+          );
+        } else {
+          setJobs(data.jobs || []);
+          setFairChanceInfo(data.fair_chance_info || "");
+          setSource(data.source || "");
+          try {
+            localStorage.setItem(
+              "refinery_last_job_search",
+              JSON.stringify({
+                ts: Date.now(),
+                context,
+                jobs: data.jobs || [],
+                fairChanceInfo: data.fair_chance_info || "",
+                source: data.source || "",
+              })
+            );
+          } catch {}
+        }
+      } else {
+        setJobs([]);
+        setSearchError(
+          "Something went wrong on our end running that search. Try again in a few minutes."
+        );
       }
     } catch {
       setJobs([]);
+      setSearchError(
+        "We couldn't reach the server. Check your connection and try again."
+      );
     } finally {
       setSearching(false);
     }
@@ -248,6 +299,7 @@ function JobBoardPage() {
           employment_type: job.employment_type,
           source: "jsearch",
           source_id: job.id,
+          apply_url: job.apply_url || null,
           status: "saved",
         }),
       });
@@ -494,6 +546,16 @@ function JobBoardPage() {
         </div>
       )}
 
+      {/* Search failure -- never let an outage read as "no jobs exist" */}
+      {searchError && !searching && (
+        <div className="bg-t-panel p-5 border border-t-red mb-6">
+          <p className="text-sm font-semibold text-t-red mb-1">
+            Job search is having trouble right now
+          </p>
+          <p className="text-sm text-t-phos leading-relaxed">{searchError}</p>
+        </div>
+      )}
+
       {/* Fair chance info box */}
       {fairChanceInfo && (
         <div className="bg-t-panel p-5 border border-t-steel mb-6">
@@ -515,7 +577,7 @@ function JobBoardPage() {
       )}
 
       {/* No results */}
-      {!searching && searched && visibleJobs.length === 0 && (
+      {!searching && searched && !searchError && visibleJobs.length === 0 && (
         <div className="text-center py-12">
           <p className="text-t-phos-dim mb-3">
             No listings found for this search right now. Try:
@@ -686,49 +748,9 @@ function JobBoardPage() {
                       </div>
                     )}
 
-                    {/* Apply link */}
-                    {(job.apply_url || job.employer_website) && (
-                      <div className="bg-t-panel-2 px-3 py-2 border border-t-steel">
-                        <p className="text-xs text-t-phos mb-1">
-                          Apply directly -- always confirm the posting is still open before you apply.
-                        </p>
-                        {job.apply_url && (
-                          <a
-                            href={job.apply_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80 break-all"
-                          >
-                            View full listing &amp; apply &#8599;
-                          </a>
-                        )}
-                        {!job.apply_url && job.employer_website && (
-                          <a
-                            href={job.employer_website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
-                          >
-                            {job.employer_website} &#8599;
-                          </a>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Actions */}
+                    {/* Actions -- do the work HERE first (save, tailor); the
+                        external employer link is deliberately the LAST step. */}
                     <div className="flex items-center gap-3 pt-2 flex-wrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          sessionStorage.setItem("resume_target_job", JSON.stringify(job));
-                          window.location.href = "/dashboard/application-tailor?from=job";
-                        }}
-                        className="t-focus px-4 py-2 bg-t-steel text-white text-sm font-bold hover:opacity-90 transition-colors"
-                      >
-                        Build a Resume for This Job
-                      </button>
                       {!isSaved ? (
                         <button
                           onClick={(e) => {
@@ -769,6 +791,17 @@ function JobBoardPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          sessionStorage.setItem("resume_target_job", JSON.stringify(job));
+                          window.location.href = "/dashboard/application-tailor?from=job";
+                        }}
+                        className="t-focus px-4 py-2 bg-transparent border border-t-steel text-t-steel text-sm font-bold hover:bg-t-steel hover:text-white transition-colors"
+                      >
+                        Tailor My Resume for This Job
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           dismissJob(job.id);
                         }}
                         className="text-xs text-t-phos-dim hover:text-t-white ml-auto"
@@ -776,6 +809,40 @@ function JobBoardPage() {
                         Not for me
                       </button>
                     </div>
+
+                    {/* External apply -- the LAST step, after saving and tailoring here */}
+                    {(job.apply_url || job.employer_website) && (
+                      <div className="bg-t-panel-2 px-3 py-2 border border-t-line">
+                        <p className="text-xs text-t-phos mb-1">
+                          <strong className="text-t-white">Last step:</strong>{" "}
+                          when your resume is ready, apply on the employer&apos;s
+                          site. Save the job first so it lands in your
+                          Applications list. Always confirm the posting is still
+                          open.
+                        </p>
+                        {job.apply_url ? (
+                          <a
+                            href={job.apply_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80 break-all"
+                          >
+                            Open the employer&apos;s application page &#8599;
+                          </a>
+                        ) : job.employer_website ? (
+                          <a
+                            href={job.employer_website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
+                          >
+                            {job.employer_website} &#8599;
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

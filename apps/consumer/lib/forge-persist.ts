@@ -83,7 +83,9 @@ export async function persistForgeSession(
           "resume",
           {
             source: "forge",
-            targetJob: resumeContent.meta.targetJob || "General",
+            // No fallback label here: an empty targetJob lets the UI show
+            // "Base resume" instead of a cryptic "General" chip.
+            targetJob: resumeContent.meta.targetJob || "",
           },
           resumeContent as unknown as Record<string, unknown>,
           1.0

@@ -686,64 +686,79 @@ export function ResumeWorkspace() {
               </button>
             </div>
             <div className="space-y-2">
-              {savedResumes.map((r) => (
-                <div
-                  key={r.id}
-                  className="border border-t-line bg-t-panel hover:border-t-phos-dim transition-colors"
-                >
-                  {confirmDeleteId === r.id ? (
-                    <div className="px-4 py-3 flex items-center justify-between gap-3">
-                      <span className="text-sm text-t-white">Delete this resume?</span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => deleteResume(r.id)}
-                          disabled={deletingId === r.id}
-                          className="t-focus text-xs font-medium text-white bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
-                        >
-                          {deletingId === r.id ? "Deleting..." : "Delete"}
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="text-xs text-t-phos-dim hover:text-t-white px-2"
-                        >
-                          Cancel
-                        </button>
+              {savedResumes.map((r) => {
+                // The Forge-built resume is the user's base resume. Historical
+                // rows stored the literal label "General" -- treat those as
+                // base too, and never offer to delete the base resume.
+                const isBase =
+                  (r.target_context as any)?.source === "forge" ||
+                  r.target_context?.targetJob === "General";
+                const label = isBase
+                  ? "Base resume"
+                  : r.target_context?.targetJob || "Untitled resume";
+                return (
+                  <div
+                    key={r.id}
+                    className="border border-t-line bg-t-panel hover:border-t-phos-dim transition-colors"
+                  >
+                    {confirmDeleteId === r.id ? (
+                      <div className="px-4 py-3 flex items-center justify-between gap-3">
+                        <span className="text-sm text-t-white">Delete this resume?</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => deleteResume(r.id)}
+                            disabled={deletingId === r.id}
+                            className="t-focus text-xs font-medium text-white bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
+                          >
+                            {deletingId === r.id ? "Deleting..." : "Delete"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="text-xs text-t-phos-dim hover:text-t-white px-2"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => loadResume(r.id)}
-                        className="flex-1 text-left px-4 py-3"
-                      >
-                        <span className="text-sm font-medium text-t-white">
-                          {r.target_context?.targetJob ||
-                            ((r.target_context as any)?.source === "forge"
-                              ? "Base resume"
-                              : "Untitled resume")}
-                        </span>
-                        {r.target_context?.targetCompany && (
-                          <span className="text-xs text-t-phos-dim ml-2">
-                            at {r.target_context.targetCompany}
+                    ) : (
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => loadResume(r.id)}
+                          className="flex-1 text-left px-4 py-3"
+                        >
+                          <span className="text-sm font-medium text-t-white">
+                            {label}
                           </span>
+                          {isBase && (
+                            <span className="text-xs text-t-phos-dim ml-2">
+                              built in The Forge -- your starting point
+                            </span>
+                          )}
+                          {r.target_context?.targetCompany && (
+                            <span className="text-xs text-t-phos-dim ml-2">
+                              at {r.target_context.targetCompany}
+                            </span>
+                          )}
+                        </button>
+                        {!isBase && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(r.id);
+                            }}
+                            className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0"
+                            title="Delete resume"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                              <path d="M3 3l8 8M11 3l-8 8" />
+                            </svg>
+                          </button>
                         )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmDeleteId(r.id);
-                        }}
-                        className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0"
-                        title="Delete resume"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                          <path d="M3 3l8 8M11 3l-8 8" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

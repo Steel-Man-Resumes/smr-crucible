@@ -19,6 +19,7 @@ interface Application {
   company: string;
   location: string | null;
   salary: string | null;
+  apply_url?: string | null;
   status: string;
   status_updated_at: string;
   applied_at: string | null;
@@ -297,8 +298,19 @@ function ApplicationsPage() {
                             </div>
                           </div>
 
-                          {/* Status actions */}
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Status actions -- the "saved" stage gets a real
+                              apply sequence, not a bare status flip. */}
+                          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                            {stage.status === "saved" && app.apply_url && (
+                              <a
+                                href={app.apply_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors"
+                              >
+                                Apply on employer&apos;s site &#8599;
+                              </a>
+                            )}
                             {nextStage && (
                               <button
                                 onClick={() =>
@@ -309,7 +321,9 @@ function ApplicationsPage() {
                               >
                                 {updating === app.id
                                   ? "..."
-                                  : `Move to ${nextStage.label}`}
+                                  : stage.status === "saved"
+                                    ? "I applied -- move to Applied"
+                                    : `Move to ${nextStage.label}`}
                               </button>
                             )}
                             <button

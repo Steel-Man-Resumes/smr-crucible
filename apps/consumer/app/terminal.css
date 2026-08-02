@@ -18,6 +18,14 @@
   --t-bone-dim: #5f665f;
   --t-steel: #5f665f;
   --t-electric: #4f6b57;
+  /* Skill-category colors -- three clearly distinct hues (blue / amber / green)
+     with tinted fills, because steel vs phos alone are indistinguishable. */
+  --t-skill-hard: #2d5a85;
+  --t-skill-hard-bg: #e9f0f7;
+  --t-skill-soft: #8a5410;
+  --t-skill-soft-bg: #f8efdd;
+  --t-skill-transfer: #2f6b3c;
+  --t-skill-transfer-bg: #e8f3ea;
   --t-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
   --t-display: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
   --t-body: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;

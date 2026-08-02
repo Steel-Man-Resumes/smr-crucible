@@ -84,11 +84,11 @@ function Missing() {
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[104px_1fr] gap-2">
+    <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
       <span className="text-[11px] font-medium text-t-phos-dim uppercase pt-0.5">
         {label}
       </span>
-      <span className="text-t-phos">{children}</span>
+      <span className="min-w-0 break-words text-t-phos">{children}</span>
     </div>
   );
 }

@@ -26,8 +26,33 @@ interface BulletWorkshopProps {
   company?: string;
   targetJob?: string;
   initialBullet?: string;
+  /** Stable key (entry id + bullet index) for draft persistence across close/reopen. */
+  storageKey?: string;
   onAccept: (bullet: string, evidence: BulletEvidence) => void;
   onClose: () => void;
+}
+
+// Everything the user types in the workshop survives close/reopen/navigation.
+// Saved per bullet under this prefix; cleared only when the bullet is accepted.
+const DRAFT_PREFIX = "forge_bullet_workshop:";
+
+type WorkshopDraft = {
+  did: string;
+  tools: string;
+  often: string;
+  quantity: string;
+  improved: string;
+  draft: string | null;
+};
+
+function loadDraft(storageKey?: string): WorkshopDraft | null {
+  if (!storageKey || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_PREFIX + storageKey);
+    return raw ? (JSON.parse(raw) as WorkshopDraft) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function BulletWorkshop({
@@ -35,18 +60,33 @@ export function BulletWorkshop({
   company,
   targetJob,
   initialBullet,
+  storageKey,
   onAccept,
   onClose,
 }: BulletWorkshopProps) {
-  const [did, setDid] = useState(initialBullet?.trim() || "");
-  const [tools, setTools] = useState("");
-  const [often, setOften] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [improved, setImproved] = useState("");
-  const [draft, setDraft] = useState<string | null>(null);
+  const [saved] = useState(() => loadDraft(storageKey));
+  const [did, setDid] = useState(saved?.did ?? (initialBullet?.trim() || ""));
+  const [tools, setTools] = useState(saved?.tools ?? "");
+  const [often, setOften] = useState(saved?.often ?? "");
+  const [quantity, setQuantity] = useState(saved?.quantity ?? "");
+  const [improved, setImproved] = useState(saved?.improved ?? "");
+  const [draft, setDraft] = useState<string | null>(saved?.draft ?? null);
   const [generating, setGenerating] = useState(false);
   const [toolHints, setToolHints] = useState<string[]>([]);
   const [error, setError] = useState("");
+
+  // Persist every keystroke so closing the workshop never loses work.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(
+        DRAFT_PREFIX + storageKey,
+        JSON.stringify({ did, tools, often, quantity, improved, draft })
+      );
+    } catch {
+      /* storage full/blocked -- keep working, in-memory state still holds */
+    }
+  }, [storageKey, did, tools, often, quantity, improved, draft]);
 
   // Memory-joggers for the tools question (O*NET, fail-open to AI).
   useEffect(() => {
@@ -119,6 +159,13 @@ export function BulletWorkshop({
   function accept() {
     const finalBullet = (draft || "").trim();
     if (!finalBullet) return;
+    if (storageKey) {
+      try {
+        window.localStorage.removeItem(DRAFT_PREFIX + storageKey);
+      } catch {
+        /* ignore */
+      }
+    }
     onAccept(finalBullet, { bullet: finalBullet, did, tools, often, quantity, improved });
   }
 
@@ -239,9 +286,14 @@ export function BulletWorkshop({
             onClick={onClose}
             className="px-3 py-2.5 text-t-phos-dim hover:text-t-white text-sm min-h-touch ml-auto"
           >
-            Cancel
+            Close
           </button>
         </div>
+        {storageKey && (
+          <p className="text-[11px] text-t-phos-dim mt-2">
+            Your answers are saved -- close anytime and pick up where you left off.
+          </p>
+        )}
       </div>
     </div>
   );

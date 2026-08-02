@@ -79,8 +79,8 @@ export function ResumeEditor({
         </button>
       </div>
 
-      {/* Split layout */}
-      <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6">
+      {/* Split layout -- preview column sized so the page reads like real paper */}
+      <div className="lg:grid lg:grid-cols-[1fr_440px] lg:gap-6">
         {/* Editor panel */}
         <div
           className={`space-y-3 ${mobileView === "preview" ? "hidden lg:block" : ""}`}
@@ -152,6 +152,13 @@ export function ResumeEditor({
         {/* Preview panel */}
         <div className={`${mobileView === "edit" ? "hidden lg:block" : ""}`}>
           <div className="lg:sticky lg:top-20">
+            <div className="mb-2">
+              <p className="text-sm font-semibold text-t-white">Live preview</p>
+              <p className="text-xs text-t-phos-dim">
+                This is what your printed resume will look like. Check it before
+                you move on.
+              </p>
+            </div>
             <ResumePreview doc={doc} sections={sections} overall={overall} />
           </div>
         </div>

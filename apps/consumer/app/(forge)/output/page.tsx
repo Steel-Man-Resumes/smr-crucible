@@ -363,30 +363,57 @@ export default function OutputPage() {
             Skills We Found
           </h2>
           <div className="flex flex-wrap gap-2">
-            {skills.map((s, i) => (
-              <span
-                key={i}
-                className={`px-3 py-1.5 text-sm font-medium border bg-t-panel-2 ${
-                  s.category === "hard"
-                    ? "border-t-steel text-t-steel"
-                    : s.category === "soft"
-                      ? "border-t-amber text-t-amber-bright"
-                      : "border-t-phos text-t-phos"
-                }`}
-              >
-                {s.name}
-              </span>
-            ))}
+            {skills.map((s, i) => {
+              const kind =
+                s.category === "hard"
+                  ? "hard"
+                  : s.category === "soft"
+                    ? "soft"
+                    : "transfer";
+              return (
+                <span
+                  key={i}
+                  className="px-3 py-1.5 text-sm font-medium border"
+                  style={{
+                    color: `var(--t-skill-${kind})`,
+                    borderColor: `var(--t-skill-${kind})`,
+                    background: `var(--t-skill-${kind}-bg)`,
+                  }}
+                >
+                  {s.name}
+                </span>
+              );
+            })}
           </div>
           <div className="flex gap-4 mt-3 text-xs text-t-phos-dim">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-t-steel" /> Technical
+              <span
+                className="w-2.5 h-2.5 border"
+                style={{
+                  background: "var(--t-skill-hard-bg)",
+                  borderColor: "var(--t-skill-hard)",
+                }}
+              />{" "}
+              Technical
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-t-amber" /> People
+              <span
+                className="w-2.5 h-2.5 border"
+                style={{
+                  background: "var(--t-skill-soft-bg)",
+                  borderColor: "var(--t-skill-soft)",
+                }}
+              />{" "}
+              People
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-t-phos" />{" "}
+              <span
+                className="w-2.5 h-2.5 border"
+                style={{
+                  background: "var(--t-skill-transfer-bg)",
+                  borderColor: "var(--t-skill-transfer)",
+                }}
+              />{" "}
               Transferable
             </span>
           </div>
@@ -684,11 +711,44 @@ export default function OutputPage() {
           </p>
         </div>
 
-        {/* Primary CTA */}
-        <TBtn onClick={() => router.push("/login?from=forge")} className="w-full text-base mb-2">
-          {rc.refineryCta.toLowerCase()}
-        </TBtn>
-        <p className="text-xs text-t-phos-dim text-center mb-6">{rc.refinerySubtext}</p>
+        {/* Primary CTA -- partner demo viewers get a partner landing, not the
+            client sign-up wall (the demo used to dead-end into the Refinery). */}
+        {isDemo && audience === "partner" ? (
+          <div className="bg-t-panel border border-t-line p-6 mb-6">
+            <h3 className="font-bold text-t-white text-lg mb-2">
+              That&apos;s the client experience, end to end.
+            </h3>
+            <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
+              Every client who runs The Forge lands in The Refinery with all of
+              this pre-loaded. As a partner, you get an anonymous statistical
+              overview of your cohort -- never their resume content.
+            </p>
+            <div className="flex flex-col gap-2">
+              <TBtn onClick={() => router.push("/partner")} className="w-full">
+                back to the partner overview
+              </TBtn>
+              <a
+                href="mailto:steelmanresumes@gmail.com?subject=Partner%20access%20request"
+                className="t-focus w-full px-4 py-3 text-center border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
+              >
+                Request partner access -- steelmanresumes@gmail.com
+              </a>
+              <button
+                onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}
+                className="t-focus w-full px-4 py-3 text-sm text-t-phos-dim hover:text-t-white transition-colors"
+              >
+                Already set up? Sign in to the partner dashboard
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <TBtn onClick={() => router.push("/login?from=forge")} className="w-full text-base mb-2">
+              {rc.refineryCta.toLowerCase()}
+            </TBtn>
+            <p className="text-xs text-t-phos-dim text-center mb-6">{rc.refinerySubtext}</p>
+          </>
+        )}
 
         {/* Secondary: downloads */}
         <div className="flex flex-col sm:flex-row gap-3">

@@ -62,7 +62,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
       <div className="bg-gray-100 rounded-[6px] p-2 shadow-inner">
         {/* The "page" itself */}
         <div
-          className="bg-white shadow-lg min-h-[560px]"
+          className="bg-white shadow-lg aspect-[17/22] overflow-y-auto"
           style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
         >
           <div className="px-5 pt-4 pb-5">

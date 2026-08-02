@@ -25,6 +25,43 @@ const input =
 const inputSmall =
   "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
 
+/**
+ * Single-line-look textarea that grows with its content, so long bullets and
+ * credentials wrap instead of scrolling off to the right unreadably.
+ */
+function GrowInput({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onInput={(e) => {
+        const el = e.currentTarget;
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+      }}
+      ref={(el) => {
+        if (el) {
+          el.style.height = "auto";
+          el.style.height = `${el.scrollHeight}px`;
+        }
+      }}
+      placeholder={placeholder}
+      rows={1}
+      className={`${className || inputSmall} resize-none overflow-hidden break-words`}
+    />
+  );
+}
+
 // ─── Contact Section ──────────────────────────────
 
 export function ContactSection({
@@ -339,16 +376,15 @@ function WorkEntryEditor({
                 <span className="text-xs text-t-phos-dim mt-2.5 w-4 flex-shrink-0">
                   {bi + 1}.
                 </span>
-                <div className="flex-1">
-                  <input
+                <div className="flex-1 min-w-0">
+                  <GrowInput
                     value={bullet}
-                    onChange={(e) => updateBullet(bi, e.target.value)}
+                    onChange={(v) => updateBullet(bi, v)}
                     placeholder={
                       bi === 0
                         ? '[Action verb] + [what you did] + [result]. Example: "Trained 5 new workers on safety procedures"'
                         : "Describe what you accomplished..."
                     }
-                    className={`${inputSmall} w-full`}
                   />
                   <button
                     type="button"
@@ -381,6 +417,7 @@ function WorkEntryEditor({
                 jobTitle={entry.title}
                 company={entry.company}
                 targetJob={targetJob}
+                storageKey={`${entry.id}:${workshopBi}`}
                 initialBullet={entry.bullets[workshopBi] || ""}
                 onAccept={(bullet, evidence) =>
                   acceptWorkshop(workshopBi, bullet, evidence)
@@ -434,14 +471,11 @@ export function EducationSection({
           key={entry.id}
           className="grid grid-cols-[1fr_auto] gap-2 items-start"
         >
-          <div className="space-y-2">
-            <input
+          <div className="space-y-2 min-w-0">
+            <GrowInput
               value={entry.credential}
-              onChange={(e) =>
-                updateEntry(entry.id, { credential: e.target.value })
-              }
+              onChange={(v) => updateEntry(entry.id, { credential: v })}
               placeholder="GED, Welding Certificate, Associate's Degree..."
-              className={inputSmall}
             />
             <div className="grid grid-cols-2 gap-2">
               <input
