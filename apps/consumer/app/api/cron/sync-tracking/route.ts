@@ -5,9 +5,9 @@
  * "SMR partners" base so the dashboard stays current without anyone touching
  * it. PII-free (counts/rates/timestamps only). Schedule lives in vercel.json.
  *
- * Auth: Vercel sends `Authorization: Bearer ${CRON_SECRET}` when CRON_SECRET is
- * set in the project env. We reject anything else so the route can't be poked
- * by the public.
+ * Auth: Vercel sends `Authorization: Bearer ${CRON_SECRET}`. Fails closed --
+ * if CRON_SECRET is not configured, the route rejects everything rather than
+ * becoming publicly callable.
  */
 import { NextResponse } from "next/server";
 import { syncPartnerTrackingToAirtable } from "@crucible/core";
@@ -17,11 +17,9 @@ export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const authHeader = request.headers.get("authorization");
+  if (!secret || authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const apiKey = process.env.AIRTABLE_API_KEY;

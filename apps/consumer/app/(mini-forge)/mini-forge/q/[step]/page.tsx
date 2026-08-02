@@ -165,7 +165,12 @@ export default async function QuestionPage({
     const aiTimeout = new Promise<null>((resolve) =>
       setTimeout(() => resolve(null), 9000)
     );
-    const aiResult = processMiniForge(updated as MiniForgeIntake);
+    // A fast AI failure must not crash the server action -- resolve null and
+    // fall through to the processing page, which retries with lock rollback.
+    const aiResult = processMiniForge(updated as MiniForgeIntake).catch((err) => {
+      console.error("[mini-forge] inline AI failed; deferring to processing:", err);
+      return null;
+    });
     const winner = await Promise.race([aiResult, aiTimeout]);
 
     if (winner !== null) {

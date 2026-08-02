@@ -226,7 +226,7 @@ export default function EvidencePage() {
   session_id: string | null
   context_page: "analyze" | "assistant" | "disclosure" | ...
   model_provider: "anthropic"
-  model_id: "claude-sonnet-4-20250514"
+  model_id: "claude-sonnet-4-6"
   input_hash: sha256(user_input)[0:16]
   explanation: "why this recommendation was made"
   output_summary: { type, counts, metadata }

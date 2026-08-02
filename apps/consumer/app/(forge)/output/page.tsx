@@ -418,12 +418,12 @@ export default function OutputPage() {
                     {b.legal_notes}
                   </p>
                 )}
-                {b.resources.length > 0 && (
+                {(b.resources?.length ?? 0) > 0 && (
                   <div className="mt-3 space-y-2">
                     <p className="text-xs font-medium text-t-phos-dim uppercase">
                       Resources
                     </p>
-                    {b.resources.map((r, j) => (
+                    {(b.resources ?? []).map((r, j) => (
                       <div
                         key={j}
                         className="bg-t-panel-2 px-4 py-3 border border-t-line"
@@ -472,13 +472,13 @@ export default function OutputPage() {
                 <p className="text-sm text-t-phos mt-2">
                   {cp.match_reason}
                 </p>
-                {cp.next_steps.length > 0 && (
+                {(cp.next_steps?.length ?? 0) > 0 && (
                   <div className="mt-3">
                     <p className="text-xs font-medium text-t-phos-dim uppercase mb-1">
                       Next Steps
                     </p>
                     <ol className="text-sm text-t-phos-dim space-y-1 list-decimal list-inside">
-                      {cp.next_steps.map((step, j) => (
+                      {(cp.next_steps ?? []).map((step, j) => (
                         <li key={j}>{step}</li>
                       ))}
                     </ol>

@@ -8,6 +8,7 @@
  * - job_application
  * - decision_log entries
  * - ai_usage entries
+ * - coach_conversation (AI coach memory -- full transcript erase)
  *
  * Does NOT delete the user account itself (they can sign back in).
  * Client-side should also clear localStorage after calling this.
@@ -32,6 +33,7 @@ export async function DELETE() {
     await query("DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
+    await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Reset access codes and tier

@@ -128,6 +128,15 @@ export async function tryClaimProcessing(id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** Roll back a failed processing claim: processing → pending so a retry can claim it. */
+export async function releaseProcessingClaim(id: string): Promise<void> {
+  await query(
+    `UPDATE tablet_session SET processing_status = 'pending'
+     WHERE id = $1 AND processing_status = 'processing'`,
+    [id]
+  );
+}
+
 /** Read a session regardless of claimed_at -- used by import-complete after claim. */
 export async function getTabletSessionForImport(id: string): Promise<TabletSession | null> {
   return getOne<TabletSession>(

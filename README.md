@@ -30,19 +30,21 @@ A seven-stage journey, with one intelligent "next step" surfaced at every point:
 
 Throughout: an AI coach that knows where the person is, a consent-gated partner
 dashboard so a support organization can see progress (only what the person chooses
-to share, never their content), and a privacy posture that stores progress, not
-transcripts.
+to share, never their content), and a privacy posture that keeps as little as
+possible: the anonymous Forge stores nothing server-side, the page assistant
+stores only a hash of what was asked, and Delete My Data erases everything --
+including AI coach conversation memory -- in one click.
 
 ## Architecture
 
 Monorepo (npm workspaces):
 
-- `apps/consumer` -- the product. Next.js 15 App Router, deployed on Vercel.
+- `apps/consumer` -- the product. Next.js 14 App Router, deployed on Vercel.
 - `packages/core` -- shared library: database access, migrations, the intelligence
   engine (`getUserProfile` + `computeNextStep`), consent, artifacts, the AI coach,
   partner dashboard, employer directory, and system health.
 
-Stack: Next.js 15, Neon Postgres, Auth.js (NextAuth) with a Postgres adapter,
+Stack: Next.js 14, Neon Postgres, Auth.js (NextAuth) with a Postgres adapter,
 Cloudflare R2 for files, Anthropic (primary) with OpenAI fallback for AI, Resend for
 email. Every high-risk system is behind a feature flag.
 

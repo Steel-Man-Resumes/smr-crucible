@@ -20,6 +20,7 @@ import {
   HeadingLevel,
   ShadingType,
 } from "docx";
+import { withRateLimit } from "@/lib/withRateLimit";
 
 export const maxDuration = 30;
 const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
@@ -49,7 +50,7 @@ interface DownloadInput {
   format?: "docx" | "txt";
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   try {
     const contentLength = request.headers.get("content-length");
     if (
@@ -471,3 +472,8 @@ function createBulletParagraph(text: string): Paragraph {
     children: textRuns,
   });
 }
+
+export const POST = withRateLimit(handlePost, {
+  mode: "ip",
+  endpoint: "forge-download",
+});

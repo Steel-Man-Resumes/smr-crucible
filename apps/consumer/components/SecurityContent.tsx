@@ -110,22 +110,18 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             title="Export Your Data"
             description="Download everything we have about you — your resume, Forge results, saved jobs, all of it."
             showButton={showUserControls}
-            buttonLabel="Export All Data"
-            onClick={() => alert("Data export will be available soon.")}
+            buttonLabel="Export in Settings"
+            onClick={() => {
+              window.location.href = "/dashboard/settings";
+            }}
           />
           <ControlCard
             title="Delete Everything"
             description="Permanently erase all your data. One click. Can't be undone. We won't keep a copy."
             showButton={showUserControls}
-            buttonLabel="Delete All Data"
+            buttonLabel="Delete in Settings"
             onClick={() => {
-              if (
-                confirm(
-                  "This will permanently delete all your data. This cannot be undone. Continue?"
-                )
-              ) {
-                alert("Data deletion will be available soon.");
-              }
+              window.location.href = "/dashboard/settings";
             }}
             destructive
           />

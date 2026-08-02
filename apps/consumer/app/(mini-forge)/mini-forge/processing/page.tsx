@@ -13,6 +13,7 @@ import { redirect } from "next/navigation";
 import {
   getTabletSession,
   tryClaimProcessing,
+  releaseProcessingClaim,
   saveOutput,
   TABLET_COOKIE,
 } from "@/lib/tablet-session";
@@ -38,9 +39,18 @@ export default async function ProcessingPage() {
     const locked = await tryClaimProcessing(session.id);
     if (locked) {
       const intake = (session.forge_intake ?? {}) as MiniForgeIntake;
-      const output = await processMiniForge(intake);
-      await saveOutput(session.id, output);
-      redirect("/mini-forge/results");
+      let saved = false;
+      try {
+        const output = await processMiniForge(intake);
+        await saveOutput(session.id, output);
+        saved = true;
+      } catch (err) {
+        // Release the claim so the meta-refresh retry can take it again --
+        // otherwise one AI failure strands the session in 'processing' forever.
+        console.error("[mini-forge] processing failed, releasing claim:", err);
+        await releaseProcessingClaim(session.id).catch(() => {});
+      }
+      if (saved) redirect("/mini-forge/results");
     }
   }
 

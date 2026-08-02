@@ -21,6 +21,9 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // shared IPs (reentry-program labs, libraries) share it -- raise it further
   // for those contexts if users report being cut off.
   "forge-resume-assist": 100,
+  // Deterministic docx build (no AI cost) -- generous cap, bounded so the
+  // public route can't be used as a free compute endpoint.
+  "forge-download": 100,
 };
 
 export interface RateLimitResult {

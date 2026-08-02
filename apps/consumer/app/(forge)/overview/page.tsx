@@ -411,7 +411,7 @@ export default function OverviewPage() {
             <p className="text-t-phos-dim/70 mb-2">// Every AI decision logged:</p>
             <p>decision_log &#123;</p>
             <p className="pl-4">input_hash: sha256(user_input)[0:16]</p>
-            <p className="pl-4">model_id: &quot;claude-sonnet-4-20250514&quot;</p>
+            <p className="pl-4">model_id: &quot;claude-sonnet-4-6&quot;</p>
             <p className="pl-4">explanation: &quot;why this recommendation&quot;</p>
             <p className="pl-4">latency_ms: 1247</p>
             <p className="pl-4">user_action: null | &quot;accepted&quot; | &quot;modified&quot;</p>

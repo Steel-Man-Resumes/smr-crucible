@@ -24,7 +24,7 @@ async function handlePost(request: Request) {
   try {
     const { messages, config, exchangeCount, forgeContext, resume, jobDescription } = await request.json();
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
