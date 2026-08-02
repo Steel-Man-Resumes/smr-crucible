@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
+import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import PostgresAdapter from "@auth/pg-adapter";
 import { Pool } from "@neondatabase/serverless";
@@ -18,6 +19,20 @@ const PARTNER_PRE_AUTH_CODE: Record<string, string> = {
 };
 
 const providers: any[] = [
+  // Google OAuth -- env-gated, dark until AUTH_GOOGLE_ID/SECRET exist.
+  // Email linking to an existing same-email account is allowed: Google verifies
+  // emails, and this audience frequently loses passwords -- a second sign-in
+  // door to the SAME account beats a duplicate-account support mess.
+  ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
+    ? [
+        Google({
+          clientId: process.env.AUTH_GOOGLE_ID,
+          clientSecret: process.env.AUTH_GOOGLE_SECRET,
+          allowDangerousEmailAccountLinking: true,
+        }),
+      ]
+    : []),
+
   Resend({
     apiKey: process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY,
     from:

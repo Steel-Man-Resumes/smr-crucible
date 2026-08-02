@@ -35,7 +35,44 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { email, password, name, phone, forge } = await request.json();
+    const { email, password, name, phone, forge, turnstileToken } =
+      await request.json();
+
+    // Bot defense -- env-gated: enforced only when TURNSTILE_SECRET_KEY is set
+    // (pair with NEXT_PUBLIC_TURNSTILE_SITE_KEY on the login page widget).
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+    if (turnstileSecret) {
+      if (!turnstileToken) {
+        return NextResponse.json(
+          { error: "Please complete the verification check." },
+          { status: 400 }
+        );
+      }
+      try {
+        const verify = await fetch(
+          "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              secret: turnstileSecret,
+              response: turnstileToken,
+            }),
+          }
+        );
+        const outcome = await verify.json();
+        if (!outcome.success) {
+          return NextResponse.json(
+            { error: "Verification failed. Please try again." },
+            { status: 400 }
+          );
+        }
+      } catch {
+        // Verification service unreachable: fail open rather than lock out
+        // real users -- Turnstile is a shield, not a gate.
+        console.error("Turnstile siteverify unreachable; allowing signup");
+      }
+    }
 
     if (!email || !password) {
       return NextResponse.json(

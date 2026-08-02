@@ -12,6 +12,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
+import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
@@ -148,10 +149,19 @@ function LoginForm() {
     } catch { forge = null; }
 
     try {
+      // Turnstile token (present only when the env-gated widget is rendered)
+      let turnstileToken: string | undefined;
+      try {
+        const el = document.querySelector<HTMLInputElement>(
+          'input[name="cf-turnstile-response"]'
+        );
+        turnstileToken = el?.value || undefined;
+      } catch {}
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge, turnstileToken }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -306,6 +316,31 @@ function LoginForm() {
           )}
         </section>
 
+        {/* Google sign-in -- env-gated dark build; shows once
+            NEXT_PUBLIC_GOOGLE_AUTH=1 (and AUTH_GOOGLE_ID/SECRET server-side) */}
+        {process.env.NEXT_PUBLIC_GOOGLE_AUTH === "1" && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => signIn("google", { callbackUrl })}
+              className="t-focus w-full flex items-center justify-center gap-2 px-4 py-3 border border-t-line bg-t-panel text-sm font-medium text-t-white hover:border-t-phos-dim transition-colors min-h-touch"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0012 23z" />
+                <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 010-4.2V7.06H2.18a11 11 0 000 9.88l3.66-2.84z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 002.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              Continue with Google
+            </button>
+            <div className="flex items-center gap-3 mt-4">
+              <div className="flex-1 h-px bg-t-line" />
+              <span className="text-[11px] text-t-phos-dim">or</span>
+              <div className="flex-1 h-px bg-t-line" />
+            </div>
+          </div>
+        )}
+
         <form onSubmit={submitHandler} className="space-y-4">
           {/* Email — always visible, autoComplete for saved credentials */}
           <div>
@@ -364,6 +399,23 @@ function LoginForm() {
                 disabled={sending}
               />
             </div>
+          )}
+
+          {/* Turnstile bot check -- env-gated dark build; renders once
+              NEXT_PUBLIC_TURNSTILE_SITE_KEY is set (server enforces when
+              TURNSTILE_SECRET_KEY is set) */}
+          {mode === "create" && process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+            <>
+              <Script
+                src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+                async
+              />
+              <div
+                className="cf-turnstile"
+                data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+                data-theme="light"
+              />
+            </>
           )}
 
           {/* Name + phone — create mode (these go on the resume + unlock the tools) */}
