@@ -1,0 +1,3 @@
+# Airtable BASE IDs (app-prefixed identifiers, not credentials) -- gitleaks airtable rule false positive
+7505daa26cd47f1dd88756444e5a62b6a7823e62:HANDOFF.md:airtable-api-key:10
+b88394ee7288cae77c0dcbf7bd016216002772a9:HANDOFF.md:airtable-api-key:10
