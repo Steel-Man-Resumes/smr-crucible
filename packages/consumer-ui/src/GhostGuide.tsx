@@ -62,12 +62,12 @@ export function GhostGuide({
     <div
       role="status"
       aria-live="polite"
-      className="border border-t-line bg-t-panel mb-6 font-term"
+      className="mb-6 overflow-hidden rounded-[6px] border border-t-line border-l-[3px] border-l-[#4f6b57] bg-t-panel shadow-[0_2px_8px_rgba(22,26,21,0.04)]"
     >
       {collapsed ? (
         <button
           onClick={toggleCollapse}
-          className="t-focus w-full flex items-center gap-2 px-4 py-3 text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors"
+          className="t-focus flex w-full items-center gap-2 px-4 py-3 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
           aria-label="Show guidance from t.ROY"
         >
           {/* t.ROY icon */}
@@ -77,7 +77,7 @@ export function GhostGuide({
             aria-hidden="true"
             className="w-4 h-4 rounded-full flex-shrink-0"
           />
-          <span>show t.ROY guidance</span>
+          <span>Show t.ROY guidance</span>
         </button>
       ) : (
         <div className="px-4 py-3">
@@ -90,23 +90,23 @@ export function GhostGuide({
             />
 
             <div className="flex-1 min-w-0">
-              <p className="font-body text-sm text-t-white leading-relaxed">{message}</p>
+              <p className="text-sm leading-relaxed text-t-white">{message}</p>
 
               <div className="flex items-center gap-3 mt-2">
                 {onExpand && (
                   <button
                     onClick={onExpand}
-                    className="t-focus text-xs text-t-amber-bright underline underline-offset-2 hover:text-t-amber transition-colors"
+                    className="t-focus min-h-0 text-xs font-semibold text-t-amber-bright underline underline-offset-2 transition-colors hover:text-t-amber"
                   >
                     {expandLabel}
                   </button>
                 )}
                 <button
                   onClick={toggleCollapse}
-                  className="t-focus text-xs text-t-phos-dim hover:text-t-phos transition-colors"
+                  className="t-focus min-h-0 text-xs text-t-bone-dim transition-colors hover:text-t-white"
                   aria-label="Hide guidance"
                 >
-                  hide
+                  Hide
                 </button>
               </div>
             </div>

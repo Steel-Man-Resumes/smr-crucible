@@ -47,8 +47,8 @@ function ForgotPasswordForm() {
 
   if (status === "sent") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-        <div className="w-full max-w-sm text-center">
+      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
             Check your email
           </h1>
@@ -65,8 +65,8 @@ function ForgotPasswordForm() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-      <div className="w-full max-w-sm">
+    <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+      <div className="app-panel w-full max-w-md p-6 sm:p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-t-white">
             Reset your password
@@ -97,7 +97,7 @@ function ForgotPasswordForm() {
           {error && <p className="text-sm text-t-red">{error}</p>}
 
           <TBtn type="submit" disabled={status === "sending" || !email.trim()} className="w-full">
-            {status === "sending" ? "sending..." : "send reset email"}
+            {status === "sending" ? "Sending..." : "Send reset email"}
           </TBtn>
         </form>
 

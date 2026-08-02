@@ -63,11 +63,11 @@ export default async function ResultsPage() {
       </div>
 
       {/* Import code -- shown prominently */}
-      <div className="bg-accent/10 border-2 border-accent rounded-xl p-6 mb-8 text-center">
-        <p className="text-sm text-muted uppercase tracking-wide font-medium mb-2">
+      <div className="bg-accent/10 border-2 border-accent rounded-[6px] p-6 mb-8 text-center">
+        <p className="text-sm text-muted uppercase font-medium mb-2">
           Your import code
         </p>
-        <p className="text-5xl font-bold tracking-[0.2em] text-foreground font-mono mb-3">
+        <p className="text-5xl font-bold text-foreground font-mono mb-3">
           {session.import_code}
         </p>
         <p className="text-sm text-muted">
@@ -88,7 +88,7 @@ export default async function ResultsPage() {
             {careerPaths.map((path, i) => (
               <div
                 key={i}
-                className="bg-card border border-border rounded-lg p-5"
+                className="bg-card border border-border rounded-[6px] p-5"
               >
                 <h3 className="font-semibold text-foreground text-lg mb-1">
                   {path.title}
@@ -102,7 +102,7 @@ export default async function ResultsPage() {
                 <p className="text-sm text-foreground mb-4">{path.match_reason}</p>
                 {path.next_steps?.length > 0 && (
                   <div>
-                    <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">
+                    <p className="text-xs font-medium text-muted uppercase mb-2">
                       Next steps
                     </p>
                     <ul className="space-y-1">
@@ -150,7 +150,7 @@ export default async function ResultsPage() {
             {barriers.map((item, i) => (
               <div
                 key={i}
-                className="bg-card border border-border rounded-lg p-4"
+                className="bg-card border border-border rounded-[6px] p-4"
               >
                 <p className="text-sm text-foreground">{item.resource}</p>
               </div>
@@ -168,7 +168,7 @@ export default async function ResultsPage() {
           <h2 className="text-xl font-semibold text-foreground mb-4">
             Resume starter
           </h2>
-          <div className="bg-card border border-border rounded-lg p-5">
+          <div className="bg-card border border-border rounded-[6px] p-5">
             <p className="text-sm text-foreground whitespace-pre-wrap">
               {output.resume_starter}
             </p>
@@ -177,15 +177,15 @@ export default async function ResultsPage() {
       )}
 
       {/* Reminder to write down code */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-8">
+      <div className="bg-card border border-border rounded-[6px] p-5 mb-8">
         <p className="font-semibold text-foreground mb-2">
           Before you leave this page
         </p>
         <p className="text-muted mb-3">
           Write down your 6-letter code and your PIN. You will need both.
         </p>
-        <div className="text-center py-3 bg-surface rounded-lg border border-border">
-          <span className="text-3xl font-bold tracking-[0.2em] font-mono text-foreground">
+        <div className="text-center py-3 bg-surface rounded-[6px] border border-border">
+          <span className="text-3xl font-bold font-mono text-foreground">
             {session.import_code}
           </span>
         </div>

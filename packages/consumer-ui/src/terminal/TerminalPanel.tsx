@@ -12,16 +12,13 @@ export function TerminalPanel({
   contentClassName = "p-6",
 }: TerminalPanelProps) {
   return (
-    <div className={`border border-t-line bg-t-panel ${className}`}>
+    <section className={`overflow-hidden rounded-[7px] border border-t-line bg-t-panel shadow-[0_8px_24px_rgba(22,26,21,0.08)] ${className}`}>
       {title && (
-        <div className="flex items-center gap-1.5 border-b border-t-line bg-t-panel px-3 py-2 font-term text-xs text-t-phos-dim">
-          <span className="h-2 w-2 rounded-full bg-t-line" aria-hidden="true" />
-          <span className="h-2 w-2 rounded-full bg-t-line" aria-hidden="true" />
-          <span className="h-2 w-2 rounded-full bg-t-line" aria-hidden="true" />
-          <span className="ml-1.5">{title}</span>
+        <div className="border-b border-t-line bg-t-panel-2 px-4 py-3 font-term text-[11px] font-semibold uppercase text-t-bone-dim">
+          <span>{title}</span>
         </div>
       )}
       <div className={contentClassName}>{children}</div>
-    </div>
+    </section>
   );
 }

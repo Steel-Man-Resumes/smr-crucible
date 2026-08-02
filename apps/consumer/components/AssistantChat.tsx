@@ -10,6 +10,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useAssistant } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
+import { Send } from "lucide-react";
 
 interface AssistantChatProps {
   context: AssistantContext;
@@ -153,7 +154,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
         {messages.length === 0 && coach &&
           (proactive ? (
             <div className="flex justify-start">
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
+              <div className="max-w-[85%] px-4 py-3 rounded-[7px] rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
                 {proactive}
               </div>
             </div>
@@ -184,7 +185,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
             }`}
           >
             <div
-              className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+              className={`max-w-[85%] px-4 py-3 rounded-[7px] text-sm leading-relaxed ${
                 message.role === "user"
                   ? "bg-sage-600 text-white rounded-br-sm"
                   : "bg-gray-100 text-foreground rounded-bl-sm"
@@ -196,7 +197,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
         ))}
 
         {error && (
-          <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
+          <div className="bg-amber-50 rounded-[6px] p-3 border border-amber-200">
             <p className="text-sm text-amber-800">
               {error.message?.includes("429")
                 ? "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more."
@@ -208,7 +209,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
         {isLoading && (
           <div className="flex justify-start">
             <div
-              className="bg-gray-100 text-foreground px-4 py-3 rounded-2xl rounded-bl-sm"
+              className="bg-gray-100 text-foreground px-4 py-3 rounded-[7px] rounded-bl-sm"
               role="status"
               aria-label="Assistant is thinking"
             >
@@ -232,7 +233,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
               key={prompt}
               type="button"
               onClick={() => sendQuickPrompt(prompt)}
-              className="px-3 py-2 text-xs font-medium rounded-full border-2 border-sage-200 text-sage-700 hover:bg-sage-50 hover:border-sage-400 transition-colors"
+              className="rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
             >
               {prompt}
             </button>
@@ -246,29 +247,16 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
-          className="flex-1 px-4 py-3 rounded-xl border-2 border-border text-sm bg-white focus:border-sage-600 transition-colors min-h-touch"
+          className="min-h-touch min-w-0 flex-1 rounded-[6px] border border-border px-4 py-3 text-sm transition-colors focus:border-sage-600"
           disabled={isLoading}
         />
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="px-4 py-3 bg-sage-600 text-white rounded-xl hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
+          className="px-4 py-3 bg-sage-600 text-white rounded-[6px] hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
           aria-label="Send message"
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M3 10L17 3L10 17L9 11L3 10Z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Send size={20} aria-hidden="true" />
         </button>
       </form>
     </div>

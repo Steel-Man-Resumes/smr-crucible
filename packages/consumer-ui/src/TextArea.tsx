@@ -28,29 +28,27 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
     const inputId = id || `textarea-${label.toLowerCase().replace(/\s+/g, "-")}`;
 
     return (
-      <div className="flex flex-col gap-1.5 font-term">
+      <div className="flex flex-col gap-1.5">
         <label
           htmlFor={inputId}
-          className="text-base font-medium text-t-white"
+          className="text-sm font-semibold text-t-white"
         >
           {label}
         </label>
-        {helper && <p className="text-sm text-t-phos-dim">{helper}</p>}
-        <textarea
-          ref={ref}
-          id={inputId}
-          rows={4}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${inputId}-error` : undefined}
-          className={`w-full px-4 py-3 border text-base bg-t-panel text-t-white transition-colors resize-y min-h-[120px] focus:outline-none ${
-            error
-              ? "border-t-red focus:border-t-red"
-              : "border-t-line focus:border-t-amber"
-          }`}
-          {...props}
-        />
+        {helper && <p className="text-sm text-t-bone-dim">{helper}</p>}
+        <div className="terminal-field terminal-field--area">
+          <textarea
+            ref={ref}
+            id={inputId}
+            rows={4}
+            aria-invalid={!!error}
+            aria-describedby={error ? `${inputId}-error` : undefined}
+            className={`min-h-[140px] w-full resize-y border py-3 pl-9 pr-4 text-base transition-colors focus:outline-none ${error ? "border-t-red" : "border-[#3b4039]"}`}
+            {...props}
+          />
+        </div>
         {error && (
-          <p id={`${inputId}-error`} className="text-sm text-t-red" role="alert">
+          <p id={`${inputId}-error`} className="font-term text-sm text-t-red" role="alert">
             {error}
           </p>
         )}

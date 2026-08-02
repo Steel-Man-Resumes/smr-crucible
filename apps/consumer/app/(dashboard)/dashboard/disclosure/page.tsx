@@ -21,6 +21,7 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { ProgressiveIntake, type IntakeQuestion } from "@/components/ProgressiveIntake";
 import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
+import { CheckCircle2 } from "lucide-react";
 
 type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
 
@@ -446,7 +447,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
   // --- Step 1: Assess ---
   if (step === "assess") {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Disclosure Planner
         </h1>
@@ -582,7 +583,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowConsentGate(true)}
-                className="t-focus px-4 py-2.5 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 transition-colors"
+                className="t-focus px-4 py-2.5 bg-t-steel text-white text-sm font-bold hover:opacity-90 transition-colors"
               >
                 Build my personalized plan
               </button>
@@ -645,7 +646,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                   setConsentGiven(true);
                   setShowConsentGate(false);
                 }}
-                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 I understand — let&apos;s prepare
               </button>
@@ -746,7 +747,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
         <button
           onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); setStep("deepen"); }}
           disabled={!record.type}
-          className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+          className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
         >
           Next: a few quick questions
         </button>
@@ -786,7 +787,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       },
     ];
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold text-t-white">
             A few questions, so this plan is really yours
@@ -849,7 +850,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       {showCelebration && (
         <MilestoneCelebration onDone={() => setShowCelebration(false)} />
       )}
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-t-white">
             Your Disclosure Plan
@@ -916,7 +917,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
                   onClick={() => setAdjustQuery(chip)}
                   className={`t-focus px-3 py-1.5 text-xs font-medium border transition-colors ${
                     adjustQuery === chip
-                      ? "bg-t-steel text-[#14100a] border-t-steel"
+                      ? "bg-t-steel text-white border-t-steel"
                       : "bg-t-panel text-t-steel border-t-line hover:border-t-steel"
                   }`}
                 >
@@ -935,7 +936,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               <button
                 onClick={refinePlan}
                 disabled={!adjustQuery.trim() || adjusting}
-                className="t-focus px-5 py-2.5 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-colors"
+                className="t-focus px-5 py-2.5 bg-t-steel text-white text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-colors"
               >
                 {adjusting ? "Refining..." : "Refine My Plan"}
               </button>
@@ -1042,7 +1043,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               : "Hi there. Thanks for coming in today. So, tell me a little about yourself and why you're interested in this position.";
             setRehearsalMessages([{ role: "assistant", content: opener }]);
           }}
-          className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+          className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Practice the Conversation
         </button>
@@ -1053,7 +1054,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
   // --- Step 3: Rehearse ---
   return (
-    <div className="max-w-2xl font-term">
+    <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-t-white">
@@ -1102,7 +1103,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
               <div
                 className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-t-amber text-[#14100a]"
+                    ? "bg-t-amber text-white"
                     : "bg-t-panel-2 text-t-white border border-t-line"
                 }`}
               >
@@ -1156,7 +1157,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           <button
             type="submit"
             disabled={rehearsing || !rehearsalInput.trim()}
-            className="t-focus px-4 py-3 bg-t-amber text-[#14100a] font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
+            className="t-focus px-4 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
             Send
           </button>
@@ -1197,67 +1198,15 @@ function MilestoneCelebration({ onDone }: { onDone: () => void }) {
     return () => clearTimeout(t);
   }, [onDone]);
 
-  const particles = Array.from({ length: 38 }, (_, i) => ({
-    id: i,
-    x: 5 + (i % 12) * 8 + Math.sin(i * 1.3) * 4,
-    color: ["#c9973f","#e0bd6e","#9fbf8f","#6d8562","#ece7d9","#b9b3a0"][i % 6],
-    delay: (i % 8) * 0.07,
-    dur: 1.4 + (i % 5) * 0.22,
-    size: 5 + (i % 4),
-    rotate: (i * 47) % 360,
-  }));
-
   return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden font-term">
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: `${p.x}%`,
-            width: p.size,
-            height: p.size * 1.6,
-            backgroundColor: p.color,
-            opacity: 0,
-            animation: `smr-confetti ${p.dur}s ${p.delay}s ease-in forwards`,
-            transform: `rotate(${p.rotate}deg)`,
-          }}
-        />
-      ))}
-      <div
-        className="absolute left-1/2 -translate-x-1/2"
-        style={{ top: "20%" }}
-      >
-        <div
-          style={{
-            background: "#1a1815",
-            border: "1px solid #c9973f",
-            padding: "14px 28px",
-            textAlign: "center",
-            boxShadow: "3px 3px 0 #000",
-            animation: "smr-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards",
-          }}
-        >
-          <p style={{ fontWeight: 700, color: "#e0bd6e", fontSize: 15, margin: 0 }}>
-            Disclosure Plan Built
-          </p>
-          <p style={{ color: "#b9b3a0", fontSize: 12, marginTop: 4, marginBottom: 0 }}>
-            Saved to your materials
-          </p>
+    <div className="pointer-events-none fixed left-1/2 top-24 z-50 -translate-x-1/2">
+      <div className="flex items-center gap-3 rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5] px-5 py-3 text-[#344b38] shadow-[0_8px_22px_rgba(22,26,21,0.14)]">
+        <CheckCircle2 size={20} aria-hidden="true" />
+        <div>
+          <p className="m-0 text-sm font-semibold">Disclosure plan built</p>
+          <p className="m-0 mt-0.5 text-xs">Saved to your materials</p>
         </div>
       </div>
-      <style>{`
-        @keyframes smr-confetti {
-          0%   { transform: translateY(-12px) rotate(0deg); opacity: 1; }
-          70%  { opacity: 0.9; }
-          100% { transform: translateY(100vh) rotate(600deg); opacity: 0; }
-        }
-        @keyframes smr-pop {
-          0%   { transform: scale(0.7); opacity: 0; }
-          100% { transform: scale(1);   opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

@@ -11,7 +11,7 @@ interface SecurityContentProps {
 
 export function SecurityContent({ showUserControls }: SecurityContentProps) {
   return (
-    <div className="max-w-2xl space-y-8 font-term">
+    <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Your Data is Private

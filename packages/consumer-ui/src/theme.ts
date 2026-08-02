@@ -12,31 +12,31 @@
  */
 
 export const FONT_STACK =
-  'ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace';
+  '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace';
 
 export const COLORS = {
   // Workshop Tape v2 palette
-  background: "#121110", // shop floor black
-  foreground: "#ece7d9", // bone
-  muted: "#6d8562", // dim phosphor (CLI-adjacent decorative text only)
-  border: "#3a352c", // line
-  card: "#1a1815", // panel
-  surface: "#201d18", // raised panel
+  background: "#eaede9",
+  foreground: "#1c1e1b",
+  muted: "#6d736d",
+  border: "#d3d8d1",
+  card: "#ffffff",
+  surface: "#f5f6f4",
 
   // Accent — amber steel ("the metal")
-  accent: "#c9973f",
-  accentHover: "#e0bd6e",
-  accentLight: "#9fbf8f", // phosphor green -- CLI fields only
+  accent: "#9b6d1d",
+  accentHover: "#795212",
+  accentLight: "#a7cf98",
 
   // Status
-  success: "#9fbf8f",
-  info: "#b9b3a0",
-  warning: "#c9973f",
-  error: "#ad2318", // semantic only, never decorative
+  success: "#4f6b57",
+  info: "#4f6b57",
+  warning: "#9b6d1d",
+  error: "#972d24",
 
   // Interactive
-  focus: "#ece7d9",
-  disabled: "#3a352c",
+  focus: "#9b6d1d",
+  disabled: "#aeb5ad",
 } as const;
 
 export const SPACING = {

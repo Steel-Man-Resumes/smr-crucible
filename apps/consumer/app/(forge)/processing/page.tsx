@@ -135,7 +135,7 @@ export default function ProcessingPage() {
 
   if (error) {
     return (
-      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center font-term bg-t-bg">
+      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg">
         <h1 className="text-2xl font-bold mb-4 text-t-white">Something went wrong</h1>
         <p className="text-base text-t-phos-dim mb-6 max-w-md">{error}</p>
         <button
@@ -143,7 +143,7 @@ export default function ProcessingPage() {
             setError(null);
             hasStarted.current = false;
           }}
-          className="t-focus px-8 py-4 bg-t-amber text-[#14100a] text-lg font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+          className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Try Again
         </button>
@@ -152,7 +152,7 @@ export default function ProcessingPage() {
   }
 
   return (
-    <div className="flow-center min-h-screen flex flex-col items-center justify-center font-term">
+    <div className="flow-center min-h-screen flex flex-col items-center justify-center">
       <div className="w-full max-w-flow text-center">
         <GhostGuide
           message={getOpusMessage("processing", audience, isDemo)}

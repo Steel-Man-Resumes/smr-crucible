@@ -259,7 +259,7 @@ export default function OutputPage() {
   // If no output, redirect back
   if (!session.forgeOutput) {
     return (
-      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center font-term bg-t-bg">
+      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg">
         <h1 className="text-2xl font-bold mb-4 text-t-white">
           Let&apos;s build your story first
         </h1>
@@ -268,7 +268,7 @@ export default function OutputPage() {
         </p>
         <button
           onClick={() => router.push("/welcome")}
-          className="t-focus px-8 py-4 bg-t-amber text-[#14100a] text-lg font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+          className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Start The Forge
         </button>
@@ -277,7 +277,7 @@ export default function OutputPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12 font-term">
+    <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
       <GhostGuide
         message={getOpusMessage("output", audience, isDemo)}
         pageId="output"
@@ -314,7 +314,7 @@ export default function OutputPage() {
             {rc.careersHeading}
           </a>
         )}
-        <a href="#documents" className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors">
+        <a href="#documents" className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors">
           {rc.docsHeading}
         </a>
       </nav>
@@ -420,7 +420,7 @@ export default function OutputPage() {
                 )}
                 {b.resources.length > 0 && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-xs font-medium text-t-phos-dim uppercase tracking-wide">
+                    <p className="text-xs font-medium text-t-phos-dim uppercase">
                       Resources
                     </p>
                     {b.resources.map((r, j) => (
@@ -474,7 +474,7 @@ export default function OutputPage() {
                 </p>
                 {cp.next_steps.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs font-medium text-t-phos-dim uppercase tracking-wide mb-1">
+                    <p className="text-xs font-medium text-t-phos-dim uppercase mb-1">
                       Next Steps
                     </p>
                     <ol className="text-sm text-t-phos-dim space-y-1 list-decimal list-inside">
@@ -519,7 +519,7 @@ export default function OutputPage() {
                 setDocState("idle");
                 generateDocs();
               }}
-              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Try Again
             </button>
@@ -537,13 +537,13 @@ export default function OutputPage() {
                     <div className="flex border border-t-line overflow-hidden text-xs">
                       <button
                         onClick={() => setResumeViewMode("preview")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-t-amber text-[#14100a]" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-t-amber text-white" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
                       >
                         Preview
                       </button>
                       <button
                         onClick={() => setResumeViewMode("text")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-t-amber text-[#14100a]" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
+                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-t-amber text-white" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
                       >
                         Plain text
                       </button>
@@ -565,7 +565,7 @@ export default function OutputPage() {
                     <button
                       onClick={() => handleDownload("resume")}
                       disabled={downloading === "resume"}
-                      className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
+                      className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                     >
                       {downloading === "resume" ? "Downloading..." : "Download .docx"}
                     </button>
@@ -600,7 +600,7 @@ export default function OutputPage() {
                     <button
                       onClick={() => handleDownload("cover_letter")}
                       disabled={downloading === "cover_letter"}
-                      className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
+                      className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                     >
                       {downloading === "cover_letter"
                         ? "Downloading..."
@@ -634,7 +634,7 @@ export default function OutputPage() {
             </p>
             <button
               onClick={generateDocs}
-              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Generate Documents
             </button>
@@ -831,7 +831,7 @@ function ResumePreview({ text }: { text: string }) {
       <div className="px-6 py-4 text-center" style={{ backgroundColor: "#1B2A4A" }}>
         {nameLine && (
           <p
-            className="font-bold tracking-wide text-base"
+            className="font-bold text-base"
             style={{ fontFamily: "Georgia, serif", color: "#FFFFFF" }}
           >
             {nameLine.toUpperCase()}

@@ -89,7 +89,7 @@ export function GuidedTour() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-xl">
+      <div className="bg-white rounded-[7px] max-w-lg w-full p-6 sm:p-8 shadow-xl">
         {/* progress dots */}
         <div className="flex gap-1.5 mb-6">
           {Array.from({ length: SCREENS }).map((_, i) => (
@@ -154,7 +154,7 @@ export function GuidedTour() {
               maxLength={40}
               placeholder="Guide"
               aria-label="Name your coach"
-              className="w-full px-4 py-3 rounded-xl border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 rounded-[6px] border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
             />
             <p className="text-xs text-muted mt-2">
               You can change this anytime in Settings.
@@ -186,7 +186,7 @@ export function GuidedTour() {
             {screen < SCREENS - 1 ? (
               <button
                 onClick={() => setScreen(screen + 1)}
-                className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="px-6 py-3 bg-sage-600 text-white rounded-[6px] text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
               >
                 Continue
               </button>
@@ -194,7 +194,7 @@ export function GuidedTour() {
               <button
                 onClick={complete}
                 disabled={saving}
-                className="px-6 py-3 bg-sage-600 text-white rounded-xl text-sm font-medium hover:bg-sage-700 disabled:opacity-60 transition-colors min-h-touch"
+                className="px-6 py-3 bg-sage-600 text-white rounded-[6px] text-sm font-medium hover:bg-sage-700 disabled:opacity-60 transition-colors min-h-touch"
               >
                 {saving ? "Starting..." : "Start"}
               </button>

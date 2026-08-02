@@ -206,9 +206,9 @@ function LoginForm() {
   // ─── Magic link sent confirmation ─────────────────────────────────────
   if (magicLinkSent) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-        <div className="w-full max-w-sm text-center">
-          <div className="w-16 h-16 mx-auto mb-6 bg-t-panel-2 border border-t-amber flex items-center justify-center">
+      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5]">
             <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-t-amber">
               <rect x="2" y="4" width="14" height="10" rx="0" stroke="currentColor" strokeWidth="1.3" />
               <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -240,19 +240,49 @@ function LoginForm() {
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim()));
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 pb-16 font-term bg-t-bg">
-      <div className="w-full max-w-sm">
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-t-white">Steel Man Resumes</h1>
-          <p className="text-sm text-t-phos-dim mt-1">
+    <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
+      <div className="app-panel w-full max-w-md p-6 sm:p-8">
+        <div className="mb-6">
+          <p className="app-eyebrow mb-2 text-[#4f6b57]">Private career workspace</p>
+          <h1 className="text-2xl font-semibold text-t-white">
+            {mode === "create" ? "Create your Refinery account" : "Sign in to The Refinery"}
+          </h1>
+          <p className="mt-2 text-sm text-t-bone-dim">
             {mode === "create"
-              ? "Create your free account"
+              ? "Save your Forge work and continue with the full toolset."
               : mode === "magic-link"
                 ? "Sign in with a magic link"
-                : "Sign in to your account"}
+                : "Continue your career work where you left off."}
           </p>
         </div>
+
+        <section
+          aria-labelledby="signin-help-title"
+          className="mb-6 border-l-[3px] border-[#4f6b57] bg-[#f5f6f4] py-3 pl-4 pr-3"
+        >
+          <h2 id="signin-help-title" className="text-sm font-semibold text-t-white">
+            Who signs in here?
+          </h2>
+          <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
+            The Forge works without an account. Sign in when you want to save
+            your work and use The Refinery.
+          </p>
+          <ul className="mt-3 space-y-2 text-xs leading-relaxed text-t-bone-dim">
+            <li>
+              <strong className="text-t-white">New job seeker:</strong> try The
+              Forge first, or create a free account below.
+            </li>
+            <li>
+              <strong className="text-t-white">Returning user:</strong> sign in
+              to continue where you stopped.
+            </li>
+            <li>
+              <strong className="text-t-white">Partner participant:</strong> use
+              the invitation or partner code your organization gave you. Each
+              participant creates their own account.
+            </li>
+          </ul>
+        </section>
 
         <form onSubmit={submitHandler} className="space-y-4">
           {/* Email — always visible, autoComplete for saved credentials */}
@@ -375,14 +405,14 @@ function LoginForm() {
           {error && <p className="text-sm text-t-red">{error}</p>}
 
           {/* Submit */}
-          <TBtn type="submit" disabled={submitDisabled} className="w-full">
+          <TBtn type="submit" disabled={submitDisabled} className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]">
             {sending
-              ? "working..."
+              ? "Working..."
               : mode === "create"
-                ? "create account"
+                ? "Create account"
                 : mode === "magic-link"
-                  ? "send magic link"
-                  : "sign in"}
+                  ? "Send magic link"
+                  : "Sign in"}
           </TBtn>
         </form>
 
@@ -453,7 +483,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => handleDevLogin("client", true)}
                 disabled={sending}
-                className="t-focus w-full px-4 py-3 bg-t-panel-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
+                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line-strong bg-t-panel-2 px-4 py-3 text-sm font-medium text-t-white transition-colors hover:bg-t-panel-3 disabled:opacity-40"
               >
                 Fresh Client Run
               </button>
@@ -462,7 +492,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("client")}
                   disabled={sending}
-                  className="t-focus px-4 py-3 bg-t-panel border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
+                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Client Login
                 </button>
@@ -470,7 +500,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("admin")}
                   disabled={sending}
-                  className="t-focus px-4 py-3 bg-t-panel border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
+                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Admin Login
                 </button>
@@ -482,7 +512,7 @@ function LoginForm() {
                   window.location.href = "/intro";
                 }}
                 disabled={sending}
-                className="t-focus w-full px-4 py-3 bg-transparent border border-t-line text-t-phos-dim text-sm font-medium hover:text-t-white hover:border-t-phos-dim disabled:opacity-40 transition-colors min-h-touch"
+                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white disabled:opacity-40"
               >
                 Reset Local Flow Only
               </button>

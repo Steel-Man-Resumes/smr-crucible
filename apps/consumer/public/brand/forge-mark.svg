@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="The Forge">
+  <rect width="48" height="48" rx="6" fill="#10110f"/>
+  <path d="M5 10h7l9.5 10M5 24h13M5 38h7l9.5-10" stroke="#8d7540" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M24 16l8 8-8 8-8-8 8-8Z" fill="#d7b86e"/>
+  <path d="M32 24h11" stroke="#d7b86e" stroke-width="3" stroke-linecap="square"/>
+</svg>

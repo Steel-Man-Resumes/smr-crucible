@@ -91,11 +91,11 @@ function EmployersList() {
   }, [employers, industry, q]);
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading verified employers...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading verified employers...</div>;
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 font-term">
+    <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">Verified Employers</h1>
       <p className="text-t-phos-dim mt-1 mb-5">
         Wisconsin employers our team verified as open to people with records. Each one was
@@ -127,7 +127,7 @@ function EmployersList() {
             <div className="mb-5 flex flex-wrap gap-2">
               <button
                 onClick={() => setIndustry("all")}
-                className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+                className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
               >
                 All ({employers.length})
               </button>
@@ -135,7 +135,7 @@ function EmployersList() {
                 <button
                   key={ind}
                   onClick={() => setIndustry(ind)}
-                  className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === ind ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+                  className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === ind ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
                 >
                   {ind}
                 </button>
@@ -168,7 +168,7 @@ function EmployersList() {
                       href={e.applyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="t-focus flex-shrink-0 px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright min-h-touch"
+                      className="t-focus flex-shrink-0 px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright min-h-touch"
                     >
                       Apply
                     </a>
@@ -200,7 +200,7 @@ function EmployersList() {
                 {openApply === e.id && (
                   <div className="mt-3 border border-t-line bg-t-panel-2 p-4 space-y-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-1">
+                      <p className="text-xs font-semibold uppercase text-t-amber-bright mb-1">
                         Your details to paste
                       </p>
                       {me?.name || me?.email || me?.city || me?.state ? (
@@ -224,7 +224,7 @@ function EmployersList() {
                       )}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-1">
+                      <p className="text-xs font-semibold uppercase text-t-amber-bright mb-1">
                         Your resume
                       </p>
                       {me?.hasResume ? (
@@ -248,7 +248,7 @@ function EmployersList() {
                         href={e.applyUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
+                        className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
                       >
                         Open the application
                       </a>

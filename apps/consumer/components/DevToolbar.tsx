@@ -68,7 +68,7 @@ function DevToolbarInner() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-[9999] px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-lg border border-amber-300 hover:bg-amber-200 transition-colors shadow-lg"
+        className="fixed bottom-4 right-4 z-[9999] px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-[6px] border border-amber-300 hover:bg-amber-200 transition-colors shadow-lg"
       >
         DEV
       </button>
@@ -76,7 +76,7 @@ function DevToolbarInner() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] w-64 max-h-[80vh] overflow-y-auto bg-white border border-amber-300 rounded-xl shadow-2xl text-sm">
+    <div className="fixed bottom-4 right-4 z-[9999] w-64 max-h-[80vh] overflow-y-auto bg-white border border-amber-300 rounded-[6px] shadow-2xl text-sm">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-amber-50 border-b border-amber-200 rounded-t-xl">
         <span className="font-bold text-amber-800 text-xs">DEV TOOLBAR</span>
@@ -103,7 +103,7 @@ function DevToolbarInner() {
         <button
           onClick={handleDevLogin}
           disabled={loggingIn}
-          className="w-full px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-200 disabled:opacity-50 transition-colors"
+          className="w-full px-3 py-2 bg-amber-100 text-amber-800 rounded-[6px] text-xs font-medium hover:bg-amber-200 disabled:opacity-50 transition-colors"
         >
           {loggingIn ? "Logging in..." : "Dev Login"}
         </button>
@@ -113,7 +113,7 @@ function DevToolbarInner() {
       <div className="px-3 py-2">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label} className="mb-2">
-            <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">
+            <p className="text-[10px] font-bold text-muted uppercaser mb-1">
               {section.label}
             </p>
             <div className="flex flex-wrap gap-1">

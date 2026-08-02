@@ -208,11 +208,11 @@ ${body}
   }
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading your materials...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your materials...</div>;
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 font-term">
+    <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">My Materials</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
@@ -232,7 +232,7 @@ ${body}
           if (group.length === 0) return null;
           return (
             <section key={g.type}>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-t-phos-dim mb-3">
+              <h2 className="text-sm font-semibold uppercase text-t-phos-dim mb-3">
                 {g.label} ({group.length})
               </h2>
               <div className="space-y-3">
@@ -256,14 +256,14 @@ ${body}
                           {isResume && (
                             <Link
                               href={`/dashboard/application-tailor?id=${a.id}`}
-                              className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-[#14100a] hover:bg-t-amber-bright"
+                              className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright"
                             >
                               {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
                             </Link>
                           )}
                           {confirmDelete === a.id ? (
                             <>
-                              <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-[#14100a] hover:opacity-90">
+                              <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-white hover:opacity-90">
                                 Delete
                               </button>
                               <button onClick={() => setConfirmDelete(null)} className="text-xs text-t-phos-dim hover:text-t-white">
@@ -292,7 +292,7 @@ ${body}
                               onClick={() =>
                                 isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
                               }
-                              className="t-focus px-3 py-1.5 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright"
+                              className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
                             >
                               Save PDF
                             </button>

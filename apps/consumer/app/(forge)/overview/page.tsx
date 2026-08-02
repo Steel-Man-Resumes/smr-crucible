@@ -197,12 +197,12 @@ export default function OverviewPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-t-bg font-term">
+    <div className="min-h-screen bg-t-bg">
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         {/* Header */}
         <div className="mb-12">
-          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase tracking-wide">
+          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase">
             Full Technical + Research Overview
           </p>
           <h1 className="text-3xl font-bold text-t-white mb-4 leading-tight">
@@ -486,7 +486,7 @@ export default function OverviewPage() {
 
         {/* Built by someone who lived it */}
         <section className="mb-12 bg-t-panel-2 border border-t-amber p-6">
-          <p className="text-sm font-semibold text-t-amber-bright mb-2 uppercase tracking-wide">
+          <p className="text-sm font-semibold text-t-amber-bright mb-2 uppercase">
             Built by someone who lived it
           </p>
           <p className="text-base text-t-white leading-relaxed mb-3">

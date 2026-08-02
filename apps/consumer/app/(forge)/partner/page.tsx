@@ -110,12 +110,12 @@ export default function PartnerPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-t-bg font-term">
+    <div className="min-h-screen bg-t-bg">
       <div className="max-w-2xl mx-auto px-4 py-12">
 
         {/* Header */}
         <div className="mb-12">
-          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase tracking-wide">
+          <p className="text-sm font-medium text-t-amber-bright mb-3 uppercase">
             For Partner Organizations
           </p>
           <h1 className="text-3xl font-bold text-t-white mb-4 leading-tight">

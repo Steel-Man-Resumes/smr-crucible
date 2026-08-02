@@ -13,13 +13,13 @@ interface TBtnProps {
 }
 
 const BASE =
-  "inline-flex items-center justify-center gap-0 min-h-[44px] font-term text-sm font-bold " +
-  "transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-t-white focus-visible:outline-offset-2 " +
+  "inline-flex items-center justify-center gap-2 min-h-[44px] rounded-[5px] font-body text-sm font-semibold " +
+  "transition-[background-color,border-color,color,box-shadow] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-t-amber focus-visible:outline-offset-2 " +
   "disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none";
 
 const VARIANT = {
-  solid: "bg-t-amber text-[#14100a] shadow-[3px_3px_0_#000] hover:bg-t-amber-bright",
-  ghost: "bg-transparent text-t-amber-bright border border-t-amber hover:bg-t-amber/10",
+  solid: "border border-t-amber bg-t-amber text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:border-t-amber-bright hover:bg-t-amber-bright",
+  ghost: "border border-t-line bg-white text-t-white hover:border-t-line-strong hover:bg-t-panel-2",
 };
 
 const SIZE = {
@@ -43,13 +43,7 @@ export function TBtn({
   ariaLabel,
 }: TBtnProps) {
   const classes = `${BASE} ${VARIANT[variant]} ${SIZE[size]} ${className}`;
-  const content = (
-    <>
-      <span aria-hidden="true">{"> "}</span>
-      {children}
-      <span aria-hidden="true">_</span>
-    </>
-  );
+  const content = children;
 
   // A disabled button must never navigate, so it always renders as a real
   // <button disabled> even when an href was passed (href+disabled is a valid

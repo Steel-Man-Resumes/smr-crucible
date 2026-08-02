@@ -11,8 +11,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warm earth tones — non-institutional, trauma-informed
-        // No red (triggers), no government blue
         background: "var(--background)",
         foreground: "var(--foreground)",
         muted: "var(--muted)",
@@ -68,39 +66,28 @@ const config: Config = {
           800: "#2a4d64",
           900: "#274155",
         },
-        // Workshop Tape + lite trash-polka v2 (2026-07-13) -- LOCKED, ported
-        // from smr-website/docs/DESIGN-SYSTEM.md (conservative baseline remap,
-        // apps/consumer, 2026-07-14). Supersedes the v1 Hand-Forged Terminal
-        // hex values -- same token names, new values, so every page already
-        // on t-* classes reskins immediately with zero className changes.
-        // Mirrored as CSS custom properties in app/terminal.css; keep both in
-        // sync by hand.
-        "t-bg": "#121110",
-        "t-panel": "#1a1815",
-        "t-panel-2": "#201d18",
-        "t-panel-3": "#28231c",
-        "t-line": "#3a352c",
-        "t-amber": "#c9973f",
-        "t-amber-bright": "#e0bd6e",
-        "t-phos": "#9fbf8f",
-        "t-phos-dim": "#6d8562",
-        "t-white": "#ece7d9",
-        "t-red": "#ad2318",
-        "t-red-bright": "#d9392a",
-        "t-bone-dim": "#b9b3a0",
-        // Legacy inline-link token from v1 pages not yet migrated to the new
-        // body/link roles -- value now matches t-bone-dim. Reach for
-        // t-bone-dim directly in new work.
-        "t-steel": "#b9b3a0",
-        // Rare 4th hue -- one-off campaign/launch moments only, never
-        // standing UI, never in the app proper.
-        "t-electric": "#4fd1c5",
+        "t-bg": "var(--t-bg)",
+        "t-panel": "var(--t-panel)",
+        "t-panel-2": "var(--t-panel-2)",
+        "t-panel-3": "var(--t-panel-3)",
+        "t-line": "var(--t-line)",
+        "t-line-strong": "var(--t-line-strong)",
+        "t-amber": "var(--t-amber)",
+        "t-amber-bright": "var(--t-amber-bright)",
+        "t-phos": "var(--t-phos)",
+        "t-phos-dim": "var(--t-phos-dim)",
+        "t-white": "var(--t-white)",
+        "t-red": "var(--t-red)",
+        "t-red-bright": "var(--t-red-bright)",
+        "t-bone-dim": "var(--t-bone-dim)",
+        "t-steel": "var(--t-steel)",
+        "t-electric": "var(--t-electric)",
       },
       fontFamily: {
-        display: ['"Arial Narrow"', "Oswald", '"Roboto Condensed"', "sans-serif"],
-        body: ["Arial", "Helvetica", "sans-serif"],
+        display: ['"IBM Plex Sans Variable"', '"IBM Plex Sans"', '"Segoe UI"', "Arial", "sans-serif"],
+        body: ['"IBM Plex Sans Variable"', '"IBM Plex Sans"', '"Segoe UI"', "Arial", "sans-serif"],
         term: [
-          "ui-monospace",
+          '"IBM Plex Mono"',
           '"Cascadia Mono"',
           "Consolas",
           '"Liberation Mono"',

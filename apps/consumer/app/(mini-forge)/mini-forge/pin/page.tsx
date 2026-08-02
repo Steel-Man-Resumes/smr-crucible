@@ -97,7 +97,7 @@ export default async function PinPage({
             name="pin"
             required
             autoComplete="off"
-            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center tracking-[0.5em] bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
+            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
             placeholder="----"
           />
         </div>
@@ -118,7 +118,7 @@ export default async function PinPage({
             name="pin_confirm"
             required
             autoComplete="off"
-            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center tracking-[0.5em] bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
+            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
             placeholder="----"
           />
         </div>

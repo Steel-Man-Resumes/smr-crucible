@@ -16,6 +16,7 @@
  */
 
 import { useState } from "react";
+import { Mail } from "lucide-react";
 
 const CONTACT_EMAIL =
   process.env.NEXT_PUBLIC_CONTACT_EMAIL || "troy@steelmanresumes.com";
@@ -52,7 +53,7 @@ export function ContactTroyButton({
     <div className="fixed bottom-24 left-4 sm:bottom-6 sm:left-6 z-40">
       {/* Gate message tooltip */}
       {showGateMessage && (
-        <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-white rounded-xl shadow-lg border border-border animate-fadeIn">
+        <div className="absolute bottom-full left-0 mb-2 w-64 rounded-[6px] border border-border bg-white p-3 shadow-lg animate-fadeIn">
           <p className="text-sm text-foreground leading-relaxed">
             Try the tool first — I built it for you. If you still need me
             after, I&apos;m right here.
@@ -62,10 +63,10 @@ export function ContactTroyButton({
 
       <button
         onClick={handleClick}
-        className={`inline-flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-colors min-h-touch text-sm font-medium ${
+        className={`inline-flex min-h-touch items-center gap-2 rounded-[6px] border px-4 py-3 text-sm font-medium shadow-[0_6px_18px_rgba(22,26,21,0.16)] transition-colors ${
           isUnlocked
-            ? "bg-earth-600 text-white hover:bg-earth-700"
-            : "bg-earth-200 text-earth-500 cursor-default"
+            ? "border-[#3d5745] bg-[#4f6b57] text-white hover:bg-[#3d5745]"
+            : "cursor-default border-t-line bg-t-panel-2 text-t-bone-dim"
         }`}
         aria-label={
           isUnlocked
@@ -73,31 +74,8 @@ export function ContactTroyButton({
             : "Contact Troy — complete more of the tool first"
         }
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 18 18"
-          fill="none"
-          aria-hidden="true"
-        >
-          <rect
-            x="2"
-            y="4"
-            width="14"
-            height="10"
-            rx="2"
-            stroke="currentColor"
-            strokeWidth="1.3"
-          />
-          <path
-            d="M2 6l7 4 7-4"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        Contact Troy
+        <Mail size={18} aria-hidden="true" />
+        <span className="hidden sm:inline">Contact Troy</span>
       </button>
     </div>
   );

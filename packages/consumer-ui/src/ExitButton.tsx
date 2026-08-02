@@ -10,6 +10,8 @@
 
 "use client";
 
+import { X } from "lucide-react";
+
 interface ExitButtonProps {
   /** Where to go when exiting. Defaults to "/" */
   href?: string;
@@ -25,23 +27,10 @@ export function ExitButton({
     <div className="fixed top-4 right-4 z-50">
       <a
         href={href}
-        className="t-focus inline-flex items-center gap-2 px-4 py-2 bg-t-panel/90 backdrop-blur-sm border border-t-line font-term text-sm text-t-bone-dim hover:text-t-amber-bright hover:border-t-phos-dim transition-colors min-h-[3rem] shadow-[2px_2px_0_#000]"
+        className="t-focus inline-flex min-h-[3rem] items-center gap-2 rounded-[5px] border border-t-line bg-t-panel/95 px-4 py-2 text-sm font-medium text-t-bone-dim shadow-[0_3px_10px_rgba(22,26,21,0.1)] transition-colors hover:border-t-line-strong hover:text-t-white"
         aria-label={label}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 4L4 12M4 4L12 12"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
+        <X size={17} aria-hidden="true" />
         {label}
       </a>
     </div>

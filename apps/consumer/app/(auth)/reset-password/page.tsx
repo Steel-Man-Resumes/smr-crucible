@@ -69,8 +69,8 @@ function ResetPasswordForm() {
 
   if (invalidLink) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-        <div className="w-full max-w-sm text-center">
+      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
             Invalid reset link
           </h1>
@@ -88,8 +88,8 @@ function ResetPasswordForm() {
 
   if (status === "done") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-        <div className="w-full max-w-sm text-center">
+      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
             Password reset
           </h1>
@@ -97,7 +97,7 @@ function ResetPasswordForm() {
             Your password has been updated. You can sign in now.
           </p>
           <TBtn onClick={signInNow} className="w-full">
-            sign in
+            Sign in
           </TBtn>
         </div>
       </main>
@@ -105,8 +105,8 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
-      <div className="w-full max-w-sm">
+    <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+      <div className="app-panel w-full max-w-md p-6 sm:p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-t-white">
             Choose a new password
@@ -158,7 +158,7 @@ function ResetPasswordForm() {
             disabled={status === "saving" || !password || !confirmPassword}
             className="w-full"
           >
-            {status === "saving" ? "saving..." : "reset password"}
+            {status === "saving" ? "Saving..." : "Reset password"}
           </TBtn>
         </form>
       </div>

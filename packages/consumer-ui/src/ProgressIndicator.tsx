@@ -19,8 +19,8 @@ export function ProgressIndicator({ current, total }: ProgressIndicatorProps) {
   const percentage = Math.min(100, Math.round(((current + 1) / total) * 100));
 
   return (
-    <div className="w-full px-4 pt-4" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100} aria-label="Progress">
-      <div className="h-1 w-full bg-t-line overflow-hidden">
+    <div className="w-full" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100} aria-label="Progress">
+      <div className="h-1 w-full overflow-hidden bg-t-line">
         <div
           className="h-full bg-t-amber transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}

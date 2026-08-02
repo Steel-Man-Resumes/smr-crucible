@@ -27,7 +27,7 @@ export function ParserPreview({ doc }: { doc: ResumeDocument }) {
   const edu = doc.education.filter((e) => e.credential.trim());
 
   return (
-    <div className="mt-6 border border-t-line bg-t-panel max-w-2xl overflow-hidden font-term">
+    <div className="mt-6 border border-t-line bg-t-panel max-w-2xl overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="t-focus w-full flex items-center justify-between px-5 py-3 text-left min-h-touch"
@@ -85,7 +85,7 @@ function Missing() {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[104px_1fr] gap-2">
-      <span className="text-[11px] font-medium text-t-phos-dim uppercase tracking-wide pt-0.5">
+      <span className="text-[11px] font-medium text-t-phos-dim uppercase pt-0.5">
         {label}
       </span>
       <span className="text-t-phos">{children}</span>

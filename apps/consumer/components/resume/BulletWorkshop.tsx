@@ -130,7 +130,7 @@ export function BulletWorkshop({
       onClick={onClose}
     >
       <div
-        className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5 font-term"
+        className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
@@ -204,7 +204,7 @@ export function BulletWorkshop({
 
         {draft !== null && (
           <div className="mt-4 bg-t-panel-2 border border-t-amber p-3">
-            <p className="text-[11px] font-semibold text-t-amber-bright uppercase tracking-wide mb-1">
+            <p className="text-[11px] font-semibold text-t-amber-bright uppercase mb-1">
               Your stronger bullet
             </p>
             <textarea
@@ -223,7 +223,7 @@ export function BulletWorkshop({
           <button
             onClick={generate}
             disabled={generating || !canGenerate}
-            className="t-focus px-4 py-2.5 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
+            className="t-focus px-4 py-2.5 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
           >
             {generating ? "Writing..." : draft !== null ? "Rewrite" : "Write a strong bullet"}
           </button>

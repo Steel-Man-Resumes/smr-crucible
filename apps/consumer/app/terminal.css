@@ -1,33 +1,31 @@
-/*
- * Workshop Tape + lite trash-polka v2 -- ported from smr-website
- * (see ~/repos/smr-website/docs/DESIGN-SYSTEM.md for the canonical spec).
- * Vendored copy, not a build-time link -- keep both files in sync by hand.
- *
- * Supersedes the v1 "Hand-Forged Terminal" hex values (2026-07-08). Same
- * token names, new values -- conservative baseline remap, apps/consumer,
- * 2026-07-14. Tokens are mirrored as `t-*` Tailwind colors in
- * tailwind.config.ts.
- */
+/* Forge + Refinery product system. Terminal treatment is reserved for direct
+   input and command context; the surrounding application stays quiet. */
 
 :root {
-  --t-bg: #121110;
-  --t-panel: #1a1815;
-  --t-panel-2: #201d18;
-  --t-panel-3: #28231c;
-  --t-line: #3a352c;
-  --t-amber: #c9973f;
-  --t-amber-bright: #e0bd6e;
-  --t-phos: #9fbf8f;
-  --t-phos-dim: #6d8562;
-  --t-white: #ece7d9;
+  --t-bg: #eaede9;
+  --t-panel: #ffffff;
+  --t-panel-2: #f5f6f4;
+  --t-panel-3: #e4e8e3;
+  --t-line: #d3d8d1;
+  --t-line-strong: #aeb5ad;
+  --t-amber: #9b6d1d;
+  --t-amber-bright: #795212;
+  --t-phos: #4f554f;
+  --t-phos-dim: #6d736d;
+  --t-white: #1c1e1b;
   --t-red: #ad2318;
-  --t-red-bright: #d9392a;
-  --t-bone-dim: #b9b3a0;
-  --t-steel: #b9b3a0;
-  --t-electric: #4fd1c5;
-  --t-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  --t-display: "Arial Narrow", Oswald, "Roboto Condensed", sans-serif;
-  --t-body: Arial, Helvetica, sans-serif;
+  --t-red-bright: #972d24;
+  --t-bone-dim: #5f665f;
+  --t-steel: #5f665f;
+  --t-electric: #4f6b57;
+  --t-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --t-display: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --t-body: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+}
+
+.refinery-app {
+  --t-amber: #4f6b57;
+  --t-amber-bright: #3d5745;
 }
 
 @keyframes t-blink {
@@ -40,7 +38,7 @@
   display: inline-block;
   width: 0.6em;
   height: 1.05em;
-  background: var(--t-amber);
+  background: #d7b86e;
   vertical-align: text-bottom;
   animation: t-blink 1.1s steps(1) infinite;
 }
@@ -51,53 +49,27 @@
   }
 }
 
-.t-scanline {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.13) 0px,
-    rgba(0, 0, 0, 0.13) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  opacity: 0.35;
-}
+.t-scanline { display: none; }
 
 .t-h2 {
-  font-family: var(--t-mono);
-  font-size: 1.15rem;
+  font-family: var(--t-body);
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--t-amber-bright);
   line-height: 1.25;
 }
-.t-h2::before {
-  content: "== ";
-  color: var(--t-phos-dim);
-}
-.t-h2::after {
-  content: " ==";
-  color: var(--t-phos-dim);
-}
+.t-h2::before, .t-h2::after { content: none; }
 
 .t-h3 {
-  font-family: var(--t-mono);
+  font-family: var(--t-body);
   font-size: 1rem;
   font-weight: 700;
   color: var(--t-white);
   line-height: 1.25;
 }
-.t-h3::before {
-  content: "> ";
-  color: var(--t-amber);
-}
+.t-h3::before { content: none; }
 
-.t-rule {
-  border: none;
-  border-top: 1px dashed var(--t-line);
-}
+.t-rule { border: none; border-top: 1px solid var(--t-line); }
 
 .t-ascii {
   color: var(--t-phos-dim);
@@ -125,14 +97,11 @@
   color: var(--t-phos);
 }
 
-.t-prompt {
-  font-family: var(--t-mono);
-  color: var(--t-phos-dim);
-}
+.t-prompt { font-family: var(--t-mono); color: #a7cf98; }
 
 /* Standard focus ring for any custom interactive element not already using
    the TBtn component. */
 .t-focus:focus-visible {
-  outline: 2px solid var(--t-white);
-  outline-offset: 2px;
+  outline: 3px solid var(--t-amber);
+  outline-offset: 3px;
 }

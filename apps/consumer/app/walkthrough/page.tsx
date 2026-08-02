@@ -24,6 +24,7 @@ import {
   type ScreenId,
 } from "./storyboard";
 import { SCREENS } from "./screens";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 
 const SCREEN_IDS = Object.keys(SCREENS) as ScreenId[];
 
@@ -162,7 +163,7 @@ export default function WalkthroughPage() {
         }}
       >
         <div
-          className="absolute inset-0 overflow-hidden rounded-2xl"
+          className="absolute inset-0 overflow-hidden rounded-[7px]"
           style={{ boxShadow: "0 30px 90px rgba(0,0,0,0.5)" }}
         >
           {/* Stage: the camera transform lives here */}
@@ -209,10 +210,10 @@ export default function WalkthroughPage() {
 
       {/* Caption */}
       {beat.caption && (
-        <div className="absolute left-0 right-0 bottom-0 px-8 pt-28 pb-16 bg-gradient-to-t from-black/85 via-black/55 to-transparent pointer-events-none z-10">
+        <div className="absolute bottom-0 left-0 right-0 z-10 border-t border-white/15 bg-black/90 px-8 pb-14 pt-6 pointer-events-none">
           <div key={beatIndex} className="max-w-3xl mx-auto text-center wt-fade">
             {beat.caption.title && (
-              <p className="text-emerald-300 text-xs sm:text-sm font-semibold tracking-[0.25em] uppercase mb-2">
+              <p className="text-emerald-300 text-xs sm:text-sm font-semibold uppercase mb-2">
                 {beat.caption.title}
               </p>
             )}
@@ -253,7 +254,7 @@ export default function WalkthroughPage() {
 
       {/* Pause / replay pill */}
       {paused && !ended && (
-        <div className="absolute top-5 right-5 z-30 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur">
+        <div className="absolute right-5 top-5 z-30 rounded-[5px] border border-white/20 bg-black/80 px-3 py-1.5 text-xs text-white backdrop-blur">
           Paused
         </div>
       )}
@@ -264,13 +265,19 @@ export default function WalkthroughPage() {
             setPaused(false);
             goTo(0);
           }}
-          className="absolute top-5 right-5 z-30 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium px-4 py-2 rounded-full shadow-lg transition-colors"
+          className="absolute right-5 top-5 z-30 inline-flex items-center gap-2 rounded-[5px] bg-[#4f6b57] px-4 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-[#3d5745]"
         >
-          Replay
+          <RotateCcw size={15} aria-hidden="true" /> Replay
         </button>
       )}
 
-      <ControlsHint />
+      <a
+        href="https://www.steelmanresumes.com/how-it-works"
+        onClick={(event) => event.stopPropagation()}
+        className="absolute left-4 top-5 z-30 inline-flex items-center gap-2 rounded-[5px] border border-white/20 bg-black/80 px-3 py-2 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-white hover:text-black"
+      >
+        <ArrowLeft size={14} aria-hidden="true" /> Back to Steel Man
+      </a>
 
       <style jsx global>{`
         @keyframes wtFade {
@@ -287,22 +294,6 @@ export default function WalkthroughPage() {
           animation: wtFade 600ms ease forwards;
         }
       `}</style>
-    </div>
-  );
-}
-
-function ControlsHint() {
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 5000);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <div
-      className="absolute top-5 left-1/2 -translate-x-1/2 z-30 bg-black/55 text-white text-xs px-4 py-2 rounded-full backdrop-blur transition-opacity duration-700"
-      style={{ opacity: visible ? 1 : 0, pointerEvents: "none" }}
-    >
-      Space pause &middot; Arrows or tap edges to move &middot; R restart
     </div>
   );
 }

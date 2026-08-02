@@ -20,7 +20,7 @@ interface TierGateProps {
 
 function DefaultFallback() {
   return (
-    <div className="border border-dashed border-t-line p-8 text-center font-term">
+    <div className="border border-dashed border-t-line p-8 text-center">
       <p className="text-lg font-semibold text-t-white mb-2">
         Full access requires a partner code
       </p>
@@ -30,7 +30,7 @@ function DefaultFallback() {
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <a
           href="https://forge.steelmanresumes.com"
-          className="t-focus px-6 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors"
+          className="t-focus px-6 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors"
         >
           Try The Forge
         </a>

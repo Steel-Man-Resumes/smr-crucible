@@ -135,13 +135,13 @@ export function ProgressiveIntake({
   const buttonLabel = canDeepen ? "Continue" : submitLabel;
 
   return (
-    <div className="space-y-6 font-term">
+    <div className="space-y-6">
       {rounds.map((round, roundIndex) => (
         <div key={roundIndex} className="space-y-4">
           {roundIndex > 0 && (
             <div className="flex items-center gap-2">
               <span className="h-px flex-1 bg-t-line" />
-              <span className="text-xs font-medium text-t-amber-bright uppercase tracking-wide">
+              <span className="text-xs font-medium text-t-amber-bright uppercase">
                 A couple of follow-ups, based on what you shared
               </span>
               <span className="h-px flex-1 bg-t-line" />
@@ -184,7 +184,7 @@ export function ProgressiveIntake({
         <button
           onClick={handleAdvance}
           disabled={thinking || busy || !currentAnswered}
-          className="t-focus px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+          className="t-focus px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
         >
           {thinking ? "Reading your answers..." : buttonLabel}
         </button>

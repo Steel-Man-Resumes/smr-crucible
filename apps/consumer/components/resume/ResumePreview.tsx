@@ -40,7 +40,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
   return (
     <div>
       {/* Completeness bar -- outside the page card (app chrome, not the document) */}
-      <div className="flex items-center gap-3 mb-2 font-term">
+      <div className="flex items-center gap-3 mb-2">
         <div className="flex-1 h-2 bg-t-line overflow-hidden">
           <div
             className={`h-full transition-all duration-500 ${
@@ -59,7 +59,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
       </div>
 
       {/* Page wrapper -- simulates a document on a desk */}
-      <div className="bg-gray-100 rounded-lg p-2 shadow-inner">
+      <div className="bg-gray-100 rounded-[6px] p-2 shadow-inner">
         {/* The "page" itself */}
         <div
           className="bg-white shadow-lg min-h-[560px]"
@@ -70,7 +70,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {hasContact ? (
               <div className="text-center mb-3 pb-2 border-b-2 border-gray-800">
                 {doc.contact.name && (
-                  <h2 className="text-base font-bold text-gray-900 uppercase tracking-widest leading-tight">
+                  <h2 className="text-base font-bold text-gray-900 uppercasest leading-tight">
                     {doc.contact.name}
                   </h2>
                 )}
@@ -93,7 +93,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {/* Summary */}
             {doc.summary.trim() ? (
               <div className="mb-3">
-                <h3 className="text-[10px] font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-0.5 mb-1.5">
+                <h3 className="text-[10px] font-bold text-gray-900 uppercase border-b border-gray-300 pb-0.5 mb-1.5">
                   Professional Summary
                 </h3>
                 <p className="text-[12px] text-gray-800 leading-relaxed">
@@ -107,7 +107,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {/* Skills */}
             {filledSkills.length > 0 ? (
               <div className="mb-3">
-                <h3 className="text-[10px] font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-0.5 mb-1.5">
+                <h3 className="text-[10px] font-bold text-gray-900 uppercase border-b border-gray-300 pb-0.5 mb-1.5">
                   Core Skills
                 </h3>
                 <p className="text-[11px] text-gray-800 leading-relaxed">
@@ -121,7 +121,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {/* Experience */}
             {filledExp.length > 0 ? (
               <div className="mb-3">
-                <h3 className="text-[10px] font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-0.5 mb-2">
+                <h3 className="text-[10px] font-bold text-gray-900 uppercase border-b border-gray-300 pb-0.5 mb-2">
                   Professional Experience
                 </h3>
                 <div className="space-y-3">
@@ -168,7 +168,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {/* Education */}
             {filledEd.length > 0 ? (
               <div className="mb-3">
-                <h3 className="text-[10px] font-bold text-gray-900 uppercase tracking-[0.2em] border-b border-gray-300 pb-0.5 mb-1.5">
+                <h3 className="text-[10px] font-bold text-gray-900 uppercase border-b border-gray-300 pb-0.5 mb-1.5">
                   Education &amp; Certifications
                 </h3>
                 <ul className="space-y-0.5">

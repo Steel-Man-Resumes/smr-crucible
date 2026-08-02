@@ -205,7 +205,7 @@ export default function RushPage() {
   // --- INPUT STEP ---
   if (step === "input") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 font-term bg-t-bg">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-t-bg">
         <div className="w-full max-w-lg">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-t-white mb-2">
@@ -341,7 +341,7 @@ export default function RushPage() {
   // --- PROCESSING STEP ---
   if (step === "processing") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 font-term bg-t-bg">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-t-bg">
         <div className="w-full max-w-md text-center">
           <div className="w-16 h-16 mx-auto mb-6 relative">
             <div className="absolute inset-0 border-4 border-t-line" />
@@ -366,7 +366,7 @@ export default function RushPage() {
 
   // --- RESULT STEP ---
   return (
-    <div className="min-h-screen px-4 py-8 font-term bg-t-bg">
+    <div className="min-h-screen px-4 py-8 bg-t-bg">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
@@ -448,7 +448,7 @@ export default function RushPage() {
               <button
                 onClick={handleDownloadDocx}
                 disabled={downloading}
-                className="t-focus flex-1 px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+                className="t-focus flex-1 px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
                 {downloading ? "Preparing..." : "Download .docx"}
               </button>

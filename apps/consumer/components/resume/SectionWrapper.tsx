@@ -20,7 +20,7 @@ export function SectionWrapper({ score, children, defaultOpen = false }: Props) 
         : "empty";
 
   return (
-    <div className="border border-t-line overflow-hidden font-term">
+    <div className="border border-t-line overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}

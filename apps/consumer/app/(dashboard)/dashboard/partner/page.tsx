@@ -85,7 +85,7 @@ export default function PartnerDashboardPage() {
 
   if (status === "forbidden") {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12 font-term">
+      <div className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-2xl font-bold text-t-white mb-3">Partner Dashboard</h1>
         <p className="text-t-phos-dim">
           This view is for partner organizations that distribute access codes to the
@@ -100,16 +100,16 @@ export default function PartnerDashboardPage() {
   }
 
   if (status === "loading") {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim font-term">Loading your cohort...</div>;
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Loading your cohort...</div>;
   }
   if (status === "error" || !cohort) {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim font-term">Could not load the cohort. Please try again.</div>;
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Could not load the cohort. Please try again.</div>;
   }
 
   const { clients, pendingCount, totalJoined, summary } = cohort;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10 font-term">
+    <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
         <div>
           <h1 className="text-2xl font-bold text-t-white">Partner Dashboard</h1>
@@ -160,7 +160,7 @@ export default function PartnerDashboardPage() {
         <div className="overflow-x-auto bg-t-panel border border-t-line">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-t-phos-dim border-b border-t-line">
+              <tr className="text-left text-xs uppercase text-t-phos-dim border-b border-t-line">
                 <th className="px-4 py-3 font-semibold">Client</th>
                 <th className="px-4 py-3 font-semibold">Stage</th>
                 <th className="px-4 py-3 font-semibold">Next step</th>

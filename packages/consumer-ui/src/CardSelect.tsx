@@ -12,6 +12,8 @@
 
 "use client";
 
+import { Check } from "lucide-react";
+
 interface CardSelectOption {
   id: string;
   label: string;
@@ -49,35 +51,21 @@ export function CardSelect({
             onClick={() => onSelect(option.id)}
             role={multi ? "checkbox" : "radio"}
             aria-checked={isSelected}
-            className={`t-focus w-full text-left px-5 py-4 border transition-all min-h-touch ${
+            className={`t-focus min-h-touch w-full rounded-[6px] border px-5 py-4 text-left shadow-[0_2px_8px_rgba(22,26,21,0.04)] transition-all ${
               isSelected
-                ? "border-t-amber bg-t-panel-2 text-t-white"
-                : "border-t-line bg-t-panel text-t-white hover:border-t-phos-dim"
+                ? "border-[#4f6b57] bg-[#e3ede5] text-t-white"
+                : "border-t-line bg-t-panel text-t-white hover:border-t-line-strong hover:bg-t-panel-2"
             }`}
           >
             <div className="flex items-center gap-3">
               {/* Selection indicator */}
               <div
-                className={`flex-shrink-0 w-5 h-5 border flex items-center justify-center ${
-                  isSelected ? "border-t-amber bg-t-amber" : "border-t-phos-dim"
+                className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[3px] border ${
+                  isSelected ? "border-[#4f6b57] bg-[#4f6b57]" : "border-t-line-strong bg-white"
                 }`}
               >
                 {isSelected && (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 12 12"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M2.5 6L5 8.5L9.5 3.5"
-                      stroke="#14100a"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <Check size={13} strokeWidth={2.4} className="text-white" aria-hidden="true" />
                 )}
               </div>
 

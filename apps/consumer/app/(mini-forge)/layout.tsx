@@ -11,22 +11,26 @@
 
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
 
 export const metadata: Metadata = {
-  title: "The Mini Forge -- Steel Man Resumes",
+  title: "The Mini Forge",
   description: "Career planning. Start here.",
+  icons: {
+    icon: [{ url: "/brand/forge-icon.png", type: "image/png", sizes: "512x512" }],
+  },
   robots: { index: false, follow: false },
 };
 
 export default function MiniForgeLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
-      <header className="px-4 py-4 border-b border-border">
-        <span className="text-sm font-semibold tracking-wide text-foreground">
-          Steel Man Resumes
-        </span>
+    <div className="min-h-screen bg-t-bg">
+      <header className="border-b border-t-line bg-white px-4 py-3">
+        <div className="mx-auto flex h-12 max-w-lg items-center">
+          <ProductFamilyBrand product="forge" />
+        </div>
       </header>
-      <main className="max-w-lg mx-auto px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-lg px-4 py-8">{children}</main>
     </div>
   );
 }

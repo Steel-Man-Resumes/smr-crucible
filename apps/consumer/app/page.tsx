@@ -1,279 +1,100 @@
 import Link from "next/link";
+import { ArrowRight, Check, ShieldCheck } from "lucide-react";
+import { CoBrandLockup, ProductBrand, SteelManBrand } from "@/components/brand/BrandMarks";
 
-/**
- * Page 0: Landing
- *
- * Hostname routing (forge/refinery subdomains) is handled in next.config.mjs
- * redirects so it runs at the edge before the app renders.
- *
- * This page renders for all other hostnames (localhost, preview deploys, etc).
- *
- * Design brief requirements:
- * - Image-first design, custom hero (not stock)
- * - What this is, who made it, that it's free, that nothing is tracked
- * - Trust signals: peer testimonials, plain-language privacy notice
- * - Must NOT look like a government website
- * - No login wall. No signup prompt.
- */
-
-const TESTIMONIALS = [
+const PRODUCTS = [
   {
-    quote:
-      "I didn't think anyone could help me with my record. This showed me options I never knew existed.",
-    attribution: "Program participant, Milwaukee WI",
+    id: "forge" as const,
+    href: "/intro",
+    eyebrow: "Start without an account",
+    title: "Turn experience into direction.",
+    body: "Bring a resume or start from scratch. The Forge identifies strengths, practical career paths, and a clear next move.",
+    action: "Open The Forge",
+    points: ["No login required", "About 90 seconds", "Private by design"],
+    accent: "border-t-[#9b6d1d]",
   },
   {
-    quote:
-      "For the first time, someone saw my skills instead of my charges. That changed everything.",
-    attribution: "Program participant, Chicago IL",
-  },
-  {
-    quote:
-      "I was scared to even start looking. The Forge helped me figure out what I actually want, not just what I'd settle for.",
-    attribution: "Program participant, Detroit MI",
+    id: "refinery" as const,
+    href: "/login",
+    eyebrow: "Return to your workspace",
+    title: "Build materials that move with you.",
+    body: "Create targeted applications, prepare for interviews, manage disclosure, and keep your career work organized.",
+    action: "Open The Refinery",
+    points: ["Save your work", "Full career toolset", "Partner access supported"],
+    accent: "border-t-[#4f6b57]",
   },
 ];
 
-export default function LandingPage() {
+export default function ProductHome() {
   return (
-    <main className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        {/* Warm gradient background — NOT institutional */}
-        <div className="absolute inset-0 bg-gradient-to-br from-warm-100 via-background to-sage-50" />
+    <main className="min-h-screen bg-t-bg">
+      <header className="border-b border-[#30332e] bg-[#10110f] text-[#ece7d9]">
+        <div className="mx-auto flex min-h-[76px] max-w-6xl items-center justify-between gap-4 px-5 sm:px-7">
+          <SteelManBrand inverse href="https://steelmanresumes.com" />
+          <span className="hidden items-center gap-2 text-[10px] text-[#aeb5ad] sm:flex">
+            <ShieldCheck size={15} aria-hidden="true" />
+            Free career intelligence
+          </span>
+        </div>
+      </header>
 
-        <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-20 text-center">
-          <p className="text-sage-600 font-medium mb-4 tracking-wide">
-            STEEL MAN RESUMES
-          </p>
-
-          <h1 className="text-3xl sm:text-[2.5rem] font-bold text-foreground leading-tight mb-6">
-            Your past doesn&apos;t define
-            <br />
-            your paycheck.
+      <section className="border-b border-t-line bg-white">
+        <div className="mx-auto max-w-6xl px-5 py-12 sm:px-7 sm:py-16">
+          <p className="app-eyebrow mb-3 text-t-amber">Steel Man Resumes tools</p>
+          <h1 className="max-w-3xl text-4xl font-semibold leading-[1.05] text-t-white sm:text-5xl">
+            Choose the workspace that fits where you are today.
           </h1>
-
-          <p className="text-body text-muted max-w-lg mx-auto mb-10 leading-relaxed">
-            Free career intelligence built for people rebuilding their lives.
-            Real tools, real resources, and t.ROY &mdash; an AI career guide that
-            actually understands what you&apos;re going through.
+          <p className="mt-5 max-w-2xl text-lg text-t-bone-dim">
+            Start with The Forge for direction. Use The Refinery when you are ready to build, save, and manage your materials.
           </p>
-
-          <Link
-            href="/intro"
-            className="inline-flex items-center justify-center px-10 py-4 bg-sage-600 text-white rounded-xl text-lg font-semibold hover:bg-sage-700 transition-colors min-h-touch shadow-lg shadow-sage-600/20"
-          >
-            Get Started — It&apos;s Free
-          </Link>
-
-          {/* Trust indicators */}
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted">
-            <span className="flex items-center gap-1.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M8 1L10.2 5.4L15 6.1L11.5 9.5L12.3 14.3L8 12L3.7 14.3L4.5 9.5L1 6.1L5.8 5.4L8 1Z"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  fill="none"
-                />
-              </svg>
-              No login required
-            </span>
-            <span className="hidden sm:block text-border">|</span>
-            <span className="flex items-center gap-1.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <rect
-                  x="3"
-                  y="7"
-                  width="10"
-                  height="7"
-                  rx="1"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                />
-                <path
-                  d="M5 7V5a3 3 0 016 0v2"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                />
-              </svg>
-              Your data stays yours
-            </span>
-            <span className="hidden sm:block text-border">|</span>
-            <span className="flex items-center gap-1.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle
-                  cx="8"
-                  cy="8"
-                  r="6"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                />
-                <path
-                  d="M5.5 8.5L7 10L10.5 6.5"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              100% free, always
-            </span>
-          </div>
         </div>
       </section>
 
-      {/* What This Is */}
-      <section className="max-w-3xl mx-auto px-6 py-16">
-        <h2 className="text-2xl font-bold text-foreground mb-6 text-center">
-          What is The Forge?
-        </h2>
-        <div className="grid sm:grid-cols-3 gap-6">
-          <div className="bg-white rounded-2xl p-6 border border-border">
-            <div className="w-10 h-10 rounded-full bg-warm-100 flex items-center justify-center mb-4">
-              <span className="text-warm-600 font-bold text-lg">1</span>
+      <section className="mx-auto grid max-w-6xl gap-5 px-5 py-8 sm:px-7 lg:grid-cols-2 lg:py-12">
+        {PRODUCTS.map((product) => (
+          <article key={product.id} className={`overflow-hidden rounded-[7px] border border-t-line border-t-[4px] bg-white shadow-[0_8px_24px_rgba(22,26,21,0.08)] ${product.accent}`}>
+            <div className="p-6 sm:p-8">
+              <ProductBrand product={product.id} />
+              <p className="app-eyebrow mb-2 mt-8">{product.eyebrow}</p>
+              <h2 className="text-2xl font-semibold text-t-white">{product.title}</h2>
+              <p className="mt-3 text-t-bone-dim">{product.body}</p>
+              <ul className="mt-6 space-y-2 text-sm text-t-bone-dim">
+                {product.points.map((point) => (
+                  <li key={point} className="flex items-center gap-2">
+                    <Check size={16} className={product.id === "forge" ? "text-t-amber" : "text-[#4f6b57]"} aria-hidden="true" />
+                    {point}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <h3 className="font-semibold mb-2">Tell us your story</h3>
-            <p className="text-sm text-muted leading-relaxed">
-              Upload your resume or build one with our help. Share what
-              you&apos;re looking for and what stands in your way.
-            </p>
+            <Link
+              href={product.href}
+              className={`t-focus flex min-h-[56px] items-center justify-between border-t border-t-line px-6 text-sm font-semibold transition-colors sm:px-8 ${product.id === "forge" ? "bg-[#9b6d1d] text-white hover:bg-[#795212]" : "bg-[#4f6b57] text-white hover:bg-[#3d5745]"}`}
+            >
+              {product.action}
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          </article>
+        ))}
+      </section>
+
+      <section className="border-y border-t-line bg-t-panel-2">
+        <div className="mx-auto flex max-w-6xl flex-col justify-between gap-6 px-5 py-8 sm:px-7 lg:flex-row lg:items-center">
+          <div className="max-w-xl">
+            <p className="app-eyebrow mb-2 text-[#4f6b57]">Co-branding available</p>
+            <h2 className="text-xl font-semibold text-t-white">A shared service that can look at home in your organization.</h2>
+            <p className="mt-2 text-sm text-t-bone-dim">Partner identity can appear alongside Steel Man Resumes without changing the tools or the user experience.</p>
           </div>
-          <div className="bg-white rounded-2xl p-6 border border-border">
-            <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center mb-4">
-              <span className="text-sage-600 font-bold text-lg">2</span>
-            </div>
-            <h3 className="font-semibold mb-2">We analyze, not judge</h3>
-            <p className="text-sm text-muted leading-relaxed">
-              Our AI finds your strengths, matches career paths, and connects
-              your barriers to real resources that help.
-            </p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-border">
-            <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center mb-4">
-              <span className="text-sky-600 font-bold text-lg">3</span>
-            </div>
-            <h3 className="font-semibold mb-2">You get a game plan</h3>
-            <p className="text-sm text-muted leading-relaxed">
-              A personalized narrative about your strengths, skills, and next
-              steps — written in your words, not ours.
-            </p>
-          </div>
+          <CoBrandLockup className="flex-none" />
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="bg-sage-50/50 py-16">
-        <div className="max-w-3xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-foreground mb-8 text-center">
-            Real people. Real results.
-          </h2>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t, i) => (
-              <blockquote
-                key={i}
-                className="bg-white rounded-2xl p-6 border border-border"
-              >
-                <p className="text-sm text-foreground leading-relaxed mb-4 italic">
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <footer className="text-xs text-muted">
-                  — {t.attribution}
-                </footer>
-              </blockquote>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Privacy & Trust */}
-      <section className="max-w-3xl mx-auto px-6 py-16 text-center">
-        <h2 className="text-2xl font-bold text-foreground mb-4">
-          Your privacy is non-negotiable.
-        </h2>
-        <p className="text-body text-muted max-w-lg mx-auto mb-8 leading-relaxed">
-          We don&apos;t sell your data. We don&apos;t share it with law
-          enforcement. You control what you share, and you can delete everything
-          at any time. No exceptions.
-        </p>
-        <Link
-          href="/intro"
-          className="inline-flex items-center justify-center px-10 py-4 bg-sage-600 text-white rounded-xl text-lg font-semibold hover:bg-sage-700 transition-colors min-h-touch shadow-lg shadow-sage-600/20"
-        >
-          Start The Forge
-        </Link>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-8 px-6">
-        <div className="max-w-3xl mx-auto text-sm text-muted">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
-            <a
-              href="https://steelmanresumes.com"
-              className="text-sage-600 hover:text-sage-700 font-medium transition-colors"
-            >
-              steelmanresumes.com
-            </a>
-            <span className="hidden sm:block text-border">|</span>
-            <a
-              href="https://forge.steelmanresumes.com"
-              className="hover:text-foreground transition-colors"
-            >
-              The Forge (Free Report)
-            </a>
-            <span className="hidden sm:block text-border">|</span>
-            <a
-              href="https://refinery.steelmanresumes.com"
-              className="hover:text-foreground transition-colors"
-            >
-              The Refinery (Free Tools)
-            </a>
-            <span className="hidden sm:block text-border">|</span>
-            <a
-              href="tel:2623918137"
-              className="hover:text-foreground transition-colors"
-            >
-              (262) 391-8137
-            </a>
-          </div>
-          <p className="text-center mb-2">
-            Built by{" "}
-            <a
-              href="https://steelmanresumes.com"
-              className="font-medium text-foreground hover:text-sage-600 transition-colors"
-            >
-              Steel Man Resumes
-            </a>{" "}
-            — a project of{" "}
-            <a
-              href="https://themidnightgarden.club"
-              className="hover:text-sage-600 transition-colors"
-            >
-              The Midnight Garden
-            </a>
-          </p>
-          <p className="text-center">
-            Grounded in research. Designed with care. Made for people who
-            deserve a real second chance.
-          </p>
+      <footer className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-t-bone-dim sm:px-7 md:flex-row md:items-center md:justify-between">
+        <span>Steel Man Resumes career tools</span>
+        <div className="flex flex-wrap gap-5">
+          <Link href="/security" className="hover:text-t-white">Security</Link>
+          <a href="https://steelmanresumes.com" className="hover:text-t-white">Main site</a>
+          <a href="mailto:info@steelmanresumes.com" className="hover:text-t-white">Contact</a>
         </div>
       </footer>
     </main>

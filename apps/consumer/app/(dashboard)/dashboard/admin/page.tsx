@@ -35,7 +35,7 @@ export default function AdminEvidenceDashboard() {
 
   if (tier !== "admin") {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <p className="text-t-phos-dim">Admin access required.</p>
       </div>
     );
@@ -77,7 +77,7 @@ export default function AdminEvidenceDashboard() {
   }
 
   return (
-    <div className="max-w-4xl space-y-10 font-term">
+    <div className="max-w-4xl space-y-10">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-t-white">Evidence Dashboard</h1>

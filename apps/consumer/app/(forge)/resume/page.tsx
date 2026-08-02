@@ -284,7 +284,7 @@ export default function ResumeIntakePage() {
         {/* Full resume preview */}
         <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
-            <p className="text-xs font-semibold text-t-phos uppercase tracking-wide">
+            <p className="text-xs font-semibold text-t-phos uppercase">
               What we read from your file
             </p>
             <p className="text-xs text-t-phos-dim">{previewText.length} characters</p>
@@ -1210,7 +1210,7 @@ function GuidedBuilder({
       >
         <div className="bg-t-panel border border-t-line overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
-            <p className="text-xs font-semibold text-t-phos uppercase tracking-wide">
+            <p className="text-xs font-semibold text-t-phos uppercase">
               Your resume draft
             </p>
             <p className="text-xs text-t-phos-dim">{assembled.length} characters</p>

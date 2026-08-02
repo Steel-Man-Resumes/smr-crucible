@@ -23,6 +23,13 @@ export interface TenantConfig {
   contactEmail: string;
   contactPhone?: string;
   website: string;
+  partnerBrand: {
+    name: string;
+    descriptor: string;
+    logoPath?: string;
+    primaryColor: string;
+    isPlaceholder: boolean;
+  };
 
   // Geography
   geo: TenantGeo;
@@ -51,6 +58,13 @@ const DEFAULT_TENANT: TenantConfig = {
   logoPath: "/images/smr-logo.png",
   contactEmail: "info@steelmanresumes.com",
   website: "https://steelmanresumes.com",
+  partnerBrand: {
+    name: process.env.NEXT_PUBLIC_PARTNER_NAME || "Your Organization",
+    descriptor: process.env.NEXT_PUBLIC_PARTNER_DESCRIPTOR || "Example partner branding",
+    logoPath: process.env.NEXT_PUBLIC_PARTNER_LOGO_PATH || undefined,
+    primaryColor: process.env.NEXT_PUBLIC_PARTNER_COLOR || "#3f5363",
+    isPlaceholder: !process.env.NEXT_PUBLIC_PARTNER_NAME,
+  },
 
   geo: {
     primaryLocations: ["Milwaukee, WI", "Waukesha, WI"],
@@ -79,8 +93,6 @@ let _cachedConfig: TenantConfig | null = null;
 export function getTenantConfig(): TenantConfig {
   if (_cachedConfig) return _cachedConfig;
 
-  // In the future: load from TENANT_CONFIG_PATH env var
-  // For now, always return default SMR config
   _cachedConfig = DEFAULT_TENANT;
   return _cachedConfig;
 }

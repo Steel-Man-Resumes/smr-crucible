@@ -40,7 +40,7 @@ export default function ForgeAccumulator() {
   if (itemCount === 0) return null;
 
   return (
-    <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line font-term">
+    <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
       <div className="flex items-center gap-2 mb-2">
         <div className="flex gap-1">
           {[hasResume, hasGoals, hasChallenges, hasPreferences].map((filled, i) => (

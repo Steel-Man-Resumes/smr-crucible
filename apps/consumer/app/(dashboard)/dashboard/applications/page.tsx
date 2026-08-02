@@ -203,7 +203,7 @@ function ApplicationsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim font-term">
+      <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
         <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
         Loading applications...
       </div>
@@ -211,7 +211,7 @@ function ApplicationsPage() {
   }
 
   return (
-    <div className="max-w-4xl font-term">
+    <div className="max-w-4xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">
         Application Tracker
       </h1>
@@ -228,7 +228,7 @@ function ApplicationsPage() {
           </p>
           <Link
             href="/dashboard/jobs"
-            className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
+            className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
           >
             Find Jobs &rarr;
           </Link>
@@ -270,7 +270,7 @@ function ApplicationsPage() {
               return (
                 <section key={stage.status}>
                   <h2
-                    className={`text-sm font-semibold uppercase tracking-wide mb-3 ${stage.color}`}
+                    className={`text-sm font-semibold uppercase mb-3 ${stage.color}`}
                   >
                     {stage.label} ({stageApps.length})
                   </h2>
@@ -386,7 +386,7 @@ function ApplicationsPage() {
                                 <div className="flex items-center gap-3 mt-3">
                                   <button
                                     onClick={() => copyFollowUp(app.id)}
-                                    className="t-focus px-3 py-1.5 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright"
+                                    className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
                                   >
                                     {copiedId === app.id ? "Copied" : "Copy"}
                                   </button>

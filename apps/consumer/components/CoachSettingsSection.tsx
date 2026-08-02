@@ -70,7 +70,7 @@ export function CoachSettingsSection() {
   }
 
   return (
-    <section className="mb-8 font-term">
+    <section className="mb-8">
       <h2 className="text-lg font-bold text-t-white mb-1">Your Coach</h2>
       <p className="text-sm text-t-phos-dim mb-4">
         Your coach guides you through your job search. Make it yours.

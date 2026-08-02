@@ -136,7 +136,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
   }
 
   return (
-    <div className="min-h-screen pt-16 pb-12 bg-t-bg font-term">
+    <div className="min-h-screen pt-16 pb-12 bg-t-bg">
       <div className="max-w-5xl mx-auto px-4">
         <button
           onClick={onBack}
@@ -181,7 +181,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
             <>
               <button
                 onClick={() => onComplete(doc)}
-                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Looks good -- continue
               </button>

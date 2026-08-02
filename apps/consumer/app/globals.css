@@ -3,55 +3,159 @@
 @tailwind utilities;
 
 :root {
-  /* Warm, non-institutional palette */
-  /* No red (triggers), no government blue */
-  --background: #fdf8f0;
-  --foreground: #2c2418;
-  --muted: #8c7e6e;
-  --border: #e0cebc;
-  --card: #f9f3ea;
-  --accent: #557553;
+  --background: #eaede9;
+  --foreground: #1c1e1b;
+  --muted: #6d736d;
+  --border: #d3d8d1;
+  --card: #ffffff;
+  --accent: #4f6b57;
 
-  /* Semantic tokens */
-  --success: #557553;
-  --info: #3d89af;
-  --warning: #d67a2a;
+  --success: #4f6b57;
+  --info: #4f6b57;
+  --warning: #9b6d1d;
   --surface: #ffffff;
-  --surface-elevated: #f9f3ea;
+  --surface-elevated: #f5f6f4;
+  --app-shadow: 0 8px 24px rgba(22, 26, 21, 0.08);
 }
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    background: var(--background);
+  }
+
   body {
+    margin: 0;
+    overflow-x: hidden;
     color: var(--foreground);
     background: var(--background);
-    font-size: 1.125rem; /* 18px minimum per design brief */
-    line-height: 1.75rem;
+    font-family: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Focus styles for accessibility — WCAG 2.2 AA */
   :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: 3px solid #9b6d1d;
+    outline-offset: 3px;
     border-radius: 4px;
   }
 
-  /* Minimum touch target enforcement */
   button, a, input, select, textarea, [role="button"] {
-    min-height: 3rem; /* 48px minimum touch target */
+    min-height: 2.75rem;
   }
 
-  /* Ensure readable text contrast */
   h1, h2, h3, h4, h5, h6 {
     color: var(--foreground);
     font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  button, input, textarea, select {
+    font: inherit;
+  }
+
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  textarea {
+    color: #a7cf98 !important;
+    background-color: #10110f !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='22' viewBox='0 0 18 22'%3E%3Ctext x='1' y='16' fill='%23d7b86e' font-family='monospace' font-size='16' font-weight='600'%3E%24%3C/text%3E%3C/svg%3E") !important;
+    background-position: 11px center !important;
+    background-repeat: no-repeat !important;
+    border-color: #3b4039 !important;
+    border-radius: 5px !important;
+    caret-color: #d7b86e;
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace !important;
+    font-size: 1rem;
+    padding-left: 2.1rem !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  textarea {
+    background-position: 11px 13px !important;
+  }
+
+  .terminal-field input,
+  .terminal-field textarea {
+    background-image: none !important;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"])::placeholder,
+  textarea::placeholder {
+    color: #718c69 !important;
+    opacity: 1;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,
+  textarea:focus {
+    border-color: #a7cf98 !important;
+    box-shadow: 0 0 0 1px #a7cf98;
+  }
+
+  select {
+    color: #1c1e1b;
+    background-color: #ffffff;
+    border-color: #aeb5ad;
+    border-radius: 5px;
   }
 }
 
 @layer utilities {
-  /* One-question-per-screen flow page centering */
   .flow-center {
     @apply mx-auto max-w-flow px-4 py-8;
+  }
+
+  .app-panel {
+    border: 1px solid #d3d8d1;
+    border-radius: 7px;
+    background: #ffffff;
+    box-shadow: var(--app-shadow);
+  }
+
+  .app-eyebrow {
+    color: #6d736d;
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .terminal-field {
+    position: relative;
+  }
+
+  .terminal-field::before {
+    content: "$";
+    position: absolute;
+    z-index: 1;
+    left: 0.9rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #d7b86e;
+    font: 600 1rem "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    pointer-events: none;
+  }
+
+  .terminal-field--area::before {
+    top: 0.9rem;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

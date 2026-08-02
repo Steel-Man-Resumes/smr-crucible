@@ -13,11 +13,11 @@ import type { ReactNode } from "react";
 import { DEMO_SESSION, DEMO_OUTPUT } from "@/lib/demo-data";
 import type { ScreenId } from "./storyboard";
 
-const CREAM = "#fdf8f0";
-const GREEN = "#557553";
-const INK = "#2c2418";
-const MUTE = "#8c7e6e";
-const BORDER = "#e0cebc";
+const CREAM = "#eaede9";
+const GREEN = "#4f6b57";
+const INK = "#1c1e1b";
+const MUTE = "#6d736d";
+const BORDER = "#d3d8d1";
 
 /** Every screen fills the stage exactly. */
 function Screen({
@@ -44,7 +44,7 @@ function TitleScreen() {
     <Screen bg={INK}>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-20">
         <p
-          className="text-sm font-semibold tracking-[0.35em] uppercase mb-6"
+          className="text-sm font-semibold uppercase mb-6"
           style={{ color: "#b9cdb6" }}
         >
           Steel Man Resumes
@@ -75,7 +75,7 @@ function BeforeScreen() {
     <Screen>
       <div className="absolute inset-0 flex items-center justify-center">
         <div
-          className="relative bg-white rounded-xl shadow-2xl border"
+          className="relative bg-white rounded-[6px] shadow-2xl border"
           style={{
             width: 588,
             height: 720,
@@ -94,7 +94,7 @@ function BeforeScreen() {
               isHeading(line) ? (
                 <p
                   key={i}
-                  className="font-bold mt-3 mb-1 text-[13px] tracking-wide"
+                  className="font-bold mt-3 mb-1 text-[13px]"
                   style={{ color: INK }}
                 >
                   {line}
@@ -144,7 +144,7 @@ function IntakeScreen() {
   return (
     <Screen>
       <div className="absolute left-0 right-0 top-[8%] text-center">
-        <p className="text-sm font-semibold tracking-[0.3em] uppercase" style={{ color: GREEN }}>
+        <p className="text-sm font-semibold uppercase" style={{ color: GREEN }}>
           The Forge
         </p>
         <p className="text-2xl font-bold mt-1" style={{ color: INK }}>
@@ -155,7 +155,7 @@ function IntakeScreen() {
         {steps.map((s, i) => (
           <div
             key={s.n}
-            className="flex-1 bg-white rounded-2xl border p-5 shadow-sm"
+            className="flex-1 bg-white rounded-[7px] border p-5 shadow-sm"
             style={{
               borderColor: i === 4 ? GREEN : BORDER,
               minHeight: 360,
@@ -214,7 +214,7 @@ function ProcessingScreen() {
         {pipes.map((p) => (
           <div
             key={p.t}
-            className="bg-white rounded-2xl border p-6 shadow-sm"
+            className="bg-white rounded-[7px] border p-6 shadow-sm"
             style={{ borderColor: BORDER, minHeight: 240 }}
           >
             <div className="h-1.5 w-full rounded-full overflow-hidden mb-4" style={{ background: BORDER }}>
@@ -252,7 +252,7 @@ function OutputScreen() {
       <div className="absolute inset-0 px-10 py-8 flex gap-7">
         {/* Left column */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold tracking-[0.25em] uppercase mb-1" style={{ color: GREEN }}>
+          <p className="text-sm font-semibold uppercase mb-1" style={{ color: GREEN }}>
             Your Forge Results
           </p>
           <h1 className="text-4xl font-bold leading-tight" style={{ color: INK }}>
@@ -269,7 +269,7 @@ function OutputScreen() {
             {strengths.map((s) => (
               <div
                 key={s.title}
-                className="rounded-xl p-4 border"
+                className="rounded-[6px] p-4 border"
                 style={{ background: "#f4f7f4", borderColor: "#c2d1c0" }}
               >
                 <p className="font-semibold text-[15px]" style={{ color: "#415d40" }}>
@@ -292,7 +292,7 @@ function OutputScreen() {
             {skills.map((s) => (
               <span
                 key={s.name}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                className="px-3 py-1.5 rounded-[6px] text-sm font-medium"
                 style={{
                   background:
                     s.category === "hard"
@@ -317,7 +317,7 @@ function OutputScreen() {
             Your Hurdles, and What Helps
           </h2>
           <div
-            className="rounded-xl p-4 border mb-5"
+            className="rounded-[6px] p-4 border mb-5"
             style={{ background: "#fdf8f0", borderColor: "#f2d6af" }}
           >
             <p className="font-semibold capitalize text-[15px]" style={{ color: "#855440" }}>
@@ -330,7 +330,7 @@ function OutputScreen() {
               {barrier.resources.slice(0, 2).map((r) => (
                 <div
                   key={r.name}
-                  className="bg-white rounded-lg px-3 py-2 border"
+                  className="bg-white rounded-[6px] px-3 py-2 border"
                   style={{ borderColor: BORDER }}
                 >
                   <p className="font-medium text-sm" style={{ color: INK }}>
@@ -351,7 +351,7 @@ function OutputScreen() {
             {paths.map((cp) => (
               <div
                 key={cp.title}
-                className="bg-white rounded-xl p-4 border"
+                className="bg-white rounded-[6px] p-4 border"
                 style={{ borderColor: BORDER }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -399,7 +399,7 @@ function RefineryScreen() {
         {tools.map((t) => (
           <div
             key={t.name}
-            className="rounded-2xl p-6 border shadow-sm"
+            className="rounded-[7px] p-6 border shadow-sm"
             style={{ background: t.bg, borderColor: t.bd, minHeight: 150 }}
           >
             <p className="text-xl font-bold mb-2" style={{ color: t.c }}>
@@ -426,14 +426,14 @@ function DisclosureScreen() {
   return (
     <Screen>
       <div className="absolute inset-0 flex flex-col items-center justify-center px-24">
-        <p className="text-sm font-semibold tracking-[0.3em] uppercase mb-2" style={{ color: "#336f94" }}>
+        <p className="text-sm font-semibold uppercase mb-2" style={{ color: "#336f94" }}>
           Disclosure Planner
         </p>
         <h2 className="text-3xl font-bold mb-6" style={{ color: INK }}>
           Your script
         </h2>
         <div
-          className="rounded-2xl p-8 border max-w-3xl"
+          className="rounded-[7px] p-8 border max-w-3xl"
           style={{ background: "#f4f7f4", borderColor: "#c2d1c0" }}
         >
           <p className="text-xl leading-relaxed" style={{ color: GREEN }}>
@@ -458,22 +458,22 @@ function InterviewScreen() {
   return (
     <Screen>
       <div className="absolute inset-0 flex flex-col items-center px-24 pt-[6%]">
-        <p className="text-sm font-semibold tracking-[0.3em] uppercase mb-2" style={{ color: "#c05e1f" }}>
+        <p className="text-sm font-semibold uppercase mb-2" style={{ color: "#c05e1f" }}>
           Interview Practice
         </p>
         <div className="w-full max-w-3xl space-y-4">
           <div className="flex justify-start">
-            <div className="max-w-[80%] px-5 py-3.5 rounded-2xl rounded-bl-sm text-lg" style={{ background: "#eceae7", color: INK }}>
+            <div className="max-w-[80%] px-5 py-3.5 rounded-[7px] rounded-bl-sm text-lg" style={{ background: "#eceae7", color: INK }}>
               Tell me about a time you had to lead a team through a difficult situation.
             </div>
           </div>
           <div className="flex justify-end">
-            <div className="max-w-[80%] px-5 py-3.5 rounded-2xl rounded-br-sm text-lg text-white" style={{ background: GREEN }}>
+            <div className="max-w-[80%] px-5 py-3.5 rounded-[7px] rounded-br-sm text-lg text-white" style={{ background: GREEN }}>
               On night shift we had a system outage and orders were backing up. I organized
               my crew to switch to manual picking and we cleared the backlog before morning.
             </div>
           </div>
-          <div className="rounded-xl p-5 border" style={{ background: "#f4f7f4", borderColor: "#c2d1c0" }}>
+          <div className="rounded-[6px] p-5 border" style={{ background: "#f4f7f4", borderColor: "#c2d1c0" }}>
             <p className="text-sm font-semibold mb-2" style={{ color: GREEN }}>
               Feedback
             </p>
@@ -509,7 +509,7 @@ function CloseScreen() {
           This is what your team can put in front of someone next week.
         </p>
         <div
-          className="mt-10 px-9 py-4 rounded-2xl text-xl font-semibold text-white shadow-lg"
+          className="mt-10 px-9 py-4 rounded-[7px] text-xl font-semibold text-white shadow-lg"
           style={{ background: GREEN }}
         >
           steelmanresumes.com

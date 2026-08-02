@@ -61,7 +61,7 @@ export function ResumeEditor({
           onClick={() => setMobileView("edit")}
           className={`flex-1 py-2 text-sm font-medium transition-colors ${
             mobileView === "edit"
-              ? "bg-t-amber text-[#14100a]"
+              ? "bg-t-amber text-white"
               : "text-t-phos-dim"
           }`}
         >
@@ -71,7 +71,7 @@ export function ResumeEditor({
           onClick={() => setMobileView("preview")}
           className={`flex-1 py-2 text-sm font-medium transition-colors ${
             mobileView === "preview"
-              ? "bg-t-amber text-[#14100a]"
+              ? "bg-t-amber text-white"
               : "text-t-phos-dim"
           }`}
         >

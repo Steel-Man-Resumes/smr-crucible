@@ -190,7 +190,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl font-term">
+    <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">Settings</h1>
       <p className="text-base text-t-phos-dim mb-8">
         Your data, your control. Manage your information and privacy.
@@ -224,7 +224,7 @@ export default function SettingsPage() {
                 }}
                 className={`t-focus px-4 py-2 text-sm font-medium transition-colors min-h-touch ${
                   testMode
-                    ? "bg-t-amber text-[#14100a] hover:bg-t-amber-bright"
+                    ? "bg-t-amber text-white hover:bg-t-amber-bright"
                     : "bg-transparent border border-t-amber text-t-amber-bright hover:bg-t-amber/10"
                 }`}
               >
@@ -439,7 +439,7 @@ export default function SettingsPage() {
                   <button
                     onClick={deleteAllData}
                     disabled={deleting}
-                    className="t-focus px-4 py-2 bg-t-red text-[#14100a] text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
+                    className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
                   >
                     {deleting ? "Deleting..." : "Confirm Delete"}
                   </button>
@@ -610,7 +610,7 @@ function AccountSection() {
         {/* Auth email */}
         <div className="flex items-center justify-between pb-3 border-b border-t-line mb-3">
           <div>
-            <p className="text-xs text-t-phos-dim uppercase tracking-wide">Signed in as</p>
+            <p className="text-xs text-t-phos-dim uppercase">Signed in as</p>
             <p className="text-sm font-medium text-t-white">{session?.user?.email || "—"}</p>
           </div>
           <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
@@ -622,7 +622,7 @@ function AccountSection() {
         {!editing ? (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-t-phos-dim uppercase tracking-wide">Resume Contact Info</p>
+              <p className="text-xs text-t-phos-dim uppercase">Resume Contact Info</p>
               <button
                 onClick={() => setEditing(true)}
                 className="text-xs text-t-amber-bright hover:text-t-amber font-medium"
@@ -643,7 +643,7 @@ function AccountSection() {
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-3">
-            <p className="text-xs text-t-phos-dim uppercase tracking-wide mb-1">Edit Resume Contact Info</p>
+            <p className="text-xs text-t-phos-dim uppercase mb-1">Edit Resume Contact Info</p>
             <input
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}

@@ -612,7 +612,7 @@ export function ResumeWorkspace() {
   // --- Full resume generation loading state ---
   if (generatingFull) {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Building Your Career Package
         </h1>
@@ -636,7 +636,7 @@ export function ResumeWorkspace() {
   // --- Generation error state ---
   if (genError && !showSetup) {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
@@ -648,7 +648,7 @@ export function ResumeWorkspace() {
                 setGenError(null);
                 setShowSetup(true);
               }}
-              className="t-focus px-6 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+              className="t-focus px-6 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Start Manually
             </button>
@@ -661,7 +661,7 @@ export function ResumeWorkspace() {
   // --- Setup screen (target + import options) ---
   if (showSetup) {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
@@ -698,7 +698,7 @@ export function ResumeWorkspace() {
                         <button
                           onClick={() => deleteResume(r.id)}
                           disabled={deletingId === r.id}
-                          className="t-focus text-xs font-medium text-[#14100a] bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
+                          className="t-focus text-xs font-medium text-white bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
                         >
                           {deletingId === r.id ? "Deleting..." : "Delete"}
                         </button>
@@ -811,7 +811,7 @@ export function ResumeWorkspace() {
               <button
                 onClick={importFromForge}
                 disabled={!doc.meta.targetJob.trim()}
-                className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] text-base font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+                className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
                 Tailor from my Forge profile
               </button>
@@ -826,7 +826,7 @@ export function ResumeWorkspace() {
             <>
               <a
                 href="/resume"
-                className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-[#14100a] text-base font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Build your base resume in the Forge first
               </a>
@@ -846,7 +846,7 @@ export function ResumeWorkspace() {
 
   // --- Workspace ---
   return (
-    <div className="max-w-6xl font-term">
+    <div className="max-w-6xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="min-w-0">
@@ -877,7 +877,7 @@ export function ResumeWorkspace() {
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-t-amber flex-shrink-0">
               <path d="M8 1l2 4.5H15l-4 3 1.5 5L8 11 3.5 13.5 5 8.5 1 5.5h5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
-            <span className="text-xs font-bold text-t-amber-bright uppercase tracking-wider">
+            <span className="text-xs font-bold text-t-amber-bright uppercaser">
               What we tailored for this job
             </span>
           </div>
@@ -901,7 +901,7 @@ export function ResumeWorkspace() {
           <button
             onClick={() => setPackageTab("resume")}
             className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              packageTab === "resume" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
+              packageTab === "resume" ? "bg-t-amber text-white" : "text-t-phos-dim"
             }`}
           >
             Resume
@@ -910,7 +910,7 @@ export function ResumeWorkspace() {
             <button
               onClick={() => setPackageTab("cover-letter")}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                packageTab === "cover-letter" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
+                packageTab === "cover-letter" ? "bg-t-amber text-white" : "text-t-phos-dim"
               }`}
             >
               Cover Letter
@@ -920,7 +920,7 @@ export function ResumeWorkspace() {
             <button
               onClick={() => setPackageTab("disclosure")}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                packageTab === "disclosure" ? "bg-t-amber text-[#14100a]" : "text-t-phos-dim"
+                packageTab === "disclosure" ? "bg-t-amber text-white" : "text-t-phos-dim"
               }`}
             >
               Disclosure
@@ -949,7 +949,7 @@ export function ResumeWorkspace() {
               </button>
               <button
                 onClick={() => downloadDocx("cover_letter", coverLetterText)}
-                className="t-focus px-3 py-1.5 text-xs font-bold text-[#14100a] bg-t-amber hover:bg-t-amber-bright transition-colors"
+                className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors"
               >
                 Download .docx
               </button>
@@ -975,7 +975,7 @@ export function ResumeWorkspace() {
               </p>
               <a
                 href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
-                className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Open Disclosure Planner
               </a>
@@ -1005,7 +1005,7 @@ export function ResumeWorkspace() {
 
             {disclosureBrief.briefScript && (
               <div className="bg-t-panel-2 p-4 border border-t-line mb-4">
-                <p className="text-xs font-medium text-t-amber-bright uppercase tracking-wide mb-2">
+                <p className="text-xs font-medium text-t-amber-bright uppercase mb-2">
                   Starting script
                 </p>
                 <p className="text-sm text-t-white leading-relaxed italic">
@@ -1031,7 +1031,7 @@ export function ResumeWorkspace() {
 
             <a
               href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
-              className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-[#14100a] text-sm font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+              className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
               Open Disclosure Planner for {disclosureBrief.targetCompany || "this role"}
             </a>
@@ -1056,7 +1056,7 @@ export function ResumeWorkspace() {
             <>
               <button
                 onClick={() => save(false)}
-                className="t-focus px-5 py-3 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus px-5 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
               </button>

@@ -66,7 +66,7 @@ export default function HealthPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <div className="flex items-center justify-between gap-4 mb-2">
         <h1 className="text-2xl font-bold text-foreground">System Health</h1>
-        <button onClick={load} disabled={status === "loading"} className="px-3 py-1.5 text-sm rounded-lg bg-white border border-border hover:bg-sage-50 disabled:opacity-50">
+        <button onClick={load} disabled={status === "loading"} className="px-3 py-1.5 text-sm rounded-[6px] bg-white border border-border hover:bg-sage-50 disabled:opacity-50">
           {status === "loading" ? "Checking..." : "Refresh"}
         </button>
       </div>
@@ -84,8 +84,8 @@ export default function HealthPage() {
 
       {report && groups.map((g) => (
         <section key={g} className="mb-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2">{g}</h2>
-          <div className="bg-white border border-border rounded-xl divide-y divide-border">
+          <h2 className="text-sm font-semibold uppercase text-muted mb-2">{g}</h2>
+          <div className="bg-white border border-border rounded-[6px] divide-y divide-border">
             {report.checks.filter((c) => c.group === g).map((c, i) => (
               <div key={i} className="flex items-start gap-3 px-4 py-3">
                 <span className={`mt-1.5 inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT[c.status]}`} />

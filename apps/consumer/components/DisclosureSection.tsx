@@ -17,7 +17,7 @@ export function DisclosureSection({
   children,
 }: DisclosureSectionProps) {
   return (
-    <details open={defaultOpen || undefined} className="group font-term">
+    <details open={defaultOpen || undefined} className="group">
       <summary className="cursor-pointer list-none flex items-center gap-2 py-3 select-none">
         <svg
           className="w-4 h-4 text-t-phos-dim transition-transform group-open:rotate-90 flex-shrink-0"

@@ -39,9 +39,9 @@ export function JourneyProgressBanner({ state }: Props) {
   if (!stage) return null;
 
   return (
-    <div className="mb-6 bg-t-panel border border-t-line px-4 py-3 font-term">
+    <div className="mb-6 bg-t-panel border border-t-line px-4 py-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold text-t-phos-dim uppercase tracking-widest">
+        <span className="text-[10px] font-bold text-t-phos-dim uppercasest">
           Your Refinery Journey
         </span>
         <span className="text-xs font-semibold text-t-amber-bright">
@@ -67,7 +67,7 @@ export function JourneyProgressBanner({ state }: Props) {
               <div
                 className={`w-5 h-5 border text-[9px] font-bold flex items-center justify-center transition-colors ${
                   done
-                    ? "bg-t-amber border-t-amber text-[#14100a]"
+                    ? "bg-t-amber border-t-amber text-white"
                     : active
                       ? "bg-t-panel-2 border-t-amber text-t-amber-bright"
                       : "bg-t-panel border-t-line text-t-bone-dim"

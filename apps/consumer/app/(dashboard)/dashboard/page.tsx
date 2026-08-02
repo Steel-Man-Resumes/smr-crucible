@@ -262,7 +262,7 @@ export default function DashboardPage() {
 
   // ─── State: needs_resume OR full_access ───────────────────────────────
   return (
-    <div className="space-y-10 font-term">
+    <div className="space-y-10">
       <MiniForgeBanner />
       <JourneyHeader />
       {/* Welcome / Narrative */}
@@ -315,7 +315,7 @@ export default function DashboardPage() {
               </p>
               <Link
                 href="/intro"
-                className="t-focus inline-flex items-center justify-center px-8 py-4 bg-t-amber text-[#14100a] shadow-[3px_3px_0_#000] text-lg font-bold hover:bg-t-amber-bright transition-colors min-h-touch"
+                className="t-focus inline-flex items-center justify-center px-8 py-4 bg-t-amber text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] text-lg font-bold hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Start The Forge
               </Link>
@@ -383,7 +383,7 @@ export default function DashboardPage() {
           </p>
           <div className="space-y-3">
             <div className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-t-amber text-[#14100a] text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+              <span className="w-6 h-6 bg-t-amber text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
                 1
               </span>
               <div>
@@ -394,7 +394,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-t-amber text-[#14100a] text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
+              <span className="w-6 h-6 bg-t-amber text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
                 2
               </span>
               <div>
@@ -664,7 +664,7 @@ function PartnerDashboard() {
   ];
 
   return (
-    <div className="space-y-10 font-term">
+    <div className="space-y-10">
       {/* Header */}
       <section className="bg-t-panel p-6 sm:p-8 border border-t-line">
         <div className="flex items-start gap-4">
@@ -784,7 +784,7 @@ function ObserverDashboard() {
   ];
 
   return (
-    <div className="space-y-10 font-term">
+    <div className="space-y-10">
       {/* Header */}
       <section className="bg-t-panel p-6 sm:p-8 border border-t-line">
         <div className="flex items-start gap-4">
@@ -909,7 +909,7 @@ function ProfileSetup({
   }
 
   return (
-    <div className="max-w-lg mx-auto font-term">
+    <div className="max-w-lg mx-auto">
       <h1 className="text-2xl font-bold text-t-white mb-2">
         {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
       </h1>
@@ -1005,7 +1005,7 @@ function MiniForgeBanner() {
   if (searchParams.get("welcome") !== "mini-forge" || dismissed) return null;
 
   return (
-    <div className="bg-t-panel border border-t-line p-5 flex items-start gap-4 font-term">
+    <div className="bg-t-panel border border-t-line p-5 flex items-start gap-4">
       <div className="flex-1">
         <p className="font-semibold text-t-white">Welcome. You started this inside.</p>
         <p className="text-sm text-t-phos-dim mt-1">

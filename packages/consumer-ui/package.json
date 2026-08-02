@@ -12,5 +12,8 @@
   "devDependencies": {
     "@types/react": "^18",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "lucide-react": "^1.28.0"
   }
 }

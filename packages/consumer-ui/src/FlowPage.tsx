@@ -15,6 +15,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ChevronLeft } from "lucide-react";
 import { TYPOGRAPHY } from "./theme";
 import { TBtn } from "./terminal";
 
@@ -70,44 +71,30 @@ export function FlowPage({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-t-bg font-body">
+    <div className="flex min-h-[calc(100vh-76px)] flex-col bg-t-bg font-body">
       {/* Back navigation */}
       {showBack && (
-        <div className="px-4 pt-4">
+        <div className="mx-auto w-full max-w-3xl px-4 pt-5 sm:px-6">
           <button
             onClick={onBack}
-            className="t-focus inline-flex items-center gap-1 text-t-bone-dim hover:text-t-amber-bright transition-colors min-h-touch px-2"
+            className="t-focus inline-flex min-h-touch items-center gap-1 rounded-[4px] px-2 text-sm font-medium text-t-bone-dim transition-colors hover:text-t-amber-bright"
             aria-label="Go back"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 20 20"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M12.5 15L7.5 10L12.5 5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            back
+            <ChevronLeft size={18} aria-hidden="true" />
+            Back
           </button>
         </div>
       )}
 
       {/* Main content area — centered, constrained */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex flex-1 flex-col items-center px-4 py-10 sm:justify-center sm:px-6 sm:py-12">
         <div className="w-full max-w-flow">
           {/* Title */}
-          <h1 className="text-2xl font-bold text-t-white leading-tight mb-3">{title}</h1>
+          <h1 className="mb-3 text-3xl font-semibold leading-tight text-t-white">{title}</h1>
 
           {/* Subtitle */}
           {subtitle && (
-            <p className="text-base text-t-bone-dim leading-relaxed mb-8">{subtitle}</p>
+            <p className="mb-8 text-base leading-relaxed text-t-bone-dim">{subtitle}</p>
           )}
 
           {/* Interactive content */}
@@ -118,9 +105,9 @@ export function FlowPage({
             <TBtn
               onClick={onAction}
               disabled={actionDisabled || loading}
-              className="w-full"
+              className="w-full sm:w-auto sm:min-w-48"
             >
-              {loading ? "working" : actionLabel}
+              {loading ? "Working" : actionLabel}
             </TBtn>
           )}
         </div>

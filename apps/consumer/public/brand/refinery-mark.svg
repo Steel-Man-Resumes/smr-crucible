@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="The Refinery">
+  <rect width="48" height="48" rx="6" fill="#10110f"/>
+  <path d="M5 24h11" stroke="#9fbea6" stroke-width="3" stroke-linecap="square"/>
+  <path d="M24 16l8 8-8 8-8-8 8-8Z" fill="#9fbea6"/>
+  <path d="M32 24h4l7-14M32 24h11M32 24h4l7 14" stroke="#58725f" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>

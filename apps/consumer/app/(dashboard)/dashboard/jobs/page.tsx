@@ -331,7 +331,7 @@ function JobBoardPage() {
   const savedCount = savedJobs.size;
 
   return (
-    <div className="max-w-3xl font-term">
+    <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">
         Job Board
       </h1>
@@ -458,7 +458,7 @@ function JobBoardPage() {
           <button
             onClick={searchJobs}
             disabled={searching || (!context.targetRole && !context.location)}
-            className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+            className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
             {searching ? "Searching real listings..." : "Find Jobs"}
           </button>
@@ -471,13 +471,13 @@ function JobBoardPage() {
           <span className="text-xs font-medium text-t-phos-dim">Filter:</span>
           <button
             onClick={() => setFairChanceOnly((v) => !v)}
-            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${fairChanceOnly ? "bg-t-amber text-[#14100a] border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${fairChanceOnly ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
             Fair chance only
           </button>
           <button
             onClick={() => setRemoteOnly((v) => !v)}
-            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${remoteOnly ? "bg-t-steel text-[#14100a] border-t-steel font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${remoteOnly ? "bg-t-steel text-white border-t-steel font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
             Remote only
           </button>
@@ -651,7 +651,7 @@ function JobBoardPage() {
                     {/* Requirements */}
                     {job.requirements.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase tracking-wide">
+                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase">
                           What they&apos;re looking for
                         </h4>
                         <ul className="text-sm text-t-phos-dim space-y-1">
@@ -670,7 +670,7 @@ function JobBoardPage() {
                     {/* Benefits */}
                     {job.benefits.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase tracking-wide">
+                        <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase">
                           Benefits
                         </h4>
                         <ul className="text-sm text-t-phos-dim space-y-1">
@@ -725,7 +725,7 @@ function JobBoardPage() {
                           sessionStorage.setItem("resume_target_job", JSON.stringify(job));
                           window.location.href = "/dashboard/application-tailor?from=job";
                         }}
-                        className="t-focus px-4 py-2 bg-t-steel text-[#14100a] text-sm font-bold hover:opacity-90 transition-colors"
+                        className="t-focus px-4 py-2 bg-t-steel text-white text-sm font-bold hover:opacity-90 transition-colors"
                       >
                         Build a Resume for This Job
                       </button>
@@ -735,7 +735,7 @@ function JobBoardPage() {
                             e.stopPropagation();
                             saveJob(job);
                           }}
-                          className="t-focus px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
+                          className="t-focus px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
                         >
                           Save Job
                         </button>
@@ -746,7 +746,7 @@ function JobBoardPage() {
                               e.stopPropagation();
                               markApplied(job.id);
                             }}
-                            className="t-focus px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
+                            className="t-focus px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
                           >
                             Mark Applied
                           </button>

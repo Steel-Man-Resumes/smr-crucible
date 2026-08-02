@@ -72,7 +72,7 @@ export default function GetListedPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12 font-term bg-t-bg">
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-t-bg">
         <div className="max-w-md w-full text-center">
           <div className="w-16 h-16 bg-t-panel-2 border border-t-amber flex items-center justify-center mx-auto mb-6">
             <svg
@@ -110,7 +110,7 @@ export default function GetListedPage() {
   }
 
   return (
-    <div className="min-h-screen bg-t-bg px-4 py-12 font-term">
+    <div className="min-h-screen bg-t-bg px-4 py-12">
       <div className="max-w-lg mx-auto">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Get Your Organization Listed

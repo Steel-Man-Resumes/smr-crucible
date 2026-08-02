@@ -103,7 +103,7 @@ function SecondChanceBoardPage() {
   const topMatchIds = new Set(ranked.slice(0, 3).map((item) => item.id));
 
   return (
-    <div className="max-w-5xl space-y-8 font-term">
+    <div className="max-w-5xl space-y-8">
       <header className="max-w-3xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Fair-Chance Lanes
@@ -179,7 +179,7 @@ function SecondChanceBoardPage() {
               onClick={() => setCategory(id)}
               className={`t-focus whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors border ${
                 category === id
-                  ? "bg-t-amber text-[#14100a] border-t-amber font-bold"
+                  ? "bg-t-amber text-white border-t-amber font-bold"
                   : "bg-t-panel text-t-phos-dim border-t-line hover:border-t-phos-dim hover:text-t-white"
               }`}
             >
@@ -224,7 +224,7 @@ function SecondChanceBoardPage() {
           </div>
           <a
             href="tel:211"
-            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-5 py-3 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
+            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-5 py-3 text-sm font-bold text-white hover:bg-t-amber-bright"
           >
             Call 211
           </a>
@@ -337,7 +337,7 @@ function OpportunityCard({
       <div className="mt-5 flex flex-wrap gap-2">
         <Link
           href={searchHref}
-          className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-[#14100a] hover:bg-t-amber-bright"
+          className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
         >
           Search live jobs
         </Link>

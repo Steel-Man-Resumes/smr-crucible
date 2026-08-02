@@ -221,7 +221,7 @@ export default function ProgressPage() {
     progress.applications_sent;
 
   return (
-    <div className="max-w-3xl font-term">
+    <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">Your Progress</h1>
       <p className="text-base text-t-phos-dim mb-8">
         Every step counts. Here&apos;s what you&apos;ve accomplished and
@@ -333,7 +333,7 @@ export default function ProgressPage() {
 
               return (
                 <div key={phase}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-2">
+                  <h3 className="text-xs font-semibold uppercase text-t-phos-dim mb-2">
                     {meta.label}
                   </h3>
                   <div className="space-y-2">
@@ -445,7 +445,7 @@ function QuickWinCard({ win }: { win: QuickWin }) {
 
   return (
     <div
-      className={`bg-t-panel p-4 border border-t-line border-l-2 font-term ${
+      className={`bg-t-panel p-4 border border-t-line border-l-2 ${
         categoryColors[win.category] || "border-l-t-amber"
       }`}
     >
@@ -456,14 +456,14 @@ function QuickWinCard({ win }: { win: QuickWin }) {
       {win.action.type === "link" && win.action.href ? (
         <Link
           href={win.action.href}
-          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
+          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
           {win.action.label} &rarr;
         </Link>
       ) : win.action.type === "phone" && win.action.phone ? (
         <a
           href={`tel:${win.action.phone}`}
-          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-[#14100a] text-sm font-bold hover:bg-t-amber-bright transition-colors"
+          className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
           {win.action.label}
         </a>
@@ -477,7 +477,7 @@ function QuickWinCard({ win }: { win: QuickWin }) {
 function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
   const content = (
     <div
-      className={`flex items-center gap-3 px-4 py-3 border transition-colors font-term ${
+      className={`flex items-center gap-3 px-4 py-3 border transition-colors ${
         node.completed
           ? "bg-t-panel-2 border-t-amber"
           : node.current
@@ -570,7 +570,7 @@ function StatCard({
   };
 
   return (
-    <div className={`p-4 border text-center font-term ${colors[color]}`}>
+    <div className={`p-4 border text-center ${colors[color]}`}>
       <span className="text-2xl font-bold block">{value}</span>
       <span className="text-xs">{label}</span>
     </div>
@@ -589,7 +589,7 @@ function ActivityRow({
   sub?: string;
 }) {
   return (
-    <div className="flex items-center justify-between bg-t-panel p-4 border border-t-line font-term">
+    <div className="flex items-center justify-between bg-t-panel p-4 border border-t-line">
       <div>
         <span className="text-sm font-medium text-t-white">{label}</span>
         {sub && (

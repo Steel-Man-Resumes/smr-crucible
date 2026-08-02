@@ -60,11 +60,11 @@ export default async function ProcessingPage() {
           </p>
         </div>
 
-        <div className="bg-card border-2 border-accent rounded-xl p-8 mb-8 mx-auto max-w-xs">
-          <p className="text-sm text-muted mb-2 uppercase tracking-wide font-medium">
+        <div className="bg-card border-2 border-accent rounded-[6px] p-8 mb-8 mx-auto max-w-xs">
+          <p className="text-sm text-muted mb-2 uppercase font-medium">
             Your import code
           </p>
-          <p className="text-5xl font-bold tracking-[0.2em] text-foreground font-mono">
+          <p className="text-5xl font-bold text-foreground font-mono">
             {session.import_code}
           </p>
           <p className="text-sm text-muted mt-4">
@@ -72,7 +72,7 @@ export default async function ProcessingPage() {
           </p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-5 text-left text-sm text-muted mx-auto max-w-sm">
+        <div className="bg-card border border-border rounded-[6px] p-5 text-left text-sm text-muted mx-auto max-w-sm">
           <p className="font-semibold text-foreground mb-2">When you are ready:</p>
           <p>
             Go to steelmanresumes.com on any phone or computer. Tap &quot;Enter

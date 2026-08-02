@@ -415,7 +415,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
   // --- Setup ---
   if (step === "setup") {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Interview Practice
         </h1>
@@ -564,7 +564,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           <button
             onClick={startInterview}
             disabled={!config.interviewType}
-            className="t-focus w-full px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+            className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
             Start Practice Interview
           </button>
@@ -576,7 +576,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
   // --- Feedback ---
   if (step === "feedback" && feedback) {
     return (
-      <div className="max-w-2xl font-term">
+      <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Interview Feedback
         </h1>
@@ -708,7 +708,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               setFeedback(null);
               setExchangeCount(0);
             }}
-            className="t-focus flex-1 px-6 py-4 bg-t-amber text-[#14100a] font-bold shadow-[3px_3px_0_#000] hover:bg-t-amber-bright transition-colors min-h-touch"
+            className="t-focus flex-1 px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
           >
             Practice Again
           </button>
@@ -728,7 +728,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
   // --- Practice ---
   return (
-    <div className="max-w-2xl font-term">
+    <div className="max-w-2xl">
       {/* Video-call style header */}
       <div className="bg-t-panel-2 border border-t-line px-5 py-4 mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -771,7 +771,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               <div
                 className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-t-amber text-[#14100a]"
+                    ? "bg-t-amber text-white"
                     : "bg-t-panel-2 text-t-white border border-t-line"
                 }`}
               >
@@ -807,7 +807,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="t-focus px-4 py-3 bg-t-amber text-[#14100a] font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
+            className="t-focus px-4 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
             Send
           </button>
@@ -976,7 +976,7 @@ function VoicePracticePanel({
   }
 
   return (
-    <div className="border border-t-steel bg-t-panel p-5 font-term">
+    <div className="border border-t-steel bg-t-panel p-5">
       <audio ref={audioRef} autoPlay className="hidden" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1004,7 +1004,7 @@ function VoicePracticePanel({
           <button
             onClick={startVoicePractice}
             disabled={!enabled || status === "connecting"}
-            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-[#14100a] hover:opacity-90 disabled:opacity-40"
+            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
           >
             {status === "connecting" ? "Connecting..." : "Start live voice"}
           </button>

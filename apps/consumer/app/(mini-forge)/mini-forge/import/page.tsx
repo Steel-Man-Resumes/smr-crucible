@@ -112,7 +112,7 @@ export default async function ImportPage({
             required
             autoCapitalize="characters"
             autoComplete="off"
-            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center tracking-[0.5em] uppercase bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch font-mono"
+            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center uppercase bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch font-mono"
             placeholder="------"
           />
         </div>
@@ -133,7 +133,7 @@ export default async function ImportPage({
             name="pin"
             required
             autoComplete="off"
-            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center tracking-[0.5em] bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
+            className="w-full border border-border rounded-lg px-4 py-3 text-xl text-center bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
             placeholder="----"
           />
         </div>

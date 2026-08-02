@@ -35,7 +35,7 @@ export function ContactSection({
   update: Updater;
 }) {
   return (
-    <div className="space-y-3 font-term">
+    <div className="space-y-3">
       <div>
         <label className="text-xs font-medium text-t-phos-dim block mb-1">
           Full Name
@@ -198,7 +198,7 @@ export function ExperienceSection({
   }
 
   return (
-    <div className="space-y-4 font-term">
+    <div className="space-y-4">
       {doc.experience.map((entry, idx) => (
         <WorkEntryEditor
           key={entry.id}
@@ -428,7 +428,7 @@ export function EducationSection({
   }
 
   return (
-    <div className="space-y-3 font-term">
+    <div className="space-y-3">
       {doc.education.map((entry) => (
         <div
           key={entry.id}
@@ -552,7 +552,7 @@ export function SkillsSection({
         <button
           onClick={addSkill}
           disabled={!newSkill.trim()}
-          className="t-focus px-3 py-2 bg-t-amber text-[#14100a] text-xs font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim min-h-touch"
+          className="t-focus px-3 py-2 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim min-h-touch"
         >
           Add
         </button>

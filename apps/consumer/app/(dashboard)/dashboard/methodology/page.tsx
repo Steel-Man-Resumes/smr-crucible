@@ -18,7 +18,7 @@ export default function MethodologyPage() {
   const isObserver = tier === "observer";
 
   return (
-    <div className="max-w-3xl font-term">
+    <div className="max-w-3xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-t-white mb-2">
           {isPartnerOrAdmin ? "Methodology Playbook" : "How The Forge Works"}

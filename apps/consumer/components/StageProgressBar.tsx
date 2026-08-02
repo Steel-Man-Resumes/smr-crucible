@@ -29,7 +29,7 @@ function Badge({
 }) {
   const cls =
     state === "current"
-      ? "bg-[#14100a]/20 text-[#14100a]"
+      ? "bg-[#14100a]/20 text-white"
       : state === "done"
         ? "bg-t-panel-2 text-t-amber-bright border border-t-amber"
         : "bg-t-panel text-t-phos-dim border border-t-line";
@@ -63,7 +63,7 @@ export function StageProgressBar({ currentStage }: { currentStage: number }) {
   return (
     <nav
       aria-label="Your journey"
-      className="bg-t-panel border border-t-line p-3 sm:p-4 font-term"
+      className="bg-t-panel border border-t-line p-3 sm:p-4"
     >
       {/* Mobile: compact step indicator */}
       <div className="sm:hidden flex items-center justify-between">
@@ -81,7 +81,7 @@ export function StageProgressBar({ currentStage }: { currentStage: number }) {
           const cls =
             "t-focus flex-1 min-w-0 flex items-center gap-2 px-3 py-2 text-sm transition-colors " +
             (state === "current"
-              ? "bg-t-amber text-[#14100a] font-semibold"
+              ? "bg-t-amber text-white font-semibold"
               : state === "done"
                 ? "bg-t-panel-2 text-t-bone-dim hover:text-t-amber-bright"
                 : "bg-t-bg text-t-bone-dim");
