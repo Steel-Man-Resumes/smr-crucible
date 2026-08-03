@@ -131,7 +131,9 @@ async function fetchJSearchJobs(
   }
 
   const query = `${role} in ${location}`;
-  const url = new URL("https://jsearch.p.rapidapi.com/search");
+  // JSearch retired /search (404 as of 2026-08); /search-v2 returns the same
+  // job objects wrapped in { data: { jobs, cursor } }.
+  const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
   url.searchParams.set("query", query);
   url.searchParams.set("page", "1");
   url.searchParams.set("num_pages", "2");
@@ -152,7 +154,11 @@ async function fetchJSearchJobs(
     }
 
     const data = await res.json();
-    return { jobs: data.data ?? [], failed: false };
+    // v2 envelope is { data: { jobs, cursor } }; tolerate the old flat array
+    // shape too in case the provider flips again.
+    const payload = data.data;
+    const jobs = Array.isArray(payload) ? payload : (payload?.jobs ?? []);
+    return { jobs, failed: false };
   } catch (err) {
     console.error("JSearch fetch failed:", err);
     return { jobs: [], failed: true };
