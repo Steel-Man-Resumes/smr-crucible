@@ -248,6 +248,49 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     }).catch(() => {});
   }, []);
 
+  // Message Troy escalation (lives in the gear panel)
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportText, setSupportText] = useState("");
+  const [supportStatus, setSupportStatus] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+
+  const sendSupportRequest = useCallback(async () => {
+    if (!supportText.trim() || supportStatus === "sending") return;
+    setSupportStatus("sending");
+    // Attach the last 6 turns (text only) so Troy sees the context
+    const excerpt = messages
+      .slice(-6)
+      .map((m) => {
+        const parts = (m as { parts?: Array<{ type?: string; text?: string }> }).parts;
+        const text = Array.isArray(parts)
+          ? parts
+              .filter((p) => p.type === "text" && typeof p.text === "string")
+              .map((p) => p.text)
+              .join(" ")
+          : m.content;
+        return text ? `${m.role === "user" ? "User" : "Assistant"}: ${text}` : null;
+      })
+      .filter(Boolean)
+      .join("\n");
+    try {
+      const res = await fetch("/api/support-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: supportText.trim(),
+          threadExcerpt: excerpt,
+          page: context.currentPage,
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setSupportStatus("sent");
+      setSupportText("");
+    } catch {
+      setSupportStatus("error");
+    }
+  }, [supportText, supportStatus, messages, context.currentPage]);
+
   // Voice out: read the finished assistant reply aloud (browser TTS, free)
   const spokenRef = useRef<string | null>(null);
   const voiceOn = !!chatSettings?.coachVoice;
@@ -377,6 +420,63 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
               {chatSettings.coachLanguage === "es" ? "On" : "Off"}
             </button>
           </div>
+          {/* Escalate to a human */}
+          <div className="border-t border-border pt-3">
+            {!supportOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSupportOpen(true);
+                  setSupportStatus("idle");
+                }}
+                className="w-full rounded-[5px] border border-[#b9cdbd] bg-white px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+              >
+                Message Troy
+              </button>
+            ) : supportStatus === "sent" ? (
+              <p className="text-xs text-[#344b38]">
+                Sent. Troy reads these himself -- his reply goes to your email.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-muted">
+                  This goes to Troy, a real person. Your last few chat messages
+                  ride along so he has context.
+                </p>
+                <textarea
+                  value={supportText}
+                  onChange={(e) => setSupportText(e.target.value)}
+                  maxLength={2000}
+                  rows={3}
+                  placeholder="What do you need a human for?"
+                  className="w-full rounded-[6px] border border-border px-3 py-2 text-sm transition-colors focus:border-sage-600"
+                />
+                {supportStatus === "error" && (
+                  <p className="text-xs text-amber-800">
+                    That did not go through. Try again in a moment.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={sendSupportRequest}
+                    disabled={!supportText.trim() || supportStatus === "sending"}
+                    className="rounded-[5px] bg-sage-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-sage-700 disabled:bg-gray-300"
+                  >
+                    {supportStatus === "sending" ? "Sending..." : "Send to Troy"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSupportOpen(false)}
+                    className="rounded-[5px] border border-border bg-white px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setShowSettings(false)}

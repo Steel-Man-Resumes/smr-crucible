@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
 import { AiCostsAdminSection } from "@/components/AiCostsSection";
+import { SupportRequestsSection } from "@/components/SupportRequestsSection";
 import type { AggregateReport, ConsentedCaseStudy } from "@crucible/core";
 import { TBtn } from "@crucible/consumer-ui";
 
@@ -267,6 +268,9 @@ export default function AdminEvidenceDashboard() {
 
       {/* AI cost calculator -- exact tokens, per user + per feature */}
       <AiCostsAdminSection />
+
+      {/* Message Troy escalations */}
+      <SupportRequestsSection />
 
       <p className="text-xs text-t-phos-dim mt-6">
         Last loaded: {data ? new Date(data.report.as_of).toLocaleString() : "--"}
