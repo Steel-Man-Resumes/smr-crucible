@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { RoleProvider } from "@/components/RoleProvider";
 import { RefineryShell } from "./RefineryShell";
 
 export const metadata: Metadata = {
@@ -11,5 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  return <RefineryShell>{children}</RefineryShell>;
+  return (
+    <RoleProvider>
+      <RefineryShell>{children}</RefineryShell>
+    </RoleProvider>
+  );
 }

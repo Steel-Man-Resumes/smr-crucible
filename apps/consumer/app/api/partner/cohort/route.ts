@@ -9,7 +9,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+// effectiveAuth: impersonation-aware, so viewing a partner shows THEIR
+// cohort, not the admin's. Read-only enforcement stays at the middleware edge.
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import {
   getUserTier,
   isPartnerUser,

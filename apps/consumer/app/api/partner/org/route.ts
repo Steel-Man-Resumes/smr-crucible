@@ -11,7 +11,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+// effectiveAuth: impersonation-aware, so viewing Marianne shows HER org, not
+// the admin's. Blue-view writes are still blocked at the middleware edge.
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import {
   getUserTier,
   getOrgContext,

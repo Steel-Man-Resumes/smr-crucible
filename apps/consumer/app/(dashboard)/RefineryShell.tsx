@@ -21,6 +21,7 @@ import {
   setViewAs,
   type UserTier,
 } from "@/lib/useUserTier";
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
@@ -217,22 +218,25 @@ export function RefineryShell({
   }, [pathname]);
 
   // Gate: client users who have never done the Forge get sent there first.
-  // View-as sessions (admin/partner in client view) are exempt from the HARD
-  // redirect -- bouncing them to the Forge domain would strand them outside
-  // the app with no way to exit client view. They see the in-app "Start with
-  // The Forge" state instead; every other gate stays real.
+  // View-as sessions (admin/partner in client view) AND impersonation
+  // sessions are exempt from the HARD redirect -- bouncing them to the Forge
+  // domain would strand the operator outside the app with no way to exit.
+  // They see the in-app "Start with The Forge" state instead; every other
+  // gate stays real.
+  const effectiveRole = useEffectiveRole();
   useEffect(() => {
     if (
       authStatus === "authenticated" &&
       userTier === "client" &&
-      getViewAs() !== "client" &&
+      getViewAs() === null &&
+      !effectiveRole?.impersonating &&
       onboarding.state !== "loading" &&
       !onboarding.forgeComplete &&
       pathname !== "/dashboard/settings"
     ) {
       window.location.href = "https://forge.steelmanresumes.com";
     }
-  }, [authStatus, userTier, onboarding.state, onboarding.forgeComplete, pathname]);
+  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, pathname]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
