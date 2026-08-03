@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getUserDailyUsage, getUserDailyLimit } from "@crucible/core";
 
 export async function GET() {

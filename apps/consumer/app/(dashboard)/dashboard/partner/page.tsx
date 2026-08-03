@@ -15,8 +15,9 @@
  * Clients who have not opted into sharing are counted but never named.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
 
 const STAGE_LABELS = [
@@ -82,7 +83,18 @@ function usd(v: number): string {
 }
 
 export default function PartnerDashboardPage() {
+  return (
+    <Suspense>
+      <PartnerDashboardInner />
+    </Suspense>
+  );
+}
+
+function PartnerDashboardInner() {
   const tier = useUserTier();
+  const searchParams = useSearchParams();
+  // Admin org override: /dashboard/partner?codeId=... shows that org's view
+  const codeId = searchParams.get("codeId") || "";
   const canView = tier === "partner" || tier === "admin";
   const [data, setData] = useState<OrgPayload | null>(null);
   const [legacyCohort, setLegacyCohort] = useState<Cohort | null>(null);
@@ -91,7 +103,9 @@ export default function PartnerDashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/partner/org");
+      const res = await fetch(
+        codeId ? `/api/partner/org?codeId=${encodeURIComponent(codeId)}` : "/api/partner/org"
+      );
       if (res.ok) {
         setData(await res.json());
         setStatus("ready");
@@ -110,7 +124,7 @@ export default function PartnerDashboardPage() {
     } catch {
       setStatus("error");
     }
-  }, []);
+  }, [codeId]);
 
   useEffect(() => {
     if (!canView) {

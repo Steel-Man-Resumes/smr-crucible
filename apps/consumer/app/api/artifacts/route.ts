@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { listArtifacts, createArtifact, query, invalidateNextStep } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 

@@ -117,6 +117,20 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
     async onFinish({ text, usage }) {
       const latencyMs = Date.now() - startTime;
 
+      // Exact token accounting (AI SDK reports real provider usage)
+      if (usage) {
+        const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+        recordTokenUsage(
+          "anthropic",
+          MODEL_CHAT,
+          {
+            inputTokens: (usage as any).promptTokens || 0,
+            outputTokens: (usage as any).completionTokens || 0,
+          },
+          { userId: userId ?? null, endpoint: "assistant" }
+        );
+      }
+
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({

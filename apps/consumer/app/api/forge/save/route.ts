@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { persistForgeSession } from "@/lib/forge-persist";
 
 export async function POST(request: Request) {

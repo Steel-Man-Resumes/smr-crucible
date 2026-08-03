@@ -10,6 +10,8 @@ import { AssistantChat } from "@/components/AssistantChat";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
+import { DevSwitcher } from "@/components/DevSwitcher";
+import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import {
   useUserTier,
   useRealTier,
@@ -146,7 +148,8 @@ function ViewAsToggle() {
     setAsClient(getViewAs() === "client");
   }, []);
 
-  if (!canSwitchView(realTier)) return null;
+  // Admins get the full DevSwitcher instead.
+  if (realTier !== "partner") return null;
 
   function toggle() {
     if (asClient) {
@@ -157,7 +160,7 @@ function ViewAsToggle() {
     window.location.href = "/dashboard";
   }
 
-  const roleLabel = realTier === "admin" ? "Admin" : "Partner";
+  const roleLabel = "Partner";
 
   return (
     <button
@@ -372,6 +375,7 @@ export function RefineryShell({
 
             {/* Right: account links */}
             <div className="flex items-center gap-2 sm:gap-4">
+              <DevSwitcher />
               <ViewAsToggle />
               <CoBrandLockup compact className="hidden xl:flex" />
               <a
@@ -421,6 +425,9 @@ export function RefineryShell({
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
       <GuidedTour />
+
+      {/* Developer impersonation frame (blue view / red assist) */}
+      <ImpersonationChrome />
 
       {/* Mobile drawer overlay */}
       {drawerOpen && (

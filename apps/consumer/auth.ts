@@ -179,10 +179,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const protectedPrefixes = [
           "/api/dashboard", "/api/artifacts", "/api/access-code",
           "/api/disclosure-guide", "/api/interview-practice", "/api/interview-voice",
-          "/api/job-search", "/api/resources-search", "/api/resume-generate",
+          "/api/job-search", "/api/resources-search",
           "/api/usage", "/api/user/",
         ];
-        if (protectedPrefixes.some((p) => path.startsWith(p))) {
+        // Exact match: /api/resume-generate is authed, but the middleware
+        // matcher now covers all of /api/* and /api/resume-generate-full is a
+        // pre-auth Forge route -- a prefix test would wrongly catch it.
+        if (
+          protectedPrefixes.some((p) => path.startsWith(p)) ||
+          path === "/api/resume-generate"
+        ) {
           return Response.json({ error: "Not authenticated" }, { status: 401 });
         }
       }

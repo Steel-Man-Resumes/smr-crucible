@@ -9,7 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getUserProfile, getOne, query } from "@crucible/core";
 
 export const revalidate = 0; // always fresh -- context freshness matters

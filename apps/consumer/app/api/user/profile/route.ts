@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { query, getOne } from "@crucible/core";
 import { formatPhoneUS } from "@/lib/phone";
 

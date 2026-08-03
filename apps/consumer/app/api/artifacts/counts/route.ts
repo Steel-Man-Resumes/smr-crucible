@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getArtifactCounts } from "@crucible/core";
 
 /** GET /api/artifacts/counts — artifact counts grouped by type */

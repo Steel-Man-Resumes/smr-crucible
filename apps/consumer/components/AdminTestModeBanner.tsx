@@ -26,7 +26,7 @@ export function AdminTestModeBanner() {
   const roleLabel = realTier === "admin" ? "admin" : "partner";
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 bg-t-amber px-4 py-2 text-center text-sm font-medium text-white">
+    <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "#2d5a85" }}>
       <span>
         Viewing as a client -- your real role is {roleLabel}. The gates and
         locks are real.
