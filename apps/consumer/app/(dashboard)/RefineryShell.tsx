@@ -302,16 +302,43 @@ export function RefineryShell({
     }
   }, []);
 
+  // Role-aware nav framing (role-clear wave): the first item names the
+  // landing the user actually gets, and org leaders see the client toolset
+  // labeled as what it is -- the tools their clients use.
+  const orgRole = effectiveRole?.orgRole ?? null;
+  const isOrgPartner = userTier === "partner" && !!orgRole;
+
+  function navItemLabel(item: NavItem): string {
+    if (item.href !== "/dashboard") return item.label;
+    if (userTier === "admin") return "Operator Home";
+    if (isOrgPartner) return "My Organization";
+    return item.label;
+  }
+
+  function navGroupLabel(group: NavGroup): string | undefined {
+    if (userTier === "partner" && group.label === "Find Work") {
+      return "Client tools -- what your clients see";
+    }
+    return group.label;
+  }
+
   function renderNavItems(onItemClick?: () => void) {
     return NAV_GROUPS.map((group, gi) => {
-      const visible = group.items.filter((item) => shouldShowItem(item, userTier));
+      const visible = group.items.filter((item) => {
+        // Org leaders' Overview IS the org dashboard -- hide the duplicate
+        // Partner Dashboard entry for them (admins keep it: it is the entry
+        // to the all-cohorts view and the ?codeId override target).
+        if (item.href === "/dashboard/partner" && isOrgPartner) return false;
+        return shouldShowItem(item, userTier);
+      });
       if (!visible.length) return null;
 
+      const groupLabel = navGroupLabel(group);
       return (
         <div key={gi} className={gi > 0 ? "mt-2 border-t border-t-line pt-3" : ""}>
-          {group.label && (
+          {groupLabel && (
             <p className="mb-1 px-3 font-term text-[9px] font-semibold uppercase text-t-bone-dim">
-              {group.label}
+              {groupLabel}
             </p>
           )}
           {visible.map((item) => {
@@ -333,7 +360,7 @@ export function RefineryShell({
                   className="flex min-h-[40px] cursor-not-allowed select-none items-center justify-between rounded-[4px] px-3 py-2 text-sm text-[#9ca29b]"
                   title={lockReason}
                 >
-                  <span>{item.label}</span>
+                  <span>{navItemLabel(item)}</span>
                   <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
                 </div>
               );
@@ -351,7 +378,7 @@ export function RefineryShell({
                     : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
                 }`}
               >
-                {item.label}
+                {navItemLabel(item)}
               </Link>
             );
           })}

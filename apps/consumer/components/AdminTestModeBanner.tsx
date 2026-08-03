@@ -12,23 +12,24 @@ import { useRealTier, canSwitchView, getViewAs, setViewAs } from "@/lib/useUserT
  */
 export function AdminTestModeBanner() {
   const realTier = useRealTier();
-  const [active, setActive] = useState(false);
+  const [view, setView] = useState<"client" | "observer" | null>(null);
 
   useEffect(() => {
-    const read = () => setActive(getViewAs() === "client");
+    const read = () => setView(getViewAs());
     read();
     window.addEventListener("storage", read);
     return () => window.removeEventListener("storage", read);
   }, []);
 
-  if (!canSwitchView(realTier) || !active) return null;
+  if (!canSwitchView(realTier) || !view) return null;
 
   const roleLabel = realTier === "admin" ? "admin" : "partner";
+  const viewLabel = view === "observer" ? "an observer" : "a client";
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "#2d5a85" }}>
       <span>
-        Viewing as a client -- your real role is {roleLabel}. The gates and
+        Viewing as {viewLabel} -- your real role is {roleLabel}. The gates and
         locks are real.
       </span>
       <button
