@@ -5,7 +5,11 @@
  * - Forge flow (pre-auth): IP-rate-limited, generous limit (20/day — it's the hook)
  * - Refinery (post-auth): user-rate-limited, counts toward daily AI quota
  *
- * Streaming conversational AI using Vercel AI SDK.
+ * Streaming conversational AI using Vercel AI SDK, with hands (10x wave):
+ * client-executed navigation/spotlight tools always on; server-executed data
+ * tools (live status, job search, save, reminders) only when authenticated.
+ * Messages pass through UNSTRIPPED so tool invocations survive the client
+ * round-trip (stripping them makes client tools loop forever).
  * Every response logged to decision_log for observability.
  */
 
@@ -19,13 +23,21 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import {
+  buildAssistantTools,
+  buildHandsSection,
+  pluckMessages,
+  lastUserText,
+} from "@/lib/tools/assistant-tools";
+import {
   getUserDailyLimit,
   incrementUserUsage,
   incrementIpUsage,
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 
-export const maxDuration = 30;
+// Tool round-trips (job search + enrichment can take 10-20s cold) need more
+// than the old 30s ceiling.
+export const maxDuration = 60;
 
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";
@@ -64,14 +76,14 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
-  const { messages, context, systemOverride, sessionId } = body as {
-    messages: Array<{ role: "user" | "assistant"; content: string }>;
+  const { context, systemOverride, sessionId } = body as {
     context: AssistantContext;
     systemOverride?: string;
     sessionId?: string;
   };
+  const messages = pluckMessages(body?.messages);
 
-  if (!Array.isArray(messages) || !messages.length) {
+  if (!messages.length) {
     return new Response("No messages provided", { status: 400 });
   }
   if (!context?.currentPage) {
@@ -80,7 +92,12 @@ export async function POST(request: Request) {
 
   const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
   const skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
-  const baseSystemPrompt = buildSystemPrompt(context) + skillsContext;
+  const toolOptions = {
+    userId: userId ?? null,
+    surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
+  };
+  const baseSystemPrompt =
+    buildSystemPrompt(context) + skillsContext + buildHandsSection(toolOptions);
   const allowRoleplayOverride =
     !!userId &&
     context.currentPage === "disclosure-rehearsal" &&
@@ -104,20 +121,25 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
   // Depth on demand: client coaching stays text-message short (the format rules
   // still cap it), but partner/observer evidence mode needs room for full
-  // citations. A flat 200 truncated those answers mid-citation.
+  // citations. Client cap is 700 (was 400) so tool round-trips have headroom;
+  // exact-token accounting in ai_token_usage watches the cost.
   const responseMaxTokens =
-    context.audience === "observer" || context.audience === "partner" ? 1200 : 400;
+    context.audience === "observer" || context.audience === "partner" ? 1200 : 700;
 
   const result = streamText({
     model: anthropic(MODEL_CHAT),
     system: systemPrompt,
-    messages,
+    messages: messages as never,
     maxTokens: responseMaxTokens,
     temperature: 0.7,
+    tools: buildAssistantTools(toolOptions),
+    maxSteps: 4,
+    toolCallStreaming: true,
     async onFinish({ text, usage }) {
       const latencyMs = Date.now() - startTime;
 
-      // Exact token accounting (AI SDK reports real provider usage)
+      // Exact token accounting (AI SDK reports real provider usage; in
+      // multi-step runs `usage` is already the combined total of all steps)
       if (usage) {
         const { recordTokenUsage } = await import("@/lib/ai-usage-log");
         recordTokenUsage(
@@ -139,7 +161,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
           contextPage: context.currentPage,
           modelProvider: "anthropic",
           modelId: MODEL_CHAT,
-          input: messages[messages.length - 1]?.content ?? "",
+          input: lastUserText(messages),
           explanation: `Assistant responded on ${context.currentPage} page. ${
             context.readinessStage
               ? `User readiness: ${context.readinessStage}.`

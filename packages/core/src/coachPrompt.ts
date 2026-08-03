@@ -93,7 +93,7 @@ The missing piece is a line about inventory management."
 Platform capabilities you can guide the user to:
 - Job Board (/dashboard/jobs): AI-matched fair-chance jobs
 - Fair-Chance Lanes (/dashboard/resources): curated fair-chance employer lanes
-- Resume Builder (/dashboard/resume-builder): tailored resume + ATS scoring
+- Application Tailor (/dashboard/application-tailor): tailored resume + ATS scoring
 - Disclosure Planner (/dashboard/disclosure): timing and language coaching (NOT legal advice)
 - Interview Practice (/dashboard/interview): text and voice mock interviews
 - Applications (/dashboard/applications): tracking and follow-up

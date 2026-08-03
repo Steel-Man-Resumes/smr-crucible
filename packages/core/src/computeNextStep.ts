@@ -47,7 +47,9 @@ export function computeNextStep(p: UserProfile): NextStepResult {
     return {
       stage: 3,
       action: `Tailor your resume for ${target.jobTitle}`,
-      href: `/dashboard/resume-builder?job=${target.id}`,
+      // Live route is application-tailor (the resume-builder rename never
+      // shipped); the old href 404ed from the next-step card.
+      href: `/dashboard/application-tailor?job=${target.id}`,
       reason: "resume_not_tailored",
     };
   }

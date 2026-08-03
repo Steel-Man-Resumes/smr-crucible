@@ -6,6 +6,13 @@
  * shape ({ messages }) so it is a drop-in for the existing chat drawer, builds a
  * profile-aware system prompt from getUserProfile, streams claude-sonnet-4-6,
  * persists each new turn to coach_conversation, and logs for observability.
+ *
+ * 10x wave: hands (shared tool factory), messages pass through unstripped so
+ * client-executed tool invocations survive the round-trip. Persistence dedupe:
+ * a client-tool continuation POST re-sends the thread, so the user turn is
+ * only persisted when the newest message IS a user turn, and the assistant
+ * turn is only persisted when the model actually finished speaking (not on
+ * finishReason "tool-calls").
  */
 
 import { NextResponse } from "next/server";
@@ -17,6 +24,13 @@ import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import { webSearchTool } from "@/lib/tools/web-search";
 import {
+  buildAssistantTools,
+  buildHandsSection,
+  pluckMessages,
+  lastUserText,
+  endsWithUserTurn,
+} from "@/lib/tools/assistant-tools";
+import {
   getUserProfile,
   buildCoachSystemPrompt,
   appendCoachMessage,
@@ -25,7 +39,9 @@ import {
   incrementUserUsage,
 } from "@crucible/core";
 
-export const maxDuration = 30;
+// Tool round-trips (job search + enrichment can take 10-20s cold) need more
+// than the old 30s ceiling.
+export const maxDuration = 60;
 
 const MODEL = MODEL_CHAT;
 const RATE_LIMIT_MESSAGE =
@@ -62,10 +78,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const incoming = Array.isArray(body?.messages) ? body.messages : [];
-  const messages = incoming
-    .filter((m: { role?: string; content?: unknown }) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .map((m: { role: string; content: string }) => ({ role: m.role as "user" | "assistant", content: m.content }));
+  const messages = pluckMessages(body?.messages);
 
   if (!messages.length) {
     return NextResponse.json({ error: "No messages provided" }, { status: 400 });
@@ -78,17 +91,22 @@ export async function POST(request: Request) {
 
   // Bring Troy's doctrine (disclosure + career-narrative) into the authenticated
   // coach -- buildCoachSystemPrompt gives profile awareness; the skill files give
-  // the coaching methodology. currentPage rides in the chat body context.
+  // the coaching methodology; the hands section gives tool doctrine.
   const ctx = (body?.context ?? {}) as { currentPage?: string };
   const page = typeof ctx.currentPage === "string" ? ctx.currentPage : "dashboard";
   const hasCriminalRecord = profile.barriers.includes("criminal_record");
   const skillsContext = loadSkillsForContext(page, hasCriminalRecord);
-  const systemPrompt = buildCoachSystemPrompt(profile) + skillsContext;
+  const toolOptions = { userId, surface: "refinery" as const };
+  const systemPrompt =
+    buildCoachSystemPrompt(profile) + skillsContext + buildHandsSection(toolOptions);
 
-  // Persist the newest user turn for cross-session memory (latest message only).
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (lastUser) {
-    await appendCoachMessage(userId, "user", sanitizeForPrompt(lastUser.content, 4000));
+  // Persist the newest user turn for cross-session memory -- but ONLY when the
+  // newest message is the user speaking. A client-tool continuation POST ends
+  // with an assistant tool-result message; persisting there would double-insert
+  // the previous user turn.
+  const userTurnText = lastUserText(messages);
+  if (endsWithUserTurn(messages) && userTurnText) {
+    await appendCoachMessage(userId, "user", sanitizeForPrompt(userTurnText, 4000));
   }
 
   const startTime = Date.now();
@@ -96,17 +114,52 @@ export async function POST(request: Request) {
   const result = streamText({
     model: anthropic(MODEL),
     system: systemPrompt,
-    messages,
+    messages: messages as never,
     maxTokens: profile.coachLength === "brief" ? 400 : 700,
     temperature: Math.min(Math.max(profile.coachCreativity / 100, 0), 1),
-    tools: { web_search: webSearchTool },
-    maxSteps: 3,
-    async onFinish({ text, usage }) {
-      try {
-        await appendCoachMessage(userId, "assistant", text);
-      } catch (err) {
-        console.error("Coach persist failed:", err);
+    tools: {
+      ...buildAssistantTools(toolOptions),
+      web_search: webSearchTool,
+    },
+    maxSteps: 4,
+    toolCallStreaming: true,
+    async onFinish({ text, usage, finishReason, steps }) {
+      // Exact token accounting (in multi-step runs `usage` is the combined
+      // total of all steps in this request)
+      if (usage) {
+        try {
+          const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+          recordTokenUsage(
+            "anthropic",
+            MODEL,
+            {
+              inputTokens: (usage as any).promptTokens || 0,
+              outputTokens: (usage as any).completionTokens || 0,
+            },
+            { userId, endpoint: "coach" }
+          );
+        } catch (err) {
+          console.error("Coach token accounting failed:", err);
+        }
       }
+
+      // Persist the assistant turn only when the model finished SPEAKING.
+      // finishReason "tool-calls" means the turn continues in the browser
+      // (client-executed tool); the continuation request persists the reply.
+      if (finishReason !== "tool-calls") {
+        const spoken = (steps ?? [])
+          .map((s) => s.text)
+          .filter(Boolean)
+          .join("\n\n") || text;
+        if (spoken.trim()) {
+          try {
+            await appendCoachMessage(userId, "assistant", spoken);
+          } catch (err) {
+            console.error("Coach persist failed:", err);
+          }
+        }
+      }
+
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
@@ -115,9 +168,9 @@ export async function POST(request: Request) {
           contextPage: "coach",
           modelProvider: "anthropic",
           modelId: MODEL,
-          input: lastUser?.content ?? "",
+          input: userTurnText,
           explanation: `Coach (${profile.coachName}) responded at journey stage ${profile.currentStage}.`,
-          outputSummary: { response_length: text.length },
+          outputSummary: { response_length: text.length, finish_reason: finishReason },
           tokenCount: usage?.totalTokens ?? null,
           latencyMs: Date.now() - startTime,
         });
