@@ -10,7 +10,14 @@ import { AssistantChat } from "@/components/AssistantChat";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
-import { useUserTier, type UserTier } from "@/lib/useUserTier";
+import {
+  useUserTier,
+  useRealTier,
+  canSwitchView,
+  getViewAs,
+  setViewAs,
+  type UserTier,
+} from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
@@ -126,6 +133,47 @@ function shouldShowItem(item: NavItem, userTier: UserTier): boolean {
   return true;
 }
 
+/**
+ * Role/view switch (walkthrough C7): partner and admin accounts can flip into
+ * the real client experience and back. The persistent amber banner
+ * (AdminTestModeBanner) marks client view; this control lives in the top nav.
+ */
+function ViewAsToggle() {
+  const realTier = useRealTier();
+  const [asClient, setAsClient] = useState(false);
+
+  useEffect(() => {
+    setAsClient(getViewAs() === "client");
+  }, []);
+
+  if (!canSwitchView(realTier)) return null;
+
+  function toggle() {
+    if (asClient) {
+      setViewAs(null);
+    } else {
+      setViewAs("client");
+    }
+    window.location.href = "/dashboard";
+  }
+
+  const roleLabel = realTier === "admin" ? "Admin" : "Partner";
+
+  return (
+    <button
+      onClick={toggle}
+      title={
+        asClient
+          ? `Return to your ${roleLabel.toLowerCase()} view`
+          : "Experience the platform exactly as a client"
+      }
+      className="t-focus hidden sm:inline-flex min-h-touch items-center gap-1.5 rounded-[4px] border border-t-line px-2.5 text-xs font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"
+    >
+      {asClient ? `${roleLabel} view` : "Client view"}
+    </button>
+  );
+}
+
 export function RefineryShell({
   children,
 }: {
@@ -165,10 +213,15 @@ export function RefineryShell({
   }, [pathname]);
 
   // Gate: client users who have never done the Forge get sent there first.
+  // View-as sessions (admin/partner in client view) are exempt from the HARD
+  // redirect -- bouncing them to the Forge domain would strand them outside
+  // the app with no way to exit client view. They see the in-app "Start with
+  // The Forge" state instead; every other gate stays real.
   useEffect(() => {
     if (
       authStatus === "authenticated" &&
       userTier === "client" &&
+      getViewAs() !== "client" &&
       onboarding.state !== "loading" &&
       !onboarding.forgeComplete &&
       pathname !== "/dashboard/settings"
@@ -319,6 +372,7 @@ export function RefineryShell({
 
             {/* Right: account links */}
             <div className="flex items-center gap-2 sm:gap-4">
+              <ViewAsToggle />
               <CoBrandLockup compact className="hidden xl:flex" />
               <a
                 href="https://forge.steelmanresumes.com"
