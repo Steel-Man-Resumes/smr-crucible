@@ -12,7 +12,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
-import Script from "next/script";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
@@ -401,22 +401,10 @@ function LoginForm() {
             </div>
           )}
 
-          {/* Turnstile bot check -- env-gated dark build; renders once
+          {/* Turnstile bot check -- env-gated; renders once
               NEXT_PUBLIC_TURNSTILE_SITE_KEY is set (server enforces when
               TURNSTILE_SECRET_KEY is set) */}
-          {mode === "create" && process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
-            <>
-              <Script
-                src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-                async
-              />
-              <div
-                className="cf-turnstile"
-                data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-                data-theme="light"
-              />
-            </>
-          )}
+          {mode === "create" && <TurnstileWidget />}
 
           {/* Name + phone — create mode (these go on the resume + unlock the tools) */}
           {mode === "create" && (
