@@ -259,7 +259,7 @@ function ApplicationsPage() {
           </div>
 
           {/* Application cards grouped by status */}
-          <div className="space-y-8">
+          <div className="space-y-8" data-tour="applications-list">
             {PIPELINE.map((stage) => {
               const stageApps = activeApps.filter(
                 (a) => a.status === stage.status

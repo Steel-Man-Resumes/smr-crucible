@@ -458,6 +458,7 @@ function JobBoardPage() {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
               }}
               placeholder="e.g., Warehouse, CDL Driver, Forklift"
+              data-tour="jobs-search-role"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
             <p className="text-xs text-t-phos-dim mt-1">
@@ -510,6 +511,7 @@ function JobBoardPage() {
           <button
             onClick={searchJobs}
             disabled={searching || (!context.targetRole && !context.location)}
+            data-tour="jobs-search-button"
             className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
             {searching ? "Searching real listings..." : "Find Jobs"}
@@ -605,7 +607,7 @@ function JobBoardPage() {
       {/* Results */}
       {!searching && visibleJobs.length > 0 && (
         <div className="space-y-3">
-          {visibleJobs.map((job) => {
+          {visibleJobs.map((job, jobIndex) => {
             const isSaved = savedJobs.has(job.id);
             const savedStatus = savedJobs.get(job.id)?.status;
             const isExpanded = expandedJob === job.id;
@@ -613,6 +615,7 @@ function JobBoardPage() {
             return (
               <div
                 key={job.id}
+                data-tour={jobIndex === 0 ? "jobs-first-result" : undefined}
                 className="bg-t-panel border border-t-line overflow-hidden transition-colors hover:border-t-phos-dim"
               >
                 {/* Header — always visible */}
@@ -794,6 +797,7 @@ function JobBoardPage() {
                           sessionStorage.setItem("resume_target_job", JSON.stringify(job));
                           window.location.href = "/dashboard/application-tailor?from=job";
                         }}
+                        data-tour={jobIndex === 0 ? "jobs-tailor-button" : undefined}
                         className="t-focus px-4 py-2 bg-transparent border border-t-steel text-t-steel text-sm font-bold hover:bg-t-steel hover:text-white transition-colors"
                       >
                         Tailor My Resume for This Job

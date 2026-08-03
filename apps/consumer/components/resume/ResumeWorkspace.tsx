@@ -778,6 +778,7 @@ export function ResumeWorkspace() {
                 }))
               }
               placeholder="e.g., Warehouse Associate, CNA, Forklift Operator"
+              data-tour="tailor-target-job"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
@@ -826,6 +827,7 @@ export function ResumeWorkspace() {
               <button
                 onClick={importFromForge}
                 disabled={!doc.meta.targetJob.trim()}
+                data-tour="tailor-generate"
                 className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
                 Tailor from my Forge profile
@@ -848,6 +850,7 @@ export function ResumeWorkspace() {
               <button
                 onClick={startFresh}
                 disabled={!doc.meta.targetJob.trim()}
+                data-tour="tailor-generate"
                 className="t-focus w-full px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
               >
                 Or start a blank resume here

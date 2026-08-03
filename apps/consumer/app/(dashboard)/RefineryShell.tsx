@@ -12,6 +12,7 @@ import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
+import { HighlightHost } from "@/components/SpotlightHighlight";
 import {
   useUserTier,
   useRealTier,
@@ -339,6 +340,7 @@ export function RefineryShell({
                 key={item.href}
                 href={item.href}
                 onClick={onItemClick}
+                data-tour={`nav-${item.href.split("/").pop()}`}
                 className={`t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
                     ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
@@ -357,6 +359,7 @@ export function RefineryShell({
   return (
     <div className="refinery-app min-h-screen bg-t-bg font-body">
       <AdminTestModeBanner />
+      <HighlightHost />
       <nav className="sticky top-0 z-30 border-b border-t-line bg-t-panel/95 backdrop-blur">
         <div className="px-4 sm:px-6">
           <div className="flex h-[72px] items-center justify-between gap-4">

@@ -21,6 +21,22 @@ const POLL_MS = 200;
 const TIMEOUT_MS = 5000;
 
 /**
+ * First VISIBLE element carrying data-tour="<target>". The nav renders twice
+ * (desktop sidebar + mobile drawer), so ids can repeat -- ring the one the
+ * user can actually see.
+ */
+export function findTourElement(target: string): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const candidates = document.querySelectorAll<HTMLElement>(
+    `[data-tour="${target}"]`
+  );
+  for (const el of Array.from(candidates)) {
+    if (el.getClientRects().length > 0 && el.offsetParent !== null) return el;
+  }
+  return null;
+}
+
+/**
  * Wait (up to 5s) for [data-tour="<target>"] to exist, then ask the spotlight
  * host to ring it. Resolves false when the element never appears so the model
  * can be honest about not finding it.
@@ -31,7 +47,7 @@ export async function requestHighlight(target: string, note: string): Promise<bo
 
   const deadline = Date.now() + TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const el = document.querySelector(`[data-tour="${target}"]`);
+    const el = findTourElement(target);
     if (el) {
       window.dispatchEvent(
         new CustomEvent<HighlightDetail>(HIGHLIGHT_EVENT, {
