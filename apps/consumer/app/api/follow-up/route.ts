@@ -89,7 +89,7 @@ Return JSON only:
 { "subject": "a short subject line", "body": "the email body, with line breaks as \\n" }`;
 
   try {
-    const text = await callAI("", [{ role: "user", content: prompt }], 600);
+    const text = await callAI("", [{ role: "user", content: prompt }], 600, undefined, { endpoint: "follow-up", userId: session.user.id });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     let result: { subject: string; body: string };
     if (jsonMatch) {

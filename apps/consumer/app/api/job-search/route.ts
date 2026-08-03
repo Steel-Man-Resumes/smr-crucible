@@ -324,7 +324,7 @@ RULES:
 
     let text: string;
     try {
-      text = await callAI("", [{ role: "user", content: prompt }], 2000);
+      text = await callAI("", [{ role: "user", content: prompt }], 2000, undefined, { endpoint: "job-search" });
     } catch {
       return { enrichedJobs: basicJobs, fairChanceInfo: "" };
     }

@@ -123,7 +123,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
 - 6th grade reading level. Use "--" never an em dash
 - JSON only`;
 
-    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP);
+    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { endpoint: "disclosure-guide" });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 

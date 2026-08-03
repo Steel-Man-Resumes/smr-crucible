@@ -151,7 +151,7 @@ RULES:
       content: m.content,
     }));
 
-    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined);
+    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { endpoint: "interview-practice" });
 
     if (shouldWrapUp) {
       // Log wrapup decision

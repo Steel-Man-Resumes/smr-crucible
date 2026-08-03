@@ -85,7 +85,7 @@ Return JSON:
 }`;
 
     const startTime = Date.now();
-    const text = await callAI(SYSTEM_PROMPT, [{ role: "user", content: userMessage }], 4000);
+    const text = await callAI(SYSTEM_PROMPT, [{ role: "user", content: userMessage }], 4000, undefined, { endpoint: "rush-resume" });
     const latencyMs = Date.now() - startTime;
     const tokenCount = undefined;
 

@@ -57,7 +57,9 @@ async function aiSuggestTools(title: string): Promise<string[]> {
           )}" commonly use? Give 6-10 plain names.`,
         },
       ],
-      200
+      200,
+      undefined,
+      { endpoint: "resume-assist" }
     );
     return raw
       .split(/[,\n]/)
@@ -132,7 +134,7 @@ RULES:
 - Honest and grounded -- only claim what the experience supports. Never invent.
 - NEVER mention incarceration, a record, or justice involvement. Disclosure is handled separately.
 - 2-3 sentences. Return ONLY the summary text.`;
-      const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP)).trim();
+      const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { endpoint: "resume-assist" })).trim();
       await logShape(`summary targetJob=${targetJob}`, `Suggested a base-resume summary${targetJob ? ` for ${targetJob}` : ""}.`, {
         type: "resume_summary",
         suggestion_length: suggestion.length,
@@ -171,7 +173,7 @@ ${targetJob ? `They are aiming for a ${targetJob} role.\n` : ""}The person's own
 
 Write the single strongest TRUE bullet from ONLY these facts.`;
 
-      const bullet = (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP))
+      const bullet = (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { endpoint: "resume-assist" }))
         .trim()
         .replace(/^["'\s•\-]+|["']+$/g, "")
         .trim();

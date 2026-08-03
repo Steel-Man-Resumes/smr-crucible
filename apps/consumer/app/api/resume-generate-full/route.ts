@@ -24,7 +24,7 @@ export const maxDuration = 120;
 const AI_MODEL = MODEL_DEEP;
 
 async function callClaude(prompt: string, maxTokens = 2000): Promise<string> {
-  return callAI("", [{ role: "user", content: prompt }], maxTokens, MODEL_DEEP);
+  return callAI("", [{ role: "user", content: prompt }], maxTokens, MODEL_DEEP, { endpoint: "resume-generate-full" });
 }
 
 async function handlePost(request: Request) {

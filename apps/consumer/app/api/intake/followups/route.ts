@@ -61,7 +61,7 @@ async function handlePost(request: Request) {
     const system = buildFollowupsSystemPrompt(topic, context);
     const userMsg = buildAnswersBlock(answersSoFar, round);
 
-    const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP);
+    const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP, { endpoint: "intake-followups" });
     const result = parseFollowups(raw, { maxQuestions: 3 });
 
     // Decision log (JBS compliance) -- shape only, never the user's words.

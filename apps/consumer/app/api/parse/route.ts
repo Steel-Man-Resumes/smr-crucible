@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { extractTextFromBuffer } from "@/lib/text-extraction";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { recordTokenUsage } from "@/lib/ai-usage-log";
 
 export const maxDuration = 60;
 
@@ -162,6 +163,19 @@ Parse what exists. Use null for missing fields. Do not infer or fabricate.`,
   }
 
   const data = await response.json();
+
+  if (data.usage) {
+    recordTokenUsage(
+      "openai",
+      data.model || "gpt-4o-mini",
+      {
+        inputTokens: data.usage.prompt_tokens || 0,
+        outputTokens: data.usage.completion_tokens || 0,
+      },
+      { endpoint: "parse" }
+    );
+  }
+
   try {
     return JSON.parse(data.choices[0].message.content);
   } catch {

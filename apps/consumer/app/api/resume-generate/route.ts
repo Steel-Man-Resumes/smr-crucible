@@ -84,7 +84,7 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
       );
     }
 
-    const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300)).trim();
+    const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, undefined, { endpoint: "resume-generate" })).trim();
 
     // Log decision for JBS compliance
     try {

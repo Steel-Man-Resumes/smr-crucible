@@ -298,7 +298,7 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string
 ): Promise<Record<string, unknown>> {
-  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP);
+  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP, { endpoint: "analyze" });
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in AI response");
   return JSON.parse(jsonMatch[0]);

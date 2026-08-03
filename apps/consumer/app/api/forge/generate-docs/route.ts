@@ -122,7 +122,7 @@ async function callClaude(
   userMessage: string,
   maxTokens = 4000
 ): Promise<string> {
-  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP);
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { endpoint: "generate-docs" });
 }
 
 // --- Resume Generation ---

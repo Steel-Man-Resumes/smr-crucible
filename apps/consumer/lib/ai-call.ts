@@ -17,6 +17,7 @@
  */
 
 import { MODEL_CHAT, FALLBACK_CHAT } from "./ai/models";
+import { recordTokenUsage, type AiCallMeta } from "./ai-usage-log";
 
 export const AI_PROVIDER = "anthropic";
 export const AI_MODEL = MODEL_CHAT;
@@ -31,7 +32,8 @@ async function callAnthropic(
   system: string,
   messages: Msg[],
   maxTokens: number,
-  model: string
+  model: string,
+  meta?: AiCallMeta
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
@@ -65,6 +67,22 @@ async function callAnthropic(
   }
 
   const data = await response.json();
+
+  // Exact token accounting -- Anthropic reports real usage on every response.
+  if (data.usage) {
+    recordTokenUsage(
+      "anthropic",
+      data.model || model,
+      {
+        inputTokens: data.usage.input_tokens || 0,
+        outputTokens: data.usage.output_tokens || 0,
+        cacheCreationInputTokens: data.usage.cache_creation_input_tokens || 0,
+        cacheReadInputTokens: data.usage.cache_read_input_tokens || 0,
+      },
+      meta
+    );
+  }
+
   const text =
     Array.isArray(data.content) &&
     data.content.find((b: { type?: string }) => b.type === "text")?.text;
@@ -74,7 +92,8 @@ async function callAnthropic(
 async function callOpenAI(
   system: string,
   messages: Msg[],
-  maxTokens: number
+  maxTokens: number,
+  meta?: AiCallMeta
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not set");
@@ -102,6 +121,19 @@ async function callOpenAI(
   }
 
   const data = await response.json();
+
+  if (data.usage) {
+    recordTokenUsage(
+      "openai",
+      data.model || AI_FALLBACK_MODEL,
+      {
+        inputTokens: data.usage.prompt_tokens || 0,
+        outputTokens: data.usage.completion_tokens || 0,
+      },
+      meta
+    );
+  }
+
   return data.choices[0]?.message?.content || "";
 }
 
@@ -109,25 +141,26 @@ export async function callAI(
   system: string,
   messages: Msg[],
   maxTokens = 2048,
-  model: string = AI_MODEL
+  model: string = AI_MODEL,
+  meta?: AiCallMeta
 ): Promise<string> {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   if (hasAnthropic) {
     try {
-      return await callAnthropic(system, messages, maxTokens, model);
+      return await callAnthropic(system, messages, maxTokens, model, meta);
     } catch (err) {
       if (!hasOpenAI) throw err;
       console.error(
         "[ai-call] Anthropic failed, falling back to OpenAI:",
         err instanceof Error ? err.message : err
       );
-      return await callOpenAI(system, messages, maxTokens);
+      return await callOpenAI(system, messages, maxTokens, meta);
     }
   }
 
-  if (hasOpenAI) return await callOpenAI(system, messages, maxTokens);
+  if (hasOpenAI) return await callOpenAI(system, messages, maxTokens, meta);
 
   throw new Error("No AI provider key set (ANTHROPIC_API_KEY or OPENAI_API_KEY)");
 }

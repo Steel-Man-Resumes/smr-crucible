@@ -14,6 +14,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
+import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
@@ -199,6 +200,9 @@ export default function SettingsPage() {
       <CoachSettingsSection />
 
       <SharingConsentSection />
+
+      {/* AI usage/cost -- quiet by design */}
+      <AiCostsOwnSection />
 
       {/* Admin Test Mode Toggle */}
       {isAdmin && (
