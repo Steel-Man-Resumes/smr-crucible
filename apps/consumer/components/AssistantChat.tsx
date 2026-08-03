@@ -3,14 +3,22 @@
  *
  * Simple, clean conversation interface with quick-tap suggestion buttons.
  * The AI behavioral rules are enforced at the API level (system prompt), not here.
+ *
+ * 10x wave: executes t.ROY's browser tools (take_me_there via router.push --
+ * the drawer is layout-mounted so the conversation survives navigation;
+ * highlight_element via the highlight bus) and renders tool activity as
+ * human activity lines, never raw tool JSON.
  */
 
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { useAssistant } from "@/lib/use-assistant";
+import { useRouter } from "next/navigation";
+import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
-import { Send } from "lucide-react";
+import { resolveAssistantPage } from "@/lib/tools/assistant-tool-defs";
+import { requestHighlight } from "@/lib/highlight-bus";
+import { Send, Check, Loader2 } from "lucide-react";
 
 interface AssistantChatProps {
   context: AssistantContext;
@@ -19,8 +27,19 @@ interface AssistantChatProps {
   coach?: boolean;
 }
 
+/** Human-friendly activity lines per tool -- shown instead of raw tool output */
+const TOOL_ACTIVITY: Record<string, string> = {
+  get_my_live_status: "Checking your real progress",
+  search_jobs: "Searching live jobs",
+  save_job: "Saving that job",
+  add_follow_up_reminder: "Setting your reminder",
+  take_me_there: "Taking you there",
+  highlight_element: "Pointing at it",
+  web_search: "Checking current facts",
+};
+
 /** Page-aware quick prompts — buttons users can tap instead of typing */
-function getQuickPrompts(context: AssistantContext): string[] {
+function getQuickPrompts(context: AssistantContext, coach?: boolean): string[] {
   const page = context.currentPage;
   const isDemo = context.isDemo;
 
@@ -87,26 +106,83 @@ function getQuickPrompts(context: AssistantContext): string[] {
         "What if my resume is bad?",
         "I have an interview tomorrow",
       ];
-    case "dashboard":
+    case "jobs":
       return [
-        "What should I do first?",
-        "How do I build a resume?",
-        "What's the disclosure planner?",
-      ];
-    default:
-      return [
-        "Help me with this page",
+        "Find me jobs that fit me",
         "What should I do next?",
-        "Talk to a real person",
+        "Explain this page",
       ];
+    case "applications":
+      return [
+        "What needs a follow-up?",
+        "What should I do next?",
+        "Explain this page",
+      ];
+    case "application-tailor":
+      return [
+        "Do it with me",
+        "What should I do next?",
+        "Explain this page",
+      ];
+    case "dashboard":
+      return coach
+        ? [
+            "What should I do next?",
+            "Take me there",
+            "Do it with me",
+          ]
+        : [
+            "What should I do first?",
+            "How do I build a resume?",
+            "What's the disclosure planner?",
+          ];
+    default:
+      return coach
+        ? [
+            "What should I do next?",
+            "Take me there",
+            "Explain this page",
+          ]
+        : [
+            "Help me with this page",
+            "What should I do next?",
+            "Talk to a real person",
+          ];
   }
 }
 
 export function AssistantChat({ context, sessionId, coach }: AssistantChatProps) {
+  const router = useRouter();
+
+  // Browser-executed tools. The return value becomes the tool result the
+  // model narrates over -- keep results short and honest.
+  const onToolCall = useCallback(
+    async ({ toolCall }: { toolCall: AssistantToolCall }) => {
+      if (toolCall.toolName === "take_me_there") {
+        const args = (toolCall.args ?? {}) as { page?: string; jobApplicationId?: string };
+        const href = args.page ? resolveAssistantPage(args.page, args.jobApplicationId) : null;
+        if (!href) {
+          return "That page name is not valid here. Name the page for the user instead of navigating.";
+        }
+        router.push(href);
+        return { ok: true, nowOn: args.page };
+      }
+      if (toolCall.toolName === "highlight_element") {
+        const args = (toolCall.args ?? {}) as { target?: string; note?: string };
+        if (!args.target) return "element-not-found";
+        const found = await requestHighlight(args.target, args.note ?? "");
+        return found ? "highlighted" : "element-not-found";
+      }
+      return "Unknown tool.";
+    },
+    [router]
+  );
+
   const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
     context,
     sessionId,
     coach,
+    onToolCall,
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -144,7 +220,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     [setInput]
   );
 
-  const quickPrompts = getQuickPrompts(context);
+  const quickPrompts = getQuickPrompts(context, coach);
   const showQuickPrompts = messages.length === 0 && !isLoading;
 
   return (
@@ -177,24 +253,75 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
           </div>
         )}
 
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[85%] px-4 py-3 rounded-[7px] text-sm leading-relaxed ${
-                message.role === "user"
-                  ? "bg-sage-600 text-white rounded-br-sm"
-                  : "bg-gray-100 text-foreground rounded-bl-sm"
-              }`}
-            >
-              {message.content}
+        {messages.map((message) => {
+          const parts = (message as { parts?: Array<Record<string, unknown>> }).parts;
+          const hasParts = Array.isArray(parts) && parts.length > 0;
+
+          if (message.role === "user" || !hasParts) {
+            // User bubbles and legacy assistant messages: plain content
+            if (!message.content) return null;
+            return (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[85%] px-4 py-3 rounded-[7px] text-sm leading-relaxed ${
+                    message.role === "user"
+                      ? "bg-sage-600 text-white rounded-br-sm"
+                      : "bg-gray-100 text-foreground rounded-bl-sm"
+                  }`}
+                >
+                  {message.content}
+                </div>
+              </div>
+            );
+          }
+
+          // Assistant message with parts: text bubbles + tool activity lines
+          return (
+            <div key={message.id} className="space-y-2">
+              {parts.map((part, i) => {
+                if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
+                  return (
+                    <div key={i} className="flex justify-start">
+                      <div className="max-w-[85%] px-4 py-3 rounded-[7px] rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
+                        {part.text}
+                      </div>
+                    </div>
+                  );
+                }
+                if (part.type === "tool-invocation") {
+                  const inv = part.toolInvocation as
+                    | { toolName?: string; state?: string }
+                    | undefined;
+                  const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
+                  const done = inv?.state === "result";
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 pl-1 text-xs text-muted"
+                      role="status"
+                    >
+                      {done ? (
+                        <Check size={14} className="text-sage-600" aria-hidden="true" />
+                      ) : (
+                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                      )}
+                      <span>
+                        {label}
+                        {done ? "" : "..."}
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {error && (
           <div className="bg-amber-50 rounded-[6px] p-3 border border-amber-200">
