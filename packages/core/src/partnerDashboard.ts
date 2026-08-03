@@ -29,6 +29,11 @@ export interface CohortClient {
   outcomeNamed: boolean;
   lastActiveAt: string | null;
   joinedAt: string;
+  /** Staff member responsible for this client (org build-out). */
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  /** Exact AI spend for this client, USD (sponsoring org sees what it funds). */
+  aiCostUsd: number;
 }
 
 export interface PartnerCohort {
@@ -59,9 +64,16 @@ export async function isPartnerUser(userId: string, tier?: string): Promise<bool
  */
 export async function getPartnerCohort(
   userId: string,
-  opts: { isAdmin?: boolean } = {}
+  opts: {
+    isAdmin?: boolean;
+    /** Scope to one org's anchor code instead of ownership (org build-out). */
+    accessCodeId?: string;
+    /** Only clients assigned to this staff member. */
+    assignedToStaffId?: string;
+  } = {}
 ): Promise<PartnerCohort> {
   // 1. Cohort membership + consent flags (one row per distinct client).
+  const scopeByCode = !!opts.accessCodeId;
   const members = await query<{
     user_id: string;
     joined_at: string;
@@ -77,9 +89,11 @@ export async function getPartnerCohort(
        LEFT JOIN consumer_consent cs
          ON cs.user_id = acr.user_id
         AND cs.consent_layer IN ('sharing', 'outcome_named')
-      WHERE ${opts.isAdmin ? "TRUE" : "ac.partner_user_id = $1"}
+      WHERE ${
+        scopeByCode ? "ac.id = $1" : opts.isAdmin ? "TRUE" : "ac.partner_user_id = $1"
+      }
       GROUP BY acr.user_id`,
-    opts.isAdmin ? [] : [userId]
+    scopeByCode ? [opts.accessCodeId] : opts.isAdmin ? [] : [userId]
   );
 
   const totalJoined = members.length;
@@ -110,8 +124,14 @@ export async function getPartnerCohort(
     has_disclosure_plan: boolean;
     hired: boolean;
     last_active_at: string | null;
+    assigned_staff_id: string | null;
+    assigned_staff_name: string | null;
+    ai_cost_usd: string;
   }>(
     `SELECT u.id, u.name, u.email, u.current_stage,
+            csa.staff_user_id AS assigned_staff_id,
+            su.name AS assigned_staff_name,
+            COALESCE((SELECT SUM(atu.cost_usd) FROM ai_token_usage atu WHERE atu.user_id = u.id), 0)::text AS ai_cost_usd,
             u.next_step_cache->>'action' AS next_step_action,
             (SELECT COUNT(*) FROM job_application ja WHERE ja.user_id = u.id AND ja.status <> 'saved')::text AS applications,
             (SELECT COUNT(*) FROM job_application ja WHERE ja.user_id = u.id AND ja.status = 'saved')::text AS saved_jobs,
@@ -125,6 +145,8 @@ export async function getPartnerCohort(
               COALESCE((SELECT MAX(updated_at) FROM refinery_artifact ra WHERE ra.user_id = u.id), to_timestamp(0))
             ) AS last_active_at
        FROM users u
+       LEFT JOIN client_staff_assignment csa ON csa.client_user_id = u.id
+       LEFT JOIN users su ON su.id = csa.staff_user_id
       WHERE u.id = ANY($1::uuid[])`,
     [ids]
   );
@@ -153,32 +175,183 @@ export async function getPartnerCohort(
       outcomeNamed: m.outcome_named,
       lastActiveAt: lastActive,
       joinedAt: m.joined_at,
+      assignedStaffId: r.assigned_staff_id,
+      assignedStaffName: r.assigned_staff_name,
+      aiCostUsd: Number(r.ai_cost_usd || 0),
     };
   });
 
-  clients.sort(
+  const scopedClients = opts.assignedToStaffId
+    ? clients.filter((c) => c.assignedStaffId === opts.assignedToStaffId)
+    : clients;
+
+  scopedClients.sort(
     (a, b) =>
       (b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0) -
       (a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0)
   );
 
-  const hired = clients.filter((c) => c.hired).length;
-  const activeThisWeek = clients.filter(
+  const hired = scopedClients.filter((c) => c.hired).length;
+  const activeThisWeek = scopedClients.filter(
     (c) => c.lastActiveAt && new Date(c.lastActiveAt).getTime() > weekAgo
   ).length;
   const avgStage =
-    clients.length > 0
+    scopedClients.length > 0
       ? Math.round(
-          (clients.reduce((s, c) => s + c.currentStage, 0) / clients.length) * 10
+          (scopedClients.reduce((s, c) => s + c.currentStage, 0) /
+            scopedClients.length) *
+            10
         ) / 10
       : null;
 
   return {
-    clients,
+    clients: scopedClients,
     pendingCount,
     totalJoined,
-    summary: { consented: clients.length, avgStage, hired, activeThisWeek },
+    summary: { consented: scopedClients.length, avgStage, hired, activeThisWeek },
   };
+}
+
+// ─── Org staff hierarchy (EXPO build-out, 2026-08-02) ───────────────────────
+
+export interface OrgStaffMember {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: "org_admin" | "staff";
+  title: string | null;
+  clientCount: number;
+}
+
+export interface OrgContext {
+  accessCodeId: string;
+  code: string;
+  orgName: string;
+  logoUrl: string | null;
+  /** Caller's role within the org. */
+  role: "owner" | "org_admin" | "staff";
+  userId: string;
+}
+
+/**
+ * Resolve the org context for a user: either they own the org's access code
+ * (partner_user_id) or they appear in org_staff. Platform admins resolving a
+ * specific code pass overrideCodeId.
+ */
+export async function getOrgContext(
+  userId: string,
+  opts: { isAdmin?: boolean; overrideCodeId?: string } = {}
+): Promise<OrgContext | null> {
+  if (opts.isAdmin && opts.overrideCodeId) {
+    const row = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null }>(
+      `SELECT id, code, partner_name, org_logo_url FROM access_code WHERE id = $1`,
+      [opts.overrideCodeId]
+    );
+    if (!row) return null;
+    return {
+      accessCodeId: row.id,
+      code: row.code,
+      orgName: row.partner_name,
+      logoUrl: row.org_logo_url,
+      role: "owner",
+      userId,
+    };
+  }
+
+  // Code owner wins
+  const owned = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null }>(
+    `SELECT id, code, partner_name, org_logo_url FROM access_code
+      WHERE partner_user_id = $1 AND is_active = true
+      ORDER BY created_at ASC LIMIT 1`,
+    [userId]
+  );
+  if (owned) {
+    return {
+      accessCodeId: owned.id,
+      code: owned.code,
+      orgName: owned.partner_name,
+      logoUrl: owned.org_logo_url,
+      role: "owner",
+      userId,
+    };
+  }
+
+  const staff = await getOne<{
+    access_code_id: string;
+    role: string;
+    code: string;
+    partner_name: string;
+    org_logo_url: string | null;
+  }>(
+    `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url
+       FROM org_staff os
+       JOIN access_code ac ON ac.id = os.access_code_id
+      WHERE os.user_id = $1
+      ORDER BY os.created_at ASC LIMIT 1`,
+    [userId]
+  );
+  if (!staff) return null;
+  return {
+    accessCodeId: staff.access_code_id,
+    code: staff.code,
+    orgName: staff.partner_name,
+    logoUrl: staff.org_logo_url,
+    role: staff.role === "org_admin" ? "org_admin" : "staff",
+    userId,
+  };
+}
+
+export async function getOrgStaff(accessCodeId: string): Promise<OrgStaffMember[]> {
+  const rows = await query<{
+    user_id: string;
+    name: string | null;
+    email: string | null;
+    role: string;
+    title: string | null;
+    client_count: string;
+  }>(
+    `SELECT os.user_id, u.name, u.email, os.role, os.title,
+            (SELECT COUNT(*) FROM client_staff_assignment csa
+              WHERE csa.staff_user_id = os.user_id
+                AND csa.access_code_id = os.access_code_id)::text AS client_count
+       FROM org_staff os
+       JOIN users u ON u.id = os.user_id
+      WHERE os.access_code_id = $1
+      ORDER BY os.role DESC, u.name ASC`,
+    [accessCodeId]
+  );
+  return rows.map((r) => ({
+    userId: r.user_id,
+    name: r.name,
+    email: r.email,
+    role: r.role === "org_admin" ? "org_admin" : "staff",
+    title: r.title,
+    clientCount: Number(r.client_count),
+  }));
+}
+
+/** Assign (or reassign) a cohort client to a staff member. Pass null staff to unassign. */
+export async function assignClientStaff(
+  accessCodeId: string,
+  clientUserId: string,
+  staffUserId: string | null,
+  assignedBy: string
+): Promise<void> {
+  if (!staffUserId) {
+    await query(
+      `DELETE FROM client_staff_assignment
+        WHERE access_code_id = $1 AND client_user_id = $2`,
+      [accessCodeId, clientUserId]
+    );
+    return;
+  }
+  await query(
+    `INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (access_code_id, client_user_id)
+     DO UPDATE SET staff_user_id = $3, assigned_by = $4, created_at = NOW()`,
+    [accessCodeId, clientUserId, staffUserId, assignedBy]
+  );
 }
 
 /** CSV export of the consent-shared cohort (progress signals only, no content). */

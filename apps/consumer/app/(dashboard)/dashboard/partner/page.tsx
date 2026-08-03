@@ -1,13 +1,21 @@
 "use client";
 
 /**
- * Partner Dashboard (W7) -- a monitoring partner sees the consent-shared progress
- * of clients who redeemed their access codes. Progress SIGNALS only (stage,
- * counts, activity, outcome) -- never resume text, disclosure plans, or interview
- * answers. Clients who have not opted into sharing are counted but never named.
+ * Partner / Org Dashboard.
+ *
+ * Two shapes on one page:
+ *  - Org shape (EXPO build-out): real org branding, staff hierarchy
+ *    (org admin manages staff; staff see their assigned clients), client
+ *    assignment, and per-client AI cost for the sponsoring org's admins.
+ *  - Legacy shape: a code owner with no org_staff rows gets the original
+ *    consent-gated cohort table via /api/partner/cohort.
+ *
+ * Consent doctrine unchanged: progress SIGNALS only (stage, counts, activity,
+ * outcome) -- never resume text, disclosure plans, or interview answers.
+ * Clients who have not opted into sharing are counted but never named.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
 
@@ -36,12 +44,30 @@ interface CohortClient {
   outcomeNamed: boolean;
   lastActiveAt: string | null;
   joinedAt: string;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  aiCostUsd: number;
 }
 interface Cohort {
   clients: CohortClient[];
   pendingCount: number;
   totalJoined: number;
   summary: { consented: number; avgStage: number | null; hired: number; activeThisWeek: number };
+}
+interface StaffMember {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: "org_admin" | "staff";
+  title: string | null;
+  clientCount: number;
+}
+interface OrgPayload {
+  org: { name: string; code: string; logoUrl: string | null; role: string };
+  staff: StaffMember[];
+  cohort: Cohort;
+  canManage: boolean;
+  showCosts: boolean;
 }
 
 function fmtDate(s: string | null): string {
@@ -51,37 +77,66 @@ function fmtDate(s: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function usd(v: number): string {
+  return `$${v.toFixed(v >= 1 ? 2 : 4)}`;
+}
+
 export default function PartnerDashboardPage() {
   const tier = useUserTier();
   const canView = tier === "partner" || tier === "admin";
-  const [cohort, setCohort] = useState<Cohort | null>(null);
+  const [data, setData] = useState<OrgPayload | null>(null);
+  const [legacyCohort, setLegacyCohort] = useState<Cohort | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/partner/org");
+      if (res.ok) {
+        setData(await res.json());
+        setStatus("ready");
+        return;
+      }
+      // No org context -- fall back to the legacy owner cohort
+      const legacy = await fetch("/api/partner/cohort");
+      if (legacy.ok) {
+        setLegacyCohort(await legacy.json());
+        setStatus("ready");
+      } else if (legacy.status === 403) {
+        setStatus("forbidden");
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
+  }, []);
 
   useEffect(() => {
     if (!canView) {
       setStatus("forbidden");
       return;
     }
-    fetch("/api/partner/cohort")
-      .then((r) => {
-        if (r.status === 403) {
-          setStatus("forbidden");
-          return null;
-        }
-        if (!r.ok) {
-          setStatus("error");
-          return null;
-        }
-        return r.json();
-      })
-      .then((data) => {
-        if (data) {
-          setCohort(data);
-          setStatus("ready");
-        }
-      })
-      .catch(() => setStatus("error"));
-  }, [canView]);
+    load();
+  }, [canView, load]);
+
+  async function assign(clientUserId: string, staffUserId: string) {
+    setSaving(clientUserId);
+    try {
+      await fetch("/api/partner/org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "assign",
+          clientUserId,
+          staffUserId: staffUserId || null,
+        }),
+      });
+      await load();
+    } finally {
+      setSaving(null);
+    }
+  }
 
   if (status === "forbidden") {
     return (
@@ -98,24 +153,48 @@ export default function PartnerDashboardPage() {
       </div>
     );
   }
-
   if (status === "loading") {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Loading your cohort...</div>;
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Loading your organization...</div>;
   }
-  if (status === "error" || !cohort) {
-    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Could not load the cohort. Please try again.</div>;
+  if (status === "error") {
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Could not load the dashboard. Please try again.</div>;
   }
 
+  const cohort = data?.cohort || legacyCohort;
+  if (!cohort) {
+    return <div className="max-w-5xl mx-auto px-4 py-12 text-t-phos-dim">Nothing to show yet.</div>;
+  }
   const { clients, pendingCount, totalJoined, summary } = cohort;
+  const canManage = data?.canManage ?? false;
+  const showCosts = data?.showCosts ?? false;
+  const staff = data?.staff ?? [];
+  const totalAiCost = showCosts ? clients.reduce((s, c) => s + (c.aiCostUsd || 0), 0) : 0;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
-        <div>
-          <h1 className="text-2xl font-bold text-t-white">Partner Dashboard</h1>
-          <p className="text-t-phos-dim mt-1">
-            Progress for the people you support who chose to share it.
-          </p>
+    <div className="max-w-6xl mx-auto px-4 py-10">
+      {/* Org header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
+        <div className="flex items-center gap-4">
+          {data?.org.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.org.logoUrl}
+              alt={`${data.org.name} logo`}
+              className="h-14 w-14 object-contain bg-white border border-t-line p-1"
+            />
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-t-white">
+              {data?.org.name || "Partner Dashboard"}
+            </h1>
+            <p className="text-t-phos-dim mt-0.5 text-sm">
+              {data
+                ? data.org.role === "staff"
+                  ? "Your clients -- the people you work with who chose to share progress."
+                  : `Organization overview -- code ${data.org.code}.`
+                : "Progress for the people you support who chose to share it."}
+            </p>
+          </div>
         </div>
         {clients.length > 0 && (
           <a
@@ -128,12 +207,13 @@ export default function PartnerDashboardPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 my-6">
         {[
-          { label: "Joined", value: totalJoined },
-          { label: "Sharing progress", value: summary.consented },
-          { label: "Active this week", value: summary.activeThisWeek },
-          { label: "Hired", value: summary.hired },
+          { label: "Joined", value: String(totalJoined) },
+          { label: "Sharing progress", value: String(summary.consented) },
+          { label: "Active this week", value: String(summary.activeThisWeek) },
+          { label: "Hired", value: String(summary.hired) },
+          ...(showCosts ? [{ label: "AI cost (all time)", value: usd(totalAiCost) }] : []),
         ].map((s) => (
           <div key={s.label} className="bg-t-panel px-4 py-3 border border-t-line">
             <div className="text-2xl font-bold text-t-amber-bright">{s.value}</div>
@@ -141,6 +221,37 @@ export default function PartnerDashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Staff panel (org shape only) */}
+      {data && staff.length > 0 && (
+        <div className="bg-t-panel border border-t-line px-4 py-4 mb-6">
+          <h2 className="text-sm font-semibold text-t-white mb-3">Team</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {staff.map((m) => (
+              <div key={m.userId} className="border border-t-line px-3 py-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-t-white">
+                    {m.name || m.email}
+                  </span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 border ${
+                      m.role === "org_admin"
+                        ? "border-t-amber text-t-amber-bright"
+                        : "border-t-line text-t-phos-dim"
+                    }`}
+                  >
+                    {m.role === "org_admin" ? "Admin" : "Staff"}
+                  </span>
+                </div>
+                {m.title && <div className="text-xs text-t-phos-dim">{m.title}</div>}
+                <div className="text-xs text-t-phos mt-1">
+                  {m.clientCount} assigned {m.clientCount === 1 ? "client" : "clients"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Privacy note */}
       <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
@@ -151,9 +262,15 @@ export default function PartnerDashboardPage() {
       {/* Cohort table */}
       {clients.length === 0 ? (
         <div className="text-t-phos-dim bg-t-panel border border-t-line px-5 py-8 text-center">
-          No one is sharing progress yet.
+          {data?.org.role === "staff"
+            ? "No clients are assigned to you yet, or your assigned clients have not turned on sharing."
+            : "No one is sharing progress yet."}
           {pendingCount > 0 && (
-            <span> {pendingCount} {pendingCount === 1 ? "person has" : "people have"} joined with your code; they can turn on sharing from their own Settings.</span>
+            <span>
+              {" "}
+              {pendingCount} {pendingCount === 1 ? "person has" : "people have"} joined with the
+              code; they can turn on sharing from their own Settings.
+            </span>
           )}
         </div>
       ) : (
@@ -165,8 +282,9 @@ export default function PartnerDashboardPage() {
                 <th className="px-4 py-3 font-semibold">Stage</th>
                 <th className="px-4 py-3 font-semibold">Next step</th>
                 <th className="px-4 py-3 font-semibold text-center">Apps</th>
-                <th className="px-4 py-3 font-semibold text-center">Practice</th>
                 <th className="px-4 py-3 font-semibold">Last active</th>
+                {data && <th className="px-4 py-3 font-semibold">Staff</th>}
+                {showCosts && <th className="px-4 py-3 font-semibold text-right">AI cost</th>}
                 <th className="px-4 py-3 font-semibold">Status</th>
               </tr>
             </thead>
@@ -183,8 +301,35 @@ export default function PartnerDashboardPage() {
                   </td>
                   <td className="px-4 py-3 text-t-phos-dim max-w-[200px]">{c.nextStepAction || "--"}</td>
                   <td className="px-4 py-3 text-center text-t-white">{c.applications}</td>
-                  <td className="px-4 py-3 text-center text-t-white">{c.practiceSessions}</td>
                   <td className="px-4 py-3 text-t-phos-dim">{fmtDate(c.lastActiveAt)}</td>
+                  {data && (
+                    <td className="px-4 py-3">
+                      {canManage ? (
+                        <select
+                          value={c.assignedStaffId || ""}
+                          onChange={(e) => assign(c.userId, e.target.value)}
+                          disabled={saving === c.userId}
+                          className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 disabled:opacity-50"
+                        >
+                          <option value="">Unassigned</option>
+                          {staff.map((m) => (
+                            <option key={m.userId} value={m.userId}>
+                              {m.name || m.email}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-t-phos-dim">
+                          {c.assignedStaffName || "--"}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {showCosts && (
+                    <td className="px-4 py-3 text-right text-t-phos tabular-nums">
+                      {usd(c.aiCostUsd || 0)}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     {c.hired ? (
                       <span className="px-2 py-1 border border-t-phos text-t-phos text-xs font-medium">Hired</span>
@@ -201,8 +346,15 @@ export default function PartnerDashboardPage() {
 
       {clients.length > 0 && pendingCount > 0 && (
         <p className="text-xs text-t-phos-dim mt-4">
-          {pendingCount} more {pendingCount === 1 ? "person has" : "people have"} joined with your code but
-          have not turned on sharing yet. They control that from their own Settings.
+          {pendingCount} more {pendingCount === 1 ? "person has" : "people have"} joined with the
+          code but have not turned on sharing yet. They control that from their own Settings.
+        </p>
+      )}
+
+      {showCosts && (
+        <p className="text-xs text-t-phos-dim mt-2">
+          AI cost is the exact provider-billed token spend for each client&apos;s use of the
+          platform&apos;s AI features. Staff accounts do not see this column.
         </p>
       )}
     </div>
