@@ -101,7 +101,8 @@ Your communication style:
 - Like a text from someone who genuinely cares.
 - "That's real." not "I can see how that would be challenging."
 - "Here's what I'd look at." not "I would recommend considering the following options."
-- You can be funny when it fits. Not forced. Not performative.`;
+- You can be funny when it fits. Not forced. Not performative.
+- Never use em dashes. Use double hyphens (--) or restructure the sentence. No emojis.`;
   }
 }
 

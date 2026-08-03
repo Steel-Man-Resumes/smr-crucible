@@ -595,6 +595,18 @@ apps/consumer/app/api/analyze/route.ts  -- reference for Mini Forge AI processin
 
 ---
 
+## 2026-08-03 (Fable) -- t.ROY 10x hands + role-clear dashboards SHIPPED
+
+Both waves from `docs/TROY-AI-10X-HANDOFF-2026-08-03.md` plus Troy's dashboard-clarity ask, 13 commits, all verified end-to-end (Playwright + DB rows) before deploy.
+
+**t.ROY hands:** shared tool factory (`lib/tools/assistant-tools.ts`) registered in BOTH `/api/assistant` and `/api/coach` (the handoff said assistant-only, but the Refinery drawer talks to /api/coach -- both now have the same hands). Client-executed: `take_me_there` (router.push, drawer survives, `?job=<applicationId>` preload), `highlight_element` (data-tour spotlight, 5s resolver). Server-executed (authed only): `get_my_live_status`, `search_jobs` (extracted `lib/job-search-core.ts`, quota-counted), `save_job` (from job_search_cache), `add_follow_up_reminder`. Critical fix that makes it work: both routes were stripping messages to `{role, content}` strings, which discards toolInvocations and makes client tools loop forever -- messages now pass through with dedupe rules on persistence (user turn only when the thread ends with a user message; assistant turn only when finishReason is not "tool-calls"). Also: cross-session memory (`coachMemory.buildMemorySection`, honest dates, /api/assistant persists when authed), proactive nudge chip, chat settings gear (migration 025: coach_voice/coach_plain_language/coach_language; settings POST now partial-update), speechSynthesis voice out + mic in, model-honesty prompt, Message Troy escalation (`support_request` + admin panel + Resend notify). Client token cap 400->700, maxDuration 60, maxSteps 4. Stage-3 next-step href pointed at nonexistent `/dashboard/resume-builder` (404 from the card) -- fixed to application-tailor.
+
+**Role-clear dashboards:** `/dashboard` now lands each identity on its own screen -- org leaders/staff on OrgDashboard (extracted from /dashboard/partner; ?codeId override preserved), partner-without-org on the tools overview + callout, admin on the new Operator Home (AdminHome: platform pulse, operate-as cards, admin links; "My job search" one click away). `GET /api/user/role` + RoleProvider make impersonation drive the CLIENT-side branches too; partner org/cohort routes moved to effectiveAuth (before this, impersonating Marianne showed the admin's org context -- her real view was unreachable). DevSwitcher gained Me: Observer + one-click Personas (blue view of Marianne/Miranda via `/api/dev/personas`). Journey stage vocabulary unified in `packages/core/src/journeyStages.ts` (was four drifting copies).
+
+**Verified:** 18/18 Playwright checks (DoD conversation drove real tools: live status -> tailor-with-job-preloaded navigation -> mock search -> real save), DB rows clean (no duplicate turns, exact tokens per endpoint, coach_voice persisted), escalation verified BY DELIVERY into the real inbox -- which caught that the planned notify address `steelmanresumes@gmail.com` does not exist (hard bounce). Notify now requires `SUPPORT_NOTIFY_EMAIL` env (set to troyrichardcarr@gmail.com in Vercel prod + local). Migration 025 applied before deploy.
+
+**Open tail:** highlight_element fires when the model chooses to point -- worth watching real sessions; Forge-side data-tour targets not annotated yet (refinery only); coach GET-history hydration into the UI still unwired (memory covers continuity); `context_digest` still unused by design.
+
 ## Context Files
 - Full ecosystem: `~/todash/COMMAND-CENTER.md`
 - SMR brand + product vision: `~/todash/brand/`
