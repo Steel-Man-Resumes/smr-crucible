@@ -18,7 +18,15 @@ import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { resolveAssistantPage } from "@/lib/tools/assistant-tool-defs";
 import { requestHighlight } from "@/lib/highlight-bus";
-import { Send, Check, Loader2 } from "lucide-react";
+import SpeechInputButton from "@/components/SpeechInputButton";
+import { Send, Check, Loader2, Settings2 } from "lucide-react";
+
+interface ChatSettings {
+  coachLength: "brief" | "full";
+  coachVoice: boolean;
+  coachPlainLanguage: boolean;
+  coachLanguage: "en" | "es";
+}
 
 interface AssistantChatProps {
   context: AssistantContext;
@@ -208,6 +216,70 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     };
   }, [coach]);
 
+  // Chat settings (coach mode): loaded once, saved as partial patches
+  const [showSettings, setShowSettings] = useState(false);
+  const [chatSettings, setChatSettings] = useState<ChatSettings | null>(null);
+  useEffect(() => {
+    if (!coach) return;
+    let cancelled = false;
+    fetch("/api/coach/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j?.data) return;
+        setChatSettings({
+          coachLength: j.data.coachLength === "brief" ? "brief" : "full",
+          coachVoice: !!j.data.coachVoice,
+          coachPlainLanguage: !!j.data.coachPlainLanguage,
+          coachLanguage: j.data.coachLanguage === "es" ? "es" : "en",
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [coach]);
+
+  const saveSettings = useCallback((patch: Partial<ChatSettings>) => {
+    setChatSettings((s) => (s ? { ...s, ...patch } : s));
+    fetch("/api/coach/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).catch(() => {});
+  }, []);
+
+  // Voice out: read the finished assistant reply aloud (browser TTS, free)
+  const spokenRef = useRef<string | null>(null);
+  const voiceOn = !!chatSettings?.coachVoice;
+  useEffect(() => {
+    if (!voiceOn || isLoading) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const last = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!last) return;
+    const parts = (last as { parts?: Array<{ type?: string; text?: string }> }).parts;
+    const text = Array.isArray(parts)
+      ? parts
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text)
+          .join(" ")
+      : last.content;
+    const clean = (text || "").replace(/https?:\/\/\S+/g, "").trim();
+    if (!clean) return;
+    const key = `${last.id}:${clean.length}`;
+    if (spokenRef.current === key) return;
+    spokenRef.current = key;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = chatSettings?.coachLanguage === "es" ? "es-US" : "en-US";
+    window.speechSynthesis.speak(utterance);
+  }, [messages, isLoading, voiceOn, chatSettings?.coachLanguage]);
+
+  // Stop speaking when voice is switched off or the chat unmounts
+  useEffect(() => {
+    if (!voiceOn) window.speechSynthesis?.cancel();
+  }, [voiceOn]);
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+
   // Send a quick prompt as if the user typed it
   const sendQuickPrompt = useCallback(
     (text: string) => {
@@ -225,6 +297,96 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
 
   return (
     <div className="flex flex-col h-full">
+      {/* Chat settings (coach only): quiet gear, opens an inline panel */}
+      {coach && (
+        <div className="flex items-center justify-end pb-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowSettings((v) => !v)}
+            className="flex items-center gap-1.5 rounded-[5px] px-2 py-1.5 text-xs text-muted transition-colors hover:bg-gray-100 hover:text-foreground"
+            aria-label="Chat settings"
+            aria-expanded={showSettings}
+          >
+            <Settings2 size={14} aria-hidden="true" />
+            <span>Chat settings</span>
+          </button>
+        </div>
+      )}
+
+      {coach && showSettings && chatSettings && (
+        <div className="mb-3 flex-shrink-0 space-y-3 rounded-[7px] border border-border bg-[#fafbf9] p-4 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-foreground">Response length</span>
+            <div className="flex gap-1">
+              {(["brief", "full"] as const).map((len) => (
+                <button
+                  key={len}
+                  type="button"
+                  onClick={() => saveSettings({ coachLength: len })}
+                  className={`rounded-[5px] border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    chatSettings.coachLength === len
+                      ? "border-sage-600 bg-sage-600 text-white"
+                      : "border-border bg-white text-foreground hover:bg-gray-50"
+                  }`}
+                >
+                  {len === "brief" ? "Short" : "Normal"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(
+            [
+              ["Plain language", "coachPlainLanguage"],
+              ["Read replies aloud", "coachVoice"],
+            ] as const
+          ).map(([label, key]) => (
+            <div key={key} className="flex items-center justify-between gap-3">
+              <span className="text-foreground">{label}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={chatSettings[key]}
+                onClick={() => saveSettings({ [key]: !chatSettings[key] } as Partial<ChatSettings>)}
+                className={`rounded-[5px] border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  chatSettings[key]
+                    ? "border-sage-600 bg-sage-600 text-white"
+                    : "border-border bg-white text-foreground hover:bg-gray-50"
+                }`}
+              >
+                {chatSettings[key] ? "On" : "Off"}
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-foreground">Reply in Spanish</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={chatSettings.coachLanguage === "es"}
+              onClick={() =>
+                saveSettings({
+                  coachLanguage: chatSettings.coachLanguage === "es" ? "en" : "es",
+                })
+              }
+              className={`rounded-[5px] border px-3 py-1.5 text-xs font-medium transition-colors ${
+                chatSettings.coachLanguage === "es"
+                  ? "border-sage-600 bg-sage-600 text-white"
+                  : "border-border bg-white text-foreground hover:bg-gray-50"
+              }`}
+            >
+              {chatSettings.coachLanguage === "es" ? "On" : "Off"}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(false)}
+            className="w-full rounded-[5px] border border-[#b9cdbd] bg-white px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+          >
+            Done
+          </button>
+        </div>
+      )}
+
       {/* Messages — min-h-0 lets flex-1 actually shrink so overflow scrolls */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4">
         {messages.length === 0 && coach &&
@@ -390,6 +552,12 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
           placeholder="Type a message..."
           className="min-h-touch min-w-0 flex-1 rounded-[6px] border border-border px-4 py-3 text-sm transition-colors focus:border-sage-600"
           disabled={isLoading}
+        />
+        <SpeechInputButton
+          compact
+          onText={(text) =>
+            setInput((prev: string) => (prev ? `${prev} ${text}` : text))
+          }
         />
         <button
           type="submit"

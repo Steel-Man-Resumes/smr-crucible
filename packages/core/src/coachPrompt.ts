@@ -50,6 +50,13 @@ export function buildCoachSystemPrompt(p: UserProfile): string {
     p.coachFocus === "answer"
       ? "Only respond to what the user explicitly asks. Do not volunteer next steps unless asked."
       : "Be proactive. Surface the single most valuable next action when it helps.";
+  const plainRule = p.coachPlainLanguage
+    ? "\nPlain language mode is ON: use the simplest possible words. Short sentences. 6th grade reading level or below. No idioms, no jargon."
+    : "";
+  const languageRule =
+    p.coachLanguage === "es"
+      ? "\nReply in Spanish (plain, Latin American neutral). The app interface stays in English -- refer to pages and buttons by their English labels."
+      : "";
 
   const careerPaths = p.topCareerPaths.length ? p.topCareerPaths.join(", ") : "not identified yet";
   const skills = p.topSkills.length ? p.topSkills.join(", ") : "not identified yet";
@@ -78,7 +85,7 @@ User profile (you know this before the first message -- use it, do not ask for i
 
 Coaching style for this user: ${p.coachStyle}. ${style}
 Response length: ${lengthRule}
-Focus: ${focusRule}
+Focus: ${focusRule}${plainRule}${languageRule}
 
 Who you are NOT:
 - Not therapeutic ("I hear that you're feeling...").

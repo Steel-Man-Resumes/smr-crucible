@@ -1,8 +1,11 @@
 /**
  * Coach settings (master plan Section 5, Settings -> "Your Coach").
  *
- * GET  -> { coachName, coachStyle, coachLength, coachFocus, coachCreativity }
- * POST -> same shape; validates enums and clamps creativity to 0-100.
+ * GET  -> { coachName, coachStyle, coachLength, coachFocus, coachCreativity,
+ *           coachVoice, coachPlainLanguage, coachLanguage }
+ * POST -> PARTIAL update: only the fields present in the body change (the
+ *         chat gear panel posts single toggles; posting a full shape still
+ *         works). Enums validated, creativity clamped to 0-100.
  */
 
 import { NextResponse } from "next/server";
@@ -14,6 +17,7 @@ export const maxDuration = 10;
 const STYLES = ["supportive", "balanced", "direct"];
 const LENGTHS = ["brief", "full"];
 const FOCI = ["guide", "answer"];
+const LANGUAGES = ["en", "es"];
 
 export async function GET() {
   const session = await auth();
@@ -27,8 +31,12 @@ export async function GET() {
     coach_length: string;
     coach_focus: string;
     coach_creativity: number;
+    coach_voice: boolean;
+    coach_plain_language: boolean;
+    coach_language: string;
   }>(
-    `SELECT coach_name, coach_style, coach_length, coach_focus, coach_creativity
+    `SELECT coach_name, coach_style, coach_length, coach_focus, coach_creativity,
+            coach_voice, coach_plain_language, coach_language
        FROM users WHERE id = $1`,
     [userId]
   );
@@ -39,6 +47,9 @@ export async function GET() {
       coachLength: row?.coach_length || "full",
       coachFocus: row?.coach_focus || "guide",
       coachCreativity: row?.coach_creativity ?? 50,
+      coachVoice: !!row?.coach_voice,
+      coachPlainLanguage: !!row?.coach_plain_language,
+      coachLanguage: row?.coach_language === "es" ? "es" : "en",
     },
   });
 }
@@ -51,23 +62,37 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const name =
-    typeof body.coachName === "string" && body.coachName.trim()
-      ? body.coachName.trim().slice(0, 40)
-      : "Guide";
-  const style = STYLES.includes(body.coachStyle) ? body.coachStyle : "balanced";
-  const length = LENGTHS.includes(body.coachLength) ? body.coachLength : "full";
-  const focus = FOCI.includes(body.coachFocus) ? body.coachFocus : "guide";
-  const creativityRaw = parseInt(String(body.coachCreativity), 10);
-  const creativity = Math.min(Math.max(Number.isFinite(creativityRaw) ? creativityRaw : 50, 0), 100);
 
-  await query(
-    `UPDATE users
-        SET coach_name = $2, coach_style = $3, coach_length = $4,
-            coach_focus = $5, coach_creativity = $6
-      WHERE id = $1`,
-    [userId, name, style, length, focus, creativity]
-  );
+  // Partial update: collect only the fields the caller actually sent.
+  const sets: string[] = [];
+  const params: unknown[] = [userId];
+
+  function set(column: string, value: unknown) {
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  }
+
+  if (typeof body.coachName === "string" && body.coachName.trim()) {
+    set("coach_name", body.coachName.trim().slice(0, 40));
+  }
+  if (STYLES.includes(body.coachStyle)) set("coach_style", body.coachStyle);
+  if (LENGTHS.includes(body.coachLength)) set("coach_length", body.coachLength);
+  if (FOCI.includes(body.coachFocus)) set("coach_focus", body.coachFocus);
+  if (body.coachCreativity !== undefined) {
+    const raw = parseInt(String(body.coachCreativity), 10);
+    set("coach_creativity", Math.min(Math.max(Number.isFinite(raw) ? raw : 50, 0), 100));
+  }
+  if (typeof body.coachVoice === "boolean") set("coach_voice", body.coachVoice);
+  if (typeof body.coachPlainLanguage === "boolean") {
+    set("coach_plain_language", body.coachPlainLanguage);
+  }
+  if (LANGUAGES.includes(body.coachLanguage)) set("coach_language", body.coachLanguage);
+
+  if (!sets.length) {
+    return NextResponse.json({ ok: true, unchanged: true });
+  }
+
+  await query(`UPDATE users SET ${sets.join(", ")} WHERE id = $1`, params);
 
   return NextResponse.json({ ok: true });
 }

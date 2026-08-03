@@ -58,6 +58,9 @@ export interface UserProfile {
   coachLength: "brief" | "full";
   coachFocus: "guide" | "answer";
   coachCreativity: number;
+  coachVoice: boolean;
+  coachPlainLanguage: boolean;
+  coachLanguage: "en" | "es";
 
   // Job search
   savedJobs: SavedJobSummary[];
@@ -124,11 +127,15 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     coach_length: string | null;
     coach_focus: string | null;
     coach_creativity: number | null;
+    coach_voice: boolean | null;
+    coach_plain_language: boolean | null;
+    coach_language: string | null;
   }>(
     `SELECT id, name, email, tier, current_stage,
             onboarding_tour_complete, onboarding_tour_deferrals,
             next_step_cache, next_step_cached_at,
-            coach_name, coach_style, coach_length, coach_focus, coach_creativity
+            coach_name, coach_style, coach_length, coach_focus, coach_creativity,
+            coach_voice, coach_plain_language, coach_language
      FROM users WHERE id = $1`,
     [userId]
   );
@@ -227,6 +234,9 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     coachLength: (user.coach_length as UserProfile["coachLength"]) || "full",
     coachFocus: (user.coach_focus as UserProfile["coachFocus"]) || "guide",
     coachCreativity: user.coach_creativity ?? 50,
+    coachVoice: !!user.coach_voice,
+    coachPlainLanguage: !!user.coach_plain_language,
+    coachLanguage: user.coach_language === "es" ? "es" : "en",
 
     savedJobs,
     applicationCount: jobs.filter((j) => j.status !== "saved").length,
