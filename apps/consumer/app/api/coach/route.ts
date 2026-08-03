@@ -33,6 +33,7 @@ import {
 import {
   getUserProfile,
   buildCoachSystemPrompt,
+  buildMemorySection,
   appendCoachMessage,
   loadCoachHistory,
   getUserDailyLimit,
@@ -97,8 +98,14 @@ export async function POST(request: Request) {
   const hasCriminalRecord = profile.barriers.includes("criminal_record");
   const skillsContext = loadSkillsForContext(page, hasCriminalRecord);
   const toolOptions = { userId, surface: "refinery" as const };
+  // Memory loads BEFORE the current user turn is persisted, so the section
+  // holds prior work, not an echo of what was just typed.
+  const memorySection = await buildMemorySection(userId);
   const systemPrompt =
-    buildCoachSystemPrompt(profile) + skillsContext + buildHandsSection(toolOptions);
+    buildCoachSystemPrompt(profile) +
+    skillsContext +
+    buildHandsSection(toolOptions) +
+    memorySection;
 
   // Persist the newest user turn for cross-session memory -- but ONLY when the
   // newest message is the user speaking. A client-tool continuation POST ends

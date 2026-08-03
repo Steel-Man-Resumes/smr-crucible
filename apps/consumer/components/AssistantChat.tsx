@@ -229,10 +229,24 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4">
         {messages.length === 0 && coach &&
           (proactive ? (
+            // Proactive nudge: computed from live data, tappable. Tapping
+            // sends a VISIBLE user message (no hidden prompts) so the model
+            // knows exactly which suggestion the user accepted.
             <div className="flex justify-start">
-              <div className="max-w-[85%] px-4 py-3 rounded-[7px] rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
+              <button
+                type="button"
+                onClick={() =>
+                  sendQuickPrompt(
+                    `Yes, let's do that -- you suggested: "${proactive}"`
+                  )
+                }
+                className="max-w-[85%] rounded-[7px] rounded-bl-sm border border-[#b9cdbd] bg-[#f5f6f4] px-4 py-3 text-left text-sm leading-relaxed text-foreground transition-colors hover:bg-[#e3ede5]"
+              >
                 {proactive}
-              </div>
+                <span className="mt-2 block text-xs font-medium text-[#344b38]">
+                  Tap to do it with me
+                </span>
+              </button>
             </div>
           ) : (
             <div className="text-muted text-sm">

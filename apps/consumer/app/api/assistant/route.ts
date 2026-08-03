@@ -27,12 +27,15 @@ import {
   buildHandsSection,
   pluckMessages,
   lastUserText,
+  endsWithUserTurn,
 } from "@/lib/tools/assistant-tools";
 import {
   getUserDailyLimit,
   incrementUserUsage,
   incrementIpUsage,
   FORGE_IP_LIMITS,
+  buildMemorySection,
+  appendCoachMessage,
 } from "@crucible/core";
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
@@ -96,8 +99,14 @@ export async function POST(request: Request) {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
   };
+  // Cross-session memory (authed only; pre-auth Forge stays ephemeral).
+  // Loaded BEFORE the current turn is persisted so it holds prior work.
+  const memorySection = userId ? await buildMemorySection(userId) : "";
   const baseSystemPrompt =
-    buildSystemPrompt(context) + skillsContext + buildHandsSection(toolOptions);
+    buildSystemPrompt(context) +
+    skillsContext +
+    buildHandsSection(toolOptions) +
+    memorySection;
   const allowRoleplayOverride =
     !!userId &&
     context.currentPage === "disclosure-rehearsal" &&
@@ -117,6 +126,18 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 - Do not promise any hiring outcome.`
     : baseSystemPrompt;
 
+  // Persist the user turn for cross-session memory (authed only, and only
+  // when the newest message IS the user speaking -- a client-tool
+  // continuation POST ends with an assistant tool-result message).
+  const userTurnText = lastUserText(messages);
+  if (userId && endsWithUserTurn(messages) && userTurnText) {
+    await appendCoachMessage(
+      userId,
+      "user",
+      sanitizeForPrompt(userTurnText, 4000)
+    ).catch((err) => console.error("Assistant memory persist failed:", err));
+  }
+
   const startTime = Date.now();
 
   // Depth on demand: client coaching stays text-message short (the format rules
@@ -135,8 +156,23 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
     tools: buildAssistantTools(toolOptions),
     maxSteps: 4,
     toolCallStreaming: true,
-    async onFinish({ text, usage }) {
+    async onFinish({ text, usage, finishReason, steps }) {
       const latencyMs = Date.now() - startTime;
+
+      // Persist the assistant turn only when the model finished SPEAKING
+      // (finishReason "tool-calls" means the turn continues in the browser).
+      if (userId && finishReason !== "tool-calls") {
+        const spoken =
+          (steps ?? [])
+            .map((s) => s.text)
+            .filter(Boolean)
+            .join("\n\n") || text;
+        if (spoken.trim()) {
+          await appendCoachMessage(userId, "assistant", spoken).catch((err) =>
+            console.error("Assistant memory persist failed:", err)
+          );
+        }
+      }
 
       // Exact token accounting (AI SDK reports real provider usage; in
       // multi-step runs `usage` is already the combined total of all steps)
