@@ -43,34 +43,43 @@ export async function POST(request: Request) {
     const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
     if (turnstileSecret) {
       if (!turnstileToken) {
-        return NextResponse.json(
-          { error: "Please complete the verification check." },
-          { status: 400 }
-        );
-      }
-      try {
-        const verify = await fetch(
-          "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              secret: turnstileSecret,
-              response: turnstileToken,
-            }),
-          }
-        );
-        const outcome = await verify.json();
-        if (!outcome.success) {
+        // Soft-launch: only hard-block missing tokens once TURNSTILE_ENFORCE=1
+        // (set after a human confirms the widget renders and passes). Until
+        // then, log and allow -- a silently broken widget must never kill
+        // real signups.
+        if (process.env.TURNSTILE_ENFORCE === "1") {
           return NextResponse.json(
-            { error: "Verification failed. Please try again." },
+            { error: "Please complete the verification check." },
             { status: 400 }
           );
         }
-      } catch {
-        // Verification service unreachable: fail open rather than lock out
-        // real users -- Turnstile is a shield, not a gate.
-        console.error("Turnstile siteverify unreachable; allowing signup");
+        console.error("Turnstile token missing on signup (soft-launch: allowed)");
+      }
+      if (turnstileToken) {
+        try {
+          const verify = await fetch(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                secret: turnstileSecret,
+                response: turnstileToken,
+              }),
+            }
+          );
+          const outcome = await verify.json();
+          if (!outcome.success) {
+            return NextResponse.json(
+              { error: "Verification failed. Please try again." },
+              { status: 400 }
+            );
+          }
+        } catch {
+          // Verification service unreachable: fail open rather than lock out
+          // real users -- Turnstile is a shield, not a gate.
+          console.error("Turnstile siteverify unreachable; allowing signup");
+        }
       }
     }
 
