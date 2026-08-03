@@ -58,10 +58,16 @@ export async function POST(request: Request) {
   })) as { id: string };
 
   // Best-effort notify. The admin panel list is the reliable surface.
+  // SUPPORT_NOTIFY_EMAIL must be set in the environment (kept out of this
+  // public repo). Delivery-verified 2026-08-03; the previous hardcoded
+  // fallback address hard-bounced (account does not exist).
   const resendKey = process.env.RESEND_API_KEY || process.env.AUTH_RESEND_KEY;
-  if (resendKey) {
+  const to = process.env.SUPPORT_NOTIFY_EMAIL;
+  if (!to) {
+    console.warn("SUPPORT_NOTIFY_EMAIL not set -- support request stored, notify skipped");
+  }
+  if (resendKey && to) {
     try {
-      const to = process.env.SUPPORT_NOTIFY_EMAIL || "steelmanresumes@gmail.com";
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
