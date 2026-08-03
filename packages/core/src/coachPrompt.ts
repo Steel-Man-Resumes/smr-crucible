@@ -11,15 +11,11 @@
  */
 
 import type { UserProfile } from "./getUserProfile";
+import { JOURNEY_STAGES } from "./journeyStages";
 
+// Canonical stage vocabulary + the coach-only post-arc stage.
 const STAGE_NAMES: Record<number, string> = {
-  0: "Getting oriented",
-  1: "Building their foundation",
-  2: "Finding a target job",
-  3: "Preparing materials (resume, cover letter)",
-  4: "Planning their approach (disclosure, timing)",
-  5: "Practicing interviews",
-  6: "Applying and tracking",
+  ...Object.fromEntries(JOURNEY_STAGES.map((s) => [s.stage, s.long])),
   7: "Staying employed",
 };
 

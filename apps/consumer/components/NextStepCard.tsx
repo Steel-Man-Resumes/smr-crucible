@@ -9,6 +9,9 @@
  */
 
 import Link from "next/link";
+// Deep import: canonical stage vocabulary without dragging the core barrel
+// (db/pg) into the client bundle.
+import { stageNextStepLabel } from "@crucible/core/src/journeyStages";
 
 export interface NextStep {
   stage: number;
@@ -17,19 +20,8 @@ export interface NextStep {
   reason?: string;
 }
 
-const STAGE_LABELS: Record<number, string> = {
-  0: "Get oriented",
-  1: "Build your foundation",
-  2: "Know your target",
-  3: "Prepare your materials",
-  4: "Plan your approach",
-  5: "Practice",
-  6: "Apply and track",
-  7: "Keep going",
-};
-
 export function NextStepCard({ next }: { next: NextStep }) {
-  const stageLabel = STAGE_LABELS[next.stage] ?? `Stage ${next.stage}`;
+  const stageLabel = stageNextStepLabel(next.stage);
 
   return (
     <Link

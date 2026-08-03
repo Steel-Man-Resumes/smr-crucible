@@ -19,16 +19,11 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+// Deep import: canonical stage vocabulary without dragging the core barrel
+// (db/pg) into the client bundle.
+import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 
-const STAGE_LABELS = [
-  "Getting oriented",
-  "Building foundation",
-  "Finding work",
-  "Tailoring resume",
-  "Planning disclosure",
-  "Practicing interviews",
-  "Applying & tracking",
-];
+const STAGE_LABELS = JOURNEY_STAGES.map((s) => s.long);
 
 interface CohortClient {
   userId: string;

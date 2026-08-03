@@ -18,6 +18,7 @@ export * from './outcomeAggregate';
 export * from './partnerTracking';
 export * from './getUserProfile';
 export * from './computeNextStep';
+export * from './journeyStages';
 export * from './coachPrompt';
 export * from './coachConversation';
 export * from './coachMemory';

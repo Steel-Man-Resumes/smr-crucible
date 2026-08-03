@@ -10,15 +10,15 @@
  */
 
 import Link from "next/link";
+// Deep import: canonical stage vocabulary without dragging the core barrel
+// (db/pg) into the client bundle.
+import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 
-const STAGES = [
-  { n: 1, label: "Foundation", href: "/intro" },
-  { n: 2, label: "Target", href: "/dashboard/jobs" },
-  { n: 3, label: "Materials", href: "/dashboard/application-tailor" },
-  { n: 4, label: "Approach", href: "/dashboard/disclosure" },
-  { n: 5, label: "Practice", href: "/dashboard/interview" },
-  { n: 6, label: "Apply", href: "/dashboard/applications" },
-];
+const STAGES = JOURNEY_STAGES.filter((s) => s.stage >= 1).map((s) => ({
+  n: s.stage,
+  label: s.short,
+  href: s.href,
+}));
 
 function Badge({
   state,

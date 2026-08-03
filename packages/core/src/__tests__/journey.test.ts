@@ -145,3 +145,32 @@ test("Opener: tailored resume, no disclosure plan -> nudges disclosure", () => {
   );
   assert.equal(m?.reason, "disclosure");
 });
+
+// ─── Canonical stage vocabulary (journeyStages) ──────────────────────────────
+
+test("journey stages: 7 entries, array index equals stage number", async () => {
+  const { JOURNEY_STAGES } = await import("../journeyStages");
+  assert.equal(JOURNEY_STAGES.length, 7);
+  JOURNEY_STAGES.forEach((s, i) => assert.equal(s.stage, i));
+});
+
+test("journey stages: every computeNextStep stage has a vocabulary entry", async () => {
+  const { JOURNEY_STAGES } = await import("../journeyStages");
+  const known = new Set(JOURNEY_STAGES.map((s) => s.stage));
+  // The ladder can return stages 0-6; assert full coverage.
+  for (let stage = 0; stage <= 6; stage++) {
+    assert.ok(known.has(stage), "missing vocabulary for stage " + stage);
+  }
+});
+
+test("journey stages: stage-3 href matches the live tailor route", async () => {
+  const { JOURNEY_STAGES } = await import("../journeyStages");
+  assert.equal(JOURNEY_STAGES[3].href, "/dashboard/application-tailor");
+  const r = computeNextStep(
+    mkProfile({ forgeComplete: true, savedJobs: [job()] })
+  );
+  assert.ok(
+    r.href.startsWith("/dashboard/application-tailor?job="),
+    "stage-3 next step must target the live route, got " + r.href
+  );
+});
