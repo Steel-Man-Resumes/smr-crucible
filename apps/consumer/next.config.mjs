@@ -79,8 +79,9 @@ const nextConfig = {
           },
           {
             key: "Content-Security-Policy",
+            // challenges.cloudflare.com = Turnstile (script + widget iframe)
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.anthropic.com; media-src 'self' blob:; frame-ancestors 'none'",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.anthropic.com https://challenges.cloudflare.com; media-src 'self' blob:; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'",
           },
         ],
       },
