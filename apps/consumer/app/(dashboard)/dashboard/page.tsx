@@ -23,6 +23,9 @@ import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/use
 import { JourneyHeader } from "@/components/JourneyHeader";
 import { DashboardResumeCard } from "@/components/DashboardResumeCard";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
+import { OrgDashboard } from "@/components/org/OrgDashboard";
+import { AdminHome } from "@/components/admin/AdminHome";
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { TBtn } from "@crucible/consumer-ui";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -160,6 +163,7 @@ function timeAgo(dateStr: string): string {
 export default function DashboardPage() {
   const tier = useUserTier();
   const isAdmin = tier === "admin";
+  const effectiveRole = useEffectiveRole();
   const onboarding = useOnboarding();
 
   // Forge data
@@ -248,13 +252,34 @@ export default function DashboardPage() {
   }
 
   // ─── Audience: Partner ────────────────────────────────────────────────
+  // Org leaders and staff land on their organization's mission control.
+  // Partner accounts with no org link get the tools overview + callout.
   if (tier === "partner") {
-    return <PartnerToolsOverview />;
+    if (effectiveRole === null) {
+      // Role still resolving -- avoid flashing the wrong landing
+      return (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+        </div>
+      );
+    }
+    return effectiveRole.orgRole ? (
+      <OrgDashboard />
+    ) : (
+      <PartnerToolsOverview noOrgCallout />
+    );
   }
 
   // ─── Audience: Observer ───────────────────────────────────────────────
   if (tier === "observer") {
     return <ObserverDashboard />;
+  }
+
+  // ─── Audience: Admin (no view-as active) ──────────────────────────────
+  // The operator lands on Operator Home. His own job-seeker journey is one
+  // click away ("My job search" -> view-as client).
+  if (isAdmin) {
+    return <AdminHome />;
   }
 
   // ─── State: needs_profile ─────────────────────────────────────────────
