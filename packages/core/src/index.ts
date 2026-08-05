@@ -24,5 +24,6 @@ export * from './coachConversation';
 export * from './coachMemory';
 export * from './coachProactive';
 export * from './partnerDashboard';
+export * from './orgInvite';
 export * from './systemHealth';
 export * from './employer';

@@ -61,11 +61,22 @@ interface StaffMember {
   title: string | null;
   clientCount: number;
 }
+interface PendingInvite {
+  userId: string;
+  name: string | null;
+  email: string;
+  invitedAt: string;
+  lastSentAt: string;
+  sendCount: number;
+  invitedByName: string | null;
+}
 interface OrgPayload {
   org: { name: string; code: string; logoUrl: string | null; role: string };
   staff: StaffMember[];
   cohort: Cohort;
+  invites?: PendingInvite[];
   canManage: boolean;
+  canInvite?: boolean;
   showCosts: boolean;
 }
 
@@ -88,6 +99,11 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [saving, setSaving] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [inviteRowBusy, setInviteRowBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -150,6 +166,77 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
     }
   }
 
+  async function sendInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (inviteBusy) return;
+    setInviteBusy(true);
+    setInviteMsg(null);
+    try {
+      const res = await fetch("/api/partner/org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite", name: inviteName, email: inviteEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setInviteMsg({ kind: data.emailFailed ? "err" : "ok", text: data.message });
+        setInviteName("");
+        setInviteEmail("");
+        await load();
+      } else {
+        setInviteMsg({
+          kind: "err",
+          text:
+            res.status === 403
+              ? "Invites are blocked: this session is read-only."
+              : data.error || "Could not send that invite. Try again.",
+        });
+      }
+    } catch {
+      setInviteMsg({ kind: "err", text: "Could not send that invite. Try again." });
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function inviteRowAction(action: "resend_invite" | "revoke_invite", inv: PendingInvite) {
+    if (inviteRowBusy) return;
+    if (
+      action === "revoke_invite" &&
+      !window.confirm(
+        `Remove ${inv.name || inv.email}? This cancels their invite link and frees the seat.`
+      )
+    ) {
+      return;
+    }
+    setInviteRowBusy(inv.userId);
+    setInviteMsg(null);
+    try {
+      const res = await fetch("/api/partner/org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, userId: inv.userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setInviteMsg({ kind: "ok", text: data.message });
+        await load();
+      } else {
+        setInviteMsg({
+          kind: "err",
+          text:
+            res.status === 403
+              ? "That action is blocked: this session is read-only."
+              : data.error || "That did not go through. Try again.",
+        });
+      }
+    } catch {
+      setInviteMsg({ kind: "err", text: "That did not go through. Try again." });
+    } finally {
+      setInviteRowBusy(null);
+    }
+  }
+
   if (status === "forbidden") {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12">
@@ -180,6 +267,13 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
   const canManage = data?.canManage ?? false;
   const showCosts = data?.showCosts ?? false;
   const staff = data?.staff ?? [];
+  const invites = data?.invites ?? [];
+  const canInvite = data?.canInvite ?? false;
+  // Invited-but-not-yet-active people hold a seat (they count in totalJoined
+  // and, having no sharing consent, in pendingCount) but have not actually
+  // joined -- split them out so both numbers stay honest.
+  const joinedCount = Math.max(0, totalJoined - invites.length);
+  const joinedNotSharing = Math.max(0, pendingCount - invites.length);
   const totalAiCost = showCosts ? clients.reduce((s, c) => s + (c.aiCostUsd || 0), 0) : 0;
 
   return (
@@ -229,7 +323,8 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 my-6">
         {[
-          { label: "Joined", value: String(totalJoined) },
+          { label: "Joined", value: String(joinedCount) },
+          ...(invites.length > 0 ? [{ label: "Invited", value: String(invites.length) }] : []),
           { label: "Sharing progress", value: String(summary.consented) },
           { label: "Active this week", value: String(summary.activeThisWeek) },
           { label: "Hired", value: String(summary.hired) },
@@ -273,6 +368,97 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
         </div>
       )}
 
+      {/* Add participant + pending invites (org shape only) */}
+      {data && canInvite && (
+        <div className="bg-t-panel border border-t-line px-4 py-4 mb-6">
+          <h2 className="text-sm font-semibold text-t-white mb-1">Add a participant</h2>
+          <p className="text-xs text-t-phos-dim mb-3">
+            They get an email that signs them straight in -- no code, no password. Their
+            seat comes off your organization&apos;s allotment right away.
+          </p>
+          <form onSubmit={sendInvite} className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={inviteName}
+              onChange={(e) => setInviteName(e.target.value)}
+              placeholder="Full name"
+              required
+              className="t-focus bg-t-panel border border-t-line text-sm text-t-phos px-3 py-2 flex-1 min-w-[160px]"
+            />
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="Email address"
+              required
+              className="t-focus bg-t-panel border border-t-line text-sm text-t-phos px-3 py-2 flex-1 min-w-[200px]"
+            />
+            <button
+              type="submit"
+              disabled={inviteBusy}
+              className="t-focus px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 disabled:opacity-50 min-h-touch"
+            >
+              {inviteBusy ? "Sending..." : "Send invite"}
+            </button>
+          </form>
+          {inviteMsg && (
+            <p
+              className={`text-xs mt-3 ${
+                inviteMsg.kind === "ok" ? "text-t-phos" : "text-t-amber-bright"
+              }`}
+            >
+              {inviteMsg.text}
+            </p>
+          )}
+
+          {invites.length > 0 && (
+            <div className="mt-4 border-t border-t-line pt-3">
+              <h3 className="text-xs uppercase font-semibold text-t-phos-dim mb-2">
+                Invited -- waiting to join
+              </h3>
+              <ul className="space-y-2">
+                {invites.map((inv) => (
+                  <li
+                    key={inv.userId}
+                    className="flex flex-wrap items-center justify-between gap-2 border border-t-line px-3 py-2"
+                  >
+                    <div>
+                      <span className="text-sm font-medium text-t-white">
+                        {inv.name || inv.email}
+                      </span>
+                      {inv.name && (
+                        <span className="text-xs text-t-phos-dim ml-2">{inv.email}</span>
+                      )}
+                      <div className="text-xs text-t-phos-dim">
+                        Invited {fmtDate(inv.invitedAt)}
+                        {inv.invitedByName ? ` by ${inv.invitedByName}` : ""}
+                        {inv.sendCount > 1 ? ` -- sent ${inv.sendCount} times` : ""}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => inviteRowAction("resend_invite", inv)}
+                        disabled={inviteRowBusy === inv.userId}
+                        className="t-focus px-3 py-1.5 border border-t-line text-xs text-t-phos hover:text-t-white disabled:opacity-50"
+                      >
+                        Resend
+                      </button>
+                      <button
+                        onClick={() => inviteRowAction("revoke_invite", inv)}
+                        disabled={inviteRowBusy === inv.userId}
+                        className="t-focus px-3 py-1.5 border border-t-line text-xs text-t-phos-dim hover:text-t-amber-bright disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Privacy note */}
       <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
         You only see clients who chose to share their progress with you. You never see their
@@ -291,10 +477,10 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
           {data?.org.role === "staff"
             ? "No clients are assigned to you yet, or your assigned clients have not turned on sharing."
             : "No one is sharing progress yet."}
-          {pendingCount > 0 && (
+          {joinedNotSharing > 0 && (
             <span>
               {" "}
-              {pendingCount} {pendingCount === 1 ? "person has" : "people have"} joined with the
+              {joinedNotSharing} {joinedNotSharing === 1 ? "person has" : "people have"} joined with the
               code; they can turn on sharing from their own Settings.
             </span>
           )}
@@ -370,9 +556,9 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
         </div>
       )}
 
-      {clients.length > 0 && pendingCount > 0 && (
+      {clients.length > 0 && joinedNotSharing > 0 && (
         <p className="text-xs text-t-phos-dim mt-4">
-          {pendingCount} more {pendingCount === 1 ? "person has" : "people have"} joined with the
+          {joinedNotSharing} more {joinedNotSharing === 1 ? "person has" : "people have"} joined with the
           code but have not turned on sharing yet. They control that from their own Settings.
         </p>
       )}

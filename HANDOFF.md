@@ -1,5 +1,56 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-05 (Fable) -- Org admin-invite feature BUILT + verified locally, NOT deployed
+
+Troy's ask (see docs/HANDOFF-2026-08-05-ORG-INVITE-FEATURE.md): org admins add a
+participant by name + email from the leader dashboard instead of passing around
+an access code. Design decisions Troy ratified via question round: pre-create the
+account (pending until first sign-in), auto-attach existing unaffiliated
+accounts (block cross-org, first-code-wins), invites open to admin AND staff,
+resend + revoke in v1.
+
+**What shipped (working tree; deploy gated on Troy's review):**
+- `packages/core/migrations/026_org_invite.sql` -- invite ledger table (APPLIED
+  to Neon; additive). "Pending" is DERIVED, not stored: users row has
+  emailVerified NULL + no password_hash + no accounts row. First sign-in by any
+  door flips them to joined with zero bookkeeping.
+- `packages/core/src/orgInvite.ts` -- createOrgInvite (validate seat -> create
+  user tier client -> redeemAccessCode -> org_invite upsert; existing users:
+  attach if unaffiliated, refuse if bound elsewhere), touchOrgInviteResend
+  (60s gap, 10-send cap), revokeOrgInvite (PENDING ONLY: frees the seat --
+  the one ratified exception to the durable-seat rule -- kills outstanding
+  verification tokens, deletes the shell user).
+- `apps/consumer/lib/org-invite-email.ts` -- hand-mints a magic link the
+  standard `/api/auth/callback/resend` accepts (identifier=email,
+  token=sha256(raw+AUTH_SECRET), verified against installed @auth/core 0.41.3;
+  RE-CHECK on next-auth major bump). 7-DAY expiry (callback honors the DB row,
+  not provider maxAge). Login-page magic-link emails completely untouched.
+  Invite + added-notification templates; Resend send THROWS on failure.
+- `POST /api/partner/org` actions `invite` / `resend_invite` / `revoke_invite`
+  (admin + staff; `assign` stays admin-only). Staff inviter auto-assigns the
+  new client to themselves. GET returns `invites[]` + `canInvite`.
+- `OrgDashboard.tsx` -- "Add a participant" form, "Invited -- waiting to join"
+  panel (Resend/Remove), Joined/Invited tiles split so invited-but-inactive
+  seats never inflate "Joined", not-sharing footnotes exclude pending invites.
+
+**Verified (2026-08-05, local dev + prod Neon, SAMPLE org CCSAMPLE26, all
+cleaned after):** 13/13 Playwright checks (invite, pending panel, resend rate
+limit, attach-existing, duplicate refusal, revoke frees seat + reuse, staff
+invite + no cost tile, 4/4 seat limit enforced); 5/5 emails delivered (Resend
+`delivered` + Troy's real inbox); magic link clicked in a fresh browser ->
+token consumed, emailVerified stamped, invitee attributed; admin dashboard
+flipped them invited -> joined. Token-vs-DB hash cross-check confirmed the
+emailed link is exact (a Gmail-MCP quoted-printable double-decode made it LOOK
+mangled -- transport is fine).
+
+**Dev-only artifact, not a bug:** post-signin redirect goes to AUTH_URL's
+origin (refinery prod) when clicking a localhost link; in prod they agree.
+
+**Known adjacent gaps (NOT touched):** login page still has a mailto to
+steelmanresumes@gmail.com (~line 306) -- that inbox does not exist (8/3 hard
+bounce). Register route 409s invitees who try password signup ("sign in
+instead") -- acceptable, invite email steers to the magic link.
+
 ## 2026-07-14 -- t.ROY emblem badge replaces placeholder SVGs
 
 `packages/consumer-ui/src/AssistantDrawer.tsx` (drawer trigger) and
