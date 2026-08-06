@@ -20,6 +20,34 @@ import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import crypto from "crypto";
 
+// Per-provider timeouts. The route caps at maxDuration=30s; without these a hung
+// upstream (JSearch/CareerOneStop/AI) blocks the whole request and 504s (the QA
+// failure). Each provider now fails fast to the next fallback, and if all fail
+// the route returns an honest empty 200 -- never a gateway timeout.
+//
+// Values are evidence-based (measured 2026-08-06 against Troy's live key):
+// JSearch num_pages=1 healthy responses ran ~6.4s (Grand Rapids); num_pages=2 ran
+// 11.5-14.2s -- which, plus enrichment, is what blew the 30s cap in QA. We fetch
+// one page now (see fetchJSearchJobs) and cap at 12s: covers a 2x slowdown with
+// wide headroom, well under the route budget.
+const JSEARCH_TIMEOUT_MS = 12000;
+const CAREERONESTOP_TIMEOUT_MS = 7000;
+const AI_ENRICH_TIMEOUT_MS = 10000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface JSearchJob {
@@ -171,20 +199,28 @@ async function fetchJSearchJobs(
   const query = `${role} in ${location}`;
   // JSearch retired /search (404 as of 2026-08); /search-v2 returns the same
   // job objects wrapped in { data: { jobs, cursor } }.
+  // num_pages=1 (10 listings, ~6s) instead of 2 (20 listings, ~12-14s): the
+  // enrichment/board only ever surfaces 15, so the second page mostly added
+  // latency that pushed the request past the route cap. One page keeps the board
+  // fast and reliable; fair-chance-first sorting still applies.
   const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
   url.searchParams.set("query", query);
   url.searchParams.set("page", "1");
-  url.searchParams.set("num_pages", "2");
+  url.searchParams.set("num_pages", "1");
   url.searchParams.set("date_posted", "month");
   url.searchParams.set("radius", String(radiusMiles));
 
   try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        "X-RapidAPI-Key": apiKey,
-        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+    const res = await fetchWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          "X-RapidAPI-Key": apiKey,
+          "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+        },
       },
-    });
+      JSEARCH_TIMEOUT_MS
+    );
 
     if (!res.ok) {
       console.error(`JSearch API error: ${res.status} ${res.statusText}`);
@@ -251,9 +287,11 @@ async function fetchCareerOneStopJobs(
   const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/25/0/0/0/15/30`;
 
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-    });
+    const res = await fetchWithTimeout(
+      url,
+      { headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } },
+      CAREERONESTOP_TIMEOUT_MS
+    );
     if (!res.ok) {
       console.error(`CareerOneStop API error: ${res.status}`);
       return [];
@@ -298,11 +336,14 @@ async function enrichJobsWithAI(
   const basicJobs: EnrichedJob[] = jobs.slice(0, 15).map((j) => {
     const salary = formatSalary(j);
     const posted = formatPosted(j.job_posted_at_datetime_utc);
+    const title = unwrapMaybeJsonArray(j.job_title);
+    const company = unwrapMaybeJsonArray(j.employer_name);
+    const fair = isKnownFairChance(company);
 
     return {
       id: j.job_id,
-      title: j.job_title,
-      company: j.employer_name,
+      title,
+      company,
       location: [j.job_city, j.job_state].filter(Boolean).join(", "),
       salary,
       description: truncateDescription(j.job_description, 200),
@@ -311,8 +352,8 @@ async function enrichJobsWithAI(
       benefits: j.job_highlights?.Benefits?.slice(0, 3) ?? [],
       employment_type: j.job_employment_type || "Full-time",
       posted,
-      second_chance: isKnownFairChance(j.employer_name),
-      fair_chance_reason: isKnownFairChance(j.employer_name)
+      second_chance: fair,
+      fair_chance_reason: fair
         ? "This company has publicly committed to fair-chance hiring."
         : null,
       remote: j.job_is_remote,
@@ -362,7 +403,15 @@ RULES:
 
     let text: string;
     try {
-      text = await callAI("", [{ role: "user", content: prompt }], 2000, undefined, { endpoint: "job-search" });
+      // Bound enrichment so a slow model never blows the route budget. On
+      // timeout we return the real listings with basic (un-simplified) copy --
+      // degraded, never a 504, and never fabricated.
+      text = await Promise.race([
+        callAI("", [{ role: "user", content: prompt }], 2000, undefined, { endpoint: "job-search" }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("ai_enrich_timeout")), AI_ENRICH_TIMEOUT_MS)
+        ),
+      ]);
     } catch {
       return { enrichedJobs: basicJobs, fairChanceInfo: "" };
     }
@@ -426,6 +475,26 @@ function formatPosted(datetime: string): string {
   if (days < 7) return `${days} days ago`;
   if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
   return "Over a month ago";
+}
+
+// JSearch /search-v2 sometimes returns a field (notably job_title) as a
+// JSON-array-encoded STRING when it aggregates duplicate postings, e.g.
+// '["Warehouse Associate","Warehouse Associate"]'. Rendered as-is that shows raw
+// brackets/quotes on the board. Unwrap to the first entry; pass plain values
+// through untouched.
+function unwrapMaybeJsonArray(value: unknown): string {
+  if (Array.isArray(value)) return String(value[0] ?? "");
+  if (typeof value !== "string") return value == null ? "" : String(value);
+  const s = value.trim();
+  if (s.startsWith("[") && s.endsWith("]")) {
+    try {
+      const arr = JSON.parse(s);
+      if (Array.isArray(arr) && arr.length) return String(arr[0] ?? "");
+    } catch {
+      /* not JSON -- fall through and return the original string */
+    }
+  }
+  return value;
 }
 
 function truncateDescription(desc: string, maxLen: number): string {
