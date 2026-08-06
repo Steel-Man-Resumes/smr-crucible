@@ -1,6 +1,32 @@
 # SMR Crucible -- Handoff
 
-## 2026-08-05 (Fable) -- Org admin-invite feature BUILT + verified locally, NOT deployed
+## 2026-08-06 (Fable) -- Org admin-invite DEPLOYED TO PROD + dead-inbox sweep + register-claim
+
+Troy approved; `vercel deploy --prod` from the REPO ROOT (deploying from
+apps/consumer fails -- the project's rootDirectory expects the monorepo).
+Aliases followed automatically (verified: refinery /security + forge /partner
+both serve the new build).
+
+**Prod verification (2026-08-06, SAMPLE org, cleaned after):** password-login
+admin on live refinery -> invite sent (200, pending panel live), email
+DELIVERED to Troy's real inbox with link host https://refinery.steelmanresumes.com
+and 7-day copy, magic link clicked in a fresh browser -> invitee signed in on
+prod (cross-subdomain cookie held; new client routed to forge /intro first-run),
+admin dashboard flipped invited -> joined. All SAMPLE rows purged.
+
+**Also in this wave (commit e6c35cd):**
+- steelmanresumes.com has NO MX -- every @steelmanresumes.com inbound address
+  was a black hole. Fixed: partner mailtos (login, forge output, forge partner
+  page), homepage + Security contact, tenant-config contactEmail -> the real
+  monitored inbox; org-listing notifications were being SENT to info@ and
+  silently lost -> now SUPPORT_NOTIFY_EMAIL fallback. If Troy wants branded
+  addresses, set up Cloudflare Email Routing, then point these back.
+- Register now CLAIMS an org-invited account that has never signed in by any
+  door (guarded UPDATE; active accounts still 409). Verified: claim keeps the
+  single user row + attribution, password login works, dashboard flips,
+  re-register 409s.
+
+## 2026-08-05 (Fable) -- Org admin-invite feature BUILT + verified locally (superseded: DEPLOYED 8/6, see above)
 
 Troy's ask (see docs/HANDOFF-2026-08-05-ORG-INVITE-FEATURE.md): org admins add a
 participant by name + email from the leader dashboard instead of passing around
