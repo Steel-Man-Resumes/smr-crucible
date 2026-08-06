@@ -12,6 +12,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { verifyGrounding } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -67,10 +68,36 @@ async function handlePost(request: Request) {
     const startTime = Date.now();
 
     // Generate resume and cover letter in parallel
-    const [resume, coverLetter] = await Promise.all([
+    const [resumeRaw, coverLetterRaw] = await Promise.all([
       generateResume(input),
       generateCoverLetter(input),
     ]);
+
+    // Post-generation grounding gate (F2): claim-trace each document back to what
+    // the user actually gave us and strip/generalize anything invented. The prompt
+    // TRUTH GATE is necessary but the model overrides it under thin inputs (Sol's
+    // "buffers and scrubbers", "clean safety record"), so this AI verify pass is
+    // load-bearing. Fail-open -- a verifier hiccup never blocks or mangles a resume.
+    // Source = ONLY the user's own material (their resume text + their own words),
+    // never the AI-derived narrative, so invention can't launder itself as source.
+    const groundingSource = [
+      input.resumeText || "",
+      input.goalNarrative || "",
+      (input.goals || []).join(", "),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const [resumeCheck, coverCheck] = await Promise.all([
+      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
+    ]);
+
+    const resume = resumeCheck.text;
+    const coverLetter = coverCheck.text;
+    const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
+    const groundingApplied = resumeCheck.applied || coverCheck.applied;
+    const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
 
     const latencyMs = Date.now() - startTime;
 
@@ -94,6 +121,8 @@ async function handlePost(request: Request) {
           type: "document_generation",
           resume_length: resume.length,
           cover_letter_length: coverLetter.length,
+          grounding_flags: groundingFlags.length,
+          grounding_applied: groundingApplied,
         },
         latencyMs,
       });
@@ -104,6 +133,11 @@ async function handlePost(request: Request) {
     return NextResponse.json({
       resume,
       coverLetter,
+      grounding: {
+        hasFabrication,
+        applied: groundingApplied,
+        flags: groundingFlags,
+      },
       generated_at: new Date().toISOString(),
     });
   } catch (error: any) {

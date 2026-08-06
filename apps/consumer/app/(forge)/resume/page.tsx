@@ -20,6 +20,8 @@ import { parseTextToResume } from "@/components/resume/resumeParsers";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
+import { GroundingGauge } from "@/components/GroundingGauge";
+import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -77,6 +79,8 @@ export default function ResumeIntakePage() {
   const [parsedName, setParsedName] = useState<string | null>(null);
   const [parsedEmail, setParsedEmail] = useState<string>("");
   const [parsedPhone, setParsedPhone] = useState<string>("");
+  // Full parsed profile -- feeds the grounding gauge (how much true material we have).
+  const [parsedProfile, setParsedProfile] = useState<any>(null);
   const [dragOver, setDragOver] = useState(false);
   // Phase 7: once ingest yields material, drop the user into the structured
   // base-resume builder (the Build stage) instead of routing straight on.
@@ -113,6 +117,7 @@ export default function ResumeIntakePage() {
         setParsedName(data.profile?.full_name || null);
         setParsedEmail(data.profile?.email || "");
         setParsedPhone(data.profile?.phone || "");
+        setParsedProfile(data.profile || null);
         setUploadSuccess(true);
       } catch (err) {
         setUploadError("Couldn't read that file. Try a different one?");
@@ -282,6 +287,11 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
       >
+        {/* Grounding gauge -- the honest contract: how much true material we have. */}
+        {parsedProfile && (
+          <GroundingGauge score={computeGrounding(jobsFromParsedProfile(parsedProfile))} />
+        )}
+
         {/* Full resume preview */}
         <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
@@ -1204,6 +1214,12 @@ function GuidedBuilder({
   // --- Review ---
   if (step === "review") {
     const assembled = assembleResume();
+    const groundingJobs = [
+      { employer: answers.job1Company, title: answers.job1Title, dates: answers.job1Dates, duties: answers.job1Duties },
+      ...(answers.addJob2
+        ? [{ employer: answers.job2Company, title: answers.job2Title, dates: answers.job2Dates, duties: answers.job2Duties }]
+        : []),
+    ];
     return (
       <FlowPage
         title="Here's what we have."
@@ -1214,6 +1230,9 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
       >
+        {/* Grounding gauge -- the honest contract, computed from the user's answers. */}
+        <GroundingGauge score={computeGrounding(groundingJobs)} />
+
         <div className="bg-t-panel border border-t-line overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
             <p className="text-xs font-semibold text-t-phos uppercase">

@@ -16,6 +16,7 @@ import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/c
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
+import { verifyGrounding } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -200,6 +201,39 @@ ${contactName || "Candidate"}`;
       throw new Error("AI returned invalid resume structure");
     }
 
+    // ─── Grounding gate (F2) ──────────────────────────────────────────
+    // Claim-trace the freeform text (cover letter + summary) back to the
+    // person's own background -- NEVER the job posting -- and strip anything
+    // invented. Fail-open. The structured bullets are constrained by the TRUTH
+    // GATE and reviewed/edited in the editor before download; per-bullet
+    // structured verification is a fast-follow.
+    const groundingSource = [
+      typeof resumeText === "string" ? resumeText : "",
+      forgeOutput?.narrative?.summary || "",
+      Array.isArray(forgeOutput?.narrative?.strengths)
+        ? forgeOutput.narrative.strengths
+            .map((s: any) => `${s.title}: ${s.evidence}`)
+            .join("\n")
+        : "",
+      Array.isArray(forgeOutput?.skills)
+        ? forgeOutput.skills
+            .map((s: any) => (typeof s === "string" ? s : s?.name))
+            .filter(Boolean)
+            .join(", ")
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const [coverCheck, summaryCheck] = await Promise.all([
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterText, kind: "cover_letter" }),
+      verifyGrounding({ sourceText: groundingSource, output: parsed.summary || "", kind: "summary" }),
+    ]);
+    const verifiedCover = coverCheck.text;
+    const groundingFlags = [...coverCheck.flags, ...summaryCheck.flags];
+    const groundingApplied = coverCheck.applied || summaryCheck.applied;
+    const hasFabrication = coverCheck.hasFabrication || summaryCheck.hasFabrication;
+
     // Build the full ResumeDocument
     const resume = {
       formatVersion: 2,
@@ -217,7 +251,7 @@ ${contactName || "Candidate"}`;
         city: contact?.city || "",
         state: contact?.state || "",
       },
-      summary: parsed.summary || "",
+      summary: summaryCheck.text || parsed.summary || "",
       experience: (parsed.experience || []).map((e: any) => ({
         id: crypto.randomUUID(),
         title: e.title || "",
@@ -303,8 +337,10 @@ ${contactName || "Candidate"}`;
           type: "career_package",
           resumeExperienceCount: resume.experience.length,
           resumeSkillsCount: resume.skills.length,
-          coverLetterLength: coverLetterText.length,
+          coverLetterLength: verifiedCover.length,
           disclosureConfidence: confidenceLevel,
+          grounding_flags: groundingFlags.length,
+          grounding_applied: groundingApplied,
         },
       });
     } catch (err) {
@@ -315,7 +351,13 @@ ${contactName || "Candidate"}`;
       ? parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4)
       : [];
 
-    return NextResponse.json({ resume, coverLetter: coverLetterText, disclosureBrief, tailoringNotes });
+    return NextResponse.json({
+      resume,
+      coverLetter: verifiedCover,
+      disclosureBrief,
+      tailoringNotes,
+      grounding: { hasFabrication, applied: groundingApplied, flags: groundingFlags },
+    });
   } catch (error: any) {
     console.error("Career package generation error:", error);
     return NextResponse.json(

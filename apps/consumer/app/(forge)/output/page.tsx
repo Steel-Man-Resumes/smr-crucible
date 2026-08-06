@@ -149,6 +149,8 @@ export default function OutputPage() {
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
   const [coverLetterText, setCoverLetterText] = useState<string>("");
+  // Grounding gate result (F2): how many unverifiable claims we removed/flagged.
+  const [groundingNote, setGroundingNote] = useState<{ count: number; applied: boolean } | null>(null);
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
   const [copied, setCopied] = useState<string>("");
@@ -193,6 +195,12 @@ export default function OutputPage() {
       const data = await response.json();
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
+      if (data.grounding?.flags?.length) {
+        setGroundingNote({
+          count: data.grounding.flags.length,
+          applied: data.grounding.applied === true,
+        });
+      }
       setDocState("done");
     } catch (err: any) {
       console.error("Doc generation error:", err);
@@ -557,6 +565,20 @@ export default function OutputPage() {
 
         {docState === "done" && (
           <div className="space-y-4">
+            {/* Grounding note (F2): honest disclosure of the truth gate at work. */}
+            {groundingNote && (
+              <div className="bg-t-panel border border-t-amber px-4 py-3">
+                <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
+                  Kept true to you
+                </p>
+                <p className="text-xs text-t-phos leading-relaxed">
+                  {groundingNote.applied
+                    ? `We reviewed every line and removed ${groundingNote.count} ${groundingNote.count === 1 ? "detail" : "details"} we couldn't trace to what you told us. Your documents contain only what's true about you -- add more detail anytime to make them fuller.`
+                    : `We reviewed every line against what you told us. A few specifics couldn't be verified from your input -- double-check anything that doesn't sound like you before you send it.`}
+                </p>
+              </div>
+            )}
+
             {/* Resume */}
             {resumeText && (
               <div className="bg-t-panel border border-t-line overflow-hidden">
