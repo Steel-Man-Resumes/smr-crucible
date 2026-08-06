@@ -116,21 +116,42 @@ export async function POST(request: Request) {
         [trimmedEmail]
       );
 
-      if (existing.rows.length > 0) {
-        return NextResponse.json(
-          { error: "An account with this email already exists. Try signing in instead." },
-          { status: 409 }
-        );
-      }
-
       const passwordHash = await bcrypt.hash(password, 12);
-      const result = await client.query(
-        `INSERT INTO users (name, email, "emailVerified", password_hash)
-         VALUES ($1, $2, NOW(), $3)
-         RETURNING id, email`,
-        [cName || trimmedEmail.split("@")[0], trimmedEmail, passwordHash]
-      );
-      newUserId = result.rows[0].id;
+
+      if (existing.rows.length > 0) {
+        // Org-invited (or pre-provisioned) accounts that have NEVER signed in
+        // by any door may be claimed by registering: proof of control is the
+        // email address, exactly as it is for a fresh registration. The
+        // guarded UPDATE keeps active accounts (password, magic-link history,
+        // or OAuth link) untouchable -- those still 409 to sign-in.
+        const claimed = await client.query(
+          `UPDATE users u
+              SET password_hash = $2,
+                  "emailVerified" = NOW(),
+                  name = COALESCE(NULLIF($3, ''), u.name)
+            WHERE u.id = $1
+              AND u.password_hash IS NULL
+              AND u."emailVerified" IS NULL
+              AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
+            RETURNING id`,
+          [existing.rows[0].id, passwordHash, cName]
+        );
+        if (claimed.rows.length === 0) {
+          return NextResponse.json(
+            { error: "An account with this email already exists. Try signing in instead." },
+            { status: 409 }
+          );
+        }
+        newUserId = claimed.rows[0].id;
+      } else {
+        const result = await client.query(
+          `INSERT INTO users (name, email, "emailVerified", password_hash)
+           VALUES ($1, $2, NOW(), $3)
+           RETURNING id, email`,
+          [cName || trimmedEmail.split("@")[0], trimmedEmail, passwordHash]
+        );
+        newUserId = result.rows[0].id;
+      }
     } finally {
       client.release();
     }

@@ -94,7 +94,8 @@ export default function ProductHome() {
         <div className="flex flex-wrap gap-5">
           <Link href="/security" className="hover:text-t-white">Security</Link>
           <a href="https://steelmanresumes.com" className="hover:text-t-white">Main site</a>
-          <a href="mailto:info@steelmanresumes.com" className="hover:text-t-white">Contact</a>
+          {/* No MX on steelmanresumes.com -- inbound mail must go to a real inbox. */}
+          <a href="mailto:troyrichardcarr@gmail.com" className="hover:text-t-white">Contact</a>
         </div>
       </footer>
     </main>

@@ -303,10 +303,10 @@ function LoginForm() {
                 </strong>{" "}
                 If your organization is not on the platform yet, email{" "}
                 <a
-                  href="mailto:steelmanresumes@gmail.com?subject=Partner%20access%20request"
+                  href="mailto:troyrichardcarr@gmail.com?subject=Partner%20access%20request"
                   className="font-medium text-t-amber-bright underline underline-offset-2"
                 >
-                  steelmanresumes@gmail.com
+                  troyrichardcarr@gmail.com
                 </a>{" "}
                 with your organization name and program type. Free for
                 nonprofits and community organizations -- typically set up

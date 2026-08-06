@@ -741,10 +741,10 @@ export default function OutputPage() {
                 back to the partner overview
               </TBtn>
               <a
-                href="mailto:steelmanresumes@gmail.com?subject=Partner%20access%20request"
+                href="mailto:troyrichardcarr@gmail.com?subject=Partner%20access%20request"
                 className="t-focus w-full px-4 py-3 text-center border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
               >
-                Request partner access -- steelmanresumes@gmail.com
+                Request partner access -- troyrichardcarr@gmail.com
               </a>
               <button
                 onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}

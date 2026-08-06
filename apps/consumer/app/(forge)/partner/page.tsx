@@ -198,7 +198,7 @@ export default function PartnerPage() {
             {[
               { label: "What it unlocks", detail: "200 AI calls/day for each client who redeems it (vs. the default free limit). That's enough for full daily use of every Refinery tool." },
               { label: "How clients use it", detail: "They enter the code at login/sign-up, or later in Settings > Partner Access Code. It takes 10 seconds." },
-              { label: "How to get one", detail: "Email steelmanresumes@gmail.com with your organization name and program type. Free for nonprofits and community organizations. Typically set up within 24 hours." },
+              { label: "How to get one", detail: "Email troyrichardcarr@gmail.com with your organization name and program type. Free for nonprofits and community organizations. Typically set up within 24 hours." },
               { label: "No expiration by default", detail: "Codes stay active as long as your program is running. You can request a new one if you need separate tracking for different cohorts." },
             ].map((item, i) => (
               <div key={i} className="bg-t-panel-2 p-4 border border-t-line">

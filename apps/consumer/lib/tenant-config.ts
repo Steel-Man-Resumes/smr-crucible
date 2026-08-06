@@ -56,7 +56,8 @@ const DEFAULT_TENANT: TenantConfig = {
   orgShortName: "Steel Man",
   orgTagline: "Rough. Raw. Real.",
   logoPath: "/images/smr-logo.png",
-  contactEmail: "info@steelmanresumes.com",
+  // steelmanresumes.com has no MX -- inbound must go to a real inbox.
+  contactEmail: "troyrichardcarr@gmail.com",
   website: "https://steelmanresumes.com",
   partnerBrand: {
     name: process.env.NEXT_PUBLIC_PARTNER_NAME || "Your Organization",

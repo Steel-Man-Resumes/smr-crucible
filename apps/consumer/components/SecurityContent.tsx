@@ -212,7 +212,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         <p className="text-sm text-t-phos-dim">
           Ask t.ROY — he&apos;s on every page. Or email us at{" "}
           <span className="font-medium text-t-white">
-            info@steelmanresumes.com
+            troyrichardcarr@gmail.com
           </span>
         </p>
       </div>

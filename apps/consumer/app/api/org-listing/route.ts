@@ -84,7 +84,8 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             from: "noreply@steelmanresumes.com",
-            to: "info@steelmanresumes.com",
+            // steelmanresumes.com has no MX -- inbound must go to a real inbox.
+            to: process.env.SUPPORT_NOTIFY_EMAIL || "troyrichardcarr@gmail.com",
             subject: `New Org Listing Request: ${orgName.trim()}`,
             text: `Organization: ${orgName}\nCategory: ${category}\nCity: ${city}\nPhone: ${phone || "N/A"}\nWebsite: ${website || "N/A"}\nDescription: ${description}\nContact: ${contactName} (${contactEmail})`,
           }),
