@@ -1,5 +1,67 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-06 (Opus 4.8) -- Pre-conference overhaul WAVE 1 (F1-F4) on branch + preview
+
+Executed Wave 1 of `~/todash/smr/SMR-CRUCIBLE-OVERHAUL-PLAN-2026-08-06.md`. Branch
+`crucible-overhaul-wave1-2026-08-06`, deployed to a PREVIEW only (never main/prod).
+Preview: `the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app`
+(SSO-gated; access via a Vercel share link). **DO NOT promote to prod until Troy +
+Codex + Fable review the preview.**
+
+**What shipped (4 atomic commits + 2 follow-ups):**
+- **F1 (PDF upload)** `lib/text-extraction.ts` + `api/parse`: pdfjs-legacy + DOM
+  polyfills (incl. `Promise.withResolvers`, absent on Node <22). Scan-only/unreadable
+  files throw a typed `UnreadableDocumentError` -> friendly 422 to the guided builder,
+  never a 500. **GOTCHA (preview-caught):** Next BUNDLED pdfjs into a serverless chunk
+  and its `pdf.worker.mjs` dynamic import resolved to a non-existent chunk -> every text
+  PDF failed on Vercel while passing on local Node 20. Fix: `pdfjs-dist` in
+  `serverComponentsExternalPackages` + force the legacy build into the `/api/parse`
+  Lambda via `outputFileTracingIncludes` (`next.config.mjs`). **Verified on the real
+  runtime: text PDF -> 200 + extracted text; junk PDF -> 422.**
+- **F3 (job-search 504)** `lib/job-search-core.ts`: AbortController timeouts per
+  provider (JSearch 12s, CareerOneStop 7s) + a race-bound on AI enrichment (10s,
+  degrades to real basic listings). **Measured Troy's live key: `num_pages=2` = 11-14s
+  (the 504 cause) -> dropped to `num_pages=1` (~6s, 10 real jobs).** Also normalized
+  `/search-v2` `job_title` values that arrive JSON-array-encoded (would render raw
+  brackets -- QA never caught it because they only ever got 504s). Live key confirmed
+  returning real Grand Rapids/Lansing postings.
+- **F4 (tailoring + unlock)** `components/resume/ResumeWorkspace.tsx`: base-resume
+  state now truthful (recognized from saved server artifacts, not just localStorage);
+  Tailor honors the typed job + an optional pasted job description and runs real AI
+  tailoring via `runCareerPackage`; unlock decoupled from the live board (tailoring to a
+  typed/pasted job creates+links a `job_application`, so the saved resume is job-targeted
+  and `useOnboarding` flips to `full_access` -- no Job Board needed). No gating-logic
+  change; keyed on the existing "job-targeted resume" gate.
+- **F2 (truth gate -- marquee)** new `lib/grounding-verify.ts` (cheap gpt-4o-mini
+  post-gen verifier, FAIL-OPEN) wired into `generate-docs` (resume+cover) and
+  `resume-generate-full` (cover+summary); new `lib/grounding.ts` + `GroundingGauge.tsx`
+  deterministic RED/AMBER/GREEN gauge on the intake/review screens; honest note on the
+  output page. **Verified: against Sol's exact vague persona the verifier flagged all
+  four invented claims and rewrote to only-what-the-source-stated (zero leakage); live
+  on the preview it flagged 8 claims on a thin persona and applied the rewrite.** Adds
+  ~1 cheap call per doc -- fold into the cost trial.
+
+**Verification status:** F1 + F2 verified END-TO-END on the real preview runtime. F3
+verified at the core (live key, latency, `/search-v2` shape, timeout logic; prod logs
+confirm the exact 30s timeout). F4 verified by code-trace against the unlock gate +
+typecheck. F3/F4 UI e2e (auth-gated, Turnstile) is the assessors' Playwright pass.
+
+**Infra fix done this session (Neon, plan s.4):** the **Preview** env `DATABASE_URL`
+was pointed at a dead/malformed Neon host (`api.c-7.us-east-.aws.neon.tech`, ENOTFOUND)
+-> every DB route 500'd on preview. Troy re-pointed Preview `DATABASE_URL` at the working
+prod crucible Neon (`ep-little-cloud-...-pooler.c-7.us-east-1`). Prod Neon is healthy
+(no prod Neon errors in 24h). Consider isolating Preview on its own Neon branch later
+(plan s.2D gating doctrine); for now Preview shares prod.
+
+**Deferred / flagged:** self-disclosure "how strong is your resume?" input (ratified
+s.2.3) deferred -- the deterministic gauge + verifier already deliver "recognize strong
+vs poor history, act accordingly." Structured per-bullet verification on the Tailor
+resume is a fast-follow (cover+summary covered now). `/api/analyze` has a separate
+recurring JSON-parse error in prod logs (barrier analysis) -- not in Wave 1 scope.
+
+**Next:** assessor preview review -> Wave 2 (F5-F6) -> Wave 3 (F7-F17) + N1-N4 -> full
+regression re-run -> promote to prod. Run the cost probe now that the verifier is live.
+
 ## 2026-08-06 (Fable) -- Org admin-invite DEPLOYED TO PROD + dead-inbox sweep + register-claim
 
 Troy approved; `vercel deploy --prod` from the REPO ROOT (deploying from
