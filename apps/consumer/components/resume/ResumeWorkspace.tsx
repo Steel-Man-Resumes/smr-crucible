@@ -16,7 +16,7 @@ import {
   formatResumeDownload,
   migrateLegacyResume,
 } from "./resumeModel";
-import { parseForgeToResume, parseRushToResume } from "./resumeParsers";
+import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { printResumePdf } from "./resumePrint";
 
@@ -53,6 +53,11 @@ export function ResumeWorkspace() {
 
   // Forge data
   const [forgeAvailable, setForgeAvailable] = useState(false);
+
+  // Optional pasted job description -- when present, tailoring is targeted to the
+  // real posting text (the ratified "pasted-JD unlocks the toolset" path). No
+  // live Job Board required.
+  const [jobDescription, setJobDescription] = useState("");
 
   // Full resume generation (from job board)
   const [generatingFull, setGeneratingFull] = useState(false);
@@ -205,6 +210,11 @@ export function ResumeWorkspace() {
         salary?: string;
         employment_type?: string;
         id?: string;
+        jobListingUrl?: string;
+        // Provenance for the created job_application (board = "jsearch",
+        // typed/pasted in the Tailor = "manual"). Purely a label; the unlock
+        // gate keys on the saved resume being job-targeted, not the source.
+        source?: string;
       },
       opts: { existingApplicationId?: string } = {}
     ) => {
@@ -220,6 +230,7 @@ export function ResumeWorkspace() {
             ...d.meta,
             targetJob: job.title || "",
             targetCompany: job.company || "",
+            jobListingUrl: job.jobListingUrl ?? d.meta.jobListingUrl,
             createdFrom: "job" as const,
           },
         }));
@@ -330,7 +341,13 @@ export function ResumeWorkspace() {
         }
 
         const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes } = await res.json();
-        setDoc(resume as ResumeDocument);
+        const finalResume = resume as ResumeDocument;
+        // Keep the typed job-listing URL on the tailored doc (the generator
+        // response doesn't echo it back).
+        if (job.jobListingUrl && finalResume?.meta) {
+          finalResume.meta = { ...finalResume.meta, jobListingUrl: job.jobListingUrl };
+        }
+        setDoc(finalResume);
         if (coverLetter) setCoverLetterText(coverLetter);
         if (brief) setDisclosureBrief(brief);
         if (notes?.length) setTailoringNotes(notes);
@@ -353,7 +370,7 @@ export function ResumeWorkspace() {
                 salary: job.salary || "",
                 description: job.description || "",
                 employment_type: job.employment_type || "",
-                source: "jsearch",
+                source: job.source || "jsearch",
                 source_id: job.id || "",
                 status: "saved",
               }),
@@ -570,17 +587,26 @@ export function ResumeWorkspace() {
 
   // Print / save as PDF -- shared helper (components/resume/resumePrint.ts).
 
-  // --- Import from Forge ---
-  function importFromForge() {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        const imported = parseForgeToResume(session);
-        setDoc(imported);
-        setShowSetup(false);
-      }
-    } catch {}
+  // --- Tailor for the typed/pasted job ---
+  // Runs the real AI tailoring against whatever the user typed (title/company/
+  // URL) and optionally a pasted job description -- honoring those fields instead
+  // of silently retargeting to the Forge-recommended role. runCareerPackage
+  // sources the base resume from localStorage OR the server (works cross-device,
+  // even when this browser has no Forge session), creates + links a job
+  // application, and the saved resume becomes job-targeted -- which unlocks the
+  // toolset without ever needing the live Job Board.
+  function tailorForJob() {
+    if (!doc.meta.targetJob.trim()) return;
+    runCareerPackage(
+      {
+        title: doc.meta.targetJob,
+        company: doc.meta.targetCompany,
+        description: jobDescription.trim() || undefined,
+        jobListingUrl: doc.meta.jobListingUrl || undefined,
+        source: "manual",
+      },
+      {}
+    );
   }
 
   // --- Start fresh ---
@@ -817,47 +843,81 @@ export function ResumeWorkspace() {
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
+          <div>
+            <label className="text-sm font-medium text-t-white block mb-1">
+              Paste the job description{" "}
+              <span className="font-normal text-t-phos-dim">(optional -- makes the tailoring sharper)</span>
+            </label>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for -- using only what's true about you."
+              rows={5}
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[120px]"
+            />
+          </div>
         </div>
 
-        {/* Start options -- the Tailor aims a BASE resume at the job.
-            Base resumes are built in the Forge; "start from scratch" links out. */}
-        <div className="space-y-3">
-          {forgeAvailable ? (
-            <>
-              <button
-                onClick={importFromForge}
-                disabled={!doc.meta.targetJob.trim()}
-                data-tour="tailor-generate"
-                className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
-              >
-                Tailor from my Forge profile
-              </button>
-              <a
-                href="/resume"
-                className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
-              >
-                Build a fresh base resume in the Forge
-              </a>
-            </>
-          ) : (
-            <>
-              <a
-                href="/resume"
-                className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
-              >
-                Build your base resume in the Forge first
-              </a>
-              <button
-                onClick={startFresh}
-                disabled={!doc.meta.targetJob.trim()}
-                data-tour="tailor-generate"
-                className="t-focus w-full px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
-              >
-                Or start a blank resume here
-              </button>
-            </>
-          )}
-        </div>
+        {/* Start options -- the Tailor aims a BASE resume at the job. "Have a
+            base resume" is truthful about BOTH sources: this browser's Forge
+            session OR a base resume saved to the account (cross-device). If a
+            base exists, tailoring is the primary action and honors the typed
+            job; otherwise the Forge builds the base first. */}
+        {(() => {
+          const hasBaseResume =
+            forgeAvailable ||
+            savedResumes.some(
+              (r) =>
+                (r.target_context as any)?.source === "forge" ||
+                r.target_context?.targetJob === "General"
+            );
+          return (
+            <div className="space-y-3">
+              {hasBaseResume ? (
+                <>
+                  <button
+                    onClick={tailorForJob}
+                    disabled={!doc.meta.targetJob.trim()}
+                    data-tour="tailor-generate"
+                    className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
+                  >
+                    Tailor my resume for this job
+                  </button>
+                  <p className="text-xs text-t-phos-dim text-center">
+                    Uses your base resume{" "}
+                    {jobDescription.trim()
+                      ? "and the job description you pasted"
+                      : "-- paste the job description above for a sharper match"}
+                    . Only what&apos;s true about you, aimed at this posting.
+                  </p>
+                  <a
+                    href="/resume"
+                    className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
+                  >
+                    Rebuild my base resume in the Forge
+                  </a>
+                </>
+              ) : (
+                <>
+                  <a
+                    href="/resume"
+                    className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
+                  >
+                    Build your base resume in the Forge first
+                  </a>
+                  <button
+                    onClick={startFresh}
+                    disabled={!doc.meta.targetJob.trim()}
+                    data-tour="tailor-generate"
+                    className="t-focus w-full px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
+                  >
+                    Or start a blank resume here
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   }
