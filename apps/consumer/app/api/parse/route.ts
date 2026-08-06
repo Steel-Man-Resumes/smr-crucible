@@ -101,6 +101,20 @@ async function handlePost(request: Request) {
     });
   } catch (error: any) {
     console.error("Parse error:", error);
+    // A genuinely unreadable document (scanned/image-only PDF, unreadable photo)
+    // is not a server fault -- return a friendly 422 and flag the guided builder
+    // so the user is never dead-ended on a generic 500.
+    if (error?.code === "UNREADABLE_DOCUMENT") {
+      return NextResponse.json(
+        {
+          error:
+            error.message ||
+            "We couldn't read that file. Paste the text, or use our guided builder instead.",
+          guided: true,
+        },
+        { status: 422 }
+      );
+    }
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },
       { status: 500 }
