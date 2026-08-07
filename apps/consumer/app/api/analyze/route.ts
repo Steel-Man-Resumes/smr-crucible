@@ -21,7 +21,7 @@ import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
-import { WOTC_RE, stripEmployerTaxCredit } from "@/lib/legal-sanitize";
+import { WOTC_RE, stripEmployerTaxCredit, stripEmDashes } from "@/lib/legal-sanitize";
 
 export const maxDuration = 120;
 
@@ -267,24 +267,6 @@ const READINESS_DIRECTIVES: Record<string, {
 
 function getReadinessDirective(stage?: string) {
   return READINESS_DIRECTIVES[stage || "preparation"] || READINESS_DIRECTIVES.preparation;
-}
-
-// Deterministic guarantee of Troy's hard rule: no em dashes anywhere in the
-// generated report. Prompts ask for it, this enforces it regardless of model
-// compliance. Em dash -> "--", en dash -> "-" (matches the parse-route cleanup).
-function stripEmDashes<T>(value: T): T {
-  if (typeof value === "string") {
-    return value.replace(/—/g, "--").replace(/–/g, "-") as unknown as T;
-  }
-  if (Array.isArray(value)) {
-    return value.map((v) => stripEmDashes(v)) as unknown as T;
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = stripEmDashes(v);
-    return out as T;
-  }
-  return value;
 }
 
 function buildContext(input: ForgeInput): string {

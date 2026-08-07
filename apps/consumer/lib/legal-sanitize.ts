@@ -47,3 +47,23 @@ export function stripEmployerTaxCredit<T>(value: T): T {
   }
   return value;
 }
+
+// House-style guard (not legal, but the same deterministic-output-sweep doctrine):
+// Troy's hard rule is no em dashes anywhere in the generated report. The prompts ask
+// for it; this enforces it regardless of model compliance. Em dash -> "--", en dash
+// -> "-" (matches the parse-route cleanup). Co-located here so both output sweeps live
+// together and the adversarial suite can unit-test them.
+export function stripEmDashes<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(/—/g, "--").replace(/–/g, "-") as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => stripEmDashes(v)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = stripEmDashes(v);
+    return out as T;
+  }
+  return value;
+}

@@ -60,7 +60,7 @@ async function fetchJsonWithTimeout(
 // Bound a DB / side-channel promise so a stalled dependency can't blow the route
 // budget (Codex 10). On timeout OR error we resolve to `fallback` and let the request
 // proceed; the detached promise's late settle is swallowed, never unhandled.
-function withDeadline<T>(p: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+export function withDeadline<T>(p: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
   return new Promise<T>((resolve) => {
     const timer = setTimeout(() => {
       console.error(`[job-search] ${label} exceeded ${ms}ms -- proceeding without it`);
