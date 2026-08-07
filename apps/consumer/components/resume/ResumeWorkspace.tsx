@@ -347,16 +347,12 @@ export function ResumeWorkspace() {
         if (job.jobListingUrl && finalResume?.meta) {
           finalResume.meta = { ...finalResume.meta, jobListingUrl: job.jobListingUrl };
         }
-        setDoc(finalResume);
-        if (coverLetter) setCoverLetterText(coverLetter);
-        if (brief) setDisclosureBrief(brief);
-        if (notes?.length) setTailoringNotes(notes);
-        setPackageTab("resume");
-        setGeneratingFull(false);
 
-        // Resolve the target application: reuse the existing one (next-step card)
-        // or create it now (job board). Remember its id so the resume artifact
-        // links back to it.
+        // Resolve the target application BEFORE rendering the workspace, so the
+        // 5s autosave (which starts when the doc mounts) always sees the linked
+        // applicationId -- otherwise the first save could persist the resume
+        // unlinked, and unchanged content later blocks the re-save that would link
+        // it (Codex 11). Server dedups manual re-runs on title+company.
         let applicationId = opts.existingApplicationId ?? null;
         if (!applicationId) {
           try {
@@ -382,6 +378,13 @@ export function ResumeWorkspace() {
           } catch {}
         }
         if (applicationId) setTargetApplicationId(applicationId);
+
+        setDoc(finalResume);
+        if (coverLetter) setCoverLetterText(coverLetter);
+        if (brief) setDisclosureBrief(brief);
+        if (notes?.length) setTailoringNotes(notes);
+        setPackageTab("resume");
+        setGeneratingFull(false);
 
         // Auto-save cover letter as artifact
         if (coverLetter) {
@@ -595,8 +598,13 @@ export function ResumeWorkspace() {
   // even when this browser has no Forge session), creates + links a job
   // application, and the saved resume becomes job-targeted -- which unlocks the
   // toolset without ever needing the live Job Board.
+  // A real job needs a title AND a company -- a bare title must never produce a
+  // "job-targeted" resume that unlocks the toolset without a linked application
+  // (Codex 5). The pasted job description is the sharper-tailoring enhancement.
+  const canTailor = Boolean(doc.meta.targetJob.trim() && doc.meta.targetCompany.trim());
+
   function tailorForJob() {
-    if (!doc.meta.targetJob.trim()) return;
+    if (!canTailor) return;
     runCareerPackage(
       {
         title: doc.meta.targetJob,
@@ -810,8 +818,8 @@ export function ResumeWorkspace() {
           </div>
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Where?{" "}
-              <span className="font-normal text-t-phos-dim">(optional)</span>
+              Which company?{" "}
+              <span className="font-normal text-t-phos-dim">(required -- we tailor to a specific employer)</span>
             </label>
             <input
               value={doc.meta.targetCompany}
@@ -877,18 +885,18 @@ export function ResumeWorkspace() {
                 <>
                   <button
                     onClick={tailorForJob}
-                    disabled={!doc.meta.targetJob.trim()}
+                    disabled={!canTailor}
                     data-tour="tailor-generate"
                     className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
                   >
                     Tailor my resume for this job
                   </button>
                   <p className="text-xs text-t-phos-dim text-center">
-                    Uses your base resume{" "}
-                    {jobDescription.trim()
-                      ? "and the job description you pasted"
-                      : "-- paste the job description above for a sharper match"}
-                    . Only what&apos;s true about you, aimed at this posting.
+                    {!canTailor
+                      ? "Add the job title and the company to tailor your resume to a specific posting."
+                      : jobDescription.trim()
+                        ? "Uses your base resume and the job description you pasted. Only what's true about you, aimed at this posting."
+                        : "Uses your base resume -- paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
                   </p>
                   <a
                     href="/resume"
