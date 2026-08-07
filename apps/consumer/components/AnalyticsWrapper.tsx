@@ -8,6 +8,7 @@
 import { usePathname } from "next/navigation";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { GoogleAnalytics } from "./GoogleAnalytics";
 
 export function AnalyticsWrapper() {
   const pathname = usePathname();
@@ -16,6 +17,7 @@ export function AnalyticsWrapper() {
     <>
       <Analytics />
       <SpeedInsights />
+      <GoogleAnalytics />
     </>
   );
 }
