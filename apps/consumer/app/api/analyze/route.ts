@@ -74,7 +74,7 @@ async function handlePost(request: Request) {
     ]);
 
     // Compose the Forge output
-    const forgeOutput = {
+    const forgeOutput = stripEmDashes({
       schema_version: "forge_output.v1",
       generated_at: new Date().toISOString(),
       readiness_stage: input.readinessStage || "preparation",
@@ -83,7 +83,7 @@ async function handlePost(request: Request) {
       skills: skills.skills || [],
       career_paths: careerPaths.paths || [],
       barriers: barriers?.barriers || [],
-    };
+    });
 
     // Log decision for JBS compliance
     try {
@@ -233,6 +233,24 @@ function getReadinessDirective(stage?: string) {
   return READINESS_DIRECTIVES[stage || "preparation"] || READINESS_DIRECTIVES.preparation;
 }
 
+// Deterministic guarantee of Troy's hard rule: no em dashes anywhere in the
+// generated report. Prompts ask for it, this enforces it regardless of model
+// compliance. Em dash -> "--", en dash -> "-" (matches the parse-route cleanup).
+function stripEmDashes<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(/—/g, "--").replace(/–/g, "-") as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => stripEmDashes(v)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = stripEmDashes(v);
+    return out as T;
+  }
+  return value;
+}
+
 function buildContext(input: ForgeInput): string {
   const parts: string[] = [];
 
@@ -328,6 +346,7 @@ RULES:
   - Focus purely on professional skills, experience, education, and certifications.
   - If education/certs were earned in prison, just list them without mentioning where. "GED, 2021" not "GED earned at Waupun Correctional."
 - The "reflection" field is private (shown only to the user) -- this CAN acknowledge their full journey with warmth.
+- Use "--" never an em dash anywhere in the output. No emojis.
 - Output JSON only.`;
 
   const prompt = `Analyze this person's story and create their narrative.
@@ -412,6 +431,7 @@ RULES:
 - Include concrete next steps for each path.
 - No blue-collar assumptions -- match based on actual skills and interests.
 - Be honest about salary ranges.
+- Use "--" never an em dash anywhere in the output. No emojis.
 - Output JSON only.`;
 
   const prompt = `Find career paths for this person.
@@ -469,11 +489,12 @@ RULES:
 - Be specific, not generic. Real organizations > generic advice.
 - For criminal records: consider type, recency, and jurisdiction. Reference laws as GENERAL INFORMATION to verify, never as a determination of THIS person's eligibility.
 - LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief -- say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
-- Employer incentives: NEVER cite the Work Opportunity Tax Credit (WOTC) as a current incentive -- it expired for hires beginning after 2025-12-31 (Form 8850 retired). The Federal Bonding Program is the current program; mention it generally if relevant, and never present any incentive as settled without verification.
+- Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all -- it expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / Michigan Works!), and never present any incentive as settled without verification.
 - Wisconsin (only if the jurisdiction is WI): ban-the-box applies to state/county government employers; Milwaukee city has an ordinance extending to private employers with 15+. An expungement statute (WI §973.015) exists -- note that a legal-aid resource can assess whether it applies; do NOT assert the person's own eligibility.
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
-- "The system has real obstacles here. Here's how to move through them." — not "don't worry about it."
+- "The system has real obstacles here. Here's how to move through them." -- not "don't worry about it."
+- Use "--" never an em dash anywhere in the output. No emojis.
 - Output JSON only.`;
 
   const prompt = `Analyze barriers and find resources for this person.
