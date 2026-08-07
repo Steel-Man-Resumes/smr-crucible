@@ -162,29 +162,34 @@ export default function SettingsPage() {
     }
   }
 
-  function exportData() {
+  async function exportData() {
     setExportStatus("exporting");
     try {
-      const exportPayload: Record<string, any> = {};
+      // Real server-side export -- everything Postgres holds for this user.
+      const res = await fetch("/api/user/export-data");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to export data. Please try again.");
+        setExportStatus("idle");
+        return;
+      }
+      const exportPayload: Record<string, any> = await res.json();
 
-      const keys = [
-        "forge_session",
-        "consumer_progress",
-        "consent_record",
-      ];
+      // Fold in the local-device keys so nothing is lost, under their own key
+      // so they never collide with the server-side field names above.
+      const localDevice: Record<string, any> = {};
+      const keys = ["forge_session", "consumer_progress", "consent_record"];
       for (const key of keys) {
         const val = localStorage.getItem(key);
         if (val) {
           try {
-            exportPayload[key] = JSON.parse(val);
+            localDevice[key] = JSON.parse(val);
           } catch {
-            exportPayload[key] = val;
+            localDevice[key] = val;
           }
         }
       }
-
-      exportPayload.exported_at = new Date().toISOString();
-      exportPayload.format_version = "1.0";
+      exportPayload.localDevice = localDevice;
 
       const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
         type: "application/json",
@@ -199,6 +204,7 @@ export default function SettingsPage() {
       setExportStatus("done");
       setTimeout(() => setExportStatus("idle"), 3000);
     } catch {
+      alert("Failed to export data. Please try again.");
       setExportStatus("idle");
     }
   }

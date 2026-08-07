@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
@@ -60,6 +61,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
+    // login wall before value). Attribute to a user when a session happens to exist.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const input: ForgeInput = await request.json();
 
     // Build context string from all user input
@@ -67,11 +73,11 @@ async function handlePost(request: Request) {
 
     // Run analysis phases in parallel
     const [narrative, skills, careerPaths, barriers] = await Promise.all([
-      analyzeNarrative(context, input),
-      extractSkills(context, input),
-      findCareerPaths(context, input),
+      analyzeNarrative(context, input, userId),
+      extractSkills(context, input, userId),
+      findCareerPaths(context, input, userId),
       input.challenges?.length
-        ? analyzeBarriers(context, input)
+        ? analyzeBarriers(context, input, userId)
         : Promise.resolve(null),
     ]);
 
@@ -332,9 +338,10 @@ function buildContext(input: ForgeInput): string {
 
 async function callClaude(
   systemPrompt: string,
-  userMessage: string
+  userMessage: string,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
-  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP, { endpoint: "analyze" });
+  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP, { userId, endpoint: "analyze" });
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in AI response");
   return JSON.parse(jsonMatch[0]);
@@ -344,7 +351,8 @@ async function callClaude(
 
 async function analyzeNarrative(
   context: string,
-  input: ForgeInput
+  input: ForgeInput,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
 
@@ -382,7 +390,7 @@ Return JSON:
 }`;
 
   try {
-    return await callClaude(system, prompt);
+    return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Narrative analysis failed:", error);
     return {
@@ -397,7 +405,8 @@ Return JSON:
 
 async function extractSkills(
   context: string,
-  input: ForgeInput
+  input: ForgeInput,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
 
@@ -422,7 +431,7 @@ Return JSON:
 }`;
 
   try {
-    return await callClaude(system, prompt);
+    return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Skills extraction failed:", error);
     return { skills: [] };
@@ -433,7 +442,8 @@ Return JSON:
 
 async function findCareerPaths(
   context: string,
-  input: ForgeInput
+  input: ForgeInput,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
 
@@ -470,7 +480,7 @@ Return JSON:
 }`;
 
   try {
-    return await callClaude(system, prompt);
+    return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Career path research failed:", error);
     return { paths: [] };
@@ -481,7 +491,8 @@ Return JSON:
 
 async function analyzeBarriers(
   context: string,
-  input: ForgeInput
+  input: ForgeInput,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
 
@@ -535,7 +546,7 @@ Return JSON:
 }`;
 
   try {
-    return await callClaude(system, prompt);
+    return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Barrier analysis failed:", error);
     return { barriers: [] };

@@ -38,6 +38,11 @@ export const AUTH_LIMITS = {
   magicLinkPerIp: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
   magicLinkPerEmail: { maxRequests: 3, windowMs: 3_600_000 } as RateLimitConfig,
   passwordPerIp: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
+  // Registration: deliberately generous per-IP -- a classroom or conference
+  // room signs up behind one NAT, and real people must never be choked.
+  // 120/hr/IP passes any human burst; sustained bot floods do not look human.
+  registerPerIp: { maxRequests: 120, windowMs: 3_600_000 } as RateLimitConfig,
+  registerPerEmail: { maxRequests: 6, windowMs: 3_600_000 } as RateLimitConfig,
 };
 
 export function checkAuthRateLimit(

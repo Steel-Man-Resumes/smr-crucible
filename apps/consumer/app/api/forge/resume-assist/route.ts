@@ -19,6 +19,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
@@ -44,7 +45,7 @@ HOW TO WRITE IT:
 
 Return ONLY the bullet text -- no quotes, no bullet symbol, no preamble, no explanation.`;
 
-async function aiSuggestTools(title: string): Promise<string[]> {
+async function aiSuggestTools(title: string, userId: string | null | undefined): Promise<string[]> {
   try {
     const raw = await callAI(
       "You list common tools, equipment, systems, and software for a job, purely as memory-joggers. Reply with ONLY a comma-separated list and nothing else.",
@@ -59,7 +60,7 @@ async function aiSuggestTools(title: string): Promise<string[]> {
       ],
       200,
       undefined,
-      { endpoint: "resume-assist" }
+      { userId, endpoint: "resume-assist" }
     );
     return raw
       .split(/[,\n]/)
@@ -94,6 +95,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
+    // login wall before value). Attribute to a user when a session happens to exist.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const body = await request.json();
     const action: string = typeof body.action === "string" ? body.action : "";
 
@@ -107,7 +113,7 @@ async function handlePost(request: Request) {
       let tools = await getToolsForTitle(jobTitle);
       let source = "onet";
       if (tools.length === 0) {
-        tools = await aiSuggestTools(jobTitle);
+        tools = await aiSuggestTools(jobTitle, userId);
         source = "ai";
       }
       return NextResponse.json({ tools, source });
@@ -134,7 +140,7 @@ RULES:
 - Honest and grounded -- only claim what the experience supports. Never invent.
 - NEVER mention incarceration, a record, or justice involvement. Disclosure is handled separately.
 - 2-3 sentences. Return ONLY the summary text.`;
-      const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { endpoint: "resume-assist" })).trim();
+      const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim();
       await logShape(`summary targetJob=${targetJob}`, `Suggested a base-resume summary${targetJob ? ` for ${targetJob}` : ""}.`, {
         type: "resume_summary",
         suggestion_length: suggestion.length,
@@ -173,7 +179,7 @@ ${targetJob ? `They are aiming for a ${targetJob} role.\n` : ""}The person's own
 
 Write the single strongest TRUE bullet from ONLY these facts.`;
 
-      const bullet = (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { endpoint: "resume-assist" }))
+      const bullet = (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { userId, endpoint: "resume-assist" }))
         .trim()
         .replace(/^["'\s•\-]+|["']+$/g, "")
         .trim();

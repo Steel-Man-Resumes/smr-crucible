@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
-import { insert, emitEvent, uploadFile, getSignedUrl } from "@crucible/core";
+import { insert, emitEvent, uploadFile, getSignedUrl, getOne } from "@crucible/core";
 import { getAuthContext, requireOrg } from "../../../../../lib/api-auth";
 import crypto from "crypto";
+
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+function isAllowedMime(mimeType: string): boolean {
+  return (
+    mimeType === "application/pdf" ||
+    mimeType === "application/msword" ||
+    mimeType.includes("wordprocessingml") ||
+    mimeType.startsWith("text/") ||
+    mimeType.startsWith("image/")
+  );
+}
 
 interface DocumentRow {
   id: string;
@@ -29,11 +41,34 @@ export async function POST(
   const orgError = requireOrg(ctx);
   if (orgError) return orgError;
 
+  // Object-level authorization: the project must belong to the caller's org
+  // (same check as run/route.ts -- a bare project id is never trusted).
+  const project = await getOne<{ id: string }>(
+    `SELECT id FROM project WHERE id = $1 AND org_id = $2`,
+    [params.id, ctx.orgId]
+  );
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
 
   if (!file) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  }
+
+  if (!isAllowedMime(file.type)) {
+    return NextResponse.json(
+      { error: "Unsupported file type. Upload PDF, Word, text, or image files." },
+      { status: 415 }
+    );
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "File too large (15MB max)." },
+      { status: 413 }
+    );
   }
 
   const bytes = await file.arrayBuffer();

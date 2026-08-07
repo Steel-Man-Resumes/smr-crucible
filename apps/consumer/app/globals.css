@@ -5,7 +5,7 @@
 :root {
   --background: #eaede9;
   --foreground: #1c1e1b;
-  --muted: #6d736d;
+  --muted: #54594f;
   --border: #d3d8d1;
   --card: #ffffff;
   --accent: #4f6b57;
@@ -122,7 +122,7 @@
   }
 
   .app-eyebrow {
-    color: #6d736d;
+    color: #54594f;
     font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
     font-size: 0.7rem;
     font-weight: 700;

@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { extractTextFromBuffer } from "@/lib/text-extraction";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
@@ -16,6 +17,11 @@ export const maxDuration = 60;
 
 async function handlePost(request: Request) {
   try {
+    // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
+    // login wall before value). Attribute to a user when a session happens to exist.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const pastedText = formData.get("text");
@@ -91,7 +97,7 @@ async function handlePost(request: Request) {
       .trim();
 
     // Parse structured profile using GPT-4o-mini
-    const parsedProfile = (await parseWithAI(cleanedText)) as Record<string, any>;
+    const parsedProfile = (await parseWithAI(cleanedText, userId)) as Record<string, any>;
 
     // Deterministic contact preservation (F5): the parser must not "normalize"
     // an email -- dropping the "+qasol" tag was the QA failure. If the AI's email
@@ -134,7 +140,8 @@ async function handlePost(request: Request) {
 }
 
 async function parseWithAI(
-  text: string
+  text: string,
+  userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   // Use OpenAI for structured extraction (cheaper, fast, reliable for parsing)
   const apiKey = process.env.OPENAI_API_KEY;
@@ -205,7 +212,7 @@ RULES (a dropped or altered field is a failure -- this feeds a real resume):
         inputTokens: data.usage.prompt_tokens || 0,
         outputTokens: data.usage.completion_tokens || 0,
       },
-      { endpoint: "parse" }
+      { userId, endpoint: "parse" }
     );
   }
 

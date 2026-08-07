@@ -7,6 +7,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
@@ -22,6 +23,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+    // the time handlePost runs -- re-derive here to attribute the AI call.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = await request.json();
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
@@ -155,7 +161,7 @@ RULES:
       content: m.content,
     }));
 
-    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { endpoint: "interview-practice" });
+    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice" });
 
     if (shouldWrapUp) {
       // Log wrapup decision

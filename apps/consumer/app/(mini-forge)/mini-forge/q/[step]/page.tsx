@@ -439,9 +439,9 @@ function Step6({ intake }: { intake: Record<string, unknown> }) {
   const current = (intake.location as string) ?? "";
   return (
     <div>
-      <h2 className="text-2xl font-semibold text-foreground mb-2">
+      <h1 className="text-2xl font-semibold text-foreground mb-2">
         Where will you look for work?
-      </h2>
+      </h1>
       <p className="text-muted mb-6">
         Enter a city and state. We use this to find local resources and employers.
       </p>
@@ -468,9 +468,9 @@ function Step7({ intake }: { intake: Record<string, unknown> }) {
   const current = (intake.hook_narrative as string) ?? "";
   return (
     <div>
-      <h2 className="text-2xl font-semibold text-foreground mb-2">
+      <h1 className="text-2xl font-semibold text-foreground mb-2">
         What would make work feel like yours?
-      </h2>
+      </h1>
       <p className="text-muted mb-6">
         No wrong answers. Write whatever comes to mind.
       </p>

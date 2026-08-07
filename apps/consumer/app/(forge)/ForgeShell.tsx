@@ -69,6 +69,12 @@ function ForgeAssistant() {
 export function ForgeShell({ children }: { children: ReactNode }) {
   return (
     <ForgeProvider>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[5px] focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-xl"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-30 border-b border-t-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6">
           <ProductFamilyBrand product="forge" productHref="/" />
@@ -89,7 +95,7 @@ export function ForgeShell({ children }: { children: ReactNode }) {
         </div>
         <ForgeProgress />
       </header>
-      <div className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">{children}</div>
+      <main id="main" className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">{children}</main>
 
       {/* AI Assistant — available on every Forge page */}
       <ForgeAssistant />

@@ -16,6 +16,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { isMockEnabled, MOCK_INTAKE_FOLLOWUPS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
@@ -38,6 +39,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+    // the time handlePost runs -- re-derive here to attribute the AI call.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const body = await request.json();
     const topic: string = typeof body.topic === "string" ? body.topic : "general";
     const context: IntakeContext =
@@ -61,7 +67,7 @@ async function handlePost(request: Request) {
     const system = buildFollowupsSystemPrompt(topic, context);
     const userMsg = buildAnswersBlock(answersSoFar, round);
 
-    const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP, { endpoint: "intake-followups" });
+    const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP, { userId, endpoint: "intake-followups" });
     const result = parseFollowups(raw, { maxQuestions: 3 });
 
     // Decision log (JBS compliance) -- shape only, never the user's words.

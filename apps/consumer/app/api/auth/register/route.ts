@@ -17,6 +17,11 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { query, getOne, ensureUserAttribution } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
+import {
+  checkAuthRateLimit,
+  getClientIp,
+  AUTH_LIMITS,
+} from "@/lib/auth-rate-limit";
 
 /** Read the org access code the user entered with (set as a cookie by /access). */
 function accessCodeFromCookie(request: Request): string | null {
@@ -95,6 +100,24 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Please enter a valid email address." },
         { status: 400 }
+      );
+    }
+
+    // Abuse limiting -- generous on purpose (see AUTH_LIMITS.registerPerIp):
+    // a whole room signing up at once must pass; a bot flood must not.
+    const ip = getClientIp(request);
+    const ipCheck = checkAuthRateLimit(
+      `register:ip:${ip}`,
+      AUTH_LIMITS.registerPerIp
+    );
+    const emailCheck = checkAuthRateLimit(
+      `register:email:${trimmedEmail}`,
+      AUTH_LIMITS.registerPerEmail
+    );
+    if (!ipCheck.allowed || !emailCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many signups from this connection right now. Wait a minute and try again -- your spot is not lost." },
+        { status: 429 }
       );
     }
 

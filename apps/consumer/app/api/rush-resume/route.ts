@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
@@ -41,6 +42,11 @@ RULES:
 
 async function handlePost(request: Request) {
   try {
+    // IP-rate-limited Forge flow -- anonymous use is intentional (no login wall
+    // before value). Attribute to a user when a session happens to exist.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const input: RushInput = await request.json();
 
     if (!input.resumeText?.trim()) {
@@ -85,7 +91,7 @@ Return JSON:
 }`;
 
     const startTime = Date.now();
-    const text = await callAI(SYSTEM_PROMPT, [{ role: "user", content: userMessage }], 4000, undefined, { endpoint: "rush-resume" });
+    const text = await callAI(SYSTEM_PROMPT, [{ role: "user", content: userMessage }], 4000, undefined, { userId, endpoint: "rush-resume" });
     const latencyMs = Date.now() - startTime;
     const tokenCount = undefined;
 

@@ -14,8 +14,11 @@
  * (Interview Practice consumes it in 7.5).
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { BulletEvidence } from "./resumeModel";
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Cache tool suggestions per job title for the page session, so re-opening the
 // workshop on bullets of the same job doesn't re-spend a suggest_tools call.
@@ -74,6 +77,40 @@ export function BulletWorkshop({
   const [generating, setGenerating] = useState(false);
   const [toolHints, setToolHints] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Focus the panel on open, trap Tab/Shift+Tab within it, and close on Escape.
+  useEffect(() => {
+    panelRef.current?.focus();
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !panel.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist every keystroke so closing the workshop never loses work.
   useEffect(() => {

@@ -9,9 +9,12 @@
  * option disappears. Client tier only -- partners/observers/admin are not nagged.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Once deferred/closed, don't re-pop on every remount this session ("remind me
 // next login" means next session, not next page nav).
@@ -42,6 +45,7 @@ export function GuidedTour() {
   const [coachName, setCoachName] = useState("");
   const [closed, setClosed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // The tour is a full-screen modal; only show it on the dashboard HOME so it can
   // never cover a tool page's form (F7 -- it was overlaying the disclosure planner).
@@ -73,9 +77,50 @@ export function GuidedTour() {
     };
   }, [tier, onHome]);
 
-  if (tier !== "client" || !onHome || closed || !state || state.tourComplete) return null;
+  const visible = tier === "client" && onHome && !closed && !!state && !state.tourComplete;
+  const canDefer = !!state && state.tourDeferrals < 2;
 
-  const canDefer = state.tourDeferrals < 2;
+  // Focus the panel when the tour opens (WCAG 2.4.3 focus order).
+  useEffect(() => {
+    if (visible) panelRef.current?.focus();
+  }, [visible]);
+
+  // Trap Tab/Shift+Tab within the panel; Escape mirrors the existing "Remind
+  // me next login" dismiss action (only available while defers remain).
+  useEffect(() => {
+    if (!visible) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (canDefer) {
+          e.preventDefault();
+          defer();
+        }
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !panel.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [visible, canDefer]);
+
+  if (!visible) return null;
 
   async function complete() {
     setSaving(true);
@@ -108,7 +153,14 @@ export function GuidedTour() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/60 backdrop-blur-sm">
-      <div className="bg-white rounded-[7px] max-w-lg w-full p-6 sm:p-8 shadow-xl">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guided-tour-heading"
+        className="bg-white rounded-[7px] max-w-lg w-full p-6 sm:p-8 shadow-xl"
+      >
         {/* progress dots */}
         <div className="flex gap-1.5 mb-6">
           {Array.from({ length: SCREENS }).map((_, i) => (
@@ -121,7 +173,7 @@ export function GuidedTour() {
 
         {screen === 0 && (
           <div>
-            <h2 className="text-2xl font-bold text-foreground mb-3">
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">
               Every tool. For free. If you qualify.
             </h2>
             <p className="text-body text-muted leading-relaxed mb-3">
@@ -137,7 +189,7 @@ export function GuidedTour() {
 
         {screen === 1 && (
           <div>
-            <h2 className="text-2xl font-bold text-foreground mb-3">
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">
               Your journey, one step at a time
             </h2>
             <ol className="space-y-2 mb-4">
@@ -161,7 +213,7 @@ export function GuidedTour() {
 
         {screen === 2 && (
           <div>
-            <h2 className="text-2xl font-bold text-foreground mb-3">Meet your coach</h2>
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">Meet your coach</h2>
             <p className="text-body text-muted leading-relaxed mb-4">
               This is your coach. They know your story and are here to help you move. What
               would you like to call them? Many people use a name from someone who believed

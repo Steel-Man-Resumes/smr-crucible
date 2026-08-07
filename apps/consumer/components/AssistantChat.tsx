@@ -291,6 +291,24 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     }
   }, [supportText, supportStatus, messages, context.currentPage]);
 
+  // Screen-reader announcement: a hidden live region that receives the text of
+  // the most recently FINISHED assistant reply (not mid-stream tokens).
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  useEffect(() => {
+    if (isLoading) return;
+    const last = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!last) return;
+    const parts = (last as { parts?: Array<{ type?: string; text?: string }> }).parts;
+    const text = Array.isArray(parts)
+      ? parts
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text)
+          .join(" ")
+      : last.content;
+    const clean = (text || "").trim();
+    if (clean) setLiveAnnouncement(clean);
+  }, [messages, isLoading]);
+
   // Voice out: read the finished assistant reply aloud (browser TTS, free)
   const spokenRef = useRef<string | null>(null);
   const voiceOn = !!chatSettings?.coachVoice;
@@ -487,8 +505,16 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
         </div>
       )}
 
+      {/* Hidden live region: announces each finished assistant reply to screen readers */}
+      <div aria-live="polite" className="sr-only">
+        {liveAnnouncement}
+      </div>
+
       {/* Messages — min-h-0 lets flex-1 actually shrink so overflow scrolls */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4"
+        lang={chatSettings?.coachLanguage === "es" ? "es" : undefined}
+      >
         {messages.length === 0 && coach &&
           (proactive ? (
             // Proactive nudge: computed from live data, tappable. Tapping

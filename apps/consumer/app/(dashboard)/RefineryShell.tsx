@@ -389,6 +389,12 @@ export function RefineryShell({
 
   return (
     <div className="refinery-app min-h-screen bg-t-bg font-body">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[4px] focus:bg-t-panel focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-t-white focus:shadow-xl"
+      >
+        Skip to content
+      </a>
       <AdminTestModeBanner />
       <HighlightHost />
       <nav className="sticky top-0 z-30 border-b border-t-line bg-t-panel/95 backdrop-blur">
@@ -451,7 +457,7 @@ export function RefineryShell({
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+        <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
           <JourneyProgressBanner state={onboarding.state} />
           {children}
         </main>

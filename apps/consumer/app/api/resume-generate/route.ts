@@ -7,6 +7,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
@@ -26,6 +27,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+    // the time handlePost runs -- re-derive here to attribute the AI call.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const body = await request.json();
     const { targetJob, targetCompany, jobListingUrl, existingBullets, skills, forgeNarrative, forgeStrengths, action } = body;
 
@@ -84,7 +90,7 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
       );
     }
 
-    const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, undefined, { endpoint: "resume-generate" })).trim();
+    const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, undefined, { userId, endpoint: "resume-generate" })).trim();
 
     // Log decision for JBS compliance
     try {

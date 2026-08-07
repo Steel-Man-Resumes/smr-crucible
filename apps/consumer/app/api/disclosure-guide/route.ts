@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
@@ -33,6 +34,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+    // the time handlePost runs -- re-derive here to attribute the AI call.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers } = await request.json();
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
@@ -123,7 +129,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
 - 6th grade reading level. Use "--" never an em dash
 - JSON only`;
 
-    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { endpoint: "disclosure-guide" });
+    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { userId, endpoint: "disclosure-guide" });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 

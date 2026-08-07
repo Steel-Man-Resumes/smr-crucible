@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
@@ -81,6 +82,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
+    // login wall before value). Attribute to a user when a session happens to exist.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const input: GenerateDocsInput = await request.json();
 
     if (!input.narrative && !input.strengths && !input.skills?.length) {
@@ -94,8 +100,8 @@ async function handlePost(request: Request) {
 
     // Generate resume and cover letter in parallel
     const [resumeRaw, coverLetterRaw] = await Promise.all([
-      generateResume(input),
-      generateCoverLetter(input),
+      generateResume(input, userId),
+      generateCoverLetter(input, userId),
     ]);
 
     // Post-generation grounding gate (F2): claim-trace each document back to what
@@ -189,14 +195,15 @@ async function handlePost(request: Request) {
 async function callClaude(
   systemPrompt: string,
   userMessage: string,
+  userId: string | null | undefined,
   maxTokens = 4000
 ): Promise<string> {
-  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { endpoint: "generate-docs" });
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { userId, endpoint: "generate-docs" });
 }
 
 // --- Resume Generation ---
 
-async function generateResume(input: GenerateDocsInput): Promise<string> {
+async function generateResume(input: GenerateDocsInput, userId: string | null | undefined): Promise<string> {
   const strengths = input.strengths || input.narrative?.strengths || [];
   const skills = input.skills || [];
   const careerPaths = input.career_paths || [];
@@ -341,12 +348,12 @@ CRITICAL REMINDERS:
 - If no work history exists: build a FUNCTIONAL resume with skill-area sections and bullets from the strengths data provided -- nothing beyond it.
 - Certifications get their OWN section -- never buried in education.`;
 
-  return await callClaude(system, prompt, 4500);
+  return await callClaude(system, prompt, userId, 4500);
 }
 
 // --- Cover Letter Generation ---
 
-async function generateCoverLetter(input: GenerateDocsInput): Promise<string> {
+async function generateCoverLetter(input: GenerateDocsInput, userId: string | null | undefined): Promise<string> {
   const strengths = input.strengths || input.narrative?.strengths || [];
   const skills = input.skills || [];
   const careerPaths = input.career_paths || [];
@@ -427,7 +434,7 @@ IMPORTANT:
 - 250-350 words for the body.
 - Address barriers in ONE natural sentence if applicable, otherwise omit entirely.`;
 
-  return await callClaude(system, prompt);
+  return await callClaude(system, prompt, userId);
 }
 
 export const POST = withRateLimit(handlePost, {

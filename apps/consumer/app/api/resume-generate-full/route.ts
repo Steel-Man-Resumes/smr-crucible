@@ -10,6 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
@@ -31,8 +32,13 @@ export const maxDuration = 120;
 // high-stakes, quality changes a real outcome. Latency is acceptable here.
 const AI_MODEL = MODEL_DEEP;
 
-async function callClaude(system: string, prompt: string, maxTokens = 2000): Promise<string> {
-  return callAI(system, [{ role: "user", content: prompt }], maxTokens, MODEL_DEEP, { endpoint: "resume-generate-full" });
+async function callClaude(
+  system: string,
+  prompt: string,
+  userId: string | null | undefined,
+  maxTokens = 2000
+): Promise<string> {
+  return callAI(system, [{ role: "user", content: prompt }], maxTokens, MODEL_DEEP, { userId, endpoint: "resume-generate-full" });
 }
 
 async function handlePost(request: Request) {
@@ -42,6 +48,11 @@ async function handlePost(request: Request) {
   }
 
   try {
+    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+    // the time handlePost runs -- re-derive here to attribute the AI calls.
+    const session = await auth();
+    const userId = session?.user?.id;
+
     const body = await request.json();
     const { forgeOutput, resumeText, job, contact, challenges, criminalRecord } = body;
 
@@ -188,8 +199,8 @@ ${contactName || "Candidate"}`;
 
     // Run resume + cover letter in parallel
     const [resumeRaw, coverLetterText] = await Promise.all([
-      callClaude(resumeSystem, resumePrompt, 2000),
-      callClaude(coverSystem, coverLetterPrompt, 1500),
+      callClaude(resumeSystem, resumePrompt, userId, 2000),
+      callClaude(coverSystem, coverLetterPrompt, userId, 1500),
     ]);
 
     // Parse resume JSON

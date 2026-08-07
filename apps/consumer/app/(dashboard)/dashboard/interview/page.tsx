@@ -1037,14 +1037,19 @@ function VoicePracticePanel({
           <p className="text-sm text-t-phos-dim">
             Talk out loud with a realtime AI interviewer using gpt-realtime-2.
           </p>
-          {status === "live" && (
-            <p className="mt-1 text-xs font-medium text-t-amber-bright">
-              Live now. Speak naturally; end the session when you are done.
-            </p>
-          )}
-          {status === "error" && error && (
-            <p className="mt-1 text-xs font-medium text-t-red">{error}</p>
-          )}
+          <div aria-live="polite" role="status">
+            {status === "connecting" && (
+              <p className="mt-1 text-xs font-medium text-t-phos-dim">Connecting...</p>
+            )}
+            {status === "live" && (
+              <p className="mt-1 text-xs font-medium text-t-amber-bright">
+                Live now. Speak naturally; end the session when you are done.
+              </p>
+            )}
+            {status === "error" && error && (
+              <p className="mt-1 text-xs font-medium text-t-red">{error}</p>
+            )}
+          </div>
         </div>
         {status === "live" ? (
           <button

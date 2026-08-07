@@ -18,7 +18,7 @@ export const COLORS = {
   // Workshop Tape v2 palette
   background: "#eaede9",
   foreground: "#1c1e1b",
-  muted: "#6d736d",
+  muted: "#54594f",
   border: "#d3d8d1",
   card: "#ffffff",
   surface: "#f5f6f4",

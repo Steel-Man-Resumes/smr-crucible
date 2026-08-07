@@ -33,6 +33,7 @@ export function AssistantDrawer({
 }: AssistantDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -45,11 +46,42 @@ export function AssistantDrawer({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen]);
 
-  // Trap focus in drawer when open
+  // Trap focus in drawer when open: move focus in on open, cycle Tab/Shift+Tab
+  // within the panel's focusables, and restore focus to the trigger on close.
   useEffect(() => {
-    if (isOpen && drawerRef.current) {
-      drawerRef.current.focus();
+    if (isOpen) {
+      previouslyFocused.current = document.activeElement as HTMLElement | null;
+      drawerRef.current?.focus();
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key !== "Tab") return;
+        const panel = drawerRef.current;
+        if (!panel) return;
+        const focusables = Array.from(
+          panel.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter((el) => el.offsetParent !== null);
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !panel.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
     }
+
+    // Closed: return focus to whatever triggered the drawer.
+    previouslyFocused.current?.focus();
+    previouslyFocused.current = null;
   }, [isOpen]);
 
   if (!enabled) return null;

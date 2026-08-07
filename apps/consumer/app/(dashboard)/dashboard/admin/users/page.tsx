@@ -6,8 +6,11 @@
  * is server-side; this page just starts it.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealTier } from "@/lib/useUserTier";
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function usd(v: unknown): string {
   const n = Number(v || 0);
@@ -22,6 +25,44 @@ export default function AdminUsersPage() {
   const [assistFor, setAssistFor] = useState<any | null>(null);
   const [reason, setReason] = useState("");
   const [starting, setStarting] = useState(false);
+  const assistPanelRef = useRef<HTMLDivElement>(null);
+
+  // Break-glass modal: focus the panel on open, trap Tab/Shift+Tab, Escape closes.
+  useEffect(() => {
+    if (!assistFor) return;
+    // The reason input is autoFocus'd already (better first-focus target);
+    // only steer focus to the panel if nothing inside it grabbed it.
+    if (!assistPanelRef.current?.contains(document.activeElement)) {
+      assistPanelRef.current?.focus();
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setAssistFor(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = assistPanelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !panel.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [assistFor]);
 
   const load = useCallback(async (search: string) => {
     try {
@@ -139,10 +180,15 @@ export default function AdminUsersPage() {
           onClick={() => setAssistFor(null)}
         >
           <div
+            ref={assistPanelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assist-modal-heading"
             className="bg-t-panel border-2 border-t-red w-full max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-t-red mb-1">
+            <h3 id="assist-modal-heading" className="text-lg font-bold text-t-red mb-1">
               Assist {assistFor.name || assistFor.email}
             </h3>
             <p className="text-xs text-t-phos-dim mb-3">
