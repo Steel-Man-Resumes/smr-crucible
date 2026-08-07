@@ -38,26 +38,52 @@ export interface GroundingScore {
   detail: string;
 }
 
-// Signals that a duty line contains a real OUTCOME/result, not just a task.
-const OUTCOME_PATTERNS = [
-  /\d/, // any number (counts, %, dollars, headcount)
-  /\b(increased|reduced|improved|cut|saved|grew|raised|lowered|boosted|exceeded|achieved|earned|awarded|promoted|led|trained|mentored|launched|delivered|maintained|processed|reached|hit|beat)\b/i,
-  /%|percent|per cent/i,
-];
-
 function hasText(v?: string): boolean {
   return !!v && v.trim().length > 0;
 }
 
+// A 4-digit calendar year (1900-2099) is a DATE, not a result. Stripped before any
+// numeric check so "Worked in 2022" cannot read as an outcome (Codex 13).
+const YEAR_RE = /\b(?:19|20)\d{2}\b/g;
+
+// Content words = alphabetic tokens of 3+ letters, after years are removed. Tells a
+// substantive duty ("Loaded and unloaded trucks") from a bare date fragment
+// ("Worked in 2022").
+function contentWordCount(text: string): number {
+  const matches = text.replace(YEAR_RE, " ").match(/[A-Za-z]{3,}/g);
+  return matches ? matches.length : 0;
+}
+
+// A real quantified metric: a percentage, a dollar figure, or any number that is not
+// just a year (headcount, counts, quantities). Years are removed first.
+function hasMetric(text: string): boolean {
+  if (/\d\s*(?:%|percent|per\s?cent)/i.test(text)) return true;
+  if (/\$\s?\d/.test(text)) return true;
+  return /\d/.test(text.replace(YEAR_RE, " "));
+}
+
+// Genuine achievement / impact / scope verbs -- a claimed result, not a routine task.
+// The old list also matched task verbs (maintained, processed, worked, reached, hit,
+// beat), which inflated the gauge; those are dropped (Codex 13).
+const ACHIEVEMENT_VERB_RE =
+  /\b(increased|decreased|reduced|improved|cut|saved|grew|raised|lowered|boosted|exceeded|achieved|earned|awarded|promoted|generated|eliminated|streamlined|negotiated|secured|launched|delivered|led|trained|mentored|supervised|managed)\b/i;
+
+// An OUTCOME is a real metric (never a bare year) OR a genuine achievement verb --
+// never just any digit or any verb (Codex 13).
 function dutyHasOutcome(duties?: string): boolean {
   if (!hasText(duties)) return false;
-  return OUTCOME_PATTERNS.some((re) => re.test(duties!));
+  return hasMetric(duties!) || ACHIEVEMENT_VERB_RE.test(duties!);
 }
 
 function scoreJob(job: GroundingJobInput, index: number): GroundingJobScore {
   const hasEmployer = hasText(job.employer);
   const hasDates = hasText(job.dates);
-  const hasDuty = hasText(job.duties) && job.duties!.trim().length >= 12;
+  // A substantive duty, not a bare date fragment: real length AND at least two content
+  // words after years are stripped ("Worked in 2022" -> 1 word -> not a duty; Codex 13).
+  const hasDuty =
+    hasText(job.duties) &&
+    job.duties!.trim().length >= 12 &&
+    contentWordCount(job.duties!) >= 2;
   const hasOutcome = dutyHasOutcome(job.duties);
   const filled =
     (hasEmployer ? 1 : 0) +

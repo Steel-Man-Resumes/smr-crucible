@@ -34,19 +34,47 @@ const JSEARCH_TIMEOUT_MS = 12000;
 const CAREERONESTOP_TIMEOUT_MS = 7000;
 const AI_ENRICH_TIMEOUT_MS = 10000;
 
-async function fetchWithTimeout(
+// Full-lifecycle deadline (Codex 10): fetch() resolves at HEADERS, so a slow/stalled
+// response BODY still hangs res.json() past the route cap and 504s. Keeping the timer
+// armed through res.json() puts the body read under the same abort signal, so a body
+// stall aborts instead of hanging. Only the success path reads the body.
+async function fetchJsonWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number
-): Promise<Response> {
+): Promise<{ ok: boolean; status: number; statusText: string; json: any }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) {
+      return { ok: false, status: res.status, statusText: res.statusText, json: null };
+    }
+    const json = await res.json();
+    return { ok: true, status: res.status, statusText: res.statusText, json };
   } finally {
     clearTimeout(timer);
   }
 }
+
+// Bound a DB / side-channel promise so a stalled dependency can't blow the route
+// budget (Codex 10). On timeout OR error we resolve to `fallback` and let the request
+// proceed; the detached promise's late settle is swallowed, never unhandled.
+function withDeadline<T>(p: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => {
+      console.error(`[job-search] ${label} exceeded ${ms}ms -- proceeding without it`);
+      resolve(fallback);
+    }, ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (err) => { clearTimeout(timer); console.error(`[job-search] ${label} failed:`, err); resolve(fallback); }
+    );
+  });
+}
+
+// Bound for cache reads/writes and the decision-log write (all Neon).
+const DB_DEADLINE_MS = 3000;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -211,7 +239,7 @@ async function fetchJSearchJobs(
   url.searchParams.set("radius", String(radiusMiles));
 
   try {
-    const res = await fetchWithTimeout(
+    const res = await fetchJsonWithTimeout(
       url.toString(),
       {
         headers: {
@@ -227,10 +255,9 @@ async function fetchJSearchJobs(
       return { jobs: [], failed: true, status: res.status };
     }
 
-    const data = await res.json();
     // v2 envelope is { data: { jobs, cursor } }; tolerate the old flat array
     // shape too in case the provider flips again.
-    const payload = data.data;
+    const payload = res.json?.data;
     const jobs = Array.isArray(payload) ? payload : (payload?.jobs ?? []);
     return { jobs, failed: false };
   } catch (err) {
@@ -287,7 +314,7 @@ async function fetchCareerOneStopJobs(
   const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/25/0/0/0/15/30`;
 
   try {
-    const res = await fetchWithTimeout(
+    const res = await fetchJsonWithTimeout(
       url,
       { headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } },
       CAREERONESTOP_TIMEOUT_MS
@@ -296,8 +323,7 @@ async function fetchCareerOneStopJobs(
       console.error(`CareerOneStop API error: ${res.status}`);
       return [];
     }
-    const data = await res.json();
-    const jobs: CareerOneStopJob[] = data?.Jobs ?? [];
+    const jobs: CareerOneStopJob[] = res.json?.Jobs ?? [];
     return jobs.slice(0, 15).map((j, i) => {
       const company = j.Company || "Employer";
       const fair = isKnownFairChance(company);
@@ -402,18 +428,26 @@ RULES:
 - JSON only, no markdown`;
 
     let text: string;
+    // Bound enrichment so a slow model never blows the route budget, and ACTUALLY
+    // ABORT the request on timeout rather than just racing it (Codex 10) -- a raced-
+    // but-not-aborted call leaves the socket open and keeps billing tokens. On timeout
+    // we return the real listings with basic (un-simplified) copy: degraded, never a
+    // 504, never fabricated.
+    const enrichController = new AbortController();
+    const enrichTimer = setTimeout(() => enrichController.abort(), AI_ENRICH_TIMEOUT_MS);
     try {
-      // Bound enrichment so a slow model never blows the route budget. On
-      // timeout we return the real listings with basic (un-simplified) copy --
-      // degraded, never a 504, and never fabricated.
-      text = await Promise.race([
-        callAI("", [{ role: "user", content: prompt }], 2000, undefined, { endpoint: "job-search" }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("ai_enrich_timeout")), AI_ENRICH_TIMEOUT_MS)
-        ),
-      ]);
+      text = await callAI(
+        "",
+        [{ role: "user", content: prompt }],
+        2000,
+        undefined,
+        { endpoint: "job-search" },
+        enrichController.signal
+      );
     } catch {
       return { enrichedJobs: basicJobs, fairChanceInfo: "" };
+    } finally {
+      clearTimeout(enrichTimer);
     }
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
@@ -524,8 +558,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   };
   const queryHash = hashQuery(cacheParams);
 
-  // 1. Check cache
-  const cached = await getCachedResults(queryHash);
+  // 1. Check cache (bounded -- a stalled read falls through to a live search)
+  const cached = await withDeadline(getCachedResults(queryHash), DB_DEADLINE_MS, null, "cache read");
   if (cached) {
     return {
       jobs: cached.results,
@@ -552,7 +586,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       cosJobs.sort((a, b) =>
         a.second_chance === b.second_chance ? 0 : a.second_chance ? -1 : 1
       );
-      await cacheResults(queryHash, cacheParams, cosJobs, "");
+      await withDeadline(cacheResults(queryHash, cacheParams, cosJobs, ""), DB_DEADLINE_MS, undefined, "cache write (cos)");
       return {
         jobs: cosJobs,
         fair_chance_info: "",
@@ -591,29 +625,38 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     return 0;
   });
 
-  // 5. Cache results (including fair_chance_info so cache hits return complete data)
-  await cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo);
+  // 5. Cache results (bounded -- including fair_chance_info so cache hits return complete data)
+  await withDeadline(
+    cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo),
+    DB_DEADLINE_MS,
+    undefined,
+    "cache write"
+  );
 
-  // 6. Log decision for JBS compliance
-  try {
-    const { logDecision } = await import("@crucible/core");
-    await logDecision({
-      contextPage: "job-search",
-      modelProvider: `jsearch+${AI_PROVIDER}`,
-      modelId: `jsearch-v1+${AI_MODEL}`,
-      input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
-      explanation: `JSearch API: ${rawJobs.length} raw results for "${role || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
-      outputSummary: {
-        type: "job_search",
-        source: "jsearch",
-        raw_count: rawJobs.length,
-        enriched_count: enrichedJobs.length,
-        second_chance_count: enrichedJobs.filter((j) => j.second_chance).length,
-      },
-    });
-  } catch (err) {
-    console.error("Decision log failed (job-search):", err);
-  }
+  // 6. Log decision for JBS compliance (bounded -- a stalled DB write must never hang
+  // the response past the route budget; Codex 10).
+  await withDeadline(
+    (async () => {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "job-search",
+        modelProvider: `jsearch+${AI_PROVIDER}`,
+        modelId: `jsearch-v1+${AI_MODEL}`,
+        input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
+        explanation: `JSearch API: ${rawJobs.length} raw results for "${role || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
+        outputSummary: {
+          type: "job_search",
+          source: "jsearch",
+          raw_count: rawJobs.length,
+          enriched_count: enrichedJobs.length,
+          second_chance_count: enrichedJobs.filter((j) => j.second_chance).length,
+        },
+      });
+    })(),
+    DB_DEADLINE_MS,
+    undefined,
+    "decision log"
+  );
 
   return {
     jobs: enrichedJobs,
