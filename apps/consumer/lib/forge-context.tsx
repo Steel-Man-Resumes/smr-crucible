@@ -28,6 +28,11 @@ export interface ForgeSessionData {
   goals?: string[];
   goalNarrative?: string;
   hookNarrative?: string;
+  // Self-disclosure (feeds generation mode -- F2 s.2.3). How the user rates their
+  // own resume + what they worry about; used to bias sharpen-vs-scaffold and to
+  // be sensitive to gaps/tenure/thin-history in generation.
+  resumeConfidence?: "none" | "rough" | "decent" | "strong";
+  resumeWorries?: string[];
 
   // Page 4: Story / Hurdles
   challenges?: string[];

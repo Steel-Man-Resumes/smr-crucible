@@ -180,3 +180,166 @@ ${output.slice(0, 8000)}
     flags,
   };
 }
+
+export interface ResumeExperience {
+  title?: string;
+  company?: string;
+  startDate?: string;
+  endDate?: string;
+  bullets: string[];
+  [key: string]: unknown;
+}
+
+export interface BulletVerifyResult {
+  experience: ResumeExperience[];
+  hasFabrication: boolean;
+  applied: boolean;
+  flags: GroundingFlag[];
+}
+
+/**
+ * Structured-bullet truth gate for the Application Tailor (F2 follow-up). The
+ * tailored resume's experience bullets are the highest fabrication risk on the
+ * paid path; a freeform rewrite can't map back to the structure, so this asks
+ * the model to ground or drop EACH bullet by id and reassembles deterministically.
+ * FAIL-OPEN: any error returns the original experience untouched.
+ */
+export async function verifyResumeBullets(params: {
+  sourceText: string;
+  experience: ResumeExperience[];
+}): Promise<BulletVerifyResult> {
+  const experience = Array.isArray(params.experience) ? params.experience : [];
+  const original: BulletVerifyResult = {
+    experience,
+    hasFabrication: false,
+    applied: false,
+    flags: [],
+  };
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return original;
+  const source = (params.sourceText || "").trim();
+  if (source.length < 15) return original;
+
+  const items: { id: string; role: string; text: string }[] = [];
+  experience.forEach((e, ei) => {
+    (e.bullets || []).forEach((b, bi) => {
+      if (typeof b === "string" && b.trim()) {
+        items.push({
+          id: `${ei}.${bi}`,
+          role: [e.title, e.company].filter(Boolean).join(" @ ") || `role ${ei + 1}`,
+          text: b,
+        });
+      }
+    });
+  });
+  if (!items.length) return original;
+
+  const system = `You are a fact-grounding auditor for Steel Man Resumes. Every resume bullet must state ONLY what the person's SOURCE supports -- it has to survive a background-checked interview.
+
+For EACH bullet: if it asserts a concrete fact the SOURCE does not support (an invented tool/equipment/software, a specific number/metric/percentage, a safety or performance record, a scope claim like supervision/headcount/budget/"zero X", a certification/license/award, an employer, or a date), REWRITE it to a grounded version using only what the source supports -- or set text to null if nothing grounded remains. Keep strong action verbs and reasonable summaries of duties the source states. The job posting is a TARGET, never a source of grantable facts. Introduce NO new facts.
+
+Return ONLY JSON: {"bullets":[{"id":"e.b","text":"grounded rewrite, or null to drop","flagged":true|false,"why":"short reason if flagged"}]}`;
+  const user = `SOURCE (everything the person told us about themselves):
+"""
+${source.slice(0, 8000)}
+"""
+
+BULLETS (id, role, text):
+${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
+
+  let data: any;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: VERIFY_MODEL,
+          response_format: { type: "json_object" },
+          temperature: 0,
+          max_tokens: 3000,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      console.error(`Bullet verify HTTP ${res.status}`);
+      return original;
+    }
+    data = await res.json();
+  } catch (err) {
+    console.error("Bullet verify failed (fail-open):", err);
+    return original;
+  }
+
+  if (data?.usage) {
+    recordTokenUsage(
+      "openai",
+      data.model || VERIFY_MODEL,
+      { inputTokens: data.usage.prompt_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
+      { endpoint: "grounding-verify:bullets" }
+    );
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+  } catch {
+    return original;
+  }
+  const rows: any[] = Array.isArray(parsed.bullets) ? parsed.bullets : [];
+  if (!rows.length) return original;
+
+  // Map graded bullets back onto the structure by id; drop nulls; collect flags.
+  const byId = new Map<string, { text: string | null; flagged: boolean; why?: string }>();
+  for (const r of rows) {
+    if (r && typeof r.id === "string") {
+      // The model sometimes returns the LITERAL string "null" (or "none") instead
+      // of a JSON null when it means "drop this bullet" -- never let that word ship
+      // as a resume bullet.
+      const trimmed = typeof r.text === "string" ? r.text.trim() : "";
+      const isDrop = !trimmed || /^(null|none|n\/a)$/i.test(trimmed);
+      const text = isDrop ? null : trimmed;
+      byId.set(r.id, { text, flagged: r.flagged === true || text === null, why: r.why });
+    }
+  }
+
+  const flags: GroundingFlag[] = [];
+  let changed = false;
+  const nextExperience: ResumeExperience[] = experience.map((e, ei) => {
+    const newBullets: string[] = [];
+    (e.bullets || []).forEach((b, bi) => {
+      const id = `${ei}.${bi}`;
+      const graded = byId.get(id);
+      if (!graded) {
+        // Model didn't address this bullet -- keep it as-is (fail-open per bullet).
+        if (typeof b === "string" && b.trim()) newBullets.push(b);
+        return;
+      }
+      if (graded.flagged || graded.text !== b) {
+        changed = true;
+        if (graded.flagged) flags.push({ claim: String(b).slice(0, 160), why: graded.why || "not supported by source" });
+      }
+      if (graded.text) newBullets.push(graded.text);
+      // graded.text === null -> bullet dropped
+    });
+    return { ...e, bullets: newBullets };
+  });
+
+  return {
+    experience: changed ? nextExperience : experience,
+    hasFabrication: flags.length > 0,
+    applied: changed,
+    flags,
+  };
+}

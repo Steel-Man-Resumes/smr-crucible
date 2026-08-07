@@ -46,7 +46,32 @@ interface GenerateDocsInput {
   goalNarrative?: string;
   preferences?: Record<string, string>;
   readinessStage?: string;
+  // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
+  resumeConfidence?: "none" | "rough" | "decent" | "strong";
+  resumeWorries?: string[];
   sessionId?: string;
+}
+
+// Translate the self-disclosure signal into a generation-mode directive. This
+// biases sharpen-vs-scaffold and what to be sensitive to -- it never licenses
+// invention (the TRUTH GATE + verifier still bound the output).
+function selfDisclosureDirective(input: GenerateDocsInput): string {
+  const bits: string[] = [];
+  const conf = input.resumeConfidence;
+  if (conf === "none" || conf === "rough") {
+    bits.push(
+      "The person rates their own history as thin/rough. Lead with a functional, skills-forward structure and narrative scaffolding built from real transferable skills. A shorter, sparser, TRUE resume is correct here -- never pad with invented detail to make it look fuller."
+    );
+  } else if (conf === "strong") {
+    bits.push(
+      "The person rates their history as strong. Sharpen and tighten what is already there; do not over-explain or inflate."
+    );
+  }
+  const worries = new Set(input.resumeWorries || []);
+  if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
+  if (worries.has("job_changes")) bits.push("They worry about job changes: frame varied roles as range and adaptability, not instability.");
+  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, and any real accomplishments; a functional layout is fine.");
+  return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
 }
 
 async function handlePost(request: Request) {
@@ -200,7 +225,7 @@ DATA CLEANING -- FIX INPUT ERRORS:
 - If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
 
 ${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
-
+${selfDisclosureDirective(input)}
 SECTION ORDER (exact):
 1. FULL NAME (all caps)
 2. Contact line: City, State | Phone | Email (one line, pipe-separated)

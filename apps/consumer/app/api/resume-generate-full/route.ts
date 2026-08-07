@@ -16,7 +16,7 @@ import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/c
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
-import { verifyGrounding } from "@/lib/grounding-verify";
+import { verifyGrounding, verifyResumeBullets } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -225,14 +225,19 @@ ${contactName || "Candidate"}`;
       .filter(Boolean)
       .join("\n\n");
 
-    const [coverCheck, summaryCheck] = await Promise.all([
+    const [coverCheck, summaryCheck, bulletCheck] = await Promise.all([
       verifyGrounding({ sourceText: groundingSource, output: coverLetterText, kind: "cover_letter" }),
       verifyGrounding({ sourceText: groundingSource, output: parsed.summary || "", kind: "summary" }),
+      verifyResumeBullets({
+        sourceText: groundingSource,
+        experience: Array.isArray(parsed.experience) ? parsed.experience : [],
+      }),
     ]);
     const verifiedCover = coverCheck.text;
-    const groundingFlags = [...coverCheck.flags, ...summaryCheck.flags];
-    const groundingApplied = coverCheck.applied || summaryCheck.applied;
-    const hasFabrication = coverCheck.hasFabrication || summaryCheck.hasFabrication;
+    const groundingFlags = [...coverCheck.flags, ...summaryCheck.flags, ...bulletCheck.flags];
+    const groundingApplied = coverCheck.applied || summaryCheck.applied || bulletCheck.applied;
+    const hasFabrication =
+      coverCheck.hasFabrication || summaryCheck.hasFabrication || bulletCheck.hasFabrication;
 
     // Build the full ResumeDocument
     const resume = {
@@ -252,7 +257,10 @@ ${contactName || "Candidate"}`;
         state: contact?.state || "",
       },
       summary: summaryCheck.text || parsed.summary || "",
-      experience: (parsed.experience || []).map((e: any) => ({
+      // Bullets pass through the structured truth gate (verifyResumeBullets):
+      // each is grounded or dropped, so the tailored resume can't ship an
+      // invented tool/number/scope claim.
+      experience: (bulletCheck.experience || []).map((e: any) => ({
         id: crypto.randomUUID(),
         title: e.title || "",
         company: e.company || "",
