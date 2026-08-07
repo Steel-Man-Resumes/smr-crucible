@@ -1,5 +1,43 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- Phase 2 IN PROGRESS on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
+
+**Read first (still):** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Preview alias:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### DB TOPOLOGY (load-bearing for this phase) -- preview and prod SHARE one Neon (`ep-little-cloud`)
+Vercel lists a Preview DATABASE_URL but it's write-only (pulls empty); HANDOFF line ~251 ("isolate
+Preview on its own Neon branch *later*") + manual `.env.local` migrations confirm they're the same DB.
+Consequences I designed around:
+- **Schema migrations** (new tables/columns) are safe to apply now -- prod `main` ignores them.
+- **Published data** (employer rows) applied now shows on the LIVE prod board immediately. So any
+  board seed is a **run-at-promote script**, NOT an auto-run migration. Keep this rule for N1/N4 too.
+- **Authed preview QA is possible** despite the prod cookie being domain-locked to `.steelmanresumes.com`:
+  create a client user with a password_hash, POST `/api/auth/callback/password-login` on the preview
+  host, capture the `authjs.session-token` VALUE, and force-send it with curl `-b` (server reads the
+  cookie by name regardless of Domain). Harness scripts in `/tmp/crucible-preview-auth.sh` (+ QA user
+  `preview-qa-p2@steelmanresumes.com`, DELETE it at phase close). This is why Phase 1 only e2e'd the
+  *unauthenticated* /api/analyze -- authed routes need this trick.
+
+### P2 ITEM 1 DONE + preview-verified: fair-chance wire (Codex 12) + GR/Kent seed + N2 banner
+- **a596ff0** -- fair-chance flag is now EXACT-match against the verified `employer` table only.
+  Killed the substring list (`"Targeted Staffing".includes("target")` -> false badge) and the AI's
+  ability to stamp `second_chance`. New core `employer.ts`: `normalizeEmployerName` (punct + legal-suffix
+  collapse), `getVerifiedEmployerNameSet` (5min cache, fail-safe empty), `isVerifiedFairChance`
+  (full-string equality). `job-search-core.ts` loads the set once (deadline-bounded) and threads it into
+  JSearch + CareerOneStop; AI now only rewrites descriptions. Adversarial suite +13 -> **52/52 green**.
+  N2: honest "database still being built" banner on /dashboard/employers, header de-WI'd.
+- **cb8b022** -- `scripts/seed-gr-kent-employers.mjs`: 3 primary-source-verified GR/Kent employers
+  (Cascade Engineering [A, own site], Montage Furniture Services [B+, WMW HR quote], Rapid-Line [B, WMW
+  fair]). 5 job-fair-list-only candidates dropped. **NOT RUN** (run-at-promote; idempotent upsert).
+- **Preview-verified (authed):** `/api/employers` -> 18 verified employers, 0 MI/GR rows (prod clean,
+  seed correctly unapplied); `/api/job-search` -> new wire executes cleanly + degrades honestly
+  (JSearch upstream was `provider_unavailable` during the check, so a *positive* live flag wasn't
+  observed -- that's an upstream outage, not the code; logic is exhaustively unit-proven).
+
+### NEXT (this phase, remaining): P2.0 URL-fetch tailoring -> N4 vault -> N1 hide-employer
+See the completion plan. Then Phase 3 (F7-F16), Phase 4 (regression + promote; run the GR/Kent seed).
+
 ## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Phase 1 COMPLETE (Codex NO-GO cleared); Phase 2 next
 
 **Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Branch `crucible-overhaul-wave1-2026-08-06`,
