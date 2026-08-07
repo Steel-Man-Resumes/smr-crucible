@@ -91,7 +91,13 @@ See HANDOFF.md top entry for the per-item verification + the `users` vs `"user"`
   (no substring/AI guess -- "Targeted Staffing" must not read as fair-chance), seed a small
   primary-source-verified Grand Rapids/Kent set, N2 "database in progress" headline.
 
-## PHASE 3 -- WAVE 3 UI/COPY (batchable)
+## PHASE 3 -- WAVE 3 UI/COPY (batchable)  **[COMPLETE 2026-08-07 -- preview-verified]**
+F7/F8/F9/F11/F12/F13/F14/F15/F16 shipped (commits fe60dd7, f5777a5, 7fa1eff). F10 fixed by N4; F17 blocked on
+Troy's OBS video. tsc clean; adversarial 80/80. Live-verified: F13 scorecard-on-End, F11 accountability naming
+(exemplary), F8 interview-prep redirect. F7/F12/F14 render + F15 lock screen = Phase 4 Playwright pass.
+F8/F15 gating direction (enforce vs unlock) flagged for Troy in HANDOFF -- one-line reversible. NEXT = Phase 4.
+
+
 F7 onboarding modal blocks forms - F8 interview routing unify (/interview-prep 404, dead sidebar div)
 - F9 legal-aid name/number (verify primary source) - F11 coach names blame-shifting/non-ownership
 - F12 Forge radio focus outline - F13 interview scorecard on End - F14 from-scratch 3rd job

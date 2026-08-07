@@ -1,5 +1,44 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- Phase 3 COMPLETE (F7-F16 UI/copy) on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
+
+Wave 3 UI/copy fixes shipped: F7, F8, F9, F11, F12, F13, F14, F15, F16 (F10 was fixed by N4; F17 blocked on
+Troy's OBS video). Commits fe60dd7, f5777a5, 7fa1eff. tsc clean; adversarial 80/80; preview build READY.
+
+- **fe60dd7 -- interview scorecard + coach quality:** F13 (End now forces a feedback wrap-up via a new
+  `endInterview` flag instead of dumping to setup; shared `buildResumePayload`/`recordCompletion`). F11
+  (mandatory ACCOUNTABILITY CHECK in the feedback prompt -- names blame-shifting, models an ownership
+  rewrite). F16 (dashboard coach recommends by ACTUAL state; never sends to a locked tool; "save a job" no
+  longer required -- paste-JD path offered). F9 (both t.ROY surfaces barred from reciting a legal-aid org
+  name/number from memory -- the "Legal Services of West Michigan" misname).
+- **f5777a5 -- overlay/focus/gating:** F7 (GuidedTour scoped to dashboard HOME only + session-suppress on
+  defer, so it no longer overlays tool-page forms). F12 (new bright `--t-focus-ring` #e0a94a + dark halo;
+  fixes the invisible focus ring app-wide). F8/F15 (new `OnboardingGate` makes Disclosure + Interview PAGES
+  enforce the full_access gate their tiles advertise -- honest, forward CTA, optimistic render; + a
+  `/dashboard/interview-prep` -> `/dashboard/interview` redirect for the old 404).
+- **7fa1eff -- F14:** from-scratch builder now takes UNLIMITED jobs (dynamic `jobs[]` array + looping "add
+  another job?"), replacing the hardcoded job1/job2 cap; deleted the duplicated blocks (net -54 lines).
+
+### DECISION FLAGGED FOR TROY (F8/F15 gating direction -- easily reversible)
+The plan said "honestly-gated" but not lock-tighter vs unlock-looser. I ENFORCED the gate on the pages
+(Disclosure + Interview require full_access = a tailored resume, which Phase 1 made reachable via a pasted
+JD -- no live-search dependency). Rationale: both tools are target-job-parameterized, and "honestly-gated
+entry" most naturally means the page enforces what the tile advertises. If Troy prefers these tools OPEN
+earlier, it's a one-line change (drop the `<OnboardingGate>` wrappers or lower `requiredState`).
+
+### Preview-verified (authed, this session)
+- F13: `/api/interview-practice` with `endInterview:true` + a mid-interview history -> real feedback scorecard.
+- F11: same call with a blame-shifting persona ("wasn't really my fault, the system railroaded me") ->
+  improvements EXPLICITLY name the dodge ("employers in peer support hear that as dodging... turn the camera
+  back on yourself") + a model answer that owns it. Exemplary.
+- F8: `/dashboard/interview-prep` -> 307 (route exists, redirects), no longer 404.
+- F9/F16 are model-driven prompt properties (build-verified, like Phase 1's prompt fixes). F7/F12/F14 render
+  + the F15 lock screen are pure UI -> the Phase 4 Playwright assessor pass (Sol+Fable), per the plan's split.
+
+### NEXT: Phase 4 -- CLOSE-OUT (regression + cost probe + PROMOTE)
+Full Sol+Fable Playwright regression vs preview (covers F7/F12/F14/F15 render + all of Phase 1-3); verifier +
+URL-fetch cost probe; **run `node scripts/seed-gr-kent-employers.mjs` at the merge**; promote to prod; smoke.
+
 ## 2026-08-07 (Opus 4.8) -- Phase 2 IN PROGRESS on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
 
 **Read first (still):** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Preview alias:
