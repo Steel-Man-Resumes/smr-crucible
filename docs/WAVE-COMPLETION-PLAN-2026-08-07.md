@@ -17,6 +17,10 @@ Codex finding 1 (API fixed, builder still broken) is why. Plus an adversarial te
 - Wave 1 (F1-F4) + Wave 2 (F5-F6) + 2 flag follow-ups: BUILT + real-runtime verified on preview.
 - Codex NO-GO review (2026-08-07): 11 confirmed correctness bugs + 2 Troy decisions + 1 already-planned.
   This plan folds every finding in. Nothing promotes to prod until findings 1-11 are resolved.
+- **Phase 1 progress (2026-08-07): 5 of 7 DONE + verified** -- P1.0 (Codex 2), P1.1 (Codex 1),
+  P1.2 (Codex 4), P1.3 (Codex 5,11), P1.4 (Codex 6,7,8). REMAINING: P1.5/6 (Codex 9,3), P1.7/8
+  (Codex 10,13), P1.9 (test suite), then Phase 1 end-to-end preview verify. See HANDOFF.md top entry
+  for exact files + approach per remaining item.
 
 ## TROY DECISIONS (2026-08-07)
 - **Report privacy (Codex 3):** the downloadable Career Analysis KEEPS the barrier/legal/resource

@@ -1,5 +1,81 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Codex remediation, Phase 1 5/7 done
+
+**Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md` (the full phased plan + Codex
+NO-GO triage + Troy's decisions). Branch `crucible-overhaul-wave1-2026-08-06`, PREVIEW
+ONLY, never prod until Troy promotes. Preview alias:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### Where we are
+Codex reviewed Waves 1+2 and returned a NO-GO with 11 correctness bugs + 2 Troy decisions.
+I agree with it. Phase 1 = fixing all 11. **DONE + verified (5 of 7 P1 items):**
+- **P1.0 (Codex 2, source laundering):** `buildTrustedSource()` in lib/grounding-verify.ts
+  is the single trust boundary -- verifier source is ONLY the person's own resume text +
+  typed answers, never AI-derived Forge narrative/skills or the job posting. Both gen routes use it.
+- **P1.1 (Codex 1, parser regression):** `profileToResume()` in components/resume/resumeParsers.ts
+  builds the base resume from /api/parse's STRUCTURED profile (upload + paste paths thread it
+  through resume/page.tsx enterBuilder), not the old text heuristic. Defense-in-depth strip:
+  reentry "release", section-header words, facility names; justice EMPLOYER blanked (job kept).
+  Verified 10/10 vs Codex's exact input + adversarial leak.
+- **P1.2 (Codex 4, Tailor field gate + injection):** rules moved to SYSTEM role, job posting
+  fenced in <job_posting> as untrusted data with an injection guard; new `verifyStructuredLists()`
+  grounds skills + education (drops injected CNC/OSHA-30); justice employers blanked in resume-
+  generate-full. Verified live: injection defeated.
+- **P1.3 (Codex 5,11, unlock):** tailoring now requires title AND company (no title-only unlock);
+  /api/applications dedups manual re-runs on title+company (no source_id); application resolved
+  BEFORE the doc renders so autosave links it (race closed). ResumeWorkspace.tsx + applications/route.ts.
+- **P1.4 (Codex 6,7,8, verifier hardening):** MAX_VERIFY_CHARS truncation guard (never apply a
+  rewrite that omits the untrusted tail); shared `isDropMarker()` (catches "None." etc) at verifier
+  AND route final assembly; bullets flagged-only (unflagged kept verbatim -- no rogue rewrites);
+  per-document removed/residual accounting so the output notice never claims "all clean" falsely.
+  isDropMarker verified 13/13.
+
+### REMAINING Phase 1 (do these next, in order)
+- **P1.5/6 (Codex 9,3) -- legal accuracy + report privacy.** In app/api/analyze/route.ts:
+  (a) add a DETERMINISTIC WOTC/8850 strip over the forge output (mirror stripEmDashes) -- prompt-
+  only isn't enough; (b) the JSON schema example still says "expungement eligibility" (~line 505) --
+  change it (contradicts the new prohibition); (c) VERIFY + correct the Milwaukee "ban-the-box
+  extends to private employers with 15+" claim (~line 493) -- Codex cites city.milwaukee.gov (scopes
+  to CITY applicants) + WI DWD; per verify-before-record, fetch those, fix the line. Report privacy
+  (Troy decided: KEEP barriers/legal, SCRUB the reflection): in (forge)/output/page.tsx the printable
+  + text exports must drop the `reflection` field and add a "Private -- for your planning" header;
+  and run verifyGrounding on the analyze narrative/reflection so Sol's "implied skills + assumed
+  pronoun" can't ship in the report.
+- **P1.7/8 (Codex 10,13).** lib/job-search-core.ts: fetchWithTimeout clears its timer after headers,
+  so res.json() body-stall still 504s -- wrap the whole fetch+json in the deadline (and bound cache/
+  decision-log; actually abort the AI enrichment, not just race it). lib/grounding.ts:
+  dutyHasOutcome counts any digit/routine verb -> "Worked in 2022" shows GREEN 100%; tighten it
+  (a bare year is not an outcome; require a real metric or substantive duty).
+- **P1.9.** Formalize the ad-hoc checks into a runnable adversarial suite (grounding, parser round-
+  trip, timeout, legal sanitization, unlock linkage). No runner exists yet -- vitest or plain tsx.
+- **Phase 1 VERIFY:** drive the REAL UI end-to-end on preview (Playwright-via-WSL), not just APIs --
+  Codex finding 1 (API fixed, builder broken) is exactly why. Re-run Codex's concrete failing inputs.
+
+Then **Phase 2** (URL-fetch per-job tailoring [Troy: fetch AND use the URL, real per-job resumes,
+design fragility up front], N4 vault, N1 hide-employer, employer exact-match wire), **Phase 3**
+(F7-F16 UI/copy), **Phase 4** (regression + promote). F17 blocked on Troy's OBS video; N3 non-code.
+
+### Verification workflow (adopt this -- it's the standard Codex's finding 1 forced)
+- Typecheck: `npx tsc --noEmit -p apps/consumer/tsconfig.json`. Build: `npm run build -w apps/consumer`.
+- Behavior-test a lib/pure function: write a `.mts` INTO `apps/consumer/` and run
+  `cd apps/consumer && npx tsx <file>.mts` (the `@/` path aliases resolve from there; from repo root
+  they don't). For functions needing an API key, read apps/consumer/.env.local into process.env at
+  the top of the test. Delete the temp file after.
+- Preview: push -> Vercel auto-builds a preview -> get a 23h bypass via Vercel MCP
+  `get_access_to_vercel_url(<preview alias>)` -> POST to endpoints sending the `_vercel_jwt` cookie
+  from `/?_vercel_share=<token>`. Preview env DATABASE_URL now points at prod Neon (Troy fixed a dead
+  host 8/7). Runtime logs via Vercel MCP `get_runtime_logs`/`get_runtime_errors` (that's how the
+  pdfjs-serverless 500 was found).
+- COMMIT via WSL bash with a `-F <msgfile>` file -- inline `-m` with quotes/parens breaks the shell.
+
+### Gotchas
+- pdfjs is externalized in next.config.mjs (serverComponentsExternalPackages) -- do not re-bundle it.
+- analyze route has deterministic stripEmDashes() over the whole forge output (add WOTC strip beside it).
+- Verifier cost now spans grounding-verify:{resume,cover_letter,summary,bullets,lists} -- all metered
+  via recordTokenUsage -> admin AI-costs panel; measure in the cost trial before promote.
+- MOCK_AI=1 (env) returns fixtures for zero-cost UI work.
+
 ## 2026-08-07 (Opus 4.8) -- WAVE 2 (F5, F6) + the three flagged follow-ups, on the same preview
 
 Same branch `crucible-overhaul-wave1-2026-08-06`, preview only. All real-runtime verified.
