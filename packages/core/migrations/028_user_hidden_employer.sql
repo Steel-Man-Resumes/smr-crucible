@@ -6,7 +6,9 @@
 
 CREATE TABLE IF NOT EXISTS user_hidden_employer (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  -- Canonical users table is `users` (plural, per migration 008); `"user"` is a
+  -- legacy empty table. Referencing it would fail the FK for every real user.
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   -- Normalized match key (lowercased, punctuation + legal suffix stripped).
   name_key TEXT NOT NULL,
   -- The name as the user saw it, for the Settings un-hide list.
