@@ -6,8 +6,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { runJobSearch } from "@/lib/job-search-core";
+import { getHiddenEmployerSet, isHiddenEmployer } from "@crucible/core";
 
 export const maxDuration = 30;
 
@@ -28,6 +30,22 @@ async function handlePost(request: Request) {
       hasRecord,
       recordType,
     });
+
+    // N1: filter out employers this user has hidden. Applied per-user AFTER the
+    // (shared, per-role) cache, so hiding is honored on cache hits too. Fail-open:
+    // a hidden-set lookup error never blocks the search.
+    try {
+      const session = await auth();
+      const userId = session?.user?.id;
+      if (userId && Array.isArray(result.jobs) && result.jobs.length > 0) {
+        const hidden = await getHiddenEmployerSet(userId);
+        if (hidden.size > 0) {
+          result.jobs = result.jobs.filter((j) => !isHiddenEmployer(j.company, hidden));
+        }
+      }
+    } catch (filterErr) {
+      console.error("Hidden-employer filter skipped:", filterErr);
+    }
 
     return NextResponse.json(result);
   } catch (error) {

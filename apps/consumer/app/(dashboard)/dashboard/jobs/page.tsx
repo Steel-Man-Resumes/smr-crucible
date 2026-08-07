@@ -65,6 +65,12 @@ const COMMON_ROLES = [
   "Retail Associate",
 ];
 
+// Light client-side employer key for immediate display filtering. The authoritative,
+// suffix-tolerant match runs server-side in /api/job-search (core normalizeEmployerName).
+function lightEmployerKey(name: string): string {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 export default function JobBoardPageWrapper() {
@@ -96,6 +102,10 @@ function JobBoardPage() {
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
+  // N1: persistent per-employer hiding (normalized name keys) + the card being confirmed.
+  const [hiddenEmployerKeys, setHiddenEmployerKeys] = useState<Set<string>>(new Set());
+  const [hideEmployerFor, setHideEmployerFor] = useState<string | null>(null);
+  const [hideReason, setHideReason] = useState("");
   const [fairChanceOnly, setFairChanceOnly] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [roleFromResume, setRoleFromResume] = useState(false);
@@ -124,6 +134,16 @@ function JobBoardPage() {
       const stored = localStorage.getItem("hidden_jobs");
       if (stored) setHiddenJobs(new Set(JSON.parse(stored)));
     } catch {}
+
+    // N1: the user's hidden employers, so restored/cached listings are filtered too.
+    fetch("/api/user/hidden-employers")
+      .then((r) => (r.ok ? r.json() : { employers: [] }))
+      .then((d) =>
+        setHiddenEmployerKeys(
+          new Set((d.employers || []).map((e: { display_name: string }) => lightEmployerKey(e.display_name)))
+        )
+      )
+      .catch(() => {});
 
     // Load saved jobs from API (DB-backed)
     async function loadSavedJobs() {
@@ -371,10 +391,28 @@ function JobBoardPage() {
     });
   }
 
+  // N1: hide an employer for good. Server matching is suffix-tolerant (next search);
+  // this light client key removes the currently-shown listings immediately.
+  async function hideEmployer(company: string) {
+    const name = (company || "").trim();
+    if (!name) return;
+    try {
+      await fetch("/api/user/hidden-employers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, reason: hideReason.trim() || undefined }),
+      });
+    } catch {}
+    setHiddenEmployerKeys((prev) => new Set(prev).add(lightEmployerKey(name)));
+    setHideEmployerFor(null);
+    setHideReason("");
+  }
+
   // ─── Derived ────────────────────────────────────────────────────────────
 
   const visibleJobs = jobs.filter((j) => {
     if (hiddenJobs.has(j.id)) return false;
+    if (hiddenEmployerKeys.has(lightEmployerKey(j.company))) return false;
     if (fairChanceOnly && !j.second_chance) return false;
     if (remoteOnly && !j.remote) return false;
     return true;
@@ -812,7 +850,53 @@ function JobBoardPage() {
                       >
                         Not for me
                       </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHideReason("");
+                          setHideEmployerFor(hideEmployerFor === job.id ? null : job.id);
+                        }}
+                        className="text-xs text-t-phos-dim hover:text-t-red"
+                        title="Hide this employer from your searches"
+                      >
+                        Hide employer
+                      </button>
                     </div>
+
+                    {/* N1: type-to-confirm + optional reason before hiding an employer. */}
+                    {hideEmployerFor === job.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-2 border border-t-line bg-t-panel-2 p-3"
+                      >
+                        <p className="text-xs text-t-phos">
+                          Hide <strong className="text-t-white">{job.company}</strong> from all your
+                          future searches. You can undo this anytime in Settings.
+                        </p>
+                        <textarea
+                          value={hideReason}
+                          onChange={(e) => setHideReason(e.target.value)}
+                          placeholder="Reason (optional) -- e.g. a former employer, or already applied"
+                          rows={2}
+                          className="mt-2 w-full px-3 py-2 text-xs bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none resize-y"
+                        />
+                        <div className="flex items-center gap-3 mt-2">
+                          <button
+                            onClick={() => hideEmployer(job.company)}
+                            className="t-focus px-3 py-1.5 text-xs font-bold bg-t-red text-white hover:opacity-90"
+                          >
+                            Hide {job.company}
+                          </button>
+                          <button
+                            onClick={() => { setHideEmployerFor(null); setHideReason(""); }}
+                            className="text-xs text-t-phos-dim hover:text-t-white"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* External apply -- the LAST step, after saving and tailoring here */}
                     {(job.apply_url || job.employer_website) && (

@@ -19,7 +19,7 @@ import { computeGrounding } from "@/lib/grounding";
 import { buildTrustedSource, isJusticeSensitive } from "@/lib/grounding-verify";
 import { profileToResume } from "@/components/resume/resumeParsers";
 import { withDeadline } from "@/lib/job-search-core";
-import { normalizeEmployerName, isVerifiedFairChance } from "@crucible/core";
+import { normalizeEmployerName, isVerifiedFairChance, isHiddenEmployer } from "@crucible/core";
 import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
 
 let pass = 0, fail = 0;
@@ -239,6 +239,19 @@ section("url-fetch tailoring -- HTML extraction");
   check("drops style contents", !text.includes("color:red"), text);
   check("drops noscript contents", !/enable javascript/i.test(text), text);
   check("no residual tags", !/[<>]/.test(text.replace(/&[a-z]+;/gi, "")), text);
+}
+
+// ── 10. Hidden-employer match: exact normalized, suffix-tolerant (N1) ─────────
+section("hidden-employer match");
+{
+  // Set is built from normalized keys, exactly as getHiddenEmployerSet stores them.
+  const hidden = new Set(["Roehl Transport, Inc.", "Acme Warehouse"].map(normalizeEmployerName));
+  check("hides an exact match", isHiddenEmployer("Acme Warehouse", hidden) === true);
+  check("hides across a legal-suffix drift", isHiddenEmployer("Roehl Transport", hidden) === true);
+  check("does NOT hide a mere substring", isHiddenEmployer("Acme Warehouse Solutions", hidden) === false);
+  check("does NOT hide an unlisted employer", isHiddenEmployer("Cascade Engineering", hidden) === false);
+  check("empty company never hides", isHiddenEmployer("", hidden) === false);
+  check("empty set never hides", isHiddenEmployer("Acme Warehouse", new Set<string>()) === false);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
