@@ -194,7 +194,7 @@ const READINESS_DIRECTIVES: Record<string, {
     barriers: `This person is preparing to move. They need actionable plans.
 - Full resource lists with contact info where possible.
 - Legal notes: specific to their situation, actionable.
-- Include timelines ("expungement takes X months in this state").
+- Timelines only as general ballpark, framed to verify ("record-clearing can take months and it varies -- a legal-aid resource can confirm for your case"), never a firm promise.
 - Frame through agency: "here's what you do first."
 - Name the structural reality (Pager's research) and the navigation: "Employers can discriminate even where ban-the-box applies. Here's how to get ahead of it."
 - At least one resource per barrier should be a potential "hook" org where a relationship can form, not just a service.`,
@@ -467,8 +467,10 @@ ${rd.barriers}
 
 RULES:
 - Be specific, not generic. Real organizations > generic advice.
-- For criminal records: consider type, recency, and jurisdiction. Mention specific WI laws if jurisdiction is Wisconsin.
-- Wisconsin ban-the-box: applies to state/county government employers; Milwaukee city has its own ordinance extending to private employers with 15+. Mention expungement eligibility under WI §973.015.
+- For criminal records: consider type, recency, and jurisdiction. Reference laws as GENERAL INFORMATION to verify, never as a determination of THIS person's eligibility.
+- LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief -- say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
+- Employer incentives: NEVER cite the Work Opportunity Tax Credit (WOTC) as a current incentive -- it expired for hires beginning after 2025-12-31 (Form 8850 retired). The Federal Bonding Program is the current program; mention it generally if relevant, and never present any incentive as settled without verification.
+- Wisconsin (only if the jurisdiction is WI): ban-the-box applies to state/county government employers; Milwaukee city has an ordinance extending to private employers with 15+. An expungement statute (WI §973.015) exists -- note that a legal-aid resource can assess whether it applies; do NOT assert the person's own eligibility.
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
 - "The system has real obstacles here. Here's how to move through them." — not "don't worry about it."
