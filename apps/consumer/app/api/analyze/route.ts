@@ -20,6 +20,8 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
+import { WOTC_RE, stripEmployerTaxCredit } from "@/lib/legal-sanitize";
 
 export const maxDuration = 120;
 
@@ -73,8 +75,38 @@ async function handlePost(request: Request) {
         : Promise.resolve(null),
     ]);
 
-    // Compose the Forge output
-    const forgeOutput = stripEmDashes({
+    // P1.6 (Codex 3): ground the narrative that ships in the downloadable report.
+    // Sol's QA flagged the report asserting implied skills and an assumed pronoun
+    // the source never stated. Run the cheap grounding verifier (fail-open) on the
+    // summary + reflection against ONLY the person's own material -- resume text and
+    // their typed answers, never the AI narrative or a job posting (buildTrustedSource).
+    try {
+      const trustedSource = buildTrustedSource({
+        resumeText: input.resumeText,
+        userText: [
+          input.goalNarrative,
+          input.hookNarrative,
+          ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []),
+          input.criminalRecord?.context,
+        ],
+      });
+      const summary = typeof narrative.summary === "string" ? narrative.summary : "";
+      const reflection = typeof narrative.reflection === "string" ? narrative.reflection : "";
+      const [gSummary, gReflection] = await Promise.all([
+        summary ? verifyGrounding({ sourceText: trustedSource, output: summary, kind: "report" }) : null,
+        reflection ? verifyGrounding({ sourceText: trustedSource, output: reflection, kind: "report" }) : null,
+      ]);
+      if (gSummary) narrative.summary = gSummary.text;
+      if (gReflection) narrative.reflection = gReflection.text;
+    } catch (err) {
+      console.error("Narrative grounding failed (fail-open):", err);
+    }
+
+    // Compose the Forge output. Two deterministic guards sweep the whole object
+    // (belt-and-suspenders, like the prompts themselves): stripEmployerTaxCredit
+    // removes any retired-WOTC / Form 8850 reference the model leaked (P1.5, Codex 9),
+    // and stripEmDashes enforces Troy's em-dash rule.
+    const rawForge = {
       schema_version: "forge_output.v1",
       generated_at: new Date().toISOString(),
       readiness_stage: input.readinessStage || "preparation",
@@ -83,7 +115,11 @@ async function handlePost(request: Request) {
       skills: skills.skills || [],
       career_paths: careerPaths.paths || [],
       barriers: barriers?.barriers || [],
-    });
+    };
+    if (WOTC_RE.test(JSON.stringify(rawForge))) {
+      console.warn("[analyze] Deterministic guard stripped a WOTC / Form 8850 reference the model emitted");
+    }
+    const forgeOutput = stripEmDashes(stripEmployerTaxCredit(rawForge));
 
     // Log decision for JBS compliance
     try {
@@ -490,7 +526,7 @@ RULES:
 - For criminal records: consider type, recency, and jurisdiction. Reference laws as GENERAL INFORMATION to verify, never as a determination of THIS person's eligibility.
 - LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief -- say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
 - Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all -- it expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / Michigan Works!), and never present any incentive as settled without verification.
-- Wisconsin (only if the jurisdiction is WI): ban-the-box applies to state/county government employers; Milwaukee city has an ordinance extending to private employers with 15+. An expungement statute (WI §973.015) exists -- note that a legal-aid resource can assess whether it applies; do NOT assert the person's own eligibility.
+- Wisconsin (only if the jurisdiction is WI): "ban-the-box" (removing the conviction question from the initial application) applies to PUBLIC hiring only -- Wisconsin state civil service (2015 Wisconsin Act 150) and the City of Milwaukee's own civil-service applicants. It does NOT bind private employers, and there is no Milwaukee or statewide private-employer ban-the-box (do not claim one). The protection that DOES reach private employers is the Wisconsin Fair Employment Act (Wis. Stat. 111.321 / 111.335): an employer may not discriminate based on conviction record UNLESS the conviction is substantially related to the particular job -- state this as general information, never as a ruling on this person. A record-clearing statute (Wis. Stat. 973.015) exists; say a legal-aid resource can assess whether it applies -- do NOT assert the person's own eligibility.
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
 - "The system has real obstacles here. Here's how to move through them." -- not "don't worry about it."
@@ -510,7 +546,7 @@ Return JSON:
       "resources": [
         { "name": "org/resource name", "type": "category", "description": "what they offer and how to access" }
       ],
-      "legal_notes": "relevant laws or rights (ban-the-box, expungement eligibility, etc.)"
+      "legal_notes": "general legal context to verify with legal aid -- e.g. ban-the-box protections that may apply, or that a record-clearing law exists and a legal-aid resource can assess whether it fits their case. NEVER an individual eligibility determination."
     }
   ]
 }`;

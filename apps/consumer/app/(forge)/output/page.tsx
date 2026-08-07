@@ -1059,12 +1059,13 @@ function analysisToStandaloneHtml(
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headline = String(narrative.headline || "Your Career Profile");
   const summary = String(narrative.summary || "");
-  const reflection = String(narrative.reflection || "");
+  // P1.6 (Codex 3, Troy decision): the downloadable report SCRUBS the private
+  // `reflection` line (it acknowledges the person's journey/record). Barriers,
+  // legal context, and resources stay -- that is this report's purpose.
 
   let body = "";
 
   if (summary) body += `<h2>Your Story</h2><p class="narrative">${escHtml(summary)}</p>`;
-  if (reflection) body += `<p class="narrative">${escHtml(reflection)}</p>`;
 
   if (output.strengths?.length) {
     body += `<h2>Your Strengths</h2>`;
@@ -1120,6 +1121,7 @@ body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1
 .header h1{margin:0 0 4px;font-size:18pt;text-transform:uppercase;letter-spacing:2px}
 .header p{margin:0;color:#B8C9E0;font-size:11pt}
 .date{color:#B8C9E0;font-size:9pt;margin-top:6px}
+.private-banner{background:#f4f1ea;border-left:3px solid #B8860B;padding:10px 14px;margin-bottom:24px;font-size:10pt;line-height:1.5;color:#3a3a3a}
 h2{font-size:14pt;color:#1B2A4A;border-bottom:2px solid #1B2A4A;padding-bottom:4px;margin-top:28px}
 .narrative{font-size:12pt;line-height:1.8}
 .strength{margin-bottom:14px}
@@ -1132,6 +1134,7 @@ ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
 @media print{@page{margin:.5in}.no-print{display:none!important}}
 </style></head><body>
 <div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
+<div class="private-banner"><strong>Private -- for your planning.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself -- your resume and cover letter are the documents to share with employers.</div>
 ${body}
 <div class="footer no-print"><p>Steel Man Resumes -- steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
 <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
@@ -1147,6 +1150,12 @@ function formatOutputAsText(
     "  THE FORGE -- Your Story, Reforged",
     "  Steel Man Resumes",
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
+    "",
+    // P1.6 (Codex 3): this analysis is the person's private planning document --
+    // it omits the reflection line and flags itself as not-for-employers.
+    "PRIVATE -- for your planning. This analysis is for your own use as you plan",
+    "your next steps. Keep it for yourself; your resume and cover letter are the",
+    "documents to share with employers.",
     "",
   ];
 
