@@ -91,7 +91,18 @@ async function handlePost(request: Request) {
       .trim();
 
     // Parse structured profile using GPT-4o-mini
-    const parsedProfile = await parseWithAI(cleanedText);
+    const parsedProfile = (await parseWithAI(cleanedText)) as Record<string, any>;
+
+    // Deterministic contact preservation (F5): the parser must not "normalize"
+    // an email -- dropping the "+qasol" tag was the QA failure. If the AI's email
+    // is not literally in the source text, restore the verbatim one (or null it),
+    // never ship a silently altered address.
+    if (typeof parsedProfile.email === "string" && parsedProfile.email) {
+      if (!cleanedText.includes(parsedProfile.email)) {
+        const found = cleanedText.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i)?.[0];
+        parsedProfile.email = found || null;
+      }
+    }
 
     return NextResponse.json({
       resumeText: cleanedText,
@@ -159,7 +170,15 @@ Return a JSON object with:
   "military": { "branch": string, "rank": string, "years": string } or null,
   "skills_mentioned": string[]
 }
-Parse what exists. Use null for missing fields. Do not infer or fabricate.`,
+
+RULES (a dropped or altered field is a failure -- this feeds a real resume):
+1. CONTACT VERBATIM: copy email, phone, full_name, city, state EXACTLY as written, character for character. NEVER normalize, "clean up", correct, or drop any part -- keep an email's plus-tag ("name+tag@x.com" stays "name+tag@x.com"), keep the full phone, keep the exact spelling.
+2. DATES: if a job shows dates, preserve start_date and end_date exactly as written (e.g. "2019", "Jan 2019", "2019-2022"). Do not drop or reformat them.
+3. CITY/STATE: if the contact line shows a city and/or state, capture them. Do not leave them null when they are present.
+4. EDUCATION is ONLY real schools, training programs, degrees, GEDs, or credentials. NEVER create an education entry from a section header ("ADDITIONAL", "SKILLS", "SUMMARY"), a narrative sentence, or a date fragment. If a line is not clearly a school/program/credential, leave it out.
+5. Capture ALL skills, tools, and certifications mentioned -- do not omit them.
+6. NEVER carry any mention of incarceration, prison, jail, parole, probation, "release", "reentry", or justice involvement into ANY field. Omit such phrases entirely; never turn them into an education entry, title, or bullet.
+7. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
         },
         {
           role: "user",
