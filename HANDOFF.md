@@ -41,6 +41,15 @@ commits, pushed, Vercel preview build READY at 085c26d):
   WOTC/8850, no em dash, no "15+ private" claim, no individual-eligibility language; legal_notes carries
   the corrected WI framing (public-only ban-the-box + WFEA + 973.015 as general info, opens "not a
   determination about your case", cites Legal Action of Wisconsin); narrative summary+reflection grounded.
+- **Michigan jurisdiction rule added (08f0361) for Troy's Grand Rapids trial.** The route had only a
+  verified WI rule; a GR-MI run generated MI law unguarded. Verified against primary sources (michigan.gov
+  Snyder executive directive 2018; Grand Rapids Human Rights Ordinance eff. 2019; Clean Slate MCL 780.621):
+  MI state ban-the-box is public-only, MI preempts local private-employer BTB, Grand Rapids' Human Rights
+  Ordinance is the exception (1+ employees, individualized assessment, no arrest-only records), Clean Slate
+  is fact-specific (direct to Michigan Legal Help / Legal Aid of Western Michigan, no eligibility claim).
+  LIVE preview /api/analyze (GR-MI manufacturing + felony persona) confirmed accurate, disciplined MI
+  legal_notes + grounded narrative. NOTE: GR ordinance enforceability vs the state preemption is genuinely
+  contested legal territory -- the rule frames it as "confirm with legal aid", never as a guarantee.
 - Deep UI Playwright pass (Forge flow: on-screen gauge, printable Private-header render, upload->builder)
   is the Phase-4 assessor regression (Sol+Fable), NOT re-done here; the builder/parser (Codex 1) was
   already verified 10/10 in P1.1 + the suite's parser round-trip.
