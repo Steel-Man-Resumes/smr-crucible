@@ -7,6 +7,18 @@ NO-GO triage + Troy's decisions). Branch `crucible-overhaul-wave1-2026-08-06`, P
 ONLY, never prod until Troy promotes. Preview alias:
 `the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
 
+### ON MERGE TO MAIN -- fold in GA4 thin acquisition layer (Troy approved 2026-08-07)
+When this overhaul branch promotes to main/prod, add the Forge/Refinery GA4 thin layer in the
+same merge (one deploy, not a separate change racing this work). Scope is deliberately THIN --
+justice-impacted users type sensitive narrative here, so NO deep product events to Google:
+- Load gtag with measurement id `G-0FFVQ6SQ0L` (the Steel Man Resumes property, 549068234).
+  Forge/refinery are subdomains of steelmanresumes.com, so they roll into the SMR property and
+  segment by hostname -- do NOT create a new property.
+- Fire ONLY: `forge_started`, `forge_completed`, `refinery_signup` (acquisition attribution).
+- Respect the existing `AnalyticsWrapper` exclusion: no analytics on `/mini-forge/*` (tablet spec).
+- Pattern mirrors smr-website/src/app/GoogleAnalytics.tsx (next/script, env `NEXT_PUBLIC_GA_ID`
+  fallback). Full context: `~/todash/GA4-ANALYTICS-ROLLOUT-2026-08-07.md`.
+
 ### Where we are
 Codex reviewed Waves 1+2 and returned a NO-GO with 11 correctness bugs + 2 Troy decisions.
 I agree with it. Phase 1 = fixing all 11. **DONE + verified (5 of 7 P1 items):**
