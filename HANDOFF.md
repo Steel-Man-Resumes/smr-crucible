@@ -1,6 +1,67 @@
 # SMR Crucible -- Handoff
 
-## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Codex remediation, Phase 1 5/7 done
+## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Phase 1 COMPLETE (Codex NO-GO cleared); Phase 2 next
+
+**Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Branch `crucible-overhaul-wave1-2026-08-06`,
+PREVIEW ONLY (never prod until Troy promotes). Preview:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### Phase 1 DONE -- all 11 Codex findings + 2 Troy decisions resolved
+P1.0-P1.4 were last session (Codex 1,2,4,5,6,7,8,11). This session finished P1.5-P1.9 (3 atomic
+commits, pushed, Vercel preview build READY at 085c26d):
+- **dd11a75 P1.5/6 (Codex 9,3) -- analyze legal accuracy + report privacy.**
+  - New `lib/legal-sanitize.ts`: `stripEmployerTaxCredit` drops any WOTC / Form 8850 SENTENCE
+    (belt-and-suspenders over the whole forge output, mirrors stripEmDashes -- which also moved here).
+    Composed as `stripEmDashes(stripEmployerTaxCredit(rawForge))`.
+  - Fixed the barrier schema example that said "expungement eligibility". Corrected the WI ban-the-box
+    RULE against PRIMARY sources (dwd.wisconsin.gov arrest/conviction + Milwaukee): the old "Milwaukee
+    ordinance extends to private employers with 15+" was FALSE. Now: WI/Milwaukee ban-the-box is
+    PUBLIC/civil-service only (2015 Wis. Act 150; City of Milwaukee civil service); the private-sector
+    protection is the WI Fair Employment Act (Wis. Stat. 111.321/111.335, substantially-related), as
+    general info; 973.015 record-clearing as general info, legal-aid assesses.
+  - `(forge)/output/page.tsx`: the downloadable Career Analysis (printable PDF + text export) SCRUBS the
+    private `reflection` line + carries a "Private -- for your planning" header; barriers/legal/resources
+    stay. analyze runs `verifyGrounding` (kind:report, fail-open) on narrative summary+reflection vs
+    `buildTrustedSource(resume + typed answers)`.
+- **f072a7c P1.7/8 (Codex 10,13) -- job-search deadline + gauge realism.**
+  - `lib/job-search-core.ts`: `fetchJsonWithTimeout` keeps the timer armed through `res.json()` (body
+    stall was still 504ing); AI enrichment is actually ABORTED (`callAI` now takes an AbortSignal;
+    `ai-call.ts` threads it and does NOT fall back to OpenAI on a caller abort); cache read/writes +
+    decision-log bounded with `withDeadline`.
+  - `lib/grounding.ts`: an outcome no longer counts a bare year or routine verb ("Worked in 2022" was
+    GREEN 100%); it needs a real metric or a genuine achievement verb, and `hasDuty` needs >=2 content
+    words after stripping years.
+- **085c26d P1.9 -- runnable suite.** `apps/consumer/test/adversarial.mts`, `npm run test:adversarial`
+  (tsx), 39 cases green: WOTC/em-dash sanitization, grounding realism, source-laundering boundary,
+  parser round-trip (`profileToResume` on Codex's adversarial profile), justice gate, timeout behavior.
+
+### Verified
+- Adversarial suite 39/39; tsc clean; consumer build clean; Vercel preview build READY (085c26d).
+- LIVE preview `POST /api/analyze` (WI + felony + probation persona, via bypass cookie): PASS -- no
+  WOTC/8850, no em dash, no "15+ private" claim, no individual-eligibility language; legal_notes carries
+  the corrected WI framing (public-only ban-the-box + WFEA + 973.015 as general info, opens "not a
+  determination about your case", cites Legal Action of Wisconsin); narrative summary+reflection grounded.
+- Deep UI Playwright pass (Forge flow: on-screen gauge, printable Private-header render, upload->builder)
+  is the Phase-4 assessor regression (Sol+Fable), NOT re-done here; the builder/parser (Codex 1) was
+  already verified 10/10 in P1.1 + the suite's parser round-trip.
+
+### NEXT: Phase 2 (net-new builds) -- see the completion plan
+- P2.0 URL-fetch per-job tailoring (Troy ratified: fetch AND use the URL; design paywall/anti-bot/timeout
+  fragility up front; fetched text -> canonical source + truth gate).
+- N4 vault redesign (pinned current resume, one-click PDF+DOCX, `is_current`).
+- N1 hide-employer table + Settings un-hide + job-search filter.
+- Fair-chance employer wire (Codex 12): exact-match the verified `018_employer` table, seed a small
+  primary-source-verified Grand Rapids/Kent set, N2 "database in progress" headline.
+Then Phase 3 (F7-F16 UI/copy), Phase 4 (regression + cost probe + promote).
+
+### Gotcha found this session (verification workflow)
+Driving the SSO-gated preview via curl from the Bash tool (Git Bash -> wsl.exe): Git Bash MSYS path
+conversion mangles `/mnt/c` paths AND the URL's `/api/...` path. Prefix the command with
+`MSYS_NO_PATHCONV=1`. Skip the cookie-jar dance: `get_access_to_vercel_url` -> `curl -D -` the
+`/?_vercel_share=...` URL to read the `_vercel_jwt` from Set-Cookie, then send it as
+`-b "_vercel_jwt=..."` on the POST.
+
+## 2026-08-07 (Opus 4.8) -- Codex remediation, Phase 1 5/7 done (superseded by the entry above)
 
 **Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md` (the full phased plan + Codex
 NO-GO triage + Troy's decisions). Branch `crucible-overhaul-wave1-2026-08-06`, PREVIEW
