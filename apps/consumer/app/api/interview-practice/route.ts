@@ -22,7 +22,7 @@ async function handlePost(request: Request) {
   }
 
   try {
-    const { messages, config, exchangeCount, forgeContext, resume, jobDescription } = await request.json();
+    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = await request.json();
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -33,7 +33,10 @@ async function handlePost(request: Request) {
 
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
-    const shouldWrapUp = exchangeCount >= 5;
+    // Wrap up (feedback scorecard) either after enough exchanges, OR when the user
+    // clicks "End" with at least one real answer on the board (F13 -- ending must
+    // never dump them back to setup empty-handed).
+    const shouldWrapUp = exchangeCount >= 5 || endInterview === true;
 
     // Build candidate context from Forge data
     let candidateBlock = "";
@@ -141,6 +144,7 @@ Return JSON:
 RULES:
 - Be specific — reference actual things they said
 - Focus on communication skills: confidence, clarity, brevity, pivot to strengths
+- ACCOUNTABILITY CHECK (do not skip): if any answer shifted blame, minimized their role, or framed their record as something that was done TO them ("it wasn't really my fault," "they charged me with," "the system"), you MUST name it plainly in improvements -- kindly, not as a lecture -- and in better_answers model the SAME point rewritten with ownership (what they did, what they learned, who they are now). Employers, and especially peer-support and reentry roles, hire for ownership; a polished answer that dodges it still fails the interview. If they owned their story well, say so in strengths.
 - For better_answers, model 1-2 stronger responses built from their real resume, in their own voice -- show them what good sounds like
 - 6th grade reading level
 - JSON only (after the closing statement)`;
