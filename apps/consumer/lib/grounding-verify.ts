@@ -59,6 +59,17 @@ export interface GroundingVerifyResult {
 
 const VERIFY_TIMEOUT_MS = 15000;
 const VERIFY_MODEL = "gpt-4o-mini";
+// The model only ever sees the first MAX_VERIFY_CHARS of source/output. A rewrite
+// must never be APPLIED when the document exceeds this, or everything past the
+// window would be silently deleted (Codex finding 6). Above it we still flag.
+const MAX_VERIFY_CHARS = 8000;
+
+// Literal drop markers a model returns instead of JSON null when it means "remove
+// this" -- must never ship as content. Tolerates trailing punctuation ("None.").
+const DROP_MARKER_RE = /^(null|none|n\/?a|n\.?a\.?)[.!]?$/i;
+export function isDropMarker(s: string): boolean {
+  return !s || DROP_MARKER_RE.test(s.trim());
+}
 
 function kindLabel(kind: GroundingKind): string {
   switch (kind) {
@@ -111,12 +122,12 @@ Return ONLY a JSON object:
 
   const user = `SOURCE (everything the person told us about themselves):
 """
-${source.slice(0, 8000)}
+${source.slice(0, MAX_VERIFY_CHARS)}
 """
 
 OUTPUT (the generated ${label} to audit):
 """
-${output.slice(0, 8000)}
+${output.slice(0, MAX_VERIFY_CHARS)}
 """`;
 
   let data: any;
@@ -185,12 +196,18 @@ ${output.slice(0, 8000)}
   const hasFabrication = parsed.hasFabrication === true || flags.length > 0;
   const cleaned = typeof parsed.cleaned === "string" ? parsed.cleaned.trim() : "";
 
-  // Guard the rewrite: only apply when the model actually returned something and
-  // it isn't a suspicious collapse of the document (a broken/over-aggressive
-  // rewrite must never reach the user). Below the floor we still surface flags.
+  // Guard the rewrite: apply ONLY when (a) fabrication was found, (b) the whole
+  // document fit inside the audited window -- otherwise the rewrite omits the
+  // untrusted tail and applying it silently deletes it (Codex 6), (c) the model
+  // returned a non-trivial rewrite (not a suspicious collapse), and (d) the result
+  // is not itself a bare drop marker. Below any guard we still surface flags.
   const lengthFloor = Math.floor(output.trim().length * 0.4);
+  const withinAuditWindow = output.trim().length <= MAX_VERIFY_CHARS;
   const applyRewrite =
-    hasFabrication && cleaned.length >= Math.max(40, lengthFloor);
+    hasFabrication &&
+    withinAuditWindow &&
+    !isDropMarker(cleaned) &&
+    cleaned.length >= Math.max(40, lengthFloor);
 
   return {
     text: applyRewrite ? cleaned : output,
@@ -261,7 +278,7 @@ For EACH bullet: if it asserts a concrete fact the SOURCE does not support (an i
 Return ONLY JSON: {"bullets":[{"id":"e.b","text":"grounded rewrite, or null to drop","flagged":true|false,"why":"short reason if flagged"}]}`;
   const user = `SOURCE (everything the person told us about themselves):
 """
-${source.slice(0, 8000)}
+${source.slice(0, MAX_VERIFY_CHARS)}
 """
 
 BULLETS (id, role, text):
@@ -319,16 +336,13 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
   const rows: any[] = Array.isArray(parsed.bullets) ? parsed.bullets : [];
   if (!rows.length) return original;
 
-  // Map graded bullets back onto the structure by id; drop nulls; collect flags.
+  // Map graded bullets by id. A literal drop marker ("null"/"none"/"None.") means
+  // remove -- it must never ship as a bullet (Codex 7).
   const byId = new Map<string, { text: string | null; flagged: boolean; why?: string }>();
   for (const r of rows) {
     if (r && typeof r.id === "string") {
-      // The model sometimes returns the LITERAL string "null" (or "none") instead
-      // of a JSON null when it means "drop this bullet" -- never let that word ship
-      // as a resume bullet.
-      const trimmed = typeof r.text === "string" ? r.text.trim() : "";
-      const isDrop = !trimmed || /^(null|none|n\/a)$/i.test(trimmed);
-      const text = isDrop ? null : trimmed;
+      const raw = typeof r.text === "string" ? r.text.trim() : "";
+      const text = isDropMarker(raw) ? null : raw;
       byId.set(r.id, { text, flagged: r.flagged === true || text === null, why: r.why });
     }
   }
@@ -338,19 +352,24 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
   const nextExperience: ResumeExperience[] = experience.map((e, ei) => {
     const newBullets: string[] = [];
     (e.bullets || []).forEach((b, bi) => {
-      const id = `${ei}.${bi}`;
-      const graded = byId.get(id);
-      if (!graded) {
-        // Model didn't address this bullet -- keep it as-is (fail-open per bullet).
-        if (typeof b === "string" && b.trim()) newBullets.push(b);
+      const original = typeof b === "string" ? b.trim() : "";
+      const graded = byId.get(`${ei}.${bi}`);
+
+      // No grade, or the model did NOT flag it -> keep the ORIGINAL verbatim. We
+      // trust the verifier only to REMOVE or GROUND a flagged claim, never to
+      // freely rewrite a bullet it considered fine (Codex 7: an unflagged rewrite
+      // could swap a true bullet for a different, unverified one). A literal drop
+      // marker sitting in the original is dropped defensively even here.
+      if (!graded || !graded.flagged) {
+        if (original && !isDropMarker(original)) newBullets.push(original);
+        else if (original) changed = true; // dropped a stray marker
         return;
       }
-      if (graded.flagged || graded.text !== b) {
-        changed = true;
-        if (graded.flagged) flags.push({ claim: String(b).slice(0, 160), why: graded.why || "not supported by source" });
-      }
+
+      // Flagged: use the grounded rewrite, or drop when nothing grounded remains.
+      changed = true;
+      flags.push({ claim: original.slice(0, 160), why: graded.why || "not supported by source" });
       if (graded.text) newBullets.push(graded.text);
-      // graded.text === null -> bullet dropped
     });
     return { ...e, bullets: newBullets };
   });

@@ -16,7 +16,7 @@ import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/c
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
-import { verifyGrounding, verifyResumeBullets, buildTrustedSource } from "@/lib/grounding-verify";
+import { verifyGrounding, verifyResumeBullets, buildTrustedSource, isDropMarker } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -255,7 +255,11 @@ ${contactName || "Candidate"}`;
         company: e.company || "",
         startDate: e.startDate || "",
         endDate: e.endDate || "",
-        bullets: Array.isArray(e.bullets) ? e.bullets.filter(Boolean) : [],
+        // Filter falsy AND literal drop markers ("null"/"None.") so neither the
+        // fail-open path nor a stray generation artifact ships one (Codex 7).
+        bullets: Array.isArray(e.bullets)
+          ? e.bullets.filter((b: any) => typeof b === "string" && b.trim() && !isDropMarker(b))
+          : [],
       })),
       education: (parsed.education || []).map((e: any) => ({
         id: crypto.randomUUID(),

@@ -117,6 +117,17 @@ async function handlePost(request: Request) {
 
     const resume = resumeCheck.text;
     const coverLetter = coverCheck.text;
+    // Per-document accounting (Codex 8): a flag is "removed" only if THAT document's
+    // rewrite was applied. A document that found fabrication but couldn't apply the
+    // rewrite (window/floor/drop guard) has RESIDUAL fabrication the user must
+    // review -- the notice must not claim it was removed.
+    const checks = [resumeCheck, coverCheck];
+    const removedCount = checks
+      .filter((c) => c.applied)
+      .reduce((n, c) => n + c.flags.length, 0);
+    const residualCount = checks
+      .filter((c) => c.hasFabrication && !c.applied)
+      .reduce((n, c) => n + c.flags.length, 0);
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
@@ -158,6 +169,8 @@ async function handlePost(request: Request) {
       grounding: {
         hasFabrication,
         applied: groundingApplied,
+        removed: removedCount,
+        residual: residualCount,
         flags: groundingFlags,
       },
       generated_at: new Date().toISOString(),
