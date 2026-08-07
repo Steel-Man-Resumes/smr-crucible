@@ -35,8 +35,22 @@ Consequences I designed around:
   (JSearch upstream was `provider_unavailable` during the check, so a *positive* live flag wasn't
   observed -- that's an upstream outage, not the code; logic is exhaustively unit-proven).
 
-### NEXT (this phase, remaining): P2.0 URL-fetch tailoring -> N4 vault -> N1 hide-employer
+### P2 ITEM 2 DONE + preview-verified: URL-fetch per-job tailoring (Codex 14)
+- **a6f6c5c** -- `POST /api/fetch-job-posting` (client tier, rate-limited): SSRF-guarded
+  (loopback/private/link-local/169.254.169.254 metadata/odd-port/non-http rejected), browser UA,
+  8s timeout, ~2MB cap, content-type check, anti-bot/JS-wall detection. Structured honest failure on
+  block/timeout/empty (never a fabricated posting). `lib/job-posting-extract.ts` = pure `isDisallowedHost`
+  + `htmlToText`, unit-tested. ResumeWorkspace: "Read the posting from this link" fills the JD textarea
+  (editable), which flows through the SAME P1.2 defenses as a pasted JD (sanitized, <job_posting>-fenced
+  as untrusted, excluded from buildTrustedSource). Suite +21 -> **74/74** (a test caught the IPv6 `[::1]`
+  bracket SSRF bypass -- URL.hostname keeps the brackets).
+- **Preview-verified (authed):** loopback + cloud-metadata -> invalid_url blocked; greenhouse real JD ->
+  OK 4454 chars extracted; LinkedIn -> honest "paste instead"; example.com (too short) -> honest fallback.
+
+### NEXT (this phase, remaining): N4 vault redesign -> N1 hide-employer
 See the completion plan. Then Phase 3 (F7-F16), Phase 4 (regression + promote; run the GR/Kent seed).
+Authed-preview note: the `_vercel_jwt` from get_access_to_vercel_url expires ~1h -- re-mint the share
+token + re-run `/tmp/crucible-preview-auth.sh <token>` when curl starts returning "Protected deployment".
 
 ## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Phase 1 COMPLETE (Codex NO-GO cleared); Phase 2 next
 
