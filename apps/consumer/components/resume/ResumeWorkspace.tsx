@@ -59,6 +59,45 @@ export function ResumeWorkspace() {
   // live Job Board required.
   const [jobDescription, setJobDescription] = useState("");
 
+  // P2.0: pull the posting text from the pasted URL so the tailoring targets the
+  // real description. Honest fallback ("paste it instead") on paywall/anti-bot/timeout.
+  const [fetchingPosting, setFetchingPosting] = useState(false);
+  const [fetchPostingMsg, setFetchPostingMsg] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
+
+  async function fetchPostingFromUrl() {
+    const url = (doc.meta.jobListingUrl || "").trim();
+    if (!url || fetchingPosting) return;
+    setFetchingPosting(true);
+    setFetchPostingMsg(null);
+    try {
+      const res = await fetch("/api/fetch-job-posting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok && typeof data.text === "string") {
+        setJobDescription(data.text);
+        setFetchPostingMsg({
+          kind: "ok",
+          text: "Read the posting. Check it below and edit if anything is missing, then tailor.",
+        });
+      } else {
+        setFetchPostingMsg({
+          kind: "warn",
+          text: data.message || "Could not read that link automatically. Paste the job description below instead.",
+        });
+      }
+    } catch {
+      setFetchPostingMsg({
+        kind: "warn",
+        text: "Could not read that link automatically. Paste the job description below instead.",
+      });
+    } finally {
+      setFetchingPosting(false);
+    }
+  }
+
   // Full resume generation (from job board)
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -850,6 +889,31 @@ export function ResumeWorkspace() {
               type="url"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
+            {doc.meta.jobListingUrl.trim() && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={fetchPostingFromUrl}
+                  disabled={fetchingPosting}
+                  className="t-focus text-sm font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-50"
+                >
+                  {fetchingPosting ? "Reading the posting..." : "Read the posting from this link"}
+                </button>
+                <p className="text-xs text-t-phos-dim mt-1">
+                  We try to pull the description so we can tailor to it. Some sites block
+                  automatic reading -- if so, just paste the text below.
+                </p>
+                {fetchPostingMsg && (
+                  <p
+                    className={`text-xs mt-1 ${
+                      fetchPostingMsg.kind === "ok" ? "text-t-amber-bright" : "text-t-amber-bright"
+                    }`}
+                  >
+                    {fetchPostingMsg.text}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">

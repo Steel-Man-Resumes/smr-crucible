@@ -20,6 +20,7 @@ import { buildTrustedSource, isJusticeSensitive } from "@/lib/grounding-verify";
 import { profileToResume } from "@/components/resume/resumeParsers";
 import { withDeadline } from "@/lib/job-search-core";
 import { normalizeEmployerName, isVerifiedFairChance } from "@crucible/core";
+import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -189,6 +190,55 @@ section("fair-chance exact-match wire");
   check("unlisted employer does NOT flag", isVerifiedFairChance("Generic Warehouse Co", verified) === false);
   check("empty company does NOT flag", isVerifiedFairChance("", verified) === false);
   check("empty verified set never flags", isVerifiedFairChance("Target", new Set<string>()) === false);
+}
+
+// ── 9. URL-fetch tailoring: SSRF guard + HTML extraction (P2.0, Codex 14) ─────
+section("url-fetch tailoring -- SSRF guard");
+{
+  const blocked = [
+    "http://localhost/admin",
+    "http://127.0.0.1:8080/",
+    "http://169.254.169.254/latest/meta-data/", // cloud metadata SSRF
+    "http://10.0.0.5/",
+    "http://192.168.1.1/",
+    "http://172.16.0.9/",
+    "http://[::1]/",
+    "https://db.internal/",
+    "http://printer.local/",
+    "file:///etc/passwd",
+    "https://example.com:22/",
+  ];
+  for (const u of blocked) {
+    let disallowed = true;
+    try { disallowed = isDisallowedHost(new URL(u)); } catch { disallowed = true; }
+    check(`blocks SSRF target ${u}`, disallowed === true, u);
+  }
+  const allowed = [
+    "https://www.indeed.com/viewjob?jk=abc",
+    "https://www.linkedin.com/jobs/view/123",
+    "http://careers.example.com/job/456",
+    "https://boards.greenhouse.io/acme/jobs/789",
+  ];
+  for (const u of allowed) {
+    check(`allows real job URL ${u}`, isDisallowedHost(new URL(u)) === false, u);
+  }
+}
+section("url-fetch tailoring -- HTML extraction");
+{
+  const html = `<!doctype html><html><head><title>x</title><style>.a{color:red}</style></head>
+    <body><script>window.__DATA__={secret:1}</script>
+    <h1>Warehouse Associate</h1>
+    <p>Pick &amp; pack orders. Lift up to 50&nbsp;lbs.</p>
+    <ul><li>Reliable attendance</li><li>Forklift a plus</li></ul>
+    <noscript>Enable JavaScript</noscript></body></html>`;
+  const text = htmlToText(html);
+  check("extracts the heading", text.includes("Warehouse Associate"), text);
+  check("extracts list items", text.includes("Reliable attendance") && text.includes("Forklift a plus"), text);
+  check("decodes &amp; and &nbsp;", text.includes("Pick & pack") && text.includes("50 lbs"), text);
+  check("drops script contents", !text.includes("__DATA__") && !text.includes("secret"), text);
+  check("drops style contents", !text.includes("color:red"), text);
+  check("drops noscript contents", !/enable javascript/i.test(text), text);
+  check("no residual tags", !/[<>]/.test(text.replace(/&[a-z]+;/gi, "")), text);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
