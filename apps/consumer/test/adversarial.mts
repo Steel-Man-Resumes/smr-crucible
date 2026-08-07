@@ -19,6 +19,7 @@ import { computeGrounding } from "@/lib/grounding";
 import { buildTrustedSource, isJusticeSensitive } from "@/lib/grounding-verify";
 import { profileToResume } from "@/components/resume/resumeParsers";
 import { withDeadline } from "@/lib/job-search-core";
+import { normalizeEmployerName, isVerifiedFairChance } from "@crucible/core";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -156,6 +157,38 @@ section("timeout behavior");
   check("stalled promise returns fallback at the deadline", slow === "fallback", slow);
   const errd = await withDeadline(Promise.reject(new Error("boom")), 1000, "fallback", "err");
   check("rejected promise returns fallback (never throws)", errd === "fallback", errd);
+}
+
+// ── 8. Fair-chance flag: exact-match only, no substring/AI guess (Codex 12) ───
+section("fair-chance exact-match wire");
+{
+  // The verified set is built exactly as getVerifiedEmployerNameSet() builds it:
+  // normalized names of published employers. Use real table-style names.
+  const verified = new Set(
+    ["Target", "Roehl Transport, Inc.", "Adecco USA, Inc.", "IEA, LLC / IEA Cooling", "Goodwill Greater Milwaukee & Chicago"]
+      .map(normalizeEmployerName)
+  );
+
+  // normalization: punctuation + legal suffixes collapse; distinct names stay distinct.
+  check("normalize strips a trailing suffix", normalizeEmployerName("Roehl Transport, Inc.") === "roehl transport", normalizeEmployerName("Roehl Transport, Inc."));
+  check("normalize strips LLC", normalizeEmployerName("Schaefer Brush Manufacturing, LLC") === "schaefer brush manufacturing", normalizeEmployerName("Schaefer Brush Manufacturing, LLC"));
+  check("normalize keeps 'targeted staffing' distinct from 'target'", normalizeEmployerName("Targeted Staffing") === "targeted staffing");
+  check("normalize handles ampersand", normalizeEmployerName("Goodwill Greater Milwaukee & Chicago") === "goodwill greater milwaukee and chicago", normalizeEmployerName("Goodwill Greater Milwaukee & Chicago"));
+
+  // THE Codex 12 bug: substring match flagged "Targeted Staffing" via "target".
+  check("Targeted Staffing is NOT fair-chance (the Codex 12 bug)", isVerifiedFairChance("Targeted Staffing", verified) === false);
+  check("Target Distribution is NOT fair-chance (substring guard)", isVerifiedFairChance("Target Distribution", verified) === false);
+
+  // Exact matches (with real-world suffix drift) DO flag.
+  check("exact verified name flags", isVerifiedFairChance("Target", verified) === true);
+  check("verified name with a different legal suffix flags", isVerifiedFairChance("Target Corporation", verified) === true);
+  check("listing short-form matches formal table name", isVerifiedFairChance("Roehl Transport", verified) === true);
+
+  // Non-matches stay unflagged (Unknown is not a badge).
+  check("partial name does NOT flag", isVerifiedFairChance("Roehl", verified) === false);
+  check("unlisted employer does NOT flag", isVerifiedFairChance("Generic Warehouse Co", verified) === false);
+  check("empty company does NOT flag", isVerifiedFairChance("", verified) === false);
+  check("empty verified set never flags", isVerifiedFairChance("Target", new Set<string>()) === false);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

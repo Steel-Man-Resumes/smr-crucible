@@ -78,6 +78,65 @@ export async function listPublishedEmployers(opts: { limit?: number; industry?: 
   }));
 }
 
+/**
+ * Normalize an employer name into a key for EXACT fair-chance matching. Codex 12:
+ * the old substring match flagged "Targeted Staffing" as fair-chance because the
+ * lowercased name contains "target". Matching is now full-string equality on this
+ * normalized key -- never a substring, never an AI guess. Punctuation is dropped,
+ * whitespace collapsed, and common legal suffixes removed so a live listing for
+ * "Roehl Transport" resolves to the same key as the table's "Roehl Transport, Inc."
+ */
+export function normalizeEmployerName(name: string): string {
+  let s = (name || "").toLowerCase();
+  s = s.replace(/&/g, " and ");
+  s = s.replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  // Strip trailing legal suffixes, repeatedly (e.g. "iea l l c" -> "iea").
+  const SUFFIX = /\s(incorporated|inc|llc|l l c|corporation|corp|company|co|ltd|limited|plc|lp|llp)$/;
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s.replace(SUFFIX, "");
+  }
+  return s;
+}
+
+// Cache the verified-name set briefly so a job search doesn't hit the DB per call.
+let _verifiedNameCache: { set: Set<string>; at: number } | null = null;
+const VERIFIED_NAME_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * The set of normalized names of PUBLISHED verified employers -- the single source
+ * of truth for fair-chance flags on live job listings (Codex 12). A listing is
+ * flagged fair-chance ONLY when its employer name EXACTLY matches (normalized) a
+ * verified employer in this set. Cached ~5 min; fail-safe to the last-known set
+ * (or empty) on a DB error, so a transient failure never produces a false badge.
+ */
+export async function getVerifiedEmployerNameSet(): Promise<Set<string>> {
+  const now = Date.now();
+  if (_verifiedNameCache && now - _verifiedNameCache.at < VERIFIED_NAME_TTL_MS) {
+    return _verifiedNameCache.set;
+  }
+  try {
+    const rows = await query<{ name: string }>(`SELECT name FROM employer WHERE published = true`);
+    const set = new Set<string>();
+    for (const r of rows) {
+      const key = normalizeEmployerName(r.name);
+      if (key) set.add(key);
+    }
+    _verifiedNameCache = { set, at: now };
+    return set;
+  } catch (err) {
+    console.error("getVerifiedEmployerNameSet failed:", err);
+    return _verifiedNameCache?.set ?? new Set();
+  }
+}
+
+/** True only if this employer name EXACTLY matches a published verified employer. */
+export function isVerifiedFairChance(company: string, verified: Set<string>): boolean {
+  const key = normalizeEmployerName(company);
+  return key.length > 0 && verified.has(key);
+}
+
 export interface EmployerStats {
   total: number;
   published: number;

@@ -18,6 +18,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { getVerifiedEmployerNameSet, isVerifiedFairChance } from "@crucible/core";
 import crypto from "crypto";
 
 // Per-provider timeouts. The route caps at maxDuration=30s; without these a hung
@@ -267,22 +268,13 @@ async function fetchJSearchJobs(
 }
 
 // ─── AI Enrichment ──────────────────────────────────────────────────────────
-
-const KNOWN_FAIR_CHANCE_EMPLOYERS = [
-  "walmart", "target", "amazon", "fedex", "ups", "goodwill", "salvation army",
-  "dave's hot chicken", "home depot", "lowe's", "tyson foods", "koch industries",
-  "jp morgan", "jpmorgan", "chase", "bank of america", "starbucks",
-  "greyston bakery", "nehemiah manufacturing", "mcdonald's", "wendy's",
-  "burger king", "taco bell", "chipotle", "kroger", "aldi", "costco",
-  "marshalls", "tj maxx", "ross", "dollar general", "dollar tree",
-  "waste management", "republic services", "cintas", "sysco",
-  "pepsi", "coca-cola", "frito-lay", "general mills",
-];
-
-function isKnownFairChance(company: string): boolean {
-  const lower = company.toLowerCase();
-  return KNOWN_FAIR_CHANCE_EMPLOYERS.some((fc) => lower.includes(fc));
-}
+//
+// Fair-chance flags come from ONE source of truth: exact-name matches against the
+// verified `employer` table (core `isVerifiedFairChance`). Codex 12 killed the old
+// hardcoded substring list (which flagged "Targeted Staffing" because it contains
+// "target") and the AI's ability to guess the flag. The AI now only simplifies
+// copy; it never stamps an employer fair-chance. Unknown is not a "no" -- it just
+// means the platform hasn't verified this employer, so no badge is shown.
 
 // ─── CareerOneStop (DOL) Fallback ───────────────────────────────────────────
 // Free, official job source used when JSearch returns zero. Env-gated and
@@ -302,7 +294,8 @@ interface CareerOneStopJob {
 
 async function fetchCareerOneStopJobs(
   keyword: string,
-  location: string
+  location: string,
+  verified: Set<string>
 ): Promise<EnrichedJob[]> {
   const uid = process.env.CAREERONESTOP_USER_ID;
   const tok = process.env.CAREERONESTOP_TOKEN;
@@ -326,7 +319,7 @@ async function fetchCareerOneStopJobs(
     const jobs: CareerOneStopJob[] = res.json?.Jobs ?? [];
     return jobs.slice(0, 15).map((j, i) => {
       const company = j.Company || "Employer";
-      const fair = isKnownFairChance(company);
+      const fair = isVerifiedFairChance(company, verified);
       return {
         id: j.JvId || `cos-${i}`,
         title: j.JobTitle || "Job",
@@ -340,7 +333,7 @@ async function fetchCareerOneStopJobs(
         employment_type: "",
         posted: j.AccquisitionDate || "",
         second_chance: fair,
-        fair_chance_reason: fair ? "Known fair-chance employer" : null,
+        fair_chance_reason: fair ? "Verified fair-chance employer" : null,
         remote: false,
         apply_url: j.URL || null,
         employer_website: null,
@@ -354,7 +347,8 @@ async function fetchCareerOneStopJobs(
 
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
-  context: { hasRecord: boolean; recordType?: string; location: string }
+  context: { hasRecord: boolean; recordType?: string; location: string },
+  verified: Set<string>
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -364,7 +358,7 @@ async function enrichJobsWithAI(
     const posted = formatPosted(j.job_posted_at_datetime_utc);
     const title = unwrapMaybeJsonArray(j.job_title);
     const company = unwrapMaybeJsonArray(j.employer_name);
-    const fair = isKnownFairChance(company);
+    const fair = isVerifiedFairChance(company, verified);
 
     return {
       id: j.job_id,
@@ -379,9 +373,7 @@ async function enrichJobsWithAI(
       employment_type: j.job_employment_type || "Full-time",
       posted,
       second_chance: fair,
-      fair_chance_reason: fair
-        ? "This company has publicly committed to fair-chance hiring."
-        : null,
+      fair_chance_reason: fair ? "Verified fair-chance employer" : null,
       remote: j.job_is_remote,
       apply_url: j.job_apply_link || j.job_google_link || null,
       employer_website: j.employer_website || null,
@@ -393,14 +385,15 @@ async function enrichJobsWithAI(
     return { enrichedJobs: basicJobs, fairChanceInfo: "" };
   }
 
-  // AI enrichment: simplify descriptions + add fair-chance context
+  // AI enrichment: simplify descriptions only. Fair-chance flags are NOT the AI's
+  // to decide (Codex 12) -- they are set deterministically from the verified
+  // employer table above and passed through untouched.
   try {
     const jobSummaries = basicJobs.map((j, i) => ({
       index: i,
       title: j.title,
       company: j.company,
       description: j.description,
-      known_fair_chance: j.second_chance,
     }));
 
     const prompt = `You are a reentry employment specialist. Simplify these job listings for someone with a criminal record looking for work in ${sanitizeForPrompt(context.location)}.
@@ -413,16 +406,14 @@ Return JSON:
   "jobs": [
     {
       "index": 0,
-      "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level.",
-      "second_chance": true/false,
-      "fair_chance_reason": "Why this employer is good for someone with a record, or null"
+      "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level."
     }
   ],
   "fair_chance_info": "1-2 sentences about fair-chance hiring laws in ${sanitizeForPrompt(context.location)}. Mention Wisconsin's ban-the-box law if applicable."
 }
 
 RULES:
-- Mark second_chance: true for companies known to hire people with records
+- Only rewrite the description into plain language. Do NOT judge which employers are fair-chance -- that is decided elsewhere.
 - Keep descriptions simple and actionable
 - 6th grade reading level
 - JSON only, no markdown`;
@@ -454,13 +445,12 @@ RULES:
     if (jsonMatch) {
       const enrichment = JSON.parse(jsonMatch[0]);
 
-      // Merge enrichment back into basic jobs
+      // Merge enrichment back into basic jobs -- description copy ONLY. The
+      // fair-chance flag stays exactly as the verified-table match set it (Codex 12).
       for (const ej of enrichment.jobs ?? []) {
         const job = basicJobs[ej.index];
-        if (job) {
-          if (ej.simple_description) job.description = ej.simple_description;
-          if (ej.second_chance) job.second_chance = true;
-          if (ej.fair_chance_reason) job.fair_chance_reason = ej.fair_chance_reason;
+        if (job && ej.simple_description) {
+          job.description = ej.simple_description;
         }
       }
 
@@ -568,6 +558,16 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     };
   }
 
+  // Single source of truth for fair-chance flags: exact-name matches against the
+  // verified employer table (Codex 12). Bounded so a stalled employer query never
+  // blows the route budget; a failure yields an empty set -- no false badges.
+  const verified = await withDeadline(
+    getVerifiedEmployerNameSet(),
+    DB_DEADLINE_MS,
+    new Set<string>(),
+    "verified employers"
+  );
+
   // 2. Fetch from JSearch
   const jsearch = await fetchJSearchJobs(
     sanitizeForPrompt(role) || "jobs",
@@ -580,7 +580,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
     const cosJobs = await fetchCareerOneStopJobs(
       sanitizeForPrompt(role) || "jobs",
-      searchLocation
+      searchLocation,
+      verified
     );
     if (cosJobs.length > 0) {
       cosJobs.sort((a, b) =>
@@ -611,12 +612,17 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     };
   }
 
-  // 3. Enrich with AI (fair-chance flags + simplified descriptions)
-  const { enrichedJobs, fairChanceInfo } = await enrichJobsWithAI(rawJobs, {
-    hasRecord: Boolean(hasRecord),
-    recordType,
-    location: searchLocation,
-  });
+  // 3. Enrich with AI (simplified descriptions only; fair-chance flags already set
+  // deterministically from the verified employer table)
+  const { enrichedJobs, fairChanceInfo } = await enrichJobsWithAI(
+    rawJobs,
+    {
+      hasRecord: Boolean(hasRecord),
+      recordType,
+      location: searchLocation,
+    },
+    verified
+  );
 
   // 4. Sort: fair-chance first, then by recency
   enrichedJobs.sort((a, b) => {
