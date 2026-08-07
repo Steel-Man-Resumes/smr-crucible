@@ -734,15 +734,21 @@ type BuilderStep =
   | "intro"
   | "name"
   | "contact"
-  | "job1-info"
-  | "job1-duties"
-  | "job2-prompt"
-  | "job2-info"
-  | "job2-duties"
+  | "job-info"
+  | "job-duties"
+  | "job-more"
   | "skills"
   | "education"
   | "extras"
   | "review";
+
+interface JobEntry {
+  title: string;
+  company: string;
+  dates: string;
+  duties: string;
+}
+const EMPTY_JOB: JobEntry = { title: "", company: "", dates: "", duties: "" };
 
 function GuidedBuilder({
   onComplete,
@@ -753,20 +759,14 @@ function GuidedBuilder({
 }) {
   const { updateSession } = useForgeSession();
   const [step, setStep] = useState<BuilderStep>("intro");
+  // Work history is a dynamic list -- no cap. A long career is never stranded (F14).
+  const [jobs, setJobs] = useState<JobEntry[]>([{ ...EMPTY_JOB }]);
+  const [jobIdx, setJobIdx] = useState(0);
   const [answers, setAnswers] = useState({
     name: "",
     phone: "",
     email: "",
     city: "",
-    job1Title: "",
-    job1Company: "",
-    job1Dates: "",
-    job1Duties: "",
-    addJob2: false,
-    job2Title: "",
-    job2Company: "",
-    job2Dates: "",
-    job2Duties: "",
     skills: "",
     education: "",
     extras: "",
@@ -776,16 +776,19 @@ function GuidedBuilder({
     setAnswers((prev) => ({ ...prev, [field]: value }));
   }
 
+  const curJob = jobs[jobIdx] ?? EMPTY_JOB;
+  function setJobField(field: keyof JobEntry, value: string) {
+    setJobs((prev) => prev.map((j, i) => (i === jobIdx ? { ...j, [field]: value } : j)));
+  }
+
   function goNext() {
     switch (step) {
       case "intro":        setStep("name"); break;
       case "name":         setStep("contact"); break;
-      case "contact":      setStep("job1-info"); break;
-      case "job1-info":    setStep("job1-duties"); break;
-      case "job1-duties":  setStep("job2-prompt"); break;
-      case "job2-prompt":  setStep(answers.addJob2 ? "job2-info" : "skills"); break;
-      case "job2-info":    setStep("job2-duties"); break;
-      case "job2-duties":  setStep("skills"); break;
+      case "contact":      setStep("job-info"); break;
+      case "job-info":     setStep("job-duties"); break;
+      case "job-duties":   setStep("job-more"); break;
+      // "job-more" advances via its own Yes/No buttons (addAnotherJob / finishJobs).
       case "skills":       setStep("education"); break;
       case "education":    setStep("extras"); break;
       case "extras":       setStep("review"); break;
@@ -807,16 +810,27 @@ function GuidedBuilder({
       case "intro":       onBack(); break;
       case "name":        setStep("intro"); break;
       case "contact":     setStep("name"); break;
-      case "job1-info":   setStep("contact"); break;
-      case "job1-duties": setStep("job1-info"); break;
-      case "job2-prompt": setStep("job1-duties"); break;
-      case "job2-info":   setStep("job2-prompt"); break;
-      case "job2-duties": setStep("job2-info"); break;
-      case "skills":      setStep(answers.addJob2 ? "job2-duties" : "job2-prompt"); break;
+      case "job-info":
+        // Back out of an added job returns to the previous job's "add another?" prompt.
+        if (jobIdx === 0) { setStep("contact"); }
+        else { setJobIdx(jobIdx - 1); setStep("job-more"); }
+        break;
+      case "job-duties":  setStep("job-info"); break;
+      case "job-more":    setStep("job-duties"); break;
+      case "skills":      setStep("job-more"); break;
       case "education":   setStep("skills"); break;
       case "extras":      setStep("education"); break;
       case "review":      setStep("extras"); break;
     }
+  }
+
+  function addAnotherJob() {
+    setJobs((prev) => [...prev, { ...EMPTY_JOB }]);
+    setJobIdx(jobs.length); // new entry's index
+    setStep("job-info");
+  }
+  function finishJobs() {
+    setStep("skills");
   }
 
   function assembleResume(): string {
@@ -830,17 +844,11 @@ function GuidedBuilder({
     lines.push("WORK HISTORY");
     lines.push("");
 
-    if (answers.job1Title || answers.job1Company || answers.job1Duties) {
-      const h = [answers.job1Title, answers.job1Company, answers.job1Dates].filter(Boolean).join(" -- ");
+    for (const job of jobs) {
+      if (!(job.title || job.company || job.duties)) continue;
+      const h = [job.title, job.company, job.dates].filter(Boolean).join(" -- ");
       if (h) lines.push(h);
-      if (answers.job1Duties) lines.push(answers.job1Duties.trim());
-      lines.push("");
-    }
-
-    if (answers.addJob2 && (answers.job2Title || answers.job2Company || answers.job2Duties)) {
-      const h = [answers.job2Title, answers.job2Company, answers.job2Dates].filter(Boolean).join(" -- ");
-      if (h) lines.push(h);
-      if (answers.job2Duties) lines.push(answers.job2Duties.trim());
+      if (job.duties) lines.push(job.duties.trim());
       lines.push("");
     }
 
@@ -982,14 +990,19 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 1 Info ---
-  if (step === "job1-info") {
+  // --- Job Info (one per job; the list is unbounded) ---
+  if (step === "job-info") {
+    const first = jobIdx === 0;
     return (
       <FlowPage
-        title="Your most recent job"
-        subtitle="Last job you held -- full-time, part-time, temp, gig, or work program. All count."
+        title={first ? "Your most recent job" : `Job ${jobIdx + 1}`}
+        subtitle={
+          first
+            ? "Last job you held -- full-time, part-time, temp, gig, or work program. All count."
+            : "Same as before -- title, company, and when."
+        }
         actionLabel="Next"
-        actionDisabled={!answers.job1Title.trim() && !answers.job1Company.trim()}
+        actionDisabled={!curJob.title.trim() && !curJob.company.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -998,8 +1011,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
             <input
-              value={answers.job1Title}
-              onChange={(e) => set("job1Title", e.target.value)}
+              value={curJob.title}
+              onChange={(e) => setJobField("title", e.target.value)}
               placeholder="e.g., Warehouse Associate, Custodian, Cook"
               className={inputClass}
               autoFocus
@@ -1008,8 +1021,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
             <input
-              value={answers.job1Company}
-              onChange={(e) => set("job1Company", e.target.value)}
+              value={curJob.company}
+              onChange={(e) => setJobField("company", e.target.value)}
               placeholder="e.g., Amazon, City of Milwaukee, Self-employed"
               className={inputClass}
             />
@@ -1017,8 +1030,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">When? (approximate is fine)</label>
             <input
-              value={answers.job1Dates}
-              onChange={(e) => set("job1Dates", e.target.value)}
+              value={curJob.dates}
+              onChange={(e) => setJobField("dates", e.target.value)}
               placeholder="e.g., 2019-2022"
               className={inputClass}
             />
@@ -1028,14 +1041,14 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 1 Duties ---
-  if (step === "job1-duties") {
+  // --- Job Duties ---
+  if (step === "job-duties") {
     return (
       <FlowPage
         title="What did you do there?"
         subtitle="Main responsibilities in your own words. Don't make it fancy -- just be honest."
         actionLabel="Next"
-        actionDisabled={!answers.job1Duties.trim()}
+        actionDisabled={!curJob.duties.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -1044,8 +1057,8 @@ function GuidedBuilder({
         }
       >
         <textarea
-          value={answers.job1Duties}
-          onChange={(e) => set("job1Duties", e.target.value)}
+          value={curJob.duties}
+          onChange={(e) => setJobField("duties", e.target.value)}
           placeholder={"e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season."}
           rows={5}
           className={textareaClass}
@@ -1055,8 +1068,9 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 2 Prompt ---
-  if (step === "job2-prompt") {
+  // --- Job More (add another? -- loops back to job-info, no cap) ---
+  if (step === "job-more") {
+    const count = jobs.filter((j) => j.title || j.company || j.duties).length;
     return (
       <FlowPage
         title="Do you have another job to add?"
@@ -1064,92 +1078,27 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
       >
+        {count > 0 && (
+          <p className="text-sm text-t-phos-dim mb-3">
+            {count} job{count === 1 ? "" : "s"} added so far.
+          </p>
+        )}
         <div className="flex flex-col gap-3">
           <button
-            onClick={() => { set("addJob2", true); setStep("job2-info"); }}
+            onClick={addAnotherJob}
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
             <span className="font-medium text-t-white">Yes -- add another job</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
           </button>
           <button
-            onClick={() => { set("addJob2", false); setStep("skills"); }}
+            onClick={finishJobs}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
             <span className="font-medium text-t-white">No -- that's my history</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Continue to skills and certifications</p>
           </button>
         </div>
-      </FlowPage>
-    );
-  }
-
-  // --- Job 2 Info ---
-  if (step === "job2-info") {
-    return (
-      <FlowPage
-        title="Second job"
-        subtitle="Same as before -- title, company, and when."
-        actionLabel="Next"
-        actionDisabled={!answers.job2Title.trim() && !answers.job2Company.trim()}
-        onAction={goNext}
-        showBack
-        onBack={goBack}
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
-            <input
-              value={answers.job2Title}
-              onChange={(e) => set("job2Title", e.target.value)}
-              placeholder="e.g., Cashier, Driver, Maintenance Tech"
-              className={inputClass}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
-            <input
-              value={answers.job2Company}
-              onChange={(e) => set("job2Company", e.target.value)}
-              placeholder="e.g., Walmart, local restaurant, freelance"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">When?</label>
-            <input
-              value={answers.job2Dates}
-              onChange={(e) => set("job2Dates", e.target.value)}
-              placeholder="e.g., 2015-2019"
-              className={inputClass}
-            />
-          </div>
-        </div>
-      </FlowPage>
-    );
-  }
-
-  // --- Job 2 Duties ---
-  if (step === "job2-duties") {
-    return (
-      <FlowPage
-        title="What did you do there?"
-        subtitle="Same question -- main responsibilities in your own words."
-        actionLabel="Next"
-        actionDisabled={!answers.job2Duties.trim()}
-        onAction={goNext}
-        showBack
-        onBack={goBack}
-      >
-        <textarea
-          value={answers.job2Duties}
-          onChange={(e) => set("job2Duties", e.target.value)}
-          placeholder={"Describe your main responsibilities..."}
-          rows={5}
-          className={textareaClass}
-          autoFocus
-        />
       </FlowPage>
     );
   }
@@ -1242,12 +1191,9 @@ function GuidedBuilder({
   // --- Review ---
   if (step === "review") {
     const assembled = assembleResume();
-    const groundingJobs = [
-      { employer: answers.job1Company, title: answers.job1Title, dates: answers.job1Dates, duties: answers.job1Duties },
-      ...(answers.addJob2
-        ? [{ employer: answers.job2Company, title: answers.job2Title, dates: answers.job2Dates, duties: answers.job2Duties }]
-        : []),
-    ];
+    const groundingJobs = jobs
+      .filter((j) => j.title || j.company || j.duties)
+      .map((j) => ({ employer: j.company, title: j.title, dates: j.dates, duties: j.duties }));
     return (
       <FlowPage
         title="Here's what we have."
