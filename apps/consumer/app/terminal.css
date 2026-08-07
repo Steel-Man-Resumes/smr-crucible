@@ -10,6 +10,9 @@
   --t-line-strong: #aeb5ad;
   --t-amber: #9b6d1d;
   --t-amber-bright: #795212;
+  /* Keyboard focus ring -- deliberately BRIGHT (not the muted brand amber) so it
+     is visible on dark panels too (F12). Intentionally NOT overridden per scope. */
+  --t-focus-ring: #e0a94a;
   --t-phos: #4f554f;
   --t-phos-dim: #6d736d;
   --t-white: #1c1e1b;
@@ -110,6 +113,8 @@
 /* Standard focus ring for any custom interactive element not already using
    the TBtn component. */
 .t-focus:focus-visible {
-  outline: 3px solid var(--t-amber);
-  outline-offset: 3px;
+  outline: 3px solid var(--t-focus-ring);
+  outline-offset: 2px;
+  /* Dark halo so the bright ring also separates cleanly on light surfaces. */
+  box-shadow: 0 0 0 1px rgba(22, 26, 21, 0.55);
 }

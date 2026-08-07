@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
@@ -89,7 +90,9 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <Suspense><InterviewPracticePage /></Suspense>
+      <OnboardingGate toolName="Interview Practice">
+        <Suspense><InterviewPracticePage /></Suspense>
+      </OnboardingGate>
     </TierGate>
   );
 }
