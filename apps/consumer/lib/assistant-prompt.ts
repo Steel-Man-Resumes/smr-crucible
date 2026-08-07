@@ -22,6 +22,11 @@
 import { RESEARCH_CONTEXT } from "./research-context";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import type { UserFullContext } from "./use-user-context";
+import {
+  computeCurrentBlock,
+  buildBlockSection,
+  buildWhatsNewSection,
+} from "@crucible/core";
 
 export interface AssistantContext {
   /** Current page the user is on */
@@ -409,7 +414,16 @@ function buildFullUserSection(ctx: UserFullContext): string {
     gaps.forEach((g) => lines.push(`  -- ${g}`));
   }
 
-  return lines.join("\n");
+  // The explicit "what's locked + the one-click unblock" model, shared with the
+  // in-Refinery coach so t.ROY's block behavior is identical on both surfaces.
+  const blockSection = buildBlockSection(
+    computeCurrentBlock({
+      forgeComplete: ctx.journey.forgeComplete,
+      hasResumeTailoredToTarget: ctx.journey.hasResumeTailoredToTarget,
+    })
+  );
+
+  return lines.join("\n") + blockSection;
 }
 
 export function buildSystemPrompt(context: AssistantContext): string {
@@ -515,6 +529,7 @@ You are NOT a generic chatbot waiting for questions. You know this user's entire
 NEVER wait to be asked something obvious. If someone opens the chat on the resume page, don't say "How can I help?" -- say something specific about what you see in their journey.
 
 ${context.userFullContext ? buildFullUserSection(context.userFullContext) : "No full context loaded -- work from current page signals only."}
+${buildWhatsNewSection()}
 
 ## FORMAT — THIS IS CRITICAL
 - MAXIMUM 2-3 sentences per response. Think text message, not email.

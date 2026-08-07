@@ -12,6 +12,8 @@
 
 import type { UserProfile } from "./getUserProfile";
 import { JOURNEY_STAGES } from "./journeyStages";
+import { computeCurrentBlock, buildBlockSection } from "./currentBlock";
+import { buildWhatsNewSection } from "./platformChangelog";
 
 // Canonical stage vocabulary + the coach-only post-arc stage.
 const STAGE_NAMES: Record<number, string> = {
@@ -61,6 +63,14 @@ export function buildCoachSystemPrompt(p: UserProfile): string {
     ? p.savedJobs.slice(0, 3).map((j) => `${j.jobTitle} at ${j.company}`).join("; ")
     : "none saved yet";
   const location = p.city ? `${p.city}, ${p.state}` : p.state;
+
+  const blockSection = buildBlockSection(
+    computeCurrentBlock({
+      forgeComplete: p.forgeComplete,
+      hasResumeTailoredToTarget: p.hasResumeTailoredToTarget,
+    })
+  );
+  const whatsNew = buildWhatsNewSection();
 
   return `You are ${coach}, a career coach for Steel Man, a free career platform for
 justice-impacted people. Your role is to help ${user} move through their job
@@ -120,5 +130,5 @@ Stage-of-Change adaptation:
 - Precontemplation/Contemplation: patient, exploratory, low-pressure.
 - Preparation: help them plan; answer process questions.
 - Action: direct, fast, "here is what to do today."
-- Maintenance: focus on tracking, follow-up, the next opportunity.`;
+- Maintenance: focus on tracking, follow-up, the next opportunity.${blockSection}${whatsNew}`;
 }

@@ -20,6 +20,8 @@ import { buildTrustedSource, isJusticeSensitive } from "@/lib/grounding-verify";
 import { profileToResume } from "@/components/resume/resumeParsers";
 import { withDeadline } from "@/lib/job-search-core";
 import { normalizeEmployerName, isVerifiedFairChance, isHiddenEmployer } from "@crucible/core";
+import { computeCurrentBlock, buildBlockSection, PLATFORM_CHANGELOG, buildWhatsNewSection } from "@crucible/core";
+import { REFINERY_PAGES, FORGE_PAGES } from "@/lib/tools/assistant-tool-defs";
 import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
 
 let pass = 0, fail = 0;
@@ -252,6 +254,55 @@ section("hidden-employer match");
   check("does NOT hide an unlisted employer", isHiddenEmployer("Cascade Engineering", hidden) === false);
   check("empty company never hides", isHiddenEmployer("", hidden) === false);
   check("empty set never hides", isHiddenEmployer("Acme Warehouse", new Set<string>()) === false);
+}
+
+// ── 11. t.ROY current-block detection + one-click unblock ────────────────────
+section("t.ROY current-block");
+{
+  const validPage = (p: string) => p in REFINERY_PAGES || p in FORGE_PAGES;
+
+  const preForge = computeCurrentBlock({ forgeComplete: false, hasResumeTailoredToTarget: false });
+  check("pre-Forge is blocked", preForge !== null);
+  check("pre-Forge locks the Application Tailor", !!preForge?.lockedTools.includes("Application Tailor"));
+  check("pre-Forge CTA page is a real take_me_there page", !!preForge && validPage(preForge.targetPage), preForge?.targetPage);
+
+  const needsResume = computeCurrentBlock({ forgeComplete: true, hasResumeTailoredToTarget: false });
+  check("forge-done-no-resume is blocked", needsResume !== null);
+  check("needs_resume unblock targets application-tailor", needsResume?.targetPage === "application-tailor", needsResume?.targetPage);
+  check("needs_resume CTA is a real page", !!needsResume && validPage(needsResume.targetPage));
+  check("needs_resume no longer locks the Application Tailor", !needsResume?.lockedTools.includes("Application Tailor"));
+  check("needs_resume still locks Disclosure + Interview", !!needsResume?.lockedTools.includes("Disclosure Planner") && !!needsResume?.lockedTools.includes("Interview Practice"));
+
+  const full = computeCurrentBlock({ forgeComplete: true, hasResumeTailoredToTarget: true });
+  check("full access is NOT blocked", full === null);
+
+  const lockedSection = buildBlockSection(needsResume);
+  check("block section offers take_me_there to the unblock page", lockedSection.includes("take_me_there") && lockedSection.includes("application-tailor"));
+  check("block section forbids pointing at a locked tool as open", /never point them at a locked tool/i.test(lockedSection));
+
+  const clearSection = buildBlockSection(full);
+  check("no-block section says nothing is locked", /nothing is locked/i.test(clearSection));
+  check("no-block section does NOT invent a take_me_there unblock", !clearSection.includes("take_me_there"));
+}
+
+// ── 12. Platform changelog: real, honest, navigable ──────────────────────────
+section("platform changelog");
+{
+  const validPage = (p?: string) => !p || p in REFINERY_PAGES || p in FORGE_PAGES;
+  check("changelog is non-empty", PLATFORM_CHANGELOG.length > 0);
+  check("every entry has date + title + meaning", PLATFORM_CHANGELOG.every((e) => !!e.date && !!e.title && !!e.meaning));
+  check("every entry page (if set) is a real take_me_there page", PLATFORM_CHANGELOG.every((e) => validPage(e.page)),
+    PLATFORM_CHANGELOG.map((e) => e.page).join(","));
+  check("no em dashes in changelog copy", !/[—–]/.test(JSON.stringify(PLATFORM_CHANGELOG)));
+
+  const whatsNew = buildWhatsNewSection();
+  check("what's-new renders the section header", whatsNew.includes("WHAT'S NEW ON THE PLATFORM"));
+  check("what's-new carries the honesty guard", /Reference ONLY the changes listed here/i.test(whatsNew));
+  check("what's-new surfaces at least one real change", whatsNew.includes(PLATFORM_CHANGELOG[0].title));
+
+  // The "since" filter must not fabricate future changes: nothing is newer than the newest entry.
+  const newest = PLATFORM_CHANGELOG.map((e) => e.date).sort().pop()!;
+  check("since-newest yields no entries (no fabricated freshness)", buildWhatsNewSection(newest) === "");
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

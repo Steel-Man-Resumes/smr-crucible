@@ -28,3 +28,5 @@ export * from './orgInvite';
 export * from './systemHealth';
 export * from './employer';
 export * from './hiddenEmployers';
+export * from './currentBlock';
+export * from './platformChangelog';
