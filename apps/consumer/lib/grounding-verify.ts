@@ -20,6 +20,25 @@
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 
+/**
+ * Build the TRUSTED SOURCE for grounding verification -- the single canonical
+ * definition of "what the person actually told us about themselves." It admits
+ * ONLY self-authored material: the original resume text and the user's own typed
+ * answers/goals. It must NEVER include AI-derived content (the Forge narrative,
+ * strengths, or extracted skills) or the job posting -- doing so lets an invented
+ * fact launder itself into the verifier's evidence (Codex finding 2). Keep every
+ * caller routed through here so the trust boundary lives in one place.
+ */
+export function buildTrustedSource(parts: {
+  resumeText?: string;
+  userText?: Array<string | undefined | null>;
+}): string {
+  return [parts.resumeText || "", ...((parts.userText || []).filter(Boolean) as string[])]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export type GroundingKind = "resume" | "cover_letter" | "report" | "summary";
 
 export interface GroundingFlag {

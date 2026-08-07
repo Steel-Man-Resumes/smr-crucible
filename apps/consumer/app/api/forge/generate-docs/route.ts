@@ -12,7 +12,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
-import { verifyGrounding } from "@/lib/grounding-verify";
+import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -105,13 +105,10 @@ async function handlePost(request: Request) {
     // load-bearing. Fail-open -- a verifier hiccup never blocks or mangles a resume.
     // Source = ONLY the user's own material (their resume text + their own words),
     // never the AI-derived narrative, so invention can't launder itself as source.
-    const groundingSource = [
-      input.resumeText || "",
-      input.goalNarrative || "",
-      (input.goals || []).join(", "),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const groundingSource = buildTrustedSource({
+      resumeText: input.resumeText,
+      userText: [input.goalNarrative, (input.goals || []).join(", ")],
+    });
 
     const [resumeCheck, coverCheck] = await Promise.all([
       verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),

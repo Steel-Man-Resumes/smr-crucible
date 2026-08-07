@@ -10,7 +10,130 @@ import {
 } from "./resumeModel";
 
 const INCARCERATION_REGEX =
-  /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|waupun|penitentiary/i;
+  /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|waupun|penitentiary|reformatory|house of correction|detention|dept\.? of correction|department of correction/i;
+
+// Section headers that must never become education/experience rows if a parser
+// (ours or the AI's) misfiles them (Codex finding 1: "ADDITIONAL" as education).
+const SECTION_HEADER_WORDS = new Set([
+  "additional", "skills", "summary", "experience", "education", "objective",
+  "references", "reference", "certifications", "certification", "awards",
+  "volunteer", "interests", "hobbies", "contact", "profile", "work history",
+  "employment", "professional experience", "core competencies", "activities",
+]);
+
+function isSectionHeaderWord(text?: string): boolean {
+  if (!text) return false;
+  return SECTION_HEADER_WORDS.has(text.trim().toLowerCase().replace(/[:.]+$/, ""));
+}
+
+// Reentry "release" phrasing the base regex misses (Codex finding 1: "Since
+// release in November" leaked into education). Conservative -- requires a temporal
+// preposition so it does NOT catch "press release" or "released a new product".
+const REENTRY_RELEASE_REGEX =
+  /\b(?:since|upon|after|following|before|awaiting)\s+(?:my|his|her|their|the)?\s*release\b|\breleased\s+(?:in|from|on|during)\b/i;
+
+function isJusticeSensitive(text?: string): boolean {
+  if (!text) return false;
+  return INCARCERATION_REGEX.test(text) || REENTRY_RELEASE_REGEX.test(text);
+}
+
+/**
+ * Build a ResumeDocument DIRECTLY from /api/parse's structured profile (Codex
+ * finding 1). This is the trustworthy path: the parse route already extracts
+ * dates, city/state, education, and skills reliably (and now guards them), so the
+ * builder must consume that structure instead of re-deriving it from raw text
+ * with the fragile line heuristic (which dropped city/state + dates and turned
+ * headers like "ADDITIONAL"/"Since release in November" into education rows).
+ * Justice-sensitive content is stripped defensively even though the API also
+ * strips it -- the base resume must stay disclosure-safe.
+ */
+export function profileToResume(
+  profile: any,
+  rawText?: string
+): ResumeDocument {
+  const doc = createEmptyResume("forge");
+
+  doc.contact = {
+    name: (profile?.full_name || "").trim(),
+    phone: (profile?.phone || "").trim(),
+    email: (profile?.email || "").trim(),
+    city: (profile?.city || "").trim(),
+    state: (profile?.state || "").trim(),
+  };
+
+  const work = Array.isArray(profile?.work_history) ? profile.work_history : [];
+  for (const w of work) {
+    // Blank a justice-sensitive EMPLOYER rather than drop the whole job -- the
+    // person did the work; the resume just never names the facility (matches the
+    // generation doctrine: "list them without mentioning where"). A justice-
+    // sensitive TITLE is blanked the same way.
+    const company = isJusticeSensitive(w?.company) ? "" : (w?.company || "").trim();
+    const title = isJusticeSensitive(w?.title) ? "" : (w?.title || "").trim();
+    const rawBullets = Array.isArray(w?.bullets)
+      ? w.bullets
+      : typeof w?.bullets === "string"
+        ? [w.bullets]
+        : [];
+    const bullets = rawBullets
+      .map((b: any) => String(b || "").trim())
+      .filter((b: string) => b && !isJusticeSensitive(b));
+    if (!company && !title && !bullets.length) continue;
+    doc.experience.push({
+      id: crypto.randomUUID(),
+      title,
+      company,
+      startDate: (w?.start_date || "").trim(),
+      endDate: (w?.end_date || "").trim(),
+      bullets,
+    });
+  }
+
+  const edu = Array.isArray(profile?.education) ? profile.education : [];
+  for (const e of edu) {
+    const institutionRaw = (e?.institution || "").trim();
+    const credential = (e?.credential || e?.field || "").trim();
+    // Real education only -- must have an institution or a credential, never a
+    // bare section header ("ADDITIONAL"), never justice-sensitive. A justice-
+    // sensitive institution is blanked (keep the credential, e.g. "GED").
+    if (!institutionRaw && !credential) continue;
+    if (isSectionHeaderWord(credential) || isSectionHeaderWord(institutionRaw)) continue;
+    if (isJusticeSensitive(credential)) continue;
+    const institution = isJusticeSensitive(institutionRaw) ? "" : institutionRaw;
+    if (!institution && !credential) continue;
+    doc.education.push({
+      id: crypto.randomUUID(),
+      institution,
+      credential,
+      year: (e?.year || "").trim(),
+    });
+  }
+
+  const skillList: string[] = [
+    ...(Array.isArray(profile?.skills_mentioned) ? profile.skills_mentioned : []),
+    ...(Array.isArray(profile?.certifications) ? profile.certifications : []),
+  ]
+    .map((s: any) => String(s || "").trim())
+    .filter((s: string) => s && !isJusticeSensitive(s));
+  const seen = new Set<string>();
+  for (const s of skillList) {
+    const k = s.toLowerCase();
+    if (!seen.has(k)) {
+      seen.add(k);
+      doc.skills.push(s);
+    }
+  }
+
+  // If the structured profile yielded no experience but we have raw text, fall
+  // back to the text heuristic so we never lose everything on a sparse profile.
+  if (doc.experience.length === 0 && rawText?.trim()) {
+    const parsed = parseResumeText(cleanText(rawText));
+    if (parsed.experience.length) doc.experience = parsed.experience;
+    if (doc.education.length === 0 && parsed.education.length) doc.education = parsed.education;
+    if (doc.skills.length === 0 && parsed.skills.length) doc.skills = parsed.skills;
+  }
+
+  return doc;
+}
 
 function cleanText(text: string): string {
   return text

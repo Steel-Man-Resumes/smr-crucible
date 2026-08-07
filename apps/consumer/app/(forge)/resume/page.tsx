@@ -16,7 +16,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
-import { parseTextToResume } from "@/components/resume/resumeParsers";
+import { parseTextToResume, profileToResume } from "@/components/resume/resumeParsers";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
@@ -146,11 +146,27 @@ export default function ResumeIntakePage() {
     [handleFile]
   );
 
-  // Parse ingested text into a structured ResumeDocument and enter the Build
-  // stage. seed (from /api/parse) wins over regex-detected contact when present.
+  // Enter the Build stage with a structured ResumeDocument. When /api/parse
+  // returned a structured profile, build DIRECTLY from it (preserves dates,
+  // city/state, education, skills -- Codex finding 1); otherwise fall back to the
+  // text heuristic. seed still wins for contact on the fallback path.
   const enterBuilder = useCallback(
-    (text: string, seed?: { name?: string; email?: string; phone?: string }) => {
-      setBuilderDoc(parseTextToResume(text, seed));
+    (
+      text: string,
+      seed?: { name?: string; email?: string; phone?: string },
+      profile?: any
+    ) => {
+      const hasStructuredProfile =
+        profile &&
+        ((Array.isArray(profile.work_history) && profile.work_history.length) ||
+          (Array.isArray(profile.education) && profile.education.length) ||
+          profile.city ||
+          profile.state);
+      setBuilderDoc(
+        hasStructuredProfile
+          ? profileToResume(profile, text)
+          : parseTextToResume(text, seed)
+      );
     },
     []
   );
@@ -266,13 +282,25 @@ export default function ResumeIntakePage() {
     const previewText = session.resumeText || "";
 
     const commitAndContinue = () => {
-      // Contact is seeded into the builder's doc.contact below, so hand the
-      // extracted text + parsed contact straight to the Build stage.
-      enterBuilder(previewText, {
-        name: parsedName || undefined,
-        email: parsedEmail || undefined,
-        phone: parsedPhone || undefined,
-      });
+      // Prefer the full structured profile (dates/city/state/education/skills);
+      // the seed carries any contact the user just filled in by hand.
+      const mergedProfile = parsedProfile
+        ? {
+            ...parsedProfile,
+            full_name: parsedName || parsedProfile.full_name,
+            email: parsedEmail || parsedProfile.email,
+            phone: parsedPhone || parsedProfile.phone,
+          }
+        : null;
+      enterBuilder(
+        previewText,
+        {
+          name: parsedName || undefined,
+          email: parsedEmail || undefined,
+          phone: parsedPhone || undefined,
+        },
+        mergedProfile
+      );
     };
 
     return (
@@ -684,7 +712,7 @@ export default function ResumeIntakePage() {
   if (activePath === "paste") {
     return (
       <PasteResume
-        onComplete={(text, seed) => enterBuilder(text, seed)}
+        onComplete={(text, seed, profile) => enterBuilder(text, seed, profile)}
         onBack={() => setActivePath(null)}
       />
     );
@@ -1268,7 +1296,11 @@ function PasteResume({
   onComplete,
   onBack,
 }: {
-  onComplete: (text: string, seed?: { name?: string; email?: string; phone?: string }) => void;
+  onComplete: (
+    text: string,
+    seed?: { name?: string; email?: string; phone?: string },
+    profile?: any
+  ) => void;
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
@@ -1287,6 +1319,7 @@ function PasteResume({
     // text and the client-side parser if the server is unavailable.
     let finalText = raw;
     let seed: { name?: string; email?: string; phone?: string } | undefined;
+    let profile: any = null;
     try {
       const formData = new FormData();
       formData.append("text", raw);
@@ -1295,6 +1328,7 @@ function PasteResume({
         const data = await res.json();
         if (data.resumeText) finalText = data.resumeText;
         if (data.profile) {
+          profile = data.profile;
           seed = {
             name: data.profile.full_name || undefined,
             email: data.profile.email || undefined,
@@ -1312,7 +1346,7 @@ function PasteResume({
       lastPageVisited: "resume",
     });
     setParsing(false);
-    onComplete(finalText, seed);
+    onComplete(finalText, seed, profile);
   }
 
   async function copyPrompt() {
