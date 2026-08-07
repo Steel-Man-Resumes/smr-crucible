@@ -59,6 +59,53 @@ export default function SettingsPage() {
   // Usage state
   const [usage, setUsage] = useState<UsageData | null>(null);
 
+  // N1: hidden employers (manage + un-hide).
+  const [hiddenEmployers, setHiddenEmployers] = useState<
+    { id: string; display_name: string; reason: string | null }[]
+  >([]);
+  const [hideInput, setHideInput] = useState("");
+  const [hideReasonInput, setHideReasonInput] = useState("");
+  const [hideBusy, setHideBusy] = useState(false);
+
+  function loadHiddenEmployers() {
+    fetch("/api/user/hidden-employers")
+      .then((r) => (r.ok ? r.json() : { employers: [] }))
+      .then((d) => setHiddenEmployers(d.employers || []))
+      .catch(() => {});
+  }
+
+  async function addHiddenEmployer(e: FormEvent) {
+    e.preventDefault();
+    const name = hideInput.trim();
+    if (!name || hideBusy) return;
+    setHideBusy(true);
+    try {
+      const res = await fetch("/api/user/hidden-employers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, reason: hideReasonInput.trim() || undefined }),
+      });
+      if (res.ok) {
+        setHideInput("");
+        setHideReasonInput("");
+        loadHiddenEmployers();
+      }
+    } catch {} finally {
+      setHideBusy(false);
+    }
+  }
+
+  async function unhideEmployer(id: string) {
+    try {
+      const res = await fetch("/api/user/hidden-employers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) setHiddenEmployers((prev) => prev.filter((e) => e.id !== id));
+    } catch {}
+  }
+
   // Load usage + redeemed codes on mount
   useEffect(() => {
     fetch("/api/usage")
@@ -70,6 +117,8 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((data) => setRedeemedCodes(data.codes || []))
       .catch(() => {});
+
+    loadHiddenEmployers();
   }, []);
 
   async function redeemCode(e: React.FormEvent) {
@@ -347,6 +396,63 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* N1: Hidden Employers */}
+      <section className="mb-8">
+        <h2 className="text-lg font-bold text-t-white mb-4">Hidden Employers</h2>
+        <div className="bg-t-panel p-5 border border-t-line">
+          <p className="text-sm text-t-phos-dim mb-4">
+            Employers you hide never show up in your job search. Hide a former employer, or
+            anywhere you have already applied. You can un-hide any of them here.
+          </p>
+
+          <form onSubmit={addHiddenEmployer} className="space-y-2 mb-4">
+            <input
+              type="text"
+              value={hideInput}
+              onChange={(e) => setHideInput(e.target.value)}
+              placeholder="Employer name to hide"
+              maxLength={200}
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
+            />
+            <input
+              type="text"
+              value={hideReasonInput}
+              onChange={(e) => setHideReasonInput(e.target.value)}
+              placeholder="Reason (optional)"
+              maxLength={280}
+              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
+            />
+            <TBtn type="submit" disabled={hideBusy || !hideInput.trim()}>
+              {hideBusy ? "..." : "hide employer"}
+            </TBtn>
+          </form>
+
+          {hiddenEmployers.length === 0 ? (
+            <p className="text-sm text-t-phos-dim">You have not hidden any employers.</p>
+          ) : (
+            <div className="space-y-2">
+              {hiddenEmployers.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 py-2 border-b border-t-line last:border-0"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-t-white truncate">{e.display_name}</p>
+                    {e.reason && <p className="text-xs text-t-phos-dim truncate">{e.reason}</p>}
+                  </div>
+                  <button
+                    onClick={() => unhideEmployer(e.id)}
+                    className="t-focus flex-shrink-0 text-xs font-medium text-t-amber-bright hover:text-t-amber"
+                  >
+                    Un-hide
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

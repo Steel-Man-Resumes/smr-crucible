@@ -30,8 +30,12 @@ const PRICES: Record<string, ModelPrice> = {
 
 function priceFor(model: string): ModelPrice {
   if (PRICES[model]) return PRICES[model];
-  // Prefix match tolerates dated/suffixed model ids
-  const key = Object.keys(PRICES).find((k) => model.startsWith(k));
+  // Prefix match tolerates dated/suffixed model ids. Match the LONGEST key first
+  // so "gpt-4o-mini-2024-07-18" resolves to "gpt-4o-mini", not "gpt-4o" (which
+  // over-reported the mini-based grounding verifier ~16x in the cost panel).
+  const key = Object.keys(PRICES)
+    .sort((a, b) => b.length - a.length)
+    .find((k) => model.startsWith(k));
   if (key) return PRICES[key];
   // Unknown model: assume Sonnet-tier so costs are never silently zero
   return { input: 3, output: 15 };

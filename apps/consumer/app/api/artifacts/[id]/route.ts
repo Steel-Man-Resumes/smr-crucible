@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { getArtifact, updateArtifact, deleteArtifact } from "@crucible/core";
+import {
+  getArtifact,
+  updateArtifact,
+  deleteArtifact,
+  setCurrentResume,
+  clearCurrentResume,
+} from "@crucible/core";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -33,6 +39,19 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const body = await request.json();
+
+  // N4: pin/unpin this resume as the user's current one (no content change).
+  if (body && typeof body === "object" && "setCurrent" in body && !body.content) {
+    if (body.setCurrent) {
+      const ok = await setCurrentResume(userId, id);
+      if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    } else {
+      await clearCurrentResume(userId);
+    }
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
   if (!body || typeof body !== "object" || !body.content) {
     return NextResponse.json(
       { error: "Missing required field: content" },

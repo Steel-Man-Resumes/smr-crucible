@@ -131,11 +131,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // Dedup: check if same source_id already saved
+    // Dedup: same source_id already saved (board jobs carry a stable source_id)...
     if (body.source_id) {
       const existing = await getOne(
         `SELECT id, status FROM job_application WHERE user_id = $1 AND source_id = $2`,
         [session.user.id, body.source_id]
+      );
+      if (existing) {
+        return NextResponse.json({ application: existing, duplicate: true });
+      }
+    } else {
+      // ...and dedup MANUAL re-runs (no source_id) on normalized title+company, so
+      // tailoring the same typed job twice reuses the application instead of
+      // spawning a duplicate + a second cover-letter artifact (Codex 11).
+      const existing = await getOne(
+        `SELECT id, status FROM job_application
+           WHERE user_id = $1
+             AND LOWER(TRIM(job_title)) = LOWER(TRIM($2))
+             AND LOWER(TRIM(company)) = LOWER(TRIM($3))
+           ORDER BY status_updated_at DESC
+           LIMIT 1`,
+        [session.user.id, body.job_title, body.company]
       );
       if (existing) {
         return NextResponse.json({ application: existing, duplicate: true });

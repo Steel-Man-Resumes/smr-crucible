@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
@@ -89,7 +90,9 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <Suspense><InterviewPracticePage /></Suspense>
+      <OnboardingGate toolName="Interview Practice">
+        <Suspense><InterviewPracticePage /></Suspense>
+      </OnboardingGate>
     </TierGate>
   );
 }
@@ -233,6 +236,112 @@ function InterviewPracticePage() {
     } catch {}
   }
 
+  // The selected resume, formatted for the interviewer prompt + the bullet-proof
+  // handoff. Shared by sendMessage and endInterview.
+  function buildResumePayload():
+    | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
+    | undefined {
+    const sel = resumes.find((r) => r.id === selectedResumeId);
+    if (!sel?.content) return undefined;
+    let text = "";
+    try {
+      text = formatResumeDownload(sel.content).slice(0, 2800);
+    } catch {
+      text = JSON.stringify(sel.content).slice(0, 2800);
+    }
+    const proofPoints = Array.isArray(sel.content.experience)
+      ? sel.content.experience.flatMap((e: any) =>
+          (Array.isArray(e.evidence) ? e.evidence : []).map((ev: any) => ({
+            role: e.title || "",
+            bullet: ev.bullet || "",
+            did: ev.did || "",
+            tools: ev.tools || "",
+            often: ev.often || "",
+            quantity: ev.quantity || "",
+            improved: ev.improved || "",
+          }))
+        )
+      : [];
+    return {
+      targetJob: sel.targetJob,
+      targetCompany: sel.targetCompany,
+      text,
+      evidence: proofPoints.slice(0, 12),
+    };
+  }
+
+  // Record a completed practice into the in-page tracker + the journey engine.
+  function recordCompletion(fb: any, exchanges: number) {
+    try {
+      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
+      tracker.interviews_completed = (tracker.interviews_completed || 0) + 1;
+      localStorage.setItem("consumer_progress", JSON.stringify(tracker));
+    } catch {}
+    recordInterviewPractice({
+      role: config.targetRole,
+      frame: config.interviewType || "general",
+      mode: "text",
+      includeDisclosure: config.interviewType === "disclosure" || config.includeDisclosure,
+      exchanges,
+      feedback: fb,
+    });
+  }
+
+  function resetToSetup() {
+    setStep("setup");
+    setMessages([]);
+    setFeedback(null);
+    setExchangeCount(0);
+  }
+
+  // F13: ending the interview produces a written scorecard instead of dropping the
+  // user back to setup empty-handed. If they've given at least one real answer we
+  // ask the coach to wrap up + score; if they barely started, just reset.
+  async function endInterview() {
+    if (sending) return;
+    const answered = messages.filter((m) => m.role === "user").length;
+    if (answered < 1) {
+      resetToSetup();
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch("/api/interview-practice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages,
+          config,
+          exchangeCount,
+          endInterview: true,
+          forgeContext: forgeContext || undefined,
+          resume: buildResumePayload(),
+          jobDescription: jobDescription.trim() || undefined,
+        }),
+      });
+      if (res.status === 429) {
+        const data = await res.json();
+        setRateLimitError(data.error);
+      } else if (res.ok) {
+        const data = await res.json();
+        if (data.feedback) {
+          if (data.response) setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+          setFeedback(data.feedback);
+          setStep("feedback");
+          recordCompletion(data.feedback, exchangeCount);
+        } else {
+          resetToSetup();
+        }
+      } else {
+        resetToSetup();
+      }
+    } catch {
+      resetToSetup();
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function sendMessage() {
     if (!input.trim()) return;
 
@@ -245,40 +354,6 @@ function InterviewPracticePage() {
     const newExchangeCount = exchangeCount + 1;
     setExchangeCount(newExchangeCount);
 
-    const sel = resumes.find((r) => r.id === selectedResumeId);
-    let resumePayload:
-      | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
-      | undefined;
-    if (sel?.content) {
-      // Clean resume text (not raw JSON) for the prompt.
-      let text = "";
-      try {
-        text = formatResumeDownload(sel.content).slice(0, 2800);
-      } catch {
-        text = JSON.stringify(sel.content).slice(0, 2800);
-      }
-      // The bullet-workshop proof behind each bullet -- the interview handoff.
-      const proofPoints = Array.isArray(sel.content.experience)
-        ? sel.content.experience.flatMap((e: any) =>
-            (Array.isArray(e.evidence) ? e.evidence : []).map((ev: any) => ({
-              role: e.title || "",
-              bullet: ev.bullet || "",
-              did: ev.did || "",
-              tools: ev.tools || "",
-              often: ev.often || "",
-              quantity: ev.quantity || "",
-              improved: ev.improved || "",
-            }))
-          )
-        : [];
-      resumePayload = {
-        targetJob: sel.targetJob,
-        targetCompany: sel.targetCompany,
-        text,
-        evidence: proofPoints.slice(0, 12),
-      };
-    }
-
     try {
       const res = await fetch("/api/interview-practice", {
         method: "POST",
@@ -288,7 +363,7 @@ function InterviewPracticePage() {
           config,
           exchangeCount: newExchangeCount,
           forgeContext: forgeContext || undefined,
-          resume: resumePayload,
+          resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
         }),
       });
@@ -307,26 +382,7 @@ function InterviewPracticePage() {
           ]);
           setFeedback(data.feedback);
           setStep("feedback");
-
-          // Track completion (localStorage for the in-page tracker; server-side
-          // record so the journey engine advances -- frame + feedback, no words).
-          try {
-            const tracker = JSON.parse(
-              localStorage.getItem("consumer_progress") || "{}"
-            );
-            tracker.interviews_completed =
-              (tracker.interviews_completed || 0) + 1;
-            localStorage.setItem("consumer_progress", JSON.stringify(tracker));
-          } catch {}
-          recordInterviewPractice({
-            role: config.targetRole,
-            frame: config.interviewType || "general",
-            mode: "text",
-            includeDisclosure:
-              config.interviewType === "disclosure" || config.includeDisclosure,
-            exchanges: newExchangeCount,
-            feedback: data.feedback,
-          });
+          recordCompletion(data.feedback, newExchangeCount);
         } else {
           setMessages((prev) => [
             ...prev,
@@ -746,14 +802,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           </div>
         </div>
         <button
-          onClick={() => {
-            setStep("setup");
-            setMessages([]);
-            setExchangeCount(0);
-          }}
-          className="t-focus text-sm text-t-phos-dim hover:text-t-white px-3 py-1.5 hover:bg-t-panel transition-colors"
+          onClick={endInterview}
+          disabled={sending}
+          className="t-focus text-sm text-t-phos-dim hover:text-t-white px-3 py-1.5 hover:bg-t-panel transition-colors disabled:opacity-50"
         >
-          End
+          {sending ? "Wrapping up..." : "End & get feedback"}
         </button>
       </div>
 

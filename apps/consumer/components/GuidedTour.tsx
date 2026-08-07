@@ -10,7 +10,12 @@
  */
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+
+// Once deferred/closed, don't re-pop on every remount this session ("remind me
+// next login" means next session, not next page nav).
+const SUPPRESS_KEY = "guided_tour_suppressed";
 
 interface TourState {
   tourComplete: boolean;
@@ -31,14 +36,25 @@ const JOURNEY = [
 
 export function GuidedTour() {
   const tier = useUserTier();
+  const pathname = usePathname();
   const [state, setState] = useState<TourState | null>(null);
   const [screen, setScreen] = useState(0);
   const [coachName, setCoachName] = useState("");
   const [closed, setClosed] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // The tour is a full-screen modal; only show it on the dashboard HOME so it can
+  // never cover a tool page's form (F7 -- it was overlaying the disclosure planner).
+  const onHome = pathname === "/dashboard";
+
   useEffect(() => {
-    if (tier !== "client") return;
+    if (tier !== "client" || !onHome) return;
+    try {
+      if (sessionStorage.getItem(SUPPRESS_KEY) === "1") {
+        setClosed(true);
+        return;
+      }
+    } catch {}
     let cancelled = false;
     fetch("/api/onboarding/tour")
       .then((r) => (r.ok ? r.json() : null))
@@ -55,9 +71,9 @@ export function GuidedTour() {
     return () => {
       cancelled = true;
     };
-  }, [tier]);
+  }, [tier, onHome]);
 
-  if (tier !== "client" || closed || !state || state.tourComplete) return null;
+  if (tier !== "client" || !onHome || closed || !state || state.tourComplete) return null;
 
   const canDefer = state.tourDeferrals < 2;
 
@@ -77,6 +93,9 @@ export function GuidedTour() {
   }
 
   async function defer() {
+    try {
+      sessionStorage.setItem(SUPPRESS_KEY, "1");
+    } catch {}
     try {
       await fetch("/api/onboarding/tour", {
         method: "POST",

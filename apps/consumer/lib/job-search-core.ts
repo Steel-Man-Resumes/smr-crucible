@@ -18,7 +18,64 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { getVerifiedEmployerNameSet, isVerifiedFairChance } from "@crucible/core";
 import crypto from "crypto";
+
+// Per-provider timeouts. The route caps at maxDuration=30s; without these a hung
+// upstream (JSearch/CareerOneStop/AI) blocks the whole request and 504s (the QA
+// failure). Each provider now fails fast to the next fallback, and if all fail
+// the route returns an honest empty 200 -- never a gateway timeout.
+//
+// Values are evidence-based (measured 2026-08-06 against Troy's live key):
+// JSearch num_pages=1 healthy responses ran ~6.4s (Grand Rapids); num_pages=2 ran
+// 11.5-14.2s -- which, plus enrichment, is what blew the 30s cap in QA. We fetch
+// one page now (see fetchJSearchJobs) and cap at 12s: covers a 2x slowdown with
+// wide headroom, well under the route budget.
+const JSEARCH_TIMEOUT_MS = 12000;
+const CAREERONESTOP_TIMEOUT_MS = 7000;
+const AI_ENRICH_TIMEOUT_MS = 10000;
+
+// Full-lifecycle deadline (Codex 10): fetch() resolves at HEADERS, so a slow/stalled
+// response BODY still hangs res.json() past the route cap and 504s. Keeping the timer
+// armed through res.json() puts the body read under the same abort signal, so a body
+// stall aborts instead of hanging. Only the success path reads the body.
+async function fetchJsonWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<{ ok: boolean; status: number; statusText: string; json: any }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) {
+      return { ok: false, status: res.status, statusText: res.statusText, json: null };
+    }
+    const json = await res.json();
+    return { ok: true, status: res.status, statusText: res.statusText, json };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Bound a DB / side-channel promise so a stalled dependency can't blow the route
+// budget (Codex 10). On timeout OR error we resolve to `fallback` and let the request
+// proceed; the detached promise's late settle is swallowed, never unhandled.
+export function withDeadline<T>(p: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => {
+      console.error(`[job-search] ${label} exceeded ${ms}ms -- proceeding without it`);
+      resolve(fallback);
+    }, ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (err) => { clearTimeout(timer); console.error(`[job-search] ${label} failed:`, err); resolve(fallback); }
+    );
+  });
+}
+
+// Bound for cache reads/writes and the decision-log write (all Neon).
+const DB_DEADLINE_MS = 3000;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -171,30 +228,37 @@ async function fetchJSearchJobs(
   const query = `${role} in ${location}`;
   // JSearch retired /search (404 as of 2026-08); /search-v2 returns the same
   // job objects wrapped in { data: { jobs, cursor } }.
+  // num_pages=1 (10 listings, ~6s) instead of 2 (20 listings, ~12-14s): the
+  // enrichment/board only ever surfaces 15, so the second page mostly added
+  // latency that pushed the request past the route cap. One page keeps the board
+  // fast and reliable; fair-chance-first sorting still applies.
   const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
   url.searchParams.set("query", query);
   url.searchParams.set("page", "1");
-  url.searchParams.set("num_pages", "2");
+  url.searchParams.set("num_pages", "1");
   url.searchParams.set("date_posted", "month");
   url.searchParams.set("radius", String(radiusMiles));
 
   try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        "X-RapidAPI-Key": apiKey,
-        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+    const res = await fetchJsonWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          "X-RapidAPI-Key": apiKey,
+          "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+        },
       },
-    });
+      JSEARCH_TIMEOUT_MS
+    );
 
     if (!res.ok) {
       console.error(`JSearch API error: ${res.status} ${res.statusText}`);
       return { jobs: [], failed: true, status: res.status };
     }
 
-    const data = await res.json();
     // v2 envelope is { data: { jobs, cursor } }; tolerate the old flat array
     // shape too in case the provider flips again.
-    const payload = data.data;
+    const payload = res.json?.data;
     const jobs = Array.isArray(payload) ? payload : (payload?.jobs ?? []);
     return { jobs, failed: false };
   } catch (err) {
@@ -204,22 +268,13 @@ async function fetchJSearchJobs(
 }
 
 // ─── AI Enrichment ──────────────────────────────────────────────────────────
-
-const KNOWN_FAIR_CHANCE_EMPLOYERS = [
-  "walmart", "target", "amazon", "fedex", "ups", "goodwill", "salvation army",
-  "dave's hot chicken", "home depot", "lowe's", "tyson foods", "koch industries",
-  "jp morgan", "jpmorgan", "chase", "bank of america", "starbucks",
-  "greyston bakery", "nehemiah manufacturing", "mcdonald's", "wendy's",
-  "burger king", "taco bell", "chipotle", "kroger", "aldi", "costco",
-  "marshalls", "tj maxx", "ross", "dollar general", "dollar tree",
-  "waste management", "republic services", "cintas", "sysco",
-  "pepsi", "coca-cola", "frito-lay", "general mills",
-];
-
-function isKnownFairChance(company: string): boolean {
-  const lower = company.toLowerCase();
-  return KNOWN_FAIR_CHANCE_EMPLOYERS.some((fc) => lower.includes(fc));
-}
+//
+// Fair-chance flags come from ONE source of truth: exact-name matches against the
+// verified `employer` table (core `isVerifiedFairChance`). Codex 12 killed the old
+// hardcoded substring list (which flagged "Targeted Staffing" because it contains
+// "target") and the AI's ability to guess the flag. The AI now only simplifies
+// copy; it never stamps an employer fair-chance. Unknown is not a "no" -- it just
+// means the platform hasn't verified this employer, so no badge is shown.
 
 // ─── CareerOneStop (DOL) Fallback ───────────────────────────────────────────
 // Free, official job source used when JSearch returns zero. Env-gated and
@@ -239,7 +294,8 @@ interface CareerOneStopJob {
 
 async function fetchCareerOneStopJobs(
   keyword: string,
-  location: string
+  location: string,
+  verified: Set<string>
 ): Promise<EnrichedJob[]> {
   const uid = process.env.CAREERONESTOP_USER_ID;
   const tok = process.env.CAREERONESTOP_TOKEN;
@@ -251,18 +307,19 @@ async function fetchCareerOneStopJobs(
   const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/25/0/0/0/15/30`;
 
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-    });
+    const res = await fetchJsonWithTimeout(
+      url,
+      { headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } },
+      CAREERONESTOP_TIMEOUT_MS
+    );
     if (!res.ok) {
       console.error(`CareerOneStop API error: ${res.status}`);
       return [];
     }
-    const data = await res.json();
-    const jobs: CareerOneStopJob[] = data?.Jobs ?? [];
+    const jobs: CareerOneStopJob[] = res.json?.Jobs ?? [];
     return jobs.slice(0, 15).map((j, i) => {
       const company = j.Company || "Employer";
-      const fair = isKnownFairChance(company);
+      const fair = isVerifiedFairChance(company, verified);
       return {
         id: j.JvId || `cos-${i}`,
         title: j.JobTitle || "Job",
@@ -276,7 +333,7 @@ async function fetchCareerOneStopJobs(
         employment_type: "",
         posted: j.AccquisitionDate || "",
         second_chance: fair,
-        fair_chance_reason: fair ? "Known fair-chance employer" : null,
+        fair_chance_reason: fair ? "Verified fair-chance employer" : null,
         remote: false,
         apply_url: j.URL || null,
         employer_website: null,
@@ -290,7 +347,8 @@ async function fetchCareerOneStopJobs(
 
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
-  context: { hasRecord: boolean; recordType?: string; location: string }
+  context: { hasRecord: boolean; recordType?: string; location: string },
+  verified: Set<string>
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -298,11 +356,14 @@ async function enrichJobsWithAI(
   const basicJobs: EnrichedJob[] = jobs.slice(0, 15).map((j) => {
     const salary = formatSalary(j);
     const posted = formatPosted(j.job_posted_at_datetime_utc);
+    const title = unwrapMaybeJsonArray(j.job_title);
+    const company = unwrapMaybeJsonArray(j.employer_name);
+    const fair = isVerifiedFairChance(company, verified);
 
     return {
       id: j.job_id,
-      title: j.job_title,
-      company: j.employer_name,
+      title,
+      company,
       location: [j.job_city, j.job_state].filter(Boolean).join(", "),
       salary,
       description: truncateDescription(j.job_description, 200),
@@ -311,10 +372,8 @@ async function enrichJobsWithAI(
       benefits: j.job_highlights?.Benefits?.slice(0, 3) ?? [],
       employment_type: j.job_employment_type || "Full-time",
       posted,
-      second_chance: isKnownFairChance(j.employer_name),
-      fair_chance_reason: isKnownFairChance(j.employer_name)
-        ? "This company has publicly committed to fair-chance hiring."
-        : null,
+      second_chance: fair,
+      fair_chance_reason: fair ? "Verified fair-chance employer" : null,
       remote: j.job_is_remote,
       apply_url: j.job_apply_link || j.job_google_link || null,
       employer_website: j.employer_website || null,
@@ -326,14 +385,15 @@ async function enrichJobsWithAI(
     return { enrichedJobs: basicJobs, fairChanceInfo: "" };
   }
 
-  // AI enrichment: simplify descriptions + add fair-chance context
+  // AI enrichment: simplify descriptions only. Fair-chance flags are NOT the AI's
+  // to decide (Codex 12) -- they are set deterministically from the verified
+  // employer table above and passed through untouched.
   try {
     const jobSummaries = basicJobs.map((j, i) => ({
       index: i,
       title: j.title,
       company: j.company,
       description: j.description,
-      known_fair_chance: j.second_chance,
     }));
 
     const prompt = `You are a reentry employment specialist. Simplify these job listings for someone with a criminal record looking for work in ${sanitizeForPrompt(context.location)}.
@@ -346,38 +406,51 @@ Return JSON:
   "jobs": [
     {
       "index": 0,
-      "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level.",
-      "second_chance": true/false,
-      "fair_chance_reason": "Why this employer is good for someone with a record, or null"
+      "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level."
     }
   ],
   "fair_chance_info": "1-2 sentences about fair-chance hiring laws in ${sanitizeForPrompt(context.location)}. Mention Wisconsin's ban-the-box law if applicable."
 }
 
 RULES:
-- Mark second_chance: true for companies known to hire people with records
+- Only rewrite the description into plain language. Do NOT judge which employers are fair-chance -- that is decided elsewhere.
 - Keep descriptions simple and actionable
 - 6th grade reading level
 - JSON only, no markdown`;
 
     let text: string;
+    // Bound enrichment so a slow model never blows the route budget, and ACTUALLY
+    // ABORT the request on timeout rather than just racing it (Codex 10) -- a raced-
+    // but-not-aborted call leaves the socket open and keeps billing tokens. On timeout
+    // we return the real listings with basic (un-simplified) copy: degraded, never a
+    // 504, never fabricated.
+    const enrichController = new AbortController();
+    const enrichTimer = setTimeout(() => enrichController.abort(), AI_ENRICH_TIMEOUT_MS);
     try {
-      text = await callAI("", [{ role: "user", content: prompt }], 2000, undefined, { endpoint: "job-search" });
+      text = await callAI(
+        "",
+        [{ role: "user", content: prompt }],
+        2000,
+        undefined,
+        { endpoint: "job-search" },
+        enrichController.signal
+      );
     } catch {
       return { enrichedJobs: basicJobs, fairChanceInfo: "" };
+    } finally {
+      clearTimeout(enrichTimer);
     }
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
       const enrichment = JSON.parse(jsonMatch[0]);
 
-      // Merge enrichment back into basic jobs
+      // Merge enrichment back into basic jobs -- description copy ONLY. The
+      // fair-chance flag stays exactly as the verified-table match set it (Codex 12).
       for (const ej of enrichment.jobs ?? []) {
         const job = basicJobs[ej.index];
-        if (job) {
-          if (ej.simple_description) job.description = ej.simple_description;
-          if (ej.second_chance) job.second_chance = true;
-          if (ej.fair_chance_reason) job.fair_chance_reason = ej.fair_chance_reason;
+        if (job && ej.simple_description) {
+          job.description = ej.simple_description;
         }
       }
 
@@ -428,6 +501,26 @@ function formatPosted(datetime: string): string {
   return "Over a month ago";
 }
 
+// JSearch /search-v2 sometimes returns a field (notably job_title) as a
+// JSON-array-encoded STRING when it aggregates duplicate postings, e.g.
+// '["Warehouse Associate","Warehouse Associate"]'. Rendered as-is that shows raw
+// brackets/quotes on the board. Unwrap to the first entry; pass plain values
+// through untouched.
+function unwrapMaybeJsonArray(value: unknown): string {
+  if (Array.isArray(value)) return String(value[0] ?? "");
+  if (typeof value !== "string") return value == null ? "" : String(value);
+  const s = value.trim();
+  if (s.startsWith("[") && s.endsWith("]")) {
+    try {
+      const arr = JSON.parse(s);
+      if (Array.isArray(arr) && arr.length) return String(arr[0] ?? "");
+    } catch {
+      /* not JSON -- fall through and return the original string */
+    }
+  }
+  return value;
+}
+
 function truncateDescription(desc: string, maxLen: number): string {
   if (!desc) return "";
   // Strip HTML tags
@@ -455,8 +548,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   };
   const queryHash = hashQuery(cacheParams);
 
-  // 1. Check cache
-  const cached = await getCachedResults(queryHash);
+  // 1. Check cache (bounded -- a stalled read falls through to a live search)
+  const cached = await withDeadline(getCachedResults(queryHash), DB_DEADLINE_MS, null, "cache read");
   if (cached) {
     return {
       jobs: cached.results,
@@ -464,6 +557,16 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       source: "cache",
     };
   }
+
+  // Single source of truth for fair-chance flags: exact-name matches against the
+  // verified employer table (Codex 12). Bounded so a stalled employer query never
+  // blows the route budget; a failure yields an empty set -- no false badges.
+  const verified = await withDeadline(
+    getVerifiedEmployerNameSet(),
+    DB_DEADLINE_MS,
+    new Set<string>(),
+    "verified employers"
+  );
 
   // 2. Fetch from JSearch
   const jsearch = await fetchJSearchJobs(
@@ -477,13 +580,14 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
     const cosJobs = await fetchCareerOneStopJobs(
       sanitizeForPrompt(role) || "jobs",
-      searchLocation
+      searchLocation,
+      verified
     );
     if (cosJobs.length > 0) {
       cosJobs.sort((a, b) =>
         a.second_chance === b.second_chance ? 0 : a.second_chance ? -1 : 1
       );
-      await cacheResults(queryHash, cacheParams, cosJobs, "");
+      await withDeadline(cacheResults(queryHash, cacheParams, cosJobs, ""), DB_DEADLINE_MS, undefined, "cache write (cos)");
       return {
         jobs: cosJobs,
         fair_chance_info: "",
@@ -508,12 +612,17 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     };
   }
 
-  // 3. Enrich with AI (fair-chance flags + simplified descriptions)
-  const { enrichedJobs, fairChanceInfo } = await enrichJobsWithAI(rawJobs, {
-    hasRecord: Boolean(hasRecord),
-    recordType,
-    location: searchLocation,
-  });
+  // 3. Enrich with AI (simplified descriptions only; fair-chance flags already set
+  // deterministically from the verified employer table)
+  const { enrichedJobs, fairChanceInfo } = await enrichJobsWithAI(
+    rawJobs,
+    {
+      hasRecord: Boolean(hasRecord),
+      recordType,
+      location: searchLocation,
+    },
+    verified
+  );
 
   // 4. Sort: fair-chance first, then by recency
   enrichedJobs.sort((a, b) => {
@@ -522,29 +631,38 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     return 0;
   });
 
-  // 5. Cache results (including fair_chance_info so cache hits return complete data)
-  await cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo);
+  // 5. Cache results (bounded -- including fair_chance_info so cache hits return complete data)
+  await withDeadline(
+    cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo),
+    DB_DEADLINE_MS,
+    undefined,
+    "cache write"
+  );
 
-  // 6. Log decision for JBS compliance
-  try {
-    const { logDecision } = await import("@crucible/core");
-    await logDecision({
-      contextPage: "job-search",
-      modelProvider: `jsearch+${AI_PROVIDER}`,
-      modelId: `jsearch-v1+${AI_MODEL}`,
-      input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
-      explanation: `JSearch API: ${rawJobs.length} raw results for "${role || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
-      outputSummary: {
-        type: "job_search",
-        source: "jsearch",
-        raw_count: rawJobs.length,
-        enriched_count: enrichedJobs.length,
-        second_chance_count: enrichedJobs.filter((j) => j.second_chance).length,
-      },
-    });
-  } catch (err) {
-    console.error("Decision log failed (job-search):", err);
-  }
+  // 6. Log decision for JBS compliance (bounded -- a stalled DB write must never hang
+  // the response past the route budget; Codex 10).
+  await withDeadline(
+    (async () => {
+      const { logDecision } = await import("@crucible/core");
+      await logDecision({
+        contextPage: "job-search",
+        modelProvider: `jsearch+${AI_PROVIDER}`,
+        modelId: `jsearch-v1+${AI_MODEL}`,
+        input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
+        explanation: `JSearch API: ${rawJobs.length} raw results for "${role || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
+        outputSummary: {
+          type: "job_search",
+          source: "jsearch",
+          raw_count: rawJobs.length,
+          enriched_count: enrichedJobs.length,
+          second_chance_count: enrichedJobs.filter((j) => j.second_chance).length,
+        },
+      });
+    })(),
+    DB_DEADLINE_MS,
+    undefined,
+    "decision log"
+  );
 
   return {
     jobs: enrichedJobs,

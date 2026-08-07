@@ -17,6 +17,8 @@ export interface RefineryArtifact {
   file_id: string | null;
   iteration_number: number;
   scaffold_level: number;
+  /** N4: the user's one pinned "current" resume (at most one per user). */
+  is_current: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -140,6 +142,43 @@ export async function deleteArtifact(
     [artifactId, userId]
   );
   return rows.length > 0;
+}
+
+/**
+ * Pin ONE resume as the user's current resume (N4). Clears any prior pin first,
+ * so the partial unique index (one current per user) is never transiently
+ * violated by the neon HTTP driver's per-statement execution. If the two writes
+ * are interrupted between, the state is "no current resume" -- valid, never an
+ * error. Returns false if the artifact isn't this user's resume.
+ */
+export async function setCurrentResume(
+  userId: string,
+  artifactId: string
+): Promise<boolean> {
+  const target = await getOne<{ id: string }>(
+    `SELECT id FROM refinery_artifact
+     WHERE id = $1 AND user_id = $2 AND artifact_type = 'resume'`,
+    [artifactId, userId]
+  );
+  if (!target) return false;
+  // Clear the old pin first (does not touch updated_at -- pinning is not an edit).
+  await query(
+    `UPDATE refinery_artifact SET is_current = false WHERE user_id = $1 AND is_current`,
+    [userId]
+  );
+  await query(
+    `UPDATE refinery_artifact SET is_current = true WHERE id = $1 AND user_id = $2`,
+    [artifactId, userId]
+  );
+  return true;
+}
+
+/** Unpin the user's current resume (if any). */
+export async function clearCurrentResume(userId: string): Promise<void> {
+  await query(
+    `UPDATE refinery_artifact SET is_current = false WHERE user_id = $1 AND is_current`,
+    [userId]
+  );
 }
 
 /**

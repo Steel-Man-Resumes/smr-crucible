@@ -6,7 +6,8 @@
     "dev": "next dev --port 3002",
     "build": "cd ../.. && npm run build -w packages/core && cd apps/consumer && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:adversarial": "npx tsx test/adversarial.mts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.0",

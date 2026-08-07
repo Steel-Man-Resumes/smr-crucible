@@ -149,6 +149,9 @@ export default function OutputPage() {
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
   const [coverLetterText, setCoverLetterText] = useState<string>("");
+  // Grounding gate result (F2): claims removed vs. residual (found but not
+  // auto-removed -- the user must review those). Codex 8: never conflate them.
+  const [groundingNote, setGroundingNote] = useState<{ removed: number; residual: number } | null>(null);
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
   const [copied, setCopied] = useState<string>("");
@@ -182,6 +185,8 @@ export default function OutputPage() {
           goalNarrative: session.goalNarrative,
           preferences: session.preferences,
           readinessStage: session.readinessStage,
+          resumeConfidence: session.resumeConfidence,
+          resumeWorries: session.resumeWorries,
         }),
       });
 
@@ -193,6 +198,12 @@ export default function OutputPage() {
       const data = await response.json();
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
+      if (data.grounding && (data.grounding.removed || data.grounding.residual)) {
+        setGroundingNote({
+          removed: data.grounding.removed || 0,
+          residual: data.grounding.residual || 0,
+        });
+      }
       setDocState("done");
     } catch (err: any) {
       console.error("Doc generation error:", err);
@@ -428,6 +439,13 @@ export default function OutputPage() {
           <h2 className="text-xl font-bold text-t-white mb-4">
             Your Hurdles, and What Can Help
           </h2>
+          {/* Coaching-not-legal-advice disclaimer (F6): the analysis can touch
+              expungement/ban-the-box, so it carries the same guard the disclosure
+              planner does. */}
+          <p className="text-xs text-t-phos mb-4 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
+            <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
+            Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.
+          </p>
           <div className="space-y-4">
             {barriers.map((b, i) => (
               <div
@@ -557,6 +575,28 @@ export default function OutputPage() {
 
         {docState === "done" && (
           <div className="space-y-4">
+            {/* Grounding note (F2): honest disclosure of the truth gate. Removed
+                and residual are reported separately so we never claim a document
+                is fully clean when a fabrication couldn't be auto-removed (Codex 8). */}
+            {groundingNote && (
+              <div className="bg-t-panel border border-t-amber px-4 py-3">
+                <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
+                  Kept true to you
+                </p>
+                <p className="text-xs text-t-phos leading-relaxed">
+                  {groundingNote.removed > 0 && (
+                    <>
+                      We reviewed every line and removed {groundingNote.removed}{" "}
+                      {groundingNote.removed === 1 ? "detail" : "details"} we couldn&apos;t trace to what you told us.{" "}
+                    </>
+                  )}
+                  {groundingNote.residual > 0
+                    ? `A few specifics still couldn't be verified from your input -- double-check anything that doesn't sound like you before you send it.`
+                    : `Your documents contain only what's true about you -- add more detail anytime to make them fuller.`}
+                </p>
+              </div>
+            )}
+
             {/* Resume */}
             {resumeText && (
               <div className="bg-t-panel border border-t-line overflow-hidden">
@@ -1019,12 +1059,13 @@ function analysisToStandaloneHtml(
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headline = String(narrative.headline || "Your Career Profile");
   const summary = String(narrative.summary || "");
-  const reflection = String(narrative.reflection || "");
+  // P1.6 (Codex 3, Troy decision): the downloadable report SCRUBS the private
+  // `reflection` line (it acknowledges the person's journey/record). Barriers,
+  // legal context, and resources stay -- that is this report's purpose.
 
   let body = "";
 
   if (summary) body += `<h2>Your Story</h2><p class="narrative">${escHtml(summary)}</p>`;
-  if (reflection) body += `<p class="narrative">${escHtml(reflection)}</p>`;
 
   if (output.strengths?.length) {
     body += `<h2>Your Strengths</h2>`;
@@ -1069,6 +1110,8 @@ function analysisToStandaloneHtml(
       }
       body += `</div>`;
     }
+    // Coaching-not-legal-advice disclaimer (F6).
+    body += `<p style="margin-top:14px;font-size:9pt;color:#555;background:#f4f4f4;border-left:3px solid #B8C9E0;padding:8px 12px;"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.</p>`;
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis -- Steel Man Resumes</title>
@@ -1078,6 +1121,7 @@ body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1
 .header h1{margin:0 0 4px;font-size:18pt;text-transform:uppercase;letter-spacing:2px}
 .header p{margin:0;color:#B8C9E0;font-size:11pt}
 .date{color:#B8C9E0;font-size:9pt;margin-top:6px}
+.private-banner{background:#f4f1ea;border-left:3px solid #B8860B;padding:10px 14px;margin-bottom:24px;font-size:10pt;line-height:1.5;color:#3a3a3a}
 h2{font-size:14pt;color:#1B2A4A;border-bottom:2px solid #1B2A4A;padding-bottom:4px;margin-top:28px}
 .narrative{font-size:12pt;line-height:1.8}
 .strength{margin-bottom:14px}
@@ -1090,6 +1134,7 @@ ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
 @media print{@page{margin:.5in}.no-print{display:none!important}}
 </style></head><body>
 <div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
+<div class="private-banner"><strong>Private -- for your planning.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself -- your resume and cover letter are the documents to share with employers.</div>
 ${body}
 <div class="footer no-print"><p>Steel Man Resumes -- steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
 <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
@@ -1105,6 +1150,12 @@ function formatOutputAsText(
     "  THE FORGE -- Your Story, Reforged",
     "  Steel Man Resumes",
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
+    "",
+    // P1.6 (Codex 3): this analysis is the person's private planning document --
+    // it omits the reflection line and flags itself as not-for-employers.
+    "PRIVATE -- for your planning. This analysis is for your own use as you plan",
+    "your next steps. Keep it for yourself; your resume and cover letter are the",
+    "documents to share with employers.",
     "",
   ];
 
@@ -1144,6 +1195,12 @@ function formatOutputAsText(
         lines.push(`  \u2022 ${r.name}: ${r.description}`);
       }
     }
+    // Coaching-not-legal-advice disclaimer (F6).
+    lines.push(
+      "",
+      "This is career coaching, not legal advice. Laws change and every situation is",
+      "different -- for legal guidance, contact a reentry attorney or free legal aid in your area."
+    );
   }
 
   lines.push("", "", "Generated by The Forge, powered by t.ROY -- steelmanresumes.com");

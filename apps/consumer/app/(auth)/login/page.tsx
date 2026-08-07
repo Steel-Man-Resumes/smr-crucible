@@ -16,6 +16,7 @@ import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
+import { trackGA } from "@/lib/ga";
 
 export default function LoginPage() {
   return (
@@ -169,6 +170,8 @@ function LoginForm() {
         setSending(false);
         return;
       }
+      // Acquisition attribution only -- no PII, no product detail (GA doctrine).
+      trackGA("refinery_signup", { from_forge: !!forge });
       // New accounts with no Forge data go to /intro, not /dashboard
       const createCallback = (() => {
         try {

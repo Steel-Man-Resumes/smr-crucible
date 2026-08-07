@@ -1,5 +1,387 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- Phase 3 COMPLETE (F7-F16 UI/copy) on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
+
+Wave 3 UI/copy fixes shipped: F7, F8, F9, F11, F12, F13, F14, F15, F16 (F10 was fixed by N4; F17 blocked on
+Troy's OBS video). Commits fe60dd7, f5777a5, 7fa1eff. tsc clean; adversarial 80/80; preview build READY.
+
+- **fe60dd7 -- interview scorecard + coach quality:** F13 (End now forces a feedback wrap-up via a new
+  `endInterview` flag instead of dumping to setup; shared `buildResumePayload`/`recordCompletion`). F11
+  (mandatory ACCOUNTABILITY CHECK in the feedback prompt -- names blame-shifting, models an ownership
+  rewrite). F16 (dashboard coach recommends by ACTUAL state; never sends to a locked tool; "save a job" no
+  longer required -- paste-JD path offered). F9 (both t.ROY surfaces barred from reciting a legal-aid org
+  name/number from memory -- the "Legal Services of West Michigan" misname).
+- **f5777a5 -- overlay/focus/gating:** F7 (GuidedTour scoped to dashboard HOME only + session-suppress on
+  defer, so it no longer overlays tool-page forms). F12 (new bright `--t-focus-ring` #e0a94a + dark halo;
+  fixes the invisible focus ring app-wide). F8/F15 (new `OnboardingGate` makes Disclosure + Interview PAGES
+  enforce the full_access gate their tiles advertise -- honest, forward CTA, optimistic render; + a
+  `/dashboard/interview-prep` -> `/dashboard/interview` redirect for the old 404).
+- **7fa1eff -- F14:** from-scratch builder now takes UNLIMITED jobs (dynamic `jobs[]` array + looping "add
+  another job?"), replacing the hardcoded job1/job2 cap; deleted the duplicated blocks (net -54 lines).
+
+### DECISION FLAGGED FOR TROY (F8/F15 gating direction -- easily reversible)
+The plan said "honestly-gated" but not lock-tighter vs unlock-looser. I ENFORCED the gate on the pages
+(Disclosure + Interview require full_access = a tailored resume, which Phase 1 made reachable via a pasted
+JD -- no live-search dependency). Rationale: both tools are target-job-parameterized, and "honestly-gated
+entry" most naturally means the page enforces what the tile advertises. If Troy prefers these tools OPEN
+earlier, it's a one-line change (drop the `<OnboardingGate>` wrappers or lower `requiredState`).
+
+### Preview-verified (authed, this session)
+- F13: `/api/interview-practice` with `endInterview:true` + a mid-interview history -> real feedback scorecard.
+- F11: same call with a blame-shifting persona ("wasn't really my fault, the system railroaded me") ->
+  improvements EXPLICITLY name the dodge ("employers in peer support hear that as dodging... turn the camera
+  back on yourself") + a model answer that owns it. Exemplary.
+- F8: `/dashboard/interview-prep` -> 307 (route exists, redirects), no longer 404.
+- F9/F16 are model-driven prompt properties (build-verified, like Phase 1's prompt fixes). F7/F12/F14 render
+  + the F15 lock screen are pure UI -> the Phase 4 Playwright assessor pass (Sol+Fable), per the plan's split.
+
+### NEXT: Phase 4 -- CLOSE-OUT (regression + cost probe + PROMOTE)
+Full Sol+Fable Playwright regression vs preview (covers F7/F12/F14/F15 render + all of Phase 1-3); verifier +
+URL-fetch cost probe; **run `node scripts/seed-gr-kent-employers.mjs` at the merge**; promote to prod; smoke.
+
+## 2026-08-07 (Opus 4.8) -- Phase 2 IN PROGRESS on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
+
+**Read first (still):** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Preview alias:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### DB TOPOLOGY (load-bearing for this phase) -- preview and prod SHARE one Neon (`ep-little-cloud`)
+Vercel lists a Preview DATABASE_URL but it's write-only (pulls empty); HANDOFF line ~251 ("isolate
+Preview on its own Neon branch *later*") + manual `.env.local` migrations confirm they're the same DB.
+Consequences I designed around:
+- **Schema migrations** (new tables/columns) are safe to apply now -- prod `main` ignores them.
+- **Published data** (employer rows) applied now shows on the LIVE prod board immediately. So any
+  board seed is a **run-at-promote script**, NOT an auto-run migration. Keep this rule for N1/N4 too.
+- **Authed preview QA is possible** despite the prod cookie being domain-locked to `.steelmanresumes.com`:
+  create a client user with a password_hash, POST `/api/auth/callback/password-login` on the preview
+  host, capture the `authjs.session-token` VALUE, and force-send it with curl `-b` (server reads the
+  cookie by name regardless of Domain). Harness scripts in `/tmp/crucible-preview-auth.sh` (+ QA user
+  `preview-qa-p2@steelmanresumes.com`, DELETE it at phase close). This is why Phase 1 only e2e'd the
+  *unauthenticated* /api/analyze -- authed routes need this trick.
+
+### P2 ITEM 1 DONE + preview-verified: fair-chance wire (Codex 12) + GR/Kent seed + N2 banner
+- **a596ff0** -- fair-chance flag is now EXACT-match against the verified `employer` table only.
+  Killed the substring list (`"Targeted Staffing".includes("target")` -> false badge) and the AI's
+  ability to stamp `second_chance`. New core `employer.ts`: `normalizeEmployerName` (punct + legal-suffix
+  collapse), `getVerifiedEmployerNameSet` (5min cache, fail-safe empty), `isVerifiedFairChance`
+  (full-string equality). `job-search-core.ts` loads the set once (deadline-bounded) and threads it into
+  JSearch + CareerOneStop; AI now only rewrites descriptions. Adversarial suite +13 -> **52/52 green**.
+  N2: honest "database still being built" banner on /dashboard/employers, header de-WI'd.
+- **cb8b022** -- `scripts/seed-gr-kent-employers.mjs`: 3 primary-source-verified GR/Kent employers
+  (Cascade Engineering [A, own site], Montage Furniture Services [B+, WMW HR quote], Rapid-Line [B, WMW
+  fair]). 5 job-fair-list-only candidates dropped. **NOT RUN** (run-at-promote; idempotent upsert).
+- **Preview-verified (authed):** `/api/employers` -> 18 verified employers, 0 MI/GR rows (prod clean,
+  seed correctly unapplied); `/api/job-search` -> new wire executes cleanly + degrades honestly
+  (JSearch upstream was `provider_unavailable` during the check, so a *positive* live flag wasn't
+  observed -- that's an upstream outage, not the code; logic is exhaustively unit-proven).
+
+### P2 ITEM 2 DONE + preview-verified: URL-fetch per-job tailoring (Codex 14)
+- **a6f6c5c** -- `POST /api/fetch-job-posting` (client tier, rate-limited): SSRF-guarded
+  (loopback/private/link-local/169.254.169.254 metadata/odd-port/non-http rejected), browser UA,
+  8s timeout, ~2MB cap, content-type check, anti-bot/JS-wall detection. Structured honest failure on
+  block/timeout/empty (never a fabricated posting). `lib/job-posting-extract.ts` = pure `isDisallowedHost`
+  + `htmlToText`, unit-tested. ResumeWorkspace: "Read the posting from this link" fills the JD textarea
+  (editable), which flows through the SAME P1.2 defenses as a pasted JD (sanitized, <job_posting>-fenced
+  as untrusted, excluded from buildTrustedSource). Suite +21 -> **74/74** (a test caught the IPv6 `[::1]`
+  bracket SSRF bypass -- URL.hostname keeps the brackets).
+- **Preview-verified (authed):** loopback + cloud-metadata -> invalid_url blocked; greenhouse real JD ->
+  OK 4454 chars extracted; LinkedIn -> honest "paste instead"; example.com (too short) -> honest fallback.
+
+### P2 ITEM 3 DONE + preview-verified: N4 vault redesign
+- **a6a3504** -- migration 027 `is_current` on refinery_artifact + partial unique index
+  (`WHERE is_current`, one current/user). Core `setCurrentResume` (clear-then-set, neon-HTTP-safe) +
+  `clearCurrentResume`. PATCH /api/artifacts/[id] accepts `{setCurrent}`. Vault: "Current Resume"
+  section on top, pin/unpin per resume, search box across all materials, one-click "Download .docx"
+  (F10) for resumes + cover letters (reuses /api/forge/download).
+- **Preview-verified (authed):** list shows `is_current`; PATCH pin -> is_current=true; re-list ->
+  exactly 1 current; DOCX endpoint -> 200 + valid "Microsoft Word 2007+" file (7969 bytes). DB probe:
+  forced double-pin rejected by the unique index.
+
+### P2 ITEM 4 DONE + preview-verified: N1 hide-employer
+- **e065423** + **4c4a0bd (FK fix)** -- migration 028 `user_hidden_employer` (+ 029 corrective FK).
+  Core `hiddenEmployers.ts` (hide/unhide/list/getSet/isHiddenEmployer, reuses `normalizeEmployerName`).
+  `/api/user/hidden-employers` GET/POST/DELETE. `/api/job-search` filters the returned jobs by the
+  user's hidden set AFTER the shared cache (fail-open). Job Board card "Hide employer" (inline confirm
+  + reason); Settings "Hidden Employers" (add + un-hide).
+- **BUG caught live + fixed:** 028 first referenced the legacy `"user"` table -> every hide 500ed on
+  the FK. Canonical table is `users` (plural, per migration 008 -- HANDOFF line ~566 warned this).
+  Fixed the 028 file + added idempotent 029 to repoint the constraint. **users(plural) vs "user"(singular)
+  is a live footgun for ALL new FKs -- always target `users`.**
+- **Preview-verified (authed):** hide POST -> key "targeted staffing"; list -> 1 w/ reason; job-search
+  filter path runs clean; un-hide DELETE -> success. (Filtering a NON-empty job list wasn't observable --
+  JSearch upstream was `provider_unavailable` all session -- but the filter is unit-tested + ran error-free.)
+
+### PHASE 2 COMPLETE (all 4 items). Adversarial suite 80/80; core build + consumer tsc clean.
+Migrations 027/028/029 applied to the SHARED Neon (additive, prod `main` ignores them). GR/Kent employer
+seed is NOT applied (promote-only). QA test user + artifacts cleaned from the DB at close.
+
+### NEXT: Phase 3 (F7-F16 UI/copy), then Phase 4 (regression + cost probe + PROMOTE).
+**At promote (Phase 4), remember to run `node scripts/seed-gr-kent-employers.mjs`** so the 3 verified
+GR/Kent employers publish to the live board with the merge.
+Authed-preview note: the `_vercel_jwt` from get_access_to_vercel_url expires ~1h -- re-mint the share
+token + re-run `/tmp/crucible-preview-auth.sh <token>` when curl returns "Protected deployment". A
+client QA user with a password_hash is the way in (password-login provider works in all envs; the prod
+session cookie is domain-locked so force-send the token value with curl -b).
+
+## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Phase 1 COMPLETE (Codex NO-GO cleared); Phase 2 next
+
+**Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md`. Branch `crucible-overhaul-wave1-2026-08-06`,
+PREVIEW ONLY (never prod until Troy promotes). Preview:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### Phase 1 DONE -- all 11 Codex findings + 2 Troy decisions resolved
+P1.0-P1.4 were last session (Codex 1,2,4,5,6,7,8,11). This session finished P1.5-P1.9 (3 atomic
+commits, pushed, Vercel preview build READY at 085c26d):
+- **dd11a75 P1.5/6 (Codex 9,3) -- analyze legal accuracy + report privacy.**
+  - New `lib/legal-sanitize.ts`: `stripEmployerTaxCredit` drops any WOTC / Form 8850 SENTENCE
+    (belt-and-suspenders over the whole forge output, mirrors stripEmDashes -- which also moved here).
+    Composed as `stripEmDashes(stripEmployerTaxCredit(rawForge))`.
+  - Fixed the barrier schema example that said "expungement eligibility". Corrected the WI ban-the-box
+    RULE against PRIMARY sources (dwd.wisconsin.gov arrest/conviction + Milwaukee): the old "Milwaukee
+    ordinance extends to private employers with 15+" was FALSE. Now: WI/Milwaukee ban-the-box is
+    PUBLIC/civil-service only (2015 Wis. Act 150; City of Milwaukee civil service); the private-sector
+    protection is the WI Fair Employment Act (Wis. Stat. 111.321/111.335, substantially-related), as
+    general info; 973.015 record-clearing as general info, legal-aid assesses.
+  - `(forge)/output/page.tsx`: the downloadable Career Analysis (printable PDF + text export) SCRUBS the
+    private `reflection` line + carries a "Private -- for your planning" header; barriers/legal/resources
+    stay. analyze runs `verifyGrounding` (kind:report, fail-open) on narrative summary+reflection vs
+    `buildTrustedSource(resume + typed answers)`.
+- **f072a7c P1.7/8 (Codex 10,13) -- job-search deadline + gauge realism.**
+  - `lib/job-search-core.ts`: `fetchJsonWithTimeout` keeps the timer armed through `res.json()` (body
+    stall was still 504ing); AI enrichment is actually ABORTED (`callAI` now takes an AbortSignal;
+    `ai-call.ts` threads it and does NOT fall back to OpenAI on a caller abort); cache read/writes +
+    decision-log bounded with `withDeadline`.
+  - `lib/grounding.ts`: an outcome no longer counts a bare year or routine verb ("Worked in 2022" was
+    GREEN 100%); it needs a real metric or a genuine achievement verb, and `hasDuty` needs >=2 content
+    words after stripping years.
+- **085c26d P1.9 -- runnable suite.** `apps/consumer/test/adversarial.mts`, `npm run test:adversarial`
+  (tsx), 39 cases green: WOTC/em-dash sanitization, grounding realism, source-laundering boundary,
+  parser round-trip (`profileToResume` on Codex's adversarial profile), justice gate, timeout behavior.
+
+### Verified
+- Adversarial suite 39/39; tsc clean; consumer build clean; Vercel preview build READY (085c26d).
+- LIVE preview `POST /api/analyze` (WI + felony + probation persona, via bypass cookie): PASS -- no
+  WOTC/8850, no em dash, no "15+ private" claim, no individual-eligibility language; legal_notes carries
+  the corrected WI framing (public-only ban-the-box + WFEA + 973.015 as general info, opens "not a
+  determination about your case", cites Legal Action of Wisconsin); narrative summary+reflection grounded.
+- **Michigan jurisdiction rule added (08f0361) for Troy's Grand Rapids trial.** The route had only a
+  verified WI rule; a GR-MI run generated MI law unguarded. Verified against primary sources (michigan.gov
+  Snyder executive directive 2018; Grand Rapids Human Rights Ordinance eff. 2019; Clean Slate MCL 780.621):
+  MI state ban-the-box is public-only, MI preempts local private-employer BTB, Grand Rapids' Human Rights
+  Ordinance is the exception (1+ employees, individualized assessment, no arrest-only records), Clean Slate
+  is fact-specific (direct to Michigan Legal Help / Legal Aid of Western Michigan, no eligibility claim).
+  LIVE preview /api/analyze (GR-MI manufacturing + felony persona) confirmed accurate, disciplined MI
+  legal_notes + grounded narrative. NOTE: GR ordinance enforceability vs the state preemption is genuinely
+  contested legal territory -- the rule frames it as "confirm with legal aid", never as a guarantee.
+- Deep UI Playwright pass (Forge flow: on-screen gauge, printable Private-header render, upload->builder)
+  is the Phase-4 assessor regression (Sol+Fable), NOT re-done here; the builder/parser (Codex 1) was
+  already verified 10/10 in P1.1 + the suite's parser round-trip.
+
+### NEXT: Phase 2 (net-new builds) -- see the completion plan
+- P2.0 URL-fetch per-job tailoring (Troy ratified: fetch AND use the URL; design paywall/anti-bot/timeout
+  fragility up front; fetched text -> canonical source + truth gate).
+- N4 vault redesign (pinned current resume, one-click PDF+DOCX, `is_current`).
+- N1 hide-employer table + Settings un-hide + job-search filter.
+- Fair-chance employer wire (Codex 12): exact-match the verified `018_employer` table, seed a small
+  primary-source-verified Grand Rapids/Kent set, N2 "database in progress" headline.
+Then Phase 3 (F7-F16 UI/copy), Phase 4 (regression + cost probe + promote).
+
+### Gotcha found this session (verification workflow)
+Driving the SSO-gated preview via curl from the Bash tool (Git Bash -> wsl.exe): Git Bash MSYS path
+conversion mangles `/mnt/c` paths AND the URL's `/api/...` path. Prefix the command with
+`MSYS_NO_PATHCONV=1`. Skip the cookie-jar dance: `get_access_to_vercel_url` -> `curl -D -` the
+`/?_vercel_share=...` URL to read the `_vercel_jwt` from Set-Cookie, then send it as
+`-b "_vercel_jwt=..."` on the POST.
+
+## 2026-08-07 (Opus 4.8) -- Codex remediation, Phase 1 5/7 done (superseded by the entry above)
+
+**Read first:** `docs/WAVE-COMPLETION-PLAN-2026-08-07.md` (the full phased plan + Codex
+NO-GO triage + Troy's decisions). Branch `crucible-overhaul-wave1-2026-08-06`, PREVIEW
+ONLY, never prod until Troy promotes. Preview alias:
+`the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app` (SSO-gated).
+
+### ON MERGE TO MAIN -- fold in GA4 thin acquisition layer (Troy approved 2026-08-07)
+When this overhaul branch promotes to main/prod, add the Forge/Refinery GA4 thin layer in the
+same merge (one deploy, not a separate change racing this work). Scope is deliberately THIN --
+justice-impacted users type sensitive narrative here, so NO deep product events to Google:
+- Load gtag with measurement id `G-0FFVQ6SQ0L` (the Steel Man Resumes property, 549068234).
+  Forge/refinery are subdomains of steelmanresumes.com, so they roll into the SMR property and
+  segment by hostname -- do NOT create a new property.
+- Fire ONLY: `forge_started`, `forge_completed`, `refinery_signup` (acquisition attribution).
+- Respect the existing `AnalyticsWrapper` exclusion: no analytics on `/mini-forge/*` (tablet spec).
+- Pattern mirrors smr-website/src/app/GoogleAnalytics.tsx (next/script, env `NEXT_PUBLIC_GA_ID`
+  fallback). Full context: `~/todash/GA4-ANALYTICS-ROLLOUT-2026-08-07.md`.
+
+### Where we are
+Codex reviewed Waves 1+2 and returned a NO-GO with 11 correctness bugs + 2 Troy decisions.
+I agree with it. Phase 1 = fixing all 11. **DONE + verified (5 of 7 P1 items):**
+- **P1.0 (Codex 2, source laundering):** `buildTrustedSource()` in lib/grounding-verify.ts
+  is the single trust boundary -- verifier source is ONLY the person's own resume text +
+  typed answers, never AI-derived Forge narrative/skills or the job posting. Both gen routes use it.
+- **P1.1 (Codex 1, parser regression):** `profileToResume()` in components/resume/resumeParsers.ts
+  builds the base resume from /api/parse's STRUCTURED profile (upload + paste paths thread it
+  through resume/page.tsx enterBuilder), not the old text heuristic. Defense-in-depth strip:
+  reentry "release", section-header words, facility names; justice EMPLOYER blanked (job kept).
+  Verified 10/10 vs Codex's exact input + adversarial leak.
+- **P1.2 (Codex 4, Tailor field gate + injection):** rules moved to SYSTEM role, job posting
+  fenced in <job_posting> as untrusted data with an injection guard; new `verifyStructuredLists()`
+  grounds skills + education (drops injected CNC/OSHA-30); justice employers blanked in resume-
+  generate-full. Verified live: injection defeated.
+- **P1.3 (Codex 5,11, unlock):** tailoring now requires title AND company (no title-only unlock);
+  /api/applications dedups manual re-runs on title+company (no source_id); application resolved
+  BEFORE the doc renders so autosave links it (race closed). ResumeWorkspace.tsx + applications/route.ts.
+- **P1.4 (Codex 6,7,8, verifier hardening):** MAX_VERIFY_CHARS truncation guard (never apply a
+  rewrite that omits the untrusted tail); shared `isDropMarker()` (catches "None." etc) at verifier
+  AND route final assembly; bullets flagged-only (unflagged kept verbatim -- no rogue rewrites);
+  per-document removed/residual accounting so the output notice never claims "all clean" falsely.
+  isDropMarker verified 13/13.
+
+### REMAINING Phase 1 (do these next, in order)
+- **P1.5/6 (Codex 9,3) -- legal accuracy + report privacy.** In app/api/analyze/route.ts:
+  (a) add a DETERMINISTIC WOTC/8850 strip over the forge output (mirror stripEmDashes) -- prompt-
+  only isn't enough; (b) the JSON schema example still says "expungement eligibility" (~line 505) --
+  change it (contradicts the new prohibition); (c) VERIFY + correct the Milwaukee "ban-the-box
+  extends to private employers with 15+" claim (~line 493) -- Codex cites city.milwaukee.gov (scopes
+  to CITY applicants) + WI DWD; per verify-before-record, fetch those, fix the line. Report privacy
+  (Troy decided: KEEP barriers/legal, SCRUB the reflection): in (forge)/output/page.tsx the printable
+  + text exports must drop the `reflection` field and add a "Private -- for your planning" header;
+  and run verifyGrounding on the analyze narrative/reflection so Sol's "implied skills + assumed
+  pronoun" can't ship in the report.
+- **P1.7/8 (Codex 10,13).** lib/job-search-core.ts: fetchWithTimeout clears its timer after headers,
+  so res.json() body-stall still 504s -- wrap the whole fetch+json in the deadline (and bound cache/
+  decision-log; actually abort the AI enrichment, not just race it). lib/grounding.ts:
+  dutyHasOutcome counts any digit/routine verb -> "Worked in 2022" shows GREEN 100%; tighten it
+  (a bare year is not an outcome; require a real metric or substantive duty).
+- **P1.9.** Formalize the ad-hoc checks into a runnable adversarial suite (grounding, parser round-
+  trip, timeout, legal sanitization, unlock linkage). No runner exists yet -- vitest or plain tsx.
+- **Phase 1 VERIFY:** drive the REAL UI end-to-end on preview (Playwright-via-WSL), not just APIs --
+  Codex finding 1 (API fixed, builder broken) is exactly why. Re-run Codex's concrete failing inputs.
+
+Then **Phase 2** (URL-fetch per-job tailoring [Troy: fetch AND use the URL, real per-job resumes,
+design fragility up front], N4 vault, N1 hide-employer, employer exact-match wire), **Phase 3**
+(F7-F16 UI/copy), **Phase 4** (regression + promote). F17 blocked on Troy's OBS video; N3 non-code.
+
+### Verification workflow (adopt this -- it's the standard Codex's finding 1 forced)
+- Typecheck: `npx tsc --noEmit -p apps/consumer/tsconfig.json`. Build: `npm run build -w apps/consumer`.
+- Behavior-test a lib/pure function: write a `.mts` INTO `apps/consumer/` and run
+  `cd apps/consumer && npx tsx <file>.mts` (the `@/` path aliases resolve from there; from repo root
+  they don't). For functions needing an API key, read apps/consumer/.env.local into process.env at
+  the top of the test. Delete the temp file after.
+- Preview: push -> Vercel auto-builds a preview -> get a 23h bypass via Vercel MCP
+  `get_access_to_vercel_url(<preview alias>)` -> POST to endpoints sending the `_vercel_jwt` cookie
+  from `/?_vercel_share=<token>`. Preview env DATABASE_URL now points at prod Neon (Troy fixed a dead
+  host 8/7). Runtime logs via Vercel MCP `get_runtime_logs`/`get_runtime_errors` (that's how the
+  pdfjs-serverless 500 was found).
+- COMMIT via WSL bash with a `-F <msgfile>` file -- inline `-m` with quotes/parens breaks the shell.
+
+### Gotchas
+- pdfjs is externalized in next.config.mjs (serverComponentsExternalPackages) -- do not re-bundle it.
+- analyze route has deterministic stripEmDashes() over the whole forge output (add WOTC strip beside it).
+- Verifier cost now spans grounding-verify:{resume,cover_letter,summary,bullets,lists} -- all metered
+  via recordTokenUsage -> admin AI-costs panel; measure in the cost trial before promote.
+- MOCK_AI=1 (env) returns fixtures for zero-cost UI work.
+
+## 2026-08-07 (Opus 4.8) -- WAVE 2 (F5, F6) + the three flagged follow-ups, on the same preview
+
+Same branch `crucible-overhaul-wave1-2026-08-06`, preview only. All real-runtime verified.
+
+- **F6 (career report legal accuracy) -- highest stakes, in front of MDOC.** Sol's QA: the report
+  told employers the person "may qualify" for WOTC (expired for hires after 2025-12-31, Form 8850
+  retired) and gave individualized expungement conclusions with no disclaimer. Fixes: corrected the
+  WOTC seed in `context-library.ts` (per Troy's own ai-comms PROTOCOL: WOTC dead -> Federal Bonding);
+  disciplined the `analyze` barrier/legal prompt (never assert THIS person's expungement eligibility,
+  describe protections generally + route to legal aid, no invented statutes/deadlines, WOTC barred
+  ENTIRELY -- not even to dismiss it); added the "career coaching, not legal advice" disclaimer to all
+  THREE render paths (on-screen barriers, printable Career Analysis report, text export); added the
+  `-- never em-dash / no-emoji` rule the generation prompts carry PLUS a deterministic `stripEmDashes()`
+  sweep over the whole forge output (the analyze route lacked it and was leaking em dashes into the
+  flagship report). **Verified on preview: no WOTC anywhere, no em/en dash, no individual-eligibility
+  claim, legal_note opens "General information to verify, not a determination about your case."**
+- **F5 (intake parser drops/corrupts fields).** Sol's QA: email "+qasol" tag dropped, city/state +
+  job dates dropped, garbage education rows from headers ("ADDITIONAL", "Since release in November").
+  Fixes in `api/parse`: prompt rules (verbatim contact incl. plus-tags, dates round-trip, education is
+  only real schools/credentials never a header/date fragment, keep all skills, strip justice-
+  involvement) + a deterministic email guard (if the AI email isn't literally in the source, restore
+  the verbatim one). **Verified on preview: +qasol preserved, Milwaukee/WI captured, dates kept,
+  education clean (just the GED), no justice leak.**
+- **Flag: self-disclosure input (plan s.2.3, previously deferred).** Goals page now asks "How strong
+  is your resume?" + "Anything you're worried about?" (optional), stored on the forge session and
+  passed to `generate-docs` as a mode directive (scaffold thin vs sharpen strong; gap/tenure/thin-
+  experience sensitivity) -- biases HOW, never licenses invention. **Verified: thin/none persona
+  builds sparse-but-true with zero invented specifics, verifier applied.**
+- **Flag: Tailor structured-bullet truth gate.** New `verifyResumeBullets()` grounds-or-drops EACH
+  tailored resume experience bullet against the person's own background (was only cover+summary).
+  Guards the literal "null"/"none" a model returns for a dropped bullet. Fail-open per bullet.
+  **Verified on gpt-4o-mini: three Sol-style fabricated bullets dropped, the one true bullet kept.**
+
+Verifier cost now spans grounding-verify:{resume,cover_letter,summary,bullets} -- all metered via
+recordTokenUsage -> admin AI-costs panel; measure in the cost trial before promote.
+
+**Wave 1+2 status: F1-F6 + N-flags all built on the preview, all real-runtime verified. NOT promoted
+to prod -- Troy's final pass, then Codex+Fable, then promote. Wave 3 (F7-F17 UI/copy) + N1 (hide-
+employer) + N4 (vault redesign) + fair-chance employer wire/seed remain.**
+
+## 2026-08-06 (Opus 4.8) -- Pre-conference overhaul WAVE 1 (F1-F4) on branch + preview
+
+Executed Wave 1 of `~/todash/smr/SMR-CRUCIBLE-OVERHAUL-PLAN-2026-08-06.md`. Branch
+`crucible-overhaul-wave1-2026-08-06`, deployed to a PREVIEW only (never main/prod).
+Preview: `the-crucible-git-crucible-overhaul-w-5881cf-troy-carrs-projects.vercel.app`
+(SSO-gated; access via a Vercel share link). **DO NOT promote to prod until Troy +
+Codex + Fable review the preview.**
+
+**What shipped (4 atomic commits + 2 follow-ups):**
+- **F1 (PDF upload)** `lib/text-extraction.ts` + `api/parse`: pdfjs-legacy + DOM
+  polyfills (incl. `Promise.withResolvers`, absent on Node <22). Scan-only/unreadable
+  files throw a typed `UnreadableDocumentError` -> friendly 422 to the guided builder,
+  never a 500. **GOTCHA (preview-caught):** Next BUNDLED pdfjs into a serverless chunk
+  and its `pdf.worker.mjs` dynamic import resolved to a non-existent chunk -> every text
+  PDF failed on Vercel while passing on local Node 20. Fix: `pdfjs-dist` in
+  `serverComponentsExternalPackages` + force the legacy build into the `/api/parse`
+  Lambda via `outputFileTracingIncludes` (`next.config.mjs`). **Verified on the real
+  runtime: text PDF -> 200 + extracted text; junk PDF -> 422.**
+- **F3 (job-search 504)** `lib/job-search-core.ts`: AbortController timeouts per
+  provider (JSearch 12s, CareerOneStop 7s) + a race-bound on AI enrichment (10s,
+  degrades to real basic listings). **Measured Troy's live key: `num_pages=2` = 11-14s
+  (the 504 cause) -> dropped to `num_pages=1` (~6s, 10 real jobs).** Also normalized
+  `/search-v2` `job_title` values that arrive JSON-array-encoded (would render raw
+  brackets -- QA never caught it because they only ever got 504s). Live key confirmed
+  returning real Grand Rapids/Lansing postings.
+- **F4 (tailoring + unlock)** `components/resume/ResumeWorkspace.tsx`: base-resume
+  state now truthful (recognized from saved server artifacts, not just localStorage);
+  Tailor honors the typed job + an optional pasted job description and runs real AI
+  tailoring via `runCareerPackage`; unlock decoupled from the live board (tailoring to a
+  typed/pasted job creates+links a `job_application`, so the saved resume is job-targeted
+  and `useOnboarding` flips to `full_access` -- no Job Board needed). No gating-logic
+  change; keyed on the existing "job-targeted resume" gate.
+- **F2 (truth gate -- marquee)** new `lib/grounding-verify.ts` (cheap gpt-4o-mini
+  post-gen verifier, FAIL-OPEN) wired into `generate-docs` (resume+cover) and
+  `resume-generate-full` (cover+summary); new `lib/grounding.ts` + `GroundingGauge.tsx`
+  deterministic RED/AMBER/GREEN gauge on the intake/review screens; honest note on the
+  output page. **Verified: against Sol's exact vague persona the verifier flagged all
+  four invented claims and rewrote to only-what-the-source-stated (zero leakage); live
+  on the preview it flagged 8 claims on a thin persona and applied the rewrite.** Adds
+  ~1 cheap call per doc -- fold into the cost trial.
+
+**Verification status:** F1 + F2 verified END-TO-END on the real preview runtime. F3
+verified at the core (live key, latency, `/search-v2` shape, timeout logic; prod logs
+confirm the exact 30s timeout). F4 verified by code-trace against the unlock gate +
+typecheck. F3/F4 UI e2e (auth-gated, Turnstile) is the assessors' Playwright pass.
+
+**Infra fix done this session (Neon, plan s.4):** the **Preview** env `DATABASE_URL`
+was pointed at a dead/malformed Neon host (`api.c-7.us-east-.aws.neon.tech`, ENOTFOUND)
+-> every DB route 500'd on preview. Troy re-pointed Preview `DATABASE_URL` at the working
+prod crucible Neon (`ep-little-cloud-...-pooler.c-7.us-east-1`). Prod Neon is healthy
+(no prod Neon errors in 24h). Consider isolating Preview on its own Neon branch later
+(plan s.2D gating doctrine); for now Preview shares prod.
+
+**Deferred / flagged:** self-disclosure "how strong is your resume?" input (ratified
+s.2.3) deferred -- the deterministic gauge + verifier already deliver "recognize strong
+vs poor history, act accordingly." Structured per-bullet verification on the Tailor
+resume is a fast-follow (cover+summary covered now). `/api/analyze` has a separate
+recurring JSON-parse error in prod logs (barrier analysis) -- not in Wave 1 scope.
+
+**Next:** assessor preview review -> Wave 2 (F5-F6) -> Wave 3 (F7-F17) + N1-N4 -> full
+regression re-run -> promote to prod. Run the cost probe now that the verifier is live.
+
 ## 2026-08-06 (Fable) -- Org admin-invite DEPLOYED TO PROD + dead-inbox sweep + register-claim
 
 Troy approved; `vercel deploy --prod` from the REPO ROOT (deploying from

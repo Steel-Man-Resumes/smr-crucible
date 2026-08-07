@@ -16,10 +16,12 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
-import { parseTextToResume } from "@/components/resume/resumeParsers";
+import { parseTextToResume, profileToResume } from "@/components/resume/resumeParsers";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
+import { GroundingGauge } from "@/components/GroundingGauge";
+import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -77,6 +79,8 @@ export default function ResumeIntakePage() {
   const [parsedName, setParsedName] = useState<string | null>(null);
   const [parsedEmail, setParsedEmail] = useState<string>("");
   const [parsedPhone, setParsedPhone] = useState<string>("");
+  // Full parsed profile -- feeds the grounding gauge (how much true material we have).
+  const [parsedProfile, setParsedProfile] = useState<any>(null);
   const [dragOver, setDragOver] = useState(false);
   // Phase 7: once ingest yields material, drop the user into the structured
   // base-resume builder (the Build stage) instead of routing straight on.
@@ -113,6 +117,7 @@ export default function ResumeIntakePage() {
         setParsedName(data.profile?.full_name || null);
         setParsedEmail(data.profile?.email || "");
         setParsedPhone(data.profile?.phone || "");
+        setParsedProfile(data.profile || null);
         setUploadSuccess(true);
       } catch (err) {
         setUploadError("Couldn't read that file. Try a different one?");
@@ -141,11 +146,27 @@ export default function ResumeIntakePage() {
     [handleFile]
   );
 
-  // Parse ingested text into a structured ResumeDocument and enter the Build
-  // stage. seed (from /api/parse) wins over regex-detected contact when present.
+  // Enter the Build stage with a structured ResumeDocument. When /api/parse
+  // returned a structured profile, build DIRECTLY from it (preserves dates,
+  // city/state, education, skills -- Codex finding 1); otherwise fall back to the
+  // text heuristic. seed still wins for contact on the fallback path.
   const enterBuilder = useCallback(
-    (text: string, seed?: { name?: string; email?: string; phone?: string }) => {
-      setBuilderDoc(parseTextToResume(text, seed));
+    (
+      text: string,
+      seed?: { name?: string; email?: string; phone?: string },
+      profile?: any
+    ) => {
+      const hasStructuredProfile =
+        profile &&
+        ((Array.isArray(profile.work_history) && profile.work_history.length) ||
+          (Array.isArray(profile.education) && profile.education.length) ||
+          profile.city ||
+          profile.state);
+      setBuilderDoc(
+        hasStructuredProfile
+          ? profileToResume(profile, text)
+          : parseTextToResume(text, seed)
+      );
     },
     []
   );
@@ -261,13 +282,25 @@ export default function ResumeIntakePage() {
     const previewText = session.resumeText || "";
 
     const commitAndContinue = () => {
-      // Contact is seeded into the builder's doc.contact below, so hand the
-      // extracted text + parsed contact straight to the Build stage.
-      enterBuilder(previewText, {
-        name: parsedName || undefined,
-        email: parsedEmail || undefined,
-        phone: parsedPhone || undefined,
-      });
+      // Prefer the full structured profile (dates/city/state/education/skills);
+      // the seed carries any contact the user just filled in by hand.
+      const mergedProfile = parsedProfile
+        ? {
+            ...parsedProfile,
+            full_name: parsedName || parsedProfile.full_name,
+            email: parsedEmail || parsedProfile.email,
+            phone: parsedPhone || parsedProfile.phone,
+          }
+        : null;
+      enterBuilder(
+        previewText,
+        {
+          name: parsedName || undefined,
+          email: parsedEmail || undefined,
+          phone: parsedPhone || undefined,
+        },
+        mergedProfile
+      );
     };
 
     return (
@@ -282,6 +315,11 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
       >
+        {/* Grounding gauge -- the honest contract: how much true material we have. */}
+        {parsedProfile && (
+          <GroundingGauge score={computeGrounding(jobsFromParsedProfile(parsedProfile))} />
+        )}
+
         {/* Full resume preview */}
         <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
@@ -674,7 +712,7 @@ export default function ResumeIntakePage() {
   if (activePath === "paste") {
     return (
       <PasteResume
-        onComplete={(text, seed) => enterBuilder(text, seed)}
+        onComplete={(text, seed, profile) => enterBuilder(text, seed, profile)}
         onBack={() => setActivePath(null)}
       />
     );
@@ -696,15 +734,21 @@ type BuilderStep =
   | "intro"
   | "name"
   | "contact"
-  | "job1-info"
-  | "job1-duties"
-  | "job2-prompt"
-  | "job2-info"
-  | "job2-duties"
+  | "job-info"
+  | "job-duties"
+  | "job-more"
   | "skills"
   | "education"
   | "extras"
   | "review";
+
+interface JobEntry {
+  title: string;
+  company: string;
+  dates: string;
+  duties: string;
+}
+const EMPTY_JOB: JobEntry = { title: "", company: "", dates: "", duties: "" };
 
 function GuidedBuilder({
   onComplete,
@@ -715,20 +759,14 @@ function GuidedBuilder({
 }) {
   const { updateSession } = useForgeSession();
   const [step, setStep] = useState<BuilderStep>("intro");
+  // Work history is a dynamic list -- no cap. A long career is never stranded (F14).
+  const [jobs, setJobs] = useState<JobEntry[]>([{ ...EMPTY_JOB }]);
+  const [jobIdx, setJobIdx] = useState(0);
   const [answers, setAnswers] = useState({
     name: "",
     phone: "",
     email: "",
     city: "",
-    job1Title: "",
-    job1Company: "",
-    job1Dates: "",
-    job1Duties: "",
-    addJob2: false,
-    job2Title: "",
-    job2Company: "",
-    job2Dates: "",
-    job2Duties: "",
     skills: "",
     education: "",
     extras: "",
@@ -738,16 +776,19 @@ function GuidedBuilder({
     setAnswers((prev) => ({ ...prev, [field]: value }));
   }
 
+  const curJob = jobs[jobIdx] ?? EMPTY_JOB;
+  function setJobField(field: keyof JobEntry, value: string) {
+    setJobs((prev) => prev.map((j, i) => (i === jobIdx ? { ...j, [field]: value } : j)));
+  }
+
   function goNext() {
     switch (step) {
       case "intro":        setStep("name"); break;
       case "name":         setStep("contact"); break;
-      case "contact":      setStep("job1-info"); break;
-      case "job1-info":    setStep("job1-duties"); break;
-      case "job1-duties":  setStep("job2-prompt"); break;
-      case "job2-prompt":  setStep(answers.addJob2 ? "job2-info" : "skills"); break;
-      case "job2-info":    setStep("job2-duties"); break;
-      case "job2-duties":  setStep("skills"); break;
+      case "contact":      setStep("job-info"); break;
+      case "job-info":     setStep("job-duties"); break;
+      case "job-duties":   setStep("job-more"); break;
+      // "job-more" advances via its own Yes/No buttons (addAnotherJob / finishJobs).
       case "skills":       setStep("education"); break;
       case "education":    setStep("extras"); break;
       case "extras":       setStep("review"); break;
@@ -769,16 +810,27 @@ function GuidedBuilder({
       case "intro":       onBack(); break;
       case "name":        setStep("intro"); break;
       case "contact":     setStep("name"); break;
-      case "job1-info":   setStep("contact"); break;
-      case "job1-duties": setStep("job1-info"); break;
-      case "job2-prompt": setStep("job1-duties"); break;
-      case "job2-info":   setStep("job2-prompt"); break;
-      case "job2-duties": setStep("job2-info"); break;
-      case "skills":      setStep(answers.addJob2 ? "job2-duties" : "job2-prompt"); break;
+      case "job-info":
+        // Back out of an added job returns to the previous job's "add another?" prompt.
+        if (jobIdx === 0) { setStep("contact"); }
+        else { setJobIdx(jobIdx - 1); setStep("job-more"); }
+        break;
+      case "job-duties":  setStep("job-info"); break;
+      case "job-more":    setStep("job-duties"); break;
+      case "skills":      setStep("job-more"); break;
       case "education":   setStep("skills"); break;
       case "extras":      setStep("education"); break;
       case "review":      setStep("extras"); break;
     }
+  }
+
+  function addAnotherJob() {
+    setJobs((prev) => [...prev, { ...EMPTY_JOB }]);
+    setJobIdx(jobs.length); // new entry's index
+    setStep("job-info");
+  }
+  function finishJobs() {
+    setStep("skills");
   }
 
   function assembleResume(): string {
@@ -792,17 +844,11 @@ function GuidedBuilder({
     lines.push("WORK HISTORY");
     lines.push("");
 
-    if (answers.job1Title || answers.job1Company || answers.job1Duties) {
-      const h = [answers.job1Title, answers.job1Company, answers.job1Dates].filter(Boolean).join(" -- ");
+    for (const job of jobs) {
+      if (!(job.title || job.company || job.duties)) continue;
+      const h = [job.title, job.company, job.dates].filter(Boolean).join(" -- ");
       if (h) lines.push(h);
-      if (answers.job1Duties) lines.push(answers.job1Duties.trim());
-      lines.push("");
-    }
-
-    if (answers.addJob2 && (answers.job2Title || answers.job2Company || answers.job2Duties)) {
-      const h = [answers.job2Title, answers.job2Company, answers.job2Dates].filter(Boolean).join(" -- ");
-      if (h) lines.push(h);
-      if (answers.job2Duties) lines.push(answers.job2Duties.trim());
+      if (job.duties) lines.push(job.duties.trim());
       lines.push("");
     }
 
@@ -944,14 +990,19 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 1 Info ---
-  if (step === "job1-info") {
+  // --- Job Info (one per job; the list is unbounded) ---
+  if (step === "job-info") {
+    const first = jobIdx === 0;
     return (
       <FlowPage
-        title="Your most recent job"
-        subtitle="Last job you held -- full-time, part-time, temp, gig, or work program. All count."
+        title={first ? "Your most recent job" : `Job ${jobIdx + 1}`}
+        subtitle={
+          first
+            ? "Last job you held -- full-time, part-time, temp, gig, or work program. All count."
+            : "Same as before -- title, company, and when."
+        }
         actionLabel="Next"
-        actionDisabled={!answers.job1Title.trim() && !answers.job1Company.trim()}
+        actionDisabled={!curJob.title.trim() && !curJob.company.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -960,8 +1011,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
             <input
-              value={answers.job1Title}
-              onChange={(e) => set("job1Title", e.target.value)}
+              value={curJob.title}
+              onChange={(e) => setJobField("title", e.target.value)}
               placeholder="e.g., Warehouse Associate, Custodian, Cook"
               className={inputClass}
               autoFocus
@@ -970,8 +1021,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
             <input
-              value={answers.job1Company}
-              onChange={(e) => set("job1Company", e.target.value)}
+              value={curJob.company}
+              onChange={(e) => setJobField("company", e.target.value)}
               placeholder="e.g., Amazon, City of Milwaukee, Self-employed"
               className={inputClass}
             />
@@ -979,8 +1030,8 @@ function GuidedBuilder({
           <div>
             <label className="text-xs font-medium text-t-phos-dim block mb-1">When? (approximate is fine)</label>
             <input
-              value={answers.job1Dates}
-              onChange={(e) => set("job1Dates", e.target.value)}
+              value={curJob.dates}
+              onChange={(e) => setJobField("dates", e.target.value)}
               placeholder="e.g., 2019-2022"
               className={inputClass}
             />
@@ -990,14 +1041,14 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 1 Duties ---
-  if (step === "job1-duties") {
+  // --- Job Duties ---
+  if (step === "job-duties") {
     return (
       <FlowPage
         title="What did you do there?"
         subtitle="Main responsibilities in your own words. Don't make it fancy -- just be honest."
         actionLabel="Next"
-        actionDisabled={!answers.job1Duties.trim()}
+        actionDisabled={!curJob.duties.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -1006,8 +1057,8 @@ function GuidedBuilder({
         }
       >
         <textarea
-          value={answers.job1Duties}
-          onChange={(e) => set("job1Duties", e.target.value)}
+          value={curJob.duties}
+          onChange={(e) => setJobField("duties", e.target.value)}
           placeholder={"e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season."}
           rows={5}
           className={textareaClass}
@@ -1017,8 +1068,9 @@ function GuidedBuilder({
     );
   }
 
-  // --- Job 2 Prompt ---
-  if (step === "job2-prompt") {
+  // --- Job More (add another? -- loops back to job-info, no cap) ---
+  if (step === "job-more") {
+    const count = jobs.filter((j) => j.title || j.company || j.duties).length;
     return (
       <FlowPage
         title="Do you have another job to add?"
@@ -1026,92 +1078,27 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
       >
+        {count > 0 && (
+          <p className="text-sm text-t-phos-dim mb-3">
+            {count} job{count === 1 ? "" : "s"} added so far.
+          </p>
+        )}
         <div className="flex flex-col gap-3">
           <button
-            onClick={() => { set("addJob2", true); setStep("job2-info"); }}
+            onClick={addAnotherJob}
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
             <span className="font-medium text-t-white">Yes -- add another job</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
           </button>
           <button
-            onClick={() => { set("addJob2", false); setStep("skills"); }}
+            onClick={finishJobs}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
             <span className="font-medium text-t-white">No -- that's my history</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Continue to skills and certifications</p>
           </button>
         </div>
-      </FlowPage>
-    );
-  }
-
-  // --- Job 2 Info ---
-  if (step === "job2-info") {
-    return (
-      <FlowPage
-        title="Second job"
-        subtitle="Same as before -- title, company, and when."
-        actionLabel="Next"
-        actionDisabled={!answers.job2Title.trim() && !answers.job2Company.trim()}
-        onAction={goNext}
-        showBack
-        onBack={goBack}
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
-            <input
-              value={answers.job2Title}
-              onChange={(e) => set("job2Title", e.target.value)}
-              placeholder="e.g., Cashier, Driver, Maintenance Tech"
-              className={inputClass}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
-            <input
-              value={answers.job2Company}
-              onChange={(e) => set("job2Company", e.target.value)}
-              placeholder="e.g., Walmart, local restaurant, freelance"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">When?</label>
-            <input
-              value={answers.job2Dates}
-              onChange={(e) => set("job2Dates", e.target.value)}
-              placeholder="e.g., 2015-2019"
-              className={inputClass}
-            />
-          </div>
-        </div>
-      </FlowPage>
-    );
-  }
-
-  // --- Job 2 Duties ---
-  if (step === "job2-duties") {
-    return (
-      <FlowPage
-        title="What did you do there?"
-        subtitle="Same question -- main responsibilities in your own words."
-        actionLabel="Next"
-        actionDisabled={!answers.job2Duties.trim()}
-        onAction={goNext}
-        showBack
-        onBack={goBack}
-      >
-        <textarea
-          value={answers.job2Duties}
-          onChange={(e) => set("job2Duties", e.target.value)}
-          placeholder={"Describe your main responsibilities..."}
-          rows={5}
-          className={textareaClass}
-          autoFocus
-        />
       </FlowPage>
     );
   }
@@ -1204,6 +1191,9 @@ function GuidedBuilder({
   // --- Review ---
   if (step === "review") {
     const assembled = assembleResume();
+    const groundingJobs = jobs
+      .filter((j) => j.title || j.company || j.duties)
+      .map((j) => ({ employer: j.company, title: j.title, dates: j.dates, duties: j.duties }));
     return (
       <FlowPage
         title="Here's what we have."
@@ -1214,6 +1204,9 @@ function GuidedBuilder({
         showBack
         onBack={goBack}
       >
+        {/* Grounding gauge -- the honest contract, computed from the user's answers. */}
+        <GroundingGauge score={computeGrounding(groundingJobs)} />
+
         <div className="bg-t-panel border border-t-line overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
             <p className="text-xs font-semibold text-t-phos uppercase">
@@ -1249,7 +1242,11 @@ function PasteResume({
   onComplete,
   onBack,
 }: {
-  onComplete: (text: string, seed?: { name?: string; email?: string; phone?: string }) => void;
+  onComplete: (
+    text: string,
+    seed?: { name?: string; email?: string; phone?: string },
+    profile?: any
+  ) => void;
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
@@ -1268,6 +1265,7 @@ function PasteResume({
     // text and the client-side parser if the server is unavailable.
     let finalText = raw;
     let seed: { name?: string; email?: string; phone?: string } | undefined;
+    let profile: any = null;
     try {
       const formData = new FormData();
       formData.append("text", raw);
@@ -1276,6 +1274,7 @@ function PasteResume({
         const data = await res.json();
         if (data.resumeText) finalText = data.resumeText;
         if (data.profile) {
+          profile = data.profile;
           seed = {
             name: data.profile.full_name || undefined,
             email: data.profile.email || undefined,
@@ -1293,7 +1292,7 @@ function PasteResume({
       lastPageVisited: "resume",
     });
     setParsing(false);
-    onComplete(finalText, seed);
+    onComplete(finalText, seed, profile);
   }
 
   async function copyPrompt() {

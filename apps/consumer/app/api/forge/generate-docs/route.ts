@@ -12,6 +12,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
 
@@ -45,7 +46,32 @@ interface GenerateDocsInput {
   goalNarrative?: string;
   preferences?: Record<string, string>;
   readinessStage?: string;
+  // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
+  resumeConfidence?: "none" | "rough" | "decent" | "strong";
+  resumeWorries?: string[];
   sessionId?: string;
+}
+
+// Translate the self-disclosure signal into a generation-mode directive. This
+// biases sharpen-vs-scaffold and what to be sensitive to -- it never licenses
+// invention (the TRUTH GATE + verifier still bound the output).
+function selfDisclosureDirective(input: GenerateDocsInput): string {
+  const bits: string[] = [];
+  const conf = input.resumeConfidence;
+  if (conf === "none" || conf === "rough") {
+    bits.push(
+      "The person rates their own history as thin/rough. Lead with a functional, skills-forward structure and narrative scaffolding built from real transferable skills. A shorter, sparser, TRUE resume is correct here -- never pad with invented detail to make it look fuller."
+    );
+  } else if (conf === "strong") {
+    bits.push(
+      "The person rates their history as strong. Sharpen and tighten what is already there; do not over-explain or inflate."
+    );
+  }
+  const worries = new Set(input.resumeWorries || []);
+  if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
+  if (worries.has("job_changes")) bits.push("They worry about job changes: frame varied roles as range and adaptability, not instability.");
+  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, and any real accomplishments; a functional layout is fine.");
+  return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
 }
 
 async function handlePost(request: Request) {
@@ -67,10 +93,44 @@ async function handlePost(request: Request) {
     const startTime = Date.now();
 
     // Generate resume and cover letter in parallel
-    const [resume, coverLetter] = await Promise.all([
+    const [resumeRaw, coverLetterRaw] = await Promise.all([
       generateResume(input),
       generateCoverLetter(input),
     ]);
+
+    // Post-generation grounding gate (F2): claim-trace each document back to what
+    // the user actually gave us and strip/generalize anything invented. The prompt
+    // TRUTH GATE is necessary but the model overrides it under thin inputs (Sol's
+    // "buffers and scrubbers", "clean safety record"), so this AI verify pass is
+    // load-bearing. Fail-open -- a verifier hiccup never blocks or mangles a resume.
+    // Source = ONLY the user's own material (their resume text + their own words),
+    // never the AI-derived narrative, so invention can't launder itself as source.
+    const groundingSource = buildTrustedSource({
+      resumeText: input.resumeText,
+      userText: [input.goalNarrative, (input.goals || []).join(", ")],
+    });
+
+    const [resumeCheck, coverCheck] = await Promise.all([
+      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
+    ]);
+
+    const resume = resumeCheck.text;
+    const coverLetter = coverCheck.text;
+    // Per-document accounting (Codex 8): a flag is "removed" only if THAT document's
+    // rewrite was applied. A document that found fabrication but couldn't apply the
+    // rewrite (window/floor/drop guard) has RESIDUAL fabrication the user must
+    // review -- the notice must not claim it was removed.
+    const checks = [resumeCheck, coverCheck];
+    const removedCount = checks
+      .filter((c) => c.applied)
+      .reduce((n, c) => n + c.flags.length, 0);
+    const residualCount = checks
+      .filter((c) => c.hasFabrication && !c.applied)
+      .reduce((n, c) => n + c.flags.length, 0);
+    const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
+    const groundingApplied = resumeCheck.applied || coverCheck.applied;
+    const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
 
     const latencyMs = Date.now() - startTime;
 
@@ -94,6 +154,8 @@ async function handlePost(request: Request) {
           type: "document_generation",
           resume_length: resume.length,
           cover_letter_length: coverLetter.length,
+          grounding_flags: groundingFlags.length,
+          grounding_applied: groundingApplied,
         },
         latencyMs,
       });
@@ -104,6 +166,13 @@ async function handlePost(request: Request) {
     return NextResponse.json({
       resume,
       coverLetter,
+      grounding: {
+        hasFabrication,
+        applied: groundingApplied,
+        removed: removedCount,
+        residual: residualCount,
+        flags: groundingFlags,
+      },
       generated_at: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -166,7 +235,7 @@ DATA CLEANING -- FIX INPUT ERRORS:
 - If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
 
 ${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
-
+${selfDisclosureDirective(input)}
 SECTION ORDER (exact):
 1. FULL NAME (all caps)
 2. Contact line: City, State | Phone | Email (one line, pipe-separated)

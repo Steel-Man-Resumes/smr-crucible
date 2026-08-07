@@ -57,6 +57,21 @@ const GOAL_OPTIONS = [
   },
 ];
 
+// Self-disclosure (F2 s.2.3): primes generation mode -- sharpen a strong history
+// vs scaffold a thin one -- and flags what to be sensitive to. Optional.
+const CONFIDENCE_OPTS = [
+  { id: "none", label: "I don't have one yet" },
+  { id: "rough", label: "It's rough" },
+  { id: "decent", label: "It's decent" },
+  { id: "strong", label: "It's strong" },
+];
+const WORRY_OPTS = [
+  { id: "gaps", label: "Gaps in my history" },
+  { id: "job_changes", label: "Job changes" },
+  { id: "little_experience", label: "Not much experience" },
+  { id: "nothing", label: "Nothing major" },
+];
+
 export default function GoalsPage() {
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
@@ -76,6 +91,12 @@ export default function GoalsPage() {
     isDemo ? (DEMO_SESSION.hookNarrative || "") : (session.hookNarrative || "")
   );
   const [showHookPrompt, setShowHookPrompt] = useState(!isDemo);
+  const [resumeConfidence, setResumeConfidence] = useState<string>(
+    isDemo ? "" : (session.resumeConfidence || "")
+  );
+  const [resumeWorries, setResumeWorries] = useState<string[]>(
+    isDemo ? [] : (session.resumeWorries || [])
+  );
 
   // Track page visit
   useEffect(() => {
@@ -96,6 +117,8 @@ export default function GoalsPage() {
       goals: isDemo ? DEMO_SESSION.goals : selected,
       goalNarrative: isDemo ? DEMO_SESSION.goalNarrative : (narrative || undefined),
       hookNarrative: isDemo ? (DEMO_SESSION.hookNarrative || undefined) : (hookNarrative || undefined),
+      resumeConfidence: isDemo ? undefined : ((resumeConfidence || undefined) as "none" | "rough" | "decent" | "strong" | undefined),
+      resumeWorries: isDemo ? undefined : (resumeWorries.length ? resumeWorries : undefined),
       lastPageVisited: "goals",
     });
     router.push("/story");
@@ -158,6 +181,59 @@ export default function GoalsPage() {
         <p className="text-sm text-t-phos-dim text-center mt-2">
           Pick at least one, or describe what you&apos;re looking for below.
         </p>
+      )}
+
+      {/* Self-disclosure (F2 s.2.3): primes how we build the resume. Optional. */}
+      {!isDemo && (
+        <div className="mt-6 bg-t-panel px-4 py-3 border border-t-line">
+          <p className="text-sm font-medium text-t-white mb-2">
+            How strong is your resume right now?{" "}
+            <span className="font-normal text-t-phos-dim">(optional)</span>
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {CONFIDENCE_OPTS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => setResumeConfidence((prev) => (prev === o.id ? "" : o.id))}
+                className={`t-focus px-3 py-1.5 text-sm border transition-colors min-h-touch ${
+                  resumeConfidence === o.id
+                    ? "border-t-amber bg-t-panel-2 text-t-amber-bright"
+                    : "border-t-line text-t-phos-dim hover:border-t-phos-dim hover:text-t-white"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm font-medium text-t-white mb-2">
+            Anything you&apos;re worried about?{" "}
+            <span className="font-normal text-t-phos-dim">(optional)</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {WORRY_OPTS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() =>
+                  setResumeWorries((prev) =>
+                    prev.includes(o.id) ? prev.filter((x) => x !== o.id) : [...prev, o.id]
+                  )
+                }
+                className={`t-focus px-3 py-1.5 text-sm border transition-colors min-h-touch ${
+                  resumeWorries.includes(o.id)
+                    ? "border-t-amber bg-t-panel-2 text-t-amber-bright"
+                    : "border-t-line text-t-phos-dim hover:border-t-phos-dim hover:text-t-white"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-t-phos-dim mt-2">
+            This just helps us build it right. We only ever use what&apos;s true about you.
+          </p>
+        </div>
       )}
 
       {/* Optional free-text for more nuanced expression */}

@@ -97,10 +97,21 @@ function EmployersList() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">Verified Employers</h1>
-      <p className="text-t-phos-dim mt-1 mb-5">
-        Wisconsin employers our team verified as open to people with records. Each one was
-        checked against real fair-chance hiring signals. Read the notes -- some have honest caveats.
+      <p className="text-t-phos-dim mt-1 mb-4">
+        Employers our team verified as open to people with records. Each one was checked
+        against a real fair-chance hiring signal. Read the notes -- some have honest caveats.
       </p>
+
+      {/* N2: honest "in progress" banner while the curated list is small and growing. */}
+      <div className="mb-5 border-l-4 border-t-amber bg-t-panel-2 px-4 py-3">
+        <p className="text-sm font-bold text-t-amber-bright">This database is still being built.</p>
+        <p className="text-sm text-t-phos-dim mt-1 leading-relaxed">
+          The list is deliberately small: an employer is added only after we confirm its
+          fair-chance hiring with a real source, so a name here means something. It is growing
+          weekly. If your area is not covered yet, that is not a dead end -- use Job Search for
+          live listings and the disclosure planner to prepare. A missing employer is not a "no."
+        </p>
+      </div>
 
       {q && (
         <div className="mb-5 flex items-center justify-between gap-3 border border-t-amber bg-t-panel-2 px-4 py-3">

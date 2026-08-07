@@ -33,7 +33,8 @@ async function callAnthropic(
   messages: Msg[],
   maxTokens: number,
   model: string,
-  meta?: AiCallMeta
+  meta?: AiCallMeta,
+  signal?: AbortSignal
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
@@ -59,6 +60,7 @@ async function callAnthropic(
       "anthropic-version": ANTHROPIC_VERSION,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -93,7 +95,8 @@ async function callOpenAI(
   system: string,
   messages: Msg[],
   maxTokens: number,
-  meta?: AiCallMeta
+  meta?: AiCallMeta,
+  signal?: AbortSignal
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not set");
@@ -113,6 +116,7 @@ async function callOpenAI(
       max_tokens: maxTokens,
       messages: allMessages,
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -142,25 +146,29 @@ export async function callAI(
   messages: Msg[],
   maxTokens = 2048,
   model: string = AI_MODEL,
-  meta?: AiCallMeta
+  meta?: AiCallMeta,
+  signal?: AbortSignal
 ): Promise<string> {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   if (hasAnthropic) {
     try {
-      return await callAnthropic(system, messages, maxTokens, model, meta);
+      return await callAnthropic(system, messages, maxTokens, model, meta, signal);
     } catch (err) {
+      // A caller-initiated abort (deadline) is intentional -- do NOT start a fresh
+      // OpenAI call after the deadline already passed; propagate the abort.
+      if (signal?.aborted) throw err;
       if (!hasOpenAI) throw err;
       console.error(
         "[ai-call] Anthropic failed, falling back to OpenAI:",
         err instanceof Error ? err.message : err
       );
-      return await callOpenAI(system, messages, maxTokens, meta);
+      return await callOpenAI(system, messages, maxTokens, meta, signal);
     }
   }
 
-  if (hasOpenAI) return await callOpenAI(system, messages, maxTokens, meta);
+  if (hasOpenAI) return await callOpenAI(system, messages, maxTokens, meta, signal);
 
   throw new Error("No AI provider key set (ANTHROPIC_API_KEY or OPENAI_API_KEY)");
 }
