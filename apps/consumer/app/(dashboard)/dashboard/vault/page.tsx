@@ -22,6 +22,7 @@ interface Artifact {
     createdFrom?: string;
   } | null;
   content: any;
+  is_current?: boolean;
   updated_at: string;
 }
 
@@ -86,6 +87,19 @@ function toText(a: Artifact): string {
   }
 }
 
+/** Lowercased searchable text for an artifact (title, target, and body). */
+function haystack(a: Artifact): string {
+  return [
+    title(a),
+    a.target_context?.targetJob,
+    a.target_context?.targetCompany,
+    toText(a),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 /** A base resume (built in the Forge) vs a job-tailored one. */
 function isBaseResume(a: Artifact): boolean {
   return (
@@ -102,6 +116,8 @@ export default function VaultPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [pinning, setPinning] = useState<string | null>(null);
 
   function load() {
     fetch("/api/artifacts?limit=100")
@@ -111,6 +127,56 @@ export default function VaultPage() {
       .finally(() => setLoading(false));
   }
   useEffect(load, []);
+
+  // N4: pin ONE resume as "current" -- it floats to the top and is the default grab.
+  async function setCurrent(id: string, makeCurrent: boolean) {
+    setPinning(id);
+    try {
+      const res = await fetch(`/api/artifacts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setCurrent: makeCurrent }),
+      });
+      if (res.ok) {
+        // Locally mirror the "one current per user" invariant.
+        setItems((prev) =>
+          prev.map((a) =>
+            a.artifact_type === "resume"
+              ? { ...a, is_current: makeCurrent ? a.id === id : a.id === id ? false : a.is_current }
+              : a
+          )
+        );
+      }
+    } catch {} finally {
+      setPinning(null);
+    }
+  }
+
+  // N4/F10: one-click editable DOCX for resumes + cover letters, reusing the
+  // Forge DOCX generator (same file quality as the builder's export).
+  async function downloadDocx(a: Artifact) {
+    const type = a.artifact_type === "resume" ? "resume" : "cover_letter";
+    const content = a.artifact_type === "resume" ? toText(a) : a.content?.text || toText(a);
+    if (!content) return;
+    try {
+      const res = await fetch("/api/forge/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, type, format: "docx" }),
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const slug = (title(a) || "document").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "") || "document";
+      link.download = `${slug}_SteelMan.docx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("DOCX download error:", err);
+    }
+  }
 
   // Phase 6: one formatted PDF export for every artifact type (print window),
   // matching the disclosure/interview deliverables. Replaces copy + .txt.
@@ -207,106 +273,182 @@ ${body}
     setConfirmDelete(null);
   }
 
+  // One artifact card -- shared by the pinned Current Resume section and the groups.
+  function renderCard(a: Artifact) {
+    const isResume = a.artifact_type === "resume";
+    const canDocx = a.artifact_type === "resume" || a.artifact_type === "cover_letter";
+    const open = expanded === a.id;
+    return (
+      <div
+        key={a.id}
+        className={`bg-t-panel border p-4 ${a.is_current ? "border-t-amber" : "border-t-line"}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
+              {a.is_current && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-t-amber text-white">
+                  Current
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setExpanded(open ? null : a.id)}
+              className="t-focus px-3 py-1.5 text-xs font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
+            >
+              {open ? "Hide" : "View"}
+            </button>
+            {isResume && (
+              <Link
+                href={`/dashboard/application-tailor?id=${a.id}`}
+                className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright"
+              >
+                {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
+              </Link>
+            )}
+            {confirmDelete === a.id ? (
+              <>
+                <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-white hover:opacity-90">
+                  Delete
+                </button>
+                <button onClick={() => setConfirmDelete(null)} className="text-xs text-t-phos-dim hover:text-t-white">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(a.id)}
+                className="text-xs text-t-phos-dim hover:text-t-red"
+                title="Delete"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isResume && (
+          <div className="mt-2">
+            <button
+              onClick={() => setCurrent(a.id, !a.is_current)}
+              disabled={pinning === a.id}
+              className="text-xs font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-50"
+            >
+              {a.is_current ? "Unpin as current" : "Set as my current resume"}
+            </button>
+          </div>
+        )}
+
+        {open && (
+          <div className="mt-3 border-t border-t-line pt-3">
+            <p className="text-sm text-t-phos whitespace-pre-line leading-relaxed">
+              {toText(a)}
+            </p>
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button
+                onClick={() =>
+                  isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
+                }
+                className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
+              >
+                Save PDF
+              </button>
+              {canDocx && (
+                <button
+                  onClick={() => downloadDocx(a)}
+                  className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-t-phos text-xs font-bold hover:border-t-phos-dim"
+                >
+                  Download .docx
+                </button>
+              )}
+            </div>
+            {canDocx && (
+              <p className="text-xs text-t-phos-dim mt-2">
+                .docx opens in Word to edit. PDF keeps the formatting exactly.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your materials...</div>;
   }
+
+  // Search across everything; the pinned current resume is surfaced on its own.
+  const query = q.trim().toLowerCase();
+  const filtered = query ? items.filter((a) => haystack(a).includes(query)) : items;
+  const currentResume = filtered.find((a) => a.artifact_type === "resume" && a.is_current) || null;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">My Materials</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
-        unless you choose to. Save anything as a PDF, or delete it, anytime.
+        unless you choose to. Pin your current resume, save anything as a PDF or Word file, or
+        delete it, anytime.
       </p>
 
-      {items.length === 0 && (
+      {items.length === 0 ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it
           will show up here.
         </div>
-      )}
+      ) : (
+        <>
+          <div className="mb-6">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search your materials by job, company, or text"
+              className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
+            />
+          </div>
 
-      <div className="space-y-8">
-        {GROUPS.map((g) => {
-          const group = items.filter((a) => a.artifact_type === g.type);
-          if (group.length === 0) return null;
-          return (
-            <section key={g.type}>
-              <h2 className="text-sm font-semibold uppercase text-t-phos-dim mb-3">
-                {g.label} ({group.length})
+          {filtered.length === 0 && (
+            <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-10">
+              Nothing matches &ldquo;{q.trim()}&rdquo;.{" "}
+              <button onClick={() => setQ("")} className="text-t-amber-bright font-medium hover:text-t-amber">
+                Clear search
+              </button>
+            </div>
+          )}
+
+          {/* N4: the pinned current resume, surfaced first. */}
+          {currentResume && (
+            <section className="mb-8">
+              <h2 className="text-sm font-semibold uppercase text-t-amber-bright mb-3">
+                Current Resume
               </h2>
-              <div className="space-y-3">
-                {group.map((a) => {
-                  const isResume = a.artifact_type === "resume";
-                  const open = expanded === a.id;
-                  return (
-                    <div key={a.id} className="bg-t-panel border border-t-line p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
-                          <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => setExpanded(open ? null : a.id)}
-                            className="t-focus px-3 py-1.5 text-xs font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
-                          >
-                            {open ? "Hide" : "View"}
-                          </button>
-                          {isResume && (
-                            <Link
-                              href={`/dashboard/application-tailor?id=${a.id}`}
-                              className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright"
-                            >
-                              {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
-                            </Link>
-                          )}
-                          {confirmDelete === a.id ? (
-                            <>
-                              <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-white hover:opacity-90">
-                                Delete
-                              </button>
-                              <button onClick={() => setConfirmDelete(null)} className="text-xs text-t-phos-dim hover:text-t-white">
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDelete(a.id)}
-                              className="text-xs text-t-phos-dim hover:text-t-red"
-                              title="Delete"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {open && (
-                        <div className="mt-3 border-t border-t-line pt-3">
-                          <p className="text-sm text-t-phos whitespace-pre-line leading-relaxed">
-                            {toText(a)}
-                          </p>
-                          <div className="flex items-center gap-3 mt-3">
-                            <button
-                              onClick={() =>
-                                isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
-                              }
-                              className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
-                            >
-                              Save PDF
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {renderCard(currentResume)}
             </section>
-          );
-        })}
-      </div>
+          )}
+
+          <div className="space-y-8">
+            {GROUPS.map((g) => {
+              // The current resume is shown in its own section above -- don't repeat it.
+              const group = filtered.filter(
+                (a) => a.artifact_type === g.type && !(a.is_current && a === currentResume)
+              );
+              if (group.length === 0) return null;
+              return (
+                <section key={g.type}>
+                  <h2 className="text-sm font-semibold uppercase text-t-phos-dim mb-3">
+                    {g.label} ({group.length})
+                  </h2>
+                  <div className="space-y-3">{group.map((a) => renderCard(a))}</div>
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
