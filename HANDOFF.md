@@ -1,5 +1,47 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- PHASE 4 DONE: OVERHAUL PROMOTED TO PROD + GA4 folded in
+
+The full overhaul (Phases 1-4) is **LIVE ON PROD**. Merged `crucible-overhaul-wave1-2026-08-06`
+(40 commits) to `main` via merge commit `e90cb19` (`--no-ff`, easy revert). Prod deploy
+`dpl_6AsvMurLyXRMCQXLfj1rzdUpDo1E` READY on forge/refinery.steelmanresumes.com.
+
+**At-merge steps done:**
+- Ran `node scripts/seed-gr-kent-employers.mjs` -- 3 verified GR/Kent fair-chance employers
+  published to the live board (36 -> 39). Idempotent.
+- Folded in the Troy-approved (8/7) **GA4 thin acquisition layer** (commit 21b2f6b): gtag base
+  `G-0FFVQ6SQ0L` (NEXT_PUBLIC_GA_ID override) mounted in AnalyticsWrapper (inherits /mini-forge
+  exclusion); fires ONLY `forge_started` (first forge route), `forge_completed` (/output),
+  `refinery_signup` (register success). No deep product events. `lib/ga.ts` + `components/GoogleAnalytics.tsx`.
+- Cost-panel gpt-4o-mini pricing fix (commit b50b73b): `priceFor()` now matches longest key first
+  (a dated `gpt-4o-mini-*` id was billing at gpt-4o rate -> verifier over-reported ~16x; real spend
+  never affected).
+
+**Phase 4 verification:**
+- Cost probe: verifier ~$0.0006/call (gpt-4o-mini), URL-fetch = zero AI cost. grounding-verify $0.06/11 calls.
+  Whole-app 7-day spend $3.66. No cost surprise.
+- Preview UI regression (Playwright): F14 unbounded-jobs builder e2e (3rd job renders + gauge iterates), F12 focus ring, SSO.
+- **Prod smoke 9/9 GREEN**: forge health, F14 builder, F12 (#e0a94a), GA4 base (gtag live), auth,
+  F8 interview-prep redirect, F15 disclosure+interview locks ("Tailor my resume" CTA), F7 tour scoped
+  to home (NOT overlaying the job board). Screenshots in ~/pw-scratch/prod-shots/.
+
+**Auth-QA note (durable):** on PROD the session cookie domain (.steelmanresumes.com) matches the host,
+so Playwright login works natively (no cookie surgery). On PREVIEW it's domain-locked (see prior entry).
+QA user `preview-qa-p4@steelmanresumes.com` (forge-complete + phone, so needs_resume) is KEPT for the
+t.ROY wave preview verification -- DELETE at true session close.
+
+**Left untouched (not mine):** a parallel session has uncommitted work in this tree --
+`apps/consumer/lib/auth-rate-limit.ts`, `apps/consumer/app/api/auth/register/route.ts`, and an
+`apps/web/app/api/projects/[id]/upload/route.ts` object-level-authz + upload-limit security fix. My push
+contained ONLY the overhaul (verified via `git diff origin/main..HEAD`). Also two untracked root scripts
+`expo-resetpw.mjs` / `expo-setpw.mjs` left in place.
+
+**NEXT: t.ROY awareness upgrade** (Troy approved 8/7, all four) as its own wave -- deterministic
+current-block detection + one-click unblock (take_me_there), platform-changelog awareness, coach parity,
+no new DB. See the t.ROY design notes below / memory.
+
+---
+
 ## 2026-08-07 (Opus 4.8) -- Phase 3 COMPLETE (F7-F16 UI/copy) on `crucible-overhaul-wave1-2026-08-06` (PREVIEW ONLY)
 
 Wave 3 UI/copy fixes shipped: F7, F8, F9, F11, F12, F13, F14, F15, F16 (F10 was fixed by N4; F17 blocked on
