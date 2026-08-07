@@ -74,7 +74,12 @@ Foundational refactor first (fixes several findings at once), then the point fix
   true kept, source-laundering blocked), parser round-trip (contact verbatim, no garbage education),
   timeout behavior, legal sanitization (no WOTC/em-dash/eligibility), unlock linkage (no title-only unlock).
 
-## PHASE 2 -- NET-NEW BUILDS + URL TAILORING
+## PHASE 2 -- NET-NEW BUILDS + URL TAILORING  **[COMPLETE 2026-08-07 -- preview-verified]**
+All 4 items shipped on `crucible-overhaul-wave1-2026-08-06` (commits a596ff0, cb8b022, a6f6c5c, a6a3504,
+e065423, 4c4a0bd). Adversarial suite 80/80; core build + consumer tsc clean. Migrations 027/028/029 on the
+shared Neon (additive); GR/Kent seed is promote-only (`node scripts/seed-gr-kent-employers.mjs` at Phase 4).
+See HANDOFF.md top entry for the per-item verification + the `users` vs `"user"` FK footgun.
+
 - **P2.0 URL-fetch tailoring (Codex 14, Troy ratified).** Server-side fetcher pulls the posting text from
   a pasted URL (UA + timeout + size cap); on paywall/anti-bot/timeout, fall back to "paste the description"
   with honest copy. Fetched text flows through the canonical source + the truth gate. Real per-job resumes.

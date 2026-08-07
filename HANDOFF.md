@@ -47,10 +47,41 @@ Consequences I designed around:
 - **Preview-verified (authed):** loopback + cloud-metadata -> invalid_url blocked; greenhouse real JD ->
   OK 4454 chars extracted; LinkedIn -> honest "paste instead"; example.com (too short) -> honest fallback.
 
-### NEXT (this phase, remaining): N4 vault redesign -> N1 hide-employer
-See the completion plan. Then Phase 3 (F7-F16), Phase 4 (regression + promote; run the GR/Kent seed).
+### P2 ITEM 3 DONE + preview-verified: N4 vault redesign
+- **a6a3504** -- migration 027 `is_current` on refinery_artifact + partial unique index
+  (`WHERE is_current`, one current/user). Core `setCurrentResume` (clear-then-set, neon-HTTP-safe) +
+  `clearCurrentResume`. PATCH /api/artifacts/[id] accepts `{setCurrent}`. Vault: "Current Resume"
+  section on top, pin/unpin per resume, search box across all materials, one-click "Download .docx"
+  (F10) for resumes + cover letters (reuses /api/forge/download).
+- **Preview-verified (authed):** list shows `is_current`; PATCH pin -> is_current=true; re-list ->
+  exactly 1 current; DOCX endpoint -> 200 + valid "Microsoft Word 2007+" file (7969 bytes). DB probe:
+  forced double-pin rejected by the unique index.
+
+### P2 ITEM 4 DONE + preview-verified: N1 hide-employer
+- **e065423** + **4c4a0bd (FK fix)** -- migration 028 `user_hidden_employer` (+ 029 corrective FK).
+  Core `hiddenEmployers.ts` (hide/unhide/list/getSet/isHiddenEmployer, reuses `normalizeEmployerName`).
+  `/api/user/hidden-employers` GET/POST/DELETE. `/api/job-search` filters the returned jobs by the
+  user's hidden set AFTER the shared cache (fail-open). Job Board card "Hide employer" (inline confirm
+  + reason); Settings "Hidden Employers" (add + un-hide).
+- **BUG caught live + fixed:** 028 first referenced the legacy `"user"` table -> every hide 500ed on
+  the FK. Canonical table is `users` (plural, per migration 008 -- HANDOFF line ~566 warned this).
+  Fixed the 028 file + added idempotent 029 to repoint the constraint. **users(plural) vs "user"(singular)
+  is a live footgun for ALL new FKs -- always target `users`.**
+- **Preview-verified (authed):** hide POST -> key "targeted staffing"; list -> 1 w/ reason; job-search
+  filter path runs clean; un-hide DELETE -> success. (Filtering a NON-empty job list wasn't observable --
+  JSearch upstream was `provider_unavailable` all session -- but the filter is unit-tested + ran error-free.)
+
+### PHASE 2 COMPLETE (all 4 items). Adversarial suite 80/80; core build + consumer tsc clean.
+Migrations 027/028/029 applied to the SHARED Neon (additive, prod `main` ignores them). GR/Kent employer
+seed is NOT applied (promote-only). QA test user + artifacts cleaned from the DB at close.
+
+### NEXT: Phase 3 (F7-F16 UI/copy), then Phase 4 (regression + cost probe + PROMOTE).
+**At promote (Phase 4), remember to run `node scripts/seed-gr-kent-employers.mjs`** so the 3 verified
+GR/Kent employers publish to the live board with the merge.
 Authed-preview note: the `_vercel_jwt` from get_access_to_vercel_url expires ~1h -- re-mint the share
-token + re-run `/tmp/crucible-preview-auth.sh <token>` when curl starts returning "Protected deployment".
+token + re-run `/tmp/crucible-preview-auth.sh <token>` when curl returns "Protected deployment". A
+client QA user with a password_hash is the way in (password-login provider works in all envs; the prod
+session cookie is domain-locked so force-send the token value with curl -b).
 
 ## 2026-08-07 (Opus 4.8) -- NEXT SESSION START HERE: Phase 1 COMPLETE (Codex NO-GO cleared); Phase 2 next
 
