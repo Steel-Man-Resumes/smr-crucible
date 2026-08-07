@@ -1,5 +1,45 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-07 (Opus 4.8) -- WAVE 2 (F5, F6) + the three flagged follow-ups, on the same preview
+
+Same branch `crucible-overhaul-wave1-2026-08-06`, preview only. All real-runtime verified.
+
+- **F6 (career report legal accuracy) -- highest stakes, in front of MDOC.** Sol's QA: the report
+  told employers the person "may qualify" for WOTC (expired for hires after 2025-12-31, Form 8850
+  retired) and gave individualized expungement conclusions with no disclaimer. Fixes: corrected the
+  WOTC seed in `context-library.ts` (per Troy's own ai-comms PROTOCOL: WOTC dead -> Federal Bonding);
+  disciplined the `analyze` barrier/legal prompt (never assert THIS person's expungement eligibility,
+  describe protections generally + route to legal aid, no invented statutes/deadlines, WOTC barred
+  ENTIRELY -- not even to dismiss it); added the "career coaching, not legal advice" disclaimer to all
+  THREE render paths (on-screen barriers, printable Career Analysis report, text export); added the
+  `-- never em-dash / no-emoji` rule the generation prompts carry PLUS a deterministic `stripEmDashes()`
+  sweep over the whole forge output (the analyze route lacked it and was leaking em dashes into the
+  flagship report). **Verified on preview: no WOTC anywhere, no em/en dash, no individual-eligibility
+  claim, legal_note opens "General information to verify, not a determination about your case."**
+- **F5 (intake parser drops/corrupts fields).** Sol's QA: email "+qasol" tag dropped, city/state +
+  job dates dropped, garbage education rows from headers ("ADDITIONAL", "Since release in November").
+  Fixes in `api/parse`: prompt rules (verbatim contact incl. plus-tags, dates round-trip, education is
+  only real schools/credentials never a header/date fragment, keep all skills, strip justice-
+  involvement) + a deterministic email guard (if the AI email isn't literally in the source, restore
+  the verbatim one). **Verified on preview: +qasol preserved, Milwaukee/WI captured, dates kept,
+  education clean (just the GED), no justice leak.**
+- **Flag: self-disclosure input (plan s.2.3, previously deferred).** Goals page now asks "How strong
+  is your resume?" + "Anything you're worried about?" (optional), stored on the forge session and
+  passed to `generate-docs` as a mode directive (scaffold thin vs sharpen strong; gap/tenure/thin-
+  experience sensitivity) -- biases HOW, never licenses invention. **Verified: thin/none persona
+  builds sparse-but-true with zero invented specifics, verifier applied.**
+- **Flag: Tailor structured-bullet truth gate.** New `verifyResumeBullets()` grounds-or-drops EACH
+  tailored resume experience bullet against the person's own background (was only cover+summary).
+  Guards the literal "null"/"none" a model returns for a dropped bullet. Fail-open per bullet.
+  **Verified on gpt-4o-mini: three Sol-style fabricated bullets dropped, the one true bullet kept.**
+
+Verifier cost now spans grounding-verify:{resume,cover_letter,summary,bullets} -- all metered via
+recordTokenUsage -> admin AI-costs panel; measure in the cost trial before promote.
+
+**Wave 1+2 status: F1-F6 + N-flags all built on the preview, all real-runtime verified. NOT promoted
+to prod -- Troy's final pass, then Codex+Fable, then promote. Wave 3 (F7-F17 UI/copy) + N1 (hide-
+employer) + N4 (vault redesign) + fair-chance employer wire/seed remain.**
+
 ## 2026-08-06 (Opus 4.8) -- Pre-conference overhaul WAVE 1 (F1-F4) on branch + preview
 
 Executed Wave 1 of `~/todash/smr/SMR-CRUCIBLE-OVERHAUL-PLAN-2026-08-06.md`. Branch
