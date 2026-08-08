@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRealTier, canSwitchView, getViewAs, setViewAs } from "@/lib/useUserTier";
+import { useOrgRole } from "@/components/RoleProvider";
 
 /**
  * Persistent acting-as indicator (walkthrough C7 P0: when operating as another
@@ -12,6 +13,7 @@ import { useRealTier, canSwitchView, getViewAs, setViewAs } from "@/lib/useUserT
  */
 export function AdminTestModeBanner() {
   const realTier = useRealTier();
+  const { orgRole, orgName } = useOrgRole();
   const [view, setView] = useState<"client" | "observer" | null>(null);
 
   useEffect(() => {
@@ -22,6 +24,32 @@ export function AdminTestModeBanner() {
   }, []);
 
   if (!canSwitchView(realTier) || !view) return null;
+
+  // Model A: for an org leader in client view, this isn't a "preview" -- it's
+  // their own private job-search workspace. Frame it that way, and offer a clear
+  // switch back to running the org.
+  const isOrgLeader = realTier === "partner" && !!orgRole && view === "client";
+  const org = orgName || "your organization";
+
+  if (isOrgLeader) {
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "#2d5a85" }}>
+        <span>
+          You&apos;re in your personal job search -- private from your team.
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setViewAs(null);
+            window.location.href = "/dashboard";
+          }}
+          className="t-focus bg-[#14100a] px-3 py-1 text-xs font-semibold text-t-amber-bright hover:bg-black"
+        >
+          Back to {org} admin
+        </button>
+      </div>
+    );
+  }
 
   const roleLabel = realTier === "admin" ? "admin" : "partner";
   const viewLabel = view === "observer" ? "an observer" : "a client";

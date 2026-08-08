@@ -185,6 +185,7 @@ function shouldShowItem(item: NavItem, userTier: UserTier): boolean {
  */
 function ViewAsToggle() {
   const realTier = useRealTier();
+  const effectiveRole = useEffectiveRole();
   const [asClient, setAsClient] = useState(false);
 
   useEffect(() => {
@@ -195,27 +196,38 @@ function ViewAsToggle() {
   if (realTier !== "partner") return null;
 
   function toggle() {
-    if (asClient) {
-      setViewAs(null);
-    } else {
-      setViewAs("client");
-    }
+    setViewAs(asClient ? null : "client");
     window.location.href = "/dashboard";
   }
 
-  const roleLabel = "Partner";
+  // Model A workspace switch: an org leader has two real spaces under one login
+  // -- running the org, and their OWN private job search. A non-org partner just
+  // gets the client-experience preview.
+  const orgRole = effectiveRole?.orgRole ?? null;
+  const orgName = effectiveRole?.orgName || "your organization";
+  const isOrg = !!orgRole;
+  const label = isOrg
+    ? asClient
+      ? `${orgName} admin`
+      : "My job search"
+    : asClient
+      ? "Partner view"
+      : "Client view";
+  const title = isOrg
+    ? asClient
+      ? `Switch back to running ${orgName}`
+      : "Switch to your own private job search -- your team can't see it"
+    : asClient
+      ? "Return to your partner view"
+      : "Experience the platform exactly as a client";
 
   return (
     <button
       onClick={toggle}
-      title={
-        asClient
-          ? `Return to your ${roleLabel.toLowerCase()} view`
-          : "Experience the platform exactly as a client"
-      }
+      title={title}
       className="t-focus hidden sm:inline-flex min-h-touch items-center gap-1.5 rounded-[4px] border border-t-line px-2.5 text-xs font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"
     >
-      {asClient ? `${roleLabel} view` : "Client view"}
+      {label}
     </button>
   );
 }
@@ -483,8 +495,8 @@ export function RefineryShell({
           })}
         </div>
 
-        {/* Client tools relocated here: the participant experience is a preview,
-            not the org leader's home. */}
+        {/* Model A second workspace: the org leader's OWN private job search,
+            same login, separate space -- not their org-admin home. */}
         <div className="mt-2 border-t border-t-line pt-3">
           <button
             onClick={() => {
@@ -493,10 +505,10 @@ export function RefineryShell({
             }}
             className="t-focus flex min-h-[40px] w-full items-center rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-left text-sm font-medium text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
           >
-            Client view
+            My job search
           </button>
           <p className="mt-1 px-3 text-[10px] text-t-bone-dim">
-            See exactly what your clients see.
+            Your own private resume space -- your team can&apos;t see it.
           </p>
         </div>
 
