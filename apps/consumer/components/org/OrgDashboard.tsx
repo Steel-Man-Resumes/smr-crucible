@@ -533,7 +533,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
                       : " -- unlimited seats"}
                   </span>
                   <a
-                    href={`mailto:troy@steelmanresumes.com?subject=${encodeURIComponent(
+                    href={`mailto:hmu@themidnightgarden.club?subject=${encodeURIComponent(
                       `More seats for ${data?.org.name || "our org"} (${data?.org.code || ""})`
                     )}`}
                     className="t-focus text-t-amber-bright hover:text-t-amber"
