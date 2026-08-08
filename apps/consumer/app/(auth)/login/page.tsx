@@ -47,6 +47,9 @@ function LoginForm() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  // Two-step sign-in: after password, show a 2FA code field when required.
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [totp, setTotp] = useState("");
 
   // Pre-fill partner code from URL
   useEffect(() => {
@@ -116,11 +119,42 @@ function LoginForm() {
     setError(""); setSending(true); storeCode();
 
     try {
+      // Step 1 (password only): verify creds + learn if a 2FA code is needed.
+      // Fail-open: if precheck is unavailable, fall through to sign-in (which
+      // still enforces 2FA on its own) rather than blocking a valid login.
+      if (!twoFactorStep) {
+        const pre = await fetch("/api/auth/password-precheck", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim(), password }),
+        })
+          .then((r) => r.json())
+          .catch(() => null);
+        if (pre && pre.ok === false) {
+          setError("Invalid email or password.");
+          setSending(false);
+          return;
+        }
+        if (pre && pre.twoFactorRequired) {
+          setTwoFactorStep(true);
+          setSending(false);
+          return;
+        }
+      }
+
       const result = await signIn("password-login", {
-        email: email.trim(), password, callbackUrl, redirect: false,
+        email: email.trim(),
+        password,
+        totp: twoFactorStep ? totp.trim() : undefined,
+        callbackUrl,
+        redirect: false,
       });
       if (result?.error) {
-        setError("Invalid email or password.");
+        setError(
+          twoFactorStep
+            ? "That code didn't match. Try again, or use a backup code."
+            : "Invalid email or password."
+        );
         setSending(false);
       } else if (result?.url) {
         window.location.href = result.url;
@@ -253,6 +287,7 @@ function LoginForm() {
 
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
+    || (twoFactorStep && !totp.trim())
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim()));
 
   return (
@@ -384,6 +419,30 @@ function LoginForm() {
             </div>
           )}
 
+          {/* Two-factor code — sign-in, second step */}
+          {mode !== "magic-link" && twoFactorStep && (
+            <div>
+              <label htmlFor="totp" className="block text-sm font-medium text-t-white mb-1">
+                Authentication code
+              </label>
+              <input
+                id="totp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={totp}
+                onChange={(e) => setTotp(e.target.value.replace(/[^0-9a-zA-Z-]/g, ""))}
+                placeholder="6-digit code (or a backup code)"
+                autoFocus
+                className="w-full px-4 py-3 border border-t-amber text-sm bg-t-panel text-t-white tracking-widest focus:border-t-amber-bright focus:outline-none transition-colors min-h-touch"
+                disabled={sending}
+              />
+              <p className="text-[11px] text-t-phos-dim mt-1">
+                Open your authenticator app for the current code -- or use a backup code.
+              </p>
+            </div>
+          )}
+
           {/* Confirm password — create mode only */}
           {mode === "create" && (
             <div>
@@ -477,7 +536,9 @@ function LoginForm() {
                 ? "Create account"
                 : mode === "magic-link"
                   ? "Send magic link"
-                  : "Sign in"}
+                  : twoFactorStep
+                    ? "Verify code"
+                    : "Sign in"}
           </TBtn>
         </form>
 

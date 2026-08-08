@@ -617,6 +617,7 @@ function SecuritySection() {
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [needsCurrent, setNeedsCurrent] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   function refresh() {
     return fetch("/api/user/security-status")
@@ -625,6 +626,7 @@ function SecuritySection() {
         if (d) {
           setHasPassword(!!d.hasPassword);
           setUpdatedAt(d.passwordUpdatedAt);
+          setTwoFactorEnabled(!!d.twoFactorEnabled);
         }
       })
       .catch(() => {});
@@ -774,7 +776,229 @@ function SecuritySection() {
           </TBtn>
         </form>
       </div>
+
+      <TwoFactorCard enabled={twoFactorEnabled} refresh={refresh} />
     </section>
+  );
+}
+
+function TwoFactorCard({
+  enabled,
+  refresh,
+}: {
+  enabled: boolean;
+  refresh: () => Promise<void> | void;
+}) {
+  const [mode, setMode] = useState<"idle" | "setup" | "backup">("idle");
+  const [qr, setQr] = useState("");
+  const [secret, setSecret] = useState("");
+  const [code, setCode] = useState("");
+  const [backup, setBackup] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [showDisable, setShowDisable] = useState(false);
+  const [disableToken, setDisableToken] = useState("");
+
+  async function startSetup() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/user/2fa/setup", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setQr(d.qr);
+        setSecret(d.secret);
+        setMode("setup");
+      } else {
+        setErr(d.error || "Could not start setup.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmEnable() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/user/2fa/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: code.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setBackup(d.backupCodes || []);
+        setCode("");
+        setMode("backup");
+        await refresh();
+      } else {
+        setErr(d.error || "That code didn't match.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/user/2fa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: disableToken.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setShowDisable(false);
+        setDisableToken("");
+        await refresh();
+      } else {
+        setErr(d.error || "Could not turn it off.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function copyBackup() {
+    try {
+      navigator.clipboard.writeText(backup.join("\n"));
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="bg-t-panel p-5 border border-t-line mt-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-t-white">Two-step verification</h3>
+          <p className="text-sm text-t-phos-dim mt-0.5">
+            {enabled
+              ? "On. You'll enter a code from your authenticator app when you sign in."
+              : "Add a second step at sign-in with an authenticator app (Google Authenticator, Authy, 1Password)."}
+          </p>
+        </div>
+        <span
+          className={`flex-shrink-0 text-[11px] px-2 py-0.5 border ${
+            enabled ? "border-t-phos text-t-phos" : "border-t-line text-t-phos-dim"
+          }`}
+        >
+          {enabled ? "On" : "Off"}
+        </span>
+      </div>
+
+      {err && <p className="text-sm text-t-red mt-3">{err}</p>}
+
+      {/* Off, idle -> offer to turn on */}
+      {!enabled && mode === "idle" && (
+        <div className="mt-4">
+          <TBtn onClick={startSetup} disabled={busy}>
+            {busy ? "starting..." : "turn on two-step"}
+          </TBtn>
+        </div>
+      )}
+
+      {/* Setup: scan QR + confirm a code */}
+      {!enabled && mode === "setup" && (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-t-phos-dim">
+            1. Scan this with your authenticator app.
+          </p>
+          {qr && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qr} alt="Two-factor QR code" className="border border-t-line bg-white p-2" width={200} height={200} />
+          )}
+          <p className="text-xs text-t-phos-dim">
+            Can&apos;t scan? Enter this key manually:
+            <span className="block mt-1 font-mono text-t-white break-all">{secret}</span>
+          </p>
+          <p className="text-sm text-t-phos-dim">2. Enter the 6-digit code it shows.</p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="000000"
+              className="px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white tracking-widest focus:border-t-amber focus:outline-none min-h-touch w-40"
+            />
+            <TBtn onClick={confirmEnable} disabled={busy || code.length < 6}>
+              {busy ? "verifying..." : "verify & turn on"}
+            </TBtn>
+            <button
+              type="button"
+              onClick={() => { setMode("idle"); setErr(""); }}
+              className="text-sm text-t-phos-dim hover:text-t-white px-3"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Backup codes shown once */}
+      {mode === "backup" && (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-t-phos">
+            Two-step is on. Save these backup codes somewhere safe -- each works once if you
+            ever lose your phone. You won&apos;t see them again.
+          </p>
+          <div className="grid grid-cols-2 gap-2 bg-t-panel-2 border border-t-line p-3 font-mono text-sm text-t-white">
+            {backup.map((c) => (
+              <span key={c}>{c}</span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <TBtn onClick={copyBackup}>copy codes</TBtn>
+            <button
+              type="button"
+              onClick={() => setMode("idle")}
+              className="text-sm text-t-phos-dim hover:text-t-white px-3"
+            >
+              I saved them
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* On -> allow turning off (re-auth required) */}
+      {enabled && (
+        <div className="mt-4">
+          {!showDisable ? (
+            <button
+              type="button"
+              onClick={() => { setShowDisable(true); setErr(""); }}
+              className="text-sm text-t-phos-dim hover:text-t-amber-bright underline"
+            >
+              Turn off two-step verification
+            </button>
+          ) : (
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                type="text"
+                value={disableToken}
+                onChange={(e) => setDisableToken(e.target.value)}
+                placeholder="Current code or a backup code"
+                className="px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch flex-1 min-w-[220px]"
+              />
+              <TBtn onClick={disable} disabled={busy || !disableToken.trim()}>
+                {busy ? "..." : "confirm turn off"}
+              </TBtn>
+              <button
+                type="button"
+                onClick={() => { setShowDisable(false); setDisableToken(""); setErr(""); }}
+                className="text-sm text-t-phos-dim hover:text-t-white px-3"
+              >
+                cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

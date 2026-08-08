@@ -47,6 +47,7 @@ const providers: any[] = [
     credentials: {
       email: { label: "Email", type: "email" },
       password: { label: "Password", type: "password" },
+      totp: { label: "Code", type: "text" },
     },
     async authorize(credentials) {
       if (!credentials?.email || !credentials?.password) return null;
@@ -56,7 +57,7 @@ const providers: any[] = [
       const client = await pool.connect();
       try {
         const result = await client.query(
-          `SELECT id, name, email, image, tier, password_hash FROM users WHERE email = $1`,
+          `SELECT id, name, email, image, tier, password_hash, two_factor_enabled FROM users WHERE email = $1`,
           [email]
         );
         if (result.rows.length === 0) return null;
@@ -66,6 +67,40 @@ const providers: any[] = [
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return null;
+
+        // Second factor: if enabled, a valid TOTP code (or a one-time backup
+        // code) is required. This is the real gate -- the login form's precheck
+        // is only UX. Backup codes are consumed on use.
+        if (user.two_factor_enabled) {
+          const totp = String((credentials as any)?.totp || "").replace(/\s/g, "");
+          if (!totp) return null;
+          const tf = await client.query(
+            `SELECT secret, backup_codes FROM user_two_factor WHERE user_id = $1`,
+            [user.id]
+          );
+          const row = tf.rows[0];
+          let ok = false;
+          if (row?.secret) {
+            const { verifyToken } = await import("@/lib/two-factor");
+            ok = verifyToken(totp, row.secret);
+            if (!ok && Array.isArray(row.backup_codes)) {
+              for (let i = 0; i < row.backup_codes.length; i++) {
+                if (await bcrypt.compare(totp, row.backup_codes[i])) {
+                  ok = true;
+                  const remaining = (row.backup_codes as string[]).filter(
+                    (_, j) => j !== i
+                  );
+                  await client.query(
+                    `UPDATE user_two_factor SET backup_codes = $2::jsonb WHERE user_id = $1`,
+                    [user.id, JSON.stringify(remaining)]
+                  );
+                  break;
+                }
+              }
+            }
+          }
+          if (!ok) return null;
+        }
 
         return {
           id: user.id,
