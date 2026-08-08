@@ -1,5 +1,22 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-08 -- Steel Man's OWN Twilio account is intentionally dormant, not a pending task
+
+A todash session chasing down why SMR texting didn't work found Steel Man's
+standalone Twilio account (`AC980530...` -- the one this
+repo's `.env.local` `TWILIO_*` vars point at) has a REJECTED Trust Hub compliance
+profile (email-domain mismatch; `steelmanresumes.com` had zero MX records at the
+time) and has never had a number or A2P campaign. Decision: leave it dormant, don't
+pursue fixing it. Real SMS (W6 -- reminders/follow-ups/partner alerts) would route
+through TMG's already-working Twilio line instead if/when W6 gets built, not through
+registering this account separately. `packages/core/src/systemHealth.ts`'s health
+panel will keep showing Twilio as "Keys set; messaging service pending (A2P)"
+indefinitely -- that's expected now, not a bug or an open task, until someone
+explicitly reopens this. This repo's `.env.local` `TWILIO_AUTH_TOKEN` value is also
+stale/wrong (confirmed via a live 401) -- don't trust it if W6 ever gets picked back
+up, pull a fresh token from the Twilio console first. No code changed. Full record:
+todash memory `project-twilio-consolidation-decision-2026-08-08.md`.
+
 ## 2026-08-07 (Opus 4.8) -- PHASE 4 DONE: OVERHAUL PROMOTED TO PROD + GA4 folded in
 
 The full overhaul (Phases 1-4) is **LIVE ON PROD**. Merged `crucible-overhaul-wave1-2026-08-06`
