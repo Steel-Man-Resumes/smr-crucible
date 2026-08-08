@@ -228,6 +228,8 @@ export interface OrgContext {
   code: string;
   orgName: string;
   logoUrl: string | null;
+  /** Seat cap (access_code.max_redemptions); null = unlimited. */
+  seatLimit: number | null;
   /** Caller's role within the org. */
   role: "owner" | "org_admin" | "staff";
   userId: string;
@@ -243,8 +245,8 @@ export async function getOrgContext(
   opts: { isAdmin?: boolean; overrideCodeId?: string } = {}
 ): Promise<OrgContext | null> {
   if (opts.isAdmin && opts.overrideCodeId) {
-    const row = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null }>(
-      `SELECT id, code, partner_name, org_logo_url FROM access_code WHERE id = $1`,
+    const row = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null; max_redemptions: number | null }>(
+      `SELECT id, code, partner_name, org_logo_url, max_redemptions FROM access_code WHERE id = $1`,
       [opts.overrideCodeId]
     );
     if (!row) return null;
@@ -253,14 +255,15 @@ export async function getOrgContext(
       code: row.code,
       orgName: row.partner_name,
       logoUrl: row.org_logo_url,
+      seatLimit: row.max_redemptions,
       role: "owner",
       userId,
     };
   }
 
   // Code owner wins
-  const owned = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null }>(
-    `SELECT id, code, partner_name, org_logo_url FROM access_code
+  const owned = await getOne<{ id: string; code: string; partner_name: string; org_logo_url: string | null; max_redemptions: number | null }>(
+    `SELECT id, code, partner_name, org_logo_url, max_redemptions FROM access_code
       WHERE partner_user_id = $1 AND is_active = true
       ORDER BY created_at ASC LIMIT 1`,
     [userId]
@@ -271,6 +274,7 @@ export async function getOrgContext(
       code: owned.code,
       orgName: owned.partner_name,
       logoUrl: owned.org_logo_url,
+      seatLimit: owned.max_redemptions,
       role: "owner",
       userId,
     };
@@ -282,8 +286,9 @@ export async function getOrgContext(
     code: string;
     partner_name: string;
     org_logo_url: string | null;
+    max_redemptions: number | null;
   }>(
-    `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url
+    `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url, ac.max_redemptions
        FROM org_staff os
        JOIN access_code ac ON ac.id = os.access_code_id
       WHERE os.user_id = $1
@@ -296,6 +301,7 @@ export async function getOrgContext(
     code: staff.code,
     orgName: staff.partner_name,
     logoUrl: staff.org_logo_url,
+    seatLimit: staff.max_redemptions,
     role: staff.role === "org_admin" ? "org_admin" : "staff",
     userId,
   };

@@ -91,6 +91,8 @@ export async function GET(request: Request) {
         code: org.code,
         logoUrl: org.logoUrl,
         role: org.role,
+        // Seat cap is org-admin/owner information (null = unlimited).
+        seatLimit: isOrgAdmin ? org.seatLimit : null,
       },
       staff,
       cohort: { ...cohort, clients },
