@@ -358,6 +358,14 @@ export function RefineryShell({
     }
   }, [authStatus, sessionData?.user?.id]);
 
+  // New-device sign-in alert (fingerprints this device server-side; emails the
+  // user if it's a new device on their account). Fire-and-forget, once.
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      fetch("/api/auth/signin-alert", { method: "POST" }).catch(() => {});
+    }
+  }, [authStatus]);
+
   // Role-aware nav framing (role-clear wave): the first item names the
   // landing the user actually gets, and org leaders see the client toolset
   // labeled as what it is -- the tools their clients use.

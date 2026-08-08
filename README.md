@@ -48,6 +48,14 @@ Stack: Next.js 14, Neon Postgres, Auth.js (NextAuth) with a Postgres adapter,
 Cloudflare R2 for files, Anthropic (primary) with OpenAI fallback for AI, Resend for
 email. Every high-risk system is behind a feature flag.
 
+## Product world map
+
+The human-facing canonical map of the public Site, The Forge, and The Refinery is
+[`docs/SMR-WORLD-MAP.html`](./docs/SMR-WORLD-MAP.html). It is a standalone,
+interactive file: open it directly in a browser; no application build is required.
+See [`docs/SMR-WORLD-MAP.md`](./docs/SMR-WORLD-MAP.md) for provenance and the
+maintenance rule.
+
 ## Local development
 
 ```bash

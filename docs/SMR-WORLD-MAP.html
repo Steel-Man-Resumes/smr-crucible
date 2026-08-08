@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steel Man Resumes — World Map</title>
+<style>
+:root{--black:#10110f;--charcoal:#1c1e1b;--anvil:#30332e;--bg:#eaede9;--panel:#fff;--panel2:#f5f6f4;--line:#d3d8d1;--line2:#aeb5ad;--text:#1c1e1b;--muted:#5f665f;--bone:#ece7d9;--gold:#d4a84b;--gold2:#9b6d1d;--green:#4f6b57;--green2:#3d5745;--red:#ad2318;--blue:#2d5a85;--shadow:0 8px 24px rgba(22,26,21,.08);--mono:"IBM Plex Mono","Cascadia Mono",Consolas,monospace;--sans:"IBM Plex Sans Variable","IBM Plex Sans","Segoe UI",Arial,sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #e0a94a;outline-offset:3px}h1,h2,h3,p{margin:0}.shell{max-width:1440px;margin:auto;padding:0 28px}
+.mast{background:var(--black);color:var(--bone);border-bottom:1px solid #30332e}.mastin{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;align-items:center;gap:12px}.brand svg{width:44px;height:44px}.brandname{font-weight:700;font-size:17px;letter-spacing:.01em}.brandname span{display:block;color:#aeb5ad;font:700 9px var(--mono);text-transform:uppercase;letter-spacing:.15em;margin-top:2px}.snapshot{color:#aeb5ad;font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.1em;text-align:right}
+.hero{background:#fff;border-bottom:1px solid var(--line)}.heroin{padding:54px 28px 42px}.eyebrow{font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.16em;color:var(--gold2)}h1{font-size:clamp(38px,6vw,72px);line-height:.96;letter-spacing:-.045em;font-weight:650;max-width:900px;margin-top:13px}.lead{max-width:790px;margin-top:19px;color:var(--muted);font-size:18px}.promise{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:25px;color:var(--muted);font-size:12px;font-weight:600}.promise span{display:flex;align-items:center;gap:8px}.promise i{width:8px;height:8px;background:var(--gold2);display:inline-block}.promise span:nth-child(2) i{background:var(--green)}.promise span:nth-child(3) i{background:var(--blue)}
+.workspace{padding:28px 0 64px}.toolbar{position:sticky;top:0;z-index:10;background:rgba(234,237,233,.96);backdrop-filter:blur(10px);border-block:1px solid var(--line);padding:14px 0;margin-bottom:25px}.toolin{display:grid;grid-template-columns:auto minmax(220px,430px) auto;align-items:center;gap:16px}.tabs{display:flex;gap:7px}.tab{min-height:44px;border:1px solid var(--line2);background:var(--panel);color:var(--muted);padding:0 15px;border-radius:5px;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.05em}.tab[aria-selected="true"]{background:var(--black);border-color:var(--black);color:#fff}.tab .tabno{color:var(--gold);margin-right:6px}.search{position:relative}.search:before{content:'$';position:absolute;left:14px;top:11px;color:var(--gold2);font:700 15px var(--mono)}.search input{width:100%;min-height:44px;border:1px solid #3b4039;border-radius:5px;background:#10110f;color:#a7cf98;padding:9px 38px 9px 34px;font:500 14px var(--mono);caret-color:#d7b86e}.search input::placeholder{color:#718c69}.clear{position:absolute;right:8px;top:7px;border:0;background:transparent;color:#8d9a89;width:30px;height:30px}.globalhint{text-align:right;color:var(--muted);font:700 9px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.panel{display:none}.panel.active{display:block}.sectiontop{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:26px;align-items:end;margin-bottom:22px}.sectiontop h2{font-size:38px;line-height:1.03;letter-spacing:-.035em;margin-top:8px}.sectiontop p{color:var(--muted);max-width:720px;margin-top:11px}.facts{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);background:var(--panel)}.fact{padding:14px;border-right:1px solid var(--line)}.fact:last-child{border:0}.fact b{display:block;font-size:18px}.fact span{color:var(--muted);font:700 9px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.journey{background:var(--black);color:#fff;border-radius:7px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:18px}.journeyhead{display:flex;justify-content:space-between;gap:20px;padding:16px 20px;border-bottom:1px solid #343833}.journeyhead b{font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.11em;color:var(--gold)}.journeyhead span{font-size:11px;color:#aeb5ad}.track{display:flex;overflow-x:auto;padding:14px 16px 17px}.stop{display:flex;align-items:center;min-width:max-content}.stopbox{width:130px}.stopbox b{display:block;font-size:12px}.stopbox span{display:block;color:#aeb5ad;font-size:10px;margin-top:3px;line-height:1.3}.arrow{color:var(--gold);font:700 18px var(--mono);padding:0 10px}
+.mapcard{background:var(--panel);border:1px solid var(--line);border-radius:7px;box-shadow:var(--shadow);overflow:hidden}.maphead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:13px;padding:18px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}.rootline{display:flex;align-items:center;gap:12px}.rooticon{width:32px;height:32px;background:var(--black);color:var(--gold);display:grid;place-items:center;font:700 14px var(--mono);border-radius:4px}.rootline h3{font-size:18px}.rootline p{color:var(--muted);font-size:11px}.controls{display:flex;flex-wrap:wrap;gap:7px}.ctl{min-height:36px;border:1px solid var(--line2);background:#fff;color:var(--text);border-radius:4px;padding:0 11px;font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.04em}.ctl:hover{border-color:var(--gold2);color:var(--gold2)}
+.tree{padding:14px 18px 20px}.treeitem{position:relative;margin-left:22px;padding-left:22px}.treeitem:before{content:'';position:absolute;left:0;top:-10px;bottom:-10px;border-left:1px solid var(--line)}.treeitem:last-child:before{bottom:27px}.treeitem:after{content:'';position:absolute;left:0;top:26px;width:17px;border-top:1px solid var(--line)}.tree>.treeitem{margin-left:0}.tree>.treeitem:before{top:26px}.children{padding-top:6px}.node{margin:6px 0;border:1px solid var(--line);border-left:4px solid var(--accent,var(--gold2));border-radius:5px;background:#fff;transition:border-color .15s,background .15s}.node:hover{border-color:var(--line2);border-left-color:var(--accent,var(--gold2))}.folder>summary{list-style:none;display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:9px;align-items:start;padding:13px 14px;cursor:pointer}.folder>summary::-webkit-details-marker{display:none}.chev{width:22px;height:22px;border:1px solid var(--line2);display:grid;place-items:center;border-radius:3px;color:var(--accent,var(--gold2));font:700 15px/1 var(--mono);transition:transform .15s}.folder[open]>summary .chev{transform:rotate(90deg);background:var(--panel2)}.nodetitle{font-weight:700;font-size:14px;line-height:1.25}.meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}.path{font:600 10px var(--mono);color:var(--accent,var(--gold2));word-break:break-word}.desc{font-size:11px;color:var(--muted);line-height:1.4;margin-top:4px}.count{align-self:center;color:var(--muted);font:700 9px var(--mono);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.leaf{display:grid;grid-template-columns:24px minmax(0,1fr);gap:9px;align-items:start;padding:12px 14px}.docicon{width:20px;height:23px;border:1px solid var(--line2);border-radius:2px;position:relative;background:var(--panel2)}.docicon:after{content:'';position:absolute;left:4px;right:4px;top:6px;height:1px;background:var(--accent,var(--gold2));box-shadow:0 4px 0 var(--line2),0 8px 0 var(--line2)}.badge{display:inline-flex;align-items:center;min-height:18px;padding:1px 6px;border:1px solid var(--line);border-radius:99px;color:var(--muted);font:700 8px var(--mono);text-transform:uppercase;letter-spacing:.05em}.badge.page{color:#624a16;background:#fbf2de;border-color:#e9d19c}.badge.step{color:#315a39;background:#e8f3ea;border-color:#c3dcc8}.badge.decision{color:#8b2b21;background:#fae9e7;border-color:#edc8c3}.badge.output{color:#294f73;background:#e9f0f7;border-color:#c4d6e7}.badge.protected{color:#4b5559;background:#edf0ef;border-color:#d4d9d7}.badge.audience{color:#674a16;background:#f8efdd;border-color:#e8d19e}.badge.system{color:#53555e;background:#efeff2;border-color:#d6d6dc}.level-2>.node{background:#fcfcfa}.level-3>.node{background:#f8f9f7}.level-4>.node{background:#f3f5f2}.level-5>.node{background:#eef1ed}.empty{padding:48px 20px;text-align:center;color:var(--muted)}.searchhide{display:none!important}.match>.node{box-shadow:0 0 0 2px #e0a94a}.legend{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}.legend .badge{background:#fff}.canon{margin-top:18px;border:1px solid var(--line);border-left:4px solid var(--gold2);background:var(--panel2);padding:14px 16px;border-radius:5px}.canon b{font-size:12px}.canon p{color:var(--muted);font-size:11px;margin-top:4px}
+.footer{background:var(--black);color:#aeb5ad;border-top:1px solid #30332e}.footerin{min-height:84px;display:flex;align-items:center;justify-content:space-between;gap:20px;font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.08em}.footer b{color:var(--bone)}
+@media(max-width:900px){.toolin{grid-template-columns:1fr}.tabs{overflow-x:auto}.tab{flex:1}.globalhint{display:none}.sectiontop{grid-template-columns:1fr}.facts{max-width:520px}.snapshot{display:none}.tree{padding-left:8px;padding-right:8px}.treeitem{margin-left:10px;padding-left:15px}.treeitem:after{width:11px}.folder>summary{grid-template-columns:24px minmax(0,1fr)}.count{display:none}}
+@media(max-width:560px){.shell{padding-inline:16px}.heroin{padding-inline:16px}.facts{grid-template-columns:1fr}.fact{border-right:0;border-bottom:1px solid var(--line)}.tabs .tabno{display:none}.tab{padding-inline:10px}.promise{display:block}.promise span{margin-top:7px}.maphead{display:block}.controls{margin-top:12px}.sectiontop h2{font-size:31px}.footerin{align-items:flex-start;flex-direction:column;padding-block:22px}}
+@media print{.toolbar,.controls{display:none}.panel{display:block!important;page-break-before:always}.panel:first-of-type{page-break-before:auto}.node{break-inside:avoid}.folder>summary{break-after:avoid}.mastin{min-height:58px}.hero{display:none}.workspace{padding-top:15px}.sectiontop{margin-top:20px}}
+</style>
+</head>
+<body>
+<header class="mast"><div class="shell mastin"><div class="brand"><svg viewBox="0 0 80 52" role="img" aria-label="Steel Man bell curve mark"><path d="M3 44h74M5 44c11 0 13-31 31-31 16 0 17 31 39 31" fill="none" stroke="#d4a84b" stroke-width="3"/><circle cx="19" cy="29" r="4" fill="#ece7d9"/><path d="M19 34l-5 10m5-10 7 10m-7-8 9-7" stroke="#ece7d9" stroke-width="3" stroke-linecap="round"/></svg><div class="brandname">Steel Man Resumes<span>World map / product topology</span></div></div><div class="snapshot">Canonical product view<br>Snapshot · August 8, 2026</div></div></header>
+<section class="hero"><div class="shell heroin"><div class="eyebrow">Truth. Told Strong. · the whole system</div><h1>One map for the entire<br>Steel Man journey.</h1><p class="lead">The public Site explains the world. The Forge discovers the person’s material. The Refinery turns it into a repeatable job search. Open any folder to see the real pages, decisions, tools, and outputs inside.</p><div class="promise"><span><i></i>Only folders have arrows</span><span><i></i>Pages and outcomes are non-clicking leaves</span><span><i></i>Descriptions are written for a first-time visitor</span></div></div></section>
+<div class="toolbar"><div class="shell toolin"><nav class="tabs" aria-label="Map sections"><button class="tab" data-tab="site" aria-selected="true"><span class="tabno">01</span>The Site</button><button class="tab" data-tab="forge" aria-selected="false"><span class="tabno">02</span>The Forge</button><button class="tab" data-tab="refinery" aria-selected="false"><span class="tabno">03</span>The Refinery</button></nav><label class="search"><input id="search" type="search" placeholder="find a page, tool, or idea" aria-label="Search this map"><button class="clear" id="clearSearch" aria-label="Clear search">×</button></label><div class="globalhint">Click a folder row to open it</div></div></div>
+<main class="shell workspace"><div id="panels"></div></main>
+<footer class="footer"><div class="shell footerin"><b>Steel Man Resumes · Truth. Told Strong.</b><span>Human-facing product map · maintained from live routes</span></div></footer>
+<script>
+const N=(title,path,desc,kind='page',children=[],extra={})=>({title,path,desc,kind,children,...extra});
+const site=[
+N('Public entrance','steelmanresumes.com','The pages that explain the mission and help a visitor choose a next step.','folder',[
+ N('Home','/','The shortest explanation of Steel Man Resumes and the main starting point.','folder',[
+  N('Core promise','','Stronger, honest career stories for justice-impacted job seekers.','feature'),
+  N('Start with the Forge','forge.steelmanresumes.com','Primary action for someone rebuilding a career.','step'),
+  N('How the system works','/how-it-works','A plain-language bridge from the public story into both products.','step'),
+  N('Three audience doors','','Career rebuilder, workforce partner, or someone coming home with a Mini Forge code.','decision'),
+  N('Evidence preview','/success','Research, verified voices, and measured outcomes.','feature'),
+  N('Returning user','refinery.steelmanresumes.com/dashboard','Direct route back to saved work.','step')
+ ],{main:true}),
+ N('How the system works','/how-it-works','A two-stage explanation of the person’s full path.','folder',[
+  N('Stage 1 · The Forge','forge.steelmanresumes.com','Tell the story, surface strengths, understand barriers, and build a base resume.','step'),
+  N('Stage 2 · The Refinery','refinery.steelmanresumes.com','Aim the story at real jobs, practice hard conversations, and keep returning.','step'),
+  N('Guided walkthrough','forge.steelmanresumes.com/walkthrough','A no-login visual tour of the complete experience.','page')
+ ],{main:true}),
+ N('Frequently asked questions','/faq','Plain answers about access, records, gaps, privacy, pricing, and how the tools work.','folder',[
+  N('Using the products','','What the Forge and Refinery do, who they are for, and where to begin.','feature'),
+  N('Resumes and employment gaps','','How the system handles incomplete, complex, or nontraditional work histories.','feature'),
+  N('Records and disclosure','','What the tools can help plan—and what remains legal advice.','feature'),
+  N('Privacy and data','','What is saved, what is not sold, and what the person controls.','feature'),
+  N('Partners and access','','How organizations refer participants and use access codes.','feature')
+ ])
+]),
+N('Product tours and special entry paths','','Public explanations of each product before someone enters the working tools.','folder',[
+ N('The Forge tour','/forge','Explains the free Career Intelligence Report and its five public-facing stages.','folder',[
+  N('01 · Welcome','','Meet t.ROY, understand the time and the result.','step'),
+  N('02 · Your Story','','Narrative reconstruction from the facts the person provides.','step'),
+  N('03 · Goals & Fit','','Career direction, practical preferences, and record comfort.','step'),
+  N('04 · The Build','','Upload or build a resume; optionally connect through a partner.','step'),
+  N('05 · Your Report','','Strengths, career paths, barriers, base resume, and cover letter.','output')
+ ]),
+ N('The Refinery tour','/refinery','Explains the saved workspace through five core public-facing tools.','folder',[
+  N('01 · Application Tailor','','Targeted resume, cover letter, and disclosure brief for one job.','step'),
+  N('02 · Disclosure Planner','','Timing, framing, script building, and rehearsal.','step'),
+  N('03 · Interview Practice','','Role-aware practice with coaching feedback.','step'),
+  N('04 · Job Board','','Live listings and fair-chance context.','step'),
+  N('05 · Resource Hub','','Verified support tied to practical barriers.','step')
+ ]),
+ N('The Mini Forge','/mini-forge','Pre-release career planning designed for DOC-approved tablets.','folder',[
+  N('Inside the facility','','A seven-question, server-rendered path that works without client-side JavaScript.','folder',[
+   N('1 · Readiness','','Where work fits in the person’s thinking today.','step'),N('2 · Goals','','Stability, growth, meaning, immediate income, independence, or giving back.','step'),N('3 · Challenges','','Record, gap, recovery, transportation, housing, education, health, or career change.','step'),N('4 · Work type','','Physical, desk, flexible/remote, or mixed.','step'),N('5 · Skills','','Practical skills plus the person’s own words.','step'),N('6 · Location','','Where the person expects to return.','step'),N('7 · Personal hook','','A short statement about what matters next.','step')
+  ]),
+  N('Mini Forge result','','Career directions, strengths, a starter plan, and a pickup PIN.','output'),
+  N('Coming Home','/coming-home','Enter the PIN after release and continue the saved plan in the Refinery.','folder',[
+   N('Enter pickup code','','Connect the pre-release session to the person.','decision'),
+   N('Import to Refinery','refinery.steelmanresumes.com/mini-forge/import','Move the plan into an account and continue.','step')
+  ])
+ ]),
+ N('EXPO community entry','/expo','No-index partner leave-behind: watch, start, answer, then save in the Refinery.','page',[],{audience:'Partner-specific'})
+]),
+N('Resource library','/resources','A public, sourced library that can be used without entering the products.','folder',[
+ N('Resource landing','/resources','Browse guides, printables, and video-ready career information.','page'),
+ N('Justice-impacted employment','/guide/second-chance-employment/[slug]','Nine full guides about records, gaps, rights, and reentry.','folder',[
+  N('Resume with a felony','/guide/second-chance-employment/felony-resume','Address a record honestly and still earn interviews.','page'),
+  N('Explaining employment gaps','/guide/second-chance-employment/employment-gaps','Frame incarceration, caregiving, health, and life gaps.','page'),
+  N('Interview scripts for tough questions','/guide/second-chance-employment/interview-scripts','Words for background, gaps, recovery, and career change.','page'),
+  N('Fair-Chance & Ban-the-Box laws','/guide/second-chance-employment/fair-chance-laws','Understand when and what employers may ask.','page'),
+  N('Jobs that support recovery','/guide/second-chance-employment/recovery-jobs','Industries and employers that understand recovery.','page'),
+  N('First job after prison','/guide/second-chance-employment/first-job-after-prison','Build a credible resume without recent work history.','page'),
+  N('Disclosure planning','/guide/second-chance-employment/disclosure-planning','A full playbook for when and how to talk about a record.','page'),
+  N('DUI record and employment','/guide/second-chance-employment/dui-record-employment','Work options, license limits, and Wisconsin context.','page'),
+  N('Reentry employment for women','/guide/second-chance-employment/women-reentry-employment','Caregiving, safety, and women-specific reentry barriers.','page')
+ ]),
+ N('Getting hired','/guide/getting-hired/[slug]','Eight practical guides about roles, credentials, and job-search strategy.','folder',[
+  N('Warehouse & distribution resumes','/guide/getting-hired/warehouse-resume','What warehouse hiring managers look for.','page'),
+  N('Trades & skilled labor resumes','/guide/getting-hired/trades-resume','Show trade value without relying on a degree.','page'),
+  N('Certifications worth getting','/guide/getting-hired/certifications','Prioritize credentials that affect hiring.','page'),
+  N('Job-search strategy','/guide/getting-hired/job-search-strategy','Choose between walk-ins, agencies, referrals, and online applications.','page'),
+  N('Clean up your online presence','/guide/getting-hired/online-presence-cleanup','Handle search results, old social media, and LinkedIn.','page'),
+  N('Gig work and driving apps','/guide/getting-hired/gig-work-driving-apps','Background-check realities across common platforms.','page'),
+  N('Office and customer service without a degree','/guide/getting-hired/office-customer-service-jobs','Roles, free computer training, and screening differences.','page'),
+  N('Apprenticeships and union trades','/guide/getting-hired/apprenticeships-union-trades','Earn-while-you-learn routes into skilled work.','page')
+ ]),
+ N('Printable downloads','/downloads/[slug]','Condensed one-page tools linked back to full guides.','folder',[
+  N('Disclosure one-pager','/downloads/disclosure-one-pager','A printable order-of-operations for talking about a record.','output'),
+  N('Fair-chance law map','/downloads/fair-chance-law-map','A printable state-by-state law summary.','output')
+ ])
+]),
+N('Evidence, trust, and accountability','','Pages that make the claims, method, and limits inspectable.','folder',[
+ N('Proof','/success','Verified reviews, human service outcomes, case studies, and research context.','folder',[
+  N('Verified voices','','Google Business Profile reviews.','feature'),N('Case studies','','Real outcomes with names changed.','feature'),N('Measured claims','','What SMR can support without promising a job.','feature')
+ ]),
+ N('Research & methodology','/research','Six research traditions and what each changes in practice.','folder',[
+  N('Narrative identity & desistance','','How a future-facing identity supports behavior change.','feature'),N('Behavioral and motivational science','','Readiness, autonomy, competence, and achievable next steps.','feature'),N('Neuroscience and affect labeling','','Why naming experience can reduce cognitive threat.','feature'),N('Labor-market and fair-chance evidence','','Records, bias, hiring practices, and economic barriers.','feature'),N('Trauma-aware interaction design','','Choice, pacing, plain language, and control.','feature'),N('Responsible AI governance','','Consent, auditability, limits, and human review.','feature')
+ ]),
+ N('Privacy policy','/privacy','Public explanation of data collection, use, control, and third parties.','page'),
+ N('Terms of service','/terms','Rules, limits, disclaimers, and service relationship.','page')
+]),
+N('People and programs','','Paths for organizations, media, collaborators, and direct contact.','folder',[
+ N('For workforce partners','/partners','Partner model, access codes, co-branded materials, evidence, and implementation.','folder',[
+  N('What partners receive','','Free Forge access, referral support, expanded limits, and co-branded materials.','feature'),N('Why organizations trust it','','Research grounding, inspectable technology, field connection, and lived experience.','feature'),N('Who it serves','','Workforce boards, reentry, colleges, rehab, housing, recovery, veterans, and more.','feature')
+ ]),
+ N('About Troy Carr','/about','Founder, direct-service history, research, systems work, and the meaning of Steel Man.','page'),
+ N('Contact','/contact','Routes career help, partnerships, sponsorship, speaking, media, and systems work.','page'),
+ N('Service messages','','Small utility pages used after forms and email actions.','folder',[
+  N('Unsubscribe','/unsubscribe','Email preference confirmation.','system'),N('Contact / inquiry result','','Confirmation states after a form is sent.','system')
+ ])
+])
+];
+
+const forge=[
+N('Product home','forge.steelmanresumes.com','The shared tool entrance: choose the Forge or return to the Refinery.','folder',[
+ N('Choose The Forge','/intro','Start without an account.','step'),N('Choose The Refinery','/login','Return to saved materials.','step'),N('Security & privacy','/security','Plain-language explanation of what is stored and controlled.','page')
+]),
+N('Audience decision','/intro','t.ROY introduces itself and asks who is entering.','folder',[
+ N('Career rebuilder','/welcome','The full personal Forge journey.','folder',[
+  N('Rush Mode escape hatch','/rush','A same-day resume rewrite for urgent applications; explicitly not the recommended path.','folder',[
+   N('Bring a resume','','Paste text or upload a file.','step'),N('Name the target','','Job title, company, and optional job description.','step'),N('Process','','Rewrite only what is true.','step'),N('Receive the rush resume','','Headline, summary, bullets, skills, copy, text download, or DOCX.','output')
+  ])
+ ],{main:true}),
+ N('Workforce partner','/partner','A methodology and deployment tour built for program staff.','folder',[
+  N('Five-step client workflow','','Refer, complete Forge, create account, use Refinery, share consented progress.','step'),N('Client toolset','','Forge, Tailor, Disclosure, Interview, Job Board, Applications.','feature'),N('Partner dashboard','','Cohort stage, activity, outputs, and CSV reporting.','feature'),N('Access codes','','Higher daily limits linked to a program.','feature'),N('Partner questions','','Cost, privacy, devices, data, and onboarding.','feature')
+ ]),
+ N('Observer / evaluator','/overview','A transparent view of the problem, journey, research, stack, and accountability.','folder',[
+  N('The gap','','Employment and record context.','feature'),N('Full six-stage journey','','Forge through application follow-up.','feature'),N('Behavioral rules','','How t.ROY is allowed to respond.','feature'),N('Research base','','Narrative, readiness, self-efficacy, and fair-chance evidence.','feature'),N('Technology and data','','Models, storage, email, and decision logging.','system'),N('Partner and funder views','','Access, outputs, costs, and audit trail.','feature')
+ ])
+]),
+N('Personal Forge journey','','The primary path from raw history to a Career Intelligence Report.','folder',[
+ N('1 · Readiness','/welcome','Sets how much guidance t.ROY gives today.','folder',[
+  N('Just exploring','','Low-pressure orientation.','decision'),N('Thinking about it','','More context before action.','decision'),N('Getting ready','','Planning and practical preparation.','decision'),N('Ready to go','','Direct action and shorter explanation.','decision'),N('Privacy acknowledgment','','Confirms the person understands the experience before continuing.','step')
+ ],{main:true}),
+ N('2 · Resume intake','/resume','Bring what exists, build from scratch, or continue without a resume.','folder',[
+  N('I already have a resume','','Multiple ways to bring an existing document.','folder',[
+   N('Upload a file','','PDF, Word, image, or screenshot.','decision'),N('Paste text','','Copy from email, notes, or another app.','decision'),N('Import from a platform','','Instructions for downloading from LinkedIn or Indeed.','decision'),N('Parse and verify','','Extract name, contact information, experience, skills, and education; the person checks the result.','step')
+  ]),
+  N('Build one from scratch','','A ten-step guided resume builder with no cap on work-history entries.','folder',[
+   N('1 · Orientation','','Explain the 15–20 minute build and how gaps are handled.','step'),N('2 · Name','','Resume heading.','step'),N('3 · Contact','','Phone, email, and city.','step'),N('4 · Job information','','Title, company, and dates for one role.','step'),N('5 · Job duties','','What the person actually did, in their own words.','step'),N('6 · Add another job?','','Repeat work-history steps as many times as needed.','decision'),N('7 · Skills & certifications','','Practical skills, licenses, and credentials.','step'),N('8 · Education & training','','School, training, inside credentials, and programs.','step'),N('9 · Additional material','','Volunteer work, projects, awards, or useful context.','step'),N('10 · Review','','Assemble and confirm the base resume.','output')
+  ]),
+  N('Continue without one','','The Forge can still analyze the rest of the story, with a thinner document base.','decision')
+ ],{main:true}),
+ N('3 · Goals','/goals','Clarifies what success means and how confident the person feels about the resume.','folder',[
+  N('Goal choices','','Stable work, growth, meaning, immediate income, independence, community, or flexibility.','decision'),N('Goal narrative','','Optional explanation of what the person wants and why.','step'),N('Personal hook','','Optional detail that helps t.ROY understand motivation.','step'),N('Resume confidence','','None yet, rough, decent, or strong.','decision'),N('Resume worries','','Gaps, job changes, little experience, or no major concern.','decision')
+ ],{main:true}),
+ N('4 · Barriers and story','/story','Names what is in the way, then gathers only the detail needed to help.','folder',[
+  N('Choose relevant barriers','','Record, employment gap, recovery, transportation, housing, education, health, career change, or another issue.','decision'),
+  N('Criminal-record detail','Only shown when relevant','Structured, editable context rather than an open-ended confession.','folder',[
+   N('Record type','','Misdemeanor, felony, or both.','decision'),N('Number of convictions','','1, 2–3, or 4+.','decision'),N('How long ago','','From less than one year to more than ten.','decision'),N('Supervision status','','Current, completed, or none.','decision'),N('What has changed','','Optional future-facing context and accomplishments.','step'),N('What feels hardest','','Optional concern in the person’s own words.','step')
+  ]),
+  N('Narratives for other barriers','','Optional, barrier-specific plain-language context.','step')
+ ],{main:true}),
+ N('5 · Practical preferences','/preferences','Filters career suggestions to fit the person’s real life.','folder',[
+  N('Schedule','','Full-time, part-time, flexible/gig, or open.','decision'),N('Work environment','','Physical, office, people-facing, or remote.','decision'),N('Commute','','Walk, public transit, short drive, or longer commute.','decision'),N('Location','','Optional city or area for matching.','step')
+ ],{main:true}),
+ N('6 · Analysis','/processing','The system turns the gathered material into a grounded career analysis.','folder',[
+  N('Read experience','','Find the usable facts and history.','step'),N('Find strengths','','Identify repeated evidence of capability.','step'),N('Match career paths','','Connect skills, goals, and preferences to plausible work.','step'),N('Connect barriers to resources','','Turn friction into possible support.','step'),N('Craft the narrative','','Build a coherent, honest through-line.','step'),N('Generate the resume','','Strengthen the base document without inventing experience.','step'),N('Write the cover letter','','Create a general-purpose starting letter.','step'),N('Optional reflection','','A two-minute prompt while processing.','decision')
+ ],{main:true}),
+ N('7 · Career Intelligence Report','/output','The person sees what their experience adds up to and can take the work with them.','folder',[
+  N('Readiness-aware summary','','The tone and next action match where the person is today.','output'),
+  N('Strengths','','Evidence-backed patterns from the person’s story.','output'),
+  N('Skills','','Hard, soft, and transferable skills.','folder',[
+   N('Hard skills','','Tools, systems, licenses, and job-specific ability.','output'),N('Soft skills','','Communication, reliability, leadership, and self-management.','output'),N('Transferable skills','','Abilities that move across industries.','output')
+  ]),
+  N('Barriers and resources','','Each relevant barrier paired with practical next steps or support.','output'),
+  N('Matched career paths','','Role options with reasons for fit and concrete next steps.','output'),
+  N('Career documents','','Generated from verified material.','folder',[
+   N('Base resume','','Preview, copy, and editable DOCX download.','output'),N('General cover letter','','Preview, copy, and editable DOCX download.','output'),N('Grounding check','','Flags and removes unsupported claims before the documents are shown.','system')
+  ]),
+  N('Continue into the Refinery','','Create an account, save the Forge result, and carry the profile into the working tools.','step')
+ ],{main:true})
+]),
+N('Supporting Forge surfaces','','Optional routes around the main journey.','folder',[
+ N('Guided walkthrough','/walkthrough','Self-running visual story: before, intake, processing, output, Refinery, disclosure, interview, close.','page'),
+ N('Security & privacy','/security','Data storage, consent, account control, exports, deletion, and AI boundaries.','page'),
+ N('Get an organization listed','/get-listed','Submission form for verified Milwaukee/Waukesha support resources.','folder',[
+  N('Organization details','','Name, category, city, phone, website, and service description.','step'),N('Contact details','','Submitter name and email.','step'),N('Human verification','','SMR reviews the listing before it appears.','system')
+ ])
+])
+];
+
+const refinery=[
+N('Access and onboarding','','Protected entry, account creation, and the handoff from Forge.','folder',[
+ N('Sign in or create account','/login','One page with three real access modes.','folder',[
+  N('Password sign-in','','Email, password, and two-step code when enabled.','decision'),N('Create account','','Name, phone, email, password, and optional partner code.','decision'),N('Magic link','','Email a single-use sign-in link.','decision'),N('Partner access code','','Redeemed during sign-up or later in Settings.','protected')
+ ]),
+ N('Authentication support','','Pages used when access needs an extra step.','folder',[
+  N('Check email','/check-email','Confirms that a magic link was sent.','system'),N('Forgot password','/forgot-password','Requests a password reset.','system'),N('Reset password','/reset-password','Creates the replacement password.','system'),N('Access code','/access','Redeems organization-linked access.','protected')
+ ]),
+ N('Forge completion gate','','A client who has not completed the Forge is sent there first, unless an admin/partner is testing client view.','decision'),
+ N('Forge data handoff','','Resume, strengths, career paths, barriers, preferences, and readiness become editable starting context.','system'),
+ N('Mini Forge import','/mini-forge/import','Bring a pre-release plan into the account.','folder',[
+  N('Enter PIN','/mini-forge/pin','Match the tablet session.','decision'),N('Import processing','/mini-forge/processing','Attach the saved plan safely.','system'),N('Import complete','/mini-forge/import-complete','Confirm the handoff and enter the dashboard.','output')
+ ])
+]),
+N('Dashboard home','/dashboard','The role-aware starting point after sign-in.','folder',[
+ N('Client overview','','The participant’s own journey and next action.','folder',[
+  N('Journey progress bar','','Seven stages with the current stage named.','feature'),N('Your next step','','One prominent action from the rules-based next-step engine.','feature'),N('Forge profile','','Strengths, career paths, and editable source context.','feature'),N('Your resume','','Current base or tailored resume.','feature'),N('Saved work','','Recent artifacts and counts by type.','feature'),N('Tools grid','','Access to Find Work, Build, My Stuff, and support tools.','feature')
+ ],{main:true}),
+ N('Observer overview','','Evidence-first view for a non-participant account.','folder',[
+  N('Five findings','','The core research claims.','feature'),N('Evidence deck','','Direct route to citations and governance.','feature'),N('Design methodology','','Direct route to how features are built.','feature')
+ ]),
+ N('Partner / organization overview','','Mission control instead of the participant tool grid.','step')
+]),
+N('Find Work','','The search-and-application loop.','folder',[
+ N('Job Board','/dashboard/jobs','Live listings matched to Forge context, with fair-chance signals and saved state.','folder',[
+  N('Search setup','','Target role, location, common roles, or role pulled from the latest resume.','folder',[
+   N('Role and location','','Editable search context.','step'),N('Fair-chance only','','Filter to listings with a visible fair-chance reason.','decision'),N('Remote only','','Limit results to remote listings.','decision')
+  ]),
+  N('Listing results','','Native job cards rather than sending the user away immediately.','folder',[
+   N('Job basics','','Title, company, location, salary, employment type, and posted date.','feature'),N('Full description','','Duties, requirements, and benefits.','feature'),N('Fair-chance context','','Why the role or employer may be relevant.','feature'),N('Save job','','Creates an application record in Saved.','step'),N('Mark applied','','Moves the record into the tracker.','step'),N('Tailor for this job','','Hands the job directly to Application Tailor.','step'),N('Hide employer','','Persistent personal block with optional reason.','decision')
+  ]),
+  N('Search memory','','Restores the last search and results for six hours.','system')
+ ],{main:true}),
+ N('Applications','/dashboard/applications','A pipeline that connects each status to the right preparation tool.','folder',[
+  N('Saved','','Next suggestion: tailor a resume.','step'),N('Applied','','Next suggestion: prepare disclosure.','step'),N('Heard Back','','Next suggestion: practice interviewing.','step'),N('Interviewing','','Next suggestion: review the disclosure script.','step'),N('Offered','','Record the outcome and next decision.','output'),N('Archived','','Rejected and declined applications remain available without cluttering the active pipeline.','folder',[
+   N('Rejected','','Employer ended the process.','output'),N('Declined','','The person chose not to continue.','output')
+  ])
+ ],{main:true}),
+ N('Verified Employers','/dashboard/employers','A manually maintained directory of employers with fair-chance context.','folder',[
+  N('Search and industry filter','','Narrow the directory by name, role, place, or industry.','decision'),N('Employer profile','','Name, location, industry, website, careers link, and available context.','feature'),N('Personal visibility control','','Hide an employer from future searches.','decision'),N('Build-state notice','','The directory openly states that verification is ongoing.','system')
+ ]),
+ N('Fair-Chance Lanes','/dashboard/resources','Curated career lanes that bridge a Forge profile into realistic live searches.','folder',[
+  N('Matched from Forge','','Career paths, skills, barriers, and location influence ranking.','system'),
+  N('Opportunity categories','','Seven starting lanes.','folder',[
+   N('Warehouse','','Common roles, example employers, preparation, and live-search handoff.','feature'),N('Manufacturing','','Production and plant pathways.','feature'),N('Food service','','Kitchen, service, and hospitality pathways.','feature'),N('Transportation','','Driving, delivery, and logistics pathways.','feature'),N('Customer service','','Retail, phone, and service pathways.','feature'),N('Trades','','Construction and skilled-work pathways.','feature'),N('Support','','Community, peer, and helping-role pathways.','feature')
+  ]),
+  N('Reality check','','Fair-chance does not mean automatic approval; role, location, timing, and record relevance still matter.','feature'),
+  N('Live search handoff','','Open the Job Board with a useful search term.','step')
+ ])
+]),
+N('Build','','Tools that create job-specific materials and rehearse high-stakes conversations.','folder',[
+ N('Application Tailor','/dashboard/application-tailor','Turns a base resume and a specific posting into a three-part career package.','folder',[
+  N('Choose the starting resume','','Use a Forge base resume, a saved version, or begin blank when necessary.','decision'),
+  N('Define the target job','','The employer-specific input.','folder',[
+   N('Job title','','Required role.','step'),N('Company','','Required employer.','step'),N('Job-listing URL','','Optional automatic fetch; some sites may block it.','step'),N('Pasted description','','Optional but produces sharper tailoring.','step')
+  ]),
+  N('Build the career package','','20–40 second generation grounded in the Forge profile and resume facts.','system'),
+  N('Career package','','Three connected tabs.','folder',[
+   N('Targeted resume','','Editable sections, bullet workshop, save, DOCX, and PDF.','folder',[
+    N('Contact','','Editable name and contact data.','feature'),N('Summary','','Editable summary with optional assist.','feature'),N('Experience','','Role entries and scored bullet workshop.','feature'),N('Skills','','Editable skills and credentials.','feature'),N('Education','','Editable education and training.','feature'),N('Tailoring notes','','What changed for this job and why.','output')
+   ]),
+   N('Cover letter','','Employer-specific letter; copy or DOCX download.','output'),
+   N('Disclosure brief','','Readiness score, starter script, timing advice, disclaimer, and handoff to the full planner.','output')
+  ]),
+  N('Version history','','Every saved resume keeps its target job, company, source, and current/base status.','system')
+ ],{main:true}),
+ N('Disclosure Planner','/dashboard/disclosure','Career coaching for deciding when and how to talk about a record. Not legal advice.','folder',[
+  N('Consent gate','','Explains the sensitive fields, what is stored, and the person’s right to delete.','protected'),
+  N('Assess','','Gather and verify the situation.','folder',[
+   N('Target job and employer','','Optional job-specific framing.','step'),N('Location','','Used for high-level legal context.','step'),N('Editable Forge strengths','','Add, remove, or rewrite the source strengths.','step'),N('Record and supervision context','','User-entered details remain editable.','protected'),N('Preferred disclosure timing','','Application, interview, after offer, or unsure.','decision')
+  ]),
+  N('Deepen','','Three prompts create the raw material for an honest script.','folder',[
+   N('What happened?','','Factual, concise context.','step'),N('What has changed?','','Evidence of responsibility, growth, or stability.','step'),N('What worries you?','','The concern the person needs to prepare for.','step')
+  ]),
+  N('Plan','','Generate and edit the coaching result.','folder',[
+   N('Legal context','','High-level rights and timing information.','output'),N('When to disclose','','Employer- and stage-aware timing advice.','output'),N('What to say','','A personalized script.','output'),N('Key tips','','Concrete reminders for delivery.','output'),N('Revise with t.ROY','','Ask for a specific change and regenerate.','step')
+  ]),
+  N('Rehearse','','Practice the script in the person’s own voice.','folder',[
+   N('Text rehearsal','','Type the response.','step'),N('Spoken rehearsal','','Record or speak the response for feedback.','step'),N('Coaching feedback','','What landed, what to strengthen, and a revised frame.','output')
+  ]),
+  N('Save and take it with you','','Save as a private artifact, copy, print/PDF, or connect support.','output')
+ ],{main:true}),
+ N('Interview Practice','/dashboard/interview','Repeated role-aware practice in text or live voice.','folder',[
+  N('Setup','','Choose the source and kind of interview.','folder',[
+   N('Resume version','','Use the base resume or a job-targeted saved version.','decision'),N('Interview type','','General, behavioral/STAR, industry-specific, or disclosure practice.','decision'),N('Target role and company','','Sets the interview context.','step'),N('Practice mode','','Text or live voice.','decision')
+  ]),
+  N('Practice','','Answer questions one at a time and continue for as many rounds as useful.','folder',[
+   N('Text conversation','','Typed questions and answers.','step'),N('Live voice session','','Realtime spoken interview; audio is not stored.','step'),N('Context-aware questions','','Questions use the role, resume, and chosen interview type.','system')
+  ]),
+  N('Feedback','','A saved interview analysis.','folder',[
+   N('Frame to carry in','','The central story to hold through the interview.','output'),N('What went well','','Specific strengths in the answers.','output'),N('Areas to improve','','Clarity, detail, framing, or confidence gaps.','output'),N('Stronger model answers','','Examples tied to the questions asked.','output'),N('Overall assessment','','Summary of readiness and next practice.','output'),N('Personal notes','','The person’s own takeaways.','step')
+  ]),
+  N('Save / print analysis','','Store in My Materials or print to PDF.','output')
+ ],{main:true})
+]),
+N('My Stuff','','Saved materials, personal progress, and account controls.','folder',[
+ N('My Materials','/dashboard/vault','Private library for everything generated in the Refinery.','folder',[
+  N('Current resume','','Pinned primary resume.','output'),N('Resumes','','Base and targeted versions.','output'),N('Cover letters','','Job-specific letters.','output'),N('Follow-up messages','','Saved application follow-ups.','output'),N('Disclosure plans','','Private scripts and planning outputs.','protected'),N('Interview practice','','Saved feedback and notes.','protected'),N('Actions','','Search, view, copy, edit when supported, DOCX/PDF export, set current, or delete.','folder',[
+   N('Search materials','','Find by title, target, or content.','step'),N('Export','','DOCX for resumes/letters; formatted PDF for every artifact.','output'),N('Delete','','Permanent account-scoped removal after confirmation.','protected')
+  ])
+ ]),
+ N('Progress','/dashboard/progress','A rules-based map of momentum rather than a vague percentage.','folder',[
+  N('Quick Wins','','Personalized small actions based on readiness, barriers, and activity.','feature'),N('Upcoming','','Applications or follow-ups that need attention.','feature'),N('Career Roadmap','','Four phases with real completion signals.','folder',[
+   N('Foundation','','Complete Forge, review skills, and connect barriers to lanes.','step'),N('Preparation','','Build a resume, disclosure plan, and first practice interview.','step'),N('Action','','Search, tailor, and submit the first application.','step'),N('Momentum','','Five applications, three practices, and continued follow-through.','step')
+  ]),
+  N('Activity scoreboard','','Counts for skills, strengths, resumes, bullets, plans, practice, searches, resources, and applications.','output')
+ ]),
+ N('Settings','/dashboard/settings','Account, privacy, security, personalization, and data ownership.','folder',[
+  N('Profile and contact','','Name, phone, location, and resume contact information.','protected'),N('Your Coach','','Supportive/balanced/direct style and guide-me/just-answer focus.','decision'),N('Partner access','','Redeem or view organization access.','protected'),N('Share your progress','','Consent controls for partner visibility.','protected'),N('Hidden employers','','Review and restore employers removed from searches.','protected'),N('Security','','Password, sign-in methods, and two-step verification.','protected'),N('Your data','','Export everything the account stores or delete it.','folder',[
+   N('Full export','','Database data plus relevant local-device state.','output'),N('Delete all data','','Confirmed permanent deletion.','protected')
+  ]),N('About the system','','Version, responsible-AI commitments, and transparency links.','system')
+ ])
+]),
+N('Program and organization views','','Consent-gated oversight for staff and administrators.','folder',[
+ N('Partner Dashboard','/dashboard/partner','The organization mission-control surface.','folder',[
+  N('Shared principles','','Only progress signals; never resume text, disclosure plans, or interview answers.','protected'),
+  N('Organization admin / owner','','Runs the team and full program view.','folder',[
+   N('Summary','','Joined, invited, sharing, active, hired, seats, and optional AI cost.','output'),N('Team map','','Staff cards with client load, active/behind/hired rollups, and drill-down.','feature'),N('Add participants','','Invite by name and email; seat assigned immediately.','step'),N('Pending invitations','','Resend or revoke.','protected'),N('Assign clients','','Connect participants to staff or leave unassigned.','step'),N('All clients','','Stage, next step, activity signals, outcome, and assignment.','protected'),N('Export CSV','','Program reporting from consented progress.','output')
+  ]),
+  N('Staff view','','Focused support view without seat or cost administration.','folder',[
+   N('My clients','','Only participants assigned to this staff member who consented to share.','protected'),N('Add participant','','Invite and auto-assign to the staff member.','step'),N('Progress signals','','Stage, next step, applications, practices, and outcome—not content.','output')
+  ]),
+  N('Client view switch','','Partner/admin can experience the real participant toolset with a persistent test banner.','decision')
+ ]),
+ N('Methodology','/dashboard/methodology','Detailed product logic for practitioners, partners, and evaluators.','folder',[
+  N('Behavioral science foundations','','Readiness, affect labeling, self-efficacy, and autonomy.','feature'),N('Narrative identity & desistance','','Future self, redemption narrative, and credible change.','feature'),N('Competitive landscape','','What this system combines that ordinary builders separate.','feature'),N('AI UX for marginalized users','','Scaffolding, plain language, and fading support.','feature'),N('JBS compliance','','Consent, auditability, explanation, and non-discrimination.','feature'),N('Ten t.ROY rules','','The client-facing behavior constraints.','system')
+ ]),
+ N('Evidence','/dashboard/evidence','Citations, comparison, governance, architecture decisions, and known gaps.','folder',[
+  N('Core citations','','Research directly tied to product mechanisms.','feature'),N('Competitive matrix','','Feature-by-feature comparison.','feature'),N('Compliance checklist','','Consent, logging, portability, deletion, and safeguards.','system'),N('Architecture decisions','','Why major technical choices were made.','system'),N('Known gaps','','What remains incomplete or unproven.','system')
+ ])
+]),
+N('Internal administration','/dashboard/admin','Restricted operating surfaces used to run and audit the platform.','folder',[
+ N('Operator home','/dashboard/admin','Operate-as controls, platform funnel, access-code minting, partner metrics, and consented cases.','protected'),N('User accounts','/dashboard/admin/users','Account list, tier, usage/cost, and assisted access controls.','protected'),N('Organizations','/dashboard/admin/orgs','Organization records, roles, seats, codes, and status.','protected'),N('System health','/dashboard/admin/health','Checks grouped by service with pass, warning, and fail states.','system')
+])
+];
+
+const defs={site:{title:'The Site',sub:'The public world',desc:'Explains what Steel Man Resumes is, shows proof, serves free resources, and routes each audience into the right product.',accent:'#d4a84b',root:'steelmanresumes.com',facts:[['15','indexed pages'],['17','full guides'],['2','printable tools']],journey:[['Arrive','Understand the promise'],['Learn','See the two-stage system'],['Choose','Person, partner, or coming home'],['Trust','Read proof and research'],['Enter','Forge or Refinery']],data:site},forge:{title:'The Forge',sub:'Discover the material',desc:'A no-login guided conversation that turns lived experience into strengths, career paths, resources, a base resume, and a cover letter.',accent:'#9b6d1d',root:'forge.steelmanresumes.com',facts:[['8','main route pages'],['3','audience paths'],['10','guided resume steps']],journey:[['Choose','Audience'],['Prepare','Readiness + resume'],['Name','Goals + barriers'],['Fit','Preferences'],['Analyze','Grounded synthesis'],['Receive','Report + documents'],['Continue','Save in Refinery']],data:forge},refinery:{title:'The Refinery',sub:'Work the material',desc:'A private, returning workspace for finding real work, tailoring applications, preparing disclosure, practicing interviews, and tracking progress.',accent:'#4f6b57',root:'refinery.steelmanresumes.com',facts:[['5','access modes'],['14','client routes'],['3','org role views']],journey:[['Enter','Sign in + Forge handoff'],['Orient','Next step'],['Find','Job or lane'],['Tailor','Career package'],['Prepare','Disclosure + interview'],['Track','Application pipeline'],['Repeat','Progress + saved work']],data:refinery}};
+const kindLabel={folder:'folder',page:'page',step:'step',decision:'decision',output:'output',protected:'protected',feature:'feature',system:'system'};
+function deepText(n){return [n.title,n.path,n.desc,n.kind,...(n.children||[]).map(deepText)].join(' ').toLowerCase()}
+function total(n){return 1+(n.children||[]).reduce((a,c)=>a+total(c),0)}
+function renderNode(n,depth=1){const children=n.children||[];const style=`--accent:${currentAccent}`;const meta=`<div class="meta">${n.path?`<span class="path">${n.path}</span>`:''}<span class="badge ${n.kind}">${kindLabel[n.kind]||n.kind}</span>${n.audience?`<span class="badge audience">${n.audience}</span>`:''}</div>`;const body=`<div><div class="nodetitle">${n.title}</div>${meta}<p class="desc">${n.desc}</p></div>`;if(children.length){return `<div class="treeitem level-${Math.min(depth,5)}" data-deeptext="${deepText(n).replace(/"/g,'&quot;')}" data-main="${n.main?'true':'false'}"><details class="node folder" ${n.main||depth===1?'open':''} style="${style}"><summary><span class="chev">›</span>${body}<span class="count">${children.length} ${children.length===1?'branch':'branches'}</span></summary><div class="children">${children.map(c=>renderNode(c,depth+1)).join('')}</div></details></div>`}return `<div class="treeitem level-${Math.min(depth,5)}" data-deeptext="${deepText(n).replace(/"/g,'&quot;')}"><div class="node leaf" style="${style}"><span class="docicon" aria-hidden="true"></span>${body}</div></div>`}
+let currentAccent='#d4a84b';
+function renderPanel(id,d){currentAccent=d.accent;return `<section class="panel ${id==='site'?'active':''}" id="panel-${id}" style="--section-accent:${d.accent}"><div class="sectiontop"><div><div class="eyebrow" style="color:${d.accent}">${id==='site'?'01':id==='forge'?'02':'03'} · ${d.sub}</div><h2>${d.title}</h2><p>${d.desc}</p><div class="legend"><span class="badge page">page</span><span class="badge step">step</span><span class="badge decision">decision</span><span class="badge output">output</span><span class="badge protected">protected</span><span class="badge system">system</span></div></div><div class="facts">${d.facts.map(f=>`<div class="fact"><b>${f[0]}</b><span>${f[1]}</span></div>`).join('')}</div></div><div class="journey"><div class="journeyhead"><b>Primary human journey</b><span>The shortest explanation of this section</span></div><div class="track">${d.journey.map((s,i)=>`<div class="stop"><div class="stopbox"><b>${s[0]}</b><span>${s[1]}</span></div>${i<d.journey.length-1?'<div class="arrow">→</div>':''}</div>`).join('')}</div></div><div class="mapcard"><div class="maphead"><div class="rootline"><div class="rooticon">⌂</div><div><h3>${d.root}</h3><p>${d.data.reduce((a,n)=>a+total(n),0)} mapped folders, pages, decisions, and outputs</p></div></div><div class="controls"><button class="ctl" data-action="main">Main journey</button><button class="ctl" data-action="expand">Expand all</button><button class="ctl" data-action="collapse">Collapse all</button></div></div><div class="tree">${d.data.map(n=>renderNode(n)).join('')}</div></div><div class="canon"><b>Canonical reading rule</b><p>An arrow means there is real structure underneath. A document shape is the end of that branch: a page, choice, feature, protected area, system behavior, or user-visible result.</p></div></section>`}
+document.getElementById('panels').innerHTML=Object.entries(defs).map(([id,d])=>renderPanel(id,d)).join('');
+let active='site';
+function activate(id){active=id;document.querySelectorAll('.tab').forEach(b=>{const on=b.dataset.tab===id;b.setAttribute('aria-selected',String(on))});document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===`panel-${id}`));history.replaceState(null,'',`#${id}`);document.getElementById('search').value='';filter('')}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>activate(b.dataset.tab)));
+document.addEventListener('click',e=>{const ctl=e.target.closest('.ctl');if(!ctl)return;const panel=ctl.closest('.panel');const details=[...panel.querySelectorAll('details')];if(ctl.dataset.action==='expand')details.forEach(d=>d.open=true);if(ctl.dataset.action==='collapse')details.forEach(d=>d.open=false);if(ctl.dataset.action==='main'){details.forEach(d=>d.open=false);panel.querySelectorAll('[data-main="true"] > details').forEach(d=>d.open=true);panel.querySelectorAll('.tree > .treeitem > details').forEach(d=>d.open=true)}});
+const search=document.getElementById('search');
+function filter(value){const q=value.trim().toLowerCase();const panel=document.getElementById(`panel-${active}`);panel.querySelectorAll('.treeitem').forEach(item=>{const on=!q||item.dataset.deeptext.includes(q);item.classList.toggle('searchhide',!on);item.classList.toggle('match',!!q&&item.querySelector(':scope > .node')?.innerText.toLowerCase().includes(q));if(q&&on){const d=item.querySelector(':scope > details');if(d)d.open=true}})}
+search.addEventListener('input',e=>filter(e.target.value));document.getElementById('clearSearch').addEventListener('click',()=>{search.value='';filter('');search.focus()});
+const start=location.hash.replace('#','');if(defs[start])activate(start);
+</script>
+</body></html>
