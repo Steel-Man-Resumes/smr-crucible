@@ -464,8 +464,8 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Set Password */}
-      <SetPasswordSection />
+      {/* Security */}
+      <SecuritySection />
 
       {/* Privacy & Data */}
       <section className="mb-8">
@@ -588,43 +588,92 @@ export default function SettingsPage() {
   );
 }
 
-function SetPasswordSection() {
+function scorePassword(pw: string): { score: number; label: string } {
+  if (!pw) return { score: 0, label: "" };
+  let s = 0;
+  if (pw.length >= 10) s++;
+  if (pw.length >= 14) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^a-zA-Z0-9]/.test(pw)) s++;
+  const labels = ["keep going", "getting there", "solid", "strong", "fabulous", "unbreakable"];
+  const score = Math.min(s, 5);
+  return { score, label: labels[score] };
+}
+
+function fmtWhen(s: string | null): string {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function SecuritySection() {
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [current, setCurrent] = useState("");
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [needsCurrent, setNeedsCurrent] = useState(false);
 
-  async function handleSetPassword(e: FormEvent) {
+  function refresh() {
+    return fetch("/api/user/security-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setHasPassword(!!d.hasPassword);
+          setUpdatedAt(d.passwordUpdatedAt);
+        }
+      })
+      .catch(() => {});
+  }
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const strength = scorePassword(pw);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (pw.length < 8) {
-      setErrorMsg("Password must be at least 8 characters.");
+    if (pw.length < 10) {
+      setErrorMsg("Use at least 10 characters.");
+      setStatus("error");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw)) {
+      setErrorMsg("Include at least one letter and one number.");
       setStatus("error");
       return;
     }
     if (pw !== confirm) {
-      setErrorMsg("Passwords don’t match.");
+      setErrorMsg("Those two don't match yet.");
       setStatus("error");
       return;
     }
-
     setStatus("saving");
     setErrorMsg("");
-
     try {
       const res = await fetch("/api/auth/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify(
+          hasPassword ? { password: pw, currentPassword: current } : { password: pw }
+        ),
       });
-
       if (res.ok) {
         setStatus("done");
         setPw("");
         setConfirm("");
-        setTimeout(() => setStatus("idle"), 3000);
+        setCurrent("");
+        setNeedsCurrent(false);
+        await refresh();
+        setTimeout(() => setStatus("idle"), 3500);
       } else {
-        const data = await res.json();
-        setErrorMsg(data.error || "Could not set password.");
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || "Could not save that. Try again.");
+        setNeedsCurrent(!!data.needsCurrent);
         setStatus("error");
       }
     } catch {
@@ -633,45 +682,95 @@ function SetPasswordSection() {
     }
   }
 
+  const creating = hasPassword === false;
+  const strengthColors = ["bg-t-line", "bg-t-red", "bg-t-amber", "bg-t-amber-bright", "bg-t-phos", "bg-t-phos"];
+
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-4">
-        Password
-      </h2>
+      <h2 className="text-lg font-bold text-t-white mb-1">Security</h2>
+      <p className="text-sm text-t-phos-dim mb-4">
+        Your account, locked down the way it should be.
+      </p>
+
       <div className="bg-t-panel p-5 border border-t-line">
-        <h3 className="font-semibold text-t-white mb-2">
-          Set a password for quick login
-        </h3>
-        <p className="text-sm text-t-phos-dim mb-4">
-          Optional. Set a password so you can sign in without waiting for a magic link email every time.
-        </p>
-        <form onSubmit={handleSetPassword} className="space-y-3">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <h3 className="font-semibold text-t-white">
+              {creating ? "Create a password" : "Password"}
+            </h3>
+            <p className="text-sm text-t-phos-dim mt-0.5">
+              {creating
+                ? "Set a password so you can sign in instantly -- no waiting for an email link."
+                : updatedAt
+                  ? `Last changed ${fmtWhen(updatedAt)}.`
+                  : "Sign in with your email and password."}
+            </p>
+          </div>
+          {!creating && hasPassword !== null && (
+            <span className="flex-shrink-0 text-[11px] px-2 py-0.5 border border-t-phos text-t-phos">
+              Password set
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3 mt-3">
+          {hasPassword && (
+            <input
+              type="password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              placeholder="Current password"
+              autoComplete="current-password"
+              className={`w-full px-4 py-3 border text-sm bg-t-panel-2 text-t-white focus:outline-none transition-colors min-h-touch ${
+                needsCurrent ? "border-t-red focus:border-t-red" : "border-t-line focus:border-t-amber"
+              }`}
+            />
+          )}
           <input
             type="password"
             value={pw}
             onChange={(e) => setPw(e.target.value)}
-            placeholder="New password (min 8 characters)"
+            placeholder={creating ? "New password (10+ characters)" : "New password"}
             autoComplete="new-password"
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
+
+          {pw && (
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1 flex-1">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      i < strength.score ? strengthColors[strength.score] : "bg-t-line"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-t-phos-dim w-20 text-right capitalize">
+                {strength.label}
+              </span>
+            </div>
+          )}
+
           <input
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Confirm password"
+            placeholder="Confirm new password"
             autoComplete="new-password"
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
-          {status === "error" && (
-            <p className="text-sm text-t-red">{errorMsg}</p>
-          )}
+
+          {status === "error" && <p className="text-sm text-t-red">{errorMsg}</p>}
           {status === "done" && (
-            <p className="text-sm text-t-amber-bright">
-              Password set! You can now sign in with email + password.
+            <p className="text-sm text-t-phos">
+              {creating ? "Password created. You're all set." : "Password updated. Nice and secure."}
             </p>
           )}
-          <TBtn type="submit" disabled={status === "saving" || !pw || !confirm}>
-            {status === "saving" ? "saving..." : "set password"}
+
+          <TBtn type="submit" disabled={status === "saving" || !pw || !confirm || (hasPassword === true && !current)}>
+            {status === "saving" ? "saving..." : creating ? "create password" : "update password"}
           </TBtn>
         </form>
       </div>
