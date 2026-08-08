@@ -544,7 +544,9 @@ export function RefineryShell({
 
         {/* Main content */}
         <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
-          <JourneyProgressBanner state={onboarding.state} />
+          {/* The client journey banner is participant chrome -- org leaders run
+              the org, they are not working a resume journey here. */}
+          {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
           {children}
         </main>
       </div>
