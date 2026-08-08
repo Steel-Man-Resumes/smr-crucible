@@ -778,7 +778,129 @@ function SecuritySection() {
       </div>
 
       <TwoFactorCard enabled={twoFactorEnabled} refresh={refresh} />
+
+      <ActiveDevicesCard />
     </section>
+  );
+}
+
+interface DeviceSession {
+  jti: string;
+  device: string;
+  location: string | null;
+  lastSeenAt: string;
+  createdAt: string;
+  current: boolean;
+}
+
+function ActiveDevicesCard() {
+  const [sessions, setSessions] = useState<DeviceSession[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  function load() {
+    return fetch("/api/user/sessions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSessions(d?.sessions ?? []))
+      .catch(() => setSessions([]));
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function revoke(jti: string) {
+    setBusy(jti);
+    try {
+      const r = await fetch("/api/user/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revoke", jti }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d?.selfRevoked) {
+        window.location.href = "/login";
+        return;
+      }
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function revokeOthers() {
+    setBusy("others");
+    try {
+      await fetch("/api/user/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revoke_others" }),
+      });
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (sessions !== null && sessions.length === 0) return null;
+  const hasOthers = (sessions || []).some((s) => !s.current);
+
+  return (
+    <div className="bg-t-panel p-5 border border-t-line mt-3">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 className="font-semibold text-t-white">Active devices</h3>
+          <p className="text-sm text-t-phos-dim mt-0.5">
+            Where you&apos;re signed in. Revoke anything you don&apos;t recognize -- it&apos;s
+            signed out right away.
+          </p>
+        </div>
+        {hasOthers && (
+          <button
+            type="button"
+            onClick={revokeOthers}
+            disabled={busy === "others"}
+            className="t-focus flex-shrink-0 text-xs px-3 py-1.5 border border-t-line text-t-phos-dim hover:text-t-amber-bright disabled:opacity-50"
+          >
+            {busy === "others" ? "..." : "Sign out others"}
+          </button>
+        )}
+      </div>
+      {sessions === null ? (
+        <p className="text-sm text-t-phos-dim">Loading...</p>
+      ) : (
+        <ul className="space-y-2">
+          {sessions.map((s) => (
+            <li
+              key={s.jti}
+              className="flex flex-wrap items-center justify-between gap-2 border border-t-line px-3 py-2.5"
+            >
+              <div>
+                <div className="text-sm font-medium text-t-white">
+                  {s.device}
+                  {s.current && (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 border border-t-phos text-t-phos">
+                      This device
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-t-phos-dim">
+                  {s.location ? `${s.location} -- ` : ""}last active {fmtWhen(s.lastSeenAt)}
+                </div>
+              </div>
+              {!s.current && (
+                <button
+                  type="button"
+                  onClick={() => revoke(s.jti)}
+                  disabled={busy === s.jti}
+                  className="t-focus text-xs px-3 py-1.5 border border-t-line text-t-phos-dim hover:text-t-amber-bright disabled:opacity-50"
+                >
+                  {busy === s.jti ? "..." : "Revoke"}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

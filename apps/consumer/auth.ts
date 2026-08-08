@@ -3,10 +3,23 @@ import Resend from "next-auth/providers/resend";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import PostgresAdapter from "@auth/pg-adapter";
-import { Pool } from "@neondatabase/serverless";
+import { Pool, neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// Edge-safe HTTP query (works in the middleware `authorized` callback) for the
+// per-request session-revocation check. Fail-open on any error so a DB blip can
+// never lock everyone out.
+const sqlEdge = neon(process.env.DATABASE_URL!);
+async function isSessionRevoked(jti: string): Promise<boolean> {
+  try {
+    const rows = await sqlEdge`SELECT 1 FROM user_session WHERE jti = ${jti} AND revoked_at IS NOT NULL LIMIT 1`;
+    return (rows as any[]).length > 0;
+  } catch {
+    return false;
+  }
+}
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -228,6 +241,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Device revocation (3B): a signed-in request whose session was revoked
+      // from the active-devices list is turned away here -- the real gate for
+      // every page + data call. Skip auth-internal polling (/api/auth/*) to
+      // keep the DB check off the hot session-poll path.
+      const sid = (session?.user as any)?.sid as string | undefined;
+      if (session && sid && (isDashboard || (isApi && !path.startsWith("/api/auth/")))) {
+        if (await isSessionRevoked(sid)) {
+          if (isApi) {
+            return Response.json({ error: "Session revoked" }, { status: 401 });
+          }
+          return Response.redirect(new URL("/login", request.url));
+        }
+      }
+
       return true;
     },
     async jwt({ token, user, trigger }) {
@@ -290,12 +317,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
       }
+      // Stable session id (3B): a CUSTOM claim (`sid`) -- NOT `jti`, which is a
+      // reserved JWT claim Auth.js rotates on every re-issue (that rotation is
+      // exactly why an earlier attempt never matched). Minted once on sign-in,
+      // then persists like `tier`; matched against user_session for the
+      // active-devices list + revocation.
+      if (token.sub && !(token as any).sid) {
+        try {
+          (token as any).sid = globalThis.crypto.randomUUID();
+        } catch {
+          (token as any).sid = `${token.sub}-${Date.now()}`;
+        }
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub || "";
         (session.user as any).tier = token.tier || "client";
+        (session.user as any).sid = (token as any).sid || null;
       }
       return session;
     },
