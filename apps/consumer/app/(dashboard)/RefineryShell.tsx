@@ -378,6 +378,27 @@ export function RefineryShell({
     }
   }, [authStatus]);
 
+  // Admin 2FA enforcement: an admin account without two-step verification is
+  // guided (not locked) to Settings to turn it on. Only in a real admin session
+  // (not view-as, so QA impersonation isn't disrupted).
+  const realTier = useRealTier();
+  const [adminNeeds2fa, setAdminNeeds2fa] = useState(false);
+  useEffect(() => {
+    if (realTier === "admin" && getViewAs() === null) {
+      fetch("/api/user/security-status")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setAdminNeeds2fa(!!d && !d.twoFactorEnabled))
+        .catch(() => {});
+    } else {
+      setAdminNeeds2fa(false);
+    }
+  }, [realTier]);
+  useEffect(() => {
+    if (adminNeeds2fa && pathname !== "/dashboard/settings") {
+      window.location.href = "/dashboard/settings";
+    }
+  }, [adminNeeds2fa, pathname]);
+
   // Role-aware nav framing (role-clear wave): the first item names the
   // landing the user actually gets, and org leaders see the client toolset
   // labeled as what it is -- the tools their clients use.
@@ -605,6 +626,12 @@ export function RefineryShell({
 
         {/* Main content */}
         <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+          {adminNeeds2fa && (
+            <div className="mb-6 border border-t-amber bg-t-panel px-4 py-3 text-sm text-t-amber-bright">
+              <span className="font-semibold">Two-step verification is required for admin accounts.</span>{" "}
+              Set it up under <span className="font-semibold">Security</span> below to secure your account.
+            </div>
+          )}
           {/* The client journey banner is participant chrome -- org leaders run
               the org, they are not working a resume journey here. */}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
