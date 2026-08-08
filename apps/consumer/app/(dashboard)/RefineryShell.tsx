@@ -129,6 +129,29 @@ const ORG_STAFF_NAV: OrgNavItem[] = [
   { href: "/dashboard#add", label: "Add participants" },
 ];
 
+// Personal, account-scoped data cached in localStorage. Cleared on sign-out so
+// the next person to use this browser can never inherit the previous user's
+// Forge/resume/job data (shared-machine isolation).
+const PERSONAL_LS_KEYS = [
+  "forge_session",
+  "forge_preload",
+  "forge_audience",
+  "consumer_progress",
+  "saved_jobs",
+  "hidden_jobs",
+  "refinery_last_job_search",
+  "pending_access_code",
+];
+function clearPersonalLocalStorage() {
+  for (const k of PERSONAL_LS_KEYS) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function isNavUnlocked(
   item: NavItem,
   userTier: UserTier,
@@ -203,7 +226,7 @@ export function RefineryShell({
   children: ReactNode;
 }) {
   const userTier = useUserTier();
-  const { status: authStatus } = useSession();
+  const { data: sessionData, status: authStatus } = useSession();
   const pathname = usePathname();
   const onboarding = useOnboarding();
   const { context: userFullContext } = useUserContext();
@@ -282,10 +305,24 @@ export function RefineryShell({
       // Silent
     }
 
+    // Forge session sync -- with hard cross-user isolation. A Forge blob in
+    // localStorage belongs to exactly one account; on a shared browser it must
+    // never sync to, or render for, a different user (prevents the data bleed
+    // where account A's resume showed up under account B).
     try {
       const stored = localStorage.getItem("forge_session");
       if (!stored) return;
       const forgeData = JSON.parse(stored);
+      const uid = sessionData?.user?.id;
+      if (!uid) return; // wait until the signed-in user id is known
+
+      if (forgeData._ownerUserId && forgeData._ownerUserId !== uid) {
+        // Foreign blob: purge so it can't sync to or surface for this account.
+        clearPersonalLocalStorage();
+        window.dispatchEvent(new Event("forge-synced"));
+        return;
+      }
+
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
 
       try {
@@ -299,7 +336,7 @@ export function RefineryShell({
 
       const syncedAt = forgeData._syncedAt;
       const currentStartedAt = forgeData.startedAt || "unknown";
-      if (syncedAt === currentStartedAt) return;
+      if (syncedAt === currentStartedAt && forgeData._ownerUserId === uid) return;
 
       fetch("/api/forge/save", {
         method: "POST",
@@ -310,6 +347,7 @@ export function RefineryShell({
           if (res.ok) {
             forgeData._synced = true;
             forgeData._syncedAt = currentStartedAt;
+            forgeData._ownerUserId = uid; // claim this blob for the current account
             localStorage.setItem("forge_session", JSON.stringify(forgeData));
             window.dispatchEvent(new Event("forge-synced"));
           }
@@ -318,7 +356,7 @@ export function RefineryShell({
     } catch {
       // Silent
     }
-  }, []);
+  }, [authStatus, sessionData?.user?.id]);
 
   // Role-aware nav framing (role-clear wave): the first item names the
   // landing the user actually gets, and org leaders see the client toolset
@@ -518,7 +556,10 @@ export function RefineryShell({
                 Settings
               </Link>
               <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={() => {
+                  clearPersonalLocalStorage();
+                  signOut({ callbackUrl: "/login" });
+                }}
                 className="t-focus flex min-h-touch items-center gap-1.5 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
                 <LogOut size={15} aria-hidden="true" />
@@ -593,7 +634,10 @@ export function RefineryShell({
               The Forge <ExternalLink size={14} aria-hidden="true" />
             </a>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => {
+                clearPersonalLocalStorage();
+                signOut({ callbackUrl: "/login" });
+              }}
               className="flex min-h-touch w-full items-center gap-1.5 rounded-[4px] px-3 py-2 text-left text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
             >
               <LogOut size={14} aria-hidden="true" /> Sign out
