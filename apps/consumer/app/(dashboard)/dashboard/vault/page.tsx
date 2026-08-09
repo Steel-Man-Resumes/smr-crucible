@@ -24,6 +24,8 @@ interface Artifact {
   } | null;
   content: any;
   is_current?: boolean;
+  lane?: string | null;
+  is_locked?: boolean;
   updated_at: string;
 }
 
@@ -119,6 +121,10 @@ export default function VaultPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [pinning, setPinning] = useState<string | null>(null);
+  // R6: lock a resume as an approved per-lane baseline.
+  const [locking, setLocking] = useState<string | null>(null);
+  const [lockingFor, setLockingFor] = useState<string | null>(null);
+  const [laneInput, setLaneInput] = useState<Record<string, string>>({});
 
   function load() {
     fetch("/api/artifacts?limit=100")
@@ -150,6 +156,33 @@ export default function VaultPage() {
       }
     } catch {} finally {
       setPinning(null);
+    }
+  }
+
+  // R6: lock/unlock a resume as an approved per-lane baseline (optionally labeling
+  // its career lane). Locked baselines are what the tailor trusts + restructures
+  // (R5) and what the "searching as" selector offers.
+  async function lockAsBaseline(id: string, lock: boolean, lane?: string) {
+    setLocking(id);
+    try {
+      const res = await fetch(`/api/artifacts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lock ? { lock: true, lane: lane || null } : { lock: false }),
+      });
+      if (res.ok) {
+        const { data } = await res.json();
+        setItems((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, is_locked: data.is_locked, lane: data.lane } : a))
+        );
+        setLockingFor(null);
+        // Nudge any open "searching as" selector to re-read the baseline list.
+        try {
+          window.dispatchEvent(new Event("baseline-changed"));
+        } catch {}
+      }
+    } catch {} finally {
+      setLocking(null);
     }
   }
 
@@ -293,6 +326,11 @@ ${body}
                   Current
                 </span>
               )}
+              {a.is_locked && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-t-steel text-t-steel">
+                  Baseline{a.lane ? ` · ${a.lane}` : ""}
+                </span>
+              )}
             </div>
             <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
           </div>
@@ -333,7 +371,7 @@ ${body}
         </div>
 
         {isResume && (
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
             <button
               onClick={() => setCurrent(a.id, !a.is_current)}
               disabled={pinning === a.id}
@@ -341,6 +379,46 @@ ${body}
             >
               {a.is_current ? "Unpin as current" : "Set as my current resume"}
             </button>
+            {a.is_locked ? (
+              <button
+                onClick={() => lockAsBaseline(a.id, false)}
+                disabled={locking === a.id}
+                className="text-xs font-medium text-t-steel hover:text-t-white disabled:opacity-50"
+              >
+                {locking === a.id ? "..." : "Unlock baseline"}
+              </button>
+            ) : lockingFor === a.id ? (
+              <span className="inline-flex items-center gap-2">
+                <input
+                  value={laneInput[a.id] || ""}
+                  onChange={(e) => setLaneInput((m) => ({ ...m, [a.id]: e.target.value }))}
+                  placeholder="Lane, e.g. Manufacturing"
+                  maxLength={60}
+                  className="px-2 py-1 text-xs bg-t-panel border border-t-line text-t-white focus:border-t-steel focus:outline-none"
+                />
+                <button
+                  onClick={() => lockAsBaseline(a.id, true, laneInput[a.id])}
+                  disabled={locking === a.id}
+                  className="t-focus text-xs font-bold text-white bg-t-steel px-2.5 py-1 hover:opacity-90 disabled:opacity-50"
+                >
+                  {locking === a.id ? "..." : "Lock"}
+                </button>
+                <button
+                  onClick={() => setLockingFor(null)}
+                  className="text-xs text-t-phos-dim hover:text-t-white"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setLockingFor(a.id)}
+                className="text-xs font-medium text-t-steel hover:text-t-white"
+                title="Lock this as an approved baseline for a career lane"
+              >
+                Lock as a baseline
+              </button>
+            )}
           </div>
         )}
 
@@ -392,8 +470,9 @@ ${body}
       <h1 className="text-2xl font-bold text-t-white">My Materials</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
-        unless you choose to. Pin your current resume, save anything as a PDF or Word file, or
-        delete it, anytime.
+        unless you choose to. Pin your current resume, lock an approved baseline for each
+        career lane (so tailoring sharpens it without ever downgrading it), save anything as a
+        PDF or Word file, or delete it, anytime.
       </p>
 
       {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for

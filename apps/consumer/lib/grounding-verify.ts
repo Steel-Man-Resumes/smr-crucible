@@ -23,17 +23,31 @@ import { recordTokenUsage } from "@/lib/ai-usage-log";
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
  * definition of "what the person actually told us about themselves." It admits
- * ONLY self-authored material: the original resume text and the user's own typed
- * answers/goals. It must NEVER include AI-derived content (the Forge narrative,
- * strengths, or extracted skills) or the job posting -- doing so lets an invented
- * fact launder itself into the verifier's evidence (Codex finding 2). Keep every
- * caller routed through here so the trust boundary lives in one place.
+ * self-authored material only: the original resume text, the user's own typed
+ * answers/goals, and -- behind an explicit approval flag -- the person's own
+ * HUMAN-APPROVED base resume.
+ *
+ * It must NEVER admit UNREVIEWED AI-derived content (the Forge /api/analyze
+ * narrative, strengths, or extracted skills) or the job posting -- doing so lets
+ * an invented fact launder itself into the verifier's evidence (Codex finding 2).
+ *
+ * `approvedResume` is the deliberate, principled exception (R5): a resume the
+ * user has explicitly reviewed and approved -- their pinned "current" resume or a
+ * locked per-lane baseline -- is self-authored truth, and human approval is the
+ * exact trust signal the raw-only rule was protecting. It is admitted ONLY when
+ * `approved === true`, so an unreviewed draft can never enter through this door.
+ * Keep every caller routed through here so the trust boundary lives in one place.
  */
 export function buildTrustedSource(parts: {
   resumeText?: string;
   userText?: Array<string | undefined | null>;
+  approvedResume?: { text?: string | null; approved?: boolean };
 }): string {
-  return [parts.resumeText || "", ...((parts.userText || []).filter(Boolean) as string[])]
+  const approved =
+    parts.approvedResume?.approved === true && typeof parts.approvedResume.text === "string"
+      ? parts.approvedResume.text
+      : "";
+  return [parts.resumeText || "", approved, ...((parts.userText || []).filter(Boolean) as string[])]
     .map((s) => s.trim())
     .filter(Boolean)
     .join("\n\n");

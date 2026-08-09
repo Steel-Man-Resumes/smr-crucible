@@ -98,16 +98,35 @@ check("year range is not an outcome",
   computeGrounding([{ duties: "Employed there from 2018 to 2021 full time." }]).jobs[0].hasOutcome === false);
 check("empty history is RED", computeGrounding([]).band === "red");
 
-// ── 4. Source-laundering boundary: buildTrustedSource (Codex 2) ──────────────
+// ── 4. Source-laundering boundary: buildTrustedSource (Codex 2 + R5) ──────────
 section("source-laundering boundary");
 {
   const src = buildTrustedSource({ resumeText: "  Forklift operator, 3 years.  ", userText: ["I want warehouse work.", "", null, "  Reliable, on time.  "] });
   check("joins resume + user text, trimmed", src.includes("Forklift operator") && src.includes("warehouse work") && src.includes("Reliable, on time"), src);
   check("filters empty/null user entries", !/\n\n\n/.test(src) && src.trim() === src, JSON.stringify(src));
-  // Structural boundary: the signature accepts ONLY resumeText + userText, so an AI
-  // narrative or a job posting has no parameter to enter through. Confirm an
-  // invented phrase never present in the inputs is absent from the trusted source.
+  // Structural boundary: the only text inputs are resumeText, userText, and the
+  // approval-gated approvedResume -- an unreviewed AI narrative or a job posting
+  // has no parameter to enter through.
   check("cannot admit AI-narrative/posting content", !src.includes("buffers and scrubbers"), src);
+
+  // R5: the HUMAN-APPROVED base resume is admitted ONLY behind the explicit flag.
+  const approvedOn = buildTrustedSource({
+    resumeText: "Forklift operator, 3 years.",
+    approvedResume: { text: "Led a 4-person dock crew and cut load times.", approved: true },
+  });
+  check("approved base resume (approved:true) IS admitted", approvedOn.includes("Led a 4-person dock crew"), approvedOn);
+
+  const approvedOff = buildTrustedSource({
+    resumeText: "Forklift operator, 3 years.",
+    approvedResume: { text: "Led a 4-person dock crew and cut load times.", approved: false },
+  });
+  check("un-approved base resume (approved:false) is NOT admitted", !approvedOff.includes("dock crew"), approvedOff);
+
+  const approvedNoFlag = buildTrustedSource({
+    resumeText: "Forklift operator, 3 years.",
+    approvedResume: { text: "Led a 4-person dock crew and cut load times." },
+  });
+  check("base resume with no approval flag is NOT admitted", !approvedNoFlag.includes("dock crew"), approvedNoFlag);
 }
 
 // ── 5. Parser round-trip: profileToResume (Codex 1) ──────────────────────────

@@ -6,6 +6,8 @@ import {
   deleteArtifact,
   setCurrentResume,
   clearCurrentResume,
+  lockBaseline,
+  unlockBaseline,
 } from "@crucible/core";
 
 interface RouteContext {
@@ -48,6 +50,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     } else {
       await clearCurrentResume(userId);
     }
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
+  // R6: lock/unlock this resume as an approved per-lane baseline (no content
+  // change). Optional `lane` labels the career lane when locking.
+  if (body && typeof body === "object" && "lock" in body && !body.content) {
+    const ok = body.lock
+      ? await lockBaseline(userId, id, typeof body.lane === "string" ? body.lane : null)
+      : await unlockBaseline(userId, id);
+    if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const artifact = await getArtifact(id, userId);
     return NextResponse.json({ data: artifact });
   }

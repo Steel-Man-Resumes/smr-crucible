@@ -19,6 +19,10 @@ export interface RefineryArtifact {
   scaffold_level: number;
   /** N4: the user's one pinned "current" resume (at most one per user). */
   is_current: boolean;
+  /** R6: short career-lane label for a locked baseline resume (e.g. "Manufacturing"). */
+  lane: string | null;
+  /** R6: an approved, locked per-lane baseline resume. Multiple are allowed. */
+  is_locked: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +183,45 @@ export async function clearCurrentResume(userId: string): Promise<void> {
     `UPDATE refinery_artifact SET is_current = false WHERE user_id = $1 AND is_current`,
     [userId]
   );
+}
+
+/**
+ * R6: lock a resume as an approved per-lane BASELINE, optionally labeling its
+ * career lane. Multiple locked baselines are allowed (one per lane), unlike the
+ * single is_current pin. Locking is not an edit, so updated_at is left untouched
+ * (the vault keeps its order). A null/omitted lane keeps any existing label.
+ * Ownership + resume-type checked; returns false if it isn't this user's resume.
+ */
+export async function lockBaseline(
+  userId: string,
+  artifactId: string,
+  lane?: string | null
+): Promise<boolean> {
+  const cleanLane =
+    typeof lane === "string" && lane.trim() ? lane.trim().slice(0, 60) : null;
+  const rows = await query(
+    `UPDATE refinery_artifact
+       SET is_locked = true, lane = COALESCE($3, lane)
+     WHERE id = $1 AND user_id = $2 AND artifact_type = 'resume'
+     RETURNING id`,
+    [artifactId, userId, cleanLane]
+  );
+  return rows.length > 0;
+}
+
+/** R6: unlock a baseline resume (leaves its lane label in place). */
+export async function unlockBaseline(
+  userId: string,
+  artifactId: string
+): Promise<boolean> {
+  const rows = await query(
+    `UPDATE refinery_artifact
+       SET is_locked = false
+     WHERE id = $1 AND user_id = $2 AND artifact_type = 'resume'
+     RETURNING id`,
+    [artifactId, userId]
+  );
+  return rows.length > 0;
 }
 
 /**

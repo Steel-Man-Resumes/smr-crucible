@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StatusBadges } from "./StatusBadges";
+import { BaselineSelector } from "./BaselineSelector";
 
 interface SavedApp {
   id: string;
@@ -78,9 +79,12 @@ export function SavedJobsPanel({
           Open tracker &rarr;
         </Link>
       </div>
-      <p className="text-xs text-t-phos-dim mb-4">
+      <p className="text-xs text-t-phos-dim mb-3">
         You tailor one job at a time. Save as many as you want, then dial them in and apply one by one.
       </p>
+      <div className="mb-4">
+        <BaselineSelector />
+      </div>
 
       <div className="space-y-2">
         {shown.map((app) => {

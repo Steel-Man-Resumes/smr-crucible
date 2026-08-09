@@ -20,6 +20,7 @@ import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
+import { BaselineSelector } from "@/components/apply/BaselineSelector";
 
 interface SavedResume {
   id: string;
@@ -436,6 +437,37 @@ export function ResumeWorkspace() {
           };
         }
 
+        // R5/R6: resolve the person's HUMAN-APPROVED base resume -- the one they
+        // are "searching as" (R6 active baseline) or their pinned "current" resume
+        // -- and pass it so tailoring TRUSTS and RESTRUCTURES it instead of
+        // regressing toward the weaker raw upload. Only an explicitly approved
+        // resume qualifies (a locked baseline or the pinned current), never a
+        // random tailored draft.
+        let approvedResumePayload: { text: string; approved: boolean } | undefined;
+        try {
+          const artRes = await fetch("/api/artifacts?type=resume&limit=50");
+          if (artRes.ok) {
+            const { data } = await artRes.json();
+            const resumes: any[] = data || [];
+            let activeId: string | null = null;
+            try {
+              activeId = localStorage.getItem("active_baseline_id");
+            } catch {}
+            const approvedBase =
+              (activeId && resumes.find((a) => a.id === activeId && (a.is_locked || a.is_current))) ||
+              resumes.find((a) => a.is_current) ||
+              null;
+            if (approvedBase?.content) {
+              const c = approvedBase.content;
+              const docForText = c.formatVersion === 2 ? (c as ResumeDocument) : migrateLegacyResume(c);
+              const text = formatResumeDownload(docForText);
+              if (text && text.trim().length > 30) {
+                approvedResumePayload = { text, approved: true };
+              }
+            }
+          }
+        } catch {}
+
         // Call the career package generation API
         const res = await fetch("/api/resume-generate-full", {
           method: "POST",
@@ -453,6 +485,7 @@ export function ResumeWorkspace() {
             contact: contactInfo,
             challenges,
             criminalRecord,
+            ...(approvedResumePayload ? { approvedResume: approvedResumePayload } : {}),
           }),
         });
 
@@ -843,11 +876,16 @@ export function ResumeWorkspace() {
           letter, and disclosure plan to the exact posting -- using your Forge
           profile.
         </p>
-        <p className="text-sm text-t-phos-dim mb-8">
+        <p className="text-sm text-t-phos-dim mb-4">
           You work one job at a time. Save as many as you want on the Job Board,
           then tailor and apply to them one by one -- they wait for you under
           your saved jobs.
         </p>
+        {/* R6: which approved baseline this tailoring restructures. Tailoring
+            within a lane sharpens that baseline without downgrading it. */}
+        <div className="mb-8">
+          <BaselineSelector />
+        </div>
 
         {/* Saved resumes */}
         {savedResumes.length > 0 && (
