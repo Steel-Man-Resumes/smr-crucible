@@ -16,6 +16,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
+import { TroyLivingIcon } from "./TroyLivingIcon";
 
 interface AssistantDrawerProps {
   /** Content of the assistant conversation */
@@ -24,14 +25,45 @@ interface AssistantDrawerProps {
   enabled?: boolean;
   /** Optional label for the trigger button */
   triggerLabel?: string;
+  /**
+   * Draw the user's eye to t.ROY (brighter/faster glow + pop) — set this when he
+   * has something timely to say. Independent of the one-time first-visit nudge.
+   */
+  attention?: boolean;
 }
 
 export function AssistantDrawer({
   children,
   enabled = true,
   triggerLabel = "Ask t.ROY",
+  attention = false,
 }: AssistantDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // First-visit nudge: t.ROY glows for a few seconds to say "I'm here and alive."
+  // Once per browser session, and never while the drawer is open.
+  const [nudge, setNudge] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (sessionStorage.getItem("troy-nudged") === "1") return;
+    } catch {
+      // sessionStorage blocked (private mode) — just skip the nudge.
+      return;
+    }
+    const start = window.setTimeout(() => setNudge(true), 3500);
+    const stop = window.setTimeout(() => {
+      setNudge(false);
+      try {
+        sessionStorage.setItem("troy-nudged", "1");
+      } catch {
+        /* ignore */
+      }
+    }, 3500 + 6000);
+    return () => {
+      window.clearTimeout(start);
+      window.clearTimeout(stop);
+    };
+  }, []);
   const drawerRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
@@ -88,20 +120,18 @@ export function AssistantDrawer({
 
   return (
     <>
-      {/* Trigger button — fixed bottom-right, never auto-opens */}
+      {/* Trigger — t.ROY himself, living in the corner. Never auto-opens.
+          The figure is the control; the label reveals on hover/focus. */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="t-focus fixed bottom-24 right-4 z-40 inline-flex min-h-touch items-center gap-2 rounded-[6px] border border-[#292c27] bg-[#1c1e1b] px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(22,26,21,0.22)] transition-colors hover:bg-[#2b2e2a] sm:bottom-6 sm:right-6"
-          aria-label="Open assistant"
+          className="t-focus group fixed bottom-24 right-2 z-40 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:bottom-5 sm:right-4"
+          aria-label={`${triggerLabel} — open assistant`}
         >
-          <img
-            src="/images/t-roy-icon-badge.webp"
-            alt=""
-            aria-hidden="true"
-            className="w-5 h-5 rounded-full flex-shrink-0"
-          />
-          <span className="hidden sm:inline">{triggerLabel}</span>
+          <span className="pointer-events-none hidden rounded-full border border-[#e4d9ff] bg-white/95 px-3 py-1.5 text-sm font-semibold text-[#4c1d95] opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 sm:inline-block">
+            {triggerLabel}
+          </span>
+          <TroyLivingIcon size={62} attention={attention || nudge} />
         </button>
       )}
 

@@ -2,6 +2,7 @@
 export { FlowPage } from "./FlowPage";
 export { ExitButton } from "./ExitButton";
 export { AssistantDrawer } from "./AssistantDrawer";
+export { TroyLivingIcon } from "./TroyLivingIcon";
 export { GhostGuide } from "./GhostGuide";
 export { CustomImage } from "./CustomImage";
 export { CardSelect } from "./CardSelect";
