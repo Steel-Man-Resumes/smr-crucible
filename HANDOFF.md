@@ -1,5 +1,26 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-08 -- Troy's REAL prod walkthrough: full feedback captured + wave plan (NOT yet executed)
+
+Troy ran the entire funnel on prod with his real resume and real job-search intent
+(recording for demo material) and dictated ~25 observations. Full organized plan:
+`docs/WALKTHROUGH-FEEDBACK-PLAN-2026-08-08.md`. Wave order: T1 truth fixes
+(smr-website false "Black Belt" claim -- he is Black Belt TRAINED, not certified;
+verify SUPPORT_NOTIFY_EMAIL delivery) -> B1 bugs (stale post-tour "take the tour"
+next-step card with dead Continue; Forge progress bar stuck at 80% must be real
+recorded data; auto-write summary on strong-resume parse; watch job-list-after-
+tailor corruption) -> UX1 Forge output/button hierarchy + package email + partner
+code -> UX2 Refinery first-run landing + state-aware CTAs -> J1 job board filters/
+multi-select prefs -> TROY wave (folds INTO the approved 8/7 awareness upgrade:
+anon page-awareness, stage-appropriate advice, expanded intro + demo invite, and
+the NEW living icon -- hooded figure art Troy delivered 8/8, transparent bg,
+purple glow, alive/glowing at key moments; float + synced particles later).
+"Send to Troy" support path confirmed already email-based (DB-first + Resend),
+NOT Twilio -- only prod env delivery verification remains. Troy decided: user
+experience doctrine = intuitive, relaxing, empowered, met at their level; job
+board first attempt = dream-job narrow, widen only later. Plan awaiting Troy's
+go; T1 items are ready-to-execute one-liners.
+
 ## 2026-08-08 -- Steel Man's OWN Twilio account is intentionally dormant, not a pending task
 
 A todash session chasing down why SMR texting didn't work found Steel Man's
