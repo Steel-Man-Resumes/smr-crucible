@@ -316,7 +316,46 @@ BUILD: explicit post-finalize confirmation -- "you finished {company}: apply her
 then move to your next saved job [link]." Natural home is the R1 saved-jobs "pending
 work" view. Low risk once R1 exists.
 
+### R8 -- APPLY capability (the missing piece) [NEW 8/9, Troy's centerpiece for next round, NOT BUILT]
+Troy: the platform has no direct "apply" like Indeed/LinkedIn. After a resume is tailored
+and dialed in, the user must actually APPLY -- and there's no button for it. Build a real
+Apply action, surfaced at the moment the resume is ready (in ResumeWorkspace + on the
+Applications/saved-jobs card), with a fallback ladder:
+1. **Direct apply link** -- the job board ALREADY captures `apply_url` (jobs/page.tsx L36,
+   rendered as "Last step" L901-911). VERIFY it's persisted on `job_application` (migration
+   011 snapshot) so the saved job keeps its apply link; surface an "Apply now" button that
+   opens it. Fastest path, do first.
+2. **Employer website** -- fall back to `job.employer_website` (already on the card) when no
+   apply_url.
+3. **t.ROY-assisted application email** -- when neither exists, help the user find the
+   company's correct careers/HR email and draft the application email (resume + cover letter
+   attached / in body). Ties to the assistant tools.
+4. **Quick Apply (later, R6-dependent)** -- for candidates with a LOCKED per-lane general
+   resume (industry-approved, not job-specific), a one-tap apply using that baseline.
+Also: mark the application `status: applied` when they apply (the tracker already has the
+status enum) so the saved-jobs "pending work" view (R1) reflects it.
+
 ---
+
+## NEXT ROUND GOAL (Troy, 8/9 session close) -- COMPLETE the application loop, end-to-end
+
+Troy will start a FRESH session with full context and wants a COMPLETE build he can run to
+finish his real application process. The loop he expects to run, in order:
+1. Sign in -> **find the job he already tailored a resume to** (needs R1: saved jobs
+   discoverable; his tailored resume is linked to that application).
+2. **Dial in that resume** -- edit/verify it's as good as it can be (workspace editing
+   exists today; R5 quality-gate fix is SEPARATE and Troy said NOT YET).
+3. **Apply for the job** -- R8 Apply button/flow (the new centerpiece).
+4. **Do the other ~5 saved jobs** he hasn't tailored yet -- find them (R1) and tailor each
+   (existing flow, one at a time; R2 surface the constraint).
+5. Once applied to all -> **play with the other tools** (Disclosure Planner, Interview
+   Coach) to fine-tune the whole process.
+
+So next-round build set = **R1 (find saved jobs + status) + R8 (Apply) + R7 (explicit
+"apply here / next job" after finalize) + R2 (surface one-at-a-time)**, wired into one
+smooth end-to-end loop. R5 (tailoring quality gate) and R6 (locked per-lane baselines) are
+NEXT-NEXT (Troy: R5 "not yet"). Build with the adversarial suite where the safety gate is
+touched; nothing ships to prod while Troy is in a live session.
 
 ## Open items needing Troy
 - T1.1 wording approval for the Black Belt correction.

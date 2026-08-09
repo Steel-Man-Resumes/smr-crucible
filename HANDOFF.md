@@ -1,5 +1,41 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-09 (session close) -- NEXT ROUND: build the COMPLETE application loop, end-to-end
+
+Troy closed the session to start FRESH with a full context window. He wants a COMPLETE build
+he can run to finish his REAL job application. Full spec + verified code map: `docs/WALKTHROUGH-FEEDBACK-PLAN-2026-08-08.md`
+(see "NEXT ROUND GOAL" + Wave R). The loop he will run: sign in -> find the job he already
+tailored a resume to (R1) -> dial in that resume -> **APPLY (R8, the missing centerpiece)** ->
+tailor his other ~5 saved jobs (R1 find + existing flow) -> then play with Disclosure Planner +
+Interview Coach.
+
+**BUILD SET for next round: R1 + R8 + R7 + R2, wired into ONE smooth loop.**
+- **R8 APPLY** (new, top priority): no direct apply like Indeed/LinkedIn today. Job board
+  already captures `apply_url` (jobs/page.tsx L36/L901-911, "Last step") -- surface an "Apply
+  now" button at the moment the resume is ready (ResumeWorkspace + Applications card), fallback
+  ladder: apply_url -> employer_website -> t.ROY-drafted application email -> (later) Quick
+  Apply from a locked lane. Mark status:applied. VERIFY apply_url is persisted on job_application.
+- **R1** (saved jobs findable + per-job status badges): saved jobs are on the **Applications**
+  tab, NOT My Materials -- that's the confusion (Troy confirmed, doesn't care about the name,
+  just make them findable). Needs a `cover_letter_artifact_id` migration + badges.
+- **R7** explicit "apply here / next job" after finalize. **R2** surface one-job-at-a-time.
+- **R5 (tailoring quality gate) and R6 (locked per-lane baselines): Troy said NOT YET.** R5 is
+  safety-critical (anti-fabrication grounding gate) -- when it IS built, run the adversarial suite.
+
+**SHIPPED + LIVE this session (prod deploy the-crucible-591zhm9sv READY, merges 9d979ff + b1cd645):**
+- **t.ROY living icon** -- `TroyLivingIcon` (packages/consumer-ui) replaces the old dark-button
+  launcher: transparent hooded figure (`apps/consumer/public/images/t-roy-avatar.png`) + purple
+  glow, idle float/pulse, `attention` pop state, first-visit nudge, hover "Ask t.ROY" pill;
+  prod-verified on live forge. Float-around-screen + synced particles = future. Forge intro-page
+  TOP icon still a placeholder -- swap during TROY.3.
+- **R3 PDF styling fix** (commit 6afadf4) -- print-color-adjust:exact on both print paths; PDF
+  now keeps the navy header/hierarchy. **R4 cover-letter** teaching copy (DOCX-first).
+- (smr-website) Black Belt claim corrected; SUPPORT_NOTIFY_EMAIL -> hmu@ (deliverable Zoho MX;
+  it's a SENSITIVE write-only var, pull shows "" always -- don't re-diagnose as empty).
+
+Deploy RULE: never deploy Forge/Refinery while Troy is in a live session. WSL gotcha: `wsl.exe
+bash -lc` mangles loops/backticks -- put scripts in files, commit messages via `git commit -F`.
+
 ## 2026-08-08 -- Troy's REAL prod walkthrough: full feedback captured + wave plan (NOT yet executed)
 
 Troy ran the entire funnel on prod with his real resume and real job-search intent
