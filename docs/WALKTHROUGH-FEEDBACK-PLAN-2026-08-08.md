@@ -191,7 +191,25 @@ Troy believes it IS the best and wants users to know: expand into a genuine,
 confident intro and invite the user to a quick demonstration via the Ask t.ROY
 button in the corner.
 
-### TROY.4 -- The living icon (spec updated 8/8 with new art)
+### TROY.4 -- The living icon [BUILT 2026-08-09, branch troy-living-icon-2026-08-09, NOT deployed]
+STATUS: Built + Playwright-verified (idle/hover/attention states screenshotted on
+the real light app bg). Source `t.ROY-LOGO-official.png` was ALREADY transparent
+(indigo hooded figure + cyan/gold stars; the "white" was just the chat viewer) --
+no bg removal needed; trimmed + padded to `apps/consumer/public/images/t-roy-avatar.png`.
+New `TroyLivingIcon` component (packages/consumer-ui): transparent figure, layered
+purple glow (rgba 139,92,246) under/around him, always gently alive (slow float +
+glow pulse), `attention` state = brighter/faster glow + pop for important moments,
+`prefers-reduced-motion` safe. Wired into `AssistantDrawer` launcher: removed the
+old dark-rounded-button chrome + tiny 20px badge; the figure IS the control now,
+with a hover/focus "Ask t.ROY" pill for discoverability and a one-time first-visit
+attention nudge (sessionStorage-gated). Old `t-roy-icon-badge.webp` left in place
+(may be used elsewhere). NOT built (future, per Troy "just update icon in plan"):
+free-floating movement around the screen + particles synced to him -- and an
+`attention` trigger driven by real "t.ROY has something to say" events (the prop
+exists; nothing wires it to live moments yet). Also have `t.ROY-animated.mp4` for a
+possible future motion treatment.
+
+ORIGINAL SPEC (8/8 with new art):
 New official icon: hooded t.ROY figure -- deep indigo hood/robes, cyan
 four-point star in the hood, gold four-point star at the base, serif "t"
 letterform. (Troy pasted the art in chat 8/8; source candidates in
