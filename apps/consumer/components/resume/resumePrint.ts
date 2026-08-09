@@ -30,6 +30,10 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
       bodyHtml += `<div class="section-header">${t}</div>`;
     } else if (t.startsWith("- ") || t.startsWith("* ")) {
       bodyHtml += `<div class="bullet">${t.slice(2)}</div>`;
+    } else if (t.includes("|") && /\b(19|20)\d{2}\b/.test(t)) {
+      // Job/role line ("Title | Employer, 2021 - 2022") -- bold it to match the
+      // DOCX hierarchy. The year guard keeps the contact line (no year) as body.
+      bodyHtml += `<div class="job-title">${t}</div>`;
     } else {
       bodyHtml += `<div class="body-line">${t}</div>`;
     }
@@ -37,15 +41,16 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} -- Resume${job ? ` for ${job}` : ""}</title>
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;margin:0;padding:0.5in 0.5in 0.5in 0.5in}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;margin:0;padding:0.5in 0.5in 0.5in 0.5in;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .name{font-family:Georgia,serif;font-size:16pt;font-weight:bold;text-align:center;background:#1B2A4A;color:#fff;padding:8px 0;letter-spacing:0.05em}
   .subtitle{text-align:center;background:#1B2A4A;color:#B8C9E0;font-size:8pt;padding:3px 0 6px}
   .section-header{font-family:Georgia,serif;font-size:9pt;font-weight:bold;color:#1B2A4A;border-bottom:1.5px solid #1B2A4A;margin:12px 0 4px;padding-bottom:2px;text-transform:uppercase;letter-spacing:0.1em}
+  .job-title{font-weight:bold;font-size:9pt;color:#1a1a1a;margin:8px 0 1px}
   .bullet{margin:2px 0 2px 14px;font-size:8.5pt;line-height:1.45}
   .bullet::before{content:"\\2022  ";color:#1B2A4A;font-weight:bold}
   .body-line{margin:2px 0;font-size:8.5pt;line-height:1.4}
   br{display:block;margin:3px 0}
-  @media print{@page{size:letter;margin:0.4in 0.45in}}
+  @media print{@page{size:letter;margin:0.4in 0.45in} body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head>
 <body>
 <div class="name">${name.toUpperCase()}</div>

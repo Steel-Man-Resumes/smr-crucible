@@ -1041,8 +1041,8 @@ function resumeTextToStandaloneHtml(text: string): string {
   bodyHtml += `</div>`;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume -- Steel Man Resumes</title>
-<style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff}
-@media print{@page{margin:0.5in;size:letter}body{margin:0}.no-print{display:none!important}}</style>
+<style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{@page{margin:0.5in;size:letter}body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}</style>
 </head><body><div style="max-width:7.5in;margin:0 auto;background:#fff;">
 ${headerHtml}${bodyHtml}
 <div class="no-print" style="padding:12px 20px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
