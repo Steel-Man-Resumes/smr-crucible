@@ -320,6 +320,7 @@ function JobBoardPage() {
           source: "jsearch",
           source_id: job.id,
           apply_url: job.apply_url || null,
+          employer_website: job.employer_website || null,
           status: "saved",
         }),
       });

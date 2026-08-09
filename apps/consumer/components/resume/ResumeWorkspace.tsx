@@ -19,6 +19,7 @@ import {
 import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { printResumePdf } from "./resumePrint";
+import { ApplyActions } from "@/components/apply/ApplyActions";
 
 interface SavedResume {
   id: string;
@@ -107,6 +108,15 @@ export function ResumeWorkspace() {
   // set, the saved resume artifact is linked to it (Stage 3 journey gate).
   const [targetApplicationId, setTargetApplicationId] = useState<string | null>(null);
 
+  // Where to actually APPLY once the resume is ready (Wave R / R8). The ladder is
+  // apply_url -> employer_website -> t.ROY-drafted email; `applied` reflects the
+  // saved application's status so the CTA can flip to "Applied".
+  const [applyInfo, setApplyInfo] = useState<{
+    applyUrl: string | null;
+    employerWebsite: string | null;
+    applied: boolean;
+  }>({ applyUrl: null, employerWebsite: null, applied: false });
+
   // Career package (cover letter + disclosure brief)
   const [packageTab, setPackageTab] = useState<"resume" | "cover-letter" | "disclosure">("resume");
   const [coverLetterText, setCoverLetterText] = useState<string | null>(null);
@@ -193,6 +203,73 @@ export function ResumeWorkspace() {
       .catch(() => {});
   }, [searchParams]);
 
+  // --- Recover the linked application when a tailored resume is opened directly
+  // (?id=, or from "Your saved work") so the Apply CTA (R8) can appear even
+  // when the user did not arrive through the job hand-off. ---
+  useEffect(() => {
+    if (!artifactId || targetApplicationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/applications");
+        if (!res.ok) return;
+        const { applications } = await res.json();
+        const app = (applications || []).find(
+          (a: any) => a.resume_artifact_id === artifactId
+        );
+        if (!app || cancelled) return;
+        setTargetApplicationId(app.id);
+        setApplyInfo({
+          applyUrl: app.apply_url || null,
+          employerWebsite: app.employer_website || null,
+          applied: app.status === "applied",
+        });
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [artifactId, targetApplicationId]);
+
+  // --- Next saved job to work on (R7 "what's next"): the next non-applied job
+  // that still needs a tailored resume, so the workspace can point straight to
+  // it once this one is applied. ---
+  const [nextJob, setNextJob] = useState<{ id: string; title: string } | null>(null);
+  useEffect(() => {
+    if (!targetApplicationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/applications");
+        if (!res.ok) return;
+        const { applications } = await res.json();
+        const next = (applications || []).find(
+          (a: any) =>
+            a.id !== targetApplicationId &&
+            !a.resume_artifact_id &&
+            !["rejected", "declined", "applied"].includes(a.status)
+        );
+        if (!cancelled) setNextJob(next ? { id: next.id, title: next.job_title } : null);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetApplicationId, applyInfo.applied]);
+
+  // Real strengths from the Forge session -- referenced only if t.ROY drafts an
+  // application email (R8 rung 3). Never invents; empty is fine.
+  function workspaceStrengths(): string[] {
+    try {
+      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const raw = s?.forgeOutput?.strengths;
+      if (Array.isArray(raw)) {
+        return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  }
+
   // --- Import from Rush (via sessionStorage) ---
   useEffect(() => {
     const from = searchParams.get("from");
@@ -250,6 +327,11 @@ export function ResumeWorkspace() {
         employment_type?: string;
         id?: string;
         jobListingUrl?: string;
+        // Where to apply -- persisted on the job_application so the Apply CTA
+        // (R8) works from the workspace, the Applications tracker, and the saved
+        // job list without a re-fetch of the original board listing.
+        apply_url?: string | null;
+        employer_website?: string | null;
         // Provenance for the created job_application (board = "jsearch",
         // typed/pasted in the Tailor = "manual"). Purely a label; the unlock
         // gate keys on the saved resume being job-targeted, not the source.
@@ -407,6 +489,8 @@ export function ResumeWorkspace() {
                 employment_type: job.employment_type || "",
                 source: job.source || "jsearch",
                 source_id: job.id || "",
+                apply_url: job.apply_url || null,
+                employer_website: job.employer_website || null,
                 status: "saved",
               }),
             });
@@ -417,6 +501,13 @@ export function ResumeWorkspace() {
           } catch {}
         }
         if (applicationId) setTargetApplicationId(applicationId);
+        // Remember where to apply so the Apply CTA (R8) can surface the moment
+        // the resume is ready.
+        setApplyInfo({
+          applyUrl: job.apply_url || null,
+          employerWebsite: job.employer_website || null,
+          applied: false,
+        });
 
         setDoc(finalResume);
         if (coverLetter) setCoverLetterText(coverLetter);
@@ -468,6 +559,13 @@ export function ResumeWorkspace() {
         const { applications } = await res.json();
         const app = (applications || []).find((a: any) => a.id === appId);
         if (!app || cancelled) return;
+        // Carry the saved job's apply target + applied-state so the Apply CTA
+        // (R8) shows the right rung whether or not the resume already exists.
+        setApplyInfo({
+          applyUrl: app.apply_url || null,
+          employerWebsite: app.employer_website || null,
+          applied: app.status === "applied",
+        });
         // Already tailored: open it for editing rather than regenerating (no AI spend).
         if (app.resume_artifact_id) {
           setTargetApplicationId(app.id);
@@ -483,6 +581,8 @@ export function ResumeWorkspace() {
             salary: app.salary,
             employment_type: app.employment_type,
             id: app.source_id,
+            apply_url: app.apply_url,
+            employer_website: app.employer_website,
           },
           { existingApplicationId: app.id }
         );
@@ -738,10 +838,15 @@ export function ResumeWorkspace() {
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
-        <p className="text-base text-t-phos-dim mb-8">
+        <p className="text-base text-t-phos-dim mb-2">
           Aim your base resume at a specific job. We tailor your resume, cover
           letter, and disclosure plan to the exact posting -- using your Forge
           profile.
+        </p>
+        <p className="text-sm text-t-phos-dim mb-8">
+          You work one job at a time. Save as many as you want on the Job Board,
+          then tailor and apply to them one by one -- they wait for you under
+          your saved jobs.
         </p>
 
         {/* Saved resumes */}
@@ -1042,6 +1147,54 @@ export function ResumeWorkspace() {
           <p className="text-[10px] text-t-phos-dim mt-2 italic">
             Use these points in your disclosure and interview prep -- they are where your profile and this job connect.
           </p>
+        </div>
+      )}
+
+      {/* Ready to apply -- the Apply ladder (R8) plus what's next (R7). Appears
+          once this resume is tied to a real saved job. */}
+      {targetApplicationId && !generatingFull && (
+        <div className="mb-4 bg-t-panel border border-t-amber p-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="text-t-amber flex-shrink-0">
+              <path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            </svg>
+            <span className="text-sm font-bold text-t-amber-bright">
+              {applyInfo.applied ? "Applied -- nice work" : "Ready to apply"}
+            </span>
+          </div>
+          <p className="text-xs text-t-phos-dim mb-3">
+            {applyInfo.applied
+              ? `You applied to ${doc.meta.targetCompany || "this job"}. Keep the momentum going.`
+              : "Dial in your resume below until it reads exactly right, then apply. t.ROY keeps track for you -- no re-typing."}
+          </p>
+          <ApplyActions
+            applicationId={targetApplicationId}
+            applyUrl={applyInfo.applyUrl}
+            employerWebsite={applyInfo.employerWebsite}
+            company={doc.meta.targetCompany || doc.meta.targetJob || "this employer"}
+            applied={applyInfo.applied}
+            onApplied={() => setApplyInfo((p) => ({ ...p, applied: true }))}
+            forgeStrengths={workspaceStrengths()}
+            candidateName={doc.contact.name}
+          />
+          {/* What's next: the next saved job that still needs a tailored resume. */}
+          <div className="mt-3 pt-3 border-t border-t-line">
+            {nextJob ? (
+              <a
+                href={`/dashboard/application-tailor?job=${nextJob.id}`}
+                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
+              >
+                Next: tailor your resume for {nextJob.title} &rarr;
+              </a>
+            ) : (
+              <a
+                href="/dashboard/applications"
+                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
+              >
+                See all your saved jobs &rarr;
+              </a>
+            )}
+          </div>
         </div>
       )}
 

@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
+import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 
 interface Artifact {
   id: string;
@@ -394,6 +395,12 @@ ${body}
         unless you choose to. Pin your current resume, save anything as a PDF or Word file, or
         delete it, anytime.
       </p>
+
+      {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for
+          them. Renders nothing when there are none. */}
+      <div className="mb-8">
+        <SavedJobsPanel heading="Your saved jobs" limit={5} />
+      </div>
 
       {items.length === 0 ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">

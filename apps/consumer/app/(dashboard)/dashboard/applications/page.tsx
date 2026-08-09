@@ -10,6 +10,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { ApplyActions } from "@/components/apply/ApplyActions";
+import { StatusBadges } from "@/components/apply/StatusBadges";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,10 @@ interface Application {
   location: string | null;
   salary: string | null;
   apply_url?: string | null;
+  employer_website?: string | null;
+  resume_artifact_id?: string | null;
+  cover_letter_artifact_id?: string | null;
+  disclosure_plan_id?: string | null;
   status: string;
   status_updated_at: string;
   applied_at: string | null;
@@ -296,22 +302,21 @@ function ApplicationsPage() {
                               )}
                               <span>{timeAgo(app.status_updated_at)}</span>
                             </div>
+                            {/* Per-job status (R1): what's done for this job. */}
+                            <div className="mt-2">
+                              <StatusBadges
+                                hasResume={!!app.resume_artifact_id}
+                                hasCover={!!app.cover_letter_artifact_id}
+                                hasDisclosure={!!app.disclosure_plan_id}
+                              />
+                            </div>
                           </div>
 
-                          {/* Status actions -- the "saved" stage gets a real
-                              apply sequence, not a bare status flip. */}
+                          {/* Status actions. The "saved" stage's apply + mark-
+                              applied lives in the ApplyActions block below (the
+                              full apply ladder); later stages just advance. */}
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                            {stage.status === "saved" && app.apply_url && (
-                              <a
-                                href={app.apply_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors"
-                              >
-                                Apply on employer&apos;s site &#8599;
-                              </a>
-                            )}
-                            {nextStage && (
+                            {stage.status !== "saved" && nextStage && (
                               <button
                                 onClick={() =>
                                   updateStatus(app.id, nextStage.status)
@@ -321,9 +326,7 @@ function ApplicationsPage() {
                               >
                                 {updating === app.id
                                   ? "..."
-                                  : stage.status === "saved"
-                                    ? "I applied -- move to Applied"
-                                    : `Move to ${nextStage.label}`}
+                                  : `Move to ${nextStage.label}`}
                               </button>
                             )}
                             <button
@@ -350,8 +353,33 @@ function ApplicationsPage() {
                           </div>
                         </div>
 
-                        {/* Cross-tool suggestion */}
-                        {stage.suggestion && (
+                        {/* Apply ladder (R8): the saved stage's real apply step
+                            -- direct link, employer site, or a t.ROY-drafted
+                            email -- plus the explicit "I applied" that advances
+                            the tracker. */}
+                        {stage.status === "saved" && (
+                          <div className="mt-3">
+                            {app.resume_artifact_id && (
+                              <p className="text-xs text-t-phos-dim mb-2">
+                                Your tailored resume is ready. Apply when you are:
+                              </p>
+                            )}
+                            <ApplyActions
+                              applicationId={app.id}
+                              applyUrl={app.apply_url || null}
+                              employerWebsite={app.employer_website || null}
+                              company={app.company}
+                              applied={false}
+                              onApplied={loadApps}
+                              forgeStrengths={forgeStrengths()}
+                            />
+                          </div>
+                        )}
+
+                        {/* Cross-tool suggestion (the saved-stage "tailor" nudge
+                            drops once the resume exists). */}
+                        {stage.suggestion &&
+                          !(stage.status === "saved" && !!app.resume_artifact_id) && (
                           <Link
                             href={stage.suggestion.href}
                             className="t-focus mt-3 flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs text-t-amber-bright hover:text-t-amber transition-colors"

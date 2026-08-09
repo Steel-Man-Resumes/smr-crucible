@@ -1,5 +1,58 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-09 (build) -- APPLY LOOP built on branch `refinery-apply-loop-2026-08-09` (R1+R8+R7+R2), NOT deployed
+
+Built the complete application loop Troy asked to run end-to-end: sign in -> find the
+saved job he already tailored (R1) -> dial in the resume -> **APPLY (R8)** -> move to the
+next saved job (R7) -> repeat. Staged on a branch; **nothing deployed** (Troy was mid live
+test). Typecheck (`tsc --noEmit`) + prod build both GREEN.
+
+**R8 -- Apply (the missing centerpiece):**
+- `components/apply/ApplyActions.tsx` = the apply ladder: `apply_url` -> `employer_website`
+  -> **t.ROY-drafted application email** (new `app/api/apply-email/route.ts`, modeled on
+  `follow-up`: draft-only, coaches where to find the employer's careers/HR address, never
+  sends and never invents an address; rate-limited client tier, mock-aware, decision-logged).
+  Opening a link is not applying, so there is always an explicit "I applied" that flips the
+  application to `status: applied`.
+- Surfaced in **ResumeWorkspace** the moment a tailored resume is ready ("Ready to apply"
+  block) and on the **Applications** tracker's saved-stage cards.
+- Fixed a real gap: `runCareerPackage` now persists `apply_url` + `employer_website` on the
+  job_application it creates (previously dropped, so a directly-tailored job had no apply
+  link). The workspace also recovers the linked application when a tailored resume is opened
+  directly via `?id=`, so Apply appears no matter how the user arrived.
+
+**R1 -- findable saved jobs + per-job status:**
+- `components/apply/SavedJobsPanel.tsx` = the "pending work" view (per-job status + one next
+  action), surfaced on the **Overview** and **My Materials** (renders nothing when there are
+  no saved jobs). Directly answers "I saved jobs and couldn't find them."
+- `components/apply/StatusBadges.tsx` (resume / cover letter / disclosure) on the panel + the
+  Applications cards.
+- New **cover_letter_artifact_id** link column wired into `APPLICATION_LINK_COLUMN`
+  (artifacts route) so the cover letter auto-links like resume / disclosure already do.
+
+**R7** = workspace points to the next saved job still needing a tailored resume.
+**R2** = one-job-at-a-time framing on the tailor entry + saved-jobs panel.
+
+**MIGRATION 031** (`packages/core/migrations/031_apply_ladder_and_cover_link.sql`, additive +
+`IF NOT EXISTS`, inert to current prod): adds `job_application.employer_website` +
+`cover_letter_artifact_id`. UI degrades gracefully if it hasn't run (badges just read
+false), but the loop needs it. **NOT run** (single Neon branch = prod; don't run under a
+live session).
+
+**DEPLOY RUNBOOK (when Troy says go, and is OUT of a live session):**
+1. `git checkout main && git merge --no-ff refinery-apply-loop-2026-08-09`
+2. Run the migration against prod:
+   `export DATABASE_URL=$(grep -m1 '^DATABASE_URL=' apps/consumer/.env.local | cut -d= -f2- | tr -d '"') && cd packages/core && npm run migrate` (applies 031 only; idempotent).
+3. Deploy the-crucible/consumer prod (same path as prior waves).
+4. Smoke: save a board job -> tailor -> "Ready to apply" shows with an Apply button + "I
+   applied" -> Overview + My Materials show the saved job with badges -> Applications card
+   shows badges + apply ladder. For a job with no apply_url/employer_website, the rung-3
+   "Draft an application email" returns subject/body/where-to-find.
+
+**NOT built (Troy: not yet):** R5 (tailoring grounding gate) + R6 (locked per-lane
+baselines). The grounding gate (`api/resume-generate-full/route.ts`) was NOT touched, so the
+anti-fabrication adversarial suite was not required for this change. When R5 IS built, run it.
+
 ## 2026-08-09 (session close) -- NEXT ROUND: build the COMPLETE application loop, end-to-end
 
 Troy closed the session to start FRESH with a full context window. He wants a COMPLETE build
