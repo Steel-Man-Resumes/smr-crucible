@@ -244,6 +244,80 @@ Nav-bar/grouping note (Troy's ask): as UX2 lands, audit the nav so the order
 of items mirrors the actual journey (resume -> jobs -> tailor -> apply ->
 interview) and nothing appears before its stage is relevant.
 
+## Wave R -- Refinery tour feedback (source: todash smr/qa-2026-08/troy/REFINERY-TOUR-FEEDBACK-2026-08-09.md)
+
+Verified code map done 2026-08-09 (Explore agent). Branch `refinery-feedback-batch-2026-08-09`.
+
+### R3 -- PDF export unstyled vs DOCX [DONE 8/9, commit 6afadf4]
+Root cause: two hand-maintained print paths (`apps/consumer/components/resume/resumePrint.ts`
++ Forge `app/(forge)/output/page.tsx` `resumeTextToStandaloneHtml`) set navy header/
+section backgrounds but omitted `print-color-adjust`, so Chrome strips backgrounds on
+Save-as-PDF (the vault PDF path already had it -- that's why DOCX/other paths looked
+right). FIX: added `-webkit-print-color-adjust/print-color-adjust: exact` to both +
+restored bold job-title lines in the shared path (guarded by pipe+year so the contact
+line stays plain). Print-emulation verified (navy header + hierarchy render).
+
+### R4 -- Cover letter DOCX-first / editable [DONE 8/9]
+Already structurally DOCX-only in-flow (Forge output + Application Tailor cover-letter
+panels offer Copy + Download .docx, NO PDF -- map confirmed). Added teaching copy under
+the cover-letter panel in `ResumeWorkspace.tsx`: personalize the .docx (hiring manager
+name, company specifics) before sending; goes in the email body; export PDF later.
+
+### R1 -- Saved jobs not discoverable + per-job "pending work" status [SPECED, NOT BUILT]
+Findings: saved jobs live in DB table `job_application` (`packages/core/migrations/011_application_tracker.sql`),
+listed by `/api/applications`, rendered on the **Applications** tracker
+(`app/(dashboard)/dashboard/applications/page.tsx`, Kanban by status) -- NOT on **My
+Materials** (`dashboard/vault`, which only shows artifacts). That mismatch is why Troy
+couldn't find his 6 saved jobs. Per-job status data PARTLY exists: `resume_artifact_id`
++ `disclosure_plan_id` columns are written (`api/artifacts/route.ts` APPLICATION_LINK_COLUMN)
+and read (`lib/tools/assistant-tools.ts` `resumeTailored`), but NO cover-letter link
+column and NO UI badges. BUILD: (a) add `cover_letter_artifact_id` to migration 011
+(new migration file), wire it like the others; (b) render per-job badges (resume ✓ /
+cover ✓ / disclosure ✓) on the Applications cards + Job Board saved list; (c) make the
+saved-jobs "pending work" view obvious from the Overview/My Materials (link or surface).
+Schema change -> do carefully with a real migration, not a rushed edit.
+
+### R2 -- Surface one-job-at-a-time + group similar jobs [SPECED, NOT BUILT]
+Not a hard lock -- it's the single-`doc` workspace design (`ResumeWorkspace.tsx`, one
+`sessionStorage["resume_target_job"]`, `canTailor` needs exactly one job). BUILD (low
+risk): up-front copy on the Job Board / tailor entry -- "you work one job at a time;
+save as many as you want and tailor them one by one." Grouping similar jobs to reuse a
+near-identical tailored resume (save tokens) = larger feature, its own item.
+
+### R5 -- Tailoring degrades the approved resume [SPECED, SAFETY-CRITICAL, NOT BUILT]
+ROOT CAUSE (verified): `app/api/resume-generate-full/route.ts` grounding gate (L219-247)
+builds its trusted source from ONLY the raw uploaded `resumeText` and DELIBERATELY
+excludes the Forge narrative/strengths -- a documented anti-fabrication guard (a prior
+"Codex finding": trusting AI-generated Forge output let invented claims launder into
+resumes). So `verifyResumeBullets`/`verifyStructuredLists` strip approved-but-rephrased
+content not literally in the raw resume, and the output regresses toward the weaker
+original. This is a SAFETY gate for justice-impacted users (fabrication = failed
+background check). FIX APPROACH (do NOT rush; run the repo adversarial suite): treat the
+user's HUMAN-APPROVED base resume (the confirmed vault "current" resume artifact) as an
+additional trusted source -- human approval is the exact trust signal the raw-only rule
+was protecting. Requires: caller (`ResumeWorkspace`) passes the approved base resume
+text; `buildTrustedSource` includes it ONLY when it carries an explicit approved flag;
+keep raw resume + approved base as trusted, never the unreviewed analyze output. Also
+feed the approved base resume (not just forgeOutput fields) into the tailoring prompt so
+it RESTRUCTURES the approved doc instead of re-deriving from raw. Verify no fabrication
+regression before ship.
+
+### R6 -- Never-downgrade rule + locked per-lane baselines + "search as which resume" [SPECED, NOT BUILT]
+Larger feature. Today: exactly one "current" resume per user (`vault/page.tsx` setCurrent,
+"one current per user" invariant). BUILD: allow multiple distinct LOCKED baseline resumes
+(one per industry/lane -- manufacturing, culinary, leadership, non-profit); a "which
+resume am I searching as" selector from My Materials; tailoring within a lane = minor
+tweaks only (ties to R5's restructure-don't-strip), major rewrite only on a different
+lane. Depends on R5 landing first. Schema: baselines need a lane/label + lock flag.
+
+### R7 -- No "what's next" after download [SPECED, PARTIAL TODAY]
+Today next-step is implicit (disclosure tab CTA; Applications tracker `PIPELINE[].suggestion`).
+BUILD: explicit post-finalize confirmation -- "you finished {company}: apply here [link],
+then move to your next saved job [link]." Natural home is the R1 saved-jobs "pending
+work" view. Low risk once R1 exists.
+
+---
+
 ## Open items needing Troy
 - T1.1 wording approval for the Black Belt correction.
 - TROY.4: exact source file of the new hooded icon (or re-export from the

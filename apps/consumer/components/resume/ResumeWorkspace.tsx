@@ -1110,6 +1110,15 @@ export function ResumeWorkspace() {
               {coverLetterText}
             </pre>
           </div>
+          <div className="px-6 pb-5">
+            <p className="text-xs text-t-phos-dim bg-t-panel-2 border border-t-line px-3 py-2 leading-relaxed">
+              <span className="font-semibold text-t-white">Make it yours before you send.</span>{" "}
+              Download the .docx and personalize it -- confirm the hiring manager&rsquo;s
+              name, drop in any specific details about the company, and adjust the
+              opening if you want. A cover letter usually goes in your email body, so
+              keep it editable. Save a PDF later, once it reads exactly how you want.
+            </p>
+          </div>
         </div>
       )}
 
