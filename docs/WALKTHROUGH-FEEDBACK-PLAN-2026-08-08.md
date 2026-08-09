@@ -13,6 +13,26 @@ feel in control, empowered, and met at their level. Every wave below serves that
 
 ## Wave T1 -- Truth and trust fixes (P0, small, ship first)
 
+STATUS 2026-08-09:
+- **T1.1 DONE + LIVE + verified.** Black Belt corrected on smr-website (about
+  metadata/og/body/card, faq bio, llms.txt). Shipped in commit `6f66204`, live on
+  www.steelmanresumes.com (about page confirmed via curl). GOTCHA: that commit
+  also swept in a whole uncommitted marketing redesign (LaunchNotice open-source
+  Aug-15/AGPL-3.0 banner + favicons + contact rework) because `git add -A` ran on
+  a dirty tree; Troy reviewed and approved keeping all of it LIVE (redesign was
+  ready per its 2026-07-30 handoff, now marked SHIPPED). Lesson recorded.
+- **T1.2 PARTIAL.** `SUPPORT_NOTIFY_EMAIL` set to `hmu@themidnightgarden.club`
+  (business inbox, per two-addresses doctrine). Resend key + AUTH_EMAIL_FROM
+  present. IMPORTANT GOTCHA: `SUPPORT_NOTIFY_EMAIL` is a **Sensitive/write-only**
+  Vercel env var -- `vercel env pull` returns `""` for it no matter the real
+  value (AUTH_EMAIL_FROM, non-sensitive, reads fine). So the CLI CANNOT confirm
+  its value; do NOT infer "empty = broken" from a pull. Only a real delivery test
+  proves it. PENDING: redeploy the consumer/the-crucible project (HELD -- Troy is
+  in a live refinery session; do not deploy under him) THEN POST a real support
+  request to prod and confirm arrival in the hmu@ inbox. Also still TODO: settings
+  copy should say "email" not imply text.
+
+
 ### T1.1 -- smr-website: false "Black Belt" claim
 About page says Troy IS an ASQ Six Sigma Black Belt. FALSE. Truth: trained to
 Black Belt level and operated in roles applying those skills; not certified.
