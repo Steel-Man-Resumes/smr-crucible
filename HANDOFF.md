@@ -1,11 +1,18 @@
 # SMR Crucible -- Handoff
 
-## 2026-08-09 (build) -- APPLY LOOP built on branch `refinery-apply-loop-2026-08-09` (R1+R8+R7+R2), NOT deployed
+## 2026-08-09 -- APPLY LOOP LIVE ON PROD (Wave R: R1+R8+R7+R2)
 
-Built the complete application loop Troy asked to run end-to-end: sign in -> find the
-saved job he already tailored (R1) -> dial in the resume -> **APPLY (R8)** -> move to the
-next saved job (R7) -> repeat. Staged on a branch; **nothing deployed** (Troy was mid live
-test). Typecheck (`tsc --noEmit`) + prod build both GREEN.
+The complete application loop is **merged to main + deployed to production**: sign in -> find
+the saved job (R1) -> dial in the resume -> **APPLY (R8)** -> move to the next saved job (R7)
+-> repeat. Merge `50957dd`; prod deploy `dpl_6w1KqXFEGckcJCjwbcn7oui9Mkbn` READY on
+forge/refinery.steelmanresumes.com; migration 031 applied to prod. Typecheck + prod build
+GREEN; prod smoke: `/api/apply-email` 401 (live, auth-gated), `/api/applications` 401,
+`/login` 200, `/dashboard(/applications)` 302 (auth redirect, no 500s). NOTE: full
+*authenticated* click-through of the visual loop was NOT run (no prod QA login provisioned to
+avoid creating prod test data) -- that's the one remaining check, best done on next real
+sign-in. (A branch *preview* build ERRORED on a pre-existing preview-env quirk -- `neon()`
+has no DB string in preview at build-time page-data collection for `/api/access-code/redeem`,
+a route I never touched -- the identical code built READY on prod, which has the env.)
 
 **R8 -- Apply (the missing centerpiece):**
 - `components/apply/ApplyActions.tsx` = the apply ladder: `apply_url` -> `employer_website`
@@ -33,21 +40,15 @@ test). Typecheck (`tsc --noEmit`) + prod build both GREEN.
 **R7** = workspace points to the next saved job still needing a tailored resume.
 **R2** = one-job-at-a-time framing on the tailor entry + saved-jobs panel.
 
-**MIGRATION 031** (`packages/core/migrations/031_apply_ladder_and_cover_link.sql`, additive +
-`IF NOT EXISTS`, inert to current prod): adds `job_application.employer_website` +
-`cover_letter_artifact_id`. UI degrades gracefully if it hasn't run (badges just read
-false), but the loop needs it. **NOT run** (single Neon branch = prod; don't run under a
-live session).
+**MIGRATION 031** (`packages/core/migrations/031_apply_ladder_and_cover_link.sql`): adds
+`job_application.employer_website` + `cover_letter_artifact_id`. **APPLIED to prod** 8/9 (all
+prior migrations skipped; idempotent runner). Additive + inert to old code.
 
-**DEPLOY RUNBOOK (when Troy says go, and is OUT of a live session):**
-1. `git checkout main && git merge --no-ff refinery-apply-loop-2026-08-09`
-2. Run the migration against prod:
-   `export DATABASE_URL=$(grep -m1 '^DATABASE_URL=' apps/consumer/.env.local | cut -d= -f2- | tr -d '"') && cd packages/core && npm run migrate` (applies 031 only; idempotent).
-3. Deploy the-crucible/consumer prod (same path as prior waves).
-4. Smoke: save a board job -> tailor -> "Ready to apply" shows with an Apply button + "I
-   applied" -> Overview + My Materials show the saved job with badges -> Applications card
-   shows badges + apply ladder. For a job with no apply_url/employer_website, the rung-3
-   "Draft an application email" returns subject/body/where-to-find.
+**REMAINING (Troy's real click-through, on next sign-in):** save a board job -> tailor ->
+"Ready to apply" block shows an Apply button + "I applied" -> Overview + My Materials show the
+saved job with resume/cover/disclosure badges -> Applications card shows badges + apply
+ladder. For a job with no apply_url/employer_website, the rung-3 "Draft an application email"
+should return subject/body/where-to-find.
 
 **NOT built (Troy: not yet):** R5 (tailoring grounding gate) + R6 (locked per-lane
 baselines). The grounding gate (`api/resume-generate-full/route.ts`) was NOT touched, so the
