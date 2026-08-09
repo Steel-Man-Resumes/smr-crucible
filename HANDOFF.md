@@ -1,5 +1,36 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-09 -- R5 + R6 LIVE ON PROD (never-downgrade tailoring + locked lane baselines)
+
+Shipped the two items previously deferred. Merge/commit `3a38a65` on main; migrations 031 +
+032 applied to prod; tsc + adversarial suite (104 green) + prod build all green.
+
+**R5 (safety-critical grounding fix) -- the tailoring regression:** the grounding gate
+(`api/resume-generate-full`) trusted ONLY the raw uploaded resume, so `verifyResumeBullets`/
+`verifyStructuredLists` stripped approved-but-rephrased content that wasn't literally in the
+upload, regressing a strong resume toward the weaker original. Fix: the person's
+HUMAN-APPROVED base resume (their pinned "current" resume or a locked per-lane baseline) is
+now (a) a trusted grounding source and (b) fed to the tailoring prompt as the PRIMARY document
+to RESTRUCTURE (new system rule 13). `buildTrustedSource` gained an approval-gated
+`approvedResume` param -- admitted ONLY when `approved === true`, so an unreviewed
+`/api/analyze` narrative still has no door (the exact trust signal the raw-only rule
+protected; Codex 2 boundary intact). `ResumeWorkspace.runCareerPackage` resolves the active
+baseline (R6) or the pinned current and passes it. The adversarial suite was EXTENDED (test 4)
+to lock the new boundary: `approved:true` admits, `approved:false`/no-flag do NOT -- run
+`npm run test:adversarial` (104 green).
+
+**R6 (locked per-lane baselines + "searching as"):** migration 032 adds
+`refinery_artifact.lane` + `is_locked`. Core `lockBaseline`/`unlockBaseline`; artifacts PATCH
+handles `{lock,lane}`. In My Materials a user can lock several APPROVED baseline resumes (one
+per lane) with a label + a "Baseline" badge. New `BaselineSelector` ("Searching as ...")
+persists the active baseline to `localStorage.active_baseline_id` and is read by the tailor;
+surfaced on the tailor entry + saved-jobs panel. Tailoring within a lane restructures that
+locked baseline (R5) instead of downgrading it -- the never-downgrade rule.
+
+**NOT verified: authenticated visual click-through** (no prod QA login provisioned). The tail
+that most wants a real human pass: tailor the SAME job twice from a locked baseline and eyeball
+that approved bullets are preserved/re-emphasized, not stripped.
+
 ## 2026-08-09 -- APPLY LOOP LIVE ON PROD (Wave R: R1+R8+R7+R2)
 
 The complete application loop is **merged to main + deployed to production**: sign in -> find
