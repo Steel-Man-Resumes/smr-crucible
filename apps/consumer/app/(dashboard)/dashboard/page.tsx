@@ -22,6 +22,7 @@ import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
 import { JourneyHeader } from "@/components/JourneyHeader";
 import { DashboardResumeCard } from "@/components/DashboardResumeCard";
+import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
@@ -356,6 +357,11 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {/* Saved jobs -- the pending-work view (R1). Renders only when the user
+          has saved jobs, so it stays out of a brand-new user's way. This is the
+          entry point for "find the job I already tailored -> dial in -> apply". */}
+      <SavedJobsPanel heading="Your saved jobs" limit={4} />
 
       {/* The resume itself -- front and center, collapsible */}
       <DashboardResumeCard />

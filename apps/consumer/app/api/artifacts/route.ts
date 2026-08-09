@@ -9,6 +9,7 @@ import type { ArtifactType } from "@crucible/core";
 const APPLICATION_LINK_COLUMN: Partial<Record<ArtifactType, string>> = {
   resume: "resume_artifact_id",
   disclosure_plan: "disclosure_plan_id",
+  cover_letter: "cover_letter_artifact_id",
 };
 
 // Creating any of these moves a journey gate, so the next-step engine must
