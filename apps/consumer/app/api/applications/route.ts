@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { query: dbQuery, insert, getOne, invalidateNextStep } = await import("@crucible/core");
+    const { query: dbQuery, insert, getOne, invalidateNextStep, recordStatusEvent } = await import("@crucible/core");
 
     // Update existing application
     if (body.id && body.status) {
@@ -78,14 +78,15 @@ export async function POST(request: Request) {
         );
       }
 
-      const existing = await getOne(
-        `SELECT id FROM job_application WHERE id = $1 AND user_id = $2`,
+      const existing = await getOne<{ id: string; status: string }>(
+        `SELECT id, status FROM job_application WHERE id = $1 AND user_id = $2`,
         [body.id, session.user.id]
       );
 
       if (!existing) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
+      const previousStatus = existing.status;
 
       const sets: string[] = [
         `status = $1`,
@@ -119,6 +120,14 @@ export async function POST(request: Request) {
 
       // Status / follow-up changes move the journey (Stage 6) -- recompute.
       await invalidateNextStep(session.user.id).catch(() => {});
+
+      // Phase 1A: append to the append-only status ledger, but only when the
+      // status actually changed. Non-fatal -- the update already succeeded.
+      if (body.status !== previousStatus) {
+        await recordStatusEvent(session.user.id, body.id, previousStatus, body.status).catch(
+          (err: unknown) => console.error("recordStatusEvent error:", err)
+        );
+      }
 
       return NextResponse.json({ application: rows[0] });
     }
@@ -178,6 +187,14 @@ export async function POST(request: Request) {
 
     // Saving a first target / applying advances the journey (Stage 2 -> 3, Stage 6) -- recompute.
     await invalidateNextStep(session.user.id).catch(() => {});
+
+    // Phase 1A: the new row's initial status is the first ledger entry (no prior status).
+    await recordStatusEvent(
+      session.user.id,
+      row.id as string,
+      null,
+      row.status as string
+    ).catch((err: unknown) => console.error("recordStatusEvent error:", err));
 
     return NextResponse.json({ application: row }, { status: 201 });
   } catch (error) {

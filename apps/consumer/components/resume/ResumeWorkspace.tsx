@@ -44,6 +44,9 @@ export function ResumeWorkspace() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "locked">("idle");
   const lastSaved = useRef<string>("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The artifact id whose content is currently loaded in the editor -- guards
+  // the ?id= effect against re-fetch-and-clobber after a fork URL replace.
+  const loadedIdRef = useRef<string | null>(null);
 
   // Delete
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -184,13 +187,59 @@ export function ResumeWorkspace() {
   }, []);
 
   // --- Load from URL param ?id= ---
+  // A locked baseline must never be opened under its own id (Phase 0.1 keeps
+  // the write blocked at the SQL layer, but the workspace should not even try
+  // -- and should not silently mask edits as read-only when a fork is the
+  // right move). Phase 1A: fork it and open the fork instead.
   useEffect(() => {
     const id = searchParams.get("id");
     if (!id) return;
+    // After a fork the URL is replaced with the fork's id, which re-runs this
+    // effect. The document is already loaded then -- re-fetching would clobber
+    // any keystroke made in the meantime.
+    if (id === loadedIdRef.current) return;
     fetch(`/api/artifacts/${id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then(async (data) => {
         if (!data?.data) return;
+
+        if (data.data.is_locked) {
+          // The ?job= param is the only application id reliably in scope
+          // synchronously here; targetApplicationId is populated by a later,
+          // async effect and may not be set yet.
+          const jobId = searchParams.get("job");
+          const operationKey = `tailor:${id}:${jobId || "manual"}`;
+          try {
+            const forkRes = await fetch(`/api/artifacts/${id}/fork`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reason: "tailor", operationKey }),
+            });
+            if (forkRes.ok) {
+              const { data: fork } = await forkRes.json();
+              loadedIdRef.current = fork.id;
+              setArtifactId(fork.id);
+              const content = fork.content;
+              if (content.formatVersion === 2) {
+                setDoc(content as ResumeDocument);
+              } else {
+                setDoc(migrateLegacyResume(content));
+              }
+              lastSaved.current = JSON.stringify(content);
+              setShowSetup(false);
+              router.replace(`/dashboard/application-tailor?id=${fork.id}`, {
+                scroll: false,
+              });
+              return;
+            }
+          } catch {}
+          // Fork failed: fall back to opening the locked baseline read-only.
+          // The existing locked-banner mechanism (saveStatus === "locked")
+          // already shows the notice and suppresses autosave.
+          setSaveStatus("locked");
+        }
+
+        loadedIdRef.current = data.data.id;
         setArtifactId(data.data.id);
         const content = data.data.content;
         if (content.formatVersion === 2) {
@@ -202,7 +251,7 @@ export function ResumeWorkspace() {
         setShowSetup(false);
       })
       .catch(() => {});
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   // --- Recover the linked application when a tailored resume is opened directly
   // (?id=, or from "Your saved work") so the Apply CTA (R8) can appear even
@@ -437,13 +486,12 @@ export function ResumeWorkspace() {
           };
         }
 
-        // R5/R6: resolve the person's HUMAN-APPROVED base resume -- the one they
-        // are "searching as" (R6 active baseline) or their pinned "current" resume
-        // -- and pass it so tailoring TRUSTS and RESTRUCTURES it instead of
-        // regressing toward the weaker raw upload. Only an explicitly approved
-        // resume qualifies (a locked baseline or the pinned current), never a
-        // random tailored draft.
-        let approvedResumePayload: { text: string; approved: boolean } | undefined;
+        // R5/R6 -> 1A: resolve the person's HUMAN-APPROVED base resume -- the
+        // one they are "searching as" (R6 active baseline) or their pinned
+        // "current" resume -- and pass its ID. The server verifies ownership +
+        // approval/lock state and loads the content itself (Phase 1A); the
+        // client never sends approved text.
+        let approvedArtifactId: string | undefined;
         try {
           const artRes = await fetch("/api/artifacts?type=resume&limit=50");
           if (artRes.ok) {
@@ -457,14 +505,7 @@ export function ResumeWorkspace() {
               (activeId && resumes.find((a) => a.id === activeId && (a.is_locked || a.is_current))) ||
               resumes.find((a) => a.is_current) ||
               null;
-            if (approvedBase?.content) {
-              const c = approvedBase.content;
-              const docForText = c.formatVersion === 2 ? (c as ResumeDocument) : migrateLegacyResume(c);
-              const text = formatResumeDownload(docForText);
-              if (text && text.trim().length > 30) {
-                approvedResumePayload = { text, approved: true };
-              }
-            }
+            if (approvedBase?.id) approvedArtifactId = approvedBase.id;
           }
         } catch {}
 
@@ -485,7 +526,7 @@ export function ResumeWorkspace() {
             contact: contactInfo,
             challenges,
             criminalRecord,
-            ...(approvedResumePayload ? { approvedResume: approvedResumePayload } : {}),
+            ...(approvedArtifactId ? { approvedArtifactId } : {}),
           }),
         });
 

@@ -9,6 +9,7 @@ import {
   lockBaseline,
   unlockBaseline,
 } from "@crucible/core";
+import { validateResumeContent } from "@/lib/resume-validate";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -70,6 +71,17 @@ export async function PATCH(request: Request, context: RouteContext) {
       { error: "Missing required field: content" },
       { status: 400 }
     );
+  }
+  // Phase 1A: structural schema gate. A v2 resume envelope (formatVersion
+  // marker) must be structurally valid before it can overwrite content.
+  if ((body.content as any)?.formatVersion !== undefined) {
+    const verdict = validateResumeContent(body.content);
+    if (!verdict.ok) {
+      return NextResponse.json(
+        { error: "invalid_resume_content", reason: verdict.reason },
+        { status: 400 }
+      );
+    }
   }
 
   const result = await updateArtifact(

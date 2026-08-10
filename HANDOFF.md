@@ -1,5 +1,62 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 1A COMPLETE: trust + revision contracts. 1B/1C/1D next.
+
+Executed Phase 1A of the final plan (Troy said "continue" after Phase 0, so 1A ran in the
+same session). Verification: tsc clean, prod build green, adversarial 109 -> 131 green (new
+sections 14 approved-base, 15 fork contract, 16 resume validation), core tests 18/18,
+banned-claims clean. Migration 033 APPLIED to the shared Neon (additive; prod code ignored
+it until this deploy). Fresh-context review: 6 findings, 2 real ones fixed (em dash; a
+fork-then-refetch race that could clobber a fast keystroke -- loadedIdRef guard), 1 was a
+reviewer error (disclosure_plan IS in APPLICATION_LINK_COLUMN), rest documented below.
+
+- **1A.2 The `approved:true` client-trust door is CLOSED.** `resume-generate-full` accepts
+  `approvedArtifactId` ONLY; server loads the artifact (ownership-scoped getArtifact) and a
+  pure resolver (`apps/consumer/lib/approved-base.ts`) enforces owner + resume-type +
+  (is_locked OR is_current). Bad reference fails LOUD (400/403/404 `approved_source_rejected`),
+  never silently degrades. ResumeWorkspace sends the id; no client path can inject approved
+  text into grounding. Decision log now records approved_base_used + artifact id. Adversarial
+  section 14 locks the resolver (IDOR, wrong type, unapproved draft, flag smuggling).
+- **1A.1/1A.3 Revision model + atomic fork LIVE-PROVEN.** Migration 033: refinery_artifact
+  gains parent_artifact_id, origin_artifact_id, content_hash, approved_at, creation_reason,
+  operation_key + partial unique fork-dedupe index. `forkArtifact` = single atomic
+  INSERT..SELECT (ARTIFACT_FORK_SQL exported for the suite): ownership in the SELECT, fork
+  starts unlocked/unpinned/no-lane, origin = COALESCE(source.origin, source.id), ON CONFLICT
+  dedupe on (user, parent, operation_key). `lockBaseline` now stamps approved_at (locking IS
+  the approval act). New route POST /api/artifacts/[id]/fork. ResumeWorkspace: opening a
+  LOCKED artifact via ?id= forks it and opens the fork (URL replaced); fork failure falls
+  back to the read-only locked banner. LIVE verify (scripts/verify-1a-fork.mjs, QA accounts,
+  reversible, 12/12 green): owner fork + lineage + hash, duplicate operationKey dedupes to
+  the same row, foreign-user fork rejected (IDOR), fork editable while the locked master
+  survived the full cycle byte-identical and still refuses direct writes.
+- **1A.4 Provenance + status ledger.** New tables `application_document` (immutable
+  "what did I send" snapshot: type, provenance baseline_as_is|fine_tuned|tailored, content
+  snapshot + sha256 hash) and `application_status_event` (append-only; "applications sent" =
+  countApplicationsSent event count, not a mutable status read). Applications route records
+  events on create + real status changes (non-fatal). Artifacts route snapshots every
+  application-linked artifact with provenance "tailored" (today's only kind; baseline_as_is
+  arrives with Quick Apply 3.3, fine_tuned with 2.7). getUserProfile.resumeTailored now
+  DUAL-READS provenance (EXISTS on application_document) OR the legacy resume_artifact_id --
+  retire the legacy half when 2.7/3.3 write snapshots everywhere.
+- **1A.5 Server-boundary resume validation.** `apps/consumer/lib/resume-validate.ts`
+  structural gate on artifacts POST (type resume) + PATCH (v2 envelope): rejects non-object /
+  wrong formatVersion / non-array sections / non-string skills; sparse drafts and legacy
+  (pre-v2) content pass by design. Full typed-block v3 schema is Phase 2.1.
+
+KNOWN GAPS carried forward (deliberate, documented): (a) a fork created from a locked
+baseline is not auto-linked to the job_application (no resume_artifact_id update / snapshot
+for that session) -- the full fine-tune flow (2.7) owns fork+link; blast radius today is low
+because app-linked tailored resumes are normally unlocked. (b) PATCH validation only fires on
+v2-shaped content (a formatVersion-less object still passes -- legacy support); v3 (2.1)
+closes this. (c) An approved LEGACY artifact whose content formats to empty text generates
+without an approved base (console.warn, matches old client behavior). (d) resume-generate-full
+still trusts client forgeOutput/resumeText as before -- only the APPROVED path moved
+server-side (that is 1A's scope; full-source grounding rework is Phase 2.4).
+
+NEXT: 1B (consent enforcement), 1C (encrypted R2 storage platform), 1D (JourneySnapshot,
+GateDecision, preview/prod Neon split BEFORE any sensitive store, worker + voice enforcement).
+Ops scripts added: scripts/run-migrate.sh, scripts/verify-1a-fork.mjs.
+
 ## 2026-08-10 (Fable 5) -- PHASE 0 CONTAINMENT COMPLETE (all 7 items). Phase 1 next.
 
 Executed Phase 0 of docs/REFINERY-FINAL-EXECUTION-PLAN-2026-08-10.md. All items shipped in

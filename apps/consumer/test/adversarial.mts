@@ -346,6 +346,80 @@ section("artifact lock predicate -- content writes require is_locked = false");
     /id = \$1 AND user_id = \$2/.test(norm(ARTIFACT_DELETE_SQL)), ARTIFACT_DELETE_SQL);
 }
 
+// ── 14. Server-resolved approved base (Phase 1A) ─────────────────────────────
+// The route accepts approvedArtifactId ONLY; this pure resolver is the trust
+// decision. Client-supplied {approved:true, text} can never reach grounding.
+section("approved-base resolution -- ownership + approval state, server-side");
+{
+  const { resolveApprovedBase } = await import("@/lib/approved-base");
+  const OWNER = "user-a";
+  const base = {
+    user_id: OWNER,
+    artifact_type: "resume",
+    is_locked: false,
+    is_current: false,
+    content: { formatVersion: 2 },
+  };
+  check("null artifact -> not_found",
+    resolveApprovedBase(null, OWNER).ok === false);
+  const foreign = resolveApprovedBase({ ...base, is_locked: true }, "user-b");
+  check("foreign user rejected (IDOR)", !foreign.ok && (foreign as any).reason === "not_owner");
+  const noUser = resolveApprovedBase({ ...base, is_locked: true }, null);
+  check("missing session rejected", !noUser.ok && (noUser as any).reason === "not_owner");
+  const wrongType = resolveApprovedBase({ ...base, artifact_type: "cover_letter", is_locked: true }, OWNER);
+  check("non-resume rejected", !wrongType.ok && (wrongType as any).reason === "not_resume");
+  const draft = resolveApprovedBase(base, OWNER);
+  check("unapproved draft rejected (no lock, no pin)", !draft.ok && (draft as any).reason === "not_approved");
+  check("locked baseline admitted",
+    resolveApprovedBase({ ...base, is_locked: true }, OWNER).ok === true);
+  check("pinned current admitted",
+    resolveApprovedBase({ ...base, is_current: true }, OWNER).ok === true);
+  // The old door must stay closed: no property of the artifact object other
+  // than the DB-loaded approval marks can admit it.
+  const flagSmuggle = resolveApprovedBase({ ...base, approved: true } as any, OWNER);
+  check("client-style approved flag on the object does NOT admit",
+    !flagSmuggle.ok && (flagSmuggle as any).reason === "not_approved");
+}
+
+// ── 15. Fork contract (Phase 1A) ─────────────────────────────────────────────
+// Same doctrine as section 13: the DB isn't reachable here, so the boundary
+// is locked at the SQL layer. The exact statement forkArtifact() executes is
+// an exported constant, and a route/caller regression that widened the copy
+// (e.g. re-adding is_locked to the insert list) fails here, not in prod.
+section("fork contract -- ownership scoped, no baseline state copied");
+{
+  const { forkArtifact, ARTIFACT_FORK_SQL } = await import("@crucible/core");
+  check("forkArtifact is exported as a function", typeof forkArtifact === "function");
+
+  const norm = (s: string) => s.replace(/\s+/g, " ");
+  const insertCols = ARTIFACT_FORK_SQL.split("SELECT")[0];
+  check("fork SELECT is ownership-scoped (src.id = $1 AND src.user_id = $2)",
+    /src\.id = \$1 AND src\.user_id = \$2/.test(norm(ARTIFACT_FORK_SQL)), ARTIFACT_FORK_SQL);
+  check("fork insert column list does NOT copy is_locked",
+    !/is_locked/.test(insertCols), insertCols);
+  check("fork insert column list does NOT copy is_current",
+    !/is_current/.test(insertCols), insertCols);
+  check("fork insert column list does NOT copy lane",
+    !/\blane\b/.test(insertCols), insertCols);
+  check("origin_artifact_id keeps a forked fork pointed at the root (COALESCE)",
+    /COALESCE\(src\.origin_artifact_id, src\.id\)/.test(ARTIFACT_FORK_SQL), ARTIFACT_FORK_SQL);
+  check("operationKey dedupe is ON CONFLICT ... DO NOTHING",
+    /ON CONFLICT[\s\S]*DO NOTHING/.test(ARTIFACT_FORK_SQL), ARTIFACT_FORK_SQL);
+}
+
+// ── 16. Resume content boundary validation (Phase 1A) ────────────────────────
+section("resume content validation -- server write boundary");
+{
+  const { validateResumeContent } = await import("@/lib/resume-validate");
+  check("rejects non-object", !validateResumeContent("resume text").ok);
+  check("rejects array", !validateResumeContent([1, 2]).ok);
+  check("rejects unknown formatVersion", !validateResumeContent({ formatVersion: 99 }).ok);
+  check("rejects non-array experience", !validateResumeContent({ formatVersion: 2, experience: "lots" }).ok);
+  check("rejects non-string skills", !validateResumeContent({ formatVersion: 2, skills: [{ evil: true }] }).ok);
+  check("accepts sparse v2 draft", validateResumeContent({ formatVersion: 2, summary: "", skills: [] }).ok);
+  check("accepts legacy (no formatVersion) object", validateResumeContent({ text: "old style" }).ok);
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) { console.error("Failures: " + failures.join("; ")); process.exit(1); }

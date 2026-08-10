@@ -30,3 +30,4 @@ export * from './employer';
 export * from './hiddenEmployers';
 export * from './currentBlock';
 export * from './platformChangelog';
+export * from './applicationEvents';

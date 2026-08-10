@@ -11,8 +11,11 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { getArtifact } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { resolveApprovedBase } from "@/lib/approved-base";
+import { formatResumeDownload, migrateLegacyResume } from "@/components/resume/resumeModel";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
@@ -54,7 +57,7 @@ async function handlePost(request: Request) {
     const userId = session?.user?.id;
 
     const body = await request.json();
-    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedResume } = body;
+    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId } = body;
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
@@ -89,15 +92,46 @@ async function handlePost(request: Request) {
       ? sanitizeForPrompt(resumeText, 4000)
       : "not available";
 
-    // R5: the person's HUMAN-APPROVED base resume (their pinned "current" resume
-    // or a locked per-lane baseline). It is self-authored truth the user reviewed,
-    // so it is BOTH a trusted grounding source and the PRIMARY document to
-    // restructure for this role -- that stops tailoring from regressing toward the
-    // weaker raw upload. Admitted only with the explicit approved flag; an
-    // unreviewed draft or the /api/analyze narrative can never reach here.
-    const approvedResumeApproved =
-      approvedResume?.approved === true && typeof approvedResume?.text === "string";
-    const approvedResumeText = approvedResumeApproved ? String(approvedResume.text) : "";
+    // R5 -> 1A: the person's HUMAN-APPROVED base resume (their pinned "current"
+    // resume or a locked per-lane baseline). It is BOTH a trusted grounding
+    // source and the PRIMARY document to restructure for this role. SERVER-
+    // RESOLVED ONLY (Phase 1A): the client sends an artifact id; the server
+    // verifies ownership + approval/lock state and derives the text itself.
+    // Client-supplied resume text with an "approved" flag is no longer read --
+    // that door let any session POST arbitrary text as trusted grounding.
+    let approvedResumeText = "";
+    if (approvedArtifactId !== undefined) {
+      if (typeof approvedArtifactId !== "string" || !approvedArtifactId) {
+        return NextResponse.json(
+          { error: "invalid_approved_artifact" },
+          { status: 400 }
+        );
+      }
+      // getArtifact is ownership-scoped (WHERE user_id), so a foreign id reads
+      // as not_found; the pure resolver re-checks every predicate regardless.
+      const artifact = userId ? await getArtifact(approvedArtifactId, userId) : null;
+      const decision = resolveApprovedBase(artifact, userId);
+      if (!decision.ok) {
+        // Fail closed and loud on a BAD REFERENCE (foreign, missing, or
+        // unapproved artifact). One narrow soft spot remains: a legitimately
+        // approved artifact whose legacy content formats to empty text falls
+        // through with no approved base (warned below) -- same net behavior
+        // as the old client-side length guard.
+        return NextResponse.json(
+          { error: "approved_source_rejected", reason: decision.reason },
+          { status: decision.reason === "not_found" ? 404 : 403 }
+        );
+      }
+      const doc = decision.content as any;
+      approvedResumeText = formatResumeDownload(
+        doc?.formatVersion === 2 ? doc : migrateLegacyResume(doc)
+      );
+      if (!approvedResumeText.trim()) {
+        console.warn(
+          `Approved base ${approvedArtifactId} formatted to empty text; generating without an approved base`
+        );
+      }
+    }
     const cleanedApprovedResume = approvedResumeText
       ? sanitizeForPrompt(approvedResumeText, 6000)
       : "";
@@ -246,7 +280,9 @@ ${contactName || "Candidate"}`;
     // never source.
     const groundingSource = buildTrustedSource({
       resumeText: typeof resumeText === "string" ? resumeText : "",
-      approvedResume: { text: approvedResumeText, approved: approvedResumeApproved },
+      // Server-resolved (Phase 1A): approvedResumeText only exists when the
+      // artifact passed ownership + approval checks above.
+      approvedResume: { text: approvedResumeText, approved: !!approvedResumeText },
     });
 
     const [coverCheck, summaryCheck, bulletCheck, listCheck] = await Promise.all([
@@ -400,6 +436,8 @@ ${contactName || "Candidate"}`;
           disclosureConfidence: confidenceLevel,
           grounding_flags: groundingFlags.length,
           grounding_applied: groundingApplied,
+          approved_base_used: !!cleanedApprovedResume,
+          approved_artifact_id: approvedArtifactId || null,
         },
       });
     } catch (err) {

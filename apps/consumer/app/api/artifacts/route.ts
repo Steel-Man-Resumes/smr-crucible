@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { listArtifacts, createArtifact, query, invalidateNextStep } from "@crucible/core";
+import { listArtifacts, createArtifact, query, invalidateNextStep, snapshotApplicationDocument } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
+import { validateResumeContent } from "@/lib/resume-validate";
 
 // Journey instrumentation: which artifact types link back to a target job
 // application, and into which (whitelisted) column. The column names are fixed
@@ -10,6 +11,16 @@ const APPLICATION_LINK_COLUMN: Partial<Record<ArtifactType, string>> = {
   resume: "resume_artifact_id",
   disclosure_plan: "disclosure_plan_id",
   cover_letter: "cover_letter_artifact_id",
+};
+
+// Phase 1A: which linked artifact types get an immutable "what did I send"
+// snapshot (application_document). Matches SNAPSHOT_DOCUMENT_TYPE 1:1 with
+// APPLICATION_LINK_COLUMN's key set -- only types that can be linked can be
+// snapshotted.
+const SNAPSHOT_DOCUMENT_TYPE: Partial<Record<ArtifactType, "resume" | "cover_letter" | "disclosure_plan">> = {
+  resume: "resume",
+  cover_letter: "cover_letter",
+  disclosure_plan: "disclosure_plan",
 };
 
 // Creating any of these moves a journey gate, so the next-step engine must
@@ -88,6 +99,16 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ error: "Invalid artifact content" }, { status: 400 });
   }
+  // Phase 1A: structural schema gate for resume content at the write boundary.
+  if (body.type === "resume") {
+    const verdict = validateResumeContent(body.content);
+    if (!verdict.ok) {
+      return NextResponse.json(
+        { error: "invalid_resume_content", reason: verdict.reason },
+        { status: 400 }
+      );
+    }
+  }
 
   try {
     const targetContext =
@@ -111,11 +132,29 @@ export async function POST(request: Request) {
     const applicationId = targetContext.applicationId;
     if (linkColumn && typeof applicationId === "string" && applicationId) {
       try {
-        await query(
+        const linked = await query(
           `UPDATE job_application SET ${linkColumn} = $1, updated_at = now()
-           WHERE id = $2 AND user_id = $3`,
+           WHERE id = $2 AND user_id = $3
+           RETURNING id`,
           [artifact.id, applicationId, userId]
         );
+
+        // Phase 1A: snapshot the linked document's content as sent, so the
+        // "what did I actually send" record survives later edits/forks/deletes
+        // of the source artifact. Today every linked artifact was generated
+        // specifically for this job, so provenance is "tailored"; baseline_as_is
+        // arrives with Quick Apply (Phase 3.3) and fine_tuned with Phase 2.7.
+        const documentType = SNAPSHOT_DOCUMENT_TYPE[body.type as ArtifactType];
+        if (linked.length > 0 && documentType) {
+          await snapshotApplicationDocument({
+            userId,
+            applicationId,
+            artifactId: artifact.id,
+            documentType,
+            provenance: "tailored",
+            content: body.content,
+          }).catch((snapErr: unknown) => console.error("Application document snapshot error:", snapErr));
+        }
       } catch (linkErr: any) {
         // A linkage failure must not fail the save; the artifact is already stored.
         console.error("Artifact link error:", linkErr?.message || linkErr);

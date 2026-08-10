@@ -179,10 +179,17 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     status: string;
     follow_up_at: string | null;
     resume_artifact_id: string | null;
+    has_tailored_doc: boolean;
   }>(
-    `SELECT id, job_title, company, status, follow_up_at, resume_artifact_id
-     FROM job_application WHERE user_id = $1
-     ORDER BY updated_at DESC`,
+    `SELECT j.id, j.job_title, j.company, j.status, j.follow_up_at, j.resume_artifact_id,
+       EXISTS(
+         SELECT 1 FROM application_document ad
+         WHERE ad.application_id = j.id
+           AND ad.document_type = 'resume'
+           AND ad.provenance IN ('tailored', 'fine_tuned')
+       ) AS has_tailored_doc
+     FROM job_application j WHERE j.user_id = $1
+     ORDER BY j.updated_at DESC`,
     [userId]
   );
 
@@ -192,7 +199,12 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     company: j.company,
     status: j.status,
     followUpAt: j.follow_up_at,
-    resumeTailored: !!j.resume_artifact_id,
+    // Phase 1A: prefer the provenance snapshot (real signal); fall back to the
+    // legacy link-existence guess for prod rows that predate application_document.
+    // Drop the "|| !!j.resume_artifact_id" half once Phase 2.7/3.3 write
+    // snapshots on every apply path -- at that point the legacy guess is dead
+    // weight, not a safety net.
+    resumeTailored: j.has_tailored_doc || !!j.resume_artifact_id,
   }));
 
   // 4. Artifact-derived signals (disclosure plan present; interview practice count)
