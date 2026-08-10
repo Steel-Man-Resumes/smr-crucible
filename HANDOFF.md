@@ -1,5 +1,34 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 -- FULL REVISION PLAN drafted from Troy's real-application session (NOT YET BUILT)
+
+Troy applied to a real job through the Refinery, ran Disclosure Planner end to end, did live
+voice interviews, and gave a full multi-tab feedback dump. A 9-agent code sweep mapped every
+subsystem; the resulting plan is `docs/REFINERY-FULL-REVISION-PLAN-2026-08-10.md` (Waves
+S/Q/A/M/P/D/I/G/T/F), AWAITING TROY'S REVIEW before build.
+
+Decisions Troy locked 2026-08-10 (recorded in the plan doc): outcome over clock; disclosure
+rehearsal gets purpose-built consented+encrypted recording; voice interviews STORE TRANSCRIPTS
+(deliberate revision of the 2026-06-07 frames-not-scripts doctrine); green-light on all four
+new-infra items (gamification schema, encrypted R2 vault, avatar/AI headshot, voice metering
+beacon); baselines HARD-locked (API rejects edits, forces named fork); page-fit rule confirmed
+with a robustness mandate; NEW asks: sneak-peek gating (locked tabs open to a preview, gate at
+action depth), Help & Feedback platform in nav (bugs + support + notes-to-t.ROY, admin inbox,
+NO new scheduled email per the 7/16 messaging suspension), second demo lane = NONPROFIT
+marketing/development built from Troy's REAL background.
+
+CRITICAL FINDINGS from the sweep (fix first, Wave S): (1) locked baselines can be silently
+OVERWRITTEN -- vault "Tailor to a job" opens the baseline under its own id and the 5s autosave
+PATCHes tailored content over the master; no is_locked guard exists in PATCH/updateArtifact.
+Check Troy's baselines for corruption. (2) FALSE privacy claim live: disclosure rehearsal says
+"we never save your words" but routes through /api/assistant which persists every authed turn
+to coach_conversation. (3) Settings claims Forge data is local-only; forge_session syncs
+server-side. (4) Voice Realtime sessions have NO duration cap and NO cost metering. (5)
+Grounding verifier truncates trusted source at 8000 chars -- long approved resumes lose tail
+content (Troy's Founder section) despite R5. (6) Progress tab reads localStorage wiped on
+every sign-out -- root cause of all its wrongness. Resume degradation root causes are items
+1-5 in the plan's Wave Q intro.
+
 ## 2026-08-09 -- R5 + R6 LIVE ON PROD (never-downgrade tailoring + locked lane baselines)
 
 Shipped the two items previously deferred. Merge/commit `3a38a65` on main; migrations 031 +
