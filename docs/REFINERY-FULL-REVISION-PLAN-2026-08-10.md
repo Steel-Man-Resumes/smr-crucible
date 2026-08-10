@@ -425,3 +425,489 @@ F4. Customer service loop: t.ROY answers what it can from a support knowledge ba
 4. A3 board-guidance copy tone (how blunt to be about aggregator boards).
 5. P5 milestone list and celebration language.
 6. F1 category set and whether "Message for Troy" is its own mode or folded into feedback.
+
+---
+
+## CODEX INDEPENDENT AUDIT ADDENDUM -- 2026-08-10
+
+**Author:** OpenAI Codex
+
+**Repository state audited:** `main` at `003d10c`
+
+**Method:** independent repository trace plus separate resume-fidelity, privacy/security, and
+product/systems reviews, followed by a contrarian second pass and current official-provider
+research. No product code was changed by this audit.
+
+### Executive disposition
+
+**Conditional NO-GO on executing the plan exactly as sequenced.** The plan is directionally
+strong and should remain the product brief, but several items described as feature details are
+actually prerequisites. Building D4, I4, M2, T8, expanded progress, or AI-led guidance before
+those prerequisites would create sensitive stores without a complete lifecycle, corrupt journey
+facts, or weaken the anti-fabrication boundary.
+
+The highest-impact corrections are:
+
+1. The server trusts a client-supplied `{ approved: true, text }` object as an approved resume.
+   That bypasses the intended R5 trust boundary. Approval must be an owned, immutable server
+   artifact/revision, never a client assertion.
+2. S1 needs an atomic fork/revision operation, not only a PATCH guard. Update, delete, Forge
+   re-sync, unlock, double-click, retry, and stale-tab paths must all preserve the master.
+3. Q4 must remove truncation before generation and in every verifier. It must also stop treating
+   verifier failures or missing verdicts as clean.
+4. Privacy, consent, export, deletion, analytics, and access-audit claims are already inconsistent
+   across the site. A global truth and data-lifecycle correction is a hotfix and a release gate.
+5. Exact PDF/DOCX pagination requires a worker render system and format-specific validation.
+   Chromium cannot prove Microsoft Word pagination, and this workload must not run on Vercel.
+6. Progress, gates, application-document meaning, and next-step logic do not share one canonical
+   fact model. Adding gamification or AI recommendations first would amplify wrong state.
+7. The stated `104-green` adversarial baseline is historical, not currently reproducible: on
+   this checkout the suite aborts during module loading before any test executes. A green count
+   must not be cited until the runner is repaired and pinned.
+
+This addendum does **not** reverse Troy's decisions. It adds the engineering, security, product,
+and verification conditions required to carry them out honestly.
+
+### Corrections to the factual record
+
+These are not optional refinements; they change implementation scope or sequencing.
+
+1. **Approved baseline is presently a client assertion.** `ResumeWorkspace` sends arbitrary
+   approved text and `approved: true`; `resume-generate-full` accepts it. The server must receive
+   an `approvedArtifactId` (preferably an exact revision ID), verify ownership and approval/lock
+   state, and load the content itself. `is_current` alone is not evidence of review. Introduce an
+   explicit approval event or approved content hash with `approved_at`; any edit creates a new
+   unapproved revision.
+
+2. **Q4 identifies the wrong single choke point.** `buildTrustedSource` concatenates sources;
+   the 8,000-character slices occur inside multiple verifier functions. Generation truncates the
+   original resume to 4,000 characters and the approved resume to 6,000 before verification even
+   begins. Parse, Forge, and Rush paths have additional 6,000/8,000-character limits, and Rush has
+   no equivalent post-generation verifier. The canonical pipeline must cover all entry points or
+   explicitly retire the bypasses.
+
+3. **The verifier fails open.** Provider errors return the original output, incomplete bullet
+   grades preserve ungraded bullets, and an all-dropped list can collapse back to the original.
+   A safety boundary needs `verified | cleaned | unverified | failed`, complete claim accounting,
+   and no clean/safe badge on outage. An unverified draft may remain editable, but approval,
+   locking, or employer-ready finalization requires successful verification or an explicit
+   claim-level human review.
+
+4. **A4's current `full_description` is not full.** The provider result is truncated to about
+   2,000 characters, and the save flow persists only the shorter display description. Store a
+   bounded original snapshot separately from its excerpt, with provider, source URL, fetch time,
+   content hash, and freshness state. Fit results must be keyed to both the exact job-description
+   hash and resume revision hash and invalidated when either changes.
+
+5. **Indeed is not simply the second search provider.** Current official Indeed documentation
+   describes the Job Sync API as an ATS/employer job-posting integration, while job display for
+   publishing partners uses a partner JavaScript integration. It is not evidence of a licensed
+   server-side job-seeker search feed. A5 must be discovery and a legal/partner go/no-go; never
+   scrape. The existing CareerOneStop fallback should be validated and repaired before calling
+   Indeed the second provider.
+
+6. **Support already exists.** `support_request`, an authenticated submit route, email
+   notification, assistant escalation, and an admin list are present. Wave F should evolve that
+   system rather than create a parallel one. The current route stores and emails plaintext
+   messages/thread excerpts, so privacy lifecycle work precedes broader context capture.
+
+7. **The privacy mismatch is site-wide.** It is not limited to Disclosure and Settings. Public
+   overview/security content and interview copy include absolutes such as local-only storage,
+   no saved words, no analytics, only the user can access data, all AI is logged, and deletion
+   keeps no copy. The application loads analytics on most routes, stores authenticated assistant
+   turns, has staff/support/partner access paths, and has incomplete deletion/export coverage.
+
+8. **The 104-test gate is currently broken.** `npm run test:adversarial -w apps/consumer` fails
+   at `apps/consumer/test/adversarial.mts:24` because the runtime does not expose the named
+   `FORGE_PAGES` export. No adversarial test runs. The core journey test passes, but it is the only
+   committed core unit-test file and encodes disclosure as a universal stage. Repair the module
+   runner, pin Node/tooling, then establish and record a new reproducible baseline in CI.
+
+### Mandatory Foundation 0 -- before the existing waves
+
+Treat this as a prerequisite program, with small deployable increments and kill switches.
+
+#### 0A. Trust, artifact, and application-document contracts
+
+- Put the lock predicate in the write SQL: content updates require `is_locked = false`. Return a
+  discriminated `updated | locked | not_found` result; do not use a race-prone read-then-write.
+- Decide whether hard lock also forbids delete and unlock. The safer model is immutable revisions:
+  corrections create a successor master; prior masters and application snapshots remain intact.
+- Add an idempotent server-side `INSERT ... SELECT` fork operation. It verifies ownership and lock
+  state and records `parent_artifact_id`, `origin_artifact_id`, exact source revision/content hash,
+  application linkage, lane, display name, and creation reason. Locked documents open read-only;
+  editable UI appears only after the fork succeeds.
+- Replace race-prone `MAX(iteration_number) + 1` naming with a database-safe sequence/constraint.
+  Deduplicate concurrent forks for `(user, source revision, application, operation key)`.
+- Validate POST/PATCH content at the server boundary with the shared versioned resume schema.
+- Separate an application's attached baseline from its tailored resume. Today
+  `resume_artifact_id` is interpreted as tailored across journey, partner, and assistant surfaces.
+  Add explicit `application_document` provenance or distinct baseline/tailored fields plus a
+  preparation mode. Only a proven tailored revision satisfies a tailoring gate.
+- Freeze the exact resume rendition/revision used when the user applies. A mutable pointer cannot
+  answer “what did I send?” after later edits, unlocks, or deletes.
+- Snapshot Troy's current locked rows before remediation. Because content is overwritten in place
+  and no revision ledger exists, recovery may require a trusted prior DOCX/export or Neon PITR;
+  never silently reconstruct from the weaker Forge source.
+
+#### 0B. Truthful privacy and enforceable consent
+
+- Inventory every privacy/security/data claim in overview, Security, Settings, Disclosure,
+  Interview, sharing, export/delete, and support. Rewrite unsupported absolutes. Add a regression
+  scan for phrases such as “never stored,” “only you,” “every AI interaction,” “no analytics,” and
+  “delete everything instantly.”
+- Until the secure store exists, isolate `disclosure-rehearsal` from both prior assistant memory
+  reads and conversation writes, or display the exact current storage truth. Existing rows cannot
+  be selectively purged because `coach_conversation` lacks a surface/session discriminator.
+- Disable third-party analytics on authenticated and sensitive routes unless a valid, enforced
+  analytics consent says otherwise. Describe service-provider processing separately from partner
+  sharing or staff access.
+- Replace local consent booleans with immutable, purpose-scoped consent history attached to the
+  canonical `users` table. Each event records data categories, provider, storage behavior,
+  retention, text version, and grant/revoke time. Enforce consent server-side immediately before
+  provider calls and storage; the decline path must actually omit sensitive fields.
+- Make transcript storage a visible per-session choice or an equally explicit durable setting.
+  Define transcript versus raw audio. Default to transcript only; do not store raw audio without a
+  separate explicit decision. Explain provider processing and retention truthfully.
+- Generic interview practice must not require a disclosure plan. Disclosure is context-relevant
+  and opt-in, not a universal job-readiness prerequisite.
+
+#### 0C. Data lifecycle and sensitive-storage platform
+
+- Create a canonical data inventory/registry. Every user-owned table, object type, provider-side
+  object, derived signal, and log declares its owner, sensitivity class, purpose, export format,
+  deletion behavior, retention, backup/provider semantics, and admin/impersonation policy. CI must
+  fail when a new store is not registered.
+- Make database deletion transactional. Handle R2/provider deletion through an idempotent durable
+  outbox/saga with retries, completion status, orphan sweeps, and a user-visible receipt. Fix the
+  existing FK/delete-order gaps before adding artifact links. Distinguish content deletion from
+  account deletion and document lawful/audit exceptions.
+- Export must include actual files plus a versioned manifest and checksums, not database pointers.
+  Add `Cache-Control: private, no-store`, reauthentication/MFA for sensitive exports, and tests that
+  compare the registry against exported/deleted categories.
+- Do not force consumer files into the current B2B `org_id` storage model. Define a consumer owner
+  with an exclusive-owner constraint, random object keys, private environment-separated buckets,
+  and an authorized application proxy. Never return a decrypted presigned R2 URL.
+- Use authenticated encryption such as AES-256-GCM with random nonces, authentication tags, AAD
+  binding owner/session/type/schema, and a stored key ID/version. Specify key custody, environment
+  separation, rotation/re-encryption, failure behavior, backup deletion, incident response, and
+  separate scopes for conversation, document, identity-image, and account-secret domains. A single
+  `DOCUMENT_ENCRYPTION_KEY` environment variable is not a complete key-management design.
+- Add upload quarantine, magic-byte/MIME checks, allowlists, byte/page/pixel/archive limits,
+  malware scanning, image re-encoding/EXIF stripping, checksums, safe attachment disposition,
+  private/no-store caching, rate limits, and audited reads. Block inline SVG/HTML/script rendering.
+- Encrypt or otherwise protect all sensitive derivatives: disclosure plans, summaries, tags,
+  takeaways, support context, and TOTP secrets—not only raw transcripts or uploaded files. Prevent
+  plaintext from entering telemetry, email, errors, decision logs, and access logs.
+
+#### 0D. Canonical facts, migrations, and operations
+
+- Define a single server `JourneySnapshot` and metric dictionary: exact query/source, timestamp and
+  timezone, exclusions, state transition, idempotency, and freshness. All progress, nav, gates,
+  assistant, partner, and next-step surfaces consume it.
+- Define one versioned `GateDecision { state, reason, unlockAction, trialMode, version }`. UI gates
+  are presentation only; real data/action restrictions are enforced by the corresponding API.
+- Add `applied_at` and preferably an idempotent application-status event ledger. “Applications
+  sent” is not `status = applied`, because a sent application later becomes interviewing, offered,
+  or rejected.
+- Repair the migration system before new high-risk schemas: advisory lock, checksums/drift failure,
+  timeouts, expand/backfill/cutover/contract phases, old/new application compatibility, and a dry
+  run on a production-like snapshot. Shared preview/prod increases the requirement for feature
+  flags, test-only users, environment-separated object prefixes/credentials, canaries, and rollback.
+- Heavy render, scan, retention, deletion, and hard-hangup jobs run on the VPS worker. Add queue and
+  failure observability, idempotency, retry/dead-letter behavior, spend/latency alerts, and kill
+  switches before launch.
+
+### Required amendments to Wave S
+
+S remains first, but it is no longer credible as one small “ship together” bundle.
+
+1. **S0 immediate containment:** server SQL lock predicate; print-HTML escaping; global false-copy
+   correction; disclosure memory/write isolation; sensitive-route analytics correction; repair the
+   adversarial runner. These can ship independently behind focused tests.
+2. **S1 atomic lineage:** add the fork/revision/provenance contract in 0A. Cover Forge re-sync,
+   DELETE, unlock/supersede, autosave, stale tabs, retries, and concurrency—not only PATCH.
+3. **S4 authoritative voice control:** a browser timer or session-end beacon is not enforcement.
+   Reserve the maximum allowed minutes/cost atomically before starting; allow one bounded active
+   session; record a `voice_session` lease with idempotency and expiry; reconcile abandoned calls.
+   Because the browser currently creates the Realtime call directly, the server never receives the
+   call ID. Move SDP/call creation behind an authenticated server endpoint, retain the returned call
+   ID, and schedule the provider hard-hangup on the worker. Client timer/beacon is supplemental UX.
+   If server-mediated creation cannot ship, label the cap as soft and disable or tightly limit voice
+   rather than claiming server enforcement.
+4. **S5 verification debt:** include authenticated two-user ownership tests and concurrent fork
+   tests, not only a happy-path click-through. Record whether existing Troy baselines were
+   recoverable and exactly which evidence was used.
+
+### Required amendments to Wave Q
+
+1. **Canonical ResumeDocument v3.** Move one server-safe validated schema to shared code. Implement
+   `parseResumeDocument`, explicit v2-to-v3 upgrade, normalization, v2/v3 dual-read, and v3-only
+   write. Replace every literal `formatVersion === 2` branch; otherwise v3 will be sent through the
+   destructive legacy migrator or re-derived by Forge persistence.
+2. **Lossless means every source line is accounted for.** `customSections: bullets[]` cannot retain
+   paragraphs, projects, awards, publications, leadership blocks, or meaningful section order.
+   Use ordered, stable-ID typed blocks (or a lossless raw-line block) and a visible unparsed review
+   tray. Every normalized non-sensitive source line maps to a standard field, custom block, or an
+   explicit redaction/unparsed entry. Measure line coverage. The current raw parser recognizes a
+   summary header but does not assign its lines, and a partially successful structured parse can
+   suppress the raw fallback entirely.
+3. **Private versus employer-facing content.** A generic `notes` field risks leaking relocation,
+   health, justice, or application notes into exports. Name and type public header notes explicitly;
+   keep private notes out of the resume document. Preserve the private canonical source while an
+   employer-facing projection performs required justice-sensitivity redaction—“never drop” must not
+   mean “publish sensitive content.” Centralize one sanitizer across parse, generation, save, print,
+   PDF, and DOCX.
+4. **Full-source generation and verification.** Remove silent input truncation at parse,
+   generation, Forge, Rush, and all verifiers. Use a structured evidence index or claim-centric
+   retrieval with overlapping relevant windows and positive source IDs. Do not vote a true claim
+   down merely because it is absent from unrelated chunks. Require one verdict per claim and bound
+   latency/concurrency. AI-derived narrative/strengths are not themselves trusted facts.
+5. **Rendering architecture precedes fitting.** Add a worker render job, deterministic bundled
+   fonts, a shared structural renderer, Chromium PDF generation/page counting, and separate pinned
+   LibreOffice/Word-compatible DOCX-to-PDF validation. Cache by artifact revision/content hash,
+   renderer version, format, paper, and font set. Set iteration/time/retry bounds and return an
+   observable failure state. Disable script and network access; render escaped structured data.
+6. **The fit loop is deterministic after generation.** Rank content once, then adjust selected
+   content and spacing within legibility bounds. Maintain a visible, recoverable omission/change
+   ledger. Do not repeatedly ask AI to fill/trim, invent content to fill whitespace, mutate a locked
+   master, hide off-page text, or sacrifice ATS order.
+7. **PDF and DOCX have separate guarantees.** Chromium can guarantee the canonical PDF page count;
+   “same content budget” cannot guarantee Word pagination. DOCX passes only when the pinned office
+   renderer converts it to the target count and text-parity/ordering checks pass. Test Letter paper,
+   font substitution, Unicode, long names/URLs, sparse and dense histories, missing sections, custom
+   blocks, white/blue-collar resumes, and both formats.
+8. **Naming is persisted safely.** Add display name, stable filename slug, collision suffix, length
+   limit, Windows-forbidden-character handling, RFC-compliant `Content-Disposition`, rename/history,
+   provenance, and privacy-conscious defaults on shared devices.
+9. **Dependency corrections:** Q7 follows A4 because it needs the full saved JD. M1 follows lineage
+   and naming. M3 uses the v3 import/review/approve/lock path, not a disposable v2 seed. Declare the
+   legacy worker/B2B resume generators in or out of scope; they currently have different caps and
+   branding.
+
+### Required amendments to Wave A
+
+- A1 attaches a versioned immutable application document with explicit `baseline_as_is |
+  fine_tuned | tailored` provenance. It must not reuse a field whose current meaning is “tailored”
+  and thereby falsely advance the journey or partner reporting.
+- A2 shows the saved snapshot, its source and age. It may offer refresh or paste/confirm; it must not
+  silently substitute a changed live page for the evidence used to tailor.
+- A3 uses safe URL parsing, HTTPS policy, destination provenance, and an `unknown` state. Hostnames
+  alone do not prove an employer account requirement or a safe destination. Treat JDs and external
+  URLs as untrusted prompt/input data.
+- A4 stores a bounded original job snapshot and a separate display excerpt. Define the bound high
+  enough for complete ordinary postings, show truncation explicitly when hit, and preserve hash and
+  source metadata. Fit findings are evidence-linked requirements, not unsupported claims that the
+  person “lacks” a skill.
+- A5 begins with provider coverage, duplicates, direct-link quality, availability, licensing/terms,
+  attribution, caching/data rights, cost, and failure-mode measurements. Validate CareerOneStop.
+  Proceed with Indeed only if an approved job-seeker search arrangement exists.
+
+### Required amendments to Waves M, P, and G
+
+- M1 needs cursor pagination, server search/filter/counts, and lineage before grouping; the current
+  UI/API caps do not scale to a true library.
+- M2 follows 0C. Contrarian default: do not ask people to centralize government IDs without a
+  demonstrated workflow. A “documents to gather later” checklist may meet the outcome with far less
+  custody risk. If Troy retains ID storage, isolate it from the ordinary vault with a separate key,
+  bucket/role, no OCR/AI, short retention, reauthentication/MFA, no inline preview, and formal
+  security review. Certificates and reference letters are a safer first slice.
+- M3 creates a draft from Troy-owned source, with provenance and explicit approval before lock. Do
+  not place personal data in a global migration/seed or create two masters. Production seeding is
+  user-scoped, idempotent, audited, recoverable, and gated on Q acceptance.
+- M4 starts with an action-state inventory. Every optimistic action needs `res.ok` handling,
+  rollback, retry, duplicate-submit protection, focus/`aria-live`, offline behavior, and an honest
+  terminal state.
+- P1 uses the canonical all-record aggregate, not `/api/user/context` samples or localStorage. Use a
+  dual-write/backfill/dedupe/cutover plan before retiring historical local events.
+- P5 starts with private, non-punitive process milestones. Defer streaks and population rankings.
+  “Top quartile” requires a defensible cohort, minimum sample, time window, metric quality, privacy,
+  and an explanation; it can otherwise reward mass low-quality applications or shame people whose
+  life circumstances interrupt use.
+- P6 does not replace deterministic eligibility with AI. Consolidate the existing next-step engine
+  on correct facts; AI may explain or phrase a validated candidate and must fall back deterministically.
+- G2 precedes G1 and broader previews. Current gate logic is duplicated across nav, tiles, hooks,
+  context, onboarding/tier gates, `currentBlock`, and next-step logic. Preview controls must be
+  keyboard accessible, stable across routes, and backed by API authorization where actions or data
+  are actually restricted.
+
+### Required amendments to Waves D and I
+
+- D1 strengths remain proposed judgments until the user confirms them; store evidence/provenance and
+  never turn adjacent inferences into facts.
+- D2 legal/employer-question guidance is jurisdiction- and time-sensitive. Use legal-reviewed,
+  sourced, versioned static content with review expiry and a safe fallback. Minimize recovery,
+  health, custody/family, housing, financial, and third-party/child details; do not solicit names,
+  SSNs, diagnoses, or case detail that the coaching outcome does not require.
+- D4/I4 follow 0B/0C. Create sessions before practice and persist ordered, idempotent transcript
+  chunks or use an explicitly recoverable local buffer; end-only persistence loses the whole session
+  on crash/navigation. Separate transcript, raw audio, summaries, and derived tags in the model and
+  consent. Define expiry, provider retention, backup-deletion SLA, admin impersonation, read audit,
+  export/delete, and reauthentication.
+- Share encryption, lifecycle, and audit primitives across Disclosure and Interview, but do not force
+  both into one generic JSON conversation schema when their purpose, consent, retention, and derived
+  data differ.
+- I1 passes owned application/resume IDs; the server loads and verifies the exact revisions and JD.
+  Do not trust client-supplied resume/JD bodies.
+- I3 includes captions/text alternative, keyboard, nonvisual state, reduced motion, mobile and
+  Bluetooth/headset behavior, denied permission, backgrounding, interruption, reconnect, echo, and
+  no-microphone fallbacks.
+- I5 is voice parity/consolidation: text practice already has much of the wrap-up, feedback, PDF,
+  and restart surface. Derived struggle tags remain editable/dismissible judgments with evidence,
+  confidence, and version—not permanent labels.
+
+### Required amendments to Waves T and F
+
+- T3 applies the consent controls from 0B. Named and deidentified outcome modes are separate and
+  mutually exclusive. “Anonymous” case studies need small-cohort suppression/generalization, an
+  exact-publication preview, snapshot-specific approval, and immediate unpublish on revocation.
+- Partner-sharing consent must enumerate the fields actually exposed. The current partner query and
+  CSV go beyond stage/application count/last activity into identity, next-step, practice, artifact
+  existence, assignment, hired state, and AI cost. Remove fields without a justified purpose and
+  consent, and audit every partner read/export.
+- T4 must describe current 2FA honestly. TOTP is not an account-wide post-auth challenge for every
+  provider, and its secret is plaintext. Sensitive actions require a provider-independent MFA or
+  reauthentication flow, encrypted TOTP secret, atomic one-use recovery codes, real revocable
+  trusted-device credentials, and fail-closed session checks.
+- T5 is the data registry and lifecycle program in 0C, not a hand-maintained route extension.
+- T6 does not advertise audit transparency until sensitive reads, exports, partner/admin/support
+  access, and impersonation are centrally instrumented and coverage-tested. Store provenance,
+  rules, model/prompt version, confidence, and output summary—not chain-of-thought or canned “why.”
+  Ownership-check decision actions, and migrate audit actors away from legacy `"user"` references.
+- T7 distinguishes estimated from provider-reconciled cost. Centralize awaited/outbox usage
+  recording, actual provider/model, price-version dates, provider event/idempotency IDs, Realtime
+  audio dimensions, reasoning/cached tokens where applicable, and reconciliation status. Unknown
+  models must not silently inherit unrelated pricing.
+- T8 is evidence-gated and should follow the mature image/storage lifecycle. Illustrated avatars
+  are the safe default. AI headshots need explicit user demand, discrimination/misrepresentation
+  review, provider/retention consent, identity-preserving constraints, cost reservation, EXIF and
+  deletion controls, and no default insertion on US employment resumes. Do not require permanent
+  retention of the original.
+- F evolves `support_request`. Add owned message history, lifecycle/resolution fields, user-visible
+  replies, admin RBAC, access audit, retention/export/delete, and server ownership validation for
+  referenced decisions. Default to no assistant transcript/context; preview a redacted exact excerpt
+  and obtain opt-in. Email a notification/link rather than sensitive message content. Begin with
+  explicit “Report this”/“Was this helpful?” controls; defer automatic frustration detection.
+- Knowledge-base support is retrieval-only and versioned. Low-confidence, security, account, legal,
+  and sensitive-data questions become human tickets rather than improvised answers.
+
+### Contrarian second pass
+
+The following challenges are intentional. They protect outcomes from feature momentum.
+
+1. **Page fullness is a proxy, not the outcome.** Truth, readability, evidence strength, and ATS
+   order outrank visual fill. A sparse truthful resume should not be padded, and a strong 1.35-page
+   resume should not be degraded merely to occupy two pages. If “exactly 1 or 2” remains locked,
+   define it as a page-count ceiling plus legibility/content-density bands; never manufacture or
+   restore weak content only to fill space. Show the user omissions when constraints conflict.
+2. **Approval is provenance, not proof.** A quick approval can bless earlier AI invention. Preserve
+   approved wording, but use an evidence-linked review diff at lock and do not infer adjacent facts.
+3. **Encryption does not erase collection risk.** The safest government ID, raw voice, face image,
+   health, family, or recovery detail is the one never collected. Each sensitive category needs a
+   demonstrated job-seeking outcome, minimum-data alternative, threat model, and deletion test.
+4. **Gamification can optimize the wrong behavior.** Application count, streaks, and rankings can
+   reward low-quality volume and penalize instability or disability. Validate private milestones
+   before cohorts or competitive status.
+5. **AI is a weak owner of eligibility or truth.** Use it to draft, explain, or rank bounded options;
+   deterministic server facts decide gates, consent, access, progress, lifecycle, and safety status.
+6. **Preview/prod sharing is an avoidable amplifier.** Before government IDs, face photos, recovery
+   narratives, or transcripts, the strongest recommendation is a separate Neon branch/database and
+   separate object credentials. If the locked constraint remains, prevent preview from touching real
+   sensitive records and rehearse every migration/backfill under production-compatible flags.
+7. **Breadth should follow proof.** Defer population-ranked P5, AI-led P6, Indeed implementation,
+   AI headshots, general file-vault behavior, and automatic frustration detection until core resume,
+   application, trust, and lifecycle acceptance gates are green and user demand is demonstrated.
+
+### Corrected sequencing and release gates
+
+1. **Containment:** S0 trust/copy/XSS/analytics fixes; repair the safety test runner; snapshot current
+   locked baselines.
+2. **Foundations:** artifact/revision/application-document provenance; consent history and server
+   enforcement; data registry/export/deletion; consumer secure-storage design; voice lease/hangup;
+   canonical journey/gate/application facts; migration and worker controls.
+3. **Resume fidelity:** Q1/Q2/Q3/Q4, then render infrastructure and Q5/Q6. Run the real-content corpus
+   before calling a master production-ready.
+4. **Application path:** A3/A4 snapshot quality, then A1/A2 on the new provenance model; Q7 after A4.
+   Provider expansion only after its go/no-go.
+5. **Navigation and progress:** G2 canonical decisions, G1 previews, then P1-P4 and deterministic P6
+   explanation on validated facts.
+6. **Sensitive practice and materials:** D/I/M only after their consent, encryption, retention,
+   access, export, and deletion gates pass. Evolve support early only after its lifecycle is fixed.
+7. **Trust and optional engagement:** T improvements incrementally; P5, T8, broad vault, and feedback
+   automation only after explicit evidence gates.
+
+No wave is “independent” if it writes a new user fact, artifact, file, transcript, provider event, or
+derived judgment. It depends on ownership, provenance, consent where relevant, export, deletion,
+retention, observability, and migration compatibility.
+
+### Reproducible verification matrix
+
+The following becomes committed CI or a recorded, reproducible environment—not an informal claim.
+
+- **Trust/grounding:** owned revision resolution; forged client approval rejection; tail and
+  chunk-boundary evidence; one verdict per claim; prompt injection; missing key, timeout, malformed
+  verifier response, incomplete grades, and unverified UI/finalization behavior.
+- **Artifacts/applications:** two-user IDOR; update/delete/unlock policy; stale tab; Forge re-sync;
+  double-click and concurrent idempotent fork; immutable application snapshot; baseline versus
+  tailored gate/report parity; restoration evidence.
+- **Resume losslessness:** v1/v2/v3 round-trip; source-line coverage ledger; paragraphs and arbitrary
+  custom sections; order; Unicode; justice-sensitive private-source/public-output separation; all
+  export paths use the same sanitizer.
+- **Rendering:** sparse entry-level, dense 20-year, white/blue-collar, many certifications, no
+  education, long names/URLs, Unicode, custom blocks, missing sections, Letter paper, pinned fonts,
+  PDF page count, DOCX converted page count, text parity/order, no hidden/off-page content, and a
+  visible omission ledger.
+- **Privacy/security:** consent decline/revoke and generic path; no subsequent provider/storage call;
+  encryption/wrong-key/rotation/no-plaintext-log; upload polyglot/oversize/malware; reauthentication;
+  admin/impersonation policy; secure response headers; sensitive-route analytics absence.
+- **Lifecycle:** registry coverage; category-selective export; transactional DB deletion; DB/R2/
+  provider partial failure and retry; orphan sweep; backup/provider disclosure; support and partner
+  records; immutable completion receipt.
+- **Voice:** atomic reservation; multiple tabs; cap/hard hangup; abandoned tab; crash; replayed/missing
+  beacon; worker restart; reconnect; provider outage; midnight/timezone boundary; actual usage and
+  price reconciliation.
+- **Journey/UI:** all-record progress; status transitions; gate parity across every surface; server
+  action enforcement; offline/retry/rollback; keyboard/focus/screen-reader/reduced-motion; 200% zoom,
+  320px viewport, iOS Safari and Android Chrome microphone behavior.
+- **Release operations:** migration checksum/lock/timeout; production-like backfill rehearsal;
+  expand/contract compatibility; feature flags; canary and rollback/kill switch; queue depth,
+  renderer latency, voice spend, stuck deletion/session, decrypt/scan failures, and support backlog.
+
+The real-content acceptance still includes Troy's manufacturing DOCX, but one file cannot be the
+entire robustness mandate. Use a deidentified fixture corpus and keep private source documents out of
+the repository and global migrations.
+
+### Additional decisions for Troy's redline
+
+These join the six existing redline items:
+
+7. Does an immutable locked master permit unlock/delete, or only supersede/archive?
+8. What exact user act constitutes approval, and must locking require an evidence-linked review diff?
+9. On verifier outage, is employer-ready finalization blocked, or may the user explicitly attest to
+   every unverified claim? It must never silently pass as clean.
+10. Does “exactly full pages” mean page-count plus an occupancy band, with truth/readability allowed
+    to override fill? Define the band and conflict behavior.
+11. Confirm transcript-only default, per-session versus durable consent, retention choices, provider
+    disclosure, admin impersonation policy, and whether raw audio is excluded.
+12. Confirm whether government ID storage remains in v1 after the data-minimization challenge.
+13. Confirm the preview/prod separation decision before accepting the highest-sensitivity categories.
+14. Confirm A5 as a provider go/no-go rather than a commitment to an Indeed server search feed.
+15. Confirm deferral/evidence gates for population rankings, AI-led next steps, AI headshots, and
+    automatic frustration detection.
+
+### Current-source research used by this addendum
+
+- OpenAI's Realtime Calls API supports a server hangup endpoint for a known call ID; current Realtime
+  session configuration exposes response/token controls but not a total-call-duration setting. That
+  is why S4 requires server-mediated call creation, a stored call ID, and a scheduled hard hangup:
+  [Realtime API](https://platform.openai.com/docs/api-reference/realtime) and
+  [Realtime Calls](https://platform.openai.com/docs/api-reference/realtime-calls).
+- OpenAI's published endpoint data-controls table says `/v1/realtime` may have abuse-monitoring
+  retention by default unless the project has approved/configured controls. Verify the actual SMR
+  project status and disclose it; application-layer deletion cannot promise provider deletion it
+  does not control: [OpenAI data controls](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint).
+- Indeed's official documentation frames Job Sync as employer/ATS posting management, not a general
+  job-seeker search feed, and documents partner JavaScript for displaying Indeed jobs. This supports
+  an A5 access/terms discovery gate, not scraping or assumed API integration:
+  [Indeed Job Sync API](https://docs.indeed.com/job-sync-api/) and
+  [Indeed job postings](https://docs.indeed.com/job-postings/).

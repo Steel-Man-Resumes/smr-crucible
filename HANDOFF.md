@@ -1,5 +1,27 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 -- CODEX INDEPENDENT AUDIT ADDENDUM (PLAN CORRECTION, NOT YET BUILT)
+
+Codex independently traced the full revision plan against `main` at `003d10c`, directed separate
+resume-fidelity, privacy/security, and product/systems audits, ran a contrarian second pass, and
+appended the complete result to `docs/REFINERY-FULL-REVISION-PLAN-2026-08-10.md` under
+**CODEX INDEPENDENT AUDIT ADDENDUM -- 2026-08-10**.
+
+Disposition: the product direction is strong, but executing the original sequence unchanged is a
+conditional NO-GO. Added a mandatory Foundation 0 for artifact/revision provenance, server-resolved
+approval, consent enforcement, data inventory/export/deletion, secure consumer storage, canonical
+journey/gate facts, worker render/voice controls, migrations, and operations.
+
+Most critical new findings: (1) `resume-generate-full` trusts client-supplied approved text and an
+`approved: true` boolean; (2) truncation happens before generation and in every verifier, which also
+fails open; (3) hard-lock protection must cover atomic fork, delete, re-sync, unlock, concurrency,
+and immutable application snapshots; (4) privacy/analytics/consent/export/delete mismatches are
+site-wide; (5) Chromium cannot prove DOCX pagination and heavy rendering belongs on the worker;
+(6) attached baseline versus tailored-resume provenance is currently ambiguous and would corrupt
+journey facts; (7) Indeed is a discovery/partner gate, not a confirmed server search provider; and
+(8) the claimed 104-green adversarial suite currently aborts before running any test because of a
+tsx/ESM export failure. `packages/core` journey test passed. No product code or deployment was made.
+
 ## 2026-08-10 -- FULL REVISION PLAN drafted from Troy's real-application session (NOT YET BUILT)
 
 Troy applied to a real job through the Refinery, ran Disclosure Planner end to end, did live
