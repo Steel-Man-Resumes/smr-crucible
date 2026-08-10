@@ -36,3 +36,5 @@ export * from './journey';
 export * from './crypto';
 export * from './secureObject';
 export * from './deletionTasks';
+export * from './jobDescription';
+export * from './jobDescriptionStore';

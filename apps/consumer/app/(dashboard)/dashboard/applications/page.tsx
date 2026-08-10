@@ -372,6 +372,7 @@ function ApplicationsPage() {
                               applied={false}
                               onApplied={loadApps}
                               forgeStrengths={forgeStrengths()}
+                              resumeArtifactId={app.resume_artifact_id || null}
                             />
                           </div>
                         )}

@@ -14,6 +14,7 @@
 
 import { query, getOne } from "./db";
 import type { UserTier } from "./userTier";
+import { TAILORED_PROVENANCES } from "./applicationEvents";
 
 export interface NextStepResult {
   stage: number;
@@ -213,14 +214,19 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     follow_up_at: string | null;
     resume_artifact_id: string | null;
     has_tailored_doc: boolean;
+    has_any_resume_doc: boolean;
   }>(
     `SELECT j.id, j.job_title, j.company, j.status, j.follow_up_at, j.resume_artifact_id,
        EXISTS(
          SELECT 1 FROM application_document ad
          WHERE ad.application_id = j.id
            AND ad.document_type = 'resume'
-           AND ad.provenance IN ('tailored', 'fine_tuned')
-       ) AS has_tailored_doc
+           AND ad.provenance IN (${TAILORED_PROVENANCES.map((p) => `'${p}'`).join(", ")})
+       ) AS has_tailored_doc,
+       EXISTS(
+         SELECT 1 FROM application_document ad
+         WHERE ad.application_id = j.id AND ad.document_type = 'resume'
+       ) AS has_any_resume_doc
      FROM job_application j WHERE j.user_id = $1
      ORDER BY j.updated_at DESC`,
     [userId]
@@ -232,12 +238,17 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     company: j.company,
     status: j.status,
     followUpAt: j.follow_up_at,
-    // Phase 1A: prefer the provenance snapshot (real signal); fall back to the
-    // legacy link-existence guess for prod rows that predate application_document.
-    // Drop the "|| !!j.resume_artifact_id" half once Phase 2.7/3.3 write
-    // snapshots on every apply path -- at that point the legacy guess is dead
-    // weight, not a safety net.
-    resumeTailored: j.has_tailored_doc || !!j.resume_artifact_id,
+    // Phase 3.3: the tailored gate reads the provenance snapshot first
+    // (full-tailor/fine-tune write 'tailored'/'fine_tuned' which count; Quick
+    // Apply writes 'baseline_as_is' which must NOT). The legacy resume_artifact_id
+    // fallback is KEPT but scoped: it only applies to rows with NO application_
+    // document at all -- i.e. tailored applications that predate the snapshot
+    // system (before Phase 1A). A Quick Apply always writes a baseline_as_is
+    // document, so `has_any_resume_doc` is true for it and the legacy clause is
+    // skipped -- an as-is send never flips the gate, and existing pre-1A users
+    // are not silently relocked.
+    resumeTailored:
+      j.has_tailored_doc || (!!j.resume_artifact_id && !j.has_any_resume_doc),
   }));
 
   // 4. Artifact-derived signals (disclosure plan present; interview practice count)

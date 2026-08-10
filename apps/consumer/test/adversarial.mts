@@ -41,8 +41,11 @@ import { withDeadline } from "@/lib/job-search-core";
 import { normalizeEmployerName, isVerifiedFairChance, isHiddenEmployer } from "@crucible/core";
 import { computeCurrentBlock, buildBlockSection, PLATFORM_CHANGELOG, buildWhatsNewSection } from "@crucible/core";
 import { consentDefaultFor } from "@crucible/core";
+import { buildJdSnapshot, JD_STORE_MAX, JD_EXCERPT_MAX } from "@crucible/core";
 import { REFINERY_PAGES, FORGE_PAGES } from "@/lib/tools/assistant-tool-defs";
 import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
+import { classifyApplyUrl, rankApplyLinks } from "@/lib/apply-destination";
+import { provenanceCountsAsTailored, TAILORED_PROVENANCES } from "@crucible/core";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1018,6 +1021,133 @@ section("intake losslessness -- acceptance corpus (synthetic fixtures)");
     const cov = computeLineCoverage(src, doc);
     check("blue-collar orphan (measuring tools) is unmatched", cov.unmatched.some((l) => /measuring tools/i.test(l)), JSON.stringify(cov.unmatched));
   }
+}
+
+// ── jd snapshot: bounded original + provenance + stable hash (Phase 3.2) ──────
+{
+  // Bounds at JD_STORE_MAX and SHOWS the truncation.
+  const big = "x".repeat(JD_STORE_MAX + 500);
+  const s = buildJdSnapshot({ fullText: big });
+  check("jd snapshot: bounds full text at JD_STORE_MAX", s.jd_full_text!.length === JD_STORE_MAX, `${s.jd_full_text!.length}`);
+  check("jd snapshot: jd_truncated true when cut", s.jd_truncated === true);
+
+  // At or below the bound, not truncated.
+  const exact = "y".repeat(JD_STORE_MAX);
+  const s2 = buildJdSnapshot({ fullText: exact });
+  check("jd snapshot: not truncated at exactly the bound", s2.jd_truncated === false && s2.jd_full_text!.length === JD_STORE_MAX);
+}
+{
+  // Hash is stable for the same stored text and differs on change.
+  const a = buildJdSnapshot({ fullText: "Forklift operator, OSHA certified" });
+  const b = buildJdSnapshot({ fullText: "Forklift operator, OSHA certified" });
+  const c = buildJdSnapshot({ fullText: "Forklift operator, OSHA certified (2nd shift)" });
+  check("jd snapshot: hash stable for identical text", a.jd_hash === b.jd_hash && a.jd_hash !== null);
+  check("jd snapshot: hash differs on change", a.jd_hash !== c.jd_hash);
+
+  // The hash is of the STORED (post-bound) text, so a truncated JD hashes its
+  // stored prefix -- two different long JDs sharing the first JD_STORE_MAX chars
+  // collide by design (they ARE the same stored snapshot).
+  const long1 = "z".repeat(JD_STORE_MAX) + "AAAA";
+  const long2 = "z".repeat(JD_STORE_MAX) + "BBBB";
+  check("jd snapshot: hash keys on stored text (post-bound)", buildJdSnapshot({ fullText: long1 }).jd_hash === buildJdSnapshot({ fullText: long2 }).jd_hash);
+}
+{
+  // Excerpt <= JD_EXCERPT_MAX, drawn from full text.
+  const s = buildJdSnapshot({ fullText: "w".repeat(1000) });
+  check("jd snapshot: excerpt capped at JD_EXCERPT_MAX", s.jd_excerpt!.length === JD_EXCERPT_MAX, `${s.jd_excerpt!.length}`);
+
+  // Excerpt falls back to excerptSource when there is no full text.
+  const s2 = buildJdSnapshot({ excerptSource: "short board blurb" });
+  check("jd snapshot: excerpt falls back to excerptSource", s2.jd_excerpt === "short board blurb" && s2.jd_full_text === null);
+}
+{
+  // Empty/undefined full text -> null text/hash/excerpt, no crash.
+  const s = buildJdSnapshot({});
+  check("jd snapshot: empty input yields null text", s.jd_full_text === null && s.jd_hash === null && s.jd_excerpt === null);
+  const s2 = buildJdSnapshot({ fullText: "   " });
+  check("jd snapshot: whitespace-only full text yields null", s2.jd_full_text === null && s2.jd_hash === null);
+}
+{
+  // Provider / url / fetchedAt pass through even without text; blanks -> null.
+  const s = buildJdSnapshot({ provider: "fetched_url", sourceUrl: "https://example.com/job/1", fetchedAt: "2026-08-10T00:00:00.000Z" });
+  check("jd snapshot: provider passthrough", s.jd_source_provider === "fetched_url");
+  check("jd snapshot: url passthrough", s.jd_source_url === "https://example.com/job/1");
+  check("jd snapshot: fetchedAt passthrough", s.jd_fetched_at === "2026-08-10T00:00:00.000Z");
+  const s2 = buildJdSnapshot({ provider: "  ", sourceUrl: "" });
+  check("jd snapshot: blank provenance normalizes to null", s2.jd_source_provider === null && s2.jd_source_url === null && s2.jd_fetched_at === null);
+}
+
+// ── apply destination (Phase 3.1 + 3.5d) ─────────────────────────────────────
+section("apply destination -- honest classification + ranking");
+{
+  // ATS -> employer_ats, with an honest label (never "Apply now").
+  const ats = classifyApplyUrl("https://boards.greenhouse.io/acme/jobs/123");
+  check("apply dest: greenhouse is employer_ats", ats.kind === "employer_ats", ats.kind);
+  check("apply dest: ats host stripped of www", ats.host === "boards.greenhouse.io", ats.host || "null");
+  check("apply dest: ats label is honest (no 'Apply now')", !/apply now/i.test(ats.label) && ats.label.length > 0, ats.label);
+
+  const workday = classifyApplyUrl("https://acme.wd5.myworkdayjobs.com/en-US/careers/job/r-1");
+  check("apply dest: workday is employer_ats", workday.kind === "employer_ats", workday.kind);
+
+  // Job board -> job_board, label names the host + the account caveat.
+  const board = classifyApplyUrl("https://www.linkedin.com/jobs/view/998877");
+  check("apply dest: linkedin is job_board", board.kind === "job_board", board.kind);
+  check("apply dest: board label names the host", /linkedin\.com/.test(board.label), board.label);
+  check("apply dest: board label is not 'Apply now'", !/apply now/i.test(board.label), board.label);
+  check("apply dest: indeed is job_board", classifyApplyUrl("https://indeed.com/viewjob?jk=abc").kind === "job_board");
+
+  // Google -> google_jobs.
+  check("apply dest: google search is google_jobs", classifyApplyUrl("https://www.google.com/search?q=warehouse+jobs&ibp=htl;jobs").kind === "google_jobs");
+
+  // Aggregator -> aggregator.
+  check("apply dest: rapidapi relay is aggregator", classifyApplyUrl("https://jsearch.io/redirect?to=x").kind === "aggregator");
+
+  // Unknown employer host -> employer_site (the honest default for a real host).
+  const site = classifyApplyUrl("https://careers.acme-widgets.com/apply/42");
+  check("apply dest: unknown real host is employer_site", site.kind === "employer_site", site.kind);
+  check("apply dest: employer_site has prep steps", site.prep.length > 0);
+
+  // Invalid: null, non-http, and garbage all reject -- and carry no prep.
+  check("apply dest: null is invalid", classifyApplyUrl(null).kind === "invalid");
+  check("apply dest: empty is invalid", classifyApplyUrl("   ").kind === "invalid");
+  check("apply dest: javascript: is invalid", classifyApplyUrl("javascript:alert(1)").kind === "invalid");
+  check("apply dest: mailto: is invalid", classifyApplyUrl("mailto:hr@acme.com").kind === "invalid");
+  check("apply dest: garbage is invalid", classifyApplyUrl("not a url at all").kind === "invalid");
+  check("apply dest: invalid carries no prep", classifyApplyUrl(null).prep.length === 0);
+  check("apply dest: invalid label admits it cannot read the link", /could not read/i.test(classifyApplyUrl(null).label));
+
+  // rankApplyLinks: employer_ats > employer_site > job_board > aggregator > google_jobs.
+  const ranked = rankApplyLinks([
+    { url: "https://www.google.com/search?q=x&ibp=htl;jobs", type: "google" },
+    { url: "https://indeed.com/viewjob?jk=1", type: "board" },
+    { url: "https://careers.acme-widgets.com/apply", type: "site" },
+    { url: "https://boards.greenhouse.io/acme/jobs/9", type: "ats" },
+    { url: "https://jsearch.io/redirect?to=y", type: "agg" },
+  ]);
+  check("apply rank: ats first", ranked[0].type === "ats", ranked[0].type);
+  check("apply rank: employer_site second", ranked[1].type === "site", ranked[1].type);
+  check("apply rank: board third", ranked[2].type === "board", ranked[2].type);
+  check("apply rank: aggregator fourth", ranked[3].type === "agg", ranked[3].type);
+  check("apply rank: google_jobs last", ranked[4].type === "google", ranked[4].type);
+
+  // Stable: equal-rank candidates keep input order.
+  const stable = rankApplyLinks([
+    { url: "https://indeed.com/a", type: "b1" },
+    { url: "https://ziprecruiter.com/b", type: "b2" },
+  ]);
+  check("apply rank: equal ranks keep input order", stable[0].type === "b1" && stable[1].type === "b2");
+}
+
+// ── quick apply provenance (Phase 3.3) ───────────────────────────────────────
+section("quick apply provenance -- as-is never flips the tailored gate");
+{
+  // baseline_as_is is the Quick Apply provenance and MUST NOT count as tailored.
+  check("provenance: baseline_as_is does NOT count as tailored", provenanceCountsAsTailored("baseline_as_is") === false);
+  check("provenance: tailored counts", provenanceCountsAsTailored("tailored") === true);
+  check("provenance: fine_tuned counts", provenanceCountsAsTailored("fine_tuned") === true);
+  // The gate set is exactly {tailored, fine_tuned} -- baseline_as_is is excluded.
+  check("provenance: gate set excludes baseline_as_is", !(TAILORED_PROVENANCES as readonly string[]).includes("baseline_as_is"));
+  check("provenance: gate set is exactly tailored + fine_tuned", TAILORED_PROVENANCES.length === 2 && (TAILORED_PROVENANCES as readonly string[]).includes("tailored") && (TAILORED_PROVENANCES as readonly string[]).includes("fine_tuned"));
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

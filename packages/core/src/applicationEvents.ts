@@ -59,6 +59,24 @@ export async function countApplicationsSent(userId: string): Promise<number> {
 
 export type DocumentProvenance = "baseline_as_is" | "fine_tuned" | "tailored";
 
+/**
+ * The provenance values that count as "customized this resume for THIS job" --
+ * the set that flips the tailored gate (hasTailoredDocument /
+ * getUserProfile.resumeTailored). "baseline_as_is" is deliberately excluded:
+ * Quick Apply (Phase 3.3) attaches a resume unchanged, which must never read as
+ * tailored. The gate SQL below is built from this constant so the two cannot
+ * drift, and provenanceCountsAsTailored() is the pure, unit-testable predicate.
+ */
+export const TAILORED_PROVENANCES = ["tailored", "fine_tuned"] as const;
+
+export function provenanceCountsAsTailored(p: DocumentProvenance): boolean {
+  return (TAILORED_PROVENANCES as readonly string[]).includes(p);
+}
+
+/** SQL IN-list of the tailored provenances. Values are compile-time constants
+ *  from the union type, so this string interpolation carries no user input. */
+const TAILORED_PROVENANCE_SQL = TAILORED_PROVENANCES.map((p) => `'${p}'`).join(", ");
+
 export interface ApplicationDocument {
   id: string;
   application_id: string;
@@ -123,7 +141,7 @@ export async function hasTailoredDocument(
        SELECT 1 FROM application_document
        WHERE user_id = $1 AND application_id = $2
          AND document_type = 'resume'
-         AND provenance IN ('tailored', 'fine_tuned')
+         AND provenance IN (${TAILORED_PROVENANCE_SQL})
      ) AS exists`,
     [userId, applicationId]
   );

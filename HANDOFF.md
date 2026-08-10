@@ -1,5 +1,53 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 3 COMPLETE (app-code): apply-link honesty, JD snapshot, Quick Apply, fit check. Providers 3.5a/b external-gated. Phase 4 next.
+
+Shipped every buildable Phase 3 item. Verification: core 26/26, tsc clean, adversarial 244 ->
+288 (jd snapshot, apply destination, quick apply provenance), claims clean, prod build green.
+Migration 038 APPLIED. Fresh-context review: clean on the two highest risks (tailored-gate fix,
+Quick Apply IDOR); its 2 real consistency findings FIXED before commit.
+
+- **3.2 JD snapshot (migration 038):** job_application gains jd_full_text (bound JD_STORE_MAX
+  20000... actually 24000), jd_excerpt, jd_source_url, jd_source_provider, jd_fetched_at,
+  jd_hash (sha256 of stored text), jd_truncated. buildJdSnapshot + getJdSnapshot in core. Save
+  paths persist the BEST JD: board save now sends full_description (was the 200-char blurb),
+  Tailor sends the full pasted/fetched text with provenance ('pasted' vs 'fetched_url' + URL +
+  time). Dedup branches BACKFILL the snapshot when a re-save carries fuller JD than stored
+  (review fix -- overwrites only when strictly longer, never clobbers). This is the single
+  snapshot every downstream reader keys to (fit-check today; interview auto-fill later).
+- **3.1 + 3.5d apply-link honesty:** lib/apply-destination.ts classifyApplyUrl (safe URL parse;
+  javascript:/data:/garbage -> "invalid" and NEVER rendered as a link) sorts a link into
+  employer_ats / job_board / google_jobs / aggregator / employer_site / unknown / invalid with
+  an HONEST label ("Opens on linkedin.com -- an account may be required", never "Apply now"),
+  a plain expectation line, and a prep checklist. rankApplyLinks prefers employer/ATS over
+  aggregator/google hops. ApplyActions renders it all.
+- **3.3 Quick Apply (/api/quick-apply):** "attach my current resume as-is" -- ownership-checked
+  (no IDOR), sets resume_artifact_id, snapshots provenance 'baseline_as_is'. CRITICAL gate
+  correctness: an as-is send must NOT count as tailored. getUserProfile.resumeTailored is now
+  has_tailored_doc OR (resume_artifact_id set AND NO application_document exists) -- the legacy
+  fallback is SCOPED, not dropped, so pre-1A tailored apps (link, no snapshot) stay tailored
+  (LIVE-verified: 1 existing app would have wrongly relocked under a naive drop) while Quick
+  Apply (writes a baseline_as_is doc) reads not-tailored. Same signal now sourced from
+  TAILORED_PROVENANCES in both gate SQL sites + the coach get_my_live_status tool (review fix).
+- **3.4 fit check (/api/fit-check):** grounded matches + EVIDENCE-LINKED gaps ("the posting asks
+  for X" the resume does not show, NEVER "you lack X") + recommendation (as_is/fine_tune/
+  full_tailor) reading the 3.2 JD snapshot; keyed to jd_hash + resume content hash; returns
+  snapshot age; JD fenced as untrusted; mock-aware, rate-limited, decision-logged; honest
+  verifier-ran signal. UI panel in ApplyActions routes to the recommended action.
+
+EXTERNAL GATES (Phase 3.5, cannot build autonomously):
+- **3.5a CareerOneStop is DEAD (401 since 2026-06-07).** Zero-code fix once Troy re-registers
+  live creds at careeronestop.org/Developers and updates CAREERONESTOP_USER_ID/TOKEN.
+- **3.5b Adzuna / USAJOBS / Jooble** need API keys (USAJOBS is free but needs registration;
+  Adzuna/Jooble need signups). Once keyed, each is a fetchJSearchJobs-shaped adapter.
+- **3.5c Indeed:** DRAFTED inquiry in docs/INDEED-PARTNER-INQUIRY-2026-08-10.md (routable,
+  NOT sent -- drafts-only rule). Indeed has NO public job-seeker search API; this is a
+  go/no-go partner question, never scraping. Product does not depend on the answer.
+
+NEXT: Phase 4 (gates, Progress, gamification) -- previews on the canonical GateDecision (1D),
+Progress fully on JourneySnapshot (retire the last localStorage counters), gamification
+(private, grace-based, no leaderboards), deterministic-eligibility + AI-phrasing advising.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 2A COMPLETE: resume fidelity (v3 schema, lossless intake, fail-closed grounding, naming, fine-tune). Page-fit (2.3+2.5) GATED. Phase 3 next.
 
 Shipped every infra-free Phase 2 item. Verification: consumer tsc clean, adversarial 172 ->

@@ -189,7 +189,11 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
             savedDaysAgo: daysAgo(j.created_at),
             statusChangedDaysAgo: daysAgo(j.status_updated_at),
             followUpAt: j.follow_up_at,
-            resumeTailored: !!j.resume_artifact_id,
+            // Read the provenance-correct signal (getUserProfile.savedJobs), not
+            // the raw resume_artifact_id link. Quick Apply sets that link for an
+            // as-is send, so the raw check would wrongly report "tailored."
+            resumeTailored:
+              profile.savedJobs.find((s) => s.id === j.id)?.resumeTailored ?? false,
           })),
           counts: {
             savedJobs: jobs.length,

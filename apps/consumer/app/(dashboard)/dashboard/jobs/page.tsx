@@ -323,6 +323,12 @@ function JobBoardPage() {
           source_id: job.id,
           apply_url: job.apply_url || null,
           employer_website: job.employer_website || null,
+          // Phase 3.2: persist the fuller JD (full_description is the 2000-char
+          // HTML-stripped body) so the saved snapshot is not the 200-char
+          // truncated `description`. Provenance = the board provider + apply URL.
+          jdFullText: job.full_description || job.description,
+          jdSourceProvider: "jsearch",
+          jdSourceUrl: job.apply_url || job.employer_website || null,
           status: "saved",
         }),
       });

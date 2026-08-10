@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { query: dbQuery, insert, getOne, invalidateNextStep, recordStatusEvent } = await import("@crucible/core");
+    const { query: dbQuery, insert, getOne, invalidateNextStep, recordStatusEvent, buildJdSnapshot } = await import("@crucible/core");
 
     // Update existing application
     if (body.id && body.status) {
@@ -140,20 +140,69 @@ export async function POST(request: Request) {
       );
     }
 
+    // Phase 3.2: persist the BEST available JD as a single snapshot with
+    // provenance. fullText prefers the caller's unbounded jdFullText (board
+    // save now sends full_description; the Tailor sends the pasted/fetched
+    // text) and falls back to the legacy truncated `description`. Never blocks
+    // the save -- a snapshot-build failure leaves the columns null.
+    let jdSnapshot: Record<string, unknown> = {};
+    try {
+      jdSnapshot = { ...buildJdSnapshot({
+        fullText: body.jdFullText || body.description || null,
+        excerptSource: body.description || null,
+        sourceUrl: body.jdSourceUrl || body.apply_url || null,
+        provider: body.jdSourceProvider || body.source || null,
+        fetchedAt: body.jdFetchedAt || null,
+      }) };
+    } catch (err) {
+      console.error("buildJdSnapshot error (non-fatal):", err);
+      jdSnapshot = {};
+    }
+
+    // Backfill the JD snapshot onto an existing application when this save
+    // carries a fuller JD than what is stored -- a job saved before Phase 3.2
+    // (null jd_full_text), or a re-tailor that pasted the full posting over a
+    // board row's short blurb. Only overwrites when strictly longer, so a
+    // later thin save never clobbers a good snapshot. Non-fatal.
+    const backfillJdSnapshot = async (appId: string) => {
+      const newLen =
+        typeof jdSnapshot.jd_full_text === "string" ? jdSnapshot.jd_full_text.length : 0;
+      if (newLen === 0) return;
+      try {
+        await dbQuery(
+          `UPDATE job_application
+             SET jd_full_text = $2, jd_excerpt = $3, jd_source_url = COALESCE($4, jd_source_url),
+                 jd_source_provider = COALESCE($5, jd_source_provider), jd_fetched_at = COALESCE($6, jd_fetched_at),
+                 jd_hash = $7, jd_truncated = $8, updated_at = now()
+           WHERE id = $1 AND user_id = $9
+             AND COALESCE(length(jd_full_text), 0) < $10`,
+          [
+            appId,
+            jdSnapshot.jd_full_text, jdSnapshot.jd_excerpt, jdSnapshot.jd_source_url,
+            jdSnapshot.jd_source_provider, jdSnapshot.jd_fetched_at, jdSnapshot.jd_hash,
+            jdSnapshot.jd_truncated ?? false, session.user.id, newLen,
+          ]
+        );
+      } catch (err) {
+        console.error("JD snapshot backfill error (non-fatal):", err);
+      }
+    };
+
     // Dedup: same source_id already saved (board jobs carry a stable source_id)...
     if (body.source_id) {
-      const existing = await getOne(
+      const existing = await getOne<{ id: string; status: string }>(
         `SELECT id, status FROM job_application WHERE user_id = $1 AND source_id = $2`,
         [session.user.id, body.source_id]
       );
       if (existing) {
+        await backfillJdSnapshot(existing.id);
         return NextResponse.json({ application: existing, duplicate: true });
       }
     } else {
       // ...and dedup MANUAL re-runs (no source_id) on normalized title+company, so
       // tailoring the same typed job twice reuses the application instead of
       // spawning a duplicate + a second cover-letter artifact (Codex 11).
-      const existing = await getOne(
+      const existing = await getOne<{ id: string; status: string }>(
         `SELECT id, status FROM job_application
            WHERE user_id = $1
              AND LOWER(TRIM(job_title)) = LOWER(TRIM($2))
@@ -163,6 +212,7 @@ export async function POST(request: Request) {
         [session.user.id, body.job_title, body.company]
       );
       if (existing) {
+        await backfillJdSnapshot(existing.id);
         return NextResponse.json({ application: existing, duplicate: true });
       }
     }
@@ -183,6 +233,7 @@ export async function POST(request: Request) {
       status_updated_at: new Date().toISOString(),
       applied_at:
         body.status === "applied" ? new Date().toISOString() : null,
+      ...jdSnapshot,
     });
 
     // Saving a first target / applying advances the journey (Stage 2 -> 3, Stage 6) -- recompute.

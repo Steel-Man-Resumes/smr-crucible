@@ -70,6 +70,12 @@ export function ResumeWorkspace() {
   const [fetchingPosting, setFetchingPosting] = useState(false);
   const [fetchPostingMsg, setFetchPostingMsg] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
 
+  // Phase 3.2: when the JD text came from a URL fetch (not a hand paste), keep
+  // the source URL + fetch time so the saved snapshot records provenance
+  // ('fetched_url'). Cleared the moment the user edits the textarea by hand,
+  // since then the text is effectively pasted/edited, not the fetched original.
+  const [jdFetchMeta, setJdFetchMeta] = useState<{ url: string; fetchedAt: string } | null>(null);
+
   async function fetchPostingFromUrl() {
     const url = (doc.meta.jobListingUrl || "").trim();
     if (!url || fetchingPosting) return;
@@ -84,6 +90,7 @@ export function ResumeWorkspace() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok && typeof data.text === "string") {
         setJobDescription(data.text);
+        setJdFetchMeta({ url, fetchedAt: new Date().toISOString() });
         setFetchPostingMsg({
           kind: "ok",
           text: "Read the posting. Check it below and edit if anything is missing, then tailor.",
@@ -387,6 +394,12 @@ export function ResumeWorkspace() {
         // typed/pasted in the Tailor = "manual"). Purely a label; the unlock
         // gate keys on the saved resume being job-targeted, not the source.
         source?: string;
+        // Phase 3.2: JD-snapshot provenance for the created job_application.
+        // The full JD text is `description` (unbounded in this flow); these
+        // carry where it came from so the saved snapshot records it.
+        jdSourceProvider?: string;
+        jdSourceUrl?: string | null;
+        jdFetchedAt?: string | null;
       },
       opts: { existingApplicationId?: string } = {}
     ) => {
@@ -566,6 +579,15 @@ export function ResumeWorkspace() {
                 source_id: job.id || "",
                 apply_url: job.apply_url || null,
                 employer_website: job.employer_website || null,
+                // Phase 3.2: persist the full pasted/fetched JD as the snapshot
+                // (job.description is the unbounded text in this flow), with
+                // provenance so fit-check / interview auto-fill read one source.
+                jdFullText: job.description || "",
+                jdSourceProvider:
+                  job.jdSourceProvider ||
+                  (job.description ? "pasted" : job.source || "jsearch"),
+                jdSourceUrl: job.jdSourceUrl ?? job.apply_url ?? null,
+                jdFetchedAt: job.jdFetchedAt ?? null,
                 status: "saved",
               }),
             });
@@ -845,6 +867,13 @@ export function ResumeWorkspace() {
         description: jobDescription.trim() || undefined,
         jobListingUrl: doc.meta.jobListingUrl || undefined,
         source: "manual",
+        // Phase 3.2 provenance: fetched-from-URL text records 'fetched_url' +
+        // the source URL + fetch time; a hand paste records 'pasted'.
+        jdSourceProvider: jobDescription.trim()
+          ? (jdFetchMeta ? "fetched_url" : "pasted")
+          : undefined,
+        jdSourceUrl: jdFetchMeta?.url ?? null,
+        jdFetchedAt: jdFetchMeta?.fetchedAt ?? null,
       },
       {}
     );
@@ -1126,7 +1155,7 @@ export function ResumeWorkspace() {
             </label>
             <textarea
               value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
+              onChange={(e) => { setJobDescription(e.target.value); setJdFetchMeta(null); }}
               placeholder="Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for -- using only what's true about you."
               rows={5}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[120px]"
@@ -1280,6 +1309,7 @@ export function ResumeWorkspace() {
             onApplied={() => setApplyInfo((p) => ({ ...p, applied: true }))}
             forgeStrengths={workspaceStrengths()}
             candidateName={doc.contact.name}
+            resumeArtifactId={artifactId}
           />
           {/* What's next: the next saved job that still needs a tailored resume. */}
           <div className="mt-3 pt-3 border-t border-t-line">
