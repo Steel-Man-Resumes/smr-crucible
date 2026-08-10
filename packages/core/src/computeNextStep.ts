@@ -88,6 +88,38 @@ export function computeNextStep(p: UserProfile): NextStepResult {
 }
 
 /**
+ * Deterministic WHY copy -- one plain sentence per computeNextStep stage (0-6).
+ *
+ * Phase 4.4: the AI phrases a warm WHY for the CURRENT step, but the AI never
+ * decides WHAT the step is (computeNextStep owns that) and never gets to invent
+ * facts. When the AI is unavailable, mocked, or errors, the route returns one of
+ * these instead -- so the WHY line is always honest and always present. Every
+ * stage the ladder can return MUST have an entry here (the adversarial suite
+ * asserts full coverage). 6th-grade reading level; no em dashes; no emojis.
+ */
+export const NEXT_STEP_WHY: Record<number, string> = {
+  0: "A quick tour shows you where everything lives, so the rest goes faster.",
+  1: "Your foundation is the base every resume and plan is built on. It comes first.",
+  2: "Picking a target job tells us what to aim your resume and practice at.",
+  3: "A resume tailored to this job gets past filters and unlocks the rest of your tools.",
+  4: "Planning how you talk about your record means you walk in ready, not caught off guard.",
+  5: "A little practice makes the real interview feel familiar instead of scary.",
+  6: "Applying and tracking keeps your search moving and reminds you when to follow up.",
+};
+
+/**
+ * Pure fallback WHY. No I/O, no AI. Returns the deterministic sentence for the
+ * step's stage (defaulting to the "keep momentum" stage-2 line for any stage
+ * outside the map), tagged so callers can show the source honestly.
+ */
+export function deterministicWhy(step: NextStepResult): {
+  why: string;
+  whySource: "deterministic";
+} {
+  return { why: NEXT_STEP_WHY[step.stage] ?? NEXT_STEP_WHY[2], whySource: "deterministic" };
+}
+
+/**
  * Cache-aware next step. Reads users.next_step_cache; recomputes when missing or
  * older than 1 hour, then persists. Requires migration 016.
  */

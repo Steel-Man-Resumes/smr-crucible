@@ -18,28 +18,29 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
-
-const STATE_RANK: Record<OnboardingState, number> = {
-  full_access: 0,
-  needs_resume: 1,
-  needs_profile: 2,
-  loading: 3,
-};
+// Deep, runtime-pure import: the one shared gate-state ordering, no db/pg pulled
+// into the client bundle (see @crucible/core/src/gateRank).
+import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 
 export function OnboardingGate({
   requiredState = "full_access",
   toolName,
+  previewFeature,
   children,
 }: {
   requiredState?: OnboardingState;
   toolName: string;
+  /** Registry id (e.g. "disclosure", "interview"): adds a "See a preview" button
+   *  to the lock screen. A preview NEVER bypasses this gate -- it just shows the
+   *  locked user what the tool does before they finish unlocking it. */
+  previewFeature?: string;
   children: ReactNode;
 }) {
   const { state } = useOnboarding();
 
   // Optimistic: never lock while we don't yet know (loading) -- avoids a flash and
   // an extra round-trip for the full-access majority.
-  const locked = state !== "loading" && STATE_RANK[state] > STATE_RANK[requiredState];
+  const locked = state !== "loading" && GATE_STATE_RANK[state] > GATE_STATE_RANK[requiredState];
   if (!locked) return <>{children}</>;
 
   const needsProfile = state === "needs_profile";
@@ -66,6 +67,14 @@ export function OnboardingGate({
               className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors"
             >
               Tailor my resume
+            </Link>
+          )}
+          {previewFeature && (
+            <Link
+              href={`/dashboard/preview/${previewFeature}`}
+              className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors"
+            >
+              See a preview
             </Link>
           )}
           <Link

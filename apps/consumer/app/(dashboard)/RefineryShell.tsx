@@ -24,6 +24,10 @@ import {
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
+// Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
+// client bundle -- see @crucible/core/src/gateRank).
+import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
+import { previewIdForHref } from "@/lib/featurePreviews";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LockKeyhole, LogOut, Menu, Sparkles, X } from "lucide-react";
 
@@ -56,13 +60,6 @@ const TIER_RANK: Record<string, number> = {
   client: 2,
   default: 2,
   observer: 3,
-};
-
-const STATE_RANK: Record<string, number> = {
-  full_access: 0,
-  needs_resume: 1,
-  needs_profile: 2,
-  loading: 3,
 };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -164,8 +161,8 @@ function isNavUnlocked(
   }
   const tierRank = TIER_RANK[userTier] ?? 3;
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
-  const stateRank = STATE_RANK[onboardingState] ?? 3;
-  const requiredRank = STATE_RANK[item.minState] ?? 3;
+  const stateRank = GATE_STATE_RANK[onboardingState] ?? 3;
+  const requiredRank = GATE_STATE_RANK[item.minState] ?? 3;
   if (stateRank > requiredRank) return false;
   if (item.requiresDisclosure && !disclosureComplete) return false;
   return true;
@@ -461,6 +458,26 @@ export function RefineryShell({
             })();
 
             if (!unlocked) {
+              // Phase 4.1: no dead ends. A locked tool that has a preview becomes
+              // a LINK to that preview (lock badge kept as the "not yet yours"
+              // cue). The preview is informational only -- the real tool page
+              // still enforces the gate at action depth. Tools with no preview
+              // entry keep the plain locked affordance.
+              const previewId = previewIdForHref(item.href);
+              if (previewId) {
+                return (
+                  <Link
+                    key={item.href}
+                    href={`/dashboard/preview/${previewId}`}
+                    onClick={onItemClick}
+                    title={`${lockReason} -- see a preview`}
+                    className="t-focus flex min-h-[40px] items-center justify-between rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#9ca29b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
+                  >
+                    <span>{navItemLabel(item)}</span>
+                    <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
+                  </Link>
+                );
+              }
               return (
                 <div
                   key={item.href}

@@ -33,6 +33,7 @@ export * from './platformChangelog';
 export * from './applicationEvents';
 export * from './voiceSession';
 export * from './journey';
+export * from './gamification';
 export * from './crypto';
 export * from './secureObject';
 export * from './deletionTasks';

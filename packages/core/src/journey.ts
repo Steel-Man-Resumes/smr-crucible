@@ -74,6 +74,21 @@ export async function recordProgressEvent(
   });
 }
 
+/**
+ * Every activity-event day for a user, as ISO timestamps (created_at). Feeds
+ * the pure gamification helpers (computeStreak / detectComeback) in the journey
+ * route -- this is the DB read; the streak math itself stays pure and testable.
+ */
+export async function getProgressEventDates(userId: string): Promise<string[]> {
+  const rows = await query<{ created_at: string }>(
+    `SELECT created_at FROM user_progress_event
+     WHERE user_id = $1
+     ORDER BY created_at ASC`,
+    [userId]
+  );
+  return rows.map((r) => r.created_at);
+}
+
 export interface JourneySnapshot {
   version: 1;
   generatedAt: string;
@@ -182,6 +197,11 @@ export async function buildJourneySnapshot(userId: string): Promise<JourneySnaps
 }
 
 export type GateState = "loading" | "needs_profile" | "needs_resume" | "full_access";
+
+// GATE_STATE_RANK lives in ./gateRank (a runtime-pure module, no db imports) so
+// client components can deep-import it without dragging db/pg into the bundle.
+// Re-exported here + from the core barrel for server callers' convenience.
+export { GATE_STATE_RANK } from "./gateRank";
 
 export interface GateDecision {
   state: GateState;

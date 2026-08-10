@@ -92,7 +92,7 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate toolName="Interview Practice">
+      <OnboardingGate toolName="Interview Practice" previewFeature="interview">
         <Suspense><InterviewPracticePage /></Suspense>
       </OnboardingGate>
     </TierGate>

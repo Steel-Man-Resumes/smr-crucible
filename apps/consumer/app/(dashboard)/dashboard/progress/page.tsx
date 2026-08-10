@@ -1,16 +1,28 @@
 "use client";
 
 /**
- * Progress — Refinery Tool 6
+ * Progress -- Refinery Tool 6
  *
- * Three sections:
- *   1. Quick Wins — personalized next steps (rule-based, not AI)
- *   2. Career Roadmap — visual journey with lit-up nodes
- *   3. Activity Scoreboard — milestones + counts (existing)
+ * Sections:
+ *   1. Quick Wins -- personalized next steps (rule-based, not AI)
+ *   2. Upcoming -- application follow-ups
+ *   3. Career Roadmap -- visual journey; nodes expand in place
+ *   4. Pipeline -- live application stages (saved -> offered)
+ *   5. Milestones + Streak -- private, grace-based (Phase 4.3)
+ *   6. By the Numbers / Activity Detail -- server-truth counts
+ *
+ * Phase 4.2: every number here maps to a NAMED server fact (see
+ * lib/progress-sources.ts). The page no longer READS the localStorage
+ * "consumer_progress" tracker as its source of truth -- activity comes from
+ * /api/user/journey (the user_progress_event ledger), forge counts from
+ * /api/user/context (the server forge profile), and the pipeline from
+ * /api/applications (job_application.status). If a fetch fails the page shows a
+ * graceful empty state, never a stale localStorage number.
  */
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import type { Milestone, StreakResult } from "@crucible/core";
 import {
   getQuickWins,
   type QuickWin,
@@ -27,8 +39,8 @@ import {
 import {
   getCareerPaths,
   getSkillNames,
-  getStrengthTitles,
 } from "@/lib/forge-output";
+import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { trackProgress } from "@/lib/track-progress";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -36,11 +48,8 @@ import { trackProgress } from "@/lib/track-progress";
 interface ProgressData {
   forge_completed: boolean;
   skills_identified: number;
-  strengths_found: number;
   career_paths: number;
-  barriers_addressed: number;
   resumes_built: number;
-  resume_bullets_written: number;
   disclosure_plans_created: number;
   interviews_started: number;
   interviews_completed: number;
@@ -50,16 +59,11 @@ interface ProgressData {
   total_sessions: number;
 }
 
-// ─── Main ───────────────────────────────────────────────────────────────────
-
 const DEFAULT_PROGRESS: ProgressData = {
   forge_completed: false,
   skills_identified: 0,
-  strengths_found: 0,
   career_paths: 0,
-  barriers_addressed: 0,
   resumes_built: 0,
-  resume_bullets_written: 0,
   disclosure_plans_created: 0,
   interviews_started: 0,
   interviews_completed: 0,
@@ -76,6 +80,32 @@ interface UpcomingItem {
   status: string;
 }
 
+interface PipelineCounts {
+  saved: number;
+  applied: number;
+  heard_back: number;
+  interviewing: number;
+  offered: number;
+}
+
+const PIPELINE_STAGES: { key: keyof PipelineCounts; label: string }[] = [
+  { key: "saved", label: "Saved" },
+  { key: "applied", label: "Applied" },
+  { key: "heard_back", label: "Heard back" },
+  { key: "interviewing", label: "Interviewing" },
+  { key: "offered", label: "Offered" },
+];
+
+const TERMINAL_STATUSES = ["declined", "rejected"];
+
+// localStorage key that remembers which milestones we already celebrated, so
+// the confetti fires ONCE per newly earned milestone, not on every page load.
+// This is a "have I congratulated this yet" marker only -- the milestone truth
+// itself always comes from the server.
+const CELEBRATED_KEY = "celebrated_milestones";
+
+// ─── Main ───────────────────────────────────────────────────────────────────
+
 export default function ProgressPage() {
   const [progress, setProgress] = useState<ProgressData>(DEFAULT_PROGRESS);
   const [barriers, setBarriers] = useState<string[]>([]);
@@ -84,164 +114,212 @@ export default function ProgressPage() {
   const [quickWins, setQuickWins] = useState<QuickWin[]>([]);
   const [roadmapNodes, setRoadmapNodes] = useState<RoadmapNode[]>([]);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineCounts | null>(null);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [streak, setStreak] = useState<StreakResult | null>(null);
+  const [celebrate, setCelebrate] = useState<{ id: string; title: string; fact: string } | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Read the latest progress from localStorage (the tools write here as the user
-  // works). Pulled out so it can re-run LIVE -- on focus, tab change, and the save
-  // events the tools fire -- instead of only once on mount (Phase 5).
-  const loadProgress = useCallback(() => {
-    const data: Partial<ProgressData> = {};
-    let userBarriers: string[] = [];
-    let stage: ReadinessStage = "unknown";
-
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.readinessStage) stage = session.readinessStage;
-        if (session.challenges) userBarriers = session.challenges;
-        if (session.forgeOutput) {
-          data.forge_completed = true;
-          data.skills_identified = getSkillNames(session.forgeOutput, 200).length;
-          data.strengths_found = getStrengthTitles(session.forgeOutput, 200).length;
-          data.career_paths = getCareerPaths(session.forgeOutput).length;
-          if (session.forgeOutput.barriers) data.barriers_addressed = session.forgeOutput.barriers.length;
+  // Activity truth: the server event ledger (user_progress_event) via the
+  // journey snapshot, plus milestones + streak folded into the same fetch.
+  const loadJourney = useCallback(() => {
+    return fetch("/api/user/journey")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const m = d?.snapshot?.metrics;
+        if (m) {
+          setProgress((prev) => ({
+            ...prev,
+            resumes_built: m.resumesBuilt ?? 0,
+            disclosure_plans_created: m.disclosurePlansCreated ?? 0,
+            interviews_started: m.interviewsStarted ?? 0,
+            interviews_completed: m.interviewsCompleted ?? 0,
+            job_searches: m.jobSearches ?? 0,
+            resources_viewed: m.resourcesViewed ?? 0,
+            applications_sent: m.applicationsSent ?? 0,
+            total_sessions: m.totalSessions ?? 0,
+          }));
         }
-      }
-    } catch {}
+        if (Array.isArray(d?.milestones)) {
+          setMilestones(d.milestones);
+          maybeCelebrate(d.milestones);
+        }
+        if (d?.streak) setStreak(d.streak);
+      })
+      .catch(() => {
+        // Graceful: leave defaults (zeros). Never fall back to localStorage.
+      });
+  }, []);
 
+  // Forge-derived truth: the server forge profile. Normalized with the same
+  // tested helpers used everywhere else, so the counts match the rest of the app.
+  const loadContext = useCallback(() => {
+    return fetch("/api/user/context")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+
+        const forge = d.forge;
+        const forgeCompleted = !!forge;
+        const skills = forge ? getSkillNames({ skills: forge.skills }, 200).length : 0;
+        const paths = forge ? getCareerPaths({ career_paths: forge.careerPaths }).length : 0;
+        const userBarriers: string[] = forge
+          ? [
+              ...(forge.hasCriminalRecord ? ["criminal_record"] : []),
+              ...(Array.isArray(forge.barriers) ? forge.barriers : []),
+            ]
+          : [];
+        const stage: ReadinessStage = (forge?.readinessStage as ReadinessStage) || "unknown";
+
+        setProgress((prev) => ({
+          ...prev,
+          forge_completed: forgeCompleted,
+          skills_identified: skills,
+          career_paths: paths,
+        }));
+        setBarriers(userBarriers);
+        setReadinessStage(stage);
+
+        // Upcoming follow-ups come from the same payload.
+        if (Array.isArray(d.applications)) {
+          const items: UpcomingItem[] = d.applications
+            .filter((a: any) => a && a.followUpAt)
+            .map((a: any) => ({
+              date: a.followUpAt,
+              company: a.company || "",
+              role: a.role || "",
+              status: a.status || "saved",
+            }))
+            .sort((x: UpcomingItem, y: UpcomingItem) => x.date.localeCompare(y.date));
+          setUpcoming(items);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Live pipeline: group job_application.status the same way the Applications
+  // page does (ownership-scoped route). Real numbers only.
+  const loadPipeline = useCallback(() => {
+    return fetch("/api/applications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const rows: any[] = Array.isArray(d?.applications) ? d.applications : [];
+        const active = rows.filter((a) => !TERMINAL_STATUSES.includes(a.status));
+        const counts: PipelineCounts = {
+          saved: 0,
+          applied: 0,
+          heard_back: 0,
+          interviewing: 0,
+          offered: 0,
+        };
+        for (const a of active) {
+          if (a.status in counts) counts[a.status as keyof PipelineCounts]++;
+        }
+        setPipeline(counts);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fire the celebration burst once per newly earned milestone. Compares the
+  // freshly-earned set against the ones we've already congratulated (persisted
+  // in localStorage), so a reload never re-fires an old celebration.
+  function maybeCelebrate(list: Milestone[]) {
     try {
-      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
-      data.resumes_built = tracker.resumes_built || 0;
-      data.resume_bullets_written = tracker.resume_bullets_written || 0;
-      data.disclosure_plans_created = tracker.disclosure_plans_created || 0;
-      data.interviews_started = tracker.interviews_started || 0;
-      data.interviews_completed = tracker.interviews_completed || 0;
-      data.job_searches = tracker.job_searches || 0;
-      data.resources_viewed = tracker.resources_viewed || 0;
-      data.applications_sent = tracker.applications_sent || 0;
-      data.total_sessions = tracker.total_sessions || 1;
-    } catch {}
+      const earned = list.filter((m) => m.earned);
+      const raw = localStorage.getItem(CELEBRATED_KEY);
+      // First visit after this shipped: seed the marker with everything already
+      // earned and celebrate NONE. Without this, a user who sent their first
+      // application weeks ago would see "you just hit a milestone" as if it
+      // happened now -- the fact is real but the timing would be a lie. Only
+      // milestones earned AFTER this seed get a live celebration.
+      if (raw === null) {
+        localStorage.setItem(CELEBRATED_KEY, JSON.stringify(earned.map((m) => m.id)));
+        return;
+      }
+      const already: string[] = JSON.parse(raw);
+      const fresh = earned.filter((m) => !already.includes(m.id));
+      if (fresh.length > 0) {
+        // Record every fresh milestone as celebrated, but surface the newest one
+        // in the banner (a burst per co-earned milestone would stack awkwardly).
+        const first = fresh[0];
+        setCelebrate({ id: first.id, title: first.title, fact: first.earnedFact });
+        localStorage.setItem(
+          CELEBRATED_KEY,
+          JSON.stringify([...already, ...fresh.map((m) => m.id)])
+        );
+      }
+    } catch {
+      // localStorage unavailable -- skip the burst, the milestone still shows.
+    }
+  }
 
-    const merged = { ...DEFAULT_PROGRESS, ...data };
-    setProgress(merged);
-    setBarriers(userBarriers);
-    setReadinessStage(stage);
+  // Mount: load all server truth, track the session, wire LIVE refresh.
+  useEffect(() => {
+    Promise.all([loadJourney(), loadContext(), loadPipeline()]).finally(() =>
+      setLoading(false)
+    );
 
+    // Dual-write only -- session is COUNTED server-side (session_start event).
+    trackProgress("session_start");
+
+    const refresh = () => {
+      loadJourney();
+      loadContext();
+      loadPipeline();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const events = [
+      "focus",
+      "resume-saved",
+      "disclosure-saved",
+      "interview-saved",
+      "application-saved",
+      "job-search",
+    ];
+    events.forEach((e) => window.addEventListener(e, refresh));
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, refresh));
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadJourney, loadContext, loadPipeline]);
+
+  // Derive Quick Wins + Roadmap from server-truth state whenever it changes.
+  useEffect(() => {
     const ctx: QuickWinContext = {
-      readinessStage: stage,
-      barriers: userBarriers,
-      forgeCompleted: !!data.forge_completed,
+      readinessStage,
+      barriers,
+      forgeCompleted: progress.forge_completed,
       activity: {
-        resumes_built: merged.resumes_built,
-        interviews_completed: merged.interviews_completed,
-        interviews_started: merged.interviews_started,
-        disclosure_plans_created: merged.disclosure_plans_created,
-        job_searches: merged.job_searches,
-        resources_viewed: merged.resources_viewed,
-        applications_sent: merged.applications_sent,
+        resumes_built: progress.resumes_built,
+        interviews_completed: progress.interviews_completed,
+        interviews_started: progress.interviews_started,
+        disclosure_plans_created: progress.disclosure_plans_created,
+        job_searches: progress.job_searches,
+        resources_viewed: progress.resources_viewed,
+        applications_sent: progress.applications_sent,
       },
     };
     setQuickWins(getQuickWins(ctx));
 
     setRoadmapNodes(
       generateRoadmap({
-        forgeCompleted: !!data.forge_completed,
-        barriers: userBarriers,
+        forgeCompleted: progress.forge_completed,
+        barriers,
         activity: {
-          resumes_built: merged.resumes_built,
-          interviews_completed: merged.interviews_completed,
-          disclosure_plans_created: merged.disclosure_plans_created,
-          job_searches: merged.job_searches,
-          resources_viewed: merged.resources_viewed,
-          applications_sent: merged.applications_sent,
-          skills_identified: merged.skills_identified,
+          resumes_built: progress.resumes_built,
+          interviews_completed: progress.interviews_completed,
+          disclosure_plans_created: progress.disclosure_plans_created,
+          job_searches: progress.job_searches,
+          resources_viewed: progress.resources_viewed,
+          applications_sent: progress.applications_sent,
+          skills_identified: progress.skills_identified,
         },
       })
     );
-  }, []);
-
-  // Phase 1D dual-read. The server ledger (user_progress_event) starts EMPTY
-  // for existing users (migration 036 has no backfill), so during cutover each
-  // counter takes max(server, local) -- the server number wins as soon as it
-  // catches up, and a pre-ledger user's history is never visually wiped to
-  // zero. The max() guards retire with the localStorage tracker in Phase 4.2.
-  const loadServerJourney = useCallback(() => {
-    fetch("/api/user/journey")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const m = d?.snapshot?.metrics;
-        if (!m) return;
-        setProgress((prev) => ({
-          ...prev,
-          resumes_built: Math.max(m.resumesBuilt || 0, prev.resumes_built),
-          disclosure_plans_created: Math.max(m.disclosurePlansCreated || 0, prev.disclosure_plans_created),
-          interviews_started: Math.max(m.interviewsStarted || 0, prev.interviews_started),
-          interviews_completed: Math.max(m.interviewsCompleted || 0, prev.interviews_completed),
-          job_searches: Math.max(m.jobSearches || 0, prev.job_searches),
-          resources_viewed: Math.max(m.resourcesViewed || 0, prev.resources_viewed),
-          applications_sent: Math.max(m.applicationsSent || 0, prev.applications_sent),
-          total_sessions: Math.max(m.totalSessions || 0, prev.total_sessions),
-        }));
-      })
-      .catch(() => {
-        // Fall back to whatever loadProgress() already read from localStorage.
-      });
-  }, []);
-
-  // Pull the upcoming timeline (application follow-ups) from the server (Phase 5).
-  const loadUpcoming = useCallback(() => {
-    fetch("/api/user/context")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d || !Array.isArray(d.applications)) return;
-        const items: UpcomingItem[] = d.applications
-          .filter((a: any) => a && a.followUpAt)
-          .map((a: any) => ({
-            date: a.followUpAt,
-            company: a.company || "",
-            role: a.role || "",
-            status: a.status || "saved",
-          }))
-          .sort((x: UpcomingItem, y: UpcomingItem) => x.date.localeCompare(y.date));
-        setUpcoming(items);
-      })
-      .catch(() => {});
-  }, []);
-
-  // Mount: load once, track the session, and wire LIVE refresh so the page
-  // reflects work done elsewhere without a manual reload (Phase 5).
-  useEffect(() => {
-    loadProgress();
-    loadUpcoming();
-    loadServerJourney();
-
-    try {
-      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
-      tracker.total_sessions = (tracker.total_sessions || 0) + 1;
-      tracker.last_session = new Date().toISOString();
-      if (!tracker.first_session) tracker.first_session = new Date().toISOString();
-      localStorage.setItem("consumer_progress", JSON.stringify(tracker));
-    } catch {}
-    trackProgress("session_start");
-
-    const refresh = () => {
-      loadProgress();
-      loadUpcoming();
-      loadServerJourney();
-    };
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    const events = ["focus", "resume-saved", "disclosure-saved", "interview-saved", "application-saved", "job-search"];
-    events.forEach((e) => window.addEventListener(e, refresh));
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("storage", refresh);
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, refresh));
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [loadProgress, loadUpcoming, loadServerJourney]);
+  }, [progress, barriers, readinessStage]);
 
   const roadmapProgress = getRoadmapProgress(roadmapNodes);
   const totalActions =
@@ -251,9 +329,40 @@ export default function ProgressPage() {
     progress.disclosure_plans_created +
     progress.resources_viewed +
     progress.applications_sent;
+  const pipelineTotal = pipeline
+    ? PIPELINE_STAGES.reduce((sum, s) => sum + pipeline[s.key], 0)
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
+        <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
+        Loading your progress...
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl">
+      {celebrate && (
+        <>
+          <CompletionConfetti key={celebrate.id} />
+          <div
+            className="bg-t-panel-2 border border-t-amber p-5 mb-8"
+            role="status"
+          >
+            <p className="text-sm font-semibold text-t-amber-bright mb-1">
+              You just hit a milestone: {celebrate.title}
+            </p>
+            {celebrate.fact && (
+              <p className="text-sm text-t-phos leading-relaxed">
+                {celebrate.fact}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
       <h1 className="text-2xl font-bold text-t-white mb-2">Your Progress</h1>
       <p className="text-base text-t-phos-dim mb-8">
         Every step counts. Here&apos;s what you&apos;ve accomplished and
@@ -274,7 +383,7 @@ export default function ProgressPage() {
         </section>
       )}
 
-      {/* ── Upcoming timeline (Phase 5) ─────────────────────────────────── */}
+      {/* ── Upcoming timeline ───────────────────────────────────────────── */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-t-white">Upcoming</h2>
@@ -380,6 +489,74 @@ export default function ProgressPage() {
         </section>
       )}
 
+      {/* ── Pipeline ────────────────────────────────────────────────────── */}
+      {pipeline && pipelineTotal > 0 && (
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-t-white">Your Pipeline</h2>
+            <Link
+              href="/dashboard/applications"
+              className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
+            >
+              Open tracker
+            </Link>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {PIPELINE_STAGES.map((stage) => (
+              <div
+                key={stage.key}
+                className="flex-1 min-w-[80px] p-3 border text-center bg-t-panel border-t-line"
+              >
+                <span className="text-xl font-bold block text-t-amber-bright">
+                  {pipeline[stage.key]}
+                </span>
+                <span className="text-xs text-t-phos-dim">{stage.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Milestones + Streak (private) ───────────────────────────────── */}
+      {(milestones.length > 0 || streak) && (
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-t-white mb-1">Milestones</h2>
+          <p className="text-sm text-t-phos-dim mb-4">
+            Just for you. Each one is backed by something you actually did.
+          </p>
+
+          {streak && (
+            <div className="bg-t-panel border border-t-line p-4 mb-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-t-amber-bright">
+                  {streak.current}
+                </span>
+                <span className="text-sm text-t-white">
+                  active {streak.current === 1 ? "day" : "days"}
+                </span>
+                {streak.protected && (
+                  <span className="text-[10px] font-semibold text-t-phos border border-t-phos px-2 py-0.5 ml-auto">
+                    protected
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-t-phos-dim mt-1">{streak.message}</p>
+              {streak.longest > streak.current && (
+                <p className="text-xs text-t-phos-dim mt-1">
+                  Your longest run so far: {streak.longest} days.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {milestones.map((m) => (
+              <MilestoneRow key={m.id} milestone={m} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Summary Stats ───────────────────────────────────────────────── */}
       <section className="mb-8">
         <h2 className="text-lg font-bold text-t-white mb-4">
@@ -415,14 +592,12 @@ export default function ProgressPage() {
           Activity Detail
         </h2>
         <div className="space-y-2">
+          {/* NOTE (Phase 4.2): the old "N bullets written" sub-line is gone.
+              The 'bullet_written' event type exists but nothing writes it, so
+              that number was localStorage-only -- dropped rather than faked. */}
           <ActivityRow
             label="Resumes built"
             value={progress.resumes_built}
-            sub={
-              progress.resume_bullets_written > 0
-                ? `${progress.resume_bullets_written} bullets written`
-                : undefined
-            }
           />
           <ActivityRow
             label="Disclosure plans"
@@ -453,7 +628,7 @@ export default function ProgressPage() {
       <div className="bg-t-panel p-5 border border-t-amber text-center">
         <p className="text-sm text-t-phos leading-relaxed">
           {totalActions === 0
-            ? "Your journey starts with one step. Check out the suggestions above — pick whichever one feels right."
+            ? "Your journey starts with one step. Check out the suggestions above -- pick whichever one feels right."
             : totalActions < 5
               ? "You're building momentum. Every action you take makes the next one easier."
               : totalActions < 15
@@ -504,12 +679,37 @@ function QuickWinCard({ win }: { win: QuickWin }) {
   );
 }
 
-// ─── Roadmap Node Card ──────────────────────────────────────────────────────
+// ─── Roadmap Node Card (expands in place) ───────────────────────────────────
+
+const TOOL_LABELS: Record<string, string> = {
+  "/welcome": "The Forge",
+  "/intro": "The Forge",
+  "/dashboard": "your dashboard",
+  "/dashboard/resources": "Resources",
+  "/dashboard/application-tailor": "the Resume Tailor",
+  "/dashboard/disclosure": "Disclosure",
+  "/dashboard/interview": "Interview Practice",
+  "/dashboard/jobs": "the Job Board",
+};
+
+function toolLabel(link?: string): string {
+  if (!link) return "this tool";
+  return TOOL_LABELS[link] || "this tool";
+}
 
 function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
-  const content = (
+  const [open, setOpen] = useState(false);
+  const panelId = `roadmap-panel-${node.id}`;
+
+  const status = node.completed
+    ? "Done"
+    : node.current
+      ? "In progress"
+      : "Not started yet";
+
+  return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 border transition-colors ${
+      className={`border ${
         node.completed
           ? "bg-t-panel-2 border-t-amber"
           : node.current
@@ -517,9 +717,110 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
             : "bg-t-bg border-t-line"
       }`}
     >
-      {/* Status indicator */}
-      <div className="flex-shrink-0">
-        {node.completed ? (
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="t-focus w-full flex items-center gap-3 px-4 py-3 text-left"
+      >
+        {/* Status indicator */}
+        <div className="flex-shrink-0">
+          {node.completed ? (
+            <div className="w-6 h-6 bg-t-amber flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3 7l3 3 5-5"
+                  stroke="#14100a"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          ) : node.current ? (
+            <div className="w-6 h-6 border border-t-amber bg-t-panel flex items-center justify-center">
+              <div className="w-2 h-2 bg-t-amber animate-pulse" />
+            </div>
+          ) : (
+            <div className="w-6 h-6 border border-t-line bg-t-panel" />
+          )}
+        </div>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <span
+            className={`text-sm font-medium block ${
+              node.completed
+                ? "text-t-amber-bright"
+                : node.current
+                  ? "text-t-white"
+                  : "text-t-phos-dim"
+            }`}
+          >
+            {node.title}
+          </span>
+          <span className="text-xs text-t-phos-dim block">{node.description}</span>
+        </div>
+
+        {/* Expand chevron */}
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          className={`text-t-phos-dim flex-shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+          aria-hidden="true"
+        >
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          id={panelId}
+          className="px-4 pb-4 pt-0 border-t border-t-line"
+        >
+          <p className="text-xs text-t-phos-dim mt-3 mb-1">
+            <span className="font-semibold text-t-white">Status:</span> {status}
+          </p>
+          <p className="text-sm text-t-phos leading-relaxed mb-3">
+            {node.description}
+          </p>
+          {node.toolLink && (
+            <Link
+              href={node.toolLink}
+              className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
+            >
+              {node.completed ? "Revisit " : "Go to "}
+              {toolLabel(node.toolLink)} &rarr;
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Milestone Row ──────────────────────────────────────────────────────────
+
+function MilestoneRow({ milestone }: { milestone: Milestone }) {
+  return (
+    <div
+      className={`flex items-start gap-3 p-4 border ${
+        milestone.earned
+          ? "bg-t-panel-2 border-t-amber"
+          : "bg-t-panel border-t-line"
+      }`}
+    >
+      <div className="flex-shrink-0 mt-0.5">
+        {milestone.earned ? (
           <div className="w-6 h-6 bg-t-amber flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
@@ -531,57 +832,35 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
               />
             </svg>
           </div>
-        ) : node.current ? (
-          <div className="w-6 h-6 border border-t-amber bg-t-panel flex items-center justify-center">
-            <div className="w-2 h-2 bg-t-amber animate-pulse" />
-          </div>
         ) : (
           <div className="w-6 h-6 border border-t-line bg-t-panel" />
         )}
       </div>
-
-      {/* Text */}
       <div className="flex-1 min-w-0">
         <span
-          className={`text-sm font-medium block ${
-            node.completed
-              ? "text-t-amber-bright"
-              : node.current
-                ? "text-t-white"
-                : "text-t-phos-dim"
+          className={`text-sm font-semibold block ${
+            milestone.earned ? "text-t-amber-bright" : "text-t-white"
           }`}
         >
-          {node.title}
+          {milestone.title}
         </span>
-        <span className="text-xs text-t-phos-dim block">{node.description}</span>
+        {milestone.earned ? (
+          <>
+            <p className="text-sm text-t-phos leading-relaxed mt-0.5">
+              {milestone.celebration}
+            </p>
+            {milestone.earnedFact && (
+              <p className="text-xs text-t-phos-dim mt-1">{milestone.earnedFact}</p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-t-phos-dim leading-relaxed mt-0.5">
+            {milestone.nextUp}
+          </p>
+        )}
       </div>
-
-      {/* Arrow for actionable items */}
-      {node.toolLink && !node.completed && (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          className="text-t-phos-dim flex-shrink-0"
-        >
-          <path
-            d="M6 4l4 4-4 4"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </svg>
-      )}
     </div>
   );
-
-  if (node.toolLink && !node.completed) {
-    return <Link href={node.toolLink}>{content}</Link>;
-  }
-
-  return content;
 }
 
 // ─── Stat Card ──────────────────────────────────────────────────────────────

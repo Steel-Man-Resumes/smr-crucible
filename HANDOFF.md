@@ -1,5 +1,50 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 4 COMPLETE: gate previews, Progress on server truth, gamification, next-step advising. Phases 5+6 BLOCKED on Troy's two gates. Phase 7 next.
+
+Shipped all of Phase 4 (pure app-code, no migration -- gamification reuses user_progress_event
+036 + application_status_event 033). Verification: core 26/26, tsc clean, adversarial 288 ->
+401, claims clean, prod build green. Fresh-context review: verdict low-risk, no blockers; its
+top finding (mistimed milestone banner for existing users) FIXED (seed the celebrated-marker on
+first visit, celebrate nothing retroactively).
+
+- **4.1 previews (no dead nav):** one shared GATE_STATE_RANK (packages/core/src/gateRank.ts)
+  kills 3 drifting copies (OnboardingGate, RefineryShell, dashboard grid). featurePreviews.ts
+  registry (5 features) + a parametrized /dashboard/preview/[feature] page: what the tool does,
+  obviously-fake SAMPLE output (labeled), a trial taste, and the CORRECT unlock path read live
+  from gate.unlockAction. Locked nav items are now LINKS to their preview (was a dead div);
+  OnboardingGate gained a "See a preview" button. Previews render NO real tool and cannot reach
+  gated data/actions -- the real gate stays at action depth. useOnboarding exposes gate +
+  trialMode (still false).
+- **4.2 Progress on server truth:** the localStorage consumer_progress READ is GONE. Every stat
+  maps to a named server source (lib/progress-sources.ts): event-ledger counts from
+  /api/user/journey, forge counts from /api/user/context, applications from the status-event
+  ledger, pipeline (saved/applied/heard-back/interviewing/offered) from /api/applications. A
+  failed fetch shows a graceful empty state, never a stale number. resume_bullets_written DROPPED
+  (no server source -- honest omission over a fake count). Roadmap nodes now EXPAND IN PLACE
+  (button, aria-expanded) with a labeled "Go to [tool]" button instead of navigating away.
+- **4.3 gamification (private, grace-based, fact-backed):** core gamification.ts (pure)
+  computeMilestones (first tailored resume / application / practice / disclosure plan / comeback
+  -- each earned only on a real fact, earnedFact proves it) + computeStreak WITH GRACE (one
+  missed day never resets; message NEVER shames a lapse; no Date.now in the pure fn -- reference
+  day derived from input) + detectComeback (celebrates the return, never frames the gap as
+  failure). NO leaderboards, NO emojis, NO cross-user comparison. Surfaced on Progress; a
+  CompletionConfetti burst fires ONCE per newly-earned milestone (seeded on first visit so
+  existing users are not retro-celebrated).
+- **4.4 next-step advising (deterministic WHAT, AI WHY):** computeNextStep stays the sole source
+  of the recommendation; /api/next-step-why phrases a short warm honest WHY (mock-aware,
+  decision-logged, deterministic NEXT_STEP_WHY fallback on any failure). AI never owns the gate
+  or the recommendation. Shown under the next-step card as a "Why this step?" disclosure.
+
+>>> BLOCKED ON TROY (both in this file's earlier entries): Phases 5 (sensitive practice) and 6
+(vault) need (1) the preview/prod Neon branch split and (2) a valid R2_ENDPOINT. Until those
+land I am building Phase 7 (Settings/trust/usage) + Phase 8 (Help/Feedback), which do NOT need
+the sensitive-storage platform live, then the gated page-fit sub-phase decision.
+
+NEXT: Phase 7 (Settings IA, security history + encrypted TOTP already shipped in 1C, AI usage
+panel, avatar/headshot on the 1C storage path -- headshot GENERATION may itself touch R2 so
+that sub-item may partially gate; trust block rewritten from the real stack). Then Phase 8.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 3 COMPLETE (app-code): apply-link honesty, JD snapshot, Quick Apply, fit check. Providers 3.5a/b external-gated. Phase 4 next.
 
 Shipped every buildable Phase 3 item. Verification: core 26/26, tsc clean, adversarial 244 ->

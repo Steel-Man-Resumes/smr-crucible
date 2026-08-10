@@ -81,7 +81,7 @@ const DISCLOSURE_TIMING = [
 export default function DisclosurePlannerPageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate toolName="The Disclosure Planner">
+      <OnboardingGate toolName="The Disclosure Planner" previewFeature="disclosure">
         <Suspense><DisclosurePlannerPage /></Suspense>
       </OnboardingGate>
     </TierGate>

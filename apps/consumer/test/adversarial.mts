@@ -46,6 +46,18 @@ import { REFINERY_PAGES, FORGE_PAGES } from "@/lib/tools/assistant-tool-defs";
 import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
 import { classifyApplyUrl, rankApplyLinks } from "@/lib/apply-destination";
 import { provenanceCountsAsTailored, TAILORED_PROVENANCES } from "@crucible/core";
+import {
+  computeGateDecision,
+  GATE_STATE_RANK,
+  NEXT_STEP_WHY,
+  deterministicWhy,
+  JOURNEY_STAGES,
+  type JourneySnapshot,
+  type GateState,
+} from "@crucible/core";
+import { FEATURE_PREVIEWS, SAMPLE_LABEL, getFeaturePreview, previewIdForHref } from "@/lib/featurePreviews";
+import { computeMilestones, computeStreak, detectComeback, type MilestoneFacts } from "@crucible/core";
+import { PROGRESS_STAT_SOURCES } from "@/lib/progress-sources";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1148,6 +1160,234 @@ section("quick apply provenance -- as-is never flips the tailored gate");
   // The gate set is exactly {tailored, fine_tuned} -- baseline_as_is is excluded.
   check("provenance: gate set excludes baseline_as_is", !(TAILORED_PROVENANCES as readonly string[]).includes("baseline_as_is"));
   check("provenance: gate set is exactly tailored + fine_tuned", TAILORED_PROVENANCES.length === 2 && (TAILORED_PROVENANCES as readonly string[]).includes("tailored") && (TAILORED_PROVENANCES as readonly string[]).includes("fine_tuned"));
+}
+
+// ── gate previews + advising (Phase 4.1 + 4.4) ───────────────────────────────
+section("gate previews + advising");
+{
+  // Minimal snapshot builder -- all metrics default to the "brand new user" zero
+  // state; override only what a case cares about.
+  const snap = (o: Partial<JourneySnapshot["metrics"]> = {}): JourneySnapshot => ({
+    version: 1,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    metrics: {
+      resumesBuilt: 0,
+      jobSearches: 0,
+      resourcesViewed: 0,
+      totalSessions: 0,
+      interviewsStarted: 0,
+      interviewsCompleted: 0,
+      disclosurePlansCreated: 0,
+      applicationsSent: 0,
+      savedJobs: 0,
+      resumeTailored: false,
+      forgeComplete: false,
+      profileComplete: false,
+      hasDisclosurePlan: false,
+      ...o,
+    },
+  });
+
+  // computeGateDecision still returns the correct states.
+  check("gate: admin -> full_access", computeGateDecision(snap(), "admin").state === "full_access");
+  check("gate: no profile -> needs_profile", computeGateDecision(snap({ profileComplete: false }), "client").state === "needs_profile");
+  check(
+    "gate: profile but no tailored resume -> needs_resume",
+    computeGateDecision(snap({ profileComplete: true, resumeTailored: false }), "client").state === "needs_resume",
+  );
+  check(
+    "gate: profile + tailored resume -> full_access",
+    computeGateDecision(snap({ profileComplete: true, resumeTailored: true }), "client").state === "full_access",
+  );
+  // Locked states always advertise a real unlock path (no dead ends).
+  const gp = computeGateDecision(snap({ profileComplete: false }), "client");
+  const gr = computeGateDecision(snap({ profileComplete: true, resumeTailored: false }), "client");
+  check("gate: needs_profile has an unlock action with href", !!gp.unlockAction && gp.unlockAction.href.length > 0);
+  check("gate: needs_resume has an unlock action with href", !!gr.unlockAction && gr.unlockAction.href.length > 0);
+  check("gate: full_access has no unlock action", computeGateDecision(snap({ profileComplete: true, resumeTailored: true }), "client").unlockAction === null);
+  check("gate: trialMode field always present (false today)", computeGateDecision(snap(), "client").trialMode === false);
+
+  // Shared GATE_STATE_RANK is the single source: correct ordering.
+  check("rank: full_access < needs_resume < needs_profile < loading",
+    GATE_STATE_RANK.full_access < GATE_STATE_RANK.needs_resume &&
+    GATE_STATE_RANK.needs_resume < GATE_STATE_RANK.needs_profile &&
+    GATE_STATE_RANK.needs_profile < GATE_STATE_RANK.loading);
+
+  // Dedup: OnboardingGate, RefineryShell, and the dashboard grid import the
+  // shared rank and no longer declare their own STATE_RANK constant.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const appRoot = join(here, "..");
+  const importers = [
+    "components/OnboardingGate.tsx",
+    "app/(dashboard)/RefineryShell.tsx",
+    "app/(dashboard)/dashboard/page.tsx",
+  ];
+  for (const rel of importers) {
+    const src = readFileSync(join(appRoot, rel), "utf8");
+    check(`dedup: ${rel} imports GATE_STATE_RANK`, src.includes("GATE_STATE_RANK"));
+    check(`dedup: ${rel} has no local STATE_RANK const`, !/const\s+STATE_RANK\s*[:=]/.test(src), rel);
+  }
+
+  // Feature-preview registry: every locked feature has a complete entry.
+  const validStates: GateState[] = ["needs_profile", "needs_resume", "full_access"];
+  const previewIds = Object.keys(FEATURE_PREVIEWS);
+  check("registry: covers the locked client tools", previewIds.length >= 5 &&
+    ["disclosure", "interview", "jobs", "vault", "applications"].every((id) => previewIds.includes(id)));
+  for (const id of previewIds) {
+    const p = FEATURE_PREVIEWS[id];
+    check(`registry[${id}]: has whatItDoes`, p.whatItDoes.trim().length > 0);
+    check(`registry[${id}]: sample output is labeled "${SAMPLE_LABEL}"`, p.sampleOutput.includes(SAMPLE_LABEL), p.sampleOutput);
+    check(`registry[${id}]: has a trial taste`, p.trialTaste.trim().length > 0);
+    check(`registry[${id}]: requiredState is a real locked-above state`, validStates.includes(p.requiredState));
+    check(`registry[${id}]: href is a real tool page`, p.href.startsWith("/dashboard/"));
+    check(`registry[${id}]: id round-trips from its href`, previewIdForHref(p.href) === id);
+    check(`registry[${id}]: no em dashes in copy`, !/—/.test(p.whatItDoes + p.sampleOutput + p.trialTaste));
+    // A real unlock path exists for a user sitting below this feature's requirement.
+    const belowSnap = p.requiredState === "full_access"
+      ? snap({ profileComplete: true, resumeTailored: false })
+      : snap({ profileComplete: false });
+    const dec = computeGateDecision(belowSnap, "client");
+    check(`registry[${id}]: computeGateDecision gives a real unlock path`, !!dec.unlockAction && dec.unlockAction.href.length > 0);
+  }
+  check("registry: getFeaturePreview returns null for unknown id", getFeaturePreview("not-a-tool") === null);
+  check("registry: previewIdForHref is null for a tool with no preview", previewIdForHref("/dashboard/employers") === null);
+
+  // Deterministic WHY map: an entry for every computeNextStep stage (0-6).
+  for (const stage of JOURNEY_STAGES) {
+    check(`why-map: stage ${stage.stage} has a sentence`, typeof NEXT_STEP_WHY[stage.stage] === "string" && NEXT_STEP_WHY[stage.stage].length > 0);
+    check(`why-map: stage ${stage.stage} sentence has no em dash`, !/—/.test(NEXT_STEP_WHY[stage.stage] ?? ""));
+  }
+  // The pure fallback returns whySource "deterministic" with NO AI call.
+  const dw = deterministicWhy({ stage: 3, action: "Tailor your resume", href: "/dashboard/application-tailor" });
+  check("why-fallback: whySource is deterministic", dw.whySource === "deterministic");
+  check("why-fallback: uses the stage-3 sentence", dw.why === NEXT_STEP_WHY[3]);
+  // Out-of-range stage falls back to the stage-2 momentum line (no throw).
+  const dwOut = deterministicWhy({ stage: 99, action: "x", href: "/dashboard" });
+  check("why-fallback: unknown stage falls back cleanly", dwOut.why === NEXT_STEP_WHY[2] && dwOut.whySource === "deterministic");
+}
+
+// ── 21. Progress + gamification (Phase 4.2 / 4.3) ─────────────────────────────
+// All pure: computeStreak / computeMilestones / detectComeback take plain data
+// and never touch a DB or network. The DB readers (getProgressEventDates, the
+// journey route wiring) are the same "not reachable from this suite" boundary
+// as the other server sections.
+section("progress + gamification");
+{
+  // Emoji detector -- pictographic ranges + variation selector + ZWJ.
+  const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️‍]/u;
+  const SHAME_RE = /\b(fail|failed|failure|lost|lose|losing|broke|broken|shame|ashamed|behind|slacking|lazy)\b/i;
+
+  const DAY = 86_400_000;
+  const dayN = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * DAY).toISOString();
+
+  // --- computeStreak: consecutive days increment ---
+  const consec = computeStreak([dayN(0), dayN(1), dayN(2)]);
+  check("streak: three consecutive days -> current 3", consec.current === 3, JSON.stringify(consec));
+  check("streak: consecutive longest is 3", consec.longest === 3, JSON.stringify(consec));
+  check("streak: consecutive is not falsely 'protected'", consec.protected === false, JSON.stringify(consec));
+
+  // --- computeStreak: ONE missed day does NOT reset (grace) ---
+  const graced = computeStreak([dayN(0), dayN(1), dayN(3)]); // missed day 2
+  check("streak: one gap day does NOT reset (current still 3)", graced.current === 3, JSON.stringify(graced));
+  check("streak: one gap day marks protected", graced.protected === true, JSON.stringify(graced));
+  check("streak: grace message is present", typeof graced.message === "string" && graced.message.length > 0);
+  check("streak: grace message never shames", !SHAME_RE.test(graced.message), graced.message);
+
+  // --- computeStreak: long gap resets GENTLY, never shames ---
+  const lapsed = computeStreak([dayN(0), dayN(1), dayN(2), dayN(40)]);
+  check("streak: long gap resets current to a fresh 1", lapsed.current === 1, JSON.stringify(lapsed));
+  check("streak: long gap keeps the longest run (3)", lapsed.longest === 3, JSON.stringify(lapsed));
+  check("streak: long-gap message never shames", !SHAME_RE.test(lapsed.message), lapsed.message);
+  check("streak: long-gap message is a welcome, not a scolding", typeof lapsed.message === "string" && lapsed.message.length > 0);
+
+  // --- computeStreak: empty -> zero, no crash ---
+  const empty = computeStreak([]);
+  check("streak: empty -> current 0", empty.current === 0);
+  check("streak: empty -> longest 0", empty.longest === 0);
+  check("streak: empty -> not protected", empty.protected === false);
+  check("streak: empty -> non-shaming message", !SHAME_RE.test(empty.message) && empty.message.length > 0, empty.message);
+
+  // --- computeStreak: garbage dates are ignored, not fatal ---
+  const dirty = computeStreak(["not-a-date", dayN(5), dayN(6)] as any);
+  check("streak: invalid dates are dropped, valid ones still counted", dirty.current === 2, JSON.stringify(dirty));
+
+  // --- computeStreak: no leaderboard/rank field leaks in ---
+  check("streak: no rank/leaderboard field on the result",
+    !("rank" in consec) && !("position" in consec) && !("leaderboard" in consec) && !("percentile" in consec));
+
+  // --- detectComeback ---
+  check("comeback: a 14+ day gap then activity is a comeback", detectComeback([dayN(0), dayN(1), dayN(20)]) === true);
+  check("comeback: steady activity is NOT a comeback", detectComeback([dayN(0), dayN(1), dayN(2), dayN(3)]) === false);
+  check("comeback: empty history is NOT a comeback", detectComeback([]) === false);
+
+  // --- computeMilestones: each earned ONLY when its backing fact is true ---
+  const none: MilestoneFacts = {
+    resumeTailored: false,
+    applicationsSent: 0,
+    interviewsCompleted: 0,
+    hasDisclosurePlan: false,
+    disclosurePlansCreated: 0,
+    comeback: false,
+  };
+  const noneMs = computeMilestones(none);
+  check("milestones: with no facts, NONE are earned", noneMs.every((m) => m.earned === false), JSON.stringify(noneMs.map((m) => [m.id, m.earned])));
+  check("milestones: an unearned milestone has an empty earnedFact", noneMs.every((m) => !m.earned && m.earnedFact === ""));
+  check("milestones: an unearned milestone still offers a gentle next-up", noneMs.every((m) => m.nextUp.trim().length > 0));
+
+  const all: MilestoneFacts = {
+    resumeTailored: true,
+    applicationsSent: 3,
+    interviewsCompleted: 2,
+    hasDisclosurePlan: true,
+    disclosurePlansCreated: 1,
+    comeback: true,
+  };
+  const allMs = computeMilestones(all);
+  check("milestones: every milestone earns when its fact is true", allMs.every((m) => m.earned === true), JSON.stringify(allMs.map((m) => [m.id, m.earned])));
+  check("milestones: every earned milestone carries a real earnedFact", allMs.every((m) => m.earned && m.earnedFact.trim().length > 0));
+
+  // Each milestone flips ONLY on its own backing fact.
+  const byId = (list: ReturnType<typeof computeMilestones>, id: string) => list.find((m) => m.id === id)!;
+  check("milestones: first_tailored_resume needs resumeTailored",
+    byId(computeMilestones({ ...none, resumeTailored: true }), "first_tailored_resume").earned === true &&
+    byId(computeMilestones(none), "first_tailored_resume").earned === false);
+  check("milestones: first_application needs applicationsSent >= 1",
+    byId(computeMilestones({ ...none, applicationsSent: 1 }), "first_application").earned === true &&
+    byId(computeMilestones(none), "first_application").earned === false);
+  check("milestones: first_practice needs interviewsCompleted >= 1",
+    byId(computeMilestones({ ...none, interviewsCompleted: 1 }), "first_practice").earned === true &&
+    byId(computeMilestones(none), "first_practice").earned === false);
+  check("milestones: first_disclosure_plan needs a plan",
+    byId(computeMilestones({ ...none, hasDisclosurePlan: true }), "first_disclosure_plan").earned === true &&
+    byId(computeMilestones(none), "first_disclosure_plan").earned === false);
+  check("milestones: comeback needs the comeback fact",
+    byId(computeMilestones({ ...none, comeback: true }), "comeback").earned === true &&
+    byId(computeMilestones(none), "comeback").earned === false);
+
+  // --- No emojis anywhere in celebration / next-up / title copy ---
+  const allStrings = [...noneMs, ...allMs].flatMap((m) => [m.title, m.celebration, m.earnedFact, m.nextUp]);
+  check("milestones: no emojis in any milestone copy", allStrings.every((s) => !EMOJI_RE.test(s)),
+    allStrings.find((s) => EMOJI_RE.test(s)));
+  check("milestones: no em dashes in any milestone copy", allStrings.every((s) => !/—/.test(s)));
+
+  // --- No leaderboard / rank / cross-user field anywhere on a milestone ---
+  check("milestones: no rank/leaderboard field on any milestone",
+    [...noneMs, ...allMs].every((m) => !("rank" in m) && !("position" in m) && !("leaderboard" in m) && !("score" in m)));
+
+  // --- Comeback celebration never mentions the gap as failure ---
+  const comebackCopy = byId(allMs, "comeback").celebration + byId(allMs, "comeback").earnedFact;
+  check("milestones: comeback copy never shames the gap", !SHAME_RE.test(comebackCopy), comebackCopy);
+
+  // --- Every displayed Progress stat maps to a named server source (4.2) ---
+  const sourceKeys = Object.keys(PROGRESS_STAT_SOURCES);
+  check("progress-sources: covers the core displayed stats",
+    ["skills_identified", "career_paths", "resumes_built", "applications_sent", "job_searches", "resources_viewed"].every((k) => sourceKeys.includes(k)));
+  check("progress-sources: every stat has a non-empty NAMED server source",
+    Object.values(PROGRESS_STAT_SOURCES).every((v) => typeof v === "string" && v.length > 0));
+  check("progress-sources: every source names a real backend (journey/context/applications)",
+    Object.values(PROGRESS_STAT_SOURCES).every((v) => /^(journey|context|applications):/.test(v)));
+  check("progress-sources: the dropped localStorage-only stat is NOT listed",
+    !sourceKeys.includes("resume_bullets_written"));
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

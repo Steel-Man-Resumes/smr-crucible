@@ -10,7 +10,15 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { buildJourneySnapshot, computeGateDecision, getUserTier } from "@crucible/core";
+import {
+  buildJourneySnapshot,
+  computeGateDecision,
+  getUserTier,
+  getProgressEventDates,
+  computeMilestones,
+  computeStreak,
+  detectComeback,
+} from "@crucible/core";
 
 export const revalidate = 0; // gate decisions must never serve stale cache
 
@@ -21,11 +29,26 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const [snapshot, tier] = await Promise.all([
+  // One place answers "where is this user + what has this user earned." Folding
+  // milestones/streak in here (Phase 4.3) keeps Progress to a single fetch.
+  const [snapshot, tier, eventDates] = await Promise.all([
     buildJourneySnapshot(userId),
     getUserTier(userId),
+    getProgressEventDates(userId),
   ]);
   const gate = computeGateDecision(snapshot, tier);
 
-  return NextResponse.json({ snapshot, gate });
+  // Every milestone is backed by a real fact off the snapshot (or a comeback
+  // derived from the same event ledger the streak reads). Pure functions.
+  const milestones = computeMilestones({
+    resumeTailored: snapshot.metrics.resumeTailored,
+    applicationsSent: snapshot.metrics.applicationsSent,
+    interviewsCompleted: snapshot.metrics.interviewsCompleted,
+    hasDisclosurePlan: snapshot.metrics.hasDisclosurePlan,
+    disclosurePlansCreated: snapshot.metrics.disclosurePlansCreated,
+    comeback: detectComeback(eventDates),
+  });
+  const streak = computeStreak(eventDates);
+
+  return NextResponse.json({ snapshot, gate, milestones, streak });
 }

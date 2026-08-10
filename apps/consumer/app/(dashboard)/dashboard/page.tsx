@@ -28,6 +28,8 @@ import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { TBtn } from "@crucible/consumer-ui";
+// Deep, runtime-pure import: the one shared gate-state ordering.
+import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -100,16 +102,9 @@ const ALL_TOOLS: ToolCard[] = [
   },
 ];
 
-const STATE_RANK: Record<string, number> = {
-  full_access: 0,
-  needs_resume: 1,
-  needs_profile: 2,
-  loading: 3,
-};
-
 function isToolUnlocked(tool: ToolCard, state: OnboardingState, isAdmin: boolean): boolean {
   if (isAdmin) return true;
-  return (STATE_RANK[state] ?? 3) <= (STATE_RANK[tool.minState] ?? 3);
+  return (GATE_STATE_RANK[state] ?? 3) <= (GATE_STATE_RANK[tool.minState] ?? 3);
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────

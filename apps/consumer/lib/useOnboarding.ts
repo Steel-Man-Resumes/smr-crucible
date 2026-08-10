@@ -31,6 +31,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import type { GateDecision } from "@crucible/core";
 import { useUserTier } from "./useUserTier";
 
 export type OnboardingState = "loading" | "needs_profile" | "needs_resume" | "full_access";
@@ -49,6 +50,11 @@ export interface OnboardingData {
   resumeCount: number;
   forgeComplete: boolean;
   disclosureComplete: boolean;
+  /** Phase 4.1: the full server gate decision (unlock action, reason, trialMode).
+   *  null until the journey endpoint answers. */
+  gate: GateDecision | null;
+  /** Convenience mirror of gate.trialMode; false until known. */
+  trialMode: boolean;
   refresh: () => void;
 }
 
@@ -59,6 +65,7 @@ export function useOnboarding(): OnboardingData {
   const [resumeCount, setResumeCount] = useState(0);
   const [forgeComplete, setForgeComplete] = useState(false);
   const [disclosureComplete, setDisclosureComplete] = useState(false);
+  const [gate, setGate] = useState<GateDecision | null>(null);
 
   const refresh = useCallback(() => {
     // Admin = god mode, skip checks
@@ -66,6 +73,12 @@ export function useOnboarding(): OnboardingData {
       setState("full_access");
       setForgeComplete(true);
       setDisclosureComplete(true);
+      setGate({
+        state: "full_access",
+        reason: "Admin tier has full access to every tool.",
+        unlockAction: null,
+        trialMode: false,
+      });
       return;
     }
 
@@ -77,7 +90,8 @@ export function useOnboarding(): OnboardingData {
     ]).then(([journeyRes, profileRes]) => {
       if (cancelled) return;
 
-      const gateState = journeyRes?.gate?.state as OnboardingState | undefined;
+      const gateDecision = (journeyRes?.gate as GateDecision | undefined) ?? null;
+      const gateState = gateDecision?.state as OnboardingState | undefined;
       const metrics = journeyRes?.snapshot?.metrics;
       const contactData = profileRes?.contact || null;
       const hasForge = metrics?.forgeComplete === true || tier === "partner";
@@ -86,6 +100,7 @@ export function useOnboarding(): OnboardingData {
       setResumeCount(metrics?.resumesBuilt ?? 0);
       setForgeComplete(hasForge);
       setDisclosureComplete(metrics?.hasDisclosurePlan === true);
+      setGate(gateDecision);
 
       // Fallback preserves the pre-Phase-1D default (needs_profile) if the
       // journey endpoint didn't come back -- the page keeps working, just
@@ -120,5 +135,14 @@ export function useOnboarding(): OnboardingData {
     return () => window.removeEventListener("disclosure-saved", handler);
   }, [refresh]);
 
-  return { state, contact, resumeCount, forgeComplete, disclosureComplete, refresh };
+  return {
+    state,
+    contact,
+    resumeCount,
+    forgeComplete,
+    disclosureComplete,
+    gate,
+    trialMode: gate?.trialMode ?? false,
+    refresh,
+  };
 }
