@@ -1,5 +1,31 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 -- PLAN LOCKED: execute from docs/REFINERY-FINAL-EXECUTION-PLAN-2026-08-10.md
+
+Troy reviewed both the draft plan and the Codex audit and locked the final plan. **The next
+build session starts by reading `docs/REFINERY-FINAL-EXECUTION-PLAN-2026-08-10.md` -- it is
+the authoritative sequence and decision record** (Phases 0-8; the older draft+audit doc is
+reference-depth only, and where they disagree the final plan wins).
+
+Reconciliation outcomes worth knowing: (1) Codex's `approved: true` client-trust bypass was
+VERIFIED REAL in code (resume-generate-full trusts the flag from the request body) -- fixed in
+Phase 1A via server-resolved approvedArtifactId. (2) Codex's support-system finding verified:
+support_request + admin route already exist; Phase 8 evolves them. (3) Codex's "adversarial
+suite aborts / blocker" claim was REFUTED on this machine: 104 passed, 0 failed on the same
+checkout (2026-08-10) -- its failure was environmental; Phase 0.6 pins toolchain + adds CI.
+(4) Troy REJECTED all feature deferrals (vault incl. user-chosen ID PDFs, AI headshots,
+gamification all build now, done correctly) but ACCEPTED the engineering corrections
+(immutable revisions + atomic forks, fail-closed verification, worker-based rendering with
+separate DOCX validation, server-mediated voice with call-ID + hard hangup, preview/prod DB
+split, consent enforcement). (5) Enterprise ceremony explicitly fenced OUT in the plan's
+"Explicitly OUT of scope" section -- do not re-inflate. (6) Troy's vault doctrine: it is the
+user's storage, we keep it safe for life; guidance not gatekeeping; never a secrets vault.
+
+Execution setup Troy chose: orchestrator = Fable 5 on MEDIUM effort, delegating to subagents
+(high-effort agents for trust-boundary/crypto/schema design, Sonnet for well-specified
+implementation). One phase per session. Quality mandate: refactor the base clean, never stack
+code on code.
+
 ## 2026-08-10 -- CODEX INDEPENDENT AUDIT ADDENDUM (PLAN CORRECTION, NOT YET BUILT)
 
 Codex independently traced the full revision plan against `main` at `003d10c`, directed separate
