@@ -186,7 +186,10 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <BulletItem>
             All AI decisions are logged for compliance and audit
           </BulletItem>
-          <BulletItem>Data retention policies are configurable</BulletItem>
+          <BulletItem>
+            Voice practice audio passes through OpenAI, which may retain it
+            up to 30 days for abuse monitoring. We do not store your audio.
+          </BulletItem>
           <BulletItem>
             Users can export or delete their data independently — you
             don&apos;t control it, they do

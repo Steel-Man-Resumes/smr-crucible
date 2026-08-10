@@ -1,5 +1,69 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASES 1B + 1D COMPLETE. Phase 1C next (needs the Neon split -- ONE MANUAL STEP FOR TROY below).
+
+Troy directed "continue until completion, all steps" -- executing the full plan phase by
+phase in one continuous run (durable checklist lives in the session task list; Phases 2-8
+queued). Verification for this ship: core build + tests 18/18, consumer tsc clean,
+adversarial 162 green (sections 17 consent doctrine, 18 voice enforcement, 19 journey/gate),
+claims clean (12 phrases), prod build green, LIVE DB verification 15/15
+(scripts/verify-1bd.mjs) which caught 2 real bugs pre-ship (SQL param type deduction in the
+voice reserve; revokeConsent was UPDATE-only so revoking a default-granted layer with no row
+silently did nothing -- now an upsert). Fresh-context review: 4 real findings, ALL fixed:
+one-call-per-lease atomic claim (was: one reservation could open N provider calls),
+profileComplete parity (resume-parsed phone fallback restored -- was a live lockout
+regression), Progress dual-read uses max(server, local) during cutover (ledger has no
+backfill), needs_resume unlock breadth restored (job-targeted artifact OR provenance).
+Migrations 034 + 035 + 036 APPLIED to the shared Neon.
+
+**PHASE 1B (consent):** immutable consumer_consent_event history (034; grant/revoke write
+it); consentDefaultFor doctrine (core+enhanced opt-out/granted, research/sharing/outcome_*
+opt-in/declined) + isConsentGranted; "enhanced" consent now actually gates coach memory
+read+writes in BOTH assistant and coach routes (rehearsal isolation preserved);
+outcome_named<->outcome_anonymous mutually exclusive server-side; data_access_log finally has
+writers (partner cohort JSON/CSV + org reads); new ConsentPanel in Settings (enhanced /
+research / outcome three-way); honest OpenAI-retention copy on voice UI + SecurityContent
+("data retention policies are configurable" is now a banned claim). Per-client aiCostUsd kept
+(OrgDashboard renders it, admin-only masking already in route).
+
+**PHASE 1D (canonical facts + voice):**
+- VOICE IS NOW SERVER-ENFORCED: voice_session lease table (035, partial unique = one active
+  per user), atomic reserve BEFORE any connection (20 min/day budget, 15 min lease, LEAST
+  accounting), server-mediated SDP exchange (NEW /api/interview-voice/call relays the offer
+  with the SERVER key and holds the call id; the browser no longer talks to OpenAI directly;
+  token route only reserves), one-call-per-lease atomic claim, /api/interview-voice/end +
+  cron /api/cron/voice-reconcile every 10 min (lease expiry + provider hard-hangup via the
+  CONFIRMED endpoint POST /v1/realtime/calls/{id}/hangup) + metering into
+  ai_token_usage.audio_seconds (new column). Known soft spot: abandoned sessions meter the
+  full lease, overstating per-user audio cost (conservative for budget).
+- JOURNEY/GATES: user_progress_event ledger (036) + /api/activity + trackProgress dual-writes
+  at every localStorage site (retire in 4.2); JourneySnapshot (core journey.ts, versioned,
+  metric dictionary) + ONE pure computeGateDecision consumed by useOnboarding via NEW
+  /api/user/journey -- the 4 disagreeing gate implementations now share one server source.
+  resume_built + disclosure_plan_created recorded server-side at artifact creation (the
+  disclosure counter was a dead field -- never written before).
+- WORKER DECISION (recorded): no Redis/host exists; Phase-1D async jobs run as Vercel cron
+  routes (pattern proven with voice-reconcile). services/worker (BullMQ skeleton) stays
+  dormant until Phase 2.5 Chromium rendering forces a real host; that phase decides
+  VPS-vs-queue.
+
+**>>> ONE MANUAL STEP FOR TROY (blocks Phase 1C/5/6 sensitive stores, ~2 minutes):**
+Preview/prod Neon split (decision 11). I exhausted the autonomous routes: every Neon API key
+on this machine is dead ("not authenticated": NEON_API_KEY_MAIN in ~/.secrets/api-keys.env,
+NEON_API_KEY in mke-reentry-hub) and the DB is a Vercel-operated marketplace resource with no
+branch API in the CLI. In the VERCEL DASHBOARD: Storage -> the Neon database (ep-little-cloud)
+-> open in Neon console -> Branches -> create branch "preview" (SCHEMA-ONLY if offered; no
+prod user data in preview) -> copy its POOLED connection string -> Vercel project "consumer"
+-> Settings -> Environment Variables -> add DATABASE_URL scoped to PREVIEW ONLY with that
+string. (Alternatively: drop a working Neon API key into ~/.secrets/api-keys.env as
+NEON_API_KEY_MAIN and tell the next session to run scripts/neon-preview-branch.sh.) After
+that: run migrations against the branch (scripts/run-migrate.sh with the branch URL) + seed
+QA users only.
+
+NEXT: Phase 1C (R2 encrypted storage platform -- R2 creds + DOCUMENT_ENCRYPTION_KEY already
+exist in Vercel env both scopes), then Phases 2-8 per the plan. Ops scripts added:
+verify-1bd.mjs, cleanup-voice.mjs, neon-preview-branch.sh, test-neon-keys.sh.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 1A COMPLETE: trust + revision contracts. 1B/1C/1D next.
 
 Executed Phase 1A of the final plan (Troy said "continue" after Phase 0, so 1A ran in the

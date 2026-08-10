@@ -41,6 +41,8 @@ const BANNED_PHRASES = [
   "scrambled so nobody can read it",
   // impersonation cookie is a persistent cookie beyond auth
   "no persistent cookies beyond auth",
+  // voice practice audio flows to OpenAI, retention is theirs not ours (Phase 1B)
+  "data retention policies are configurable",
 ];
 
 function* walk(dir: string): Generator<string> {

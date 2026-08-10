@@ -38,6 +38,7 @@ import {
   loadCoachHistory,
   getUserDailyLimit,
   incrementUserUsage,
+  isConsentGranted,
 } from "@crucible/core";
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
@@ -98,9 +99,14 @@ export async function POST(request: Request) {
   const hasCriminalRecord = profile.barriers.includes("criminal_record");
   const skillsContext = loadSkillsForContext(page, hasCriminalRecord);
   const toolOptions = { userId, surface: "refinery" as const };
+  // "enhanced" consent gates all memory personalization (read AND write).
+  // Absent row defaults to granted (see consentDefaultFor doctrine), so this
+  // is a no-op for every user until someone actually revokes it. Computed
+  // once so the read and both writes below agree within one request.
+  const enhancedConsent = await isConsentGranted(userId, "enhanced");
   // Memory loads BEFORE the current user turn is persisted, so the section
   // holds prior work, not an echo of what was just typed.
-  const memorySection = await buildMemorySection(userId);
+  const memorySection = enhancedConsent ? await buildMemorySection(userId) : "";
   const systemPrompt =
     buildCoachSystemPrompt(profile) +
     skillsContext +
@@ -112,7 +118,7 @@ export async function POST(request: Request) {
   // with an assistant tool-result message; persisting there would double-insert
   // the previous user turn.
   const userTurnText = lastUserText(messages);
-  if (endsWithUserTurn(messages) && userTurnText) {
+  if (enhancedConsent && endsWithUserTurn(messages) && userTurnText) {
     await appendCoachMessage(userId, "user", sanitizeForPrompt(userTurnText, 4000));
   }
 
@@ -153,7 +159,7 @@ export async function POST(request: Request) {
       // Persist the assistant turn only when the model finished SPEAKING.
       // finishReason "tool-calls" means the turn continues in the browser
       // (client-executed tool); the continuation request persists the reply.
-      if (finishReason !== "tool-calls") {
+      if (enhancedConsent && finishReason !== "tool-calls") {
         const spoken = (steps ?? [])
           .map((s) => s.text)
           .filter(Boolean)

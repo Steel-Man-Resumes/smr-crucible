@@ -46,6 +46,12 @@ export interface TokenUsage {
   outputTokens: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  /** Phase 1D: voice practice has no provider token count, only elapsed
+   *  audio time. Text calls omit this and it defaults to 0 (audio_seconds,
+   *  migration 035) -- correct, since a text call really used 0 audio
+   *  seconds. Not included in computeCostUsd: gpt-realtime-2 audio pricing
+   *  is per-minute, not per-token, and is not modeled here yet. */
+  audioSeconds?: number;
 }
 
 export interface AiCallMeta {
@@ -78,8 +84,9 @@ export function recordTokenUsage(
       await query(
         `INSERT INTO ai_token_usage
            (user_id, endpoint, provider, model, input_tokens, output_tokens,
-            cache_creation_input_tokens, cache_read_input_tokens, cost_usd)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            cache_creation_input_tokens, cache_read_input_tokens, cost_usd,
+            audio_seconds)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           meta?.userId || null,
           meta?.endpoint || "unknown",
@@ -90,6 +97,7 @@ export function recordTokenUsage(
           usage.cacheCreationInputTokens || 0,
           usage.cacheReadInputTokens || 0,
           computeCostUsd(model, usage),
+          usage.audioSeconds || 0,
         ]
       );
     } catch (err) {

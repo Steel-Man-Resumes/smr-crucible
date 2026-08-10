@@ -14,6 +14,7 @@ import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
+import { trackProgress } from "@/lib/track-progress";
 import {
   CATEGORY_LABELS,
   rankSecondChanceOpportunities,
@@ -76,6 +77,7 @@ function SecondChanceBoardPage() {
         (tracker.second_chance_board_views || 0) + 1;
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+    trackProgress("resource_view");
   }, []);
 
   const ranked = useMemo(

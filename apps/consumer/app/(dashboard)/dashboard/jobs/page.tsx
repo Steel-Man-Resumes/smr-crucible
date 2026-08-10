@@ -15,6 +15,7 @@ import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
+import { trackProgress } from "@/lib/track-progress";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -296,6 +297,7 @@ function JobBoardPage() {
       tracker.last_job_search = new Date().toISOString();
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+    trackProgress("job_search");
   }
 
   async function saveJob(job: EnrichedJob) {

@@ -31,3 +31,5 @@ export * from './hiddenEmployers';
 export * from './currentBlock';
 export * from './platformChangelog';
 export * from './applicationEvents';
+export * from './voiceSession';
+export * from './journey';

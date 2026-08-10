@@ -36,6 +36,7 @@ import {
   FORGE_IP_LIMITS,
   buildMemorySection,
   appendCoachMessage,
+  isConsentGranted,
 } from "@crucible/core";
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
@@ -103,10 +104,17 @@ export async function POST(request: Request) {
   // its purpose-built consented store exists (Phase 5): no cross-session
   // memory reads, no coach_conversation writes for these turns.
   const isDisclosureRehearsal = context.currentPage === "disclosure-rehearsal";
+  // "enhanced" consent gates all memory personalization (read AND write).
+  // Absent row defaults to granted (see consentDefaultFor doctrine), so this
+  // is a no-op for every user until someone actually revokes it. Computed
+  // once so the read and both writes below agree within one request.
+  const enhancedConsent = userId ? await isConsentGranted(userId, "enhanced") : false;
   // Cross-session memory (authed only; pre-auth Forge stays ephemeral).
   // Loaded BEFORE the current turn is persisted so it holds prior work.
   const memorySection =
-    userId && !isDisclosureRehearsal ? await buildMemorySection(userId) : "";
+    userId && !isDisclosureRehearsal && enhancedConsent
+      ? await buildMemorySection(userId)
+      : "";
   const baseSystemPrompt =
     buildSystemPrompt(context) +
     skillsContext +
@@ -135,7 +143,13 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
   // when the newest message IS the user speaking -- a client-tool
   // continuation POST ends with an assistant tool-result message).
   const userTurnText = lastUserText(messages);
-  if (userId && !isDisclosureRehearsal && endsWithUserTurn(messages) && userTurnText) {
+  if (
+    userId &&
+    !isDisclosureRehearsal &&
+    enhancedConsent &&
+    endsWithUserTurn(messages) &&
+    userTurnText
+  ) {
     await appendCoachMessage(
       userId,
       "user",
@@ -166,7 +180,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
       // Persist the assistant turn only when the model finished SPEAKING
       // (finishReason "tool-calls" means the turn continues in the browser).
-      if (userId && !isDisclosureRehearsal && finishReason !== "tool-calls") {
+      if (userId && !isDisclosureRehearsal && enhancedConsent && finishReason !== "tool-calls") {
         const spoken =
           (steps ?? [])
             .map((s) => s.text)

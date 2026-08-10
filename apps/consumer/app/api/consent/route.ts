@@ -58,12 +58,35 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Mutual exclusivity: outcome_anonymous and outcome_named are two
+    // answers to the same question ("can we publish your success story, and
+    // how"). Granting one first force-revokes the other so a user can never
+    // hold both at once -- the revoke is recorded as its own history event so
+    // "why did this turn off" is answerable later.
+    const OPPOSING: Partial<Record<ConsentLayer, ConsentLayer>> = {
+      outcome_named: "outcome_anonymous",
+      outcome_anonymous: "outcome_named",
+    };
+    if (action === "grant" && OPPOSING[layer as ConsentLayer]) {
+      const opposing = OPPOSING[layer as ConsentLayer]!;
+      await revokeConsent(session.user.id, opposing, {
+        collectionMethod: "settings",
+        context: { reason: "mutual_exclusivity" },
+      });
+    }
+
     const record =
       action === "grant"
-        ? await grantConsent(session.user.id, layer as ConsentLayer, CONSENT_TEXT_VERSION, {
-            collected_from: "settings",
-          })
-        : await revokeConsent(session.user.id, layer as ConsentLayer);
+        ? await grantConsent(
+            session.user.id,
+            layer as ConsentLayer,
+            CONSENT_TEXT_VERSION,
+            { collected_from: "settings" },
+            { collectionMethod: "settings" }
+          )
+        : await revokeConsent(session.user.id, layer as ConsentLayer, {
+            collectionMethod: "settings",
+          });
     return NextResponse.json({ consent: record });
   } catch (err: any) {
     console.error("Consent update error:", err?.message || err);

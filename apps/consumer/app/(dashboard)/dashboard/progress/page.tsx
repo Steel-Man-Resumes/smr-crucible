@@ -29,6 +29,7 @@ import {
   getSkillNames,
   getStrengthTitles,
 } from "@/lib/forge-output";
+import { trackProgress } from "@/lib/track-progress";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,34 @@ export default function ProgressPage() {
     );
   }, []);
 
+  // Phase 1D dual-read. The server ledger (user_progress_event) starts EMPTY
+  // for existing users (migration 036 has no backfill), so during cutover each
+  // counter takes max(server, local) -- the server number wins as soon as it
+  // catches up, and a pre-ledger user's history is never visually wiped to
+  // zero. The max() guards retire with the localStorage tracker in Phase 4.2.
+  const loadServerJourney = useCallback(() => {
+    fetch("/api/user/journey")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const m = d?.snapshot?.metrics;
+        if (!m) return;
+        setProgress((prev) => ({
+          ...prev,
+          resumes_built: Math.max(m.resumesBuilt || 0, prev.resumes_built),
+          disclosure_plans_created: Math.max(m.disclosurePlansCreated || 0, prev.disclosure_plans_created),
+          interviews_started: Math.max(m.interviewsStarted || 0, prev.interviews_started),
+          interviews_completed: Math.max(m.interviewsCompleted || 0, prev.interviews_completed),
+          job_searches: Math.max(m.jobSearches || 0, prev.job_searches),
+          resources_viewed: Math.max(m.resourcesViewed || 0, prev.resources_viewed),
+          applications_sent: Math.max(m.applicationsSent || 0, prev.applications_sent),
+          total_sessions: Math.max(m.totalSessions || 0, prev.total_sessions),
+        }));
+      })
+      .catch(() => {
+        // Fall back to whatever loadProgress() already read from localStorage.
+      });
+  }, []);
+
   // Pull the upcoming timeline (application follow-ups) from the server (Phase 5).
   const loadUpcoming = useCallback(() => {
     fetch("/api/user/context")
@@ -184,6 +213,7 @@ export default function ProgressPage() {
   useEffect(() => {
     loadProgress();
     loadUpcoming();
+    loadServerJourney();
 
     try {
       const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
@@ -192,10 +222,12 @@ export default function ProgressPage() {
       if (!tracker.first_session) tracker.first_session = new Date().toISOString();
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+    trackProgress("session_start");
 
     const refresh = () => {
       loadProgress();
       loadUpcoming();
+      loadServerJourney();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") refresh();
@@ -209,7 +241,7 @@ export default function ProgressPage() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("storage", refresh);
     };
-  }, [loadProgress, loadUpcoming]);
+  }, [loadProgress, loadUpcoming, loadServerJourney]);
 
   const roadmapProgress = getRoadmapProgress(roadmapNodes);
   const totalActions =

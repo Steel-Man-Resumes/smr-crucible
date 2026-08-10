@@ -4,6 +4,7 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "crons": [
-    { "path": "/api/cron/sync-tracking", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/sync-tracking", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/voice-reconcile", "schedule": "*/10 * * * *" }
   ]
 }

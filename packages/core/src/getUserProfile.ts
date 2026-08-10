@@ -67,6 +67,17 @@ export interface UserProfile {
   applicationCount: number;
   hasResumeTailoredToTarget: boolean;
 
+  // Onboarding gate (Phase 1D journey.ts computeGateDecision reads this).
+  // Minimum-viable-contact check: a name and a phone number, same bar as
+  // /api/user/profile's `isComplete`. NOTE (delta from the client-side
+  // check): this reads users.name (DB) and consumer_profile.profile_data.
+  // contact.phone only -- it does not fall back to a phone parsed out of a
+  // Forge resume artifact the way /api/user/profile does, and it does not
+  // read the live NextAuth session name. A user whose phone lives only in a
+  // parsed resume (never saved explicitly via Settings) reads incomplete
+  // here even though the client-side check today would call it complete.
+  profileComplete: boolean;
+
   // Disclosure
   hasDisclosurePlan: boolean;
 
@@ -158,6 +169,28 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
   const prefs = profile?.preferences ?? {};
   const { city, state } = parseLocation((prefs as Record<string, unknown>).location);
+
+  const contact = (profile?.profile_data as Record<string, unknown> | undefined)?.contact as
+    | { name?: string; phone?: string }
+    | undefined;
+  const contactName = (contact?.name || user.name || "").trim();
+  let contactPhone = (contact?.phone || "").trim();
+  // Parity with /api/user/profile's isComplete: a phone that only lives in a
+  // parsed resume artifact still counts (many users never re-save the
+  // pre-filled Settings form). Without this fallback the gate flips existing
+  // full_access users back to needs_profile (review finding, 2026-08-10).
+  if (!contactPhone) {
+    const artifactPhone = await getOne<{ phone: string }>(
+      `SELECT content->'contact'->>'phone' AS phone
+       FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume'
+         AND COALESCE(content->'contact'->>'phone', '') <> ''
+       ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    );
+    contactPhone = (artifactPhone?.phone || "").trim();
+  }
+  const profileComplete = !!(contactName && contactPhone);
 
   const topCareerPaths = (profile?.career_paths ?? [])
     .map(labelOf)
@@ -253,6 +286,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     savedJobs,
     applicationCount: jobs.filter((j) => j.status !== "saved").length,
     hasResumeTailoredToTarget: savedJobs.some((j) => j.resumeTailored),
+    profileComplete,
 
     hasDisclosurePlan: Number(artifactStats?.disclosure_count ?? 0) > 0,
 

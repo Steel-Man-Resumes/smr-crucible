@@ -17,6 +17,7 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
 import { escapeHtml as esc } from "@/lib/escape-html";
+import { trackProgress } from "@/lib/track-progress";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -235,6 +236,7 @@ function InterviewPracticePage() {
       tracker.last_interview = new Date().toISOString();
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+    trackProgress("interview_started");
   }
 
   // The selected resume, formatted for the interviewer prompt + the bullet-proof
@@ -278,6 +280,7 @@ function InterviewPracticePage() {
       tracker.interviews_completed = (tracker.interviews_completed || 0) + 1;
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
+    trackProgress("interview_completed");
     recordInterviewPractice({
       role: config.targetRole,
       frame: config.interviewType || "general",
@@ -899,10 +902,12 @@ function VoicePracticePanel({
 }) {
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
   const [error, setError] = useState("");
+  const [reservedSeconds, setReservedSeconds] = useState<number | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -919,6 +924,21 @@ function VoicePracticePanel({
     streamRef.current = null;
   }
 
+  async function endServerSession() {
+    const sessionId = sessionIdRef.current;
+    sessionIdRef.current = null;
+    if (!sessionId) return;
+    try {
+      await fetch("/api/interview-voice/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+    } catch {
+      // Best-effort: the reconcile cron closes any lease this misses.
+    }
+  }
+
   function stopVoicePractice() {
     // Only record a completion if a live session actually took place.
     if (status === "live") {
@@ -931,8 +951,10 @@ function VoicePracticePanel({
       });
     }
     cleanupVoiceConnection();
+    void endServerSession();
     setStatus("idle");
     setError("");
+    setReservedSeconds(null);
   }
 
   async function startVoicePractice() {
@@ -952,13 +974,14 @@ function VoicePracticePanel({
       });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok) {
-        throw new Error(tokenData.error || "Could not start voice practice.");
+        throw new Error(tokenData.message || tokenData.error || "Could not start voice practice.");
       }
-      const ephemeralKey =
-        tokenData.value || tokenData.client_secret?.value || tokenData.secret?.value;
-      if (!ephemeralKey) {
-        throw new Error("Voice session token was missing.");
+      const sessionId = tokenData.sessionId;
+      if (!sessionId) {
+        throw new Error("Voice session could not be reserved.");
       }
+      sessionIdRef.current = sessionId;
+      setReservedSeconds(tokenData.reservedSeconds ?? null);
 
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
@@ -992,16 +1015,32 @@ function VoicePracticePanel({
       await pc.setLocalDescription(offer);
       if (!offer.sdp) throw new Error("Could not create voice offer.");
 
-      const sdpRes = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          "Content-Type": "application/sdp",
-        },
-      });
+      const configHeader = btoa(
+        unescape(
+          encodeURIComponent(
+            JSON.stringify({ config, forgeContext: forgeContext || undefined })
+          )
+        )
+      );
+
+      const sdpRes = await fetch(
+        `/api/interview-voice/call?sessionId=${encodeURIComponent(sessionId)}`,
+        {
+          method: "POST",
+          body: offer.sdp,
+          headers: {
+            "Content-Type": "application/sdp",
+            "X-Voice-Config": configHeader,
+          },
+        }
+      );
       if (!sdpRes.ok) {
-        throw new Error("Realtime voice connection failed.");
+        let message = "Realtime voice connection failed.";
+        try {
+          const errData = await sdpRes.clone().json();
+          message = errData.message || errData.error || message;
+        } catch {}
+        throw new Error(message);
       }
 
       await pc.setRemoteDescription({
@@ -1021,8 +1060,10 @@ function VoicePracticePanel({
         tracker.last_interview = new Date().toISOString();
         localStorage.setItem("consumer_progress", JSON.stringify(tracker));
       } catch {}
+      trackProgress("interview_started", { mode: "voice" });
     } catch (err: any) {
       cleanupVoiceConnection();
+      void endServerSession();
       setStatus("error");
       setError(err?.message || "Voice practice could not start.");
     }
@@ -1037,6 +1078,11 @@ function VoicePracticePanel({
           <p className="text-sm text-t-phos-dim">
             Talk out loud with a realtime AI interviewer using gpt-realtime-2.
           </p>
+          <p className="mt-1 text-xs text-t-phos-dim">
+            Voice practice runs through OpenAI. They may keep audio and
+            transcripts for up to 30 days for abuse monitoring, then delete
+            them. We do not store your audio.
+          </p>
           <div aria-live="polite" role="status">
             {status === "connecting" && (
               <p className="mt-1 text-xs font-medium text-t-phos-dim">Connecting...</p>
@@ -1044,6 +1090,8 @@ function VoicePracticePanel({
             {status === "live" && (
               <p className="mt-1 text-xs font-medium text-t-amber-bright">
                 Live now. Speak naturally; end the session when you are done.
+                {reservedSeconds != null &&
+                  ` You have up to ${Math.round(reservedSeconds / 60)} minutes this session.`}
               </p>
             )}
             {status === "error" && error && (
@@ -1051,22 +1099,29 @@ function VoicePracticePanel({
             )}
           </div>
         </div>
-        {status === "live" ? (
-          <button
-            onClick={stopVoicePractice}
-            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
-          >
-            End voice session
-          </button>
-        ) : (
-          <button
-            onClick={startVoicePractice}
-            disabled={!enabled || status === "connecting"}
-            className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
-          >
-            {status === "connecting" ? "Connecting..." : "Start live voice"}
-          </button>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {status === "live" ? (
+            <button
+              onClick={stopVoicePractice}
+              className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
+            >
+              End voice session
+            </button>
+          ) : (
+            <button
+              onClick={startVoicePractice}
+              disabled={!enabled || status === "connecting"}
+              className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {status === "connecting" ? "Connecting..." : "Start live voice"}
+            </button>
+          )}
+          {status !== "live" && reservedSeconds != null && (
+            <p className="text-xs text-t-phos-dim">
+              Up to {Math.round(reservedSeconds / 60)} minutes today.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { listArtifacts, createArtifact, query, invalidateNextStep, snapshotApplicationDocument } from "@crucible/core";
+import { listArtifacts, createArtifact, query, invalidateNextStep, snapshotApplicationDocument, recordProgressEvent } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 
@@ -164,6 +164,24 @@ export async function POST(request: Request) {
     // Force the next-step engine to recompute on the next read.
     if (NEXT_STEP_RELEVANT.includes(body.type as ArtifactType)) {
       await invalidateNextStep(userId).catch(() => {});
+    }
+
+    // Phase 1D: server-side truth beats a client trackProgress() ping for
+    // "a resume got built" -- record it here, non-fatally, rather than
+    // relying on the client to remember to call /api/activity too.
+    if (body.type === "resume") {
+      await recordProgressEvent(userId, "resume_built", { artifactId: artifact.id }).catch(
+        (evErr: unknown) => console.error("recordProgressEvent error:", evErr)
+      );
+    }
+    // Bonus fix while touching this path: disclosure_plans_created was a dead
+    // localStorage field -- nothing ever wrote it client-side, so the Progress
+    // page's disclosure count and the roadmap's disclosure node were silently
+    // stuck at 0. This is the write that was missing.
+    if (body.type === "disclosure_plan") {
+      await recordProgressEvent(userId, "disclosure_plan_created", { artifactId: artifact.id }).catch(
+        (evErr: unknown) => console.error("recordProgressEvent error:", evErr)
+      );
     }
 
     return NextResponse.json({ data: artifact }, { status: 201 });

@@ -1,69 +1,43 @@
 /**
- * Interview Voice Token API
+ * Interview Voice Reservation API
  *
- * Mints short-lived OpenAI Realtime client secrets for authenticated
- * browser-based voice practice. The standard OpenAI API key never reaches
- * the browser.
+ * Phase 1D: this route used to mint an OpenAI Realtime ephemeral client
+ * secret and hand it straight to the browser, which then POSTed the SDP
+ * offer directly to api.openai.com -- the server never learned a call
+ * happened, so there was no duration cap, no metering, and no way to stop
+ * an abandoned session. It no longer talks to OpenAI at all.
+ *
+ * Now this route only reserves a server-side lease (voice_session, see
+ * packages/core/src/voiceSession.ts) against a daily minute budget and a
+ * one-active-session-per-user rule. The browser takes the returned
+ * sessionId to POST /api/interview-voice/call, which is the route that
+ * actually relays the SDP exchange to OpenAI using the server's own API
+ * key -- the ephemeral client secret is gone because nothing on the
+ * client needs to authenticate to OpenAI directly anymore.
+ *
+ * Retention (Phase 1B, honest disclosure, unchanged by this route's
+ * rewrite): the session config sent to OpenAI by the call route passes no
+ * retention parameters, so OpenAI's default retention applies to the audio
+ * and transcript that flow through their Realtime API -- we do not control
+ * or shorten it from here. The UI-facing sentence for this lives on the
+ * interview page's voice-practice control and in SecurityContent.tsx.
  */
 
-import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeArray, sanitizeForPrompt } from "@/lib/sanitize";
+import { reserveVoiceSession } from "@crucible/core";
+import { sanitizeForPrompt } from "@/lib/sanitize";
+import { REALTIME_MODEL, type VoiceSessionBody } from "@/lib/voice-instructions";
 
 export const maxDuration = 15;
 
-const REALTIME_MODEL = "gpt-realtime-2";
 const MAX_REQUEST_BYTES = 100_000;
 
-interface VoiceSessionBody {
-  config?: {
-    targetRole?: string;
-    interviewType?: string;
-    includeDisclosure?: boolean;
-  };
-  forgeContext?: {
-    skills?: string[];
-    strengths?: string[];
-    narrative?: string;
-  };
-}
-
-function buildVoiceInstructions(body: VoiceSessionBody): string {
-  const config = body.config || {};
-  const forge = body.forgeContext || {};
-  const targetRole = sanitizeForPrompt(config.targetRole, 120);
-  const interviewType = sanitizeForPrompt(config.interviewType, 80);
-  const skills = sanitizeArray(forge.skills, 10, 80);
-  const strengths = sanitizeArray(forge.strengths, 6, 120);
-  const narrative = sanitizeForPrompt(forge.narrative, 700);
-  const includeDisclosure =
-    config.includeDisclosure || config.interviewType === "disclosure";
-
-  return `You are a professional hiring manager running a live voice mock interview.
-
-Target role: ${targetRole}
-Interview type: ${interviewType}
-Candidate skills: ${skills}
-Candidate strengths: ${strengths}
-Candidate context: ${narrative}
-
-Rules:
-- Start immediately with a short greeting and one interview question.
-- Ask one question at a time.
-- Keep spoken turns short: 1-3 sentences.
-- Use natural follow-up questions based on the user's answer.
-- Be fair, direct, and realistic. Do not flatter.
-- After about 5 candidate answers, end the practice and give concise feedback.
-- Feedback should cover clarity, confidence, specificity, and next improvement.
-- Do not promise hiring outcomes or give legal advice.
-${
-  includeDisclosure
-    ? "- Around the third or fourth answer, ask professionally about background-check context so the user can practice disclosure."
-    : "- Do not ask for criminal record details unless the user raises it first."
-}`;
-}
+const BUDGET_EXHAUSTED_MESSAGE =
+  "You have used your voice practice time for today. It resets tomorrow.";
+const ALREADY_ACTIVE_MESSAGE =
+  "A voice session is already running. End it first, then start a new one.";
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -91,42 +65,25 @@ async function handlePost(request: Request) {
     body = {};
   }
 
-  const safetyIdentifier = crypto
-    .createHash("sha256")
-    .update(userId)
-    .digest("hex");
+  const targetRole = sanitizeForPrompt(body.config?.targetRole, 120);
 
-  const response = await fetch(
-    "https://api.openai.com/v1/realtime/client_secrets",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-        "OpenAI-Safety-Identifier": safetyIdentifier,
-      },
-      body: JSON.stringify({
-        session: {
-          type: "realtime",
-          model: REALTIME_MODEL,
-          instructions: buildVoiceInstructions(body),
-          reasoning: { effort: "low" },
-          audio: {
-            output: {
-              voice: "marin",
-            },
-          },
-        },
-      }),
-    }
-  );
+  const reservation = await reserveVoiceSession(userId, targetRole);
 
-  const text = await response.text();
-  if (!response.ok) {
-    console.error("Realtime token error:", response.status, text.slice(0, 500));
+  if (reservation.status === "budget_exhausted") {
     return NextResponse.json(
-      { error: "Could not start voice practice" },
-      { status: response.status }
+      {
+        error: "budget_exhausted",
+        message: BUDGET_EXHAUSTED_MESSAGE,
+        remainingSeconds: reservation.remainingSeconds,
+      },
+      { status: 429 }
+    );
+  }
+
+  if (reservation.status === "already_active") {
+    return NextResponse.json(
+      { error: "already_active", message: ALREADY_ACTIVE_MESSAGE },
+      { status: 409 }
     );
   }
 
@@ -143,19 +100,20 @@ async function handlePost(request: Request) {
         includeDisclosure: body.config?.includeDisclosure,
       }).slice(0, 500),
       explanation:
-        "Minted authenticated OpenAI Realtime client secret for live interview practice.",
+        "Reserved a server-side voice practice lease (Phase 1D minute budget).",
       outputSummary: {
-        type: "interview_voice_token",
+        type: "interview_voice_reservation",
         model: REALTIME_MODEL,
+        reservedSeconds: reservation.session.reserved_seconds,
       },
     });
   } catch (err) {
     console.error("Decision log failed (interview voice):", err);
   }
 
-  return new Response(text, {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
+  return NextResponse.json({
+    sessionId: reservation.session.id,
+    reservedSeconds: reservation.session.reserved_seconds,
   });
 }
 

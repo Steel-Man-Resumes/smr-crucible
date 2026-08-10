@@ -10,6 +10,21 @@
  * hand so t.ROY can offer a one-click unblock. Same gate fields as OnboardingGate
  * (forgeComplete, then a resume tailored to a target job), so t.ROY and the UI lock
  * never disagree. Pure + deterministic -- testable, no I/O.
+ *
+ * Phase 1D: journey.ts's computeGateDecision() is now the canonical gate
+ * decision (consumed by useOnboarding -> OnboardingGate + RefineryShell.
+ * isNavUnlocked via GET /api/user/journey). computeCurrentBlock must stay in
+ * parity with it on the field both ultimately gate the toolset on --
+ * hasResumeTailoredToTarget -- which is unchanged here (still the same
+ * getUserProfile field, same server definition). Pre-existing, NOT
+ * introduced by Phase 1D: this function's first gate is forgeComplete, while
+ * computeGateDecision's first gate is profileComplete (name + phone) --
+ * OnboardingGate's state machine has never gated on forgeComplete directly
+ * (RefineryShell enforces that one separately, with a hard redirect to the
+ * Forge). The two ladders were already not fully identical before this
+ * change; this comment exists so the next person doesn't assume they are.
+ * If computeGateDecision's ladder changes (e.g. Phase 4.1's trialMode lane),
+ * check whether this function needs updating in the same change.
  */
 
 /** The minimal journey shape both t.ROY surfaces can supply. */

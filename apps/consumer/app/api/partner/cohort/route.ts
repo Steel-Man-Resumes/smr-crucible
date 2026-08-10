@@ -17,6 +17,7 @@ import {
   isPartnerUser,
   getPartnerCohort,
   cohortToCsv,
+  recordDataAccess,
 } from "@crucible/core";
 
 export const maxDuration = 15;
@@ -39,6 +40,14 @@ export async function GET(request: Request) {
   if (searchParams.get("format") === "csv") {
     const csv = cohortToCsv(cohort);
     const date = new Date().toISOString().slice(0, 10);
+    // Audit trail (data_access_log, Phase 1B) -- non-fatal, never blocks the
+    // download.
+    await recordDataAccess({
+      accessorUserId: session.user.id,
+      resource: "partner_cohort",
+      action: "export_csv",
+      context: { clientCount: cohort.clients.length },
+    });
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -46,6 +55,14 @@ export async function GET(request: Request) {
       },
     });
   }
+
+  // Audit trail (data_access_log, Phase 1B) -- non-fatal, never blocks the read.
+  await recordDataAccess({
+    accessorUserId: session.user.id,
+    resource: "partner_cohort",
+    action: "read",
+    context: { clientCount: cohort.clients.length },
+  });
 
   return NextResponse.json(cohort);
 }

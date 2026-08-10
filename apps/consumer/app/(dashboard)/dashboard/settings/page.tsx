@@ -14,6 +14,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
+import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
@@ -255,6 +256,8 @@ export default function SettingsPage() {
       <CoachSettingsSection />
 
       <SharingConsentSection />
+
+      <ConsentPanel />
 
       {/* AI usage/cost -- quiet by design */}
       <AiCostsOwnSection />

@@ -21,6 +21,7 @@ import { profileToResume } from "@/components/resume/resumeParsers";
 import { withDeadline } from "@/lib/job-search-core";
 import { normalizeEmployerName, isVerifiedFairChance, isHiddenEmployer } from "@crucible/core";
 import { computeCurrentBlock, buildBlockSection, PLATFORM_CHANGELOG, buildWhatsNewSection } from "@crucible/core";
+import { consentDefaultFor } from "@crucible/core";
 import { REFINERY_PAGES, FORGE_PAGES } from "@/lib/tools/assistant-tool-defs";
 import { isDisallowedHost, htmlToText } from "@/lib/job-posting-extract";
 
@@ -418,6 +419,171 @@ section("resume content validation -- server write boundary");
   check("rejects non-string skills", !validateResumeContent({ formatVersion: 2, skills: [{ evil: true }] }).ok);
   check("accepts sparse v2 draft", validateResumeContent({ formatVersion: 2, summary: "", skills: [] }).ok);
   check("accepts legacy (no formatVersion) object", validateResumeContent({ text: "old style" }).ok);
+}
+
+// ── 17. Consent doctrine (Phase 1B) ───────────────────────────────────────────
+// consentDefaultFor is the pure decision: what a layer means when a user has
+// never touched the toggle (no consumer_consent row yet). isConsentGranted
+// and the enforcement wiring in the assistant/coach routes both depend on
+// this being right, but those need a live DB/session -- covered by preview
+// e2e, not here.
+section("consent doctrine -- default-consent per layer");
+{
+  check("core defaults to granted (essential function)", consentDefaultFor("core") === "granted");
+  check("enhanced defaults to granted (disclosed, opt-out)", consentDefaultFor("enhanced") === "granted");
+  check("research defaults to declined (opt-in)", consentDefaultFor("research") === "declined");
+  check("sharing defaults to declined (opt-in)", consentDefaultFor("sharing") === "declined");
+  check("outcome_anonymous defaults to declined (opt-in)", consentDefaultFor("outcome_anonymous") === "declined");
+  check("outcome_named defaults to declined (opt-in)", consentDefaultFor("outcome_named") === "declined");
+  // Mutual exclusivity (outcome_anonymous <-> outcome_named force-revoking
+  // each other) lives inline in apps/consumer/app/api/consent/route.ts POST,
+  // not as an exported pure helper -- it calls revokeConsent/grantConsent
+  // against the live DB, so it isn't unit-testable without one. Covered by
+  // preview e2e (grant named, confirm anonymous is force-revoked, and back).
+}
+
+// ── 18. Voice enforcement -- server-side lease, not a browser-only cap ───────
+// The DB isn't reachable from this suite (same doctrine as sections 13/15),
+// so the boundary is locked at the SQL layer: the exported reservation SQL
+// must rely on the partial-unique-index ON CONFLICT arbiter (never a
+// check-then-insert race) and the usage-accounting SQL must cap each row at
+// LEAST(reserved_seconds, actual elapsed) so a lease can never be stretched.
+section("voice enforcement -- server-side lease");
+{
+  const {
+    VOICE_DAILY_SECONDS,
+    VOICE_SESSION_MAX_SECONDS,
+    VOICE_SESSION_RESERVE_SQL,
+    VOICE_SESSION_USAGE_TODAY_SQL,
+    VOICE_SESSION_EXPIRE_STALE_SQL,
+  } = await import("@crucible/core");
+
+  check("daily budget is a sane positive number of seconds",
+    typeof VOICE_DAILY_SECONDS === "number" && VOICE_DAILY_SECONDS > 0 && VOICE_DAILY_SECONDS <= 3600,
+    String(VOICE_DAILY_SECONDS));
+  check("per-session lease is a sane positive number of seconds",
+    typeof VOICE_SESSION_MAX_SECONDS === "number" && VOICE_SESSION_MAX_SECONDS > 0,
+    String(VOICE_SESSION_MAX_SECONDS));
+  check("a single session lease can never exceed the daily budget",
+    VOICE_SESSION_MAX_SECONDS <= VOICE_DAILY_SECONDS,
+    `${VOICE_SESSION_MAX_SECONDS} vs ${VOICE_DAILY_SECONDS}`);
+
+  const norm = (s: string) => s.replace(/\s+/g, " ");
+
+  // The one-active-session-per-user rule must be enforced by the partial
+  // unique index as an ON CONFLICT arbiter, not a check-then-insert --
+  // that's what makes two concurrent "start" clicks race-safe.
+  check("reserve SQL uses ON CONFLICT (user_id) WHERE status = 'active' ... DO NOTHING",
+    /ON CONFLICT\s*\(user_id\)\s*WHERE status = 'active'\s*DO NOTHING/.test(norm(VOICE_SESSION_RESERVE_SQL)),
+    VOICE_SESSION_RESERVE_SQL);
+  check("reserve SQL inserts as 'active'",
+    /VALUES\s*\(\$1, 'active'/.test(norm(VOICE_SESSION_RESERVE_SQL)), VOICE_SESSION_RESERVE_SQL);
+
+  // Usage accounting must cap each row at what was actually reserved -- a
+  // lease can never contribute more seconds than it was granted, which is
+  // what stops a stretched/extended session from inflating today's total.
+  check("usage-today SQL caps each row with LEAST(reserved_seconds, elapsed)",
+    /LEAST\(\s*reserved_seconds,/.test(norm(VOICE_SESSION_USAGE_TODAY_SQL)),
+    VOICE_SESSION_USAGE_TODAY_SQL);
+  check("usage-today SQL scopes to today (date_trunc('day', now()))",
+    /date_trunc\('day', now\(\)\)/.test(norm(VOICE_SESSION_USAGE_TODAY_SQL)),
+    VOICE_SESSION_USAGE_TODAY_SQL);
+  check("usage-today SQL is scoped to the requesting user",
+    /WHERE user_id = \$1/.test(norm(VOICE_SESSION_USAGE_TODAY_SQL)),
+    VOICE_SESSION_USAGE_TODAY_SQL);
+
+  // Stale-lease expiry must only ever touch this user's own active rows
+  // whose lease has already run out -- never someone else's, never a row
+  // that hasn't expired yet.
+  check("stale-expire SQL scoped to user + active + already past expiry",
+    /WHERE user_id = \$1 AND status = 'active' AND expires_at < now\(\)/.test(norm(VOICE_SESSION_EXPIRE_STALE_SQL)),
+    VOICE_SESSION_EXPIRE_STALE_SQL);
+  check("stale-expire SQL marks the reason 'lease_expired'",
+    /ended_reason = 'lease_expired'/.test(VOICE_SESSION_EXPIRE_STALE_SQL),
+    VOICE_SESSION_EXPIRE_STALE_SQL);
+}
+
+// ── 19. Journey + gate decision (Phase 1D) ────────────────────────────────────
+// computeGateDecision is pure -- no DB -- so it's fully testable here. The DB
+// side (recordProgressEvent's INSERT, buildJourneySnapshot's grouped COUNT
+// query) is the same "not reachable from this suite" boundary as sections
+// 13/15/18; isProgressEventType is the pure validation boundary that keeps
+// that INSERT from ever writing an unknown event type.
+section("journey + gate decision");
+{
+  const { computeGateDecision, PROGRESS_EVENT_TYPES, isProgressEventType } = await import("@crucible/core");
+
+  function mkSnapshot(overrides: Partial<{
+    profileComplete: boolean;
+    resumeTailored: boolean;
+  }> = {}) {
+    return {
+      version: 1 as const,
+      generatedAt: new Date().toISOString(),
+      metrics: {
+        resumesBuilt: 0,
+        jobSearches: 0,
+        resourcesViewed: 0,
+        totalSessions: 0,
+        interviewsStarted: 0,
+        interviewsCompleted: 0,
+        disclosurePlansCreated: 0,
+        applicationsSent: 0,
+        savedJobs: 0,
+        resumeTailored: false,
+        forgeComplete: false,
+        profileComplete: false,
+        hasDisclosurePlan: false,
+        ...overrides,
+      },
+    };
+  }
+
+  check("admin tier always resolves full_access, even with nothing complete",
+    computeGateDecision(mkSnapshot({ profileComplete: false, resumeTailored: false }), "admin").state === "full_access");
+
+  check("needs_profile takes priority over needs_resume (incomplete profile, resume already tailored)",
+    computeGateDecision(mkSnapshot({ profileComplete: false, resumeTailored: true }), "client").state === "needs_profile");
+
+  check("needs_resume when profile is complete but no resume is tailored",
+    computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: false }), "client").state === "needs_resume");
+
+  check("full_access requires BOTH profileComplete and resumeTailored",
+    computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: true }), "client").state === "full_access");
+
+  check("full_access is refused if only profileComplete is true",
+    computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: false }), "client").state !== "full_access");
+
+  for (const tier of ["client", null]) {
+    const needsProfile = computeGateDecision(mkSnapshot({ profileComplete: false }), tier);
+    check(`needs_profile (tier=${tier}) carries an unlockAction with a real href`,
+      !!needsProfile.unlockAction && typeof needsProfile.unlockAction.href === "string" && needsProfile.unlockAction.href.length > 0,
+      JSON.stringify(needsProfile.unlockAction));
+
+    const needsResume = computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: false }), tier);
+    check(`needs_resume (tier=${tier}) carries an unlockAction with a real href`,
+      !!needsResume.unlockAction && typeof needsResume.unlockAction.href === "string" && needsResume.unlockAction.href.length > 0,
+      JSON.stringify(needsResume.unlockAction));
+  }
+
+  check("full_access has no unlockAction (nothing to unlock)",
+    computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: true }), "client").unlockAction === null);
+
+  check("trialMode is always false today (Phase 4.1 turns it on)",
+    computeGateDecision(mkSnapshot({ profileComplete: true, resumeTailored: true }), "client").trialMode === false);
+
+  check("PROGRESS_EVENT_TYPES has no duplicates",
+    new Set(PROGRESS_EVENT_TYPES).size === PROGRESS_EVENT_TYPES.length,
+    PROGRESS_EVENT_TYPES.join(", "));
+
+  check("isProgressEventType accepts every listed type",
+    PROGRESS_EVENT_TYPES.every((t: string) => isProgressEventType(t)));
+
+  check("isProgressEventType rejects an unknown type",
+    !isProgressEventType("not_a_real_event"));
+
+  check("isProgressEventType rejects non-strings",
+    !isProgressEventType(123) && !isProgressEventType(null) && !isProgressEventType(undefined));
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

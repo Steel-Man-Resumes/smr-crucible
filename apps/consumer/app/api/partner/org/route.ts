@@ -33,6 +33,7 @@ import {
   createOrgInvite,
   touchOrgInviteResend,
   revokeOrgInvite,
+  recordDataAccess,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import {
@@ -84,6 +85,14 @@ export async function GET(request: Request) {
     const clients = isOrgAdmin
       ? cohort.clients
       : cohort.clients.map((c) => ({ ...c, aiCostUsd: 0 }));
+
+    // Audit trail (data_access_log, Phase 1B) -- non-fatal, never blocks the read.
+    await recordDataAccess({
+      accessorUserId: userId,
+      resource: "partner_org",
+      action: "read",
+      context: { clientCount: clients.length },
+    });
 
     return NextResponse.json({
       org: {
