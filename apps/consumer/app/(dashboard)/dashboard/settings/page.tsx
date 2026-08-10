@@ -38,6 +38,13 @@ export default function SettingsPage() {
   const isAdmin = realTier === "admin";
   const [testMode, setTestMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Phase 1C reauth gate: export and delete both require the current
+  // password (password accounts) or the literal string "DELETE" typed out
+  // (magic-link/OAuth-only accounts, which have no password to re-prove).
+  // Either field is accepted -- the server decides which one it needs based
+  // on whether the account has a password_hash.
+  const [reauthPassword, setReauthPassword] = useState("");
+  const [reauthTyped, setReauthTyped] = useState("");
 
   // Load admin test mode on mount
   useEffect(() => {
@@ -167,7 +174,17 @@ export default function SettingsPage() {
     setExportStatus("exporting");
     try {
       // Real server-side export -- everything Postgres holds for this user.
-      const res = await fetch("/api/user/export-data");
+      // Reauth-gated (Phase 1C): same password/typed-confirmation contract
+      // as delete, since a full data export is nearly as sensitive.
+      const res = await fetch("/api/user/export-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          password: reauthPassword || undefined,
+          typedConfirmation: reauthTyped || undefined,
+        }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error || "Failed to export data. Please try again.");
@@ -215,8 +232,17 @@ export default function SettingsPage() {
   async function deleteAllData() {
     setDeleting(true);
     try {
-      // Delete server-side data first
-      const res = await fetch("/api/user/delete-data", { method: "DELETE" });
+      // Delete server-side data first. Reauth-gated (Phase 1C) -- see
+      // apps/consumer/app/api/user/delete-data/route.ts's contract comment.
+      const res = await fetch("/api/user/delete-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          password: reauthPassword || undefined,
+          typedConfirmation: reauthTyped || undefined,
+        }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error || "Failed to delete data. Please try again.");
@@ -502,6 +528,35 @@ export default function SettingsPage() {
                 You can export or delete your data at any time
               </li>
             </ul>
+          </div>
+
+          {/* Reauth for export/delete -- password accounts fill the password
+              field; magic-link/OAuth-only accounts (no password) type the
+              word DELETE instead. Either one satisfies the server's gate. */}
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white">Confirm your identity</h3>
+            <p className="text-sm text-t-phos-dim mt-1">
+              Exporting or deleting your data is sensitive -- confirm it&apos;s
+              you before either action below. Enter your password, or if you
+              sign in with a magic link and have no password, type DELETE.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 mt-3">
+              <input
+                type="password"
+                value={reauthPassword}
+                onChange={(e) => setReauthPassword(e.target.value)}
+                placeholder="Your password"
+                autoComplete="current-password"
+                className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
+              />
+              <input
+                type="text"
+                value={reauthTyped}
+                onChange={(e) => setReauthTyped(e.target.value)}
+                placeholder='Or type DELETE (no-password accounts)'
+                className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
+              />
+            </div>
           </div>
 
           {/* Export data */}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { verifyToken, generateBackupCodes } from "@/lib/two-factor";
+import { verifyToken, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     const r = await client.query(
-      `SELECT secret FROM user_two_factor WHERE user_id = $1`,
+      `SELECT secret, secret_iv, secret_tag, secret_key_version FROM user_two_factor WHERE user_id = $1`,
       [session.user.id]
     );
     if (r.rowCount === 0) {
@@ -28,7 +28,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (!verifyToken(token, r.rows[0].secret)) {
+    const pendingSecret = resolveTotpSecret(r.rows[0], session.user.id);
+    if (!verifyToken(token, pendingSecret)) {
       return NextResponse.json(
         { error: "That code didn't match. Check your authenticator app and try again." },
         { status: 400 }

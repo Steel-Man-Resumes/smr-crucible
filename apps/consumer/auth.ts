@@ -88,25 +88,68 @@ const providers: any[] = [
           const totp = String((credentials as any)?.totp || "").replace(/\s/g, "");
           if (!totp) return null;
           const tf = await client.query(
-            `SELECT secret, backup_codes FROM user_two_factor WHERE user_id = $1`,
+            `SELECT secret, secret_iv, secret_tag, secret_key_version, backup_codes
+               FROM user_two_factor WHERE user_id = $1`,
             [user.id]
           );
           const row = tf.rows[0];
           let ok = false;
           if (row?.secret) {
-            const { verifyToken } = await import("@/lib/two-factor");
-            ok = verifyToken(totp, row.secret);
+            const { verifyToken, resolveTotpSecret, encryptTotpSecret } = await import(
+              "@/lib/two-factor"
+            );
+            // Guard the decrypt: a missing/rotated DOCUMENT_ENCRYPTION_KEY or a
+            // corrupt iv/tag must NOT throw out of authorize() (that 500s the
+            // whole login). Leave ok=false and fall through to the backup-code
+            // path so a user with a valid backup code can still get in. Legacy
+            // plaintext rows never enter the decrypt branch anyway.
+            let plainSecret: string | null = null;
+            try {
+              plainSecret = resolveTotpSecret(row, user.id);
+            } catch (err) {
+              console.error("TOTP secret decrypt failed at login:", err);
+            }
+            if (plainSecret) ok = verifyToken(totp, plainSecret);
+
+            // Backfill-on-next-use (Phase 1C): this row predates
+            // TOTP-secret-at-rest encryption. Having just proven possession
+            // of the secret, opportunistically re-encrypt and persist it so
+            // it's ciphertext going forward. Best-effort -- a failure here
+            // must never block a successful login.
+            if (ok && plainSecret && !row.secret_iv) {
+              try {
+                const enc = encryptTotpSecret(plainSecret, user.id);
+                await client.query(
+                  `UPDATE user_two_factor
+                      SET secret = $2, secret_iv = $3, secret_tag = $4, secret_key_version = $5, updated_at = now()
+                    WHERE user_id = $1`,
+                  [user.id, enc.ciphertext, enc.iv, enc.tag, enc.keyVersion]
+                );
+              } catch (err) {
+                console.error("TOTP secret backfill-encrypt failed:", err);
+              }
+            }
+
+            // Backup-code fallback -- consumption must be atomic. A plain
+            // SELECT-then-UPDATE lets two concurrent requests both read the
+            // same array, both pass bcrypt.compare on the same code, and
+            // both succeed (the code gets used twice). Instead this does
+            // optimistic concurrency: the UPDATE's WHERE clause repeats the
+            // exact snapshot just read, so only the first writer's UPDATE
+            // matches a row and the second gets rowCount 0 and is rejected
+            // as already-used, rather than silently double-spending.
             if (!ok && Array.isArray(row.backup_codes)) {
-              for (let i = 0; i < row.backup_codes.length; i++) {
-                if (await bcrypt.compare(totp, row.backup_codes[i])) {
-                  ok = true;
-                  const remaining = (row.backup_codes as string[]).filter(
-                    (_, j) => j !== i
+              const snapshot = row.backup_codes as string[];
+              for (let i = 0; i < snapshot.length; i++) {
+                if (await bcrypt.compare(totp, snapshot[i])) {
+                  const remaining = snapshot.filter((_, j) => j !== i);
+                  const upd = await client.query(
+                    `UPDATE user_two_factor
+                        SET backup_codes = $3::jsonb
+                      WHERE user_id = $1 AND backup_codes = $2::jsonb`,
+                    [user.id, JSON.stringify(snapshot), JSON.stringify(remaining)]
                   );
-                  await client.query(
-                    `UPDATE user_two_factor SET backup_codes = $2::jsonb WHERE user_id = $1`,
-                    [user.id, JSON.stringify(remaining)]
-                  );
+                  ok = upd.rowCount === 1;
                   break;
                 }
               }

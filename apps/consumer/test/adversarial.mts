@@ -586,6 +586,60 @@ section("journey + gate decision");
     !isProgressEventType(123) && !isProgressEventType(null) && !isProgressEventType(undefined));
 }
 
+// ── 20. Secure storage + crypto (Phase 1C) ────────────────────────────────────
+// Pure primitives only -- no R2, no DB. Round-trip + tamper-detection on the
+// AES-256-GCM envelope (packages/core/src/crypto.ts) that backs the
+// TOTP-secret-at-rest hardening (apps/consumer/lib/two-factor.ts,
+// apps/consumer/auth.ts) and the secureObject.ts platform for Phase 6
+// (vault), Phase 5 (transcripts/recordings), and Phase 7 (headshots). This
+// mutates process.env.DOCUMENT_ENCRYPTION_KEY with deterministic test keys
+// so the section is self-contained regardless of what the real environment
+// does or doesn't have configured; it is the last section, so no cleanup is
+// needed for a later section.
+section("secure storage + crypto");
+{
+  process.env.DOCUMENT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+  const { encryptString, decryptString, currentKeyVersion } = await import("@crucible/core");
+
+  const aad = "user-123:totp";
+  const enc = encryptString("JBSWY3DPEHPK3PXP", aad);
+  check("encryptString produces base64 ciphertext/iv/tag + a key version",
+    typeof enc.ciphertext === "string" && enc.ciphertext.length > 0 &&
+    typeof enc.iv === "string" && typeof enc.tag === "string" && enc.keyVersion === "v1");
+
+  check("decryptString round-trips the original plaintext",
+    decryptString(enc, aad) === "JBSWY3DPEHPK3PXP");
+
+  check("decryptString throws on AAD mismatch",
+    (() => { try { decryptString(enc, "user-456:totp"); return false; } catch { return true; } })());
+
+  const tamperedBytes = Buffer.from(enc.ciphertext, "base64");
+  tamperedBytes[0] = tamperedBytes[0] ^ 0xff;
+  const tampered = { ...enc, ciphertext: tamperedBytes.toString("base64") };
+  check("decryptString throws on tampered ciphertext",
+    (() => { try { decryptString(tampered, aad); return false; } catch { return true; } })());
+
+  check("two calls to encryptString use different random IVs (no IV reuse)",
+    encryptString("same-plaintext", aad).iv !== encryptString("same-plaintext", aad).iv);
+
+  check("currentKeyVersion defaults to v1 for a bare (unprefixed) key",
+    currentKeyVersion() === "v1");
+
+  process.env.DOCUMENT_ENCRYPTION_KEY = `v1:${Buffer.alloc(32, 9).toString("base64")}`;
+  check("currentKeyVersion parses an explicit v1: prefix",
+    currentKeyVersion() === "v1");
+  check("explicit-v1-prefixed key still encrypts/decrypts correctly",
+    decryptString(encryptString("x", aad), aad) === "x");
+
+  process.env.DOCUMENT_ENCRYPTION_KEY = Buffer.alloc(16, 1).toString("base64"); // wrong length
+  check("a wrong-length key throws a clear error instead of silently truncating/padding",
+    (() => { try { encryptString("x", aad); return false; } catch (e: any) { return /32 bytes/.test(String(e?.message)); } })());
+
+  delete process.env.DOCUMENT_ENCRYPTION_KEY;
+  check("a missing key throws at call time (not at import time -- the module was already imported above)",
+    (() => { try { encryptString("x", aad); return false; } catch { return true; } })());
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) { console.error("Failures: " + failures.join("; ")); process.exit(1); }

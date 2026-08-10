@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { verifyToken } from "@/lib/two-factor";
+import { verifyToken, resolveTotpSecret } from "@/lib/two-factor";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -20,7 +20,8 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     const u = await client.query(
-      `SELECT u.two_factor_enabled, u.password_hash, tf.secret, tf.backup_codes
+      `SELECT u.two_factor_enabled, u.password_hash,
+              tf.secret, tf.secret_iv, tf.secret_tag, tf.secret_key_version, tf.backup_codes
          FROM users u
          LEFT JOIN user_two_factor tf ON tf.user_id = u.id
         WHERE u.id = $1`,
@@ -39,7 +40,24 @@ export async function POST(req: Request) {
 
     // Accept a valid current code, a backup code, or the account password.
     let verified = false;
-    if (token && row.secret && verifyToken(token, row.secret)) verified = true;
+    if (token && row.secret) {
+      // Guard the decrypt: a broken/rotated key must not throw here and
+      // pre-empt the backup-code and password fallbacks below (that would
+      // strand a user unable to turn 2FA off even with their password).
+      try {
+        if (verifyToken(token, resolveTotpSecret(row, session.user.id))) {
+          verified = true;
+        }
+      } catch (err) {
+        console.error("2FA disable: TOTP secret decrypt failed, falling back", err);
+      }
+    }
+    // Note: no TOCTOU concern here despite matching against the same
+    // backup_codes array the login path consumes -- this path never
+    // removes/marks the matched code, it only checks membership, and a
+    // successful disable deletes the whole user_two_factor row (all codes)
+    // a few lines down. Two concurrent disable requests both matching the
+    // same code just both succeed at deleting the row, which is idempotent.
     if (!verified && token && Array.isArray(row.backup_codes)) {
       for (const h of row.backup_codes as string[]) {
         if (await bcrypt.compare(token.replace(/\s/g, ""), h)) {

@@ -1,5 +1,5 @@
 /**
- * GET /api/user/export-data
+ * POST /api/user/export-data
  *
  * Real server-side data export -- the JBS "download your data" right, done
  * properly. Returns every row Postgres holds for the signed-in user in one
@@ -15,19 +15,67 @@
  *   totals and per-endpoint breakdown, matching what /api/user/ai-costs shows)
  *
  * Mirrors the auth + ownership pattern of /api/user/delete-data (same table
- * set, same user_id scoping) -- this is its read-only twin.
+ * set, same user_id scoping) -- this is its read-only twin, including the
+ * same Phase 1C reauth gate (a full data export is nearly as sensitive as
+ * deletion): POST body must carry { confirm: true, password } for
+ * password accounts or { confirm: true, typedConfirmation: "DELETE" } for
+ * magic-link/OAuth-only accounts. Method changed from GET to POST for this
+ * pass specifically so the reauth fields can travel in the body rather than
+ * a query string (which would leak a password into logs/history).
+ *
+ * Cache-Control: no-store + Pragma: no-cache -- this payload must never be
+ * cached by a browser, proxy, or CDN.
  */
 
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getUserConsents } from "@crucible/core";
+import { query, getOne, getUserConsents } from "@crucible/core";
 
-export async function GET() {
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store",
+  Pragma: "no-cache",
+} as const;
+
+export async function POST(req: Request) {
   const session = await auth();
   const userId = session?.user?.id;
 
   if (!userId) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Not authenticated" },
+      { status: 401, headers: NO_STORE_HEADERS }
+    );
+  }
+
+  const body = await req.json().catch(() => ({}));
+  if (body?.confirm !== true) {
+    return NextResponse.json(
+      { error: "Set confirm: true to acknowledge this exports all your stored data." },
+      { status: 400, headers: NO_STORE_HEADERS }
+    );
+  }
+
+  const account = await getOne<{ password_hash: string | null }>(
+    "SELECT password_hash FROM users WHERE id = $1",
+    [userId]
+  );
+  if (account?.password_hash) {
+    const password = typeof body?.password === "string" ? body.password : "";
+    const valid = password && (await bcrypt.compare(password, account.password_hash));
+    if (!valid) {
+      return NextResponse.json(
+        { error: "Enter your password to confirm this export." },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+  } else {
+    if (body?.typedConfirmation !== "DELETE") {
+      return NextResponse.json(
+        { error: 'Type "DELETE" in typedConfirmation to confirm this export.' },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
   }
 
   try {
@@ -127,13 +175,14 @@ export async function GET() {
       headers: {
         "Content-Type": "application/json",
         "Content-Disposition": 'attachment; filename="steel-man-resumes-export.json"',
+        ...NO_STORE_HEADERS,
       },
     });
   } catch (err: any) {
     console.error("Data export error:", err?.message || err);
     return NextResponse.json(
       { error: "Failed to export data. Please try again." },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

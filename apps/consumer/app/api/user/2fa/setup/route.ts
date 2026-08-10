@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
-import { generateSecret, otpauthUrl, qrDataUrl } from "@/lib/two-factor";
+import { generateSecret, otpauthUrl, qrDataUrl, encryptTotpSecret } from "@/lib/two-factor";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -29,12 +29,18 @@ export async function POST() {
     }
 
     const secret = generateSecret();
+    // Phase 1C: `secret` is stored as ciphertext (AES-256-GCM) going
+    // forward -- see lib/two-factor.ts resolveTotpSecret for the read-side
+    // shim that keeps pre-encryption rows working.
+    const enc = encryptTotpSecret(secret, session.user.id);
     await client.query(
-      `INSERT INTO user_two_factor (user_id, secret, backup_codes, confirmed_at, updated_at)
-       VALUES ($1, $2, '[]'::jsonb, NULL, now())
+      `INSERT INTO user_two_factor
+         (user_id, secret, secret_iv, secret_tag, secret_key_version, backup_codes, confirmed_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, NULL, now())
        ON CONFLICT (user_id)
-       DO UPDATE SET secret = $2, backup_codes = '[]'::jsonb, confirmed_at = NULL, updated_at = now()`,
-      [session.user.id, secret]
+       DO UPDATE SET secret = $2, secret_iv = $3, secret_tag = $4, secret_key_version = $5,
+                      backup_codes = '[]'::jsonb, confirmed_at = NULL, updated_at = now()`,
+      [session.user.id, enc.ciphertext, enc.iv, enc.tag, enc.keyVersion]
     );
 
     const account = u.rows[0].email || "account";

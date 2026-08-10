@@ -5,6 +5,7 @@
   "installCommand": "npm install",
   "crons": [
     { "path": "/api/cron/sync-tracking", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/voice-reconcile", "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/voice-reconcile", "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/deletion-retry", "schedule": "*/30 * * * *" }
   ]
 }

@@ -6,7 +6,9 @@ import {
 import { getSignedUrl as awsGetSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { insert } from "./db";
 
-function getS3Client() {
+// Exported so secureObject.ts (the encrypted-object platform) can reuse the
+// same R2 client/credential setup rather than re-deriving it.
+export function getS3Client() {
   return new S3Client({
     region: "auto",
     endpoint: process.env.R2_ENDPOINT,
@@ -17,8 +19,16 @@ function getS3Client() {
   });
 }
 
-function getBucket() {
+export function getBucket() {
   return process.env.R2_BUCKET_NAME || "crucible-files";
+}
+
+// Secure (encrypted-at-rest) objects can live in a dedicated private bucket
+// via R2_SECURE_BUCKET_NAME; falls back to the shared bucket if unset --
+// objects are ciphertext either way, so co-locating is safe, just less
+// separable for a future bucket-level policy split.
+export function getSecureBucket() {
+  return process.env.R2_SECURE_BUCKET_NAME || getBucket();
 }
 
 export interface FileObjectRecord {

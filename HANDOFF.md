@@ -1,5 +1,62 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 1C COMPLETE: secure storage + crypto + lifecycle platform. Phase 2 next.
+
+Built the encrypted storage + data-lifecycle PLATFORM (no live user-facing vault yet -- that
+is Phase 6). Verification: core build + tests 26/26 (18 baseline + 8 crypto), consumer tsc
+clean, adversarial 162 -> 172 (section 20 crypto), claims clean, prod build green, LIVE crypto
+round-trip against the REAL DOCUMENT_ENCRYPTION_KEY passed, LIVE DB verify of TOTP
+encrypt/decrypt-from-DB + deletion ledger passed. Migration 037 APPLIED. A security-focused
+fresh-context review of every auth/2FA-touching line cleared the two highest lockout risks
+(backup-code atomic comparison CAN succeed -- jsonb=jsonb equality; TOTP AAD identical at
+every call site); its 2 narrow key-misconfig edges were then HARDENED (login + 2FA-disable
+decrypt failures now fall through to backup-code/password paths instead of throwing).
+
+- **AES-256-GCM crypto (packages/core/src/crypto.ts):** envelope encryption keyed by
+  DOCUMENT_ENCRYPTION_KEY (base64, decodes to exactly 32 bytes -- correct as-is); random
+  12-byte IV per call, GCM tag, AAD binding, key-version tag; lazy key parse (throws at call
+  time, never import time -- builds safe). Uses bare "crypto" import (node:crypto broke the
+  Next edge bundle). encryptString/JSON/Buffer + decrypt.
+- **Encrypted object store (secureObject.ts) + deletion retry (deletionTasks.ts):**
+  putEncryptedObject/getDecryptedObject/deleteObject -- owner-exclusive (IDOR-checked on read
+  AND delete), R2 stores ciphertext only, NEVER a presigned plaintext URL (app proxies bytes),
+  adds the deleteObject primitive that did not exist. deletion_task ledger + runDeletionTasks
+  + NEW cron /api/cron/deletion-retry (*/30). Migration 037: secure_object, deletion_task,
+  user_two_factor.secret_iv/tag/key_version.
+- **TOTP secret now encrypted at rest:** was plaintext. setup/enable write ciphertext; login +
+  disable decrypt; legacy plaintext rows read via a secret_iv-IS-NULL shim and re-encrypt
+  opportunistically on next successful login (no forced re-enrollment). Backup-code TOCTOU
+  fixed with optimistic-concurrency UPDATE (WHERE backup_codes = old-snapshot, rowCount=1).
+- **Reauth + no-store on sensitive data routes:** delete-data + export-data now require a
+  password (bcrypt) or, for magic-link-only users, the exact string "DELETE"; export-data
+  changed GET->POST (needs a body for reauth), settings page updated to match; export responses
+  carry Cache-Control: no-store. delete-data now enqueues R2 cleanup for the user's
+  secure_object rows (neon-http has no cross-statement tx -- deletes ordered idempotent-safe,
+  R2 cleanup routed through the retry ledger).
+
+DEPLOY-ORDER RULE (followed): migration 037 MUST be applied before this code (the 2FA login
+query selects the new columns) -- it is applied to the shared Neon; the same rule holds for
+the eventual preview branch.
+
+KNOWN GATES / carried forward:
+- **R2 endpoint is misconfigured in .env.local** (holds a Cloudflare API token, not a bucket
+  URL) -- consumer R2 has never run (dormant since inception; apps/web B2B side uses its own).
+  The secure-object CODE is review-clean but its live R2 round-trip could NOT be tested. Before
+  Phase 6 vault go-live: set a valid R2_ENDPOINT (https://<acct>.r2.cloudflarestorage.com) in
+  both .env.local and Vercel, then run scripts/verify-1c.mjs to green the R2 leg.
+- refinery_artifact.content / coach_conversation / support_request remain plaintext-at-rest
+  behind Neon's disk encryption (large reader surface) -- a later targeted pass encrypts them.
+- Preview/prod Neon split still pending Troy's manual step (see the 1B+1D entry below) -- 1C's
+  new sensitive store (secure_object) has NO live writers until Phase 6, so the doctrine
+  ("separate storage creds before a sensitive store exists") is not yet violated, but the split
+  must land before Phase 6 wires real uploads.
+
+NEXT: Phase 2 (resume fidelity). Recon done -- page-fit (2.5) has a HARD dependency on a
+Chromium worker host that does not exist (same worker gap as 1D); everything else in Phase 2
+is pure app-code (v3 schema, remove truncation caps, fail-closed grounding, Rush verifier,
+naming slugs, fine-tune on the 1A fork primitives). Ops scripts added: verify-1c.mjs,
+verify-document-encryption.mjs.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASES 1B + 1D COMPLETE. Phase 1C next (needs the Neon split -- ONE MANUAL STEP FOR TROY below).
 
 Troy directed "continue until completion, all steps" -- executing the full plan phase by
