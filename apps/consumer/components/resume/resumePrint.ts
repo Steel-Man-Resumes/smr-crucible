@@ -10,27 +10,30 @@
  */
 
 import { type ResumeDocument, formatResumeDownload } from "./resumeModel";
+import { escapeHtml } from "../../lib/escape-html";
 
 /** Build the print-optimized HTML for a resume. Exposed for testing/reuse. */
 export function buildResumePrintHtml(doc: ResumeDocument): string {
   const text = formatResumeDownload(doc);
-  const name = doc.contact.name || "Resume";
-  const job = doc.meta.targetJob || "";
-  const company = doc.meta.targetCompany || "";
+  const name = escapeHtml(doc.contact.name || "Resume");
+  const nameUpper = escapeHtml((doc.contact.name || "Resume").toUpperCase());
+  const job = escapeHtml(doc.meta.targetJob || "");
+  const company = escapeHtml(doc.meta.targetCompany || "");
 
   const lines = text.split("\n");
   let bodyHtml = "";
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) {
+  for (const rawLine of lines) {
+    const rawTrimmed = rawLine.trim();
+    if (!rawTrimmed) {
       bodyHtml += "<br>";
       continue;
     }
-    if (/^[A-Z &]+$/.test(t) && t.length > 3 && !t.includes("|")) {
+    const t = escapeHtml(rawTrimmed);
+    if (/^[A-Z &]+$/.test(rawTrimmed) && rawTrimmed.length > 3 && !rawTrimmed.includes("|")) {
       bodyHtml += `<div class="section-header">${t}</div>`;
-    } else if (t.startsWith("- ") || t.startsWith("* ")) {
-      bodyHtml += `<div class="bullet">${t.slice(2)}</div>`;
-    } else if (t.includes("|") && /\b(19|20)\d{2}\b/.test(t)) {
+    } else if (rawTrimmed.startsWith("- ") || rawTrimmed.startsWith("* ")) {
+      bodyHtml += `<div class="bullet">${escapeHtml(rawTrimmed.slice(2))}</div>`;
+    } else if (rawTrimmed.includes("|") && /\b(19|20)\d{2}\b/.test(rawTrimmed)) {
       // Job/role line ("Title | Employer, 2021 - 2022") -- bold it to match the
       // DOCX hierarchy. The year guard keeps the contact line (no year) as body.
       bodyHtml += `<div class="job-title">${t}</div>`;
@@ -53,7 +56,7 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
   @media print{@page{size:letter;margin:0.4in 0.45in} body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head>
 <body>
-<div class="name">${name.toUpperCase()}</div>
+<div class="name">${nameUpper}</div>
 ${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" -- ")}</div>` : ""}
 ${bodyHtml}
 <script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>

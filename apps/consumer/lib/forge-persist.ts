@@ -71,12 +71,20 @@ export async function persistForgeSession(
       );
 
       if (forgeResume) {
-        await updateArtifact(
+        // Lock-guarded: if the forge resume was locked as a baseline, the
+        // update is refused server-side and we leave it untouched rather
+        // than overwrite an approved document (Phase 0.1).
+        const result = await updateArtifact(
           forgeResume.id,
           userId,
           resumeContent as unknown as Record<string, unknown>,
           1.0
         );
+        if (result.status === "locked") {
+          console.warn(
+            `Forge re-sync skipped: resume artifact ${forgeResume.id} is a locked baseline`
+          );
+        }
       } else {
         await createArtifact(
           userId,

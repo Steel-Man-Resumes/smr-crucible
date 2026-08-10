@@ -19,6 +19,7 @@ import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
+import { escapeHtml } from "@/lib/escape-html";
 import { useUserContext } from "@/lib/use-user-context";
 import { ProgressiveIntake, type IntakeQuestion } from "@/components/ProgressiveIntake";
 import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
@@ -316,14 +317,14 @@ function DisclosurePlannerPage() {
 </style>
 </head>
 <body>
-<h1>Disclosure Plan${targetJob ? ` -- ${targetJob}` : ""}</h1>
+<h1>Disclosure Plan${targetJob ? ` -- ${escapeHtml(targetJob)}` : ""}</h1>
 <p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date}</p>
 <div class="callout"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.</div>
 <div class="callout">Disclosure is a conversation, not a checkbox. It happens face-to-face, where you control the narrative with your voice and your presence.</div>
-${plan.timing_advice ? `<h2>When to Disclose</h2><p>${plan.timing_advice}</p>` : ""}
-${plan.legal_context ? `<h2>Your Legal Rights</h2><p>${plan.legal_context}</p>` : ""}
-${plan.script ? `<h2>What to Say</h2><blockquote>${plan.script}</blockquote><p style="font-size:10pt;color:#666;font-style:italic;">Practice this out loud until it sounds natural in your own voice.</p>` : ""}
-${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>${t}</li>`).join("")}</ul>` : ""}
+${plan.timing_advice ? `<h2>When to Disclose</h2><p>${escapeHtml(plan.timing_advice)}</p>` : ""}
+${plan.legal_context ? `<h2>Your Legal Rights</h2><p>${escapeHtml(plan.legal_context)}</p>` : ""}
+${plan.script ? `<h2>What to Say</h2><blockquote>${escapeHtml(plan.script)}</blockquote><p style="font-size:10pt;color:#666;font-style:italic;">Practice this out loud until it sounds natural in your own voice.</p>` : ""}
+${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : ""}
 <div class="footer">This plan is yours. It is never shared without your permission. Delete it anytime in Settings.</div>
 </body>
 </html>`;
@@ -1174,10 +1175,11 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       )}
 
       <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to rehearse, and we never save your words from this
-        practice. Your disclosure plan is saved privately to your account so you
-        can come back and refine it, and it is never shared unless you choose to
-        connect a support partner. You can delete it anytime.
+        This is a safe space to rehearse. What you say in this practice
+        conversation is not saved. Your disclosure plan itself is saved
+        privately to your account so you can come back and refine it, and it is
+        never shared unless you choose to connect a support partner. You can
+        delete it anytime.
       </p>
 
       {/* t.ROY nudge */}

@@ -37,6 +37,11 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             Your activity in the Refinery — so we can track your progress and
             suggest next steps
           </BulletItem>
+          <BulletItem>
+            Your conversations with t.ROY when you are signed in, so he can
+            remember your recent work. You can delete them anytime in
+            Settings.
+          </BulletItem>
           <BulletItem bold>
             That&apos;s it. No browsing history. No location tracking. No
             social media.
@@ -48,7 +53,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       <Section title="Who Can See Your Data">
         <div className="bg-t-panel p-4 border border-t-line mb-4">
           <p className="text-sm font-bold text-t-amber-bright">
-            You. That&apos;s it.
+            You, and nobody in your life.
           </p>
         </div>
         <ul className="space-y-2">
@@ -56,19 +61,22 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <DenyItem>Not your parole officer</DenyItem>
           <DenyItem>Not your employer</DenyItem>
           <DenyItem>Not law enforcement</DenyItem>
-          <DenyItem>
-            Not us — we can see how many people use the tool, but never your
-            personal information
-          </DenyItem>
         </ul>
+        <p className="text-sm text-t-phos leading-relaxed mt-3">
+          One honest exception: our own staff can open an account to help you,
+          for example when you ask for support or something breaks. Every
+          staff access is recorded in an audit log with who and when, and
+          full-access sessions require a written reason. Day to day we look
+          at usage counts, not your personal information.
+        </p>
       </Section>
 
       {/* Where Your Data Lives */}
       <Section title="Where Your Data Lives">
         <ul className="space-y-2">
           <BulletItem>
-            Stored in an encrypted database — your data is scrambled so
-            nobody can read it without the key
+            Stored in a database that is encrypted at rest. If someone stole
+            the physical disks, they could not read your data.
           </BulletItem>
           <BulletItem>
             Files (like resumes) are stored in encrypted cloud storage — same
@@ -94,8 +102,9 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             said to you and why
           </BulletItem>
           <BulletItem>
-            The AI never remembers you between sessions — it starts fresh
-            every time
+            When you are signed in, t.ROY remembers your recent conversations
+            so he can pick up where you left off. You can delete that history
+            anytime. Without an account, nothing is remembered between visits.
           </BulletItem>
           <BulletItem>
             The AI never shares your information with other users
@@ -146,10 +155,16 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             <DenyItem>No ads. Ever.</DenyItem>
             <DenyItem>No selling your data. Ever.</DenyItem>
             <DenyItem>
-              No tracking pixels or analytics that follow you around the
-              internet
+              No ad networks and no data brokers. We use basic visit counting
+              (Google Analytics and Vercel) to see which tools help people,
+              and we keep it off the sensitive pages: disclosure practice,
+              interview practice, and your vault.
             </DenyItem>
-            <DenyItem>No sharing with third parties</DenyItem>
+            <DenyItem>
+              No sharing with third parties beyond the services that run the
+              platform (hosting, database, AI, visit counting). They process
+              your data to serve you, nothing more.
+            </DenyItem>
             <DenyItem>No data mining</DenyItem>
             <DenyItem>
               No surprises — if something changes, we&apos;ll tell you first
@@ -195,12 +210,12 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         <div className="bg-t-panel-2 p-4 border border-t-line text-xs text-t-phos-dim space-y-1.5">
           <p>Database: PostgreSQL on Neon (encrypted at rest, TLS in transit)</p>
           <p>Object Storage: Cloudflare R2 (S3-compatible, encrypted at rest)</p>
-          <p>Auth: Auth.js v5, email magic link (no passwords stored)</p>
+          <p>Auth: Auth.js v5, email magic link or optional password (bcrypt hash only)</p>
           <p>AI: Anthropic Claude (SOC 2 compliant) — no training on user data</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
           <p>Decision Logging: Every AI call logged with input hash, model, latency</p>
-          <p>Session: JWT-based, no persistent cookies beyond auth</p>
+          <p>Session: JWT-based auth cookies; audited staff-assist sessions use a separate short-lived cookie</p>
         </div>
       </Section>
 

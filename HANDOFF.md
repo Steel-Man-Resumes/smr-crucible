@@ -1,5 +1,75 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5) -- PHASE 0 CONTAINMENT COMPLETE (all 7 items). Phase 1 next.
+
+Executed Phase 0 of docs/REFINERY-FINAL-EXECUTION-PLAN-2026-08-10.md. All items shipped in
+one commit on main. Verification floor: core build + consumer tsc clean, adversarial suite
+EXTENDED 104 -> 109 (all green), new banned-claims check green, core tests 14/14, prod build
+green. A fresh-context review agent audited the full diff; its 5 findings (1 real regression,
+4 minor) were all fixed and re-verified before commit.
+
+- **0.1 Lock predicate LIVE-PROVEN.** `updateArtifact`/`deleteArtifact`
+  (packages/core/src/refineryArtifact.ts) now carry `is_locked = false` IN the write SQL and
+  return discriminated results (updated|locked|not_found; deleted|locked|not_found). The SQL
+  is exported as constants so adversarial section 13 pins the predicate (a route regression
+  cannot reopen the overwrite bug without failing the suite). Callers updated: artifacts PATCH
+  + DELETE return 409 `artifact_locked` with plain-language messages; forge re-sync
+  (forge-persist.ts) skips + warns instead of overwriting a locked baseline; ResumeWorkspace
+  shows a "Locked baseline" banner, suppresses autosave while locked, and a manual Save after
+  an elsewhere-unlock still sends the real write (review fix -- lastSaved is NOT marked on
+  409). Dashboard delete alerts on 409. LIVE verification against the shared Neon: locked QA
+  artifact refused both UPDATE and DELETE (0 rows), content intact after restore
+  (scripts/verify-lock-predicate.mjs, reversible, QA account only).
+- **0.2 Snapshot + corruption check.** Troy's 15 artifacts (3 accounts) exported to
+  ~/refinery-snapshots/2026-08-10/ (full-row JSON + readable .txt flattens; outside the repo).
+  KEY FINDING: **no artifact in prod has is_locked=true** -- Troy never had locked baselines,
+  so the overwrite bug had no locked master to corrupt. Base forge resume (8cfc6c2e, 4868
+  chars) + per-job tailored variants all distinct and intact. Neon PITR remains the fallback.
+  DOCX copies deliberately skipped: the content JSON is the recovery format and the download
+  route regenerates DOCX from it on demand.
+- **0.3 Honest-copy sweep.** A very-thorough audit agent inventoried every privacy/security
+  claim and proved 7 FALSE against the persistence code; all rewritten truthfully:
+  SecurityContent.tsx ("You. That's it." -> audited-staff-access exception; "AI never
+  remembers" -> honest memory description + delete path; "no tracking pixels" -> named
+  analytics with sensitive-page exclusions; "no passwords stored" -> optional password as
+  bcrypt hash; "scrambled so nobody can read it" -> at-rest encryption stated plainly;
+  cookie claim; third-party processors named), settings page (Forge data IS server-synced;
+  t.ROY conversations ARE saved + deletable), /security metadata, disclosure page.
+  Regression: apps/consumer/test/banned-claims.mts (`npm run test:claims -w apps/consumer`,
+  in CI) fails the build if any of the 11 falsified phrases returns. Claims verified TRUE and
+  kept: interview coach never stores words/audio (real design contrast), partner sharing
+  consent-gated + signals-only, export/delete real.
+- **0.4 Disclosure rehearsal ISOLATED.** /api/assistant now gates on
+  `currentPage === "disclosure-rehearsal"`: no buildMemorySection read, no coach_conversation
+  writes (both turns) for rehearsal calls. Other /api/assistant callers (pre-auth Forge
+  widget) and /api/coach untouched. NUANCE: the page-wide t.ROY coach widget on the
+  disclosure PAGE uses /api/coach and still persists -- that is the general coach, not the
+  rehearsal surface; the rehearsal claim copy was scoped to "this practice conversation".
+  With 0.4 live, the rehearsal privacy claim is now factually TRUE.
+- **0.5 Analytics off sensitive routes.** AnalyticsWrapper EXCLUDED_PREFIXES now covers
+  /dashboard/disclosure, /dashboard/interview (also catches /interview-prep, intended),
+  /dashboard/vault + existing /mini-forge -- kills all three trackers (Vercel Analytics,
+  Speed Insights, GA4) on those routes.
+- **0.6 Toolchain pin + CI.** .nvmrc (20), root engines >=20 <23, consumer `typecheck`
+  script, .github/workflows/ci.yml (push + dispatch): npm ci -> core build -> core tests ->
+  consumer typecheck -> adversarial -> banned-claims. Suite confirmed pure (no DB/keys).
+  WATCH: first CI run on this push -- confirm it goes green on GitHub.
+- **0.7 XSS closed in print paths.** New shared apps/consumer/lib/escape-html.ts (null-safe,
+  escapes &<>"'), applied in resumePrint.ts (was ZERO escaping on a 3-surface shared
+  builder -- real stored-XSS), disclosure downloadPlan, output/page.tsx bullet branch
+  (review caught + fixed an entity-mangling regression: metric-bolding regex now skips
+  numeric entities, apostrophes render correctly -- empirically simulated), interview page
+  (local esc replaced by shared import). DOCX path structurally safe (docx lib, no HTML).
+
+NOT done / next session (Phase 1, per plan): 1A revision model + server-resolved
+approvedArtifactId (the `approved: true` client-trust door is STILL OPEN -- 0.1 only stops
+locked-artifact overwrites), 1B consent enforcement, 1C encrypted storage platform, 1D
+JourneySnapshot/GateDecision/preview-prod split/worker+voice enforcement.
+
+One-time ops scripts kept in scripts/ (no secrets; read .env.local at runtime):
+snapshot-troy-baselines.mjs, verify-lock-predicate.mjs, check-live-activity.mjs (pre-deploy
+"is anyone live" check -- last user activity was 144 min before this deploy).
+
 ## 2026-08-10 -- PLAN LOCKED: execute from docs/REFINERY-FINAL-EXECUTION-PLAN-2026-08-10.md
 
 Troy reviewed both the draft plan and the Codex audit and locked the final plan. **The next

@@ -225,6 +225,12 @@ export default function DashboardPage() {
     setDeletingArtifact(id);
     try {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
+      if (res.status === 409) {
+        window.alert(
+          "This is a locked baseline. Unlock it in My Materials before deleting."
+        );
+        return;
+      }
       if (res.ok) {
         setRecentArtifacts((prev) => prev.filter((a) => a.id !== id));
         // Refresh counts

@@ -324,6 +324,28 @@ section("platform changelog");
   check("since-newest yields no entries (no fabricated freshness)", buildWhatsNewSection(newest) === "");
 }
 
+// ── 13. Artifact lock predicate (Phase 0.1) ──────────────────────────────────
+// The DB is not reachable from this suite, so the boundary is locked at the
+// SQL layer: the exact statements updateArtifact/deleteArtifact execute are
+// exported constants, and the write predicate must live IN the SQL -- a route
+// or caller regression cannot reopen the overwrite bug without failing here.
+section("artifact lock predicate -- content writes require is_locked = false");
+{
+  const { ARTIFACT_CONTENT_UPDATE_SQL, ARTIFACT_DELETE_SQL } = await import("@crucible/core");
+  const updateSql = ARTIFACT_CONTENT_UPDATE_SQL(", scaffold_level = $4");
+  const norm = (s: string) => s.replace(/\s+/g, " ");
+  check("content UPDATE carries is_locked = false in WHERE",
+    /WHERE[\s\S]*is_locked = false/.test(updateSql), updateSql);
+  check("content UPDATE still ownership-checks id + user_id",
+    /id = \$2 AND user_id = \$3/.test(norm(updateSql)), updateSql);
+  check("content UPDATE targets only content/updated_at/scaffold columns",
+    !/SET[\s\S]*is_locked\s*=/.test(updateSql.split("WHERE")[0]), updateSql);
+  check("DELETE carries is_locked = false in WHERE",
+    /WHERE[\s\S]*is_locked = false/.test(ARTIFACT_DELETE_SQL), ARTIFACT_DELETE_SQL);
+  check("DELETE still ownership-checks id + user_id",
+    /id = \$1 AND user_id = \$2/.test(norm(ARTIFACT_DELETE_SQL)), ARTIFACT_DELETE_SQL);
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) { console.error("Failures: " + failures.join("; ")); process.exit(1); }

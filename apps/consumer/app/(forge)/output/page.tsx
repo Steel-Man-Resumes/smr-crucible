@@ -17,6 +17,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
+import { escapeHtml as escHtml } from "@/lib/escape-html";
 
 interface Strength {
   title: string;
@@ -970,10 +971,6 @@ function ResumePreview({ text }: { text: string }) {
 
 // ─── Print-to-PDF helpers ─────────────────────────────────────────────────────
 
-function escHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 function resumeTextToStandaloneHtml(text: string): string {
   const lines = text.split("\n");
 
@@ -1020,7 +1017,12 @@ function resumeTextToStandaloneHtml(text: string): string {
     }
     if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
       const bullet = trimmed.replace(/^[-*•]\s*/, "");
-      const bHtml = bullet.replace(/(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi, "<strong>$1</strong>");
+      // Bold metrics AFTER escaping, but never inside an HTML entity the
+      // escape just produced (e.g. the 39 in &#39;).
+      const bHtml = escHtml(bullet).replace(
+        /(&#\d+;)|(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi,
+        (m, entity) => (entity ? m : `<strong>${m}</strong>`)
+      );
       bodyHtml += `<div style="display:flex;gap:6px;padding-left:12px;margin-bottom:2px;line-height:1.4;"><span style="color:#1B2A4A;font-weight:bold;font-size:10pt;flex-shrink:0;">&bull;</span><span style="font-size:10pt;color:#1a1a1a;">${bHtml}</span></div>`;
       continue;
     }

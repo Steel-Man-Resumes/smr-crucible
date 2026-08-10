@@ -482,12 +482,13 @@ export default function SettingsPage() {
             <ul className="space-y-2 text-sm text-t-phos-dim">
               <li className="flex gap-2">
                 <span className="text-t-amber flex-shrink-0">•</span>
-                Your Forge data is stored locally on your device, not on our
-                servers
+                Your Forge answers and results are saved to your account so
+                your work is here when you come back
               </li>
               <li className="flex gap-2">
                 <span className="text-t-amber flex-shrink-0">•</span>
-                AI conversations are processed but not permanently stored
+                Conversations with t.ROY are saved to your account so he can
+                remember your recent work. Deleting your data clears them.
               </li>
               <li className="flex gap-2">
                 <span className="text-t-amber flex-shrink-0">•</span>

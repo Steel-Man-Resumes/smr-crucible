@@ -3,7 +3,7 @@ import { SecurityContent } from "@/components/SecurityContent";
 export const metadata = {
   title: "Security & Privacy — Steel Man Resumes",
   description:
-    "How we protect your data. No ads, no tracking, no sharing. Your information stays private.",
+    "How we protect your data. No ads, no ad networks, no selling your information. Plain answers about what we store and who can see it.",
 };
 
 export default function SecurityPage() {

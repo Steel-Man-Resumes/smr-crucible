@@ -99,9 +99,14 @@ export async function POST(request: Request) {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
   };
+  // Disclosure rehearsal is ISOLATED from the shared coach memory pipe until
+  // its purpose-built consented store exists (Phase 5): no cross-session
+  // memory reads, no coach_conversation writes for these turns.
+  const isDisclosureRehearsal = context.currentPage === "disclosure-rehearsal";
   // Cross-session memory (authed only; pre-auth Forge stays ephemeral).
   // Loaded BEFORE the current turn is persisted so it holds prior work.
-  const memorySection = userId ? await buildMemorySection(userId) : "";
+  const memorySection =
+    userId && !isDisclosureRehearsal ? await buildMemorySection(userId) : "";
   const baseSystemPrompt =
     buildSystemPrompt(context) +
     skillsContext +
@@ -109,7 +114,7 @@ export async function POST(request: Request) {
     memorySection;
   const allowRoleplayOverride =
     !!userId &&
-    context.currentPage === "disclosure-rehearsal" &&
+    isDisclosureRehearsal &&
     typeof systemOverride === "string" &&
     systemOverride.trim().length > 0;
 
@@ -130,7 +135,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
   // when the newest message IS the user speaking -- a client-tool
   // continuation POST ends with an assistant tool-result message).
   const userTurnText = lastUserText(messages);
-  if (userId && endsWithUserTurn(messages) && userTurnText) {
+  if (userId && !isDisclosureRehearsal && endsWithUserTurn(messages) && userTurnText) {
     await appendCoachMessage(
       userId,
       "user",
@@ -161,7 +166,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
       // Persist the assistant turn only when the model finished SPEAKING
       // (finishReason "tool-calls" means the turn continues in the browser).
-      if (userId && finishReason !== "tool-calls") {
+      if (userId && !isDisclosureRehearsal && finishReason !== "tool-calls") {
         const spoken =
           (steps ?? [])
             .map((s) => s.text)

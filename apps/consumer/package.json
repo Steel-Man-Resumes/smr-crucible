@@ -7,7 +7,9 @@
     "build": "cd ../.. && npm run build -w packages/core && cd apps/consumer && next build",
     "start": "next start",
     "lint": "next lint",
-    "test:adversarial": "npx tsx test/adversarial.mts"
+    "typecheck": "tsc --noEmit",
+    "test:adversarial": "npx tsx test/adversarial.mts",
+    "test:claims": "npx tsx test/banned-claims.mts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.0",

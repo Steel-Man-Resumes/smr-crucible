@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/core
+      - run: npm run test -w packages/core
+      - run: npm run typecheck -w apps/consumer
+      - run: npm run test:adversarial -w apps/consumer
+      - run: npm run test:claims -w apps/consumer

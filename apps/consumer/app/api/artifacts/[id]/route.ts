@@ -72,17 +72,27 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
-  const artifact = await updateArtifact(
+  const result = await updateArtifact(
     id,
     userId,
     body.content,
     body.scaffoldLevel
   );
-  if (!artifact) {
+  if (result.status === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (result.status === "locked") {
+    return NextResponse.json(
+      {
+        error: "artifact_locked",
+        message:
+          "This is a locked baseline. Unlock it in My Materials to edit, or tailor a copy instead.",
+      },
+      { status: 409 }
+    );
+  }
 
-  return NextResponse.json({ data: artifact });
+  return NextResponse.json({ data: result.artifact });
 }
 
 /** DELETE /api/artifacts/[id] — delete an artifact */
@@ -95,8 +105,18 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const deleted = await deleteArtifact(id, userId);
-  if (!deleted) {
+  if (deleted === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (deleted === "locked") {
+    return NextResponse.json(
+      {
+        error: "artifact_locked",
+        message:
+          "This is a locked baseline. Unlock it in My Materials before deleting.",
+      },
+      { status: 409 }
+    );
   }
 
   return NextResponse.json({ success: true });

@@ -7,5 +7,8 @@
     "services/*",
     "packages/*"
   ],
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {}
 }

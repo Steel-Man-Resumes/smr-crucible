@@ -41,7 +41,7 @@ export function ResumeWorkspace() {
   // Persistence
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "locked">("idle");
   const lastSaved = useRef<string>("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -647,6 +647,12 @@ export function ResumeWorkspace() {
           if (res.ok) {
             lastSaved.current = contentStr;
             setSaveStatus("saved");
+          } else if (res.status === 409) {
+            // Locked baseline: the server refused the write (Phase 0.1).
+            // Do NOT touch lastSaved -- a manual Save after the user unlocks
+            // it elsewhere must still send the real write. Autosave is
+            // suppressed separately while status is "locked".
+            setSaveStatus("locked");
           } else {
             setSaveStatus("error");
           }
@@ -691,14 +697,17 @@ export function ResumeWorkspace() {
   );
 
   // --- Auto-save (5s debounce after edits, only when past setup) ---
+  // Suppressed while the artifact is a locked baseline: the server refuses
+  // the write, so retrying every 5s is noise. A manual Save still attempts
+  // (and succeeds once the user unlocks it in My Materials).
   useEffect(() => {
-    if (showSetup) return;
+    if (showSetup || saveStatus === "locked") return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => save(true), 5000);
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [doc, showSetup, save]);
+  }, [doc, showSetup, saveStatus, save]);
 
   // Clear "saved" indicator after 3s
   useEffect(() => {
@@ -1153,6 +1162,11 @@ export function ResumeWorkspace() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {saveStatus === "error" && (
             <span className="text-xs text-t-red">Save failed</span>
+          )}
+          {saveStatus === "locked" && (
+            <span className="text-xs text-t-amber-bright">
+              Locked baseline. Edits are not saved. Unlock it in My Materials to change it.
+            </span>
           )}
           <button
             onClick={startNewResume}

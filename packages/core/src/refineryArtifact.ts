@@ -66,14 +66,41 @@ export async function createArtifact(
 }
 
 /**
- * Update an existing artifact in place. Ownership-checked.
+ * Phase 0.1 stop-loss (2026-08-10): content writes carry `is_locked = false`
+ * IN THE WRITE SQL itself, so a locked baseline can never be overwritten by
+ * autosave, Forge re-sync, stale tabs, or any future caller -- regardless of
+ * what the route layer checks. The full immutable-revision model lands in
+ * Phase 1A; until then this predicate is the guarantee.
+ *
+ * Exported as a constant so the adversarial suite can assert the predicate
+ * never regresses out of the statement.
+ */
+export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string) =>
+  `UPDATE refinery_artifact
+     SET content = $1, updated_at = now()${scaffoldClause}
+     WHERE id = $2 AND user_id = $3 AND is_locked = false
+     RETURNING *`;
+
+export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
+     WHERE id = $1 AND user_id = $2 AND is_locked = false
+     RETURNING id`;
+
+export type ArtifactWriteResult =
+  | { status: "updated"; artifact: RefineryArtifact }
+  | { status: "locked" }
+  | { status: "not_found" };
+
+/**
+ * Update an existing artifact in place. Ownership-checked, lock-guarded.
+ * A locked artifact is never written; the caller gets a discriminated
+ * result and decides how to surface it.
  */
 export async function updateArtifact(
   artifactId: string,
   userId: string,
   content: Record<string, unknown>,
   scaffoldLevel?: number
-): Promise<RefineryArtifact | null> {
+): Promise<ArtifactWriteResult> {
   const scaffoldClause = scaffoldLevel !== undefined
     ? `, scaffold_level = $4`
     : "";
@@ -87,13 +114,16 @@ export async function updateArtifact(
   }
 
   const rows = await query<RefineryArtifact>(
-    `UPDATE refinery_artifact
-     SET content = $1, updated_at = now()${scaffoldClause}
-     WHERE id = $2 AND user_id = $3
-     RETURNING *`,
+    ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause),
     params
   );
-  return rows[0] ?? null;
+  if (rows[0]) return { status: "updated", artifact: rows[0] };
+  // Zero rows: distinguish a locked row from a missing/foreign one.
+  const existing = await getOne<{ is_locked: boolean }>(
+    `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+    [artifactId, userId]
+  );
+  return existing ? { status: "locked" } : { status: "not_found" };
 }
 
 /**
@@ -133,19 +163,21 @@ export async function listArtifacts(
 }
 
 /**
- * Delete an artifact. Ownership-checked.
+ * Delete an artifact. Ownership-checked, lock-guarded (Phase 0.1): a locked
+ * baseline must be explicitly unlocked before it can be deleted. Account-level
+ * data deletion bypasses this by design (it deletes by user_id directly).
  */
 export async function deleteArtifact(
   artifactId: string,
   userId: string
-): Promise<boolean> {
-  const rows = await query(
-    `DELETE FROM refinery_artifact
-     WHERE id = $1 AND user_id = $2
-     RETURNING id`,
+): Promise<"deleted" | "locked" | "not_found"> {
+  const rows = await query(ARTIFACT_DELETE_SQL, [artifactId, userId]);
+  if (rows.length > 0) return "deleted";
+  const existing = await getOne<{ is_locked: boolean }>(
+    `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
-  return rows.length > 0;
+  return existing ? "locked" : "not_found";
 }
 
 /**

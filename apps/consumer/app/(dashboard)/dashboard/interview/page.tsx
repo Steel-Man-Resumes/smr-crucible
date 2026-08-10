@@ -16,6 +16,7 @@ import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
+import { escapeHtml as esc } from "@/lib/escape-html";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -434,7 +435,6 @@ function InterviewPracticePage() {
   function downloadAnalysis() {
     const fb = feedback || {};
     const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-    const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const list = (arr: any[]) => (Array.isArray(arr) ? arr.map((x) => `<li>${esc(x)}</li>`).join("") : "");
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8" /><title>Interview Analysis</title>
