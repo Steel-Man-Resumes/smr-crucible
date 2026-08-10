@@ -16,8 +16,27 @@
 
 import { stripEmployerTaxCredit, stripEmDashes, WOTC_RE } from "@/lib/legal-sanitize";
 import { computeGrounding } from "@/lib/grounding";
-import { buildTrustedSource, isJusticeSensitive } from "@/lib/grounding-verify";
-import { profileToResume } from "@/components/resume/resumeParsers";
+import {
+  buildTrustedSource,
+  isJusticeSensitive,
+  aggregateVerification,
+  verificationNoticeFor,
+} from "@/lib/grounding-verify";
+import { buildResumeFilename } from "@/lib/resume-filename";
+import { profileToResume, attachUnparsedTray } from "@/components/resume/resumeParsers";
+import {
+  upgradeToV3,
+  isV3,
+  toEmployerFacingProjection,
+  formatResumeDownload,
+  createEmptyResume,
+  REVIEW_TRAY_LABEL,
+  type ResumeDocument,
+} from "@/components/resume/resumeModel";
+import { computeLineCoverage } from "@/lib/intake-coverage";
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { withDeadline } from "@/lib/job-search-core";
 import { normalizeEmployerName, isVerifiedFairChance, isHiddenEmployer } from "@crucible/core";
 import { computeCurrentBlock, buildBlockSection, PLATFORM_CHANGELOG, buildWhatsNewSection } from "@crucible/core";
@@ -638,6 +657,367 @@ section("secure storage + crypto");
   delete process.env.DOCUMENT_ENCRYPTION_KEY;
   check("a missing key throws at call time (not at import time -- the module was already imported above)",
     (() => { try { encryptString("x", aad); return false; } catch { return true; } })());
+}
+
+// ── 21. Resume v3 schema (Phase 2.1) -- additive superset + projection ────────
+// v3 keeps every v2 field and ADDS optional typed content blocks + notes. The
+// prime directive is non-breaking dual-read: a v2 doc must upgrade losslessly
+// and still format identically, and the employer-facing projection must strip
+// privateNotes (and justice-sensitive content) before any text is produced.
+section("resume v3 schema -- additive superset + employer-facing projection");
+{
+  const { validateResumeContent } = await import("@/lib/resume-validate");
+
+  // A known, justice-clean v2 doc (what real stored docs look like).
+  const v2: any = {
+    formatVersion: 2,
+    meta: { targetJob: "Warehouse Lead", targetCompany: "Acme", jobListingUrl: "", createdFrom: "job" },
+    contact: { name: "Jane Doe", phone: "555-123-4567", email: "jane@example.com", city: "Detroit", state: "MI" },
+    summary: "Reliable warehouse lead.",
+    experience: [
+      { id: "w1", title: "Forklift Operator", company: "Global Freight", startDate: "2019", endDate: "", bullets: ["Moved 200 pallets per shift."] },
+    ],
+    education: [
+      { id: "e1", institution: "Detroit Tech", credential: "Forklift Certification", year: "2019" },
+    ],
+    skills: ["Forklift", "Inventory"],
+  };
+
+  // v2 -> v3 upgrade preserves every v2 field; new fields absent.
+  const up = upgradeToV3(v2);
+  check("upgradeToV3 sets formatVersion 3", up.formatVersion === 3);
+  check("upgradeToV3 is a v3 doc (isV3)", isV3(up));
+  check("upgradeToV3 preserves summary", up.summary === "Reliable warehouse lead.");
+  check("upgradeToV3 preserves experience", up.experience.length === 1 && up.experience[0].company === "Global Freight");
+  check("upgradeToV3 preserves education + skills", up.education.length === 1 && up.skills.join(",") === "Forklift,Inventory");
+  check("upgradeToV3 leaves new v3 fields undefined",
+    up.headline === undefined && up.contentBlocks === undefined && up.publicNotes === undefined && up.privateNotes === undefined);
+
+  // A full v3 doc round-trips through the validator as ok.
+  const v3: any = {
+    ...up,
+    headline: "Warehouse Lead",
+    contentBlocks: [
+      { kind: "projects", items: [{ id: "p1", name: "Dock optimization", description: "Reduced load time", bullets: ["Cut dock time 20%."], link: "https://example.com" }] },
+      { kind: "custom", label: "Volunteer", items: [{ id: "c1", text: "Coached youth football." }] },
+    ],
+    publicNotes: "Open to Michigan roles.",
+    privateNotes: "Ask for at least twenty-two dollars an hour.",
+  };
+  check("validateResumeContent accepts a full v3 doc", validateResumeContent(v3).ok);
+  check("validateResumeContent accepts a sparse v3 draft", validateResumeContent({ formatVersion: 3, summary: "", skills: [] }).ok);
+
+  // Projection strips privateNotes, keeps publicNotes.
+  const proj = toEmployerFacingProjection(v3);
+  check("projection strips privateNotes", proj.privateNotes === undefined);
+  check("projection keeps publicNotes", proj.publicNotes === "Open to Michigan roles.");
+
+  // formatResumeDownload on a v3 doc renders the projects block, renders
+  // publicNotes, and NEVER renders privateNotes.
+  const t3 = formatResumeDownload(v3);
+  check("v3 text includes the PROJECTS heading", t3.includes("PROJECTS"));
+  check("v3 text includes the project name", t3.includes("Dock optimization"));
+  check("v3 text renders publicNotes", t3.includes("Open to Michigan roles."));
+  check("v3 text NEVER renders privateNotes", !t3.includes("twenty-two dollars"), t3);
+
+  // Employer-facing projection reuses the justice-sensitivity redaction: a
+  // justice-sensitive employer name is blanked before text is produced.
+  const sensitive: any = {
+    formatVersion: 3,
+    meta: { targetJob: "", targetCompany: "", jobListingUrl: "", createdFrom: "job" },
+    contact: { name: "Sam Rivera", phone: "", email: "", city: "", state: "" },
+    summary: "Skilled machine operator.",
+    experience: [
+      { id: "w1", title: "Kitchen Worker", company: "Waupun Correctional Institution", startDate: "2018", endDate: "2021", bullets: ["Prepared 300 meals daily."] },
+    ],
+    education: [],
+    skills: ["Food safety"],
+  };
+  const ts = formatResumeDownload(sensitive);
+  check("projection blanks a justice-sensitive employer", !ts.includes("Waupun") && !ts.includes("Correctional"), ts);
+  check("projection keeps the real duty bullet", ts.includes("Prepared 300 meals daily."));
+
+  // Malformed content blocks are rejected by the validator.
+  check("rejects a contentBlock with a bad kind",
+    !validateResumeContent({ formatVersion: 3, contentBlocks: [{ kind: "bogus", items: [] }] }).ok);
+  check("rejects a contentBlock with non-array items",
+    !validateResumeContent({ formatVersion: 3, contentBlocks: [{ kind: "projects", items: "nope" }] }).ok);
+  check("rejects contentBlocks that is not an array",
+    !validateResumeContent({ formatVersion: 3, contentBlocks: { kind: "projects" } }).ok);
+  check("rejects non-string v3 notes",
+    !validateResumeContent({ formatVersion: 3, privateNotes: 42 }).ok);
+
+  // Regression: the same v2 doc still formats identically to today. Stable
+  // substrings across the header, each section, and bullet formatting.
+  const t2 = formatResumeDownload(v2);
+  check("v2 header renders name uppercased", t2.includes("JANE DOE"));
+  check("v2 renders the summary heading + body", t2.includes("PROFESSIONAL SUMMARY") && t2.includes("Reliable warehouse lead."));
+  check("v2 renders the experience title line", t2.includes("Forklift Operator | Global Freight, 2019 - Present"));
+  check("v2 renders a dash bullet", t2.includes("- Moved 200 pallets per shift."));
+  check("v2 renders education + skills", t2.includes("Forklift Certification | Detroit Tech  2019") && t2.includes("Forklift | Inventory"));
+  check("v2 text has no content-block or notes leakage",
+    !t2.includes("PROJECTS") && !t2.includes("Open to Michigan"));
+}
+
+// ── Fail-closed verification aggregation (Phase 2.4) ──────────────────────────
+section("verification aggregation -- fail-closed finalization");
+{
+  // All verifiers ran -> not blocked, ran=true, no notice.
+  const allRan = aggregateVerification({ cover: true, summary: true, bullets: true, lists: true });
+  check("all-ran: ran=true", allRan.ran === true);
+  check("all-ran: finalizationBlocked=false", allRan.finalizationBlocked === false);
+  check("all-ran: no notice", verificationNoticeFor(allRan) === "");
+
+  // A single verifier that did NOT run (provider outage) blocks finalization.
+  const oneDown = aggregateVerification({ cover: true, summary: false, bullets: true, lists: true });
+  check("one-down: finalizationBlocked=true", oneDown.finalizationBlocked === true);
+  check("one-down: ran=false (not fully verified)", oneDown.ran === false);
+  check("one-down: emits an honest notice", verificationNoticeFor(oneDown).length > 0);
+  check("one-down: notice never claims verified/clean",
+    !/verified|clean/i.test(verificationNoticeFor(oneDown)), verificationNoticeFor(oneDown));
+
+  // All down -> blocked.
+  const allDown = aggregateVerification({ summary: false, bullets: false });
+  check("all-down: finalizationBlocked=true", allDown.finalizationBlocked === true);
+  check("all-down: ran=false", allDown.ran === false);
+
+  // Empty states is not "verified clean" -- nothing ran.
+  const none = aggregateVerification({});
+  check("empty: ran=false", none.ran === false);
+  check("empty: finalizationBlocked=false (nothing to block, but not clean either)",
+    none.finalizationBlocked === false);
+
+  // states passthrough preserved for the client.
+  check("states are passed through", oneDown.states.summary === false && oneDown.states.cover === true);
+}
+
+// ── Slugged resume filenames (Phase 2.6) ──────────────────────────────────────
+section("resume filename slug");
+{
+  const full = buildResumeFilename({
+    firstName: "Jane",
+    lastName: "Doe",
+    lane: "Manufacturing",
+    company: "Acme Co",
+    role: "Line Lead",
+  });
+  check("full slug uses -- between segments", full === "Jane-Doe--Manufacturing--Acme-Co--Line-Lead.docx", full);
+
+  // Forbidden Windows chars are removed, not left in.
+  const forbidden = buildResumeFilename({
+    firstName: "Al/ex",
+    lastName: 'Sm:ith?',
+    company: 'A<>"|*b',
+    role: "Fork\\Lift",
+  });
+  check("forbidden chars removed", !/[<>:"/\\|?*]/.test(forbidden), forbidden);
+  check("forbidden slug still has extension", forbidden.endsWith(".docx"), forbidden);
+
+  // Missing segments collapse cleanly -- no doubled or trailing separators.
+  const nameOnly = buildResumeFilename({ firstName: "Sam", lastName: "Lee" });
+  check("name-only has no dangling separators", nameOnly === "Sam-Lee.docx", nameOnly);
+  const gapMiddle = buildResumeFilename({ firstName: "Sam", lastName: "Lee", role: "Welder" });
+  check("skipped middle segment collapses (no ----)", gapMiddle === "Sam-Lee--Welder.docx", gapMiddle);
+  check("no quadruple hyphen anywhere", !gapMiddle.includes("----"), gapMiddle);
+
+  // Cover-letter variant carries the -CoverLetter infix.
+  const cover = buildResumeFilename({
+    firstName: "Jane",
+    lastName: "Doe",
+    company: "Acme",
+    kind: "cover_letter",
+  });
+  check("cover-letter infix present", cover === "Jane-Doe-CoverLetter--Acme.docx", cover);
+
+  // No name known -> kind-label fallback, never a bare "document".
+  const anonResume = buildResumeFilename({ company: "Acme", role: "Welder" });
+  check("anon resume falls back to Resume", anonResume === "Resume--Acme--Welder.docx", anonResume);
+  const anonCover = buildResumeFilename({ kind: "cover_letter" });
+  check("anon cover falls back to CoverLetter", anonCover === "CoverLetter.docx", anonCover);
+
+  // Collision suffix.
+  const collided = buildResumeFilename({ firstName: "Jane", lastName: "Doe", collision: 2 });
+  check("collision suffix applied", collided === "Jane-Doe-2.docx", collided);
+  const noCollide = buildResumeFilename({ firstName: "Jane", lastName: "Doe", collision: 1 });
+  check("collision=1 adds nothing", noCollide === "Jane-Doe.docx", noCollide);
+
+  // txt extension honored.
+  const txt = buildResumeFilename({ firstName: "Jane", lastName: "Doe", ext: "txt" });
+  check("ext override honored", txt === "Jane-Doe.txt", txt);
+}
+
+// ── Intake losslessness: computeLineCoverage + review tray (Phase 2.2) ────────
+section("intake losslessness -- coverage measurement");
+{
+  // A doc that contains every source line -> 100% coverage, nothing unmatched.
+  const doc: ResumeDocument = {
+    ...createEmptyResume("loaded"),
+    contact: { name: "Jane Doe", phone: "414-555-0192", email: "jane@example.com", city: "Milwaukee", state: "WI" },
+    summary: "Reliable warehouse lead with ten years on the floor.",
+    experience: [
+      { id: "w1", title: "Forklift Operator", company: "Midwest Distribution", startDate: "2014", endDate: "2020", bullets: ["Loaded and unloaded freight safely.", "Trained five new operators."] },
+    ],
+    education: [{ id: "e1", institution: "Lincoln High School", credential: "High School Diploma", year: "2012" }],
+    skills: ["Forklift", "Inventory", "Safety"],
+  };
+  const source = [
+    "Jane Doe",
+    "414-555-0192 | jane@example.com | Milwaukee, WI",
+    "Reliable warehouse lead with ten years on the floor.",
+    "Forklift Operator | Midwest Distribution | 2014 - 2020",
+    "- Loaded and unloaded freight safely.",
+    "- Trained five new operators.",
+    "High School Diploma | Lincoln High School | 2012",
+    "Forklift, Inventory, Safety",
+  ].join("\n");
+  const full = computeLineCoverage(source, doc);
+  check("full doc -> 100% coverage", full.coveragePct === 100, JSON.stringify(full));
+  check("full doc -> zero unmatched", full.unmatched.length === 0, JSON.stringify(full.unmatched));
+
+  // Omit one line from the doc -> that exact line is the only unmatched one.
+  const orphanLine = "Speaks Spanish and English fluently.";
+  const withOrphan = source + "\n" + orphanLine;
+  const partial = computeLineCoverage(withOrphan, doc);
+  check("omitted line is reported unmatched", partial.unmatched.includes(orphanLine), JSON.stringify(partial.unmatched));
+  check("omitted line is the ONLY unmatched", partial.unmatched.length === 1, JSON.stringify(partial.unmatched));
+  check("partial coverage is below 100 but high", partial.coveragePct < 100 && partial.coveragePct >= 85, String(partial.coveragePct));
+
+  // Empty source -> 100% (nothing to lose), no unmatched.
+  const empty = computeLineCoverage("", doc);
+  check("empty source -> 100% coverage", empty.coveragePct === 100 && empty.totalLines === 0, JSON.stringify(empty));
+  const blankish = computeLineCoverage("\n\n   \n----\n", doc);
+  check("separator-only source -> 100% (no meaningful lines)", blankish.coveragePct === 100 && blankish.totalLines === 0, JSON.stringify(blankish));
+}
+
+section("intake losslessness -- profileToResume tray collection");
+{
+  // Unmatched source lines land in a custom "Review these lines" block.
+  const profile = {
+    full_name: "Sam Rivera",
+    email: "sam.rivera@example.com",
+    phone: "608-555-0110",
+    city: "Madison",
+    state: "WI",
+    work_history: [{ company: "Acme Warehouse", title: "Picker", start_date: "2019", end_date: "2022", bullets: ["Picked and packed orders."] }],
+    skills_mentioned: ["Packing"],
+  };
+  const raw = [
+    "Sam Rivera",
+    "sam.rivera@example.com | 608-555-0110 | Madison, WI",
+    "Picker | Acme Warehouse | 2019 - 2022",
+    "- Picked and packed orders.",
+    "Volunteers at the community food pantry every weekend.",
+    "Fluent in American Sign Language.",
+  ].join("\n");
+  const doc = profileToResume(profile, raw);
+  const tray = (doc.contentBlocks || []).find((b) => b.kind === "custom" && b.label === REVIEW_TRAY_LABEL);
+  check("tray block created when lines are unmatched", !!tray, JSON.stringify(doc.contentBlocks));
+  if (tray && tray.kind === "custom") {
+    const texts = tray.items.map((i) => i.text);
+    check("tray holds the unmatched volunteer line", texts.some((t) => /food pantry/i.test(t)), JSON.stringify(texts));
+    check("tray holds the unmatched ASL line", texts.some((t) => /sign language/i.test(t)), JSON.stringify(texts));
+    check("tray items have ids", tray.items.every((i) => typeof i.id === "string" && i.id.length > 0));
+  }
+
+  // Complete coverage -> NO tray block (additive + safe).
+  const cleanRaw = [
+    "Sam Rivera",
+    "sam.rivera@example.com | 608-555-0110 | Madison, WI",
+    "Picker | Acme Warehouse | 2019 - 2022",
+    "- Picked and packed orders.",
+  ].join("\n");
+  const cleanDoc = profileToResume(profile, cleanRaw);
+  const noTray = (cleanDoc.contentBlocks || []).some((b) => b.kind === "custom" && b.label === REVIEW_TRAY_LABEL);
+  check("no tray block when coverage is complete", !noTray, JSON.stringify(cleanDoc.contentBlocks));
+
+  // Justice-sensitive unmatched lines are NEVER resurfaced into the tray.
+  const jRaw = cleanRaw + "\n" + "Completed a welding program while incarcerated at Waupun.";
+  const jDoc = profileToResume(profile, jRaw);
+  check("justice-sensitive unmatched line is NOT in any tray", !/waupun|incarcerat/i.test(JSON.stringify(jDoc)), JSON.stringify(jDoc.contentBlocks));
+
+  // The review tray is held OUT of employer-facing output.
+  const trayDoc = attachUnparsedTray(
+    { ...createEmptyResume("loaded"), summary: "Warehouse worker.", skills: ["Packing"] },
+    "Warehouse worker.\nPacking\nRuns a youth mentoring group on Saturdays."
+  );
+  const text = formatResumeDownload(trayDoc);
+  check("review tray never renders on employer-facing output", !/REVIEW THESE LINES/i.test(text) && !/youth mentoring/i.test(text), text);
+}
+
+section("intake losslessness -- acceptance corpus (synthetic fixtures)");
+{
+  // These synthetic, deidentified fixtures lock the coverage measurement + the
+  // tray guarantee. Each is parsed by a faithful hand-mapper (simulating a
+  // reasonable structured parse) and must reach >=90% line coverage; lines under
+  // an unrecognized "ADDITIONAL" heading are intentionally orphaned to prove they
+  // surface as unmatched. NOTE: Troy's real manufacturing DOCX is the ultimate
+  // acceptance case, but it is a PRIVATE document validated manually/out-of-repo
+  // -- it must NEVER enter the repo.
+  const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "resumes");
+
+  // Faithful test-only mapper: recognized sections map to fields; content under
+  // an unrecognized heading (e.g. ADDITIONAL) is left unmapped on purpose.
+  function buildDocFromFixture(textIn: string): ResumeDocument {
+    const doc = createEmptyResume("loaded");
+    let sectionName = "header";
+    let cur: ResumeDocument["experience"][number] | null = null;
+    const flush = () => { if (cur) { doc.experience.push(cur); cur = null; } };
+    for (const rawLine of textIn.split("\n")) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const up = line.toUpperCase();
+      if (up === "SUMMARY") { flush(); sectionName = "summary"; continue; }
+      if (up === "EXPERIENCE") { flush(); sectionName = "experience"; continue; }
+      if (up === "EDUCATION") { flush(); sectionName = "education"; continue; }
+      if (up === "SKILLS") { flush(); sectionName = "skills"; continue; }
+      if (up === "ADDITIONAL" || up === "INTERESTS") { flush(); sectionName = "orphan"; continue; }
+      if (sectionName === "header") {
+        if (!doc.contact.name) { doc.contact.name = line; continue; }
+        const email = line.match(/[\w.+-]+@[\w.-]+\.\w+/); if (email) doc.contact.email = email[0];
+        const phone = line.match(/\d{3}-\d{3}-\d{4}/); if (phone) doc.contact.phone = phone[0];
+        const loc = line.match(/([A-Za-zÀ-ÿ .'-]+),\s*([A-Z]{2})\b/); if (loc) { doc.contact.city = loc[1].trim(); doc.contact.state = loc[2]; }
+        continue;
+      }
+      if (sectionName === "summary") { doc.summary = doc.summary ? `${doc.summary} ${line}` : line; continue; }
+      if (sectionName === "experience") {
+        if (line.startsWith("-")) { if (cur) cur.bullets.push(line.replace(/^-\s*/, "")); continue; }
+        flush();
+        const parts = line.split("|").map((s) => s.trim());
+        cur = { id: `w${doc.experience.length}`, title: parts[0] || "", company: parts[1] || "", startDate: "", endDate: "", bullets: [] };
+        if (parts[2]) { const dr = parts[2].match(/(\S+)\s*-\s*(\S+)/); if (dr) { cur.startDate = dr[1]; cur.endDate = dr[2]; } }
+        continue;
+      }
+      if (sectionName === "education") {
+        const parts = line.split("|").map((s) => s.trim());
+        doc.education.push({ id: `e${doc.education.length}`, institution: parts[1] || "", credential: parts[0] || "", year: parts[2] || "" });
+        continue;
+      }
+      if (sectionName === "skills") {
+        for (const s of line.split(",").map((x) => x.trim()).filter(Boolean)) doc.skills.push(s);
+        continue;
+      }
+      // sectionName === "orphan": deliberately NOT mapped.
+    }
+    flush();
+    return doc;
+  }
+
+  const files = readdirSync(fixturesDir).filter((f) => f.endsWith(".txt")).sort();
+  check("found the synthetic fixtures", files.length >= 5, files.join(", "));
+  for (const f of files) {
+    const src = readFileSync(join(fixturesDir, f), "utf8");
+    const doc = buildDocFromFixture(src);
+    const cov = computeLineCoverage(src, doc);
+    check(`corpus ${f}: >=90% coverage`, cov.coveragePct >= 90, `${cov.coveragePct}% -- unmatched: ${JSON.stringify(cov.unmatched)}`);
+  }
+
+  // Orphaned lines under ADDITIONAL surface as unmatched (nothing silently lost).
+  {
+    const src = readFileSync(join(fixturesDir, "blue-collar-manufacturing.txt"), "utf8");
+    const doc = buildDocFromFixture(src);
+    const cov = computeLineCoverage(src, doc);
+    check("blue-collar orphan (measuring tools) is unmatched", cov.unmatched.some((l) => /measuring tools/i.test(l)), JSON.stringify(cov.unmatched));
+  }
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

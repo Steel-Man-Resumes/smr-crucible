@@ -15,6 +15,7 @@ import {
   createEmptyResume,
   formatResumeDownload,
   migrateLegacyResume,
+  upgradeToV3,
 } from "./resumeModel";
 import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
@@ -220,8 +221,8 @@ export function ResumeWorkspace() {
               loadedIdRef.current = fork.id;
               setArtifactId(fork.id);
               const content = fork.content;
-              if (content.formatVersion === 2) {
-                setDoc(content as ResumeDocument);
+              if (content.formatVersion === 2 || content.formatVersion === 3) {
+                setDoc(upgradeToV3(content));
               } else {
                 setDoc(migrateLegacyResume(content));
               }
@@ -242,8 +243,8 @@ export function ResumeWorkspace() {
         loadedIdRef.current = data.data.id;
         setArtifactId(data.data.id);
         const content = data.data.content;
-        if (content.formatVersion === 2) {
-          setDoc(content as ResumeDocument);
+        if (content.formatVersion === 2 || content.formatVersion === 3) {
+          setDoc(upgradeToV3(content));
         } else {
           setDoc(migrateLegacyResume(content));
         }
@@ -792,17 +793,27 @@ export function ResumeWorkspace() {
       const res = await fetch("/api/forge/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, type, format: "docx" }),
+        // Pass naming inputs so the download is a real slug
+        // (First-Last--Company--Role.docx), Phase 2.6.
+        body: JSON.stringify({
+          content,
+          type,
+          format: "docx",
+          name: doc.contact.name || "",
+          company: doc.meta.targetCompany || "",
+          role: doc.meta.targetJob || "",
+        }),
       });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const jobSlug = (doc.meta.targetJob || "resume").replace(/\s+/g, "_");
-      a.download = type === "resume"
-        ? `${jobSlug}_Resume_SteelMan.docx`
-        : `${jobSlug}_CoverLetter_SteelMan.docx`;
+      // The server sets Content-Disposition with the slugged name; mirror it
+      // here for the programmatic click.
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      a.download = match?.[1] || (type === "resume" ? "Resume.docx" : "CoverLetter.docx");
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {

@@ -13,8 +13,14 @@ import type {
   WorkEntry,
   EducationEntry,
   BulletEvidence,
+  ContentBlock,
+  CustomBlock,
 } from "./resumeModel";
-import { createWorkEntry, createEducationEntry } from "./resumeModel";
+import {
+  createWorkEntry,
+  createEducationEntry,
+  REVIEW_TRAY_LABEL,
+} from "./resumeModel";
 import { BulletWorkshop } from "./BulletWorkshop";
 
 type Updater = (fn: (prev: ResumeDocument) => ResumeDocument) => void;
@@ -510,6 +516,145 @@ export function EducationSection({
       >
         + Add Education or Certification
       </button>
+    </div>
+  );
+}
+
+// ─── Review Tray (lossless intake, Phase 2.2) ──────────────────────────────
+
+/**
+ * Surfaces the "Review these lines" custom block(s) the parser could not sort
+ * automatically. Nothing from intake is silently dropped -- unmatched source
+ * lines land here for the user to move where they belong or delete. Minimal by
+ * design: each line is an editable field with a delete affordance; a block that
+ * empties out removes itself.
+ *
+ * Renders nothing when there is no review tray, so the section stays invisible
+ * on a clean parse.
+ */
+export function ReviewTraySection({
+  doc,
+  update,
+}: {
+  doc: ResumeDocument;
+  update: Updater;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const trayIndexes = (doc.contentBlocks || [])
+    .map((b, i) => ({ b, i }))
+    .filter(
+      ({ b }) =>
+        b.kind === "custom" &&
+        b.label === REVIEW_TRAY_LABEL &&
+        b.items.length > 0
+    );
+
+  if (trayIndexes.length === 0) return null;
+
+  const itemCount = trayIndexes.reduce(
+    (n, { b }) => n + (b as CustomBlock).items.length,
+    0
+  );
+
+  function updateItem(blockIndex: number, itemId: string, text: string) {
+    update((d) => ({
+      ...d,
+      contentBlocks: (d.contentBlocks || []).map((b, i) =>
+        i === blockIndex && b.kind === "custom"
+          ? {
+              ...b,
+              items: b.items.map((it) =>
+                it.id === itemId ? { ...it, text } : it
+              ),
+            }
+          : b
+      ),
+    }));
+  }
+
+  function removeItem(blockIndex: number, itemId: string) {
+    update((d) => {
+      const next = (d.contentBlocks || [])
+        .map((b, i): ContentBlock => {
+          if (i === blockIndex && b.kind === "custom") {
+            return { ...b, items: b.items.filter((it) => it.id !== itemId) };
+          }
+          return b;
+        })
+        // Drop a tray block once its last line is cleared.
+        .filter(
+          (b) =>
+            !(
+              b.kind === "custom" &&
+              b.label === REVIEW_TRAY_LABEL &&
+              b.items.length === 0
+            )
+        );
+      return { ...d, contentBlocks: next };
+    });
+  }
+
+  return (
+    <div className="border border-t-amber/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="t-focus w-full flex items-center gap-3 px-4 py-3 bg-t-panel hover:bg-t-panel-2 transition-colors text-left min-h-touch"
+      >
+        <span className="w-5 h-5 border border-t-amber text-t-amber-bright flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+          {itemCount}
+        </span>
+        <span className="flex-1 text-sm font-medium text-t-white">
+          Lines we could not sort automatically
+        </span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          className={`text-t-phos-dim transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 pt-1 border-t border-t-line bg-t-panel">
+          <p className="text-xs text-t-amber-bright mb-3 leading-relaxed">
+            Move them where they belong or delete them. These stay off your
+            finished resume until you sort them.
+          </p>
+          <div className="space-y-2">
+            {trayIndexes.map(({ b, i: blockIndex }) =>
+              (b as CustomBlock).items.map((item) => (
+                <div key={item.id} className="flex gap-1.5 items-start">
+                  <div className="flex-1 min-w-0">
+                    <GrowInput
+                      value={item.text}
+                      onChange={(v) => updateItem(blockIndex, item.id, v)}
+                      placeholder="Edit or clear this line..."
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeItem(blockIndex, item.id)}
+                    className="text-t-phos-dim hover:text-t-red text-xs px-1 mt-2"
+                    title="Delete line"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

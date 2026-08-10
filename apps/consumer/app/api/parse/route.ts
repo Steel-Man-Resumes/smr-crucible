@@ -12,6 +12,8 @@ import { auth } from "@/auth";
 import { extractTextFromBuffer } from "@/lib/text-extraction";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
+import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import { coverageForProfile } from "@/components/resume/resumeParsers";
 
 export const maxDuration = 60;
 
@@ -110,11 +112,18 @@ async function handlePost(request: Request) {
       }
     }
 
+    // Lossless-intake signal (Phase 2.2): measure how much of the original
+    // cleaned source the structured parse actually accounts for, and surface the
+    // lines it missed so the client can show a review tray instead of silently
+    // dropping them. Bounded so a huge document does not bloat the payload.
+    const coverage = coverageForProfile(parsedProfile, cleanedText);
+
     return NextResponse.json({
       resumeText: cleanedText,
       profile: parsedProfile,
       charCount: cleanedText.length,
       fileName: sourceName,
+      coverage,
     });
   } catch (error: any) {
     console.error("Parse error:", error);
@@ -189,7 +198,7 @@ RULES (a dropped or altered field is a failure -- this feeds a real resume):
         },
         {
           role: "user",
-          content: text.slice(0, 8000), // Limit input size
+          content: sliceWithWarn(text, RESUME_SOURCE_MAX, "parse.text"), // Limit input size (observable)
         },
       ],
       max_tokens: 2000,

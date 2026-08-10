@@ -24,7 +24,7 @@ function isStructuredResumeDoc(d: any): boolean {
   return (
     !!d &&
     typeof d === "object" &&
-    d.formatVersion === 2 &&
+    (d.formatVersion === 2 || d.formatVersion === 3) &&
     typeof d.contact === "object" &&
     Array.isArray(d.experience)
   );

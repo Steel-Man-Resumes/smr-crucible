@@ -11,14 +11,26 @@
 
 import { type ResumeDocument, formatResumeDownload } from "./resumeModel";
 import { escapeHtml } from "../../lib/escape-html";
+import { buildResumeFilename } from "../../lib/resume-filename";
 
 /** Build the print-optimized HTML for a resume. Exposed for testing/reuse. */
 export function buildResumePrintHtml(doc: ResumeDocument): string {
   const text = formatResumeDownload(doc);
-  const name = escapeHtml(doc.contact.name || "Resume");
   const nameUpper = escapeHtml((doc.contact.name || "Resume").toUpperCase());
   const job = escapeHtml(doc.meta.targetJob || "");
   const company = escapeHtml(doc.meta.targetCompany || "");
+  // The <title> becomes the browser's default "Save as PDF" filename -- slug it
+  // to First-Last--Company--Role (Phase 2.6) rather than a spaced sentence.
+  const nameTokens = (doc.contact.name || "").trim().split(/\s+/).filter(Boolean);
+  const printTitle = escapeHtml(
+    buildResumeFilename({
+      firstName: nameTokens[0],
+      lastName: nameTokens.length > 1 ? nameTokens.slice(1).join(" ") : undefined,
+      company: doc.meta.targetCompany || "",
+      role: doc.meta.targetJob || "",
+      kind: "resume",
+    }).replace(/\.docx$/, "")
+  );
 
   const lines = text.split("\n");
   let bodyHtml = "";
@@ -42,7 +54,7 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
     }
   }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} -- Resume${job ? ` for ${job}` : ""}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${printTitle}</title>
 <style>
   body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1a1a1a;margin:0;padding:0.5in 0.5in 0.5in 0.5in;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .name{font-family:Georgia,serif;font-size:16pt;font-weight:bold;text-align:center;background:#1B2A4A;color:#fff;padding:8px 0;letter-spacing:0.05em}

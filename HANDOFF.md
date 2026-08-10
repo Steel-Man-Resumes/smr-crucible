@@ -1,5 +1,55 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 2A COMPLETE: resume fidelity (v3 schema, lossless intake, fail-closed grounding, naming, fine-tune). Page-fit (2.3+2.5) GATED. Phase 3 next.
+
+Shipped every infra-free Phase 2 item. Verification: consumer tsc clean, adversarial 172 ->
+244 (sections 21 v3 schema, intake losslessness, verification aggregation, filename, fine-tune),
+claims clean, prod build green. Fresh-context review: verdict SOUND, no blockers, no
+regressions (v2 docs load/edit/save/render/download identically; the employer projection is a
+true no-op on clean v2 data; fail-closed signal does NOT over-block thin resumes). No new
+migrations (all app-code + the v3 additive superset).
+
+- **2.1 ResumeDocument v3 (additive superset):** formatVersion 3 = every v2 field UNCHANGED +
+  optional headline, contentBlocks (typed: projects/awards/publications/leadership/
+  certifications/custom), publicNotes, privateNotes. upgradeToV3/isV3, createEmptyResume now
+  v3, dual-read at every formatVersion===2 site. ONE shared toEmployerFacingProjection strips
+  privateNotes + the review tray + re-applies justice redaction on ALL employer output. Zero
+  v2 render delta (regression-snapshot proven).
+- **2.2 Lossless intake:** lib/intake-coverage.ts computeLineCoverage (>=60% token-overlap);
+  parse route returns coverage; unmatched source lines land in a visible "Review these lines"
+  custom block (ReviewTraySection in the editor), never silently dropped, never on
+  employer-facing output, justice-sensitive lines excluded. 6 deidentified fixtures all >=90%
+  coverage (apps/consumer/test/fixtures/resumes/). Troy's real mfg docx = out-of-repo manual
+  acceptance.
+- **2.4 fail-closed grounding + de-truncation:** lib/limits.ts (RESUME_SOURCE_MAX 20000,
+  JD_MAX 12000, VERIFY_MAX 20000) replaces the 4000/6000/8000 data-loss caps; sliceWithWarn
+  makes any real truncation observable. Each verifier now reports verifierRan; aggregateVerification
+  -> {ran, finalizationBlocked, verificationNotice}. resume-generate-full + rush return the
+  honest signal; NO clean/verified badge when a verifier did not run. RUSH now has verifiers
+  (had none). NOTE: the finalization signal is server plumbing + telemetry only -- no client
+  consumes it yet (the block-UI + per-claim attest override is a later phase); the review TRAY
+  is fully wired end to end. NOTE: verifiers are OpenAI gpt-4o-mini; OPENAI_API_KEY is set in
+  prod (Production+Preview) so finalizationBlocked reflects real outages, not a missing key.
+- **2.6 naming:** lib/resume-filename.ts First-Last--Lane--Company--Role slug (forbidden-char
+  strip, collision suffix, cover-letter infix); wired into forge/download (replaced 4 hardcoded
+  "My_Resume_SteelMan" names), ResumeWorkspace download, and the print <title>.
+- **2.7 fine-tune flow:** NEW /api/resume-fine-tune -- ownership-checked fork (reason
+  "fine_tune") + a LIGHT grounded re-emphasis pass (adds no facts) + snapshot provenance
+  "fine_tuned". This CLOSES the 1A fork-to-application-link gap. Exported/handler only; a later
+  UI phase surfaces it.
+
+GATED (own sub-phase, blocks the final acceptance): **2.3 remove one-page word/skill caps +
+2.5 page-fit engine.** Hard dependency on a headless-Chromium render host that does NOT exist
+(same infra decision as the 1D worker; services/worker BullMQ skeleton is dormant, no Redis).
+Removing the one-page prompt caps WITHOUT page-fit would produce unchecked overflowing docs, so
+they ship together. INFRA DECISION FOR TROY: small VPS+Redis for services/worker, OR
+@sparticuz/chromium + playwright-core in a dedicated async Vercel render route. The DOCX side
+validates separately via pinned LibreOffice per the plan.
+
+NEXT: Phase 3 (application path) -- apply-link honesty, full JD snapshot at save, Quick Apply
+(baseline_as_is provenance), fit check, provider expansion (draft the Indeed partner inquiry,
+never send -- drafts-only rule).
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 1C COMPLETE: secure storage + crypto + lifecycle platform. Phase 2 next.
 
 Built the encrypted storage + data-lifecycle PLATFORM (no live user-facing vault yet -- that

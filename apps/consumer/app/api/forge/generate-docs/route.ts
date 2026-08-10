@@ -14,6 +14,7 @@ import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
+import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
 
 export const maxDuration = 120;
 
@@ -287,7 +288,7 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
       .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${cleanedResume.slice(0, 6000)}`);
+    parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
   }
 
   if (input.goals?.length) {
@@ -404,7 +405,7 @@ RULES:
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     parts.push(
-      `WORK HISTORY EXCERPT:\n${cleanedResume.slice(0, 3000)}`
+      `WORK HISTORY EXCERPT:\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.coverLetter.resumeText")}`
     );
   }
 

@@ -14,6 +14,7 @@ import { auth } from "@/auth";
 import { getArtifact } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { JD_MAX, RESUME_SOURCE_MAX } from "@/lib/limits";
 import { resolveApprovedBase } from "@/lib/approved-base";
 import { formatResumeDownload, migrateLegacyResume } from "@/components/resume/resumeModel";
 import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/context-library";
@@ -27,6 +28,8 @@ import {
   buildTrustedSource,
   isDropMarker,
   isJusticeSensitive,
+  aggregateVerification,
+  verificationNoticeFor,
 } from "@/lib/grounding-verify";
 
 export const maxDuration = 120;
@@ -70,7 +73,7 @@ async function handlePost(request: Request) {
     // Build shared context strings
     const jobTitle = sanitizeForPrompt(job.title, 200);
     const jobCompany = sanitizeForPrompt(job.company, 200);
-    const jobDescription = sanitizeForPrompt(job.description, 2000);
+    const jobDescription = sanitizeForPrompt(job.description, JD_MAX, "job.description");
     const jobRequirements = sanitizeArray(job.requirements, 10, 300);
 
     const skills = forgeOutput?.skills
@@ -89,7 +92,7 @@ async function handlePost(request: Request) {
       : "";
 
     const cleanedResume = resumeText
-      ? sanitizeForPrompt(resumeText, 4000)
+      ? sanitizeForPrompt(resumeText, RESUME_SOURCE_MAX, "resumeText")
       : "not available";
 
     // R5 -> 1A: the person's HUMAN-APPROVED base resume (their pinned "current"
@@ -124,7 +127,9 @@ async function handlePost(request: Request) {
       }
       const doc = decision.content as any;
       approvedResumeText = formatResumeDownload(
-        doc?.formatVersion === 2 ? doc : migrateLegacyResume(doc)
+        doc?.formatVersion === 2 || doc?.formatVersion === 3
+          ? doc
+          : migrateLegacyResume(doc)
       );
       if (!approvedResumeText.trim()) {
         console.warn(
@@ -133,7 +138,7 @@ async function handlePost(request: Request) {
       }
     }
     const cleanedApprovedResume = approvedResumeText
-      ? sanitizeForPrompt(approvedResumeText, 6000)
+      ? sanitizeForPrompt(approvedResumeText, RESUME_SOURCE_MAX, "approvedResumeText")
       : "";
 
     const contactName = sanitizeForPrompt(contact?.name, 100);
@@ -316,9 +321,25 @@ ${contactName || "Candidate"}`;
       bulletCheck.hasFabrication ||
       listCheck.hasFabrication;
 
-    // Build the full ResumeDocument
+    // FAIL-CLOSED finalization signal (Phase 2.4). Each verifier reports whether
+    // it actually ran; if ANY did not (a provider outage), the document was not
+    // fully verified and must NOT be presented as employer-ready "clean". We
+    // surface an honest signal instead of blowing up -- the client blocks
+    // finalization and offers the per-claim "I attest this is true" override.
+    const verification = aggregateVerification({
+      cover: coverCheck.verifierRan,
+      summary: summaryCheck.verifierRan,
+      bullets: bulletCheck.verifierRan,
+      lists: listCheck.verifierRan,
+    });
+    const finalizationBlocked = verification.finalizationBlocked;
+    const verificationNotice = verificationNoticeFor(verification);
+
+    // Build the full ResumeDocument. Emitted as v3 (Phase 2.1): the new v3
+    // fields are simply absent, which is a valid v3 doc. The generator does not
+    // populate content blocks or notes -- those are user-authored downstream.
     const resume = {
-      formatVersion: 2,
+      formatVersion: 3,
       meta: {
         targetJob: job.title || "",
         targetCompany: job.company || "",
@@ -436,6 +457,8 @@ ${contactName || "Candidate"}`;
           disclosureConfidence: confidenceLevel,
           grounding_flags: groundingFlags.length,
           grounding_applied: groundingApplied,
+          verifier_ran: verification.ran,
+          finalization_blocked: finalizationBlocked,
           approved_base_used: !!cleanedApprovedResume,
           approved_artifact_id: approvedArtifactId || null,
         },
@@ -454,6 +477,12 @@ ${contactName || "Candidate"}`;
       disclosureBrief,
       tailoringNotes,
       grounding: { hasFabrication, applied: groundingApplied, flags: groundingFlags },
+      // Honest verification signal: `ran` is true only when every truth-check ran.
+      // `finalizationBlocked` is true on any verifier outage -- never emit a
+      // clean/verified badge when it is true.
+      verification: { ran: verification.ran, states: verification.states },
+      finalizationBlocked,
+      verificationNotice,
     });
   } catch (error: any) {
     console.error("Career package generation error:", error);

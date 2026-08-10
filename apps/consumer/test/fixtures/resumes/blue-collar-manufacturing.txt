@@ -1,0 +1,24 @@
+Danny Kowalski
+danny.kowalski@example.com | 616-555-0121 | Grand Rapids, MI
+
+SUMMARY
+CNC machine operator and welder with twelve years on the shop floor. Comfortable reading blueprints, running production runs, and holding tight tolerances.
+
+EXPERIENCE
+CNC Operator | Precision Metalworks | 2016 - Present
+- Set up and operated three-axis and four-axis CNC mills to blueprint specs
+- Held tolerances within two thousandths of an inch on aluminum and steel parts
+- Ran first-article inspections and logged results for quality control
+MIG Welder | Lakeshore Fabrication | 2011 - 2016
+- Welded structural steel assemblies for commercial construction projects
+- Passed AWS D1.1 certification renewal every year
+
+EDUCATION
+Welding Certificate | West Michigan Technical College | 2011
+Forklift Certification | Safety First Training | 2015
+
+SKILLS
+CNC operation, MIG welding, Blueprint reading, GD&T, Micrometers, Calipers, Quality inspection, Forklift
+
+ADDITIONAL
+Owns a full set of personal measuring tools and hand tools.

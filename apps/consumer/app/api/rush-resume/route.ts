@@ -13,6 +13,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { JD_MAX, RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import {
+  buildTrustedSource,
+  verifyGrounding,
+  verifyResumeBullets,
+  verifyStructuredLists,
+  aggregateVerification,
+  verificationNoticeFor,
+  type ResumeExperience,
+} from "@/lib/grounding-verify";
 
 export const maxDuration = 60;
 
@@ -75,10 +85,10 @@ async function handlePost(request: Request) {
 
     const userMessage = `Rewrite this resume for the target job.
 
-TARGET JOB: ${input.targetJob}${input.targetCompany ? `\nTARGET COMPANY: ${input.targetCompany}` : ""}${input.jobDescription ? `\n\nJOB DESCRIPTION:\n${input.jobDescription.slice(0, 4000)}` : ""}
+TARGET JOB: ${input.targetJob}${input.targetCompany ? `\nTARGET COMPANY: ${input.targetCompany}` : ""}${input.jobDescription ? `\n\nJOB DESCRIPTION:\n${sliceWithWarn(input.jobDescription, JD_MAX, "rush.jobDescription")}` : ""}
 
 ORIGINAL RESUME:
-${cleanedResume.slice(0, 6000)}
+${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "rush.resumeText")}
 
 Return JSON:
 {
@@ -101,6 +111,59 @@ Return JSON:
 
     const result = JSON.parse(jsonMatch[0]);
 
+    // ─── Grounding gate (Rush verifier, Phase 2.4) ────────────────────────
+    // Rush had no fact-check: whatever the model emitted shipped as-is. Ground
+    // the summary, bullets, and skills against the user's OWN raw rush input --
+    // their self-authored source, same trust boundary as resume-generate-full.
+    // The deterministic incarceration-term stripping above stays; this adds the
+    // semantic truth gate on top. FAIL-CLOSED: if a verifier cannot run (no key,
+    // outage), surface finalizationBlocked rather than silently shipping.
+    const groundingSource = buildTrustedSource({
+      resumeText: typeof input.resumeText === "string" ? input.resumeText : "",
+    });
+
+    // Rush bullets are flat {text, original}. Map each to its own single-bullet
+    // experience so the structured gate can ground/drop each and we can rebuild
+    // by index, preserving the original-linkage the client shows.
+    const rushBullets: Array<{ text?: string; original?: string }> = Array.isArray(result.bullets)
+      ? result.bullets
+      : [];
+    const bulletExperience: ResumeExperience[] = rushBullets.map((b) => ({
+      bullets: [typeof b?.text === "string" ? b.text : ""],
+    }));
+
+    const [summaryCheck, bulletCheck, listCheck] = await Promise.all([
+      verifyGrounding({ sourceText: groundingSource, output: typeof result.summary === "string" ? result.summary : "", kind: "summary" }),
+      verifyResumeBullets({ sourceText: groundingSource, experience: bulletExperience }),
+      verifyStructuredLists({
+        sourceText: groundingSource,
+        skills: Array.isArray(result.skills) ? result.skills.filter((s: any) => typeof s === "string" && s.trim()) : [],
+        education: [],
+      }),
+    ]);
+
+    // Rebuild rush output from the grounded results.
+    result.summary = summaryCheck.text || result.summary;
+    result.bullets = bulletCheck.experience
+      .map((e, i) => {
+        const groundedText = Array.isArray(e.bullets) && e.bullets.length ? e.bullets[0] : "";
+        if (!groundedText) return null; // dropped as ungrounded
+        return { text: groundedText, original: rushBullets[i]?.original ?? "" };
+      })
+      .filter(Boolean);
+    result.skills = listCheck.skills;
+
+    const verification = aggregateVerification({
+      summary: summaryCheck.verifierRan,
+      bullets: bulletCheck.verifierRan,
+      skills: listCheck.verifierRan,
+    });
+    result.verification = { ran: verification.ran, states: verification.states };
+    result.finalizationBlocked = verification.finalizationBlocked;
+    result.verificationNotice = verificationNoticeFor(verification);
+    const groundingFlags =
+      summaryCheck.flags.length + bulletCheck.flags.length + listCheck.flags.length;
+
     // Log decision for JBS compliance
     try {
       const { logDecision } = await import("@crucible/core");
@@ -116,6 +179,9 @@ Return JSON:
           target_company: input.targetCompany || null,
           bullets_count: result.bullets?.length ?? 0,
           skills_count: result.skills?.length ?? 0,
+          grounding_flags: groundingFlags,
+          verifier_ran: verification.ran,
+          finalization_blocked: verification.finalizationBlocked,
         },
         tokenCount: tokenCount ?? null,
         latencyMs,

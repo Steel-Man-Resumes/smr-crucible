@@ -6,8 +6,12 @@ import {
   type ResumeDocument,
   type WorkEntry,
   type EducationEntry,
+  type CustomBlock,
   createEmptyResume,
+  upgradeToV3,
+  REVIEW_TRAY_LABEL,
 } from "./resumeModel";
+import { computeLineCoverage } from "@/lib/intake-coverage";
 
 const INCARCERATION_REGEX =
   /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|waupun|penitentiary|reformatory|house of correction|detention|dept\.? of correction|department of correction/i;
@@ -51,6 +55,17 @@ export function profileToResume(
   profile: any,
   rawText?: string
 ): ResumeDocument {
+  const doc = buildProfileDoc(profile, rawText);
+  // Lossless intake (Phase 2.2): collect any source line the parse missed into a
+  // visible review tray so nothing is silently dropped. No-op when everything
+  // parsed cleanly (no source, or full coverage).
+  return attachUnparsedTray(doc, rawText);
+}
+
+/** Build the structured doc from the profile WITHOUT the review tray. Kept
+ *  separate so coverage can be measured against the parsed-only result (the tray
+ *  itself would otherwise "cover" the very lines it collects). */
+function buildProfileDoc(profile: any, rawText?: string): ResumeDocument {
   const doc = createEmptyResume("forge");
 
   doc.contact = {
@@ -133,6 +148,63 @@ export function profileToResume(
   }
 
   return doc;
+}
+
+/**
+ * Lossless-intake tray (Phase 2.2). Measure how much of `sourceText` the built
+ * doc accounts for; every meaningful source line that matched nothing is
+ * collected into a `custom` block labeled REVIEW_TRAY_LABEL so it is visible and
+ * editable, never silently gone.
+ *
+ * Additive + safe: returns the doc unchanged when there is no source or when
+ * coverage is complete (no empty tray block). Justice-sensitive unmatched lines
+ * are NOT re-introduced -- they were deliberately excluded from the base resume
+ * by doctrine, not lost by accident, so the tray never resurfaces them.
+ */
+export function attachUnparsedTray(
+  doc: ResumeDocument,
+  sourceText?: string
+): ResumeDocument {
+  if (!sourceText?.trim()) return doc;
+  const { unmatched } = computeLineCoverage(sourceText, upgradeToV3(doc));
+  const keep = unmatched
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !isJusticeSensitive(l));
+  if (keep.length === 0) return doc;
+  const block: CustomBlock = {
+    kind: "custom",
+    label: REVIEW_TRAY_LABEL,
+    items: keep.map((text) => ({ id: crypto.randomUUID(), text })),
+  };
+  doc.contentBlocks = [...(doc.contentBlocks || []), block];
+  return doc;
+}
+
+/**
+ * Coverage signal for /api/parse: build the parsed-only doc (no tray) and report
+ * how much of the source it covers, plus the tray-eligible unmatched lines
+ * (justice-sensitive lines excluded, matching what the tray keeps). The line
+ * list is bounded so a huge document does not bloat the response.
+ */
+export function coverageForProfile(
+  profile: any,
+  sourceText: string,
+  maxLines = 40
+): { coveragePct: number; unmatchedLines: string[]; moreCount: number } {
+  const doc = buildProfileDoc(profile, sourceText);
+  const { coveragePct, unmatched } = computeLineCoverage(
+    sourceText,
+    upgradeToV3(doc)
+  );
+  const eligible = unmatched
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !isJusticeSensitive(l));
+  const unmatchedLines = eligible.slice(0, maxLines);
+  return {
+    coveragePct,
+    unmatchedLines,
+    moreCount: Math.max(0, eligible.length - unmatchedLines.length),
+  };
 }
 
 function cleanText(text: string): string {

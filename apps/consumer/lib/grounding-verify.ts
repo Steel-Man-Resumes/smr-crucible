@@ -19,6 +19,7 @@
  */
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
+import { VERIFY_MAX } from "@/lib/limits";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -69,6 +70,44 @@ export interface GroundingVerifyResult {
   applied: boolean;
   /** Invented claims for user-facing honesty ("we kept it to only what you told us"). */
   flags: GroundingFlag[];
+  /**
+   * FAIL-CLOSED signal (Phase 2.4): true only when the verifier actually ran a
+   * check. False when it short-circuited on a provider outage -- no API key, an
+   * HTTP error, a network/timeout failure, or an unparseable response. When
+   * false the document was NOT verified, so a "clean/verified" badge must never
+   * be shown; the caller aggregates this into finalizationBlocked.
+   */
+  verifierRan: boolean;
+}
+
+/**
+ * FAIL-CLOSED aggregation (Phase 2.4, pure + unit-tested).
+ *
+ * Given each verifier's `verifierRan` keyed by field, decide whether the whole
+ * document may be treated as verified. `ran` is true only when EVERY verifier
+ * ran; `finalizationBlocked` is true when ANY verifier did NOT run (a provider
+ * outage) -- the honest signal the client uses to withhold an employer-ready
+ * "verified" badge and offer the per-claim "I attest this is true" override.
+ */
+export interface VerificationAggregate {
+  ran: boolean;
+  finalizationBlocked: boolean;
+  states: Record<string, boolean>;
+}
+export function aggregateVerification(states: Record<string, boolean>): VerificationAggregate {
+  const values = Object.values(states);
+  const ran = values.length > 0 && values.every((v) => v === true);
+  const finalizationBlocked = values.some((v) => v === false);
+  return { ran, finalizationBlocked, states };
+}
+
+/**
+ * The honest notice shown when finalization is blocked -- never a clean badge.
+ * Empty string when nothing is blocked.
+ */
+export function verificationNoticeFor(agg: VerificationAggregate): string {
+  if (!agg.finalizationBlocked) return "";
+  return "We could not run the truth check on part of this document because the checker was unavailable. Do not finalize this as employer-ready until it verifies. You can review and attest each claim yourself before sending.";
 }
 
 const VERIFY_TIMEOUT_MS = 15000;
@@ -76,7 +115,11 @@ const VERIFY_MODEL = "gpt-4o-mini";
 // The model only ever sees the first MAX_VERIFY_CHARS of source/output. A rewrite
 // must never be APPLIED when the document exceeds this, or everything past the
 // window would be silently deleted (Codex finding 6). Above it we still flag.
-const MAX_VERIFY_CHARS = 8000;
+// Raised to VERIFY_MAX (20000) in Phase 2.4 so an ordinary long resume is audited
+// whole rather than having its tail silently excluded from the truth gate. The
+// "apply rewrite only if output <= cap" guard below stays as the safety valve at
+// this higher bound.
+const MAX_VERIFY_CHARS = VERIFY_MAX;
 
 // Literal drop markers a model returns instead of JSON null when it means "remove
 // this" -- must never ship as content. Tolerates trailing punctuation ("None.").
@@ -104,16 +147,21 @@ export async function verifyGrounding(params: {
   kind: GroundingKind;
 }): Promise<GroundingVerifyResult> {
   const { sourceText, output, kind } = params;
+  // verifierRan defaults TRUE: the input-guard early returns (trivial output,
+  // thin source) are not outages -- there is simply nothing an outage-retry would
+  // fix. Only the provider-outage branches below flip it to false.
   const original: GroundingVerifyResult = {
     text: output,
     hasFabrication: false,
     applied: false,
     flags: [],
+    verifierRan: true,
   };
 
   const apiKey = process.env.OPENAI_API_KEY;
-  // Fail-open: no cheap-model key, nothing to verify against, or trivial output.
-  if (!apiKey) return original;
+  // FAIL-CLOSED signal: no cheap-model key means the verifier could NOT run.
+  if (!apiKey) return { ...original, verifierRan: false };
+  // Fail-open, but the verifier legitimately RAN its decision: nothing to verify.
   if (!output || output.trim().length < 20) return original;
   const source = (sourceText || "").trim();
   // With no source at all the model can't distinguish grounded from invented;
@@ -174,12 +222,12 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
 
     if (!res.ok) {
       console.error(`Grounding verify HTTP ${res.status}`);
-      return original;
+      return { ...original, verifierRan: false };
     }
     data = await res.json();
   } catch (err) {
     console.error("Grounding verify failed (fail-open):", err);
-    return original;
+    return { ...original, verifierRan: false };
   }
 
   if (data?.usage) {
@@ -198,7 +246,7 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   try {
     parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
   } catch {
-    return original;
+    return { ...original, verifierRan: false };
   }
 
   const flags: GroundingFlag[] = Array.isArray(parsed.flags)
@@ -228,6 +276,7 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     hasFabrication,
     applied: applyRewrite,
     flags,
+    verifierRan: true,
   };
 }
 
@@ -245,6 +294,8 @@ export interface BulletVerifyResult {
   hasFabrication: boolean;
   applied: boolean;
   flags: GroundingFlag[];
+  /** FAIL-CLOSED signal (Phase 2.4): false when the verifier hit a provider outage. */
+  verifierRan: boolean;
 }
 
 /**
@@ -264,10 +315,11 @@ export async function verifyResumeBullets(params: {
     hasFabrication: false,
     applied: false,
     flags: [],
+    verifierRan: true,
   };
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return original;
+  if (!apiKey) return { ...original, verifierRan: false };
   const source = (params.sourceText || "").trim();
   if (source.length < 15) return original;
 
@@ -324,12 +376,12 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
     }
     if (!res.ok) {
       console.error(`Bullet verify HTTP ${res.status}`);
-      return original;
+      return { ...original, verifierRan: false };
     }
     data = await res.json();
   } catch (err) {
     console.error("Bullet verify failed (fail-open):", err);
-    return original;
+    return { ...original, verifierRan: false };
   }
 
   if (data?.usage) {
@@ -345,7 +397,7 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
   try {
     parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
   } catch {
-    return original;
+    return { ...original, verifierRan: false };
   }
   const rows: any[] = Array.isArray(parsed.bullets) ? parsed.bullets : [];
   if (!rows.length) return original;
@@ -393,6 +445,7 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
     hasFabrication: flags.length > 0,
     applied: changed,
     flags,
+    verifierRan: true,
   };
 }
 
@@ -417,6 +470,8 @@ export interface StructuredListsResult {
   hasFabrication: boolean;
   applied: boolean;
   flags: GroundingFlag[];
+  /** FAIL-CLOSED signal (Phase 2.4): false when the verifier hit a provider outage. */
+  verifierRan: boolean;
 }
 
 /**
@@ -440,10 +495,11 @@ export async function verifyStructuredLists(params: {
     hasFabrication: false,
     applied: false,
     flags: [],
+    verifierRan: true,
   };
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return original;
+  if (!apiKey) return { ...original, verifierRan: false };
   const source = (params.sourceText || "").trim();
   if (source.length < 15) return original;
   if (!skills.length && !education.length) return original;
@@ -490,7 +546,7 @@ ${eduLines.join("\n") || "(none)"}`;
       });
       if (!res.ok) {
         console.error(`Structured-list verify HTTP ${res.status}`);
-        return original;
+        return { ...original, verifierRan: false };
       }
       data = await res.json();
     } finally {
@@ -498,7 +554,7 @@ ${eduLines.join("\n") || "(none)"}`;
     }
   } catch (err) {
     console.error("Structured-list verify failed (fail-open):", err);
-    return original;
+    return { ...original, verifierRan: false };
   }
 
   if (data?.usage) {
@@ -514,7 +570,7 @@ ${eduLines.join("\n") || "(none)"}`;
   try {
     parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
   } catch {
-    return original;
+    return { ...original, verifierRan: false };
   }
 
   const flags: GroundingFlag[] = [];
@@ -563,5 +619,6 @@ ${eduLines.join("\n") || "(none)"}`;
     hasFabrication: flags.length > 0,
     applied,
     flags,
+    verifierRan: true,
   };
 }

@@ -21,6 +21,7 @@ import {
   ShadingType,
 } from "docx";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { buildResumeFilename } from "@/lib/resume-filename";
 
 export const maxDuration = 30;
 const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
@@ -48,6 +49,41 @@ interface DownloadInput {
   content: string;
   type: "resume" | "cover_letter";
   format?: "docx" | "txt";
+  // Optional naming inputs (Phase 2.6). When supplied, the download is named
+  // First-Last--Lane--Company--Role.<ext> instead of a generic constant. Any
+  // missing piece collapses out cleanly; nothing known falls back to
+  // "Resume"/"CoverLetter" -- never a bare "document".
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  lane?: string;
+  company?: string;
+  role?: string;
+  meta?: { targetCompany?: string; targetJob?: string; lane?: string };
+}
+
+/**
+ * Derive the download filename from whatever naming inputs the caller passed.
+ * first/last come from explicit fields or by splitting `name`; company/role
+ * fall back to meta.targetCompany / meta.targetJob.
+ */
+function resolveDownloadFilename(input: DownloadInput, ext: string): string {
+  let firstName = input.firstName;
+  let lastName = input.lastName;
+  if ((!firstName || !lastName) && typeof input.name === "string" && input.name.trim()) {
+    const tokens = input.name.trim().split(/\s+/);
+    firstName = firstName || tokens[0];
+    lastName = lastName || (tokens.length > 1 ? tokens.slice(1).join(" ") : undefined);
+  }
+  return buildResumeFilename({
+    firstName,
+    lastName,
+    lane: input.lane || input.meta?.lane,
+    company: input.company || input.meta?.targetCompany,
+    role: input.role || input.meta?.targetJob,
+    kind: input.type === "cover_letter" ? "cover_letter" : "resume",
+    ext,
+  });
 }
 
 async function handlePost(request: Request) {
@@ -85,10 +121,7 @@ async function handlePost(request: Request) {
 
     if (format === "txt") {
       const blob = new Blob([input.content], { type: "text/plain" });
-      const fileName =
-        input.type === "resume"
-          ? "My_Resume_SteelMan.txt"
-          : "My_CoverLetter_SteelMan.txt";
+      const fileName = resolveDownloadFilename(input, "txt");
       return new Response(blob, {
         headers: {
           "Content-Type": "text/plain",
@@ -102,10 +135,7 @@ async function handlePost(request: Request) {
         ? await buildResumeDocx(input.content)
         : await buildCoverLetterDocx(input.content);
 
-    const fileName =
-      input.type === "resume"
-        ? "My_Resume_SteelMan.docx"
-        : "My_CoverLetter_SteelMan.docx";
+    const fileName = resolveDownloadFilename(input, "docx");
 
     return new Response(new Uint8Array(buffer), {
       headers: {

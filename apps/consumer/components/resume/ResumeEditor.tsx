@@ -24,6 +24,7 @@ import {
   ExperienceSection,
   EducationSection,
   SkillsSection,
+  ReviewTraySection,
 } from "./sections";
 
 interface ResumeEditorProps {
@@ -137,6 +138,10 @@ export function ResumeEditor({
           >
             <SkillsSection doc={doc} update={onChange} />
           </SectionWrapper>
+
+          {/* Lossless-intake review tray (Phase 2.2): renders only when the
+              parser left source lines it could not sort. */}
+          <ReviewTraySection doc={doc} update={onChange} />
 
           {/* Action bar -- sticky so it stays visible while editing */}
           {actions && (
