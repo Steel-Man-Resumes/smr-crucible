@@ -69,6 +69,15 @@ import {
   FONT_SCALES,
   DENSITIES,
 } from "@crucible/core";
+import {
+  classifySupportTopic,
+  displaySupportStatus,
+  isValidSupportCategory,
+  isValidSupportStatus,
+  buildSupportDigestText,
+  SUPPORT_CATEGORIES,
+} from "@crucible/core";
+import { findHelpArticle } from "@/lib/helpArticles";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1524,6 +1533,107 @@ section("ai usage labels + governance");
   check("ui-prefs: normalizeUiPrefs on garbage yields all-defaults",
     emptyBag.fontScale === "normal" && emptyBag.density === "comfortable" &&
     emptyBag.reducedMotion === null && emptyBag.avatar === null);
+}
+
+// ── Phase 8: Help & Feedback -- pure classifier, status map, digest ──────────
+section("help & feedback");
+{
+  // Sensitive-topic classifier: security/account/legal ALWAYS route to a human
+  // ticket and are never article-answered. A false "sensitive" is safe; a false
+  // "general" is not, so the classifier must catch these.
+  const sensitive = [
+    "I forgot my password",
+    "I am locked out of my account",
+    "someone hacked my account",
+    "I need to reset my two-factor",
+    "can I talk to a lawyer about expungement",
+    "is this legal for my court case",
+    "my personal information was stolen",
+    "how do I delete my account",
+  ];
+  check("help: security/account/legal questions classify as sensitive",
+    sensitive.every((q) => classifySupportTopic(q) === "sensitive"),
+    sensitive.find((q) => classifySupportTopic(q) !== "sensitive"));
+
+  const general = [
+    "how do I tailor my resume",
+    "where is my saved work",
+    "what is the refinery",
+    "how do I find jobs",
+  ];
+  check("help: ordinary how-to questions classify as general",
+    general.every((q) => classifySupportTopic(q) === "general"),
+    general.find((q) => classifySupportTopic(q) !== "general"));
+
+  // A sensitive question must NOT be answerable purely from an article: even if
+  // an article keyword matches, the sensitive path wins upstream. Assert the
+  // classifier is the gate (a sensitive string stays sensitive).
+  check("help: sensitive stays sensitive even with a how-to shape",
+    classifySupportTopic("how do I reset my password to log in") === "sensitive");
+
+  // DISPLAY_STATUS mapping: legacy new->received, read->seen; others identity.
+  check("help: legacy 'new' displays as received",
+    displaySupportStatus("new") === "received");
+  check("help: legacy 'read' displays as seen",
+    displaySupportStatus("read") === "seen");
+  check("help: received/seen/fixed/replied/closed display as themselves",
+    displaySupportStatus("received") === "received" &&
+    displaySupportStatus("seen") === "seen" &&
+    displaySupportStatus("fixed") === "fixed" &&
+    displaySupportStatus("replied") === "replied" &&
+    displaySupportStatus("closed") === "closed");
+  check("help: unknown status displays as itself (never throws)",
+    displaySupportStatus("weird") === "weird");
+
+  // Category validation: only the five modes pass.
+  check("help: the five categories validate",
+    SUPPORT_CATEGORIES.every((c) => isValidSupportCategory(c)) &&
+    SUPPORT_CATEGORIES.length === 5);
+  check("help: junk categories are rejected",
+    !isValidSupportCategory("spam") &&
+    !isValidSupportCategory("") &&
+    !isValidSupportCategory(null) &&
+    !isValidSupportCategory(42));
+
+  // Status validation: superset members pass, junk rejected.
+  check("help: superset statuses validate, junk rejected",
+    isValidSupportStatus("received") && isValidSupportStatus("new") &&
+    isValidSupportStatus("seen") && isValidSupportStatus("read") &&
+    !isValidSupportStatus("done") && !isValidSupportStatus(null));
+
+  // buildSupportDigestText is pure: feed rows, assert counts + oldest-open.
+  const t0 = new Date("2026-08-10T00:00:00Z");
+  const digest = buildSupportDigestText(
+    [
+      { status: "new", category: "bug", created_at: "2026-08-01T00:00:00Z" },      // open, oldest, displays received
+      { status: "received", category: "idea", created_at: "2026-08-09T00:00:00Z" }, // open
+      { status: "read", category: "help", created_at: "2026-08-08T00:00:00Z" },     // open, displays seen
+      { status: "replied", category: "message", created_at: "2026-08-05T00:00:00Z" },// not open
+      { status: "closed", category: null, created_at: "2026-08-02T00:00:00Z" },      // not open, uncategorized
+    ],
+    t0
+  );
+  check("help: digest counts total requests",
+    digest.includes("5 total requests"));
+  check("help: digest folds legacy 'new' into received and 'read' into seen",
+    digest.includes("received: 2") && digest.includes("seen: 1"));
+  check("help: digest shows replied + closed",
+    digest.includes("replied: 1") && digest.includes("closed: 1"));
+  check("help: digest counts uncategorized rows",
+    digest.includes("uncategorized: 1"));
+  check("help: digest reports the oldest OPEN request (9 days), not the closed older one",
+    digest.includes("9 days old") && digest.includes("2026-08-01"));
+
+  const emptyDigest = buildSupportDigestText([], t0);
+  check("help: empty digest says the inbox is clear",
+    emptyDigest.includes("0 total requests") && emptyDigest.includes("Inbox is clear"));
+
+  // Retrieval-only help articles: a known question matches; sensitive is not
+  // matched here (that gate is upstream), and gibberish matches nothing.
+  check("help: a how-to question retrieves an article",
+    !!findHelpArticle("how do I tailor my resume to a job"));
+  check("help: gibberish retrieves no article",
+    findHelpArticle("zzxq") === null);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

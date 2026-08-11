@@ -104,6 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     items: [
+      { href: "/dashboard/help", label: "Help & Feedback", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
     ],

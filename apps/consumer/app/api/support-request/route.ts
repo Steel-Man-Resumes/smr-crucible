@@ -1,10 +1,16 @@
 /**
- * POST /api/support-request -- "Message Troy" escalation (10x wave item 8).
+ * POST /api/support-request -- Help & Feedback intake (Phase 8.1).
  *
- * The DB row is the source of truth (listed on the admin panel); the Resend
- * notify to Troy is best-effort and its failure never fails the request
- * (silent-email-failure doctrine: never trust send success alone).
- * Authenticated only; capped at 5/day per user.
+ * Evolves the original "Message Troy" box into the single submit path for all
+ * five Help modes (bug / confusing / help / idea / message). The DB row is the
+ * source of truth; the Resend notify to Troy is best-effort and LINK-ONLY (it
+ * carries no message text or excerpt -- no-sensitive-content doctrine).
+ *
+ * Authenticated only; capped at 5/day per user (action "support").
+ *
+ * OPT-IN context: when includeContext is true, the SERVER derives the debug
+ * context (page + tier from the DB + the user's recent decision ids). A
+ * client-supplied context blob is never trusted for anything sensitive.
  */
 
 import { NextResponse } from "next/server";
@@ -30,12 +36,23 @@ export async function POST(request: Request) {
   const message = String(body.message || "").trim().slice(0, 2000);
   const threadExcerpt = String(body.threadExcerpt || "").slice(0, 6000);
   const page = String(body.page || "").slice(0, 100);
+  const includeContext = body.includeContext === true;
+  // The old box sent no category; default it to "message" (Message for Troy).
+  let category = String(body.category || "message");
 
   if (!message) {
     return NextResponse.json({ error: "Write a short message first." }, { status: 400 });
   }
 
-  const { incrementUserUsage, insert } = await import("@crucible/core");
+  const {
+    incrementUserUsage,
+    createSupportRequest,
+    isValidSupportCategory,
+    getUserDecisions,
+    getOne,
+  } = await import("@crucible/core");
+
+  if (!isValidSupportCategory(category)) category = "message";
 
   const count = await incrementUserUsage(userId, "support");
   if (count > DAILY_CAP) {
@@ -46,27 +63,53 @@ export async function POST(request: Request) {
   }
 
   const email = session?.user?.email ?? null;
-  const name = session?.user?.name ?? "A user";
 
-  const row = (await insert("support_request", {
-    user_id: userId,
+  // OPT-IN context, SERVER-derived. Never trust the client for tier/decisions.
+  let context: Record<string, unknown> = {};
+  if (includeContext) {
+    let tier: string | null = null;
+    let decisionIds: string[] = [];
+    try {
+      const row = await getOne<{ tier: string }>(
+        `SELECT tier FROM users WHERE id = $1`,
+        [userId]
+      );
+      tier = row?.tier ?? null;
+      const decisions = await getUserDecisions(userId, 3);
+      decisionIds = decisions.map((d) => d.id);
+    } catch {
+      // Context is a best-effort aid; never fail the submit over it.
+    }
+    context = {
+      page: page || null,
+      tier,
+      decisionIds,
+    };
+  }
+
+  const row = await createSupportRequest({
+    userId,
     email,
+    category: category as never,
     message,
-    thread_excerpt: threadExcerpt || null,
     page: page || null,
-    status: "new",
-  })) as { id: string };
+    context,
+    threadExcerpt: threadExcerpt || null,
+  });
 
-  // Best-effort notify. The admin panel list is the reliable surface.
-  // SUPPORT_NOTIFY_EMAIL must be set in the environment (kept out of this
-  // public repo). Delivery-verified 2026-08-03; the previous hardcoded
-  // fallback address hard-bounced (account does not exist).
+  // Best-effort notify -- LINK ONLY. No message text, no excerpt in the body.
+  // The admin inbox is where the content is read. SUPPORT_NOTIFY_EMAIL must be
+  // set in the environment (kept out of this public repo).
   const resendKey = process.env.RESEND_API_KEY || process.env.AUTH_RESEND_KEY;
   const to = process.env.SUPPORT_NOTIFY_EMAIL;
   if (!to) {
     console.warn("SUPPORT_NOTIFY_EMAIL not set -- support request stored, notify skipped");
   }
   if (resendKey && to) {
+    const shortId = row.id.slice(0, 8);
+    const adminUrl =
+      (process.env.APP_URL || "https://steelmanresumes.com").replace(/\/$/, "") +
+      "/dashboard/admin#support";
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -79,14 +122,11 @@ export async function POST(request: Request) {
             process.env.AUTH_EMAIL_FROM ||
             "Steel Man Resumes <noreply@steelmanresumes.com>",
           to,
-          reply_to: email || undefined,
-          subject: `Support request from ${name}`,
+          subject: `New ${category} feedback (#${shortId})`,
           text:
-            `${name} (${email || "no email on file"}) sent a message from the Refinery` +
-            (page ? ` (page: ${page})` : "") +
-            `:\n\n${message}\n\n` +
-            (threadExcerpt ? `--- Recent conversation ---\n${threadExcerpt}\n\n` : "") +
-            `Reply to the user by email. This request is also listed on /dashboard/admin.`,
+            `New ${category} feedback (#${shortId}).\n\n` +
+            `Open the admin inbox to read it: ${adminUrl}\n\n` +
+            `This notice carries no message content on purpose.`,
         }),
       });
       if (!res.ok) {
@@ -100,5 +140,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, id: row.id });
+  return NextResponse.json({ id: row.id, status: "received" });
 }

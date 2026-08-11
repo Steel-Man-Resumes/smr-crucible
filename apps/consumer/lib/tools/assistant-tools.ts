@@ -389,6 +389,83 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     },
   });
 
+  tools.file_feedback = tool({
+    description:
+      "File the user's bug report, confusion, idea, or message to Troy as a support request -- the SAME store the Help center uses. Use this when the user reports a problem or gives feedback in chat. You MUST get an explicit yes first: offer ('Want me to file that for Troy?'), and only call this with confirmed=true after the user clearly agrees. Never file silently. Pick the category that fits: bug (something is broken), confusing (something is unclear), idea (a suggestion), or message (a note for Troy).",
+    parameters: jsonSchema<{
+      message: string;
+      category: string;
+      confirmed: boolean;
+    }>({
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description:
+            "A short, faithful summary of what the user is reporting, in their own words where possible.",
+        },
+        category: {
+          type: "string",
+          description: "One of: bug, confusing, idea, message.",
+        },
+        confirmed: {
+          type: "boolean",
+          description:
+            "True only after the user has explicitly agreed to file it. If they have not agreed yet, do not call this tool.",
+        },
+      },
+      required: ["message", "category", "confirmed"],
+      additionalProperties: false,
+    }),
+    execute: async ({ message, category, confirmed }) => {
+      try {
+        if (!confirmed) {
+          return "Not filed. Ask the user to confirm first, for example: 'Want me to send that to Troy?' Only file after they say yes.";
+        }
+        const text = String(message || "").trim().slice(0, 2000);
+        if (!text) {
+          return "There is nothing to file yet. Ask the user what they'd like Troy to know.";
+        }
+        const {
+          createSupportRequest,
+          isValidSupportCategory,
+          getOne,
+          incrementUserUsage,
+        } = await import("@crucible/core");
+        const cat = isValidSupportCategory(category) ? category : "message";
+
+        // Share the 5/day support cap so the tool cannot be used to flood.
+        const count = await incrementUserUsage(userId, "support");
+        if (count > 5) {
+          return "The user has filed the most feedback for today. Tell them plainly and suggest trying again tomorrow.";
+        }
+
+        const emailRow = await getOne<{ email: string }>(
+          `SELECT email FROM users WHERE id = $1`,
+          [userId]
+        );
+        const row = await createSupportRequest({
+          userId,
+          email: emailRow?.email ?? null,
+          category: cat as never,
+          message: text,
+          page: null,
+          context: { filedByAssistant: true },
+          threadExcerpt: null,
+        });
+        return {
+          filed: true,
+          id: row.id.slice(0, 8),
+          category: cat,
+          note: "Confirm to the user in one sentence that it went to Troy and his reply will show up in their Help center.",
+        };
+      } catch (err) {
+        console.error("[assistant-tools] file_feedback failed:", err);
+        return "Filing that failed. Tell the user they can send it from the Help & Feedback page instead.";
+      }
+    },
+  });
+
   return tools;
 }
 
@@ -402,6 +479,7 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
     ? `- get_my_live_status: read the user's real current data BEFORE answering "what should I do next" or referencing their saved jobs, stage, or progress. Never guess what you can read.
 - search_jobs, then save_job: find real openings and save the one the user picks.
 - add_follow_up_reminder: set a follow-up date on a tracked application (confirm the date first).
+- file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes -- never silently.
 `
     : "";
   const signInLine = authed

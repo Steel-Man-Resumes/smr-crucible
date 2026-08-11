@@ -495,14 +495,15 @@ export default function SettingsPage() {
           <h2 className="text-lg font-bold text-t-white mb-4">Get help</h2>
           <div className="bg-t-panel p-5 border border-t-line space-y-3">
             <p className="text-sm text-t-phos-dim">
-              Stuck on something? Ask t.ROY on any page, or email us and a real
-              person will get back to you.
+              Stuck on something? Ask t.ROY on any page, or open Help &amp;
+              Feedback to search for an answer, report a problem, or message
+              Troy. A real person reads every message.
             </p>
             <a
-              href="mailto:troyrichardcarr@gmail.com"
+              href="/dashboard/help"
               className="t-focus inline-flex items-center px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 transition-colors min-h-touch"
             >
-              Email support
+              Open Help &amp; Feedback
             </a>
             <p className="text-xs text-t-phos-dim pt-1">
               Want to know exactly how we protect your data?{" "}

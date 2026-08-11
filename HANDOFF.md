@@ -1,5 +1,47 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 8 COMPLETE: Help & Feedback. ALL UNBLOCKED PHASES SHIPPED. Only Troy's 2 gates + page-fit infra + final acceptance remain.
+
+Shipped Phase 8 -- the last phase that needs neither of Troy's gates. Migration 040 APPLIED.
+Verification: core 26/26, tsc clean, adversarial 428 -> 446, claims clean, prod build green
+(/dashboard/help present). Fresh-context review: NO blocking issues; the two safety-critical
+pieces (notify-email redaction, sensitive-topic classifier) both verified correct.
+
+- EVOLVED support_request (migration 040, additive -- same table, never a parallel one):
+  +category (5 modes), +admin_reply/replied_at/seen_at/fixed_at, +context JSONB; status CHECK
+  expanded to a superset so legacy new/read/replied/closed rows stay valid (display map:
+  new->received, read->seen).
+- 8.1 ONE Help center (/dashboard/help) with 5 modes (report a bug / something is confusing /
+  ask for help / share an idea / message for Troy). Opt-in context capture with a REDACTED
+  PREVIEW before send (page + tier + "up to 3 recent AI actions", SERVER-derived -- never
+  trusts a client blob, no PII). Every submission gets an id + visible status
+  (received/seen/fixed/replied) + "you have helped improve N times"; Troy's replies surface
+  in the Help center.
+- 8.1 notify email FIXED to LINK-ONLY (was embedding raw message + excerpt -- a
+  no-sensitive-content violation): body is now just the category + admin inbox URL.
+- 8.2 t.ROY intake: new file_feedback assistant tool -- offers "Want me to file that?" and
+  files to the SAME support_request store ONLY on explicit confirmed=true (hard server guard);
+  shares the 5/day cap.
+- 8.3 admin Feedback Inbox: status + category filters, a per-row reply box (reply surfaces in
+  the user's Help center), an on-demand digest button (inline, NO email -- respects the
+  standing scheduled-email suspension).
+- 8.4 retrieval-only help answers from versioned lib/helpArticles.ts; a sensitive-topic
+  classifier routes security/account/legal questions to a HUMAN ticket BEFORE any article
+  match (verified: cannot article-answer a security question).
+
+>>> RUN STATUS: every phase whose work does NOT depend on Troy's two gates is now LIVE on prod
+(0, 1A, 1B, 1C, 1D, 2A, 3, 4, 7, 8 -- 9 commits, migrations 033-040, adversarial 104 -> 446).
+REMAINING WORK, all blocked on a human decision/action:
+  1. Phase 5 (sensitive practice: disclosure + interview stores) -- needs the Neon preview/prod
+     split (gate #1). Encrypted conversation store builds on 1C once the split exists.
+  2. Phase 6 (vault + materials) -- needs the Neon split AND a valid R2_ENDPOINT (gate #2).
+  3. Phase 7.7 AI-headshot photo path -- needs the R2_ENDPOINT fix (gate #2).
+  4. Page-fit engine (2.3 one-page caps + 2.5) -- needs the Chromium-render infra DECISION
+     (small VPS+Redis for services/worker, OR @sparticuz/chromium in a dedicated async Vercel
+     render route). No key needed, just a direction from Troy.
+  5. FINAL acceptance corpus + Troy's live click-through of the full loop (his to drive).
+Gate steps are in this file's earlier entries; the two ~5-minute dashboard actions unblock 1-3.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 7 COMPLETE (avatar-photo half R2-gated): Settings IA, accessibility, security history, data controls, usage integrity, trust block. Phase 8 next.
 
 Shipped all of Phase 7 except the AI-headshot PHOTO path (R2-gated, same as Phase 6). Migration

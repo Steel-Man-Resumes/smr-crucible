@@ -44,6 +44,7 @@ const TOOL_ACTIVITY: Record<string, string> = {
   take_me_there: "Taking you there",
   highlight_element: "Pointing at it",
   web_search: "Checking current facts",
+  file_feedback: "Sending that to Troy",
 };
 
 /** Page-aware quick prompts — buttons users can tap instead of typing */
