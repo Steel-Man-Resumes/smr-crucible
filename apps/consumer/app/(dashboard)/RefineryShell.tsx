@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
+import { UiPrefsApplier } from "@/components/UiPrefsApplier";
+import { NavAvatar } from "@/components/NavAvatar";
 import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
@@ -571,6 +573,8 @@ export function RefineryShell({
 
   return (
     <div className="refinery-app min-h-screen bg-t-bg font-body">
+      {/* Applies the user's saved accessibility prefs app-wide (Phase 7.2). */}
+      <UiPrefsApplier />
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[4px] focus:bg-t-panel focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-t-white focus:shadow-xl"
@@ -611,9 +615,11 @@ export function RefineryShell({
               </a>
               <Link
                 href="/dashboard/settings"
-                className="t-focus hidden min-h-touch items-center rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white sm:flex"
+                aria-label="Settings"
+                className="t-focus flex min-h-touch items-center gap-2 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
-                Settings
+                <NavAvatar size={28} />
+                <span className="hidden sm:inline">Settings</span>
               </Link>
               <button
                 onClick={() => {

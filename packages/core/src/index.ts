@@ -39,3 +39,4 @@ export * from './secureObject';
 export * from './deletionTasks';
 export * from './jobDescription';
 export * from './jobDescriptionStore';
+export * from './uiPrefs';

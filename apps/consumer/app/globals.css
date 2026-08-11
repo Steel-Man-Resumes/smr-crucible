@@ -151,11 +151,41 @@
   }
 }
 
+/* OS-level reduced-motion. Honored UNLESS the user explicitly opted out in
+   Accessibility settings (html[data-reduced-motion="off"]) -- that is the one
+   case where the app pref overrides the device, so the tri-state "off" is real
+   even for someone whose OS requests reduced motion. Phase 7.2. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  html:not([data-reduced-motion="off"]) *,
+  html:not([data-reduced-motion="off"]) *::before,
+  html:not([data-reduced-motion="off"]) *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── Phase 7.2 accessibility prefs (app-wide) ───────────────────────────────
+   Set on <html> by UiPrefsApplier from the user's saved prefs. Font scale is
+   SIZE ONLY: it changes the root rem so rem-based sizing grows together, but
+   never touches color or contrast, so AA contrast is unaffected. */
+html[data-font-scale="large"] { font-size: 112.5%; }
+html[data-font-scale="xl"]    { font-size: 125%; }
+
+/* Density: a light, honest effect -- tighter line-height and paragraph spacing.
+   Touch targets stay >= 2.75rem, so tap accessibility is never reduced. */
+html[data-density="compact"] body { line-height: 1.4; }
+html[data-density="compact"] p { margin-top: 0; margin-bottom: 0.5rem; }
+
+/* Explicit reduced-motion override: the user turned it ON regardless of the OS
+   setting. Mirrors the prefers-reduced-motion block above. (When the user
+   leaves it on "follow my device", no class is set and the media query rules.) */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

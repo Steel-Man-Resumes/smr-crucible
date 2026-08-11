@@ -2,13 +2,25 @@
  * Mini Forge AI processing.
  *
  * Uses Haiku 4.5 (fastest/cheapest). Non-streaming -- deferred batch call.
- * Uses raw fetch to Anthropic API (same pattern as analyze route).
+ * Routes through callAI so every call is (a) token-accounted in ai_token_usage
+ * and (b) covered by the Anthropic->OpenAI fallback -- same as every other
+ * consumer AI route. It used to fetch Anthropic directly, which meant its cost
+ * was invisible and it had no provider failover.
  * With MOCK_AI=true: returns Jordan fixture instantly.
+ *
+ * RATE LIMIT: Mini Forge runs from a server component (the kiosk/tablet
+ * processing page), not an API route, so it cannot use withRateLimit and is
+ * unauthenticated by design (no user account yet). It is NOT per-IP rate
+ * limited. It is naturally throttled by the tablet-session processing lock
+ * (tryClaimProcessing): a session produces exactly one output, and a second
+ * concurrent request cannot start a new AI call. If wider abuse protection is
+ * wanted, it needs a real route or edge guard -- not faked here.
  */
 
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "./mock-ai";
 import { RESEARCH_CONTEXT } from "./research-context";
 import { MODEL_FAST } from "./ai/models";
+import { callAI } from "./ai-call";
 
 export interface MiniForgeIntake {
   readiness_stage?: string;
@@ -28,33 +40,18 @@ export async function processMiniForge(
     return { ...MOCK_FORGE_OUTPUT, generated_at: new Date().toISOString(), source: "mock" };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
   const prompt = buildPrompt(intake);
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODEL_FAST,
-      max_tokens: 2048,
-      system: MINI_FORGE_SYSTEM,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} ${text}`);
-  }
-
-  const data = await response.json();
-  const text = data.content?.[0]?.text ?? "";
+  // Mini Forge is pre-auth (kiosk), so there is no userId to attribute. Recording
+  // with endpoint "mini-forge" and a null user still makes the cost VISIBLE in
+  // aggregate -- previously it was billed with zero tracking of any kind.
+  const text = await callAI(
+    MINI_FORGE_SYSTEM,
+    [{ role: "user", content: prompt }],
+    2048,
+    MODEL_FAST,
+    { endpoint: "mini-forge", userId: null }
+  );
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {

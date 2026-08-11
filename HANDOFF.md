@@ -1,5 +1,56 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-10 (Fable 5, same session) -- PHASE 7 COMPLETE (avatar-photo half R2-gated): Settings IA, accessibility, security history, data controls, usage integrity, trust block. Phase 8 next.
+
+Shipped all of Phase 7 except the AI-headshot PHOTO path (R2-gated, same as Phase 6). Migration
+039 APPLIED. Verification: core build clean, tsc clean, adversarial 401 -> 428, claims clean,
+prod build green. Fresh-context review (settings-wiring + account-delete cascade were the two
+highest risks): BOTH clean; its 2 low findings fixed (reduced-motion "off" now overrides the OS
+media query; 3 em dashes removed from new trust copy). Account-delete cascade LIVE-VERIFIED via
+scripts/check-user-fks.mjs: all 37 FKs to users/user enumerated; the only NON-CASCADE FKs that
+point at `users` (plural) are impersonation_session (both cols) + resource_feedback, which
+delete-data clears before dropping the row -- the rest cascade or SET NULL. FRAGILITY NOTE: any
+FUTURE migration adding a NO-ACTION FK to users(id) will silently break account deletion; add it
+to the clear-list in delete-data/route.ts (re-run check-user-fks.mjs after new user FKs).
+
+- **7.6 AI usage integrity (real cost/abuse holes closed):** mini-forge AI now routes through
+  callAI (endpoint "mini-forge") -- was a RAW anthropic fetch from a server component, totally
+  invisible to cost + fallback (still not rate-limited: server-component, throttled only by the
+  tablet processing lock -- documented, not faked). Job-search enrichment now threads userId
+  (was dropping cost as user_id NULL). lib/ai-usage-labels.ts maps every endpoint (+ the 7
+  rate-bucket aliases) to a human name; AiCostsOwnSection shows human names + the "tracking
+  began Aug 2 2026" caveat (was admin-only) + voice minutes from audio_seconds.
+- **7.5 governance viewer:** /api/user/decisions + DecisionLogViewer -- the user's own recorded
+  t.ROY reasoning (explanation/model/when, NEVER raw input or chain-of-thought). getUserDecisions
+  had zero UI callers before.
+- **7.3 security history:** /api/user/login-events + LoginHistoryCard surface user_login_event
+  (sign-in, 2FA, password changes; coarse device + approx location, never raw IP) -- was written
+  but never displayed. Complements the already-shipped ActiveDevicesCard.
+- **7.1 Settings IA:** the 1345-line page reorganized into 8 anchored sections (Account / Coach &
+  AI / Accessibility / Privacy & Consent / Security / Data / Usage / Help & About) + sticky
+  jump-nav. Controls MOVED not rewritten (AccountExtras/DataSection extraction, all prop-driven);
+  review confirmed every existing control still wired.
+- **7.2 accessibility (app-wide):** migration 039 (users.ui_font_scale/ui_reduced_motion/
+  ui_density/ui_avatar); /api/user/ui-prefs; AccessibilitySettingsSection surfaces the existing
+  plain-language/read-aloud/Spanish toggles + NEW text-size, motion (on/off/follow-OS), density;
+  UiPrefsApplier sets html[data-*] app-wide (font-scale is size-only, AA untouched). Pure
+  uiPrefsShared.ts keeps node:crypto out of the client bundle.
+- **7.4 data controls:** ACCOUNT deletion now distinct from DATA deletion (data-only keeps the
+  login; account also drops the users row + cascades). Per-category export (resumes/applications/
+  chat/consent/usage). Both reauth-gated, export no-store.
+- **7.7 illustrated avatar ONLY (zero-PII):** IllustratedAvatar (deterministic SVG from a saved
+  CHOICE, not an image) in Account + the nav; never auto-inserted into a resume. The PHOTO
+  upload + AI-headshot GENERATION half is R2-GATED (needs the R2_ENDPOINT fix) -- shows a
+  "coming soon" note.
+- **7.8 trust block:** SecurityContent.tsx rewritten to match Phases 0-6 -- fixed the false
+  "one click delete" -> the real reauth two-step + account/data split; added honest 2FA (encrypted
+  secret + backup codes), device sign-out, consent-layer, voice-retention, reauth-gate sections;
+  the document vault is described as COMING (not live -- R2-gated), no overclaim. Passes claims.
+
+STILL BLOCKED ON TROY (see earlier entries): Phase 5 (needs Neon split) + Phase 6 (needs Neon
+split + R2 endpoint) + the 7.7 headshot photo path (R2 endpoint). Building Phase 8 next (Help &
+Feedback -- evolve support_request), which needs neither gate. Then the page-fit infra decision.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 4 COMPLETE: gate previews, Progress on server truth, gamification, next-step advising. Phases 5+6 BLOCKED on Troy's two gates. Phase 7 next.
 
 Shipped all of Phase 4 (pure app-code, no migration -- gamification reuses user_progress_event

@@ -240,7 +240,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         if (limit !== 0 && newCount > limit) {
           return "The user's daily job-search quota is used up. Tell them plainly and suggest trying again tomorrow, or browsing their already-saved jobs.";
         }
-        const result = await runJobSearch({ role: searchQuery, location });
+        const result = await runJobSearch({ role: searchQuery, location, userId });
         if (result.error) {
           return `Job search is unavailable right now (${result.error}). Say so plainly and suggest the Job Board later today.`;
         }

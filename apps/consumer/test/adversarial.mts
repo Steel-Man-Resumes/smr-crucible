@@ -58,6 +58,17 @@ import {
 import { FEATURE_PREVIEWS, SAMPLE_LABEL, getFeaturePreview, previewIdForHref } from "@/lib/featurePreviews";
 import { computeMilestones, computeStreak, detectComeback, type MilestoneFacts } from "@crucible/core";
 import { PROGRESS_STAT_SOURCES } from "@/lib/progress-sources";
+import { ENDPOINT_LABELS, labelForEndpoint, labelForContextPage } from "@/lib/ai-usage-labels";
+import { LOGIN_EVENT_LABELS, labelForLoginEvent } from "@/lib/login-event-labels";
+import {
+  normalizeFontScale,
+  normalizeDensity,
+  normalizeReducedMotion,
+  normalizeAvatar,
+  normalizeUiPrefs,
+  FONT_SCALES,
+  DENSITIES,
+} from "@crucible/core";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1388,6 +1399,131 @@ section("progress + gamification");
     Object.values(PROGRESS_STAT_SOURCES).every((v) => /^(journey|context|applications):/.test(v)));
   check("progress-sources: the dropped localStorage-only stat is NOT listed",
     !sourceKeys.includes("resume_bullets_written"));
+}
+
+// ── 22. AI usage labels + governance (Phase 7.3/7.5/7.6) ─────────────────────
+section("ai usage labels + governance");
+{
+  // Every known endpoint key resolves to a real human label, never the raw key.
+  const knownEndpoints = [
+    "interview-practice", "interview", "interview-voice",
+    "resume-generate-full", "resume-full", "resume-generate", "resume",
+    "resume-assist", "forge-resume-assist", "job-search", "jobs",
+    "mini-forge", "disclosure-guide", "disclosure", "analyze",
+    "apply-email", "follow-up", "parse", "fit-check", "next-step-why",
+    "assistant", "coach", "unknown",
+  ];
+  check("labels: every known endpoint is in ENDPOINT_LABELS",
+    knownEndpoints.every((k) => typeof ENDPOINT_LABELS[k] === "string" && ENDPOINT_LABELS[k].length > 0),
+    knownEndpoints.find((k) => !ENDPOINT_LABELS[k]));
+  check("labels: labelForEndpoint returns a non-raw human name for every known key",
+    knownEndpoints.every((k) => {
+      const label = labelForEndpoint(k);
+      return label === ENDPOINT_LABELS[k] && label !== k;
+    }),
+    knownEndpoints.find((k) => labelForEndpoint(k) === k));
+
+  // The canonical remaps the task called out: cost-endpoint vs rate-limit bucket
+  // must land on the SAME human name.
+  check("labels: mismatched cost/rate-limit keys share one human name",
+    labelForEndpoint("interview-practice") === labelForEndpoint("interview") &&
+    labelForEndpoint("interview-voice") === "Interview practice (voice)" &&
+    labelForEndpoint("resume-generate-full") === labelForEndpoint("resume-full") &&
+    labelForEndpoint("resume-generate") === labelForEndpoint("resume") &&
+    labelForEndpoint("resume-assist") === labelForEndpoint("forge-resume-assist") &&
+    labelForEndpoint("job-search") === labelForEndpoint("jobs"));
+
+  check("labels: mini-forge is named Quick Forge", labelForEndpoint("mini-forge") === "Quick Forge");
+  check("labels: assistant and coach both read as t.ROY chat",
+    labelForEndpoint("assistant") === "t.ROY chat" && labelForEndpoint("coach") === "t.ROY chat");
+
+  // Unknown key falls back to Title Case, never crashes, never returns the raw key.
+  check("labels: unknown key falls back title-cased", labelForEndpoint("some-new_endpoint") === "Some New Endpoint");
+  check("labels: unknown single word is title-cased", labelForEndpoint("widget") === "Widget");
+  check("labels: null/undefined/empty never crash and give a readable fallback",
+    labelForEndpoint(null) === "Other AI work" &&
+    labelForEndpoint(undefined) === "Other AI work" &&
+    labelForEndpoint("") === "Other AI work" &&
+    labelForEndpoint("   ") === "Other AI work");
+  check("labels: context-page label reuses endpoint vocabulary",
+    labelForContextPage("job-search") === labelForEndpoint("job-search") &&
+    labelForContextPage("analyze") === "Career analysis");
+
+  // No em dashes or emojis leak into any label copy (house rules).
+  const EMOJI_RE_L = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
+  const allLabelCopy = Object.values(ENDPOINT_LABELS);
+  check("labels: no em dashes in any endpoint label", allLabelCopy.every((s) => !/—/.test(s)));
+  check("labels: no emojis in any endpoint label", allLabelCopy.every((s) => !EMOJI_RE_L.test(s)));
+
+  // Login-event labels: every written event value maps to a plain sentence.
+  const knownEvents = ["sign_in", "two_factor_enabled", "two_factor_disabled", "password_created", "password_changed"];
+  check("login-events: every written event value has a plain label",
+    knownEvents.every((k) => typeof LOGIN_EVENT_LABELS[k] === "string" && LOGIN_EVENT_LABELS[k].length > 0),
+    knownEvents.find((k) => !LOGIN_EVENT_LABELS[k]));
+  check("login-events: labelForLoginEvent returns a non-raw label for every known key",
+    knownEvents.every((k) => labelForLoginEvent(k) === LOGIN_EVENT_LABELS[k] && labelForLoginEvent(k) !== k));
+  check("login-events: unknown event falls back title-cased, never crashes",
+    labelForLoginEvent("account_locked") === "Account Locked" &&
+    labelForLoginEvent(null) === "Account activity" &&
+    labelForLoginEvent("") === "Account activity");
+  check("login-events: no em dashes or emojis in any event label",
+    Object.values(LOGIN_EVENT_LABELS).every((s) => !/—/.test(s) && !EMOJI_RE_L.test(s)));
+}
+
+// ── Phase 7.2/7.7: UI accessibility-pref validators are pure and fail safe ────
+{
+  // Font scale: only the three known values pass; anything else is "normal".
+  check("ui-prefs: valid font scales pass through",
+    FONT_SCALES.every((s) => normalizeFontScale(s) === s));
+  check("ui-prefs: unknown font scale falls back to normal",
+    normalizeFontScale("huge") === "normal" &&
+    normalizeFontScale("") === "normal" &&
+    normalizeFontScale(null) === "normal" &&
+    normalizeFontScale(undefined) === "normal" &&
+    normalizeFontScale(3) === "normal");
+
+  // Density: only the two known values pass; anything else is "comfortable".
+  check("ui-prefs: valid densities pass through",
+    DENSITIES.every((d) => normalizeDensity(d) === d));
+  check("ui-prefs: unknown density falls back to comfortable",
+    normalizeDensity("tight") === "comfortable" &&
+    normalizeDensity(null) === "comfortable" &&
+    normalizeDensity(0) === "comfortable");
+
+  // Reduced motion is tri-state: only true/false are explicit; else null (OS).
+  check("ui-prefs: reduced-motion keeps explicit booleans",
+    normalizeReducedMotion(true) === true && normalizeReducedMotion(false) === false);
+  check("ui-prefs: reduced-motion coerces everything else to null (follow OS)",
+    normalizeReducedMotion(null) === null &&
+    normalizeReducedMotion(undefined) === null &&
+    normalizeReducedMotion("auto") === null &&
+    normalizeReducedMotion(1) === null &&
+    normalizeReducedMotion("true") === null);
+
+  // Avatar: non-objects are null; partial/corrupt objects fill safe defaults.
+  check("ui-prefs: avatar null for non-objects",
+    normalizeAvatar(null) === null &&
+    normalizeAvatar(undefined) === null &&
+    normalizeAvatar("x") === null &&
+    normalizeAvatar(5) === null);
+  const av = normalizeAvatar({ shape: "bogus", color: "bogus", accent: "bogus", initial: "troy" });
+  check("ui-prefs: avatar bad fields fall back to the first valid option",
+    !!av && av.shape === "circle" && av.color === "amber" && av.accent === "solid");
+  check("ui-prefs: avatar initial is a single uppercase character",
+    !!av && av.initial === "T");
+  const av2 = normalizeAvatar({ shape: "hex", color: "teal", accent: "ring", initial: "" });
+  check("ui-prefs: avatar keeps valid fields and allows empty initial",
+    !!av2 && av2.shape === "hex" && av2.color === "teal" && av2.accent === "ring" && av2.initial === "");
+
+  // Whole-bag normalize never throws and always returns every key.
+  const bag = normalizeUiPrefs({ fontScale: "large", density: "compact", reducedMotion: true, avatar: { shape: "shield", color: "plum", accent: "corner", initial: "z" } });
+  check("ui-prefs: normalizeUiPrefs returns a complete, normalized bag",
+    bag.fontScale === "large" && bag.density === "compact" && bag.reducedMotion === true &&
+    !!bag.avatar && bag.avatar.shape === "shield" && bag.avatar.initial === "Z");
+  const emptyBag = normalizeUiPrefs(null);
+  check("ui-prefs: normalizeUiPrefs on garbage yields all-defaults",
+    emptyBag.fontScale === "normal" && emptyBag.density === "comfortable" &&
+    emptyBag.reducedMotion === null && emptyBag.avatar === null);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

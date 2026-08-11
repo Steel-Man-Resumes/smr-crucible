@@ -12,8 +12,21 @@
  * - ai_usage entries
  * - coach_conversation (AI coach memory -- full transcript erase)
  *
- * Does NOT delete the user account itself (they can sign back in).
- * Client-side should also clear localStorage after calling this.
+ * ACCOUNT vs DATA (Phase 7.4): by default this wipes the DATA above but KEEPS
+ * the account/login, so the user can sign back in to an empty workspace. If the
+ * body carries `deleteAccount: true`, it additionally removes the account
+ * itself -- the `users` row -- after the data wipe. Deleting the users row
+ * cascades every ON DELETE CASCADE child (auth accounts/sessions, 2FA, tracked
+ * sessions, login events, consent events, org membership, progress events,
+ * voice sessions, secure objects, etc.). Three tables reference users(id)
+ * without a cascade (impersonation_session on both admin/target, and
+ * resource_feedback); those rows are deleted explicitly first so the users
+ * delete can't be blocked by a dangling reference. access_code_redemption has
+ * no FK to users and is already cleared in the data step above.
+ *
+ * Client-side should also clear localStorage after calling this. Account
+ * deletion signs the user out (there is no account to return to); data-only
+ * deletion also sends them to login because the tier was reset server-side.
  *
  * REAUTH CONTRACT (Phase 1C): this is destructive and irreversible, so a
  * valid session alone is not enough -- the request body must additionally
@@ -103,9 +116,24 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Reset access codes and tier
     await query("DELETE FROM access_code_redemption WHERE user_id = $1", [userId]);
+
+    const deleteAccount = body?.deleteAccount === true;
+    if (deleteAccount) {
+      // Clear the two non-cascading references, then drop the account row.
+      // Everything else cascades off the users delete.
+      await query(
+        "DELETE FROM impersonation_session WHERE target_user_id = $1 OR admin_user_id = $1",
+        [userId]
+      );
+      await query("DELETE FROM resource_feedback WHERE user_id = $1", [userId]);
+      await query("DELETE FROM users WHERE id = $1", [userId]);
+      return NextResponse.json({ success: true, accountDeleted: true });
+    }
+
+    // Data-only: keep the account, reset tier so the empty workspace is clean.
     await query("UPDATE users SET tier = 'client' WHERE id = $1", [userId]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, accountDeleted: false });
   } catch (err: any) {
     console.error("Data deletion error:", err?.message || err);
     return NextResponse.json(

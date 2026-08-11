@@ -23,20 +23,25 @@ async function handlePost(request: Request) {
     const { targetRole, location, skills, hasRecord, recordType } =
       await request.json();
 
+    // Resolve the caller once: userId attributes the enrichment AI cost to the
+    // right person (else it lands user_id NULL and is invisible in own/per-user
+    // rollups), and the same session drives the hidden-employer filter below.
+    const session = await auth();
+    const userId = session?.user?.id ?? null;
+
     const result = await runJobSearch({
       role: targetRole,
       location,
       skills,
       hasRecord,
       recordType,
+      userId,
     });
 
     // N1: filter out employers this user has hidden. Applied per-user AFTER the
     // (shared, per-role) cache, so hiding is honored on cache hits too. Fail-open:
     // a hidden-set lookup error never blocks the search.
     try {
-      const session = await auth();
-      const userId = session?.user?.id;
       if (userId && Array.isArray(result.jobs) && result.jobs.length > 0) {
         const hidden = await getHiddenEmployerSet(userId);
         if (hidden.size > 0) {

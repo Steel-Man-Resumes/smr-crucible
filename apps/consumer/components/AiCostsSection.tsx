@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { labelForEndpoint } from "@/lib/ai-usage-labels";
 
 function usd(v: unknown): string {
   const n = Number(v || 0);
@@ -17,6 +18,11 @@ function usd(v: unknown): string {
 
 function num(v: unknown): string {
   return Number(v || 0).toLocaleString();
+}
+
+/** Whole minutes of voice practice from a seconds total, rounded to nearest. */
+function voiceMinutes(seconds: unknown): number {
+  return Math.round(Number(seconds || 0) / 60);
 }
 
 function Shell({
@@ -134,7 +140,7 @@ export function AiCostsAdminSection() {
               <tbody>
                 {data.perEndpoint?.map((e: any, i: number) => (
                   <tr key={i} className="border-t border-t-line">
-                    <td className={td}>{e.endpoint}</td>
+                    <td className={td}>{labelForEndpoint(e.endpoint)}</td>
                     <td className={td}>{num(e.calls)}</td>
                     <td className={`${td} font-medium text-t-white`}>{usd(e.cost_usd)}</td>
                   </tr>
@@ -184,6 +190,12 @@ export function AiCostsOwnSection() {
               out tokens)
             </span>
           </p>
+          {voiceMinutes(data.totals?.audio_seconds) > 0 && (
+            <p className="text-xs text-t-phos-dim">
+              Includes {num(voiceMinutes(data.totals?.audio_seconds))} minutes of
+              voice practice.
+            </p>
+          )}
           {data.perEndpoint?.length > 0 && (
             <table className="w-full">
               <thead>
@@ -196,7 +208,7 @@ export function AiCostsOwnSection() {
               <tbody>
                 {data.perEndpoint.map((e: any, i: number) => (
                   <tr key={i} className="border-t border-t-line">
-                    <td className={td}>{e.endpoint}</td>
+                    <td className={td}>{labelForEndpoint(e.endpoint)}</td>
                     <td className={td}>{num(e.calls)}</td>
                     <td className={`${td} font-medium text-t-white`}>{usd(e.cost_usd)}</td>
                   </tr>
@@ -204,6 +216,13 @@ export function AiCostsOwnSection() {
               </tbody>
             </table>
           )}
+          {/* Cost per call is the exact provider-reported cost; there is no
+              separate estimated-vs-reconciled figure in this data, so nothing
+              to reconcile here -- each row is the real billed amount. */}
+          <p className="text-[10px] text-t-phos-dim">
+            Cost tracking began Aug 2, 2026. AI work before that date is not
+            shown here.
+          </p>
           <p className="text-[10px] text-t-phos-dim">
             If a partner organization sponsors your account, they see this too --
             it is how your access stays free.

@@ -16,6 +16,10 @@ import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
+import { DecisionLogViewer } from "@/components/DecisionLogViewer";
+import { LoginHistoryCard } from "@/components/LoginHistoryCard";
+import { AccessibilitySettingsSection } from "@/components/AccessibilitySettingsSection";
+import { AvatarSettingsSection } from "@/components/AvatarSettingsSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
@@ -37,7 +41,17 @@ export default function SettingsPage() {
   const realTier = useRealTier();
   const isAdmin = realTier === "admin";
   const [testMode, setTestMode] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Phase 7.4: delete is now two distinct actions -- "data" keeps the login,
+  // "account" removes everything including the login. Track which one is armed.
+  const [deleteMode, setDeleteMode] = useState<null | "data" | "account">(null);
+  // Phase 7.4: per-category export. All on = the full dump (the default).
+  const [exportCats, setExportCats] = useState({
+    resumes: true,
+    applications: true,
+    chat: true,
+    consent: true,
+    usage: true,
+  });
   // Phase 1C reauth gate: export and delete both require the current
   // password (password accounts) or the literal string "DELETE" typed out
   // (magic-link/OAuth-only accounts, which have no password to re-prove).
@@ -176,6 +190,12 @@ export default function SettingsPage() {
       // Real server-side export -- everything Postgres holds for this user.
       // Reauth-gated (Phase 1C): same password/typed-confirmation contract
       // as delete, since a full data export is nearly as sensitive.
+      // Only send the categories the user kept checked. If all are checked,
+      // omit the field entirely so the server returns the full dump.
+      const chosen = (Object.keys(exportCats) as (keyof typeof exportCats)[]).filter(
+        (k) => exportCats[k]
+      );
+      const allChosen = chosen.length === Object.keys(exportCats).length;
       const res = await fetch("/api/user/export-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,6 +203,7 @@ export default function SettingsPage() {
           confirm: true,
           password: reauthPassword || undefined,
           typedConfirmation: reauthTyped || undefined,
+          ...(allChosen ? {} : { categories: chosen }),
         }),
       });
       if (!res.ok) {
@@ -229,11 +250,12 @@ export default function SettingsPage() {
 
   const [deleting, setDeleting] = useState(false);
 
-  async function deleteAllData() {
+  async function deleteAllData(mode: "data" | "account") {
     setDeleting(true);
     try {
       // Delete server-side data first. Reauth-gated (Phase 1C) -- see
       // apps/consumer/app/api/user/delete-data/route.ts's contract comment.
+      // deleteAccount:true (Phase 7.4) also removes the login/account row.
       const res = await fetch("/api/user/delete-data", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -241,6 +263,7 @@ export default function SettingsPage() {
           confirm: true,
           password: reauthPassword || undefined,
           typedConfirmation: reauthTyped || undefined,
+          deleteAccount: mode === "account",
         }),
       });
       if (!res.ok) {
@@ -267,26 +290,45 @@ export default function SettingsPage() {
     for (const key of keys) {
       localStorage.removeItem(key);
     }
-    setShowDeleteConfirm(false);
-    // Force fresh JWT by signing out — tier was reset server-side
+    setDeleteMode(null);
+    // Force fresh JWT by signing out -- the account is gone (account mode) or
+    // the tier was reset server-side (data mode); either way, back to login.
     window.location.href = "/login";
   }
+
+  const SECTIONS: { id: string; label: string }[] = [
+    { id: "account", label: "Account" },
+    { id: "coach", label: "Coach & AI" },
+    { id: "accessibility", label: "Accessibility" },
+    { id: "privacy", label: "Privacy & Consent" },
+    { id: "security", label: "Security" },
+    { id: "data", label: "Data" },
+    { id: "usage", label: "Usage" },
+    { id: "help", label: "Help & About" },
+  ];
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">Settings</h1>
-      <p className="text-base text-t-phos-dim mb-8">
+      <p className="text-base text-t-phos-dim mb-4">
         Your data, your control. Manage your information and privacy.
       </p>
 
-      <CoachSettingsSection />
-
-      <SharingConsentSection />
-
-      <ConsentPanel />
-
-      {/* AI usage/cost -- quiet by design */}
-      <AiCostsOwnSection />
+      {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
+      <nav
+        aria-label="Settings sections"
+        className="sticky top-[72px] z-10 -mx-1 mb-8 flex flex-wrap gap-1 border-b border-t-line bg-t-bg/95 py-2 backdrop-blur"
+      >
+        {SECTIONS.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="t-focus rounded-[4px] px-3 py-1.5 text-xs font-medium text-t-phos-dim transition-colors hover:bg-t-panel-2 hover:text-t-amber-bright"
+          >
+            {s.label}
+          </a>
+        ))}
+      </nav>
 
       {/* Admin Test Mode Toggle */}
       {isAdmin && (
@@ -323,51 +365,444 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Account Info */}
-      <AccountSection />
+      {/* ── 1. Account ─────────────────────────────────────────────── */}
+      <div id="account" className="scroll-mt-32 mb-10">
+        <GroupHeading>Account</GroupHeading>
+        <AccountSection />
+        <AvatarSettingsSection />
+        <AccountExtras
+          codeInput={codeInput}
+          setCodeInput={setCodeInput}
+          redeemCode={redeemCode}
+          codeStatus={codeStatus}
+          codeError={codeError}
+          redeemedCodes={redeemedCodes}
+          hiddenEmployers={hiddenEmployers}
+          addHiddenEmployer={addHiddenEmployer}
+          hideInput={hideInput}
+          setHideInput={setHideInput}
+          hideReasonInput={hideReasonInput}
+          setHideReasonInput={setHideReasonInput}
+          hideBusy={hideBusy}
+          unhideEmployer={unhideEmployer}
+        />
+      </div>
 
-      {/* Daily Usage */}
-      <section className="mb-8">
-        <h2 className="text-lg font-bold text-t-white mb-4">
-          Daily Usage
-        </h2>
-        <div className="bg-t-panel p-5 border border-t-line">
-          {usage ? (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-t-white">
-                  AI calls today
-                </span>
-                <span className="text-sm text-t-phos-dim">
-                  {usage.limit === null
-                    ? `${usage.used} used (unlimited)`
-                    : `${usage.used} / ${usage.limit}`}
-                </span>
-              </div>
-              {usage.limit !== null && (
-                <div className="w-full bg-t-line h-2">
-                  <div
-                    className="bg-t-amber h-2 transition-all"
-                    style={{
-                      width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
-                    }}
-                  />
+      {/* ── 2. Coach & AI ──────────────────────────────────────────── */}
+      <div id="coach" className="scroll-mt-32 mb-10">
+        <GroupHeading>Coach &amp; AI</GroupHeading>
+        <CoachSettingsSection />
+      </div>
+
+      {/* ── 3. Accessibility ───────────────────────────────────────── */}
+      <div id="accessibility" className="scroll-mt-32 mb-10">
+        <GroupHeading>Accessibility</GroupHeading>
+        <h2 className="text-lg font-bold text-t-white mb-1">Make it easier to use</h2>
+        <p className="text-sm text-t-phos-dim mb-4">
+          Bigger text, less motion, and reading help. Changes take effect right away.
+        </p>
+        <AccessibilitySettingsSection />
+      </div>
+
+      {/* ── 4. Privacy & Consent ───────────────────────────────────── */}
+      <div id="privacy" className="scroll-mt-32 mb-10">
+        <GroupHeading>Privacy &amp; Consent</GroupHeading>
+        <SharingConsentSection />
+        <ConsentPanel />
+        {/* AI transparency: t.ROY's recorded reasoning */}
+        <DecisionLogViewer />
+      </div>
+
+      {/* ── 5. Security ────────────────────────────────────────────── */}
+      <div id="security" className="scroll-mt-32 mb-10">
+        <GroupHeading>Security</GroupHeading>
+        <SecuritySection />
+      </div>
+
+      {/* ── 6. Data ────────────────────────────────────────────────── */}
+      <div id="data" className="scroll-mt-32 mb-10">
+        <GroupHeading>Data</GroupHeading>
+        <DataSection
+          exportCats={exportCats}
+          setExportCats={setExportCats}
+          reauthPassword={reauthPassword}
+          setReauthPassword={setReauthPassword}
+          reauthTyped={reauthTyped}
+          setReauthTyped={setReauthTyped}
+          exportData={exportData}
+          exportStatus={exportStatus}
+          deleteMode={deleteMode}
+          setDeleteMode={setDeleteMode}
+          deleteAllData={deleteAllData}
+          deleting={deleting}
+        />
+      </div>
+
+      {/* ── 7. Usage ───────────────────────────────────────────────── */}
+      <div id="usage" className="scroll-mt-32 mb-10">
+        <GroupHeading>Usage</GroupHeading>
+
+        {/* Daily Usage */}
+        <section className="mb-8">
+          <h2 className="text-lg font-bold text-t-white mb-4">
+            Daily Usage
+          </h2>
+          <div className="bg-t-panel p-5 border border-t-line">
+            {usage ? (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-t-white">
+                    AI calls today
+                  </span>
+                  <span className="text-sm text-t-phos-dim">
+                    {usage.limit === null
+                      ? `${usage.used} used (unlimited)`
+                      : `${usage.used} / ${usage.limit}`}
+                  </span>
                 </div>
-              )}
-              {usage.remaining !== null && usage.remaining <= 5 && usage.remaining > 0 && (
-                <p className="text-xs text-t-amber-bright mt-2">
-                  {usage.remaining} AI call{usage.remaining === 1 ? "" : "s"} left today. Resets at midnight.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-t-phos-dim">Loading usage...</p>
-          )}
-        </div>
-      </section>
+                {usage.limit !== null && (
+                  <div className="w-full bg-t-line h-2">
+                    <div
+                      className="bg-t-amber h-2 transition-all"
+                      style={{
+                        width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                {usage.remaining !== null && usage.remaining <= 5 && usage.remaining > 0 && (
+                  <p className="text-xs text-t-amber-bright mt-2">
+                    {usage.remaining} AI call{usage.remaining === 1 ? "" : "s"} left today. Resets at midnight.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-t-phos-dim">Loading usage...</p>
+            )}
+          </div>
+        </section>
 
+        {/* AI usage/cost -- quiet by design */}
+        <AiCostsOwnSection />
+      </div>
+
+      {/* ── 8. Help & About ────────────────────────────────────────── */}
+      <div id="help" className="scroll-mt-32 mb-10">
+        <GroupHeading>Help &amp; About</GroupHeading>
+
+        {/* Get help */}
+        <section className="mb-8">
+          <h2 className="text-lg font-bold text-t-white mb-4">Get help</h2>
+          <div className="bg-t-panel p-5 border border-t-line space-y-3">
+            <p className="text-sm text-t-phos-dim">
+              Stuck on something? Ask t.ROY on any page, or email us and a real
+              person will get back to you.
+            </p>
+            <a
+              href="mailto:troyrichardcarr@gmail.com"
+              className="t-focus inline-flex items-center px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 transition-colors min-h-touch"
+            >
+              Email support
+            </a>
+            <p className="text-xs text-t-phos-dim pt-1">
+              Want to know exactly how we protect your data?{" "}
+              <a href="/dashboard/security" className="text-t-amber-bright hover:text-t-amber underline">
+                Read our trust page
+              </a>
+              .
+            </p>
+          </div>
+        </section>
+
+        {/* About */}
+        <section>
+          <h2 className="text-lg font-bold text-t-white mb-4">About</h2>
+          <div className="bg-t-panel p-5 border border-t-line">
+            <h3 className="font-semibold text-t-white mb-2">
+              Steel Man Resumes
+            </h3>
+            <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
+              Built by people who believe your past doesn&apos;t define your
+              paycheck. The Forge and Refinery are tools designed to help you take
+              the next step on your own terms.
+            </p>
+            <p className="text-xs text-t-phos-dim">
+              All AI-powered features are designed with transparency, consent, and
+              your dignity in mind.
+            </p>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function GroupHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-4 pb-2 border-b border-t-line">
+      {children}
+    </h2>
+  );
+}
+
+interface ExportCats {
+  resumes: boolean;
+  applications: boolean;
+  chat: boolean;
+  consent: boolean;
+  usage: boolean;
+}
+
+function DataSection({
+  exportCats,
+  setExportCats,
+  reauthPassword,
+  setReauthPassword,
+  reauthTyped,
+  setReauthTyped,
+  exportData,
+  exportStatus,
+  deleteMode,
+  setDeleteMode,
+  deleteAllData,
+  deleting,
+}: {
+  exportCats: ExportCats;
+  setExportCats: React.Dispatch<React.SetStateAction<ExportCats>>;
+  reauthPassword: string;
+  setReauthPassword: (v: string) => void;
+  reauthTyped: string;
+  setReauthTyped: (v: string) => void;
+  exportData: () => void;
+  exportStatus: "idle" | "exporting" | "done";
+  deleteMode: null | "data" | "account";
+  setDeleteMode: (v: null | "data" | "account") => void;
+  deleteAllData: (mode: "data" | "account") => void;
+  deleting: boolean;
+}) {
+  const EXPORT_CATS: { key: keyof ExportCats; label: string }[] = [
+    { key: "resumes", label: "Resumes and Forge results" },
+    { key: "applications", label: "Job applications" },
+    { key: "chat", label: "Chat history with t.ROY" },
+    { key: "consent", label: "Consent records" },
+    { key: "usage", label: "Usage totals" },
+  ];
+  const anyChecked = Object.values(exportCats).some(Boolean);
+
+  return (
+    <section className="mb-8">
+      <div className="space-y-4">
+        {/* How we handle your data */}
+        <div className="bg-t-panel p-5 border border-t-line">
+          <h3 className="font-semibold text-t-white mb-2">
+            How we handle your data
+          </h3>
+          <ul className="space-y-2 text-sm text-t-phos-dim">
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              Your Forge answers and results are saved to your account so
+              your work is here when you come back
+            </li>
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              Conversations with t.ROY are saved to your account so he can
+              remember your recent work. Deleting your data clears them.
+            </li>
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              We never sell or share your personal information
+            </li>
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              You can export or delete your data at any time
+            </li>
+          </ul>
+        </div>
+
+        {/* Reauth for export/delete -- password accounts fill the password
+            field; magic-link/OAuth-only accounts (no password) type the
+            word DELETE instead. Either one satisfies the server's gate. */}
+        <div className="bg-t-panel p-5 border border-t-line">
+          <h3 className="font-semibold text-t-white">Confirm your identity</h3>
+          <p className="text-sm text-t-phos-dim mt-1">
+            Exporting or deleting your data is sensitive -- confirm it&apos;s
+            you before either action below. Enter your password, or if you
+            sign in with a magic link and have no password, type DELETE.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 mt-3">
+            <input
+              type="password"
+              value={reauthPassword}
+              onChange={(e) => setReauthPassword(e.target.value)}
+              placeholder="Your password"
+              autoComplete="current-password"
+              className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
+            />
+            <input
+              type="text"
+              value={reauthTyped}
+              onChange={(e) => setReauthTyped(e.target.value)}
+              placeholder="Or type DELETE (no-password accounts)"
+              className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
+            />
+          </div>
+        </div>
+
+        {/* Export data -- per category */}
+        <div className="bg-t-panel p-5 border border-t-line">
+          <h3 className="font-semibold text-t-white">
+            Download your data
+          </h3>
+          <p className="text-sm text-t-phos-dim mt-1 mb-3">
+            Get a copy of what we have stored. Pick what to include, or keep
+            everything checked for a full copy.
+          </p>
+          <div className="space-y-2 mb-4">
+            {EXPORT_CATS.map((c) => (
+              <label key={c.key} className="flex items-center gap-3 text-sm text-t-white cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exportCats[c.key]}
+                  onChange={(e) =>
+                    setExportCats((prev) => ({ ...prev, [c.key]: e.target.checked }))
+                  }
+                  className="h-4 w-4 accent-t-amber"
+                />
+                {c.label}
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={exportData}
+            disabled={exportStatus !== "idle" || !anyChecked}
+            className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
+          >
+            {exportStatus === "exporting"
+              ? "Preparing..."
+              : exportStatus === "done"
+                ? "Downloaded"
+                : "Export"}
+          </button>
+        </div>
+
+        {/* Delete my data -- keeps the login */}
+        <div className="bg-t-panel p-5 border border-t-red">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-t-white">
+                Delete my data
+              </h3>
+              <p className="text-sm text-t-phos-dim mt-1">
+                Erase your resumes, plans, and history. Your login stays, so you
+                can sign back in to a fresh, empty account. This cannot be undone.
+              </p>
+            </div>
+            {deleteMode !== "data" ? (
+              <button
+                onClick={() => setDeleteMode("data")}
+                className="t-focus flex-shrink-0 px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
+              >
+                Delete data
+              </button>
+            ) : (
+              <div className="flex flex-shrink-0 gap-2">
+                <button
+                  onClick={() => setDeleteMode(null)}
+                  className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteAllData("data")}
+                  disabled={deleting}
+                  className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
+                >
+                  {deleting ? "Deleting..." : "Confirm delete data"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Delete my account -- removes everything including the login */}
+        <div className="bg-t-panel p-5 border border-t-red">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-t-white">
+                Delete my account
+              </h3>
+              <p className="text-sm text-t-phos-dim mt-1">
+                Remove everything, including your login. You will be signed out
+                and will not be able to sign back in. This cannot be undone.
+              </p>
+            </div>
+            {deleteMode !== "account" ? (
+              <button
+                onClick={() => setDeleteMode("account")}
+                className="t-focus flex-shrink-0 px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
+              >
+                Delete account
+              </button>
+            ) : (
+              <div className="flex flex-shrink-0 gap-2">
+                <button
+                  onClick={() => setDeleteMode(null)}
+                  className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteAllData("account")}
+                  disabled={deleting}
+                  className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
+                >
+                  {deleting ? "Deleting..." : "Confirm delete account"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Partner Access Code + Hidden Employers live under Account (kept intact).
+function AccountExtras({
+  codeInput,
+  setCodeInput,
+  redeemCode,
+  codeStatus,
+  codeError,
+  redeemedCodes,
+  hiddenEmployers,
+  addHiddenEmployer,
+  hideInput,
+  setHideInput,
+  hideReasonInput,
+  setHideReasonInput,
+  hideBusy,
+  unhideEmployer,
+}: {
+  codeInput: string;
+  setCodeInput: (v: string) => void;
+  redeemCode: (e: React.FormEvent) => void;
+  codeStatus: "idle" | "redeeming" | "success" | "error";
+  codeError: string;
+  redeemedCodes: RedeemedCode[];
+  hiddenEmployers: { id: string; display_name: string; reason: string | null }[];
+  addHiddenEmployer: (e: FormEvent) => void;
+  hideInput: string;
+  setHideInput: (v: string) => void;
+  hideReasonInput: string;
+  setHideReasonInput: (v: string) => void;
+  hideBusy: boolean;
+  unhideEmployer: (id: string) => void;
+}) {
+  return (
+    <>
       {/* Partner Access Code */}
-      <section className="mb-8">
+      <section className="mb-8 mt-8">
         <h2 className="text-lg font-bold text-t-white mb-4">
           Partner Access Code
         </h2>
@@ -493,157 +928,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Security */}
-      <SecuritySection />
-
-      {/* Privacy & Data */}
-      <section className="mb-8">
-        <h2 className="text-lg font-bold text-t-white mb-4">
-          Privacy & Data
-        </h2>
-
-        <div className="space-y-4">
-          {/* How we handle your data */}
-          <div className="bg-t-panel p-5 border border-t-line">
-            <h3 className="font-semibold text-t-white mb-2">
-              How we handle your data
-            </h3>
-            <ul className="space-y-2 text-sm text-t-phos-dim">
-              <li className="flex gap-2">
-                <span className="text-t-amber flex-shrink-0">•</span>
-                Your Forge answers and results are saved to your account so
-                your work is here when you come back
-              </li>
-              <li className="flex gap-2">
-                <span className="text-t-amber flex-shrink-0">•</span>
-                Conversations with t.ROY are saved to your account so he can
-                remember your recent work. Deleting your data clears them.
-              </li>
-              <li className="flex gap-2">
-                <span className="text-t-amber flex-shrink-0">•</span>
-                We never sell or share your personal information
-              </li>
-              <li className="flex gap-2">
-                <span className="text-t-amber flex-shrink-0">•</span>
-                You can export or delete your data at any time
-              </li>
-            </ul>
-          </div>
-
-          {/* Reauth for export/delete -- password accounts fill the password
-              field; magic-link/OAuth-only accounts (no password) type the
-              word DELETE instead. Either one satisfies the server's gate. */}
-          <div className="bg-t-panel p-5 border border-t-line">
-            <h3 className="font-semibold text-t-white">Confirm your identity</h3>
-            <p className="text-sm text-t-phos-dim mt-1">
-              Exporting or deleting your data is sensitive -- confirm it&apos;s
-              you before either action below. Enter your password, or if you
-              sign in with a magic link and have no password, type DELETE.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 mt-3">
-              <input
-                type="password"
-                value={reauthPassword}
-                onChange={(e) => setReauthPassword(e.target.value)}
-                placeholder="Your password"
-                autoComplete="current-password"
-                className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
-              />
-              <input
-                type="text"
-                value={reauthTyped}
-                onChange={(e) => setReauthTyped(e.target.value)}
-                placeholder='Or type DELETE (no-password accounts)'
-                className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
-              />
-            </div>
-          </div>
-
-          {/* Export data */}
-          <div className="bg-t-panel p-5 border border-t-line">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-t-white">
-                  Download your data
-                </h3>
-                <p className="text-sm text-t-phos-dim mt-1">
-                  Get a copy of everything we have stored about you.
-                </p>
-              </div>
-              <button
-                onClick={exportData}
-                disabled={exportStatus !== "idle"}
-                className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
-              >
-                {exportStatus === "exporting"
-                  ? "Preparing..."
-                  : exportStatus === "done"
-                    ? "Downloaded"
-                    : "Export"}
-              </button>
-            </div>
-          </div>
-
-          {/* Delete data */}
-          <div className="bg-t-panel p-5 border border-t-red">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-t-white">
-                  Delete all your data
-                </h3>
-                <p className="text-sm text-t-phos-dim mt-1">
-                  Permanently remove all stored data from this device. This
-                  cannot be undone.
-                </p>
-              </div>
-              {!showDeleteConfirm ? (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="t-focus px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
-                >
-                  Delete
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={deleteAllData}
-                    disabled={deleting}
-                    className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
-                  >
-                    {deleting ? "Deleting..." : "Confirm Delete"}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* About */}
-      <section>
-        <h2 className="text-lg font-bold text-t-white mb-4">About</h2>
-        <div className="bg-t-panel p-5 border border-t-line">
-          <h3 className="font-semibold text-t-white mb-2">
-            Steel Man Resumes
-          </h3>
-          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
-            Built by people who believe your past doesn&apos;t define your
-            paycheck. The Forge and Refinery are tools designed to help you take
-            the next step on your own terms.
-          </p>
-          <p className="text-xs text-t-phos-dim">
-            All AI-powered features are designed with transparency, consent, and
-            your dignity in mind.
-          </p>
-        </div>
-      </section>
-    </div>
+    </>
   );
 }
 
@@ -839,6 +1124,8 @@ function SecuritySection() {
       <TwoFactorCard enabled={twoFactorEnabled} refresh={refresh} />
 
       <ActiveDevicesCard />
+
+      <LoginHistoryCard />
     </section>
   );
 }

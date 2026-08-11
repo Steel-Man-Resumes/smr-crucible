@@ -79,15 +79,17 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             the physical disks, they could not read your data.
           </BulletItem>
           <BulletItem>
-            Files (like resumes) are stored in encrypted cloud storage — same
-            level of protection banks use
-          </BulletItem>
-          <BulletItem>
             Every connection uses HTTPS — your data is encrypted while it
             moves between your device and our servers
           </BulletItem>
           <BulletItem>Everything is hosted in the United States</BulletItem>
         </ul>
+        <p className="text-sm text-t-phos leading-relaxed mt-3">
+          We are building a document vault that adds a second lock on top of
+          the database: each file is sealed with AES-256-GCM encryption tied to
+          your account, so it can only be opened for you. That vault is coming
+          soon and is not turned on yet.
+        </p>
       </Section>
 
       {/* What the AI Sees */}
@@ -117,7 +119,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         <div className="grid sm:grid-cols-2 gap-3">
           <ControlCard
             title="Export Your Data"
-            description="Download everything we have about you — your resume, Forge results, saved jobs, all of it."
+            description="Download a copy of your data: your resume, Forge results, applications, chat history, and more. You can pick which parts to include. We ask you to confirm it's you first."
             showButton={showUserControls}
             buttonLabel="Export in Settings"
             onClick={() => {
@@ -125,8 +127,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             }}
           />
           <ControlCard
-            title="Delete Everything"
-            description="Permanently erase all your data. One click. Can't be undone. We won't keep a copy."
+            title="Delete Your Data or Account"
+            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone."
             showButton={showUserControls}
             buttonLabel="Delete in Settings"
             onClick={() => {
@@ -146,6 +148,57 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             description="The Forge works without creating an account. Nothing is stored unless you choose to sign in."
           />
         </div>
+      </Section>
+
+      {/* Locking Down Your Account */}
+      <Section title="Locking Down Your Account">
+        <ul className="space-y-2">
+          <BulletItem>
+            Set a password, or sign in with a one-time magic link sent to your
+            email. Passwords are stored as a scrambled hash, not as the words you
+            typed.
+          </BulletItem>
+          <BulletItem>
+            Turn on two-step verification. You add a code from an authenticator
+            app when you sign in, and you get one-time backup codes in case you
+            lose your phone. The secret behind those codes is stored encrypted.
+          </BulletItem>
+          <BulletItem>
+            See every device signed in to your account and sign out any one you
+            don&apos;t recognize. It loses access right away.
+          </BulletItem>
+          <BulletItem>
+            Exporting or deleting your data asks you to prove it&apos;s you first,
+            with your password, or by typing DELETE if you use magic-link
+            sign-in. That way a borrowed or unlocked device can&apos;t wipe or
+            copy your data.
+          </BulletItem>
+        </ul>
+      </Section>
+
+      {/* What You Share Is Your Choice */}
+      <Section title="What You Share Is Your Choice">
+        <p className="text-sm text-t-phos-dim mb-3">
+          You control a few separate choices in Settings. You can change any of
+          them anytime:
+        </p>
+        <ul className="space-y-2">
+          <BulletItem>
+            <span className="font-semibold text-t-white">Better help:</span> let
+            the AI use more of your Forge answers to give you sharper, more
+            personal suggestions.
+          </BulletItem>
+          <BulletItem>
+            <span className="font-semibold text-t-white">Research:</span> allow
+            your data, with your name and details removed, to help study what
+            helps people find work.
+          </BulletItem>
+          <BulletItem>
+            <span className="font-semibold text-t-white">Outcomes:</span> share
+            whether you landed a job so partner programs can see if this is
+            working. You can share this without sharing anything else.
+          </BulletItem>
+        </ul>
       </Section>
 
       {/* What We Don't Do */}
@@ -213,8 +266,13 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         <div className="bg-t-panel-2 p-4 border border-t-line text-xs text-t-phos-dim space-y-1.5">
           <p>Database: PostgreSQL on Neon (encrypted at rest, TLS in transit)</p>
           <p>Object Storage: Cloudflare R2 (S3-compatible, encrypted at rest)</p>
+          <p>Document encryption: AES-256-GCM envelope encryption for secure objects, bound to owner and purpose (rolling out with the vault)</p>
           <p>Auth: Auth.js v5, email magic link or optional password (bcrypt hash only)</p>
+          <p>Two-factor: TOTP with an encrypted secret and bcrypt-hashed one-time backup codes</p>
+          <p>Sessions: tracked per device with self-service revocation; new-device sign-ins alert the account owner</p>
+          <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
           <p>AI: Anthropic Claude (SOC 2 compliant) — no training on user data</p>
+          <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
           <p>Decision Logging: Every AI call logged with input hash, model, latency</p>

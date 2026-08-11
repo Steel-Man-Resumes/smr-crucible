@@ -130,6 +130,11 @@ export interface JobSearchParams {
   skills?: string[];
   hasRecord?: boolean;
   recordType?: string;
+  /** The signed-in user, when known. Threaded to the enrichment AI call so its
+   *  cost attributes to the right person instead of landing user_id NULL and
+   *  becoming invisible in the per-user and own-usage rollups. Null on a shared
+   *  cache-warm or an anonymous call. */
+  userId?: string | null;
 }
 
 export interface JobSearchOutcome {
@@ -347,7 +352,7 @@ async function fetchCareerOneStopJobs(
 
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
-  context: { hasRecord: boolean; recordType?: string; location: string },
+  context: { hasRecord: boolean; recordType?: string; location: string; userId?: string | null },
   verified: Set<string>
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -432,7 +437,7 @@ RULES:
         [{ role: "user", content: prompt }],
         2000,
         undefined,
-        { endpoint: "job-search" },
+        { endpoint: "job-search", userId: context.userId ?? null },
         enrichController.signal
       );
     } catch {
@@ -536,7 +541,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     return MOCK_JOB_RESULTS as JobSearchOutcome;
   }
 
-  const { role, location, skills, hasRecord, recordType } = params;
+  const { role, location, skills, hasRecord, recordType, userId } = params;
 
   const tenantGeo = getTenantConfig().geo;
   const searchLocation = sanitizeForPrompt(location ?? "") || tenantGeo.primaryLocations[0];
@@ -620,6 +625,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       hasRecord: Boolean(hasRecord),
       recordType,
       location: searchLocation,
+      userId: userId ?? null,
     },
     verified
   );

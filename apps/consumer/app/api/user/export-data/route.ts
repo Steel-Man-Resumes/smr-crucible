@@ -23,6 +23,17 @@
  * pass specifically so the reauth fields can travel in the body rather than
  * a query string (which would leak a password into logs/history).
  *
+ * Per-category selection (Phase 7.4): the body may carry
+ * `categories: string[]` to export only some of your data. Recognized keys:
+ *   "resumes"      -> consumer_profile + forge_session + refinery_artifact
+ *   "applications" -> job_application
+ *   "chat"         -> coach_conversation
+ *   "consent"      -> consent event history
+ *   "usage"        -> ai_token_usage totals
+ * The `account` block (id/name/email) is always included. If `categories` is
+ * missing/empty or contains "everything", the full dump is returned (the
+ * default), so old callers are unchanged.
+ *
  * Cache-Control: no-store + Pragma: no-cache -- this payload must never be
  * cached by a browser, proxy, or CDN.
  */
@@ -77,6 +88,14 @@ export async function POST(req: Request) {
       );
     }
   }
+
+  // Per-category selection. Missing/empty or "everything" -> full dump.
+  const rawCats = Array.isArray(body?.categories) ? body.categories : [];
+  const selected = new Set(
+    rawCats.filter((c: unknown): c is string => typeof c === "string")
+  );
+  const everything = selected.size === 0 || selected.has("everything");
+  const want = (cat: string) => everything || selected.has(cat);
 
   try {
     const [
@@ -150,25 +169,30 @@ export async function POST(req: Request) {
       ),
     ]);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       exported_at: new Date().toISOString(),
-      format_version: "1.0",
+      format_version: "1.1",
+      categories: everything ? "everything" : Array.from(selected),
       account: {
         id: userId,
         name: session.user?.name ?? null,
         email: session.user?.email ?? null,
       },
-      consumerProfile: consumerProfileRows,
-      forgeSessions: forgeSessionRows,
-      refineryArtifacts: refineryArtifactRows,
-      jobApplications: jobApplicationRows,
-      coachConversation: coachConversationRows,
-      consent: consents,
-      aiUsage: {
+    };
+    if (want("resumes")) {
+      payload.consumerProfile = consumerProfileRows;
+      payload.forgeSessions = forgeSessionRows;
+      payload.refineryArtifacts = refineryArtifactRows;
+    }
+    if (want("applications")) payload.jobApplications = jobApplicationRows;
+    if (want("chat")) payload.coachConversation = coachConversationRows;
+    if (want("consent")) payload.consent = consents;
+    if (want("usage")) {
+      payload.aiUsage = {
         totals: aiUsageTotals[0] ?? { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 },
         perEndpoint: aiUsageByEndpoint,
-      },
-    };
+      };
+    }
 
     return new NextResponse(JSON.stringify(payload, null, 2), {
       status: 200,
