@@ -1,5 +1,70 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-15 -- PHASES 6, 2.3, 7.7, 2.5 COMPLETE (on branch, PR #1, preview green). Prod deploy + acceptance click-through = Troy's gate.
+
+Continued "phase 6-7 and beyond to completion" in one session. Four atomic phases,
+each built by a leveled subagent -> independently security/correctness reviewed by a
+fresh-context agent -> live-verified against the dev DB + R2 -> committed CI-green.
+NOT on prod: all four sit on branch `refinery-phase-6-7-and-beyond` (PR #1), local
+`main` reset to origin/main so nothing auto-deploys. CI (build-and-test), gitleaks
+scan, and the Vercel PREVIEW all pass; preview READY (12 nodejs lambdas, state READY);
+unauth smoke green (root 302->login, /api/resume/fit-check 401, vault+avatar routes
+302->login, no 404/500). Adversarial suite 26 -> 86 across the run.
+
+Preview: the-crucible-git-refinery-phase-6-7-a2bc67-troy-carrs-projects.vercel.app
+
+- **Phase 6 (Materials + Vault, migration 042 vault_document):** encrypted-at-rest
+  document home on the 1C/R2 platform (purpose=vault). Upload/list/download/edit/delete,
+  6 categories, owner-exclusive via NON-impersonatable auth() (an admin impersonation
+  session cannot reach a user's ID/legal records -- the security review caught + we fixed
+  that it originally used effectiveAuth), magic-byte MIME sniff + pre-buffer size cap, no
+  presigned URLs, dependency-free store-only ZIP export (zipStore.ts) behind the export
+  reauth gate. Library reorg at /dashboard/vault (relabeled "Library"; Masters/Company/Other
+  sub-grouping via pure libraryGroupingShared; server search/lane/group/pagination on
+  /api/artifacts, back-compat kept). New Vault surface at /dashboard/documents. Vault
+  uploads use a dedicated vault_upload counter EXCLUDED from the AI-usage display so saving
+  documents never looks like it burns a client's AI allowance. delete-data auto-cleans via
+  CASCADE; export-data gains a vault manifest. Live IDOR round-trip green (verify-6-vault.mjs).
+- **Phase 2.3 (remove content-hostile caps):** dropped the ONE PAGE (400-600 words) rule
+  and the fixed 9-12 skills / 3-5 bullets counts in forge/generate-docs + resume-generate-full;
+  generation is completeness-first. Reconciled "every bullet quantified" with the truth gate
+  (quantify only where the source states a number) -- removes fabrication pressure that was in
+  direct tension with rule 1 for a background-checked population.
+- **Phase 7.7 (avatar photo path + GATED AI-headshot, migration 043 avatar_asset):** browser
+  <canvas> crop/compress -> encrypted R2 (purpose=headshot), owner-exclusive proxy, original
+  retained, "never automatically added to your resume" framing. GENERATION IS GATED: 501 unless
+  HEADSHOT_GEN_ENABLED=true AND a provider key; NO image-gen dep, NO provider HTTP call, hard
+  daily cap (3) wired as a ceiling even for unlimited tiers. TODO(troy-gate) stub awaits Troy
+  picking a provider + confirming per-image spend. Live round-trip green (verify-7-avatar.mjs).
+  Known Low follow-ups: before enabling the provider make the cap increment atomic (TOCTOU under
+  neon-http no-cross-txn); non-UUID path segments 500 instead of 404 (cosmetic).
+- **Phase 2.5 (page-fit engine):** deterministic DOCX-geometry estimator is the canonical
+  fit-check. forge/download/route.ts now IMPORTS its geometry constants + line classifiers from
+  the new pure pageFitShared.ts (single source of truth; refactor PROVEN behavior-preserving by
+  review -- no downloaded resume changes). /api/resume/fit-check + a "Check page fit" button in
+  ResumeWorkspace (reuses the exact download content-derivation) return page count + final-page
+  fullness + a TRUTHFUL omission ledger (never mutates the resume). NO dependency added.
+  REASONED DEVIATION FROM DECISION A (surface to Troy): shipped the deterministic estimator as
+  canonical instead of serverless @sparticuz/chromium, because the deliverable is DOCX and the
+  geometry model reproduces the ACTUAL download while Chromium approximates Word's pagination (a
+  different renderer) + adds a ~50MB binary + a deploy that must be preview-verified. Decision A
+  is preserved as a documented, dep-free, flag-off stub (apps/consumer/lib/pagefit-renderer.ts,
+  PAGEFIT_CHROMIUM) -- one step away, not discarded.
+
+TROY'S GATES / OPEN DECISIONS:
+1. Prod deploy: apply migrations 042 + 043 to the PROD Neon branch
+   (cd packages/core && DATABASE_URL=<prod> npm run migrate -- additive/idempotent), then merge
+   PR #1 to main (triggers Vercel prod), then his live click-through (upload a doc -> download ->
+   fit-check -> vault holds it -> avatar photo). Migrations already applied to dev/preview.
+2. Headshot image provider + per-image spend/cap sign-off to un-gate 7.7 generation.
+3. Page-fit: keep the deterministic estimator canonical (recommended) vs enable decision A
+   Chromium (needs deps + a preview verify, since @sparticuz/chromium differs local vs serverless).
+4. Pre-existing FIDELITY BUG found (not introduced here): formatResumeDownload emits the header as
+   name/contact/headline but the route's header parser treats line 2 (contact) AS the headline, so
+   the v3 branded headline is not rendered as a distinct DOCX header line. Worth a separate fix.
+
+Ops scripts added: scripts/verify-6-vault.mjs, verify-7-avatar.mjs, verify-25-pagefit.mjs.
+
 ## 2026-08-15 -- PHASE 5 COMPLETE: sensitive practice (encrypted transcripts, Confidence Coach, voice capture). BOTH TROY GATES CLEARED. Phase 6 (vault) next; it is now fully unblocked.
 
 Troy cleared BOTH manual gates: (1) Neon preview branch created + Preview-scoped DATABASE_URL
