@@ -48,3 +48,5 @@ export * from './vaultDocument';
 export * from './zipStore';
 export * from './avatarAssetShared';
 export * from './avatarAsset';
+export * from './pageFitShared';
+export * from './pageFit';

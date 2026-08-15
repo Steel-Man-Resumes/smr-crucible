@@ -22,6 +22,29 @@ import {
 } from "docx";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { buildResumeFilename } from "@/lib/resume-filename";
+// Phase 2.5: geometry + line classification live in the shared page-fit model so
+// the page-fit estimator (estimatePageFit) and this DOCX builder cannot drift --
+// single source of truth. Colors stay local (not geometry).
+import {
+  NAME_SIZE,
+  HEADLINE_SIZE,
+  CONTACT_SIZE,
+  SECTION_SIZE,
+  BODY_SIZE,
+  BULLET_SIZE,
+  COMPETENCY_SIZE,
+  JOB_TITLE_SIZE,
+  MARGIN_TOP_TWIPS,
+  MARGIN_BOTTOM_TWIPS,
+  MARGIN_LEFT_TWIPS,
+  MARGIN_RIGHT_TWIPS,
+  BULLET_INDENT_TWIPS,
+  isSectionHeader,
+  isBulletLine,
+  stripBulletMarker,
+  isCompetencyLine,
+  isJobTitleLine,
+} from "@crucible/core/src/pageFitShared";
 
 export const maxDuration = 30;
 const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
@@ -35,15 +58,9 @@ const MED_GRAY = "333333";   // competency text
 const GRAY = "555555";        // secondary text
 const LIGHT_BLUE = "B8C9E0"; // headline accent on navy
 
-// Font sizes in half-points (docx spec)
-const NAME_SIZE = 36;       // 18pt
-const HEADLINE_SIZE = 16;   // 8pt
-const CONTACT_SIZE = 16;    // 8pt
-const SECTION_SIZE = 18;    // 9pt
-const BODY_SIZE = 16;       // 8pt
-const BULLET_SIZE = 16;     // 8pt
-const COMPETENCY_SIZE = 16; // 8pt
-const JOB_TITLE_SIZE = 17;  // 8.5pt
+// Font sizes in half-points (docx spec) are imported from pageFitShared so the
+// page-fit model measures the exact sizes this builder renders. See the import
+// block above. (NAME_SIZE=36/18pt, BODY_SIZE=16/8pt, etc.)
 
 interface DownloadInput {
   content: string;
@@ -269,19 +286,15 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
     }
 
     // Bullet points
-    if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("\u2022 ")) {
-      const bulletText = trimmed.replace(/^[-*\u2022]\s*/, "");
+    if (isBulletLine(trimmed)) {
+      const bulletText = stripBulletMarker(trimmed);
       children.push(createBulletParagraph(bulletText));
       continue;
     }
 
     // Skill/competency lines: 4+ pipe/bullet parts, OR 3 short parts (skill names)
     // Avoids catching job-title lines ("TITLE | Company, Dates") or education lines
-    const pipeParts = trimmed.split(/[|•]/).map((p) => p.trim()).filter(Boolean);
-    const isCompetencyLine =
-      (trimmed.includes(" | ") || trimmed.includes(" \u2022 ")) &&
-      (pipeParts.length >= 4 || (pipeParts.length === 3 && pipeParts.every((p) => p.length <= 22)));
-    if (isCompetencyLine) {
+    if (isCompetencyLine(trimmed)) {
       children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -301,7 +314,7 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
     }
 
         // Job title lines (TITLE | Company | Location | Dates)
-    if (trimmed.includes("|") && !trimmed.includes("@")) {
+    if (isJobTitleLine(trimmed)) {
       const parts = trimmed.split("|").map((p) => p.trim());
       const runs: TextRun[] = [];
       parts.forEach((part, idx) => {
@@ -339,10 +352,10 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
           page: {
             // TORI tight margins: 0.28" top/bot, 0.43" sides
             margin: {
-              top: 403,   // 0.28" = 403 twips
-              right: 619,  // 0.43" = 619 twips
-              bottom: 403,
-              left: 619,
+              top: MARGIN_TOP_TWIPS,     // 0.28in
+              right: MARGIN_RIGHT_TWIPS, // 0.43in
+              bottom: MARGIN_BOTTOM_TWIPS,
+              left: MARGIN_LEFT_TWIPS,
             },
           },
         },
@@ -443,21 +456,8 @@ async function buildCoverLetterDocx(text: string): Promise<Buffer> {
 }
 
 // --- Utilities ---
-
-const SECTION_HEADERS = new Set([
-  "PROFESSIONAL SUMMARY", "CAREER SUMMARY", "SUMMARY",
-  "CORE COMPETENCIES", "CORE SKILLS", "KEY QUALIFICATIONS", "AREAS OF EXPERTISE", "TECHNICAL SKILLS",
-  "PROFESSIONAL EXPERIENCE", "EXPERIENCE", "WORK HISTORY", "RELEVANT EXPERIENCE",
-  "EDUCATION", "EDUCATION & CREDENTIALS", "EDUCATION & CERTIFICATIONS",
-  "CERTIFICATIONS", "LICENSES & CERTIFICATIONS",
-  "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
-  "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
-]);
-
-function isSectionHeader(text: string): boolean {
-  const upper = text.toUpperCase().replace(/[^A-Z\s&]/g, "").trim();
-  return SECTION_HEADERS.has(upper);
-}
+// SECTION_HEADERS + isSectionHeader now live in @crucible/core/src/pageFitShared
+// (imported above) so the page-fit model and this builder share one definition.
 
 function sectionHeader(text: string): Paragraph {
   return new Paragraph({
@@ -498,7 +498,7 @@ function createBulletParagraph(text: string): Paragraph {
   }
   return new Paragraph({
     spacing: { after: 30 },
-    indent: { left: 280 },
+    indent: { left: BULLET_INDENT_TWIPS },
     children: textRuns,
   });
 }

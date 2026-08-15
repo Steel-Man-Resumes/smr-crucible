@@ -19,6 +19,7 @@ import {
 } from "./resumeModel";
 import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
+import { PageFitCheck } from "./PageFitCheck";
 import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
@@ -1518,6 +1519,9 @@ export function ResumeWorkspace() {
               >
                 Save as PDF
               </button>
+              {/* Phase 2.5: page-fit estimate of the exact .docx the Download
+                  button produces -- same content-derivation (formatResumeDownload). */}
+              <PageFitCheck getContent={() => formatResumeDownload(doc)} />
             </>
           }
           actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."
