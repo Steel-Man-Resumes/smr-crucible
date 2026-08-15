@@ -123,6 +123,48 @@ export async function incrementUserUsage(
 }
 
 /**
+ * Pure cap decision for a reserved slot: the increment RETURNING count is within
+ * the cap iff it is <= cap. Extracted so the ok/count sequence is unit-testable
+ * without a DB (see rateLimit.test.ts): counts 1,2,3 against cap 3 are ok, the
+ * 4th (count 4) is not.
+ */
+export function slotWithinCap(count: number, cap: number): boolean {
+  return count <= cap;
+}
+
+/**
+ * ATOMIC reserve-a-slot for a hard-capped, PAID endpoint (fixes the TOCTOU where
+ * a separate check-then-increment let N concurrent callers each read used < cap
+ * before any increment and blow past a paid ceiling).
+ *
+ * This is a SINGLE atomic statement: the upsert increments call_count and RETURNs
+ * the post-increment value, so concurrent callers are serialized by the row lock
+ * and each receives a DISTINCT count (1, 2, 3, ...). Only the first `cap` callers
+ * get ok:true; every caller past the cap gets ok:false and MUST NOT make the paid
+ * call. The extra increment for a rejected caller is harmless -- they are capped
+ * out anyway, and the counter simply reads a little past the cap for the day.
+ *
+ * Matches incrementUserUsage's table/columns/usage_date handling exactly; the
+ * only addition is returning the ok verdict alongside the count.
+ */
+export async function reserveEndpointSlot(
+  userId: string,
+  endpoint: string,
+  cap: number
+): Promise<{ ok: boolean; count: number }> {
+  const row = await getOne<{ call_count: number }>(
+    `INSERT INTO ai_usage (user_id, endpoint, usage_date, call_count)
+     VALUES ($1, $2, CURRENT_DATE, 1)
+     ON CONFLICT (user_id, endpoint, usage_date)
+     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()
+     RETURNING call_count`,
+    [userId, endpoint]
+  );
+  const count = row?.call_count ?? 1;
+  return { ok: slotWithinCap(count, cap), count };
+}
+
+/**
  * Atomic increment for IP-based usage. Returns the new count.
  */
 export async function incrementIpUsage(
