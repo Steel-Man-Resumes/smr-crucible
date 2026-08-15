@@ -271,6 +271,87 @@ export async function unlockBaseline(
 }
 
 /**
+ * Phase 6.1 Library: SQL predicates for the three resume sub-groups. Mirrors the
+ * pure resolveResumeGroup() in libraryGroupingShared.ts -- the server count and
+ * the client bucket MUST agree, so both live off this one definition. These are
+ * fixed literals (never user input), safe to interpolate.
+ */
+export const RESUME_GROUP_PREDICATES: Record<string, string> = {
+  masters: `is_locked = true`,
+  company: `is_locked = false AND COALESCE(target_context->>'targetCompany', '') <> ''`,
+  other: `is_locked = false AND COALESCE(target_context->>'targetCompany', '') = ''`,
+};
+
+export interface ArtifactPage {
+  items: RefineryArtifact[];
+  total: number;
+}
+
+/**
+ * Phase 6.1 Library: server-side search + filter + pagination for a user's
+ * artifacts. Owner-scoped. All filters are optional and compose:
+ *   - type   : exact artifact_type
+ *   - q      : ILIKE over target_context text (job/company) -- the "title" is
+ *              derived from target_context, so this is the title/target search
+ *   - lane   : exact lane label
+ *   - group  : masters | company | other (a resume sub-group predicate)
+ *   - limit / offset : pagination (limit clamped to [1,100])
+ * Returns the page plus the total matching count (for "showing X of N").
+ */
+export async function listArtifactsPaged(
+  userId: string,
+  opts: {
+    type?: ArtifactType;
+    q?: string;
+    lane?: string;
+    group?: "masters" | "company" | "other";
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<ArtifactPage> {
+  const where: string[] = [`user_id = $1`];
+  const params: unknown[] = [userId];
+  let i = 2;
+
+  if (opts.type) {
+    where.push(`artifact_type = $${i++}`);
+    params.push(opts.type);
+  }
+  if (opts.q && opts.q.trim()) {
+    where.push(`target_context::text ILIKE $${i++}`);
+    params.push(`%${opts.q.trim()}%`);
+  }
+  if (opts.lane && opts.lane.trim()) {
+    where.push(`lane = $${i++}`);
+    params.push(opts.lane.trim());
+  }
+  if (opts.group && RESUME_GROUP_PREDICATES[opts.group]) {
+    where.push(`(${RESUME_GROUP_PREDICATES[opts.group]})`);
+  }
+
+  const whereSql = where.join(" AND ");
+
+  const countRow = await getOne<{ total: string }>(
+    `SELECT COUNT(*)::text AS total FROM refinery_artifact WHERE ${whereSql}`,
+    params
+  );
+  const total = parseInt(countRow?.total ?? "0", 10);
+
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const pageParams = [...params, limit, offset];
+  const items = await query<RefineryArtifact>(
+    `SELECT * FROM refinery_artifact
+      WHERE ${whereSql}
+      ORDER BY is_current DESC, updated_at DESC
+      LIMIT $${i++} OFFSET $${i}`,
+    pageParams
+  );
+
+  return { items, total };
+}
+
+/**
  * Get artifact counts grouped by type for a user.
  */
 export async function getArtifactCounts(

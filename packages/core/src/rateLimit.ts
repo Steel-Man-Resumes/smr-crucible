@@ -143,13 +143,22 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
 }
 
 /**
- * Get total usage for a user today (across all endpoints).
+ * Get total AI usage for a user today (across all AI endpoints).
+ *
+ * Non-AI counters that piggy-back on the ai_usage table (e.g. the vault's
+ * "vault_upload" per-day upload ceiling, Phase 6.2) are EXCLUDED here: this
+ * number is surfaced to the user via /api/usage as their AI calls used/remaining,
+ * and a justice-impacted client must never see saving a document to their vault
+ * as burning their AI allowance. The exclusion is display-only -- per-endpoint
+ * enforcement (incrementUserUsage vs getUserDailyLimit) is unaffected, and real
+ * AI endpoints are untouched.
  */
 export async function getUserDailyUsage(userId: string): Promise<number> {
   const row = await getOne<{ total: string }>(
     `SELECT COALESCE(SUM(call_count), 0) as total
      FROM ai_usage
-     WHERE user_id = $1 AND usage_date = CURRENT_DATE`,
+     WHERE user_id = $1 AND usage_date = CURRENT_DATE
+       AND endpoint NOT LIKE 'vault_%'`,
     [userId]
   );
   return parseInt(row?.total ?? "0", 10);

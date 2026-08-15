@@ -1,17 +1,32 @@
 "use client";
 
 /**
- * My Materials (W5 vault) -- one place for everything the user has created:
- * resumes, cover letters, follow-ups, disclosure plans, and practice records.
- * Reuses the existing refinery_artifact store (private to the account, encrypted
- * at rest). View, save as PDF, or delete; resumes open in the builder.
+ * Library (Phase 6.1, formerly "My Materials") -- one place for everything the
+ * user has created: resumes, cover letters, follow-ups, disclosure plans, and
+ * practice records. Reuses the refinery_artifact store (private to the account,
+ * encrypted at rest). View, save as PDF, or delete; resumes open in the builder.
+ *
+ * Resumes sub-group into Masters (locked baselines), Company variants (tailored
+ * to a company), and Other -- derived with the pure resolveResumeGroup() helper
+ * so the client bucket matches the server count. Search is server-side
+ * (?q=, debounced); sections are collapsible.
+ *
+ * The document Vault (uploaded files: IDs, certificates, references) is a
+ * SEPARATE page at /dashboard/documents.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
+import { resolveResumeGroup, type ResumeGroup } from "@crucible/core/src/libraryGroupingShared";
+
+const RESUME_GROUP_LABELS: { key: ResumeGroup; label: string }[] = [
+  { key: "masters", label: "Masters (locked baselines)" },
+  { key: "company", label: "Company variants" },
+  { key: "other", label: "Other resumes" },
+];
 
 interface Artifact {
   id: string;
@@ -120,20 +135,62 @@ export default function VaultPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [total, setTotal] = useState(0);
   const [pinning, setPinning] = useState<string | null>(null);
   // R6: lock a resume as an approved per-lane baseline.
   const [locking, setLocking] = useState<string | null>(null);
   const [lockingFor, setLockingFor] = useState<string | null>(null);
   const [laneInput, setLaneInput] = useState<Record<string, string>>({});
+  // Collapsible sections -- collapsed set (empty = all open).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [statusMsg, setStatusMsg] = useState("");
 
-  function load() {
-    fetch("/api/artifacts?limit=100")
-      .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((d) => setItems(d.data || []))
+  const PAGE = 100;
+
+  // Server-side search + pagination. A blank query loads the first page; a query
+  // hits ?q= so search covers everything, not just the loaded page.
+  const load = useCallback((query: string, offset = 0, append = false) => {
+    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+    if (query.trim()) params.set("q", query.trim());
+    return fetch(`/api/artifacts?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : { items: [], total: 0 }))
+      .then((d) => {
+        const rows = d.items || d.data || [];
+        setItems((prev) => (append ? [...prev, ...rows] : rows));
+        setTotal(typeof d.total === "number" ? d.total : rows.length);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, []);
+
+  // Initial load.
+  useEffect(() => {
+    load("");
+  }, [load]);
+
+  // Debounced server search on q change (skip the very first render -- initial
+  // load already covers the empty query).
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      setLoading(true);
+      load(q);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, load]);
+
+  function toggleSection(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
-  useEffect(load, []);
 
   // N4: pin ONE resume as "current" -- it floats to the top and is the default grab.
   async function setCurrent(id: string, makeCurrent: boolean) {
@@ -301,10 +358,26 @@ ${body}
     setTimeout(() => w.print(), 400);
   }
 
+  const [removing, setRemoving] = useState<string | null>(null);
   async function remove(id: string) {
-    const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
-    if (res.ok) setItems((prev) => prev.filter((x) => x.id !== id));
-    setConfirmDelete(null);
+    if (removing) return; // guard duplicate submit
+    setRemoving(id);
+    try {
+      const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setItems((prev) => prev.filter((x) => x.id !== id));
+        setTotal((t) => Math.max(0, t - 1));
+        setStatusMsg("Item deleted.");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setStatusMsg(err?.message || err?.error || "Could not delete that item.");
+      }
+    } catch {
+      setStatusMsg("Could not delete that item. Please try again.");
+    } finally {
+      setRemoving(null);
+      setConfirmDelete(null);
+    }
   }
 
   // One artifact card -- shared by the pinned Current Resume section and the groups.
@@ -456,23 +529,66 @@ ${body}
     );
   }
 
-  if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your materials...</div>;
+  // Collapsible section header + body. `key` drives collapse state.
+  function CollapsibleSection({
+    sectionKey,
+    label,
+    count,
+    accent,
+    children,
+  }: {
+    sectionKey: string;
+    label: string;
+    count: number;
+    accent?: boolean;
+    children: React.ReactNode;
+  }) {
+    const isCollapsed = collapsed.has(sectionKey);
+    return (
+      <section>
+        <button
+          type="button"
+          onClick={() => toggleSection(sectionKey)}
+          aria-expanded={!isCollapsed}
+          className={`t-focus flex w-full items-center justify-between text-left mb-3 ${
+            accent ? "text-t-amber-bright" : "text-t-phos-dim"
+          }`}
+        >
+          <span className="text-sm font-semibold uppercase">
+            {label} ({count})
+          </span>
+          <span className="text-xs" aria-hidden="true">
+            {isCollapsed ? "Show" : "Hide"}
+          </span>
+        </button>
+        {!isCollapsed && <div className="space-y-3">{children}</div>}
+      </section>
+    );
   }
 
-  // Search across everything; the pinned current resume is surfaced on its own.
+  if (loading) {
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your library...</div>;
+  }
+
+  // Server already filtered by ?q=; this is a harmless client-side refinement on
+  // the loaded page (also keeps the pinned resume surfaced on its own).
   const query = q.trim().toLowerCase();
   const filtered = query ? items.filter((a) => haystack(a).includes(query)) : items;
   const currentResume = filtered.find((a) => a.artifact_type === "resume" && a.is_current) || null;
 
+  const resumes = filtered.filter(
+    (a) => a.artifact_type === "resume" && !(a.is_current && a === currentResume)
+  );
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">My Materials</h1>
+      <h1 className="text-2xl font-bold text-t-white">Library</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
         unless you choose to. Pin your current resume, lock an approved baseline for each
         career lane (so tailoring sharpens it without ever downgrading it), save anything as a
-        PDF or Word file, or delete it, anytime.
+        PDF or Word file, or delete it, anytime. Uploaded documents like your ID, certificates,
+        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Vault</Link>.
       </p>
 
       {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for
@@ -481,7 +597,9 @@ ${body}
         <SavedJobsPanel heading="Your saved jobs" limit={5} />
       </div>
 
-      {items.length === 0 ? (
+      <p aria-live="polite" className="sr-only">{statusMsg}</p>
+
+      {items.length === 0 && !query ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it
           will show up here.
@@ -492,7 +610,7 @@ ${body}
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search your materials by job, company, or text"
+              placeholder="Search your library by job, company, or text"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
@@ -517,22 +635,52 @@ ${body}
           )}
 
           <div className="space-y-8">
-            {GROUPS.map((g) => {
-              // The current resume is shown in its own section above -- don't repeat it.
-              const group = filtered.filter(
-                (a) => a.artifact_type === g.type && !(a.is_current && a === currentResume)
-              );
+            {/* Resumes: sub-grouped into Masters / Company variants / Other via
+                the pure resolveResumeGroup() helper. */}
+            {resumes.length > 0 &&
+              RESUME_GROUP_LABELS.map(({ key, label }) => {
+                const group = resumes.filter((a) => resolveResumeGroup(a) === key);
+                if (group.length === 0) return null;
+                return (
+                  <CollapsibleSection
+                    key={`resume-${key}`}
+                    sectionKey={`resume-${key}`}
+                    label={label}
+                    count={group.length}
+                  >
+                    {group.map((a) => renderCard(a))}
+                  </CollapsibleSection>
+                );
+              })}
+
+            {/* All the non-resume artifact types, each its own collapsible group. */}
+            {GROUPS.filter((g) => g.type !== "resume").map((g) => {
+              const group = filtered.filter((a) => a.artifact_type === g.type);
               if (group.length === 0) return null;
               return (
-                <section key={g.type}>
-                  <h2 className="text-sm font-semibold uppercase text-t-phos-dim mb-3">
-                    {g.label} ({group.length})
-                  </h2>
-                  <div className="space-y-3">{group.map((a) => renderCard(a))}</div>
-                </section>
+                <CollapsibleSection
+                  key={g.type}
+                  sectionKey={g.type}
+                  label={g.label}
+                  count={group.length}
+                >
+                  {group.map((a) => renderCard(a))}
+                </CollapsibleSection>
               );
             })}
           </div>
+
+          {/* Pagination: load the next server page when more exist than loaded. */}
+          {!query && items.length < total && (
+            <div className="mt-8 text-center">
+              <button
+                onClick={() => load("", items.length, true)}
+                className="t-focus px-4 py-2 text-sm font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
+              >
+                Load more ({total - items.length} more)
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
