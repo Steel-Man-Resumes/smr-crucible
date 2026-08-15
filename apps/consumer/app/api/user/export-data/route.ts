@@ -32,6 +32,9 @@
  *   "usage"        -> ai_token_usage totals
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
+ *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
+ *                            source, dimensions, mime, size, sha256, dates --
+ *                            NO bytes. The image is owner-only via its proxy.
  *   "vault"                -> vault_document METADATA manifest (6.2): category,
  *                            label, filename, size, sha256, dates, linked job --
  *                            NO bytes. The actual encrypted files download as a
@@ -222,6 +225,22 @@ export async function POST(req: Request) {
            LEFT JOIN job_application ja ON ja.id = vd.linked_job_id
           WHERE vd.user_id = $1
           ORDER BY vd.created_at DESC`,
+        [userId]
+      );
+    }
+    // Phase 7.7: avatar photo/headshot inventory (metadata only, no bytes). The
+    // encrypted image bytes are owner-only and reachable solely through the
+    // per-asset image proxy; this manifest records what exists. Metadata-only
+    // (not a zip) is a deliberate choice: an avatar is a single small square the
+    // user chose, and the JSON manifest is enough to know what is stored.
+    if (want("avatar")) {
+      payload.avatarAssets = await query(
+        `SELECT aa.id, aa.kind, aa.source_asset_id, aa.width, aa.height,
+                so.mime_type, so.byte_size, so.sha256, aa.created_at
+           FROM avatar_asset aa
+           JOIN secure_object so ON so.id = aa.secure_object_id
+          WHERE aa.user_id = $1
+          ORDER BY aa.created_at DESC`,
         [userId]
       );
     }

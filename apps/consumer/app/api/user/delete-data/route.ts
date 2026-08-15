@@ -136,7 +136,18 @@ export async function DELETE(req: Request) {
     }
 
     // Data-only: keep the account, reset tier so the empty workspace is clean.
-    await query("UPDATE users SET tier = 'client' WHERE id = $1", [userId]);
+    // The headshot secure_object rows (and their avatar_asset rows via CASCADE)
+    // were removed above, so drop the now-dangling selected-photo pointer from
+    // ui_avatar (keeps any illustrated fields; Phase 7.7). The nav would fall
+    // back gracefully anyway, but this keeps stored state honest.
+    await query(
+      `UPDATE users
+          SET tier = 'client',
+              ui_avatar = CASE WHEN ui_avatar IS NULL THEN NULL
+                               ELSE ui_avatar - 'photoAssetId' END
+        WHERE id = $1`,
+      [userId]
+    );
 
     return NextResponse.json({ success: true, accountDeleted: false });
   } catch (err: any) {

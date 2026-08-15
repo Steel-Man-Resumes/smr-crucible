@@ -5,8 +5,23 @@
  */
 
 import { query, getOne } from "./db";
+import { HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_DAILY_CAP } from "./avatarAssetShared";
 
 export const DEFAULT_DAILY_LIMIT = 30;
+
+/**
+ * Per-endpoint HARD daily ceilings for authenticated users. Unlike the tier
+ * daily limit (getUserDailyLimit), a hard cap here applies to EVERY user
+ * regardless of tier -- including admin/unlimited -- because the endpoint is
+ * an expensive paid operation that must never be spammed. An endpoint absent
+ * from this map is governed solely by the tier limit (existing behavior).
+ *
+ * headshot_generate: AI headshot generation is a real paid image call, capped
+ * at a few per day even for unlimited-tier accounts.
+ */
+export const USER_ENDPOINT_HARD_CAPS: Record<string, number> = {
+  [HEADSHOT_GENERATE_ENDPOINT]: HEADSHOT_DAILY_CAP,
+};
 
 export const FORGE_IP_LIMITS: Record<string, number> = {
   analyze: 5,
@@ -39,7 +54,19 @@ export async function checkUserRateLimit(
   userId: string,
   endpoint: string
 ): Promise<RateLimitResult> {
-  const limit = await getUserDailyLimit(userId);
+  const tierLimit = await getUserDailyLimit(userId);
+
+  // A hard per-endpoint cap (if any) applies to every user, even unlimited-tier
+  // accounts (tierLimit === 0). It is a ceiling: the effective limit is the
+  // smaller of the tier limit and the hard cap, treating 0 (unlimited) as
+  // "no tier ceiling" so the hard cap alone governs.
+  const hardCap = USER_ENDPOINT_HARD_CAPS[endpoint];
+  const limit =
+    hardCap === undefined
+      ? tierLimit
+      : tierLimit === 0
+        ? hardCap
+        : Math.min(tierLimit, hardCap);
 
   const row = await getOne<{ call_count: number }>(
     `SELECT call_count FROM ai_usage
@@ -152,13 +179,20 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
  * as burning their AI allowance. The exclusion is display-only -- per-endpoint
  * enforcement (incrementUserUsage vs getUserDailyLimit) is unaffected, and real
  * AI endpoints are untouched.
+ *
+ * Phase 7.7: photo UPLOADS (endpoint "headshot_upload") are likewise excluded --
+ * saving a photo is not an AI call. That endpoint is NOT prefixed "vault_", so it
+ * needs its own explicit exclusion clause here. AI headshot GENERATION
+ * ("headshot_generate") IS a real AI call and is deliberately NOT excluded, so it
+ * DOES count toward the displayed AI usage.
  */
 export async function getUserDailyUsage(userId: string): Promise<number> {
   const row = await getOne<{ total: string }>(
     `SELECT COALESCE(SUM(call_count), 0) as total
      FROM ai_usage
      WHERE user_id = $1 AND usage_date = CURRENT_DATE
-       AND endpoint NOT LIKE 'vault_%'`,
+       AND endpoint NOT LIKE 'vault_%'
+       AND endpoint <> 'headshot_upload'`,
     [userId]
   );
   return parseInt(row?.total ?? "0", 10);
