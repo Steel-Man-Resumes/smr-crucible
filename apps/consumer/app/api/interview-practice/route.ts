@@ -94,6 +94,18 @@ async function handlePost(request: Request) {
     const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
     const sanitizedInterviewType = sanitizeForPrompt(config.interviewType, 100);
 
+    // Phase 5.9 progressive practice: skills the user chose to target this run,
+    // carried over from last session's feedback. Encouraging framing only.
+    const focusAreas: string[] = Array.isArray(config?.focusAreas)
+      ? config.focusAreas
+          .filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0)
+          .slice(0, 4)
+          .map((f: string) => sanitizeForPrompt(f, 60))
+      : [];
+    const focusBlock = focusAreas.length
+      ? `\n\nWHAT THE CANDIDATE IS WORKING ON THIS SESSION: ${focusAreas.join(", ")}. Give them natural chances to practice these skills, and notice out loud when they do it well. Frame it as building a strength, never as a weakness.`
+      : "";
+
     // Build research-backed context
     const interviewUserCtx: UserContext = {
       strengths: forgeContext?.strengths?.map((s: string) => ({ title: s, evidence: "" })) || [],
@@ -116,7 +128,7 @@ YOUR ROLE:
 - React naturally to their answers — acknowledge what they said before moving on
 - Don't be hostile, but don't be a pushover. Ask follow-ups a real interviewer would.
 - Keep your responses to 2-3 sentences max
-${candidateBlock}${applicationBlock}
+${candidateBlock}${applicationBlock}${focusBlock}
 ${isDisclosure ? `DISCLOSURE ELEMENT:
 - At some point during the interview (around exchange 3-4), naturally bring up background checks
 - Say something like "We do run a background check as part of our process. Is there anything you'd like to share about that?"

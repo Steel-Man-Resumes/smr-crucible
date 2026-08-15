@@ -18,6 +18,19 @@ import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
 import { escapeHtml as esc } from "@/lib/escape-html";
 import { trackProgress } from "@/lib/track-progress";
+import { pickJdSource, formatSnapshotAge } from "@/lib/interview-jd";
+import {
+  turnFromRealtimeEvent,
+  captionDeltaFromEvent,
+  type VoiceTurn,
+} from "@/lib/voice-transcript";
+import {
+  deriveStruggleTags,
+  struggleTagLabel,
+  knownStruggleTags,
+} from "@/lib/struggle-tags";
+
+const VOICE_PURPOSE = "interview_voice";
 
 type InterviewStep = "setup" | "practice" | "feedback";
 
@@ -25,6 +38,30 @@ interface InterviewConfig {
   targetRole: string;
   interviewType: string;
   includeDisclosure: boolean;
+  /** Phase 5.9: encouraging skills the user chose to target this run. */
+  focusAreas?: string[];
+}
+
+/** A saved job application that carries a JD snapshot we can auto-fill from. */
+interface SavedApplication {
+  id: string;
+  job_title: string;
+  company: string;
+  jd_full_text: string | null;
+  jd_excerpt: string | null;
+  jd_fetched_at: string | null;
+  jd_truncated: boolean;
+}
+
+/** Metadata for a saved interview_voice session (history list). */
+interface VoiceSessionMeta {
+  id: string;
+  target_context: Record<string, unknown>;
+  status: string;
+  struggle_tags: string[];
+  takeaways: Record<string, unknown> | null;
+  started_at: string;
+  ended_at: string | null;
 }
 
 /**
@@ -125,6 +162,17 @@ function InterviewPracticePage() {
   const [userNotes, setUserNotes] = useState("");
   const [copiedSummary, setCopiedSummary] = useState(false);
 
+  // Phase 5.6: saved jobs with a JD snapshot, so the user picks a job and we
+  // auto-fill the role + JD instead of asking them to re-paste it.
+  const [applications, setApplications] = useState<SavedApplication[]>([]);
+  const [selectedApplicationId, setSelectedApplicationId] = useState("");
+  const [jdMeta, setJdMeta] = useState<{ age: string; truncated: boolean } | null>(null);
+
+  // Phase 5.8/5.9: saved voice-interview sessions + the struggle tags carried
+  // from the most recent one, to offer targeted practice next time.
+  const [voiceHistory, setVoiceHistory] = useState<VoiceSessionMeta[]>([]);
+  const [lastStruggleTags, setLastStruggleTags] = useState<string[]>([]);
+
   // Forge context for richer AI interaction
   const [forgeContext, setForgeContext] = useState<{
     skills: string[];
@@ -205,6 +253,100 @@ function InterviewPracticePage() {
       })
       .catch(() => {});
   }, []);
+
+  // Phase 5.6: load the user's saved applications that carry a JD snapshot, so
+  // they can pick a job and auto-fill the role + description (no re-paste). We
+  // reuse /api/applications (returns the jd_* snapshot columns) and keep only
+  // rows that actually have a JD to fill from.
+  useEffect(() => {
+    fetch("/api/applications")
+      .then((r) => (r.ok ? r.json() : { applications: [] }))
+      .then(({ applications: rows }) => {
+        const withJd: SavedApplication[] = (rows || [])
+          .filter((a: any) => (a?.jd_full_text || a?.jd_excerpt))
+          .map((a: any) => ({
+            id: a.id,
+            job_title: a.job_title || "",
+            company: a.company || "",
+            jd_full_text: a.jd_full_text ?? null,
+            jd_excerpt: a.jd_excerpt ?? null,
+            jd_fetched_at: a.jd_fetched_at ?? null,
+            jd_truncated: !!a.jd_truncated,
+          }));
+        setApplications(withJd);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Phase 5.8/5.9: load saved voice-interview sessions (metadata only) so we can
+  // show a history list and offer to target last time's struggle tags.
+  const loadVoiceHistory = () => {
+    fetch(`/api/conversation/sessions?purpose=${VOICE_PURPOSE}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!Array.isArray(d?.sessions)) return;
+        setVoiceHistory(d.sessions);
+        // Most recent ended session with struggle tags seeds the targeting offer.
+        const recent = d.sessions.find(
+          (s: VoiceSessionMeta) => Array.isArray(s.struggle_tags) && s.struggle_tags.length
+        );
+        if (recent) setLastStruggleTags(knownStruggleTags(recent.struggle_tags));
+      })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    loadVoiceHistory();
+    // Fallback hint from a text-mode run on this device (no stored session).
+    try {
+      const raw = localStorage.getItem("interview_struggle_tags");
+      if (raw) {
+        const tags = knownStruggleTags(JSON.parse(raw));
+        if (tags.length) setLastStruggleTags((prev) => (prev.length ? prev : tags));
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pick a saved job: auto-fill role + company, load its JD snapshot into the
+  // job-description field (snapshot wins over any paste), and prefer a tailored
+  // resume linked to the same job if the user has one.
+  function selectApplication(id: string) {
+    setSelectedApplicationId(id);
+    if (!id) {
+      setJdMeta(null);
+      return;
+    }
+    const app = applications.find((a) => a.id === id);
+    if (!app) {
+      setJdMeta(null);
+      return;
+    }
+    const label = [app.job_title, app.company].filter(Boolean).join(" at ");
+    if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
+
+    const picked = pickJdSource(app.jd_full_text || app.jd_excerpt, "");
+    setJobDescription(picked.text);
+    setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
+
+    const norm = (v: string | null) => (v || "").toLowerCase().trim();
+    const linked = resumes.find(
+      (r) => norm(r.targetJob) === norm(app.job_title) && norm(r.targetCompany) === norm(app.company)
+    );
+    if (linked) setSelectedResumeId(linked.id);
+  }
+
+  // Phase 5.9: toggle targeting last time's struggle tags for this run.
+  const focusActive = (config.focusAreas?.length ?? 0) > 0;
+  function toggleFocus() {
+    setConfig((prev) => {
+      if (prev.focusAreas?.length) {
+        const { focusAreas: _drop, ...rest } = prev;
+        return rest;
+      }
+      const labels = lastStruggleTags.map(struggleTagLabel).filter(Boolean);
+      return { ...prev, focusAreas: labels };
+    });
+  }
 
   // Auto-scroll chat
   useEffect(() => {
@@ -289,6 +431,45 @@ function InterviewPracticePage() {
       exchanges,
       feedback: fb,
     });
+    stashStruggleTags(fb);
+  }
+
+  // Phase 5.9: keep last run's struggle tags for the next setup screen. Text
+  // mode has no stored session (we never save its words), so this local stash is
+  // the only carry-over; it holds derived TAG IDS, never any transcript.
+  function stashStruggleTags(fb: any) {
+    try {
+      const tags = deriveStruggleTags(fb);
+      if (tags.length) {
+        localStorage.setItem("interview_struggle_tags", JSON.stringify(tags));
+        setLastStruggleTags(tags);
+      }
+    } catch {}
+  }
+
+  // Phase 5.8: a SAVED voice session produced a real scorecard. Show it in the
+  // same feedback screen text mode uses, and record the completion (mode voice,
+  // with feedback). The conversation session itself is closed inside the voice
+  // panel (takeaways + struggle tags) before this runs.
+  function handleVoiceFeedback(fb: any, exchanges: number) {
+    setFeedback(fb);
+    setStep("feedback");
+    try {
+      const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
+      tracker.interviews_completed = (tracker.interviews_completed || 0) + 1;
+      localStorage.setItem("consumer_progress", JSON.stringify(tracker));
+    } catch {}
+    trackProgress("interview_completed", { mode: "voice" });
+    recordInterviewPractice({
+      role: config.targetRole,
+      frame: config.interviewType || "general",
+      mode: "voice",
+      includeDisclosure: config.interviewType === "disclosure" || config.includeDisclosure,
+      exchanges,
+      feedback: fb,
+    });
+    stashStruggleTags(fb);
+    loadVoiceHistory();
   }
 
   function resetToSetup() {
@@ -484,7 +665,67 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           simulate a real conversation.
         </p>
 
+        {/* Phase 5.9: gently offer last time's focus */}
+        {lastStruggleTags.length > 0 && (
+          <div className="bg-t-panel-2 border border-t-amber p-4 mb-6">
+            <p className="text-sm text-t-white">
+              Last time you wanted to work on{" "}
+              <span className="font-medium text-t-amber-bright">
+                {lastStruggleTags.map(struggleTagLabel).filter(Boolean).join(", ")}
+              </span>
+              . Want to target that this time?
+            </p>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={focusActive}
+                onChange={toggleFocus}
+                className="w-4 h-4 accent-t-amber"
+              />
+              <span className="text-sm text-t-phos">
+                Yes, give me chances to practice that
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="space-y-6">
+          {/* Phase 5.6: pick a saved job to auto-fill role + description */}
+          {applications.length > 0 && (
+            <div>
+              <label className="text-sm font-medium text-t-white block mb-1">
+                Practice for a saved job?{" "}
+                <span className="font-normal text-t-phos-dim">
+                  (auto-fills the role and job description)
+                </span>
+              </label>
+              <select
+                value={selectedApplicationId}
+                onChange={(e) => selectApplication(e.target.value)}
+                className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
+              >
+                <option value="">Not right now</option>
+                {applications.map((a) => {
+                  const label = [a.job_title, a.company].filter(Boolean).join(" at ");
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {label || "Saved job"}
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedApplicationId && jdMeta && (
+                <p className="text-xs text-t-amber-bright mt-1">
+                  Using the job description we saved for this job
+                  {jdMeta.age ? ` (${jdMeta.age})` : ""}.
+                  {jdMeta.truncated
+                    ? " It was long, so we saved the first part of it."
+                    : ""}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Target role */}
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
@@ -618,6 +859,10 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             config={config}
             forgeContext={forgeContext}
             enabled={!!config.interviewType}
+            jobDescription={jobDescription.trim() || undefined}
+            buildResumePayload={buildResumePayload}
+            onVoiceFeedback={handleVoiceFeedback}
+            onHistoryChange={loadVoiceHistory}
           />
 
           <button
@@ -628,6 +873,8 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             Start Practice Interview
           </button>
         </div>
+
+        <VoiceSessionHistory history={voiceHistory} />
       </div>
     );
   }
@@ -891,6 +1138,10 @@ function VoicePracticePanel({
   config,
   forgeContext,
   enabled,
+  jobDescription,
+  buildResumePayload,
+  onVoiceFeedback,
+  onHistoryChange,
 }: {
   config: InterviewConfig;
   forgeContext: {
@@ -899,15 +1150,55 @@ function VoicePracticePanel({
     narrative: string;
   } | null;
   enabled: boolean;
+  jobDescription?: string;
+  buildResumePayload: () =>
+    | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
+    | undefined;
+  onVoiceFeedback: (feedback: any, exchanges: number) => void;
+  onHistoryChange: () => void;
 }) {
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
   const [error, setError] = useState("");
   const [reservedSeconds, setReservedSeconds] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+
+  // Phase 5.7: opt-in, text-only transcript capture. The SESSION is the consent
+  // unit -- same model as the Confidence Coach. "Save this run" opens a session
+  // WITHOUT granting anything durable; "always save" grants the interview
+  // transcript layer so future runs auto-open a session.
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const [saveThisSession, setSaveThisSession] = useState(false);
+  const savingOn = alwaysAllow || saveThisSession;
+  const convSessionIdRef = useRef<string | null>(null);
+  const convSeqRef = useRef(0);
+  // Every completed turn, in arrival order. Held for the end-of-session
+  // scorecard; text only, never audio.
+  const turnsRef = useRef<VoiceTurn[]>([]);
+
+  // Phase 5.7 accessibility: a live, on-screen caption of the conversation so a
+  // deaf or hard-of-hearing user can follow along. These are ephemeral (shown,
+  // not stored) and appear for EVERY live session, saved or not.
+  const [captions, setCaptions] = useState<VoiceTurn[]>([]);
+  const [partial, setPartial] = useState("");
+
+  // On mount: is the durable interview-transcript layer already granted?
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/conversation/consent?purpose=${VOICE_PURPOSE}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (live && d?.granted) setAlwaysAllow(true);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -939,9 +1230,176 @@ function VoicePracticePanel({
     }
   }
 
+  /** Grant/revoke the durable interview-transcript layer. */
+  async function setConsent(action: "grant" | "revoke"): Promise<boolean> {
+    try {
+      const res = await fetch("/api/conversation/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: VOICE_PURPOSE, action }),
+      });
+      const data = res.ok ? await res.json() : null;
+      return !!data?.granted;
+    } catch {
+      return false;
+    }
+  }
+
+  function handleSaveToggle(next: boolean, durable: boolean) {
+    if (durable) {
+      void (async () => {
+        const granted = next ? await setConsent("grant") : await setConsent("revoke");
+        setAlwaysAllow(granted);
+        if (!granted) setSaveThisSession(false);
+      })();
+      return;
+    }
+    setSaveThisSession(next);
+    if (!next) convSessionIdRef.current = null;
+  }
+
+  /** Open a stored conversation session if saving is on. For a one-time "save
+   *  this run" we pass sessionConsent so nothing durable is granted. */
+  async function ensureConvSession(): Promise<void> {
+    if (!savingOn || convSessionIdRef.current) return;
+    try {
+      const res = await fetch("/api/conversation/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: VOICE_PURPOSE,
+          sessionConsent: saveThisSession && !alwaysAllow ? true : undefined,
+          targetContext: {
+            role: config.targetRole || null,
+            interviewType: config.interviewType || null,
+          },
+        }),
+      });
+      const data = res.ok ? await res.json() : null;
+      if (data?.created && data.sessionId) convSessionIdRef.current = data.sessionId;
+    } catch {
+      // Fail open: practice continues unrecorded if the session could not open.
+    }
+  }
+
+  async function persistVoiceTurn(turn: VoiceTurn) {
+    if (!savingOn || !convSessionIdRef.current || !turn.text.trim()) return;
+    const seq = convSeqRef.current++;
+    try {
+      await fetch("/api/conversation/chunk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: VOICE_PURPOSE,
+          sessionId: convSessionIdRef.current,
+          seq,
+          role: turn.role,
+          text: turn.text,
+        }),
+      });
+    } catch {
+      // A dropped turn is acceptable; never block practice on persistence.
+    }
+  }
+
+  // Each Realtime data-channel event: map to a completed turn (captions +
+  // capture) or a streaming caption fragment. TEXT ONLY -- audio bytes never
+  // reach this handler.
+  function handleDataChannelMessage(ev: MessageEvent) {
+    let evt: unknown;
+    try {
+      evt = JSON.parse(typeof ev.data === "string" ? ev.data : "");
+    } catch {
+      return;
+    }
+    const turn = turnFromRealtimeEvent(evt);
+    if (turn) {
+      turnsRef.current.push(turn);
+      setCaptions((prev) => [...prev, turn].slice(-60));
+      setPartial("");
+      void persistVoiceTurn(turn);
+      return;
+    }
+    const delta = captionDeltaFromEvent(evt);
+    if (delta) setPartial((prev) => (prev + delta).slice(-400));
+  }
+
+  // Generate a real scorecard from the captured transcript (same feedback shape
+  // as text mode) and close the stored session with takeaways + struggle tags.
+  async function finishSavedVoice(turns: VoiceTurn[]) {
+    setGenerating(true);
+    try {
+      const chatMessages = turns.map((t) => ({ role: t.role, content: t.text }));
+      const userTurns = turns.filter((t) => t.role === "user").length;
+      let feedback: any = null;
+      try {
+        const res = await fetch("/api/interview-practice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: chatMessages,
+            config,
+            exchangeCount: userTurns,
+            endInterview: true,
+            forgeContext: forgeContext || undefined,
+            resume: buildResumePayload(),
+            jobDescription: jobDescription || undefined,
+          }),
+        });
+        const data = res.ok ? await res.json() : null;
+        feedback = data?.feedback || null;
+      } catch {
+        feedback = null;
+      }
+
+      const struggleTags = deriveStruggleTags(feedback);
+      if (convSessionIdRef.current) {
+        await fetch("/api/conversation/session/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            purpose: VOICE_PURPOSE,
+            sessionId: convSessionIdRef.current,
+            struggleTags,
+            takeaways: feedback
+              ? { overall: feedback.overall ?? null, frame: feedback.frame ?? null }
+              : undefined,
+          }),
+        }).catch(() => {});
+      }
+      convSessionIdRef.current = null;
+      convSeqRef.current = 0;
+      onHistoryChange();
+
+      if (feedback) {
+        onVoiceFeedback(feedback, userTurns);
+      }
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   function stopVoicePractice() {
-    // Only record a completion if a live session actually took place.
-    if (status === "live") {
+    const wasLive = status === "live";
+    const turns = turnsRef.current.slice();
+    const saved = savingOn && convSessionIdRef.current != null && turns.length > 0;
+
+    cleanupVoiceConnection();
+    void endServerSession();
+    setStatus("idle");
+    setError("");
+    setReservedSeconds(null);
+
+    if (saved) {
+      // A saved run has a transcript -> generate a scorecard (Phase 5.8). The
+      // completion is recorded by the parent's onVoiceFeedback.
+      void finishSavedVoice(turns);
+      return;
+    }
+
+    // Not saved (or nothing captured): keep today's honest behavior -- a bare
+    // record of the practice, no scorecard, nothing stored from the words.
+    if (wasLive) {
       recordInterviewPractice({
         role: config.targetRole,
         frame: config.interviewType || "general",
@@ -950,22 +1408,28 @@ function VoicePracticePanel({
           config.interviewType === "disclosure" || config.includeDisclosure,
       });
     }
-    cleanupVoiceConnection();
-    void endServerSession();
-    setStatus("idle");
-    setError("");
-    setReservedSeconds(null);
+    turnsRef.current = [];
+    convSessionIdRef.current = null;
+    convSeqRef.current = 0;
   }
 
   async function startVoicePractice() {
     if (!enabled || status === "connecting" || status === "live") return;
     setStatus("connecting");
     setError("");
+    setCaptions([]);
+    setPartial("");
+    turnsRef.current = [];
+    convSeqRef.current = 0;
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("This browser does not support microphone access.");
       }
+
+      // Open the stored session first (if saving is on) so we never miss the
+      // opening turns. No consent -> no session -> nothing stored.
+      await ensureConvSession();
 
       const tokenRes = await fetch("/api/interview-voice/token", {
         method: "POST",
@@ -999,6 +1463,7 @@ function VoicePracticePanel({
 
       const dataChannel = pc.createDataChannel("oai-events");
       dataChannelRef.current = dataChannel;
+      dataChannel.onmessage = handleDataChannelMessage;
       dataChannel.onopen = () => {
         dataChannel.send(
           JSON.stringify({
@@ -1069,6 +1534,8 @@ function VoicePracticePanel({
     }
   }
 
+  const showCaptions = status === "live" || captions.length > 0 || partial;
+
   return (
     <div className="border border-t-steel bg-t-panel p-5">
       <audio ref={audioRef} autoPlay className="hidden" />
@@ -1083,6 +1550,10 @@ function VoicePracticePanel({
             transcripts for up to 30 days for abuse monitoring, then delete
             them. We do not store your audio.
           </p>
+          <p className="mt-1 text-xs text-t-phos-dim">
+            Prefer to read along? Live captions show below while you talk. You
+            can also use the text interview instead.
+          </p>
           <div aria-live="polite" role="status">
             {status === "connecting" && (
               <p className="mt-1 text-xs font-medium text-t-phos-dim">Connecting...</p>
@@ -1092,6 +1563,11 @@ function VoicePracticePanel({
                 Live now. Speak naturally; end the session when you are done.
                 {reservedSeconds != null &&
                   ` You have up to ${Math.round(reservedSeconds / 60)} minutes this session.`}
+              </p>
+            )}
+            {generating && (
+              <p className="mt-1 text-xs font-medium text-t-phos-dim">
+                Building your feedback...
               </p>
             )}
             {status === "error" && error && (
@@ -1105,12 +1581,12 @@ function VoicePracticePanel({
               onClick={stopVoicePractice}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
             >
-              End voice session
+              {savingOn ? "End & get feedback" : "End voice session"}
             </button>
           ) : (
             <button
               onClick={startVoicePractice}
-              disabled={!enabled || status === "connecting"}
+              disabled={!enabled || status === "connecting" || generating}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
             >
               {status === "connecting" ? "Connecting..." : "Start live voice"}
@@ -1122,6 +1598,172 @@ function VoicePracticePanel({
             </p>
           )}
         </div>
+      </div>
+
+      {/* Phase 5.7 consent -- shown before/after a session, not mid-call. */}
+      {status !== "live" && (
+        <div className="mt-4 border-t border-t-line pt-4">
+          <p className="text-sm font-medium text-t-white mb-1">Save this voice practice?</p>
+          <p className="text-xs text-t-phos-dim leading-relaxed mb-3">
+            Off by default. Turn it on and we save only the TEXT of your practice,
+            encrypted and private to your account, so you get written feedback at
+            the end and can read it later. We never save the audio. Delete saved
+            practice anytime in Settings.
+          </p>
+          <label className="flex items-start gap-2 mb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={savingOn}
+              onChange={(e) => handleSaveToggle(e.target.checked, false)}
+              className="mt-1"
+              disabled={alwaysAllow}
+            />
+            <span className="text-sm text-t-white">
+              Save this voice practice
+              <span className="block text-xs text-t-phos-dim">
+                Saved just for this run. Auto-saving stays off after.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={alwaysAllow}
+              onChange={(e) => handleSaveToggle(e.target.checked, true)}
+              className="mt-1"
+            />
+            <span className="text-sm text-t-white">
+              Always save my voice practice
+              <span className="block text-xs text-t-phos-dim">
+                Keeps saving on until you turn it off here or in Settings.
+              </span>
+            </span>
+          </label>
+          {!savingOn && (
+            <p className="text-xs text-t-phos-dim mt-2">
+              With saving off, we practice live and store nothing. Turn on saving
+              to get written feedback on a voice session.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Phase 5.7 accessibility -- live captions of the conversation. */}
+      {showCaptions && (
+        <div className="mt-4 border-t border-t-line pt-4">
+          <p className="text-xs font-medium text-t-steel mb-2">Live captions</p>
+          <div
+            aria-live="polite"
+            role="log"
+            className="max-h-40 overflow-y-auto space-y-2 bg-t-panel-2 border border-t-line p-3"
+          >
+            {captions.length === 0 && !partial && (
+              <p className="text-xs text-t-phos-dim">
+                Captions will appear here as you and the interviewer speak.
+              </p>
+            )}
+            {captions.map((c, i) => (
+              <p key={i} className="text-xs leading-relaxed">
+                <span
+                  className={c.role === "user" ? "text-t-amber-bright" : "text-t-steel"}
+                >
+                  {c.role === "user" ? "You" : "Interviewer"}:
+                </span>{" "}
+                <span className="text-t-white">{c.text}</span>
+              </p>
+            ))}
+            {partial && (
+              <p className="text-xs leading-relaxed text-t-phos-dim">
+                <span className="text-t-steel">Interviewer:</span> {partial}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Phase 5.8: saved voice-interview sessions, with a decrypted detail view --
+ *  same pattern as the disclosure rehearsal history. Only sessions the user
+ *  chose to save appear here. */
+function VoiceSessionHistory({ history }: { history: VoiceSessionMeta[] }) {
+  const [detail, setDetail] = useState<
+    { id: string; transcript: Array<{ role: string; text: string }> } | null
+  >(null);
+
+  if (history.length === 0) return null;
+
+  function openDetail(id: string) {
+    setDetail(null);
+    fetch(`/api/conversation/session/${id}?purpose=${VOICE_PURPOSE}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d?.transcript)) setDetail({ id, transcript: d.transcript });
+      })
+      .catch(() => {});
+  }
+
+  return (
+    <div className="mt-8">
+      <h2 className="font-semibold text-t-white mb-1">Your saved voice practice</h2>
+      <p className="text-xs text-t-phos-dim mb-3">
+        Only voice sessions you chose to save show up here. Each one is the text
+        of the practice, encrypted and private to your account. Delete saved
+        practice anytime in Settings.
+      </p>
+      <div className="space-y-2">
+        {history.map((s) => {
+          const role = (s.target_context?.role as string) || "an interview";
+          const when = new Date(s.started_at).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+          const tags = knownStruggleTags(s.struggle_tags);
+          return (
+            <div key={s.id} className="bg-t-panel border border-t-line px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-t-white font-medium">Voice practice for {role}</p>
+                  <p className="text-xs text-t-phos-dim">{when}</p>
+                </div>
+                <button
+                  onClick={() => (detail?.id === s.id ? setDetail(null) : openDetail(s.id))}
+                  className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
+                >
+                  {detail?.id === s.id ? "Hide" : "Read"}
+                </button>
+              </div>
+              {tags.length > 0 && (
+                <p className="text-xs text-t-phos mt-2">
+                  <span className="text-t-amber-bright">Working on:</span>{" "}
+                  {tags.map(struggleTagLabel).filter(Boolean).join(", ")}
+                </p>
+              )}
+              {detail?.id === s.id && (
+                <div className="mt-3 space-y-2 border-t border-t-line pt-3">
+                  {detail.transcript.map((c, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${c.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[85%] px-3 py-2 text-xs leading-relaxed ${
+                          c.role === "user"
+                            ? "bg-t-amber text-white"
+                            : "bg-t-panel-2 text-t-white border border-t-line"
+                        }`}
+                      >
+                        {c.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

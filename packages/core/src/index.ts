@@ -41,3 +41,4 @@ export * from './jobDescription';
 export * from './jobDescriptionStore';
 export * from './uiPrefs';
 export * from './supportRequest';
+export * from './conversationStore';

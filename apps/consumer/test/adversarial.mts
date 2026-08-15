@@ -78,6 +78,34 @@ import {
   SUPPORT_CATEGORIES,
 } from "@crucible/core";
 import { findHelpArticle } from "@/lib/helpArticles";
+import {
+  deriveStruggleTags,
+  struggleTagLabel,
+  knownStruggleTags,
+  STRUGGLE_TAG_IDS,
+} from "@/lib/struggle-tags";
+import { pickJdSource, formatSnapshotAge } from "@/lib/interview-jd";
+import {
+  turnFromRealtimeEvent,
+  captionDeltaFromEvent,
+} from "@/lib/voice-transcript";
+import {
+  buildConversationAad,
+  consentLayerForPurpose,
+  isConversationPurpose,
+  isConversationRole,
+  CONVERSATION_PURPOSES,
+  CONVERSATION_TABLES,
+} from "@crucible/core";
+import { REHEARSAL_PERSONA_LABELS, REHEARSAL_PERSONAS } from "@/lib/rehearsal-personas";
+import {
+  HURDLE_TYPES,
+  HURDLE_GUIDANCE,
+  getHurdleGuidance,
+  isRecordHurdle,
+  nonRecordIntakeQuestions,
+} from "@/lib/hurdle-guidance";
+import { computeSufficiency, scoreAnswerText } from "@/lib/sufficiency";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1634,6 +1662,294 @@ section("help & feedback");
     !!findHelpArticle("how do I tailor my resume to a job"));
   check("help: gibberish retrieves no article",
     findHelpArticle("zzxq") === null);
+}
+
+// ── Conversation store: AAD binding + consent defaults + purpose/role maps ────
+// (Phase 5.1). The encrypt/decrypt round-trip is covered in the crypto section;
+// here we assert the PURE pieces the store and routes depend on.
+section("conversation store");
+{
+  // AAD binding format is exactly `${owner}:${purpose}:${session}` -- the same
+  // owner:purpose:extra shape secureObject.ts uses. A stored chunk cannot be
+  // replayed under a different owner, purpose, or session because decrypt binds
+  // to this string.
+  check("conv: aad binds owner:purpose:session in order",
+    buildConversationAad("u1", "disclosure_rehearsal", "s9") === "u1:disclosure_rehearsal:s9");
+  check("conv: interview aad uses its own purpose segment",
+    buildConversationAad("u1", "interview_voice", "s9") === "u1:interview_voice:s9");
+  check("conv: aad differs when owner differs (no cross-owner replay)",
+    buildConversationAad("a", "interview_voice", "s") !== buildConversationAad("b", "interview_voice", "s"));
+  check("conv: aad differs when session differs",
+    buildConversationAad("u", "interview_voice", "s1") !== buildConversationAad("u", "interview_voice", "s2"));
+
+  // Both transcript layers are OPT-IN: declined by default. This is the gate
+  // that decides whether a turn is stored at all.
+  check("conv: disclosure_transcript defaults DECLINED (opt-in)",
+    consentDefaultFor("disclosure_transcript") === "declined");
+  check("conv: interview_transcript defaults DECLINED (opt-in)",
+    consentDefaultFor("interview_transcript") === "declined");
+
+  // Purpose -> consent layer map.
+  check("conv: disclosure purpose maps to disclosure_transcript layer",
+    consentLayerForPurpose("disclosure_rehearsal") === "disclosure_transcript");
+  check("conv: interview purpose maps to interview_transcript layer",
+    consentLayerForPurpose("interview_voice") === "interview_transcript");
+
+  // Purpose guard: only the two real purposes pass; junk is rejected.
+  check("conv: real purposes validate",
+    CONVERSATION_PURPOSES.every((p) => isConversationPurpose(p)) &&
+    CONVERSATION_PURPOSES.length === 2);
+  check("conv: junk purpose rejected",
+    !isConversationPurpose("audio") && !isConversationPurpose("") && !isConversationPurpose(null));
+
+  // Role guard: only user/assistant; junk rejected.
+  check("conv: user/assistant roles validate",
+    isConversationRole("user") && isConversationRole("assistant"));
+  check("conv: junk role rejected",
+    !isConversationRole("system") && !isConversationRole("") && !isConversationRole(42));
+
+  // Per-purpose separation: disclosure and interview never share a table.
+  check("conv: disclosure and interview use separate session tables",
+    CONVERSATION_TABLES.disclosure_rehearsal.session !== CONVERSATION_TABLES.interview_voice.session);
+  check("conv: disclosure and interview use separate chunk tables",
+    CONVERSATION_TABLES.disclosure_rehearsal.chunk !== CONVERSATION_TABLES.interview_voice.chunk);
+}
+
+// ── disclosure phase 5 (personas, hurdle guidance, sufficiency, min-collection) ──
+section("disclosure phase 5");
+{
+  // 5.5 -- the persona set matches the LOCKED list, in order.
+  const LOCKED_PERSONAS = [
+    "Supportive friend",
+    "Family member",
+    "Mentor",
+    "Hiring manager (warm)",
+    "Hiring manager (skeptical)",
+    "New coworker",
+    "Child's teacher or childcare provider",
+    "Landlord",
+  ];
+  check(
+    "phase5: persona labels match the locked set exactly",
+    JSON.stringify(REHEARSAL_PERSONA_LABELS) === JSON.stringify(LOCKED_PERSONAS)
+  );
+  check(
+    "phase5: persona constant has 8 entries with stable ids",
+    REHEARSAL_PERSONAS.length === 8 &&
+      REHEARSAL_PERSONAS.every((p) => typeof p.id === "string" && p.id.length > 0)
+  );
+
+  // 5.3 -- every hurdle has a reviewed static entry with a review date.
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  check(
+    "phase5: every hurdle type has a guidance entry with a review date",
+    HURDLE_TYPES.every((h) => {
+      const g = HURDLE_GUIDANCE[h];
+      return !!g && DATE_RE.test(g.reviewDate);
+    })
+  );
+
+  // 5.3 -- NON-record hurdles carry NO statute / legal-claim text anywhere in
+  // their user-facing coaching (frame + script + intake). Coaching only.
+  const LEGAL_CLAIM_RE =
+    /\b(statute|§|u\.s\.c\.|ordinance|ban[- ]the[- ]box|expungement|eeoc|\bada\b|fmla|felony|misdemeanor|your rights|legal advice|attorney|lawyer|lawsuit|the law\b|by law\b)\b/i;
+  const nonRecord = HURDLE_TYPES.filter((h) => h !== "record");
+  let anyLegal = false;
+  for (const h of nonRecord) {
+    const g = HURDLE_GUIDANCE[h];
+    const blob = [g.coachingFrame, g.scriptScaffold, ...g.intakeQuestions.map((q) => q.label + " " + (q.placeholder ?? ""))].join(" ");
+    if (LEGAL_CLAIM_RE.test(blob)) {
+      anyLegal = true;
+      console.error(`  legal-claim text found in non-record hurdle "${h}"`);
+    }
+  }
+  check("phase5: non-record hurdles carry NO statute/legal-claim text", !anyLegal);
+
+  // 5.3 -- record routes to jurisdiction; non-record does not.
+  check(
+    "phase5: record hurdle routes to jurisdiction, non-record does not",
+    isRecordHurdle("record") &&
+      getHurdleGuidance("record").routesToJurisdiction === true &&
+      nonRecord.every((h) => getHurdleGuidance(h).routesToJurisdiction === false)
+  );
+
+  // 5.4 -- minimum collection: no non-record intake question asks for an SSN,
+  // a diagnosis, or a case/docket number.
+  const FORBIDDEN_FIELD_RE = /(ssn|social security|diagnos|case number|case #|docket|conviction detail|what you were charged)/i;
+  let anyForbidden = false;
+  for (const h of nonRecord) {
+    for (const q of nonRecordIntakeQuestions(h)) {
+      if (FORBIDDEN_FIELD_RE.test(q.label + " " + (q.placeholder ?? ""))) {
+        anyForbidden = true;
+        console.error(`  minimum-collection breach in "${h}": ${q.label}`);
+      }
+    }
+  }
+  check("phase5: non-record intake never asks for SSN/diagnosis/case-number", !anyForbidden);
+  check(
+    "phase5: record hurdle exposes no non-record intake set",
+    nonRecordIntakeQuestions("record").length === 0
+  );
+
+  // 5.4 -- sufficiency meter: poor for a tiny answer, strong for a detailed one.
+  check("phase5: sufficiency is poor for a 3-char answer", computeSufficiency(["abc"]) === "poor");
+  const detailed =
+    "I have eight years of warehouse experience, I trained three new hires last year, I show up early every day, and I am proud that one of them became a shift lead.";
+  check("phase5: sufficiency is strong for a detailed answer", computeSufficiency([detailed]) === "strong");
+  // Monotonic-ish: a longer answer never scores lower than a shorter prefix.
+  check(
+    "phase5: scoreAnswerText is monotonic-ish (longer >= shorter)",
+    scoreAnswerText("abc") <= scoreAnswerText("abc def ghi") &&
+      scoreAnswerText("abc def ghi") <= scoreAnswerText(detailed)
+  );
+  // Adding an answer never lowers the level.
+  check(
+    "phase5: adding detail never lowers sufficiency",
+    computeSufficiency([detailed]) === "strong" && computeSufficiency([detailed, detailed]) === "strong"
+  );
+}
+
+// ── interview phase 5 (JD auto-fill, voice transcript mapping, struggle tags) ──
+section("interview phase 5");
+{
+  // 5.9 -- struggle-tags classifier maps feedback themes to the expected tags.
+  const ownFb = {
+    improvements: [
+      "You framed your record as something that was done to you. Own that story more.",
+    ],
+    disclosure_notes: "When the background check came up you got a bit defensive.",
+    overall: "Solid start.",
+  };
+  const ownTags = deriveStruggleTags(ownFb);
+  check(
+    "phase5-interview: 'blame/own' feedback yields owning_the_gap",
+    ownTags.includes("owning_the_gap")
+  );
+  check(
+    "phase5-interview: 'defensive' feedback yields staying_calm",
+    ownTags.includes("staying_calm")
+  );
+
+  const specFb = { improvements: ["Give specific examples with real numbers instead of vague answers."] };
+  check(
+    "phase5-interview: vague/specific feedback yields specifics",
+    deriveStruggleTags(specFb).includes("specifics")
+  );
+
+  const closeFb = { improvements: ["Close stronger -- have a few questions to ask at the end."] };
+  check(
+    "phase5-interview: closing feedback yields closing",
+    deriveStruggleTags(closeFb).includes("closing")
+  );
+
+  // Empty / unusable feedback -> no tags.
+  check("phase5-interview: empty feedback yields no tags", deriveStruggleTags({}).length === 0);
+  check("phase5-interview: null feedback yields no tags", deriveStruggleTags(null).length === 0);
+  check(
+    "phase5-interview: strengths-only feedback yields no tags (never flips a win to a to-do)",
+    deriveStruggleTags({ improvements: [] } as any).length === 0
+  );
+
+  // Cap is honored.
+  check("phase5-interview: derive respects the max cap", deriveStruggleTags(ownFb, 1).length <= 1);
+
+  // Encouraging labels only -- no shaming string. Every emitted tag has a
+  // non-empty, skill-framed label; the raw ids carry no deficit words.
+  const SHAMING = /\b(fail|weak|bad|poor|deficien|problem|can'?t|inadequate|lack)\b/i;
+  check(
+    "phase5-interview: every tag has an encouraging label",
+    STRUGGLE_TAG_IDS.every((id) => struggleTagLabel(id).length > 0)
+  );
+  check(
+    "phase5-interview: no tag id or label is a shaming string",
+    STRUGGLE_TAG_IDS.every((id) => !SHAMING.test(id) && !SHAMING.test(struggleTagLabel(id)))
+  );
+  check(
+    "phase5-interview: knownStruggleTags filters junk + dedupes",
+    JSON.stringify(knownStruggleTags(["specifics", "specifics", "nonsense", 42])) ===
+      JSON.stringify(["specifics"])
+  );
+
+  // 5.6 -- JD source picker prefers the saved snapshot over a paste; falls back.
+  check(
+    "phase5-interview: snapshot wins over paste",
+    pickJdSource("saved jd", "pasted jd").source === "snapshot" &&
+      pickJdSource("saved jd", "pasted jd").text === "saved jd"
+  );
+  check(
+    "phase5-interview: falls back to paste when no snapshot",
+    pickJdSource("   ", "pasted jd").source === "pasted" &&
+      pickJdSource(null, "pasted jd").text === "pasted jd"
+  );
+  check(
+    "phase5-interview: none when both empty",
+    pickJdSource("", "  ").source === "none" && pickJdSource(null, null).text === ""
+  );
+
+  // 5.6 -- snapshot age formatting is plain and never negative.
+  const NOW = new Date("2026-08-12T12:00:00Z");
+  check(
+    "phase5-interview: today formats as 'saved today'",
+    formatSnapshotAge("2026-08-12T09:00:00Z", NOW) === "saved today"
+  );
+  check(
+    "phase5-interview: yesterday formats as 'saved yesterday'",
+    formatSnapshotAge("2026-08-11T09:00:00Z", NOW) === "saved yesterday"
+  );
+  check(
+    "phase5-interview: a few days formats as 'saved N days ago'",
+    formatSnapshotAge("2026-08-09T09:00:00Z", NOW) === "saved 3 days ago"
+  );
+  check(
+    "phase5-interview: future/skew never reads negative",
+    formatSnapshotAge("2026-08-20T09:00:00Z", NOW) === "saved today"
+  );
+  check("phase5-interview: missing date is empty", formatSnapshotAge(null, NOW) === "");
+  check("phase5-interview: junk date is empty", formatSnapshotAge("not-a-date", NOW) === "");
+
+  // 5.7 -- data-channel event -> completed turn mapping (text only).
+  check(
+    "phase5-interview: user speech-final maps to a user turn",
+    JSON.stringify(
+      turnFromRealtimeEvent({
+        type: "conversation.item.input_audio_transcription.completed",
+        transcript: "  I ran the night shift.  ",
+      })
+    ) === JSON.stringify({ role: "user", text: "I ran the night shift." })
+  );
+  check(
+    "phase5-interview: assistant transcript-done maps to an assistant turn",
+    JSON.stringify(
+      turnFromRealtimeEvent({
+        type: "response.audio_transcript.done",
+        transcript: "Tell me more about that.",
+      })
+    ) === JSON.stringify({ role: "assistant", text: "Tell me more about that." })
+  );
+  check(
+    "phase5-interview: deltas and other events are NOT completed turns",
+    turnFromRealtimeEvent({ type: "response.audio_transcript.delta", delta: "Tell" }) === null &&
+      turnFromRealtimeEvent({ type: "session.created" }) === null &&
+      turnFromRealtimeEvent({ type: "response.audio.delta", delta: "..." }) === null
+  );
+  check(
+    "phase5-interview: empty/whitespace transcript is dropped (nothing to store)",
+    turnFromRealtimeEvent({
+      type: "response.audio_transcript.done",
+      transcript: "   ",
+    }) === null
+  );
+  check(
+    "phase5-interview: malformed events are safely ignored",
+    turnFromRealtimeEvent(null) === null &&
+      turnFromRealtimeEvent("nope") === null &&
+      turnFromRealtimeEvent({ type: 42 }) === null
+  );
+  check(
+    "phase5-interview: caption deltas read only from the delta event",
+    captionDeltaFromEvent({ type: "response.audio_transcript.delta", delta: "Hi" }) === "Hi" &&
+      captionDeltaFromEvent({ type: "response.audio_transcript.done", transcript: "Hi" }) === null
+  );
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────

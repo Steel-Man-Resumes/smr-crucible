@@ -16,6 +16,7 @@ import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { getHurdleGuidance, isRecordHurdle } from "@/lib/hurdle-guidance";
 
 export const maxDuration = 30;
 
@@ -29,23 +30,126 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  // Route is mode:"user" in withRateLimit, so a session is guaranteed by
+  // the time handlePost runs -- re-derive here to attribute the AI call.
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers, hurdle } =
+    await request.json();
+
+  // Phase 5.3: the criminal-record hurdle keeps the full jurisdiction /
+  // ban-the-box path below. Any OTHER hurdle gets STATIC, legal-reviewed
+  // coaching (lib/hurdle-guidance) -- the model may personalize the timing,
+  // script, and tips, but it is NEVER allowed to state law for non-record
+  // hurdles, and the "what you have to share" text is injected verbatim.
+  const isRecord = isRecordHurdle(hurdle) || hurdle === undefined || hurdle === null;
+
   if (isMockEnabled()) {
-    return NextResponse.json(MOCK_DISCLOSURE_PLAN);
+    if (isRecord) return NextResponse.json(MOCK_DISCLOSURE_PLAN);
+    const g = getHurdleGuidance(hurdle);
+    return NextResponse.json({
+      timing_advice:
+        "You get to choose when and whether to bring this up. Often the best moment is after they already see you are a strong fit -- later in the process, not on the first form.",
+      legal_context: g.coachingFrame,
+      script: g.scriptScaffold,
+      tips: [
+        "Keep it short -- a sentence or two, then move on.",
+        "Pivot straight to a real strength.",
+        "You do not owe anyone more detail than you want to give.",
+        "Practice it out loud until it feels natural.",
+      ],
+    });
   }
 
   try {
-    // Route is mode:"user" in withRateLimit, so a session is guaranteed by
-    // the time handlePost runs -- re-derive here to attribute the AI call.
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers } = await request.json();
-
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
       );
+    }
+
+    // ── Non-record hurdle: coaching frames only, no fabricated law ──────────
+    if (!isRecord) {
+      const g = getHurdleGuidance(hurdle);
+
+      let intakeLines = "";
+      if (Array.isArray(intakeAnswers) && intakeAnswers.length) {
+        intakeLines = intakeAnswers
+          .filter((a: any) => a && typeof a.answer === "string" && a.answer.trim())
+          .map((a: any) => `- ${sanitizeForPrompt(a.question, 200)}: ${sanitizeForPrompt(a.answer, 500)}`)
+          .join("\n");
+      }
+      const strengthsLine =
+        forgeContext?.strengths?.length
+          ? forgeContext.strengths.map((s: any) => sanitizeForPrompt(s.title, 120)).join(", ")
+          : "";
+
+      const nonRecordPrompt = `You are a supportive career coach helping a justice-impacted jobseeker prepare to talk about a hurdle that is NOT a criminal record. The hurdle is: ${sanitizeForPrompt(g.label, 80)}.
+
+USE THIS REVIEWED COACHING FRAME as your foundation (do not contradict it):
+${g.coachingFrame}
+
+STARTER SCRIPT SHAPE (personalize it, keep their voice):
+${g.scriptScaffold}
+
+${targetJob ? `TARGET ROLE: ${sanitizeForPrompt(targetJob, 120)}` : ""}
+${strengthsLine ? `STRENGTHS TO PIVOT TO: ${strengthsLine}` : ""}
+${intakeLines ? `IN THEIR OWN WORDS:\n${intakeLines}` : ""}
+${refinementNote ? `\nREFINEMENT REQUEST: ${sanitizeForPrompt(refinementNote, 500)}` : ""}
+
+ABSOLUTE RULES:
+- This is coaching, NOT legal advice. Do NOT state any law, statute, rule, ordinance, "your rights," or protection. Do NOT name any agency or act. If they ask about legal questions, tell them to check with a local job coach or legal aid -- do not answer it yourself.
+- Never ask them to share private detail they do not want to share. Reinforce that they choose how much to say.
+- Warm, plain, 6th-grade reading level. Use "--" never an em dash. No emojis.
+
+Return JSON ONLY:
+{
+  "timing_advice": "When and whether to bring it up, in plain coaching language. No legal claims.",
+  "script": "A natural script under 30 seconds spoken, in their voice, that keeps it short and pivots to strength.",
+  "tips": ["tip 1","tip 2","tip 3","tip 4"]
+}`;
+
+      const raw = await callAI("", [{ role: "user", content: nonRecordPrompt }], 1200, MODEL_DEEP, {
+        userId,
+        endpoint: "disclosure-guide",
+      });
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error("No JSON in response");
+      const parsed = JSON.parse(m[0]);
+      // legal_context is the STATIC reviewed frame, injected verbatim -- never
+      // model-generated, so no fabricated statute can reach the user.
+      const nonRecordResult = {
+        timing_advice: typeof parsed.timing_advice === "string" ? parsed.timing_advice : "",
+        legal_context: g.coachingFrame,
+        script: typeof parsed.script === "string" ? parsed.script : g.scriptScaffold,
+        tips: Array.isArray(parsed.tips)
+          ? parsed.tips.filter((t: unknown): t is string => typeof t === "string").slice(0, 6)
+          : [],
+      };
+
+      try {
+        const { logDecision } = await import("@crucible/core");
+        await logDecision({
+          contextPage: "disclosure-guide",
+          modelProvider: AI_PROVIDER,
+          modelId: AI_MODEL,
+          input: JSON.stringify({ hurdle: g.id, timing }).slice(0, 500),
+          explanation: `Generated non-record hurdle coaching (${g.id}) from static reviewed guidance -- no legal claims`,
+          outputSummary: {
+            type: "disclosure_plan_hurdle",
+            hurdle: g.id,
+            review_date: g.reviewDate,
+            has_script: !!nonRecordResult.script,
+            tips_count: nonRecordResult.tips.length,
+          },
+        });
+      } catch (err) {
+        console.error("Decision log failed (disclosure hurdle):", err);
+      }
+
+      return NextResponse.json(nonRecordResult);
     }
 
     // Build candidate profile from Forge data

@@ -15,7 +15,12 @@ export type ConsentLayer =
   | "research"
   | "sharing"
   | "outcome_anonymous"
-  | "outcome_named";
+  | "outcome_named"
+  // Phase 5.1 (migration 041): opt-in transcript retention. Storing an
+  // encrypted, text-only rehearsal/interview transcript is a data-retention
+  // decision, so both default to declined (see consentDefaultFor).
+  | "disclosure_transcript"
+  | "interview_transcript";
 
 export interface ConsumerConsent {
   id: string;

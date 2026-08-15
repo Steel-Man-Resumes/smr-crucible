@@ -30,6 +30,8 @@
  *   "chat"         -> coach_conversation
  *   "consent"      -> consent event history
  *   "usage"        -> ai_token_usage totals
+ *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
+ *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
  * The `account` block (id/name/email) is always included. If `categories` is
  * missing/empty or contains "everything", the full dump is returned (the
  * default), so old callers are unchanged.
@@ -41,7 +43,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getOne, getUserConsents } from "@crucible/core";
+import { query, getOne, getUserConsents, exportUserConversations } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -186,6 +188,22 @@ export async function POST(req: Request) {
     }
     if (want("applications")) payload.jobApplications = jobApplicationRows;
     if (want("chat")) payload.coachConversation = coachConversationRows;
+
+    // Phase 5.1: DECRYPTED, text-only transcripts, split by purpose so each is
+    // its own export category. Only decrypt when actually requested.
+    if (want("disclosure_rehearsal") || want("interview_voice")) {
+      const conversations = await exportUserConversations(userId);
+      if (want("disclosure_rehearsal")) {
+        payload.disclosureRehearsals = conversations.filter(
+          (c) => c.purpose === "disclosure_rehearsal"
+        );
+      }
+      if (want("interview_voice")) {
+        payload.interviewVoiceSessions = conversations.filter(
+          (c) => c.purpose === "interview_voice"
+        );
+      }
+    }
     if (want("consent")) payload.consent = consents;
     if (want("usage")) {
       payload.aiUsage = {

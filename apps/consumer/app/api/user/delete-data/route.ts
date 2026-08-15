@@ -11,6 +11,8 @@
  * - decision_log entries
  * - ai_usage entries
  * - coach_conversation (AI coach memory -- full transcript erase)
+ * - disclosure_rehearsal + interview_voice sessions/chunks (Phase 5.1
+ *   encrypted, text-only transcripts, both purposes)
  *
  * ACCOUNT vs DATA (Phase 7.4): by default this wipes the DATA above but KEEPS
  * the account/login, so the user can sign back in to an empty workspace. If the
@@ -55,7 +57,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getOne, listSecureObjectsForOwner, enqueueDeletion } from "@crucible/core";
+import { query, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations } from "@crucible/core";
 
 export async function DELETE(req: Request) {
   const session = await auth();
@@ -112,6 +114,9 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
+    // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).
+    // Chunks cascade off their session rows; this deletes the sessions.
+    await deleteUserConversations(userId);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Reset access codes and tier

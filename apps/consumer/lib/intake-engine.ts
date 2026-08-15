@@ -45,7 +45,11 @@ function topicFraming(topic: string): string {
   }
 }
 
-export function buildFollowupsSystemPrompt(topic: string, context: IntakeContext): string {
+export function buildFollowupsSystemPrompt(
+  topic: string,
+  context: IntakeContext,
+  plainLanguage = false
+): string {
   const known: string[] = [];
   if (context.targetJob) known.push(`Target role: ${sanitizeForPrompt(context.targetJob, 120)}`);
   if (context.headline) known.push(`Their headline: ${sanitizeForPrompt(context.headline, 200)}`);
@@ -79,7 +83,11 @@ You will be given what they have answered so far. Read it closely, then EITHER:
 - If their answers already hold enough concrete, usable depth for this topic, stop.
 
 RULES:
-- Plain language, 6th-grade reading level. Warm, human, never clinical.
+- Plain language, 6th-grade reading level. Warm, human, never clinical.${
+    plainLanguage
+      ? "\n- PLAIN-LANGUAGE MODE IS ON: keep every question extra short and simple. Use everyday words. Aim for a 4th-grade reading level. No jargon."
+      : ""
+  }
 - One idea per question -- no compound questions.
 - Build on THEIR words. If they mention a place, a person, or a task, ask about THAT.
 - Never re-ask anything they already told you or that you already know above.

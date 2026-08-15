@@ -17,6 +17,9 @@ export interface VoiceSessionBody {
     targetRole?: string;
     interviewType?: string;
     includeDisclosure?: boolean;
+    /** Skills the user chose to target this run, carried from last time's
+     *  feedback (Phase 5.9 progressive practice). Encouraging, never a deficit. */
+    focusAreas?: string[];
   };
   forgeContext?: {
     skills?: string[];
@@ -35,6 +38,7 @@ export function buildVoiceInstructions(body: VoiceSessionBody): string {
   const narrative = sanitizeForPrompt(forge.narrative, 700);
   const includeDisclosure =
     config.includeDisclosure || config.interviewType === "disclosure";
+  const focusAreas = sanitizeArray(config.focusAreas, 4, 60);
 
   return `You are a professional hiring manager running a live voice mock interview.
 
@@ -43,6 +47,7 @@ Interview type: ${interviewType}
 Candidate skills: ${skills}
 Candidate strengths: ${strengths}
 Candidate context: ${narrative}
+${focusAreas ? `The candidate is working on these skills this session: ${focusAreas}. Give them natural chances to practice these, and notice when they do it well.` : ""}
 
 Rules:
 - Start immediately with a short greeting and one interview question.
@@ -72,6 +77,16 @@ export function buildVoiceSessionConfig(body: VoiceSessionBody) {
     instructions: buildVoiceInstructions(body),
     reasoning: { effort: "low" as const },
     audio: {
+      // Transcribe the user's speech so the browser receives text-final events
+      // (conversation.item.input_audio_transcription.completed). This powers the
+      // on-screen live captions (accessibility) and the opt-in, text-only
+      // transcript capture (Phase 5.7). Audio is never stored by us; only the
+      // transcribed text can be, and only when the user consents.
+      input: {
+        transcription: {
+          model: "whisper-1",
+        },
+      },
       output: {
         voice: "marin",
       },

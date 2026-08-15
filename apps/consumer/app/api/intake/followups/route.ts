@@ -54,6 +54,7 @@ async function handlePost(request: Request) {
     const round: number = Number.isFinite(body.round)
       ? Math.max(0, Math.floor(body.round))
       : 0;
+    const plainLanguage: boolean = body.plainLanguage === true;
 
     // Hard cap + nothing-to-deepen: stop without spending a token.
     if (round >= MAX_FOLLOWUP_ROUNDS || answersSoFar.length === 0) {
@@ -64,7 +65,7 @@ async function handlePost(request: Request) {
       return NextResponse.json({ questions: MOCK_INTAKE_FOLLOWUPS, done: false });
     }
 
-    const system = buildFollowupsSystemPrompt(topic, context);
+    const system = buildFollowupsSystemPrompt(topic, context, plainLanguage);
     const userMsg = buildAnswersBlock(answersSoFar, round);
 
     const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP, { userId, endpoint: "intake-followups" });

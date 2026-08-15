@@ -23,9 +23,23 @@ import { escapeHtml } from "@/lib/escape-html";
 import { useUserContext } from "@/lib/use-user-context";
 import { ProgressiveIntake, type IntakeQuestion } from "@/components/ProgressiveIntake";
 import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
+import { ConfidenceCoach } from "@/components/ConfidenceCoach";
+import {
+  HURDLE_TYPES,
+  getHurdleGuidance,
+  isRecordHurdle,
+  nonRecordIntakeQuestions,
+  type HurdleType,
+} from "@/lib/hurdle-guidance";
 import { CheckCircle2 } from "lucide-react";
 
 type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
+
+interface StrengthProposal {
+  title: string;
+  evidence: string;
+  source: string;
+}
 
 interface RecordInfo {
   type: string;
@@ -94,6 +108,10 @@ function DisclosurePlannerPage() {
   const [showConsentGate, setShowConsentGate] = useState(false);
   const [targetCompany, setTargetCompany] = useState("");
   const [step, setStep] = useState<PlannerStep>("assess");
+  const [hurdle, setHurdle] = useState<HurdleType>("record");
+  const [proposals, setProposals] = useState<StrengthProposal[]>([]);
+  const [proposalsState, setProposalsState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [plainLanguage, setPlainLanguage] = useState(false);
   const [record, setRecord] = useState<RecordInfo>({
     type: "",
     charge_count: "",
@@ -104,31 +122,16 @@ function DisclosurePlannerPage() {
   const [timing, setTiming] = useState("");
   const [plan, setPlan] = useState<any>(null);
   const [generating, setGenerating] = useState(false);
-  const [rehearsalMessages, setRehearsalMessages] = useState<
-    Array<{ role: string; content: string }>
-  >([]);
-  const [rehearsalInput, setRehearsalInput] = useState("");
-  const [rehearsing, setRehearsing] = useState(false);
   const [rateLimitError, setRateLimitError] = useState("");
   const [targetJob, setTargetJob] = useState("");
   const [forge, setForge] = useState<ForgeContext>(EMPTY_FORGE);
   const [intakeAnswers, setIntakeAnswers] = useState<IntakeAnswer[]>([]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const [adjustPanelOpen, setAdjustPanelOpen] = useState(false);
   const [adjustQuery, setAdjustQuery] = useState("");
   const [adjusting, setAdjusting] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
-  const recognitionRef = useRef<any>(null);
   const { context } = useUserContext();
   const forgeLoadedRef = useRef(false);
-
-  // Auto-scroll chat to bottom on new messages
-  useEffect(() => {
-    if (step === "rehearse") {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [rehearsalMessages, rehearsing, step]);
 
   // Load Forge context from the SERVER (not fragile cross-domain localStorage).
   // Strengths/skills/career paths come from the user's saved Forge analysis; the
@@ -181,7 +184,72 @@ function DisclosurePlannerPage() {
     if (job) setTargetJob(job);
   }, [searchParams]);
 
+  // Plain-language mode (7.2 / coach settings) -- respected intake-side so
+  // questions are phrased simpler when the user prefers it.
+  useEffect(() => {
+    fetch("/api/coach/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.data?.coachPlainLanguage) setPlainLanguage(true);
+      })
+      .catch(() => {});
+  }, []);
+
   const hasForgeData = forge.strengths.length > 0 || !!forge.headline;
+  const isRecord = isRecordHurdle(hurdle);
+  const hurdleGuidance = getHurdleGuidance(hurdle);
+
+  // --- 5.2 Strength discovery: AI proposes, user confirms ---
+  async function proposeStrengths() {
+    setProposalsState("loading");
+    try {
+      const res = await fetch("/api/disclosure-strengths", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetJob: targetJob || undefined,
+          forgeContext: hasForgeData
+            ? {
+                headline: forge.headline,
+                strengths: forge.strengths.filter((s) => s.title.trim()),
+                skills: forge.skills.slice(0, 8),
+              }
+            : undefined,
+          intakeAnswers: intakeAnswers.length ? intakeAnswers : undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Do not re-propose a strength the user already has on their list.
+        const have = new Set(forge.strengths.map((s) => s.title.trim().toLowerCase()));
+        const fresh = (data.proposals || []).filter(
+          (p: StrengthProposal) => p.title && !have.has(p.title.trim().toLowerCase())
+        );
+        setProposals(fresh);
+        setProposalsState("done");
+      } else {
+        setProposalsState("error");
+      }
+    } catch {
+      setProposalsState("error");
+    }
+  }
+
+  function acceptProposal(index: number) {
+    const p = proposals[index];
+    if (!p) return;
+    setForge((prev) => ({
+      ...prev,
+      strengths: [...prev.strengths, { title: p.title, evidence: p.evidence }],
+    }));
+    setProposals((prev) => prev.filter((_, i) => i !== index));
+  }
+  function rejectProposal(index: number) {
+    setProposals((prev) => prev.filter((_, i) => i !== index));
+  }
+  function editProposal(index: number, field: "title" | "evidence", value: string) {
+    setProposals((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+  }
 
   /** Build context string for AI prompts so responses reference real strengths */
   function buildForgePromptContext(): string {
@@ -227,6 +295,7 @@ function DisclosurePlannerPage() {
         body: JSON.stringify({
           record,
           timing,
+          hurdle,
           targetJob: targetJob || undefined,
           forgeContext: hasForgeData
             ? {
@@ -337,117 +406,6 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
     setTimeout(() => w.print(), 400);
   }
 
-  function startVoice() {
-    const SR =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      alert("Voice input requires Chrome or Edge.");
-      return;
-    }
-    if (recording) {
-      recognitionRef.current?.stop();
-      setRecording(false);
-      return;
-    }
-    const r = new SR();
-    r.lang = "en-US";
-    r.interimResults = false;
-    recognitionRef.current = r;
-    r.onresult = (e: any) => {
-      const text = Array.from(e.results as any[])
-        .map((res: any) => res[0].transcript)
-        .join(" ");
-      setRehearsalInput((prev) =>
-        [prev.trim(), text.trim()].filter(Boolean).join(" ")
-      );
-    };
-    r.onend = () => setRecording(false);
-    r.onerror = () => setRecording(false);
-    r.start();
-    setRecording(true);
-  }
-
-  async function sendRehearsalMessage() {
-    if (!rehearsalInput.trim()) return;
-
-    const newMessage = { role: "user", content: rehearsalInput };
-    const updatedMessages = [...rehearsalMessages, newMessage];
-    setRehearsalMessages(updatedMessages);
-    setRehearsalInput("");
-    setRehearsing(true);
-
-    const forgeCtx = buildForgePromptContext();
-
-    try {
-      const res = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: updatedMessages,
-          context: {
-            currentPage: "disclosure-rehearsal",
-            readinessStage: "action",
-            userInput: { record, timing },
-          },
-          systemOverride: `You are playing the role of a hiring manager conducting a job interview. The candidate needs to practice disclosing their criminal record.
-${targetJob ? `\nYou are interviewing them for: ${targetJob}` : ""}
-${forgeCtx}
-
-Your role:
-- Act as a professional but fair hiring manager
-- Ask natural follow-up questions a real manager would ask
-- Don't be hostile, but don't be a pushover either
-- After 3-4 exchanges, break character and give brief feedback on how they did
-- Focus feedback on: confidence, honesty, brevity, pivot to strengths
-${forge.strengths.length > 0 ? `- When giving feedback, note whether they leveraged their verified strengths: ${forge.strengths.map((s) => s.title).join(", ")}` : ""}
-- Remember: disclosure happens in person, face-to-face. The goal is to control the narrative with voice and presence, not apologize on paper.
-
-The candidate's record: ${record.type || "criminal record"}, ${record.most_recent || "timing unknown"}, ${record.supervision || "supervision unknown"}.`,
-        }),
-      });
-
-      if (res.status === 429) {
-        const data = await res.json();
-        setRateLimitError(data.error);
-      } else if (res.ok) {
-        const reader = res.body?.getReader();
-        if (reader) {
-          let text = "";
-          const decoder = new TextDecoder();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            text += decoder.decode(value, { stream: true });
-          }
-          // Extract text content from stream
-          const contentMatch = text.match(/0:"([^"]*)"/g);
-          const content = contentMatch
-            ? contentMatch
-                .map((m) => m.slice(3, -1))
-                .join("")
-                .replace(/\\n/g, "\n")
-            : text;
-
-          setRehearsalMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: content || "Could you tell me a bit more about that?" },
-          ]);
-        }
-      }
-    } catch {
-      setRehearsalMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "I had trouble responding. Let's try again.",
-        },
-      ]);
-    } finally {
-      setRehearsing(false);
-    }
-  }
-
   // --- Step 1: Assess ---
   if (step === "assess") {
     return (
@@ -464,6 +422,111 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           Disclosure happens in person, face-to-face — never on paper. This
           tool helps you prepare and practice what to say.
         </p>
+
+        {/* 5.3 -- what are we planning to talk about? */}
+        <div className="mb-8">
+          <h2 className="font-medium text-t-white mb-1">
+            What do you want to plan for?
+          </h2>
+          <p className="text-xs text-t-phos-dim mb-3">
+            Pick the thing you are weighing how to talk about. You are always the
+            one who decides how much to share.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {HURDLE_TYPES.map((h) => {
+              const g = getHurdleGuidance(h);
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setHurdle(h)}
+                  className={`t-focus text-left px-3 py-2.5 border transition-colors ${
+                    hurdle === h
+                      ? "bg-t-panel-2 border-t-amber"
+                      : "bg-t-panel border-t-line hover:border-t-amber"
+                  }`}
+                >
+                  <span className="block text-sm font-medium text-t-white">{g.label}</span>
+                  <span className="block text-xs text-t-phos-dim mt-0.5">{g.blurb}</span>
+                </button>
+              );
+            })}
+          </div>
+          {!isRecord && (
+            <div className="mt-3 bg-t-panel p-4 border border-t-steel">
+              <p className="text-sm text-t-phos leading-relaxed">{hurdleGuidance.coachingFrame}</p>
+              <p className="text-xs text-t-phos-dim mt-2">
+                This is coaching, not legal advice. We will only ask what your plan
+                needs -- never private detail you do not want to share.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 5.2 -- strength discovery: we propose, you confirm */}
+        <div className="bg-t-panel p-5 border border-t-line mb-8">
+          <h2 className="font-semibold text-t-amber-bright mb-1">Find your strengths</h2>
+          <p className="text-xs text-t-phos-dim mb-3">
+            We can look at your own history and suggest strengths to lead with.
+            You confirm, edit, or skip each one -- nothing is added until you say so.
+          </p>
+          {proposalsState !== "done" && proposals.length === 0 && (
+            <button
+              type="button"
+              onClick={proposeStrengths}
+              disabled={proposalsState === "loading"}
+              className="t-focus px-4 py-2.5 bg-t-steel text-white text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-colors"
+            >
+              {proposalsState === "loading" ? "Looking..." : "Suggest strengths from my history"}
+            </button>
+          )}
+          {proposalsState === "error" && (
+            <p className="text-sm text-t-amber-bright mt-2">
+              Could not load suggestions right now. You can still add strengths yourself below.
+            </p>
+          )}
+          {proposals.length > 0 && (
+            <div className="space-y-2 mt-2">
+              {proposals.map((p, i) => (
+                <div key={i} className="bg-t-panel-2 px-4 py-3 border border-t-line">
+                  <p className="text-xs text-t-steel font-medium mb-1.5">
+                    We noticed this -- does it fit?
+                  </p>
+                  <input
+                    value={p.title}
+                    onChange={(e) => editProposal(i, "title", e.target.value)}
+                    className="w-full px-3 py-2 border border-t-line text-sm font-medium text-t-white bg-t-panel focus:border-t-amber focus:outline-none mb-1.5"
+                  />
+                  <textarea
+                    value={p.evidence}
+                    onChange={(e) => editProposal(i, "evidence", e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-t-line text-xs text-t-phos-dim bg-t-panel focus:border-t-amber focus:outline-none resize-y mb-1"
+                  />
+                  {p.source && (
+                    <p className="text-xs text-t-phos-dim mb-2 italic">From your {p.source}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => acceptProposal(i)}
+                      className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
+                    >
+                      Yes, that's me
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rejectProposal(i)}
+                      className="px-3 py-1.5 text-t-phos-dim text-xs font-medium hover:text-t-white"
+                    >
+                      Not this one
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Lead with your strengths — from Forge */}
         {hasForgeData && (
@@ -568,8 +631,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
         )}
 
-        {/* Personalized vs generic -- motivate the deeper path */}
-        {!consentGiven && !showConsentGate && (
+        {/* Personalized vs generic -- motivate the deeper path (record only) */}
+        {isRecord && !consentGiven && !showConsentGate && (
           <div className="bg-t-panel p-5 border border-t-steel mb-8">
             <h3 className="font-semibold text-t-steel mb-2">
               Build a plan around you, or grab a generic template
@@ -601,7 +664,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
         )}
 
-        {showConsentGate && !consentGiven && (
+        {isRecord && showConsentGate && !consentGiven && (
           <div className="bg-t-panel p-6 border border-t-steel mb-8">
             <h3 className="font-bold text-t-white mb-4 text-lg">
               Before we continue
@@ -667,7 +730,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
         )}
 
-        {/* Record info (pre-filled from Forge if available) */}
+        {/* Record info (pre-filled from Forge if available) -- record hurdle only */}
+        {isRecord && (
         <div className={`space-y-4 mb-8 ${!consentGiven ? "opacity-40 pointer-events-none" : ""}`}>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -729,6 +793,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
             />
           </div>
         </div>
+        )}
 
         {/* When do you plan to disclose? */}
         <div className="mb-8">
@@ -750,7 +815,7 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         <button
           onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); setStep("deepen"); }}
-          disabled={!record.type}
+          disabled={isRecord && !record.type}
           className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
         >
           Next: a few quick questions
@@ -768,28 +833,38 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
       skills: forge.skills.map((s) => s.name),
       hasRecord: !!record.type,
     };
-    const initialQuestions: IntakeQuestion[] = [
-      {
-        id: "story",
-        label:
-          "In your own words, what do you most want an employer to understand about you?",
-        placeholder: "No wrong answers -- a sentence or two is plenty.",
-        multiline: true,
-      },
-      {
-        id: "since",
-        label: "What have you done since then that you are proud of?",
-        placeholder:
-          "Work, school, recovery, family, a habit you changed -- anything that shows who you are now.",
-        multiline: true,
-      },
-      {
-        id: "worry",
-        label: "What worries you most about bringing up your record?",
-        placeholder: "Naming the worry helps us prepare for it.",
-        multiline: true,
-      },
-    ];
+    // Record hurdle keeps its three story questions. Any OTHER hurdle uses the
+    // minimum-collection question set for that hurdle (lib/hurdle-guidance) --
+    // only what the coaching frame needs, never private detail.
+    const initialQuestions: IntakeQuestion[] = isRecord
+      ? [
+          {
+            id: "story",
+            label:
+              "In your own words, what do you most want an employer to understand about you?",
+            placeholder: "No wrong answers -- a sentence or two is plenty.",
+            multiline: true,
+          },
+          {
+            id: "since",
+            label: "What have you done since then that you are proud of?",
+            placeholder:
+              "Work, school, recovery, family, a habit you changed -- anything that shows who you are now.",
+            multiline: true,
+          },
+          {
+            id: "worry",
+            label: "What worries you most about bringing up your record?",
+            placeholder: "Naming the worry helps us prepare for it.",
+            multiline: true,
+          },
+        ]
+      : nonRecordIntakeQuestions(hurdle).map((q) => ({
+          id: q.id,
+          label: q.label,
+          placeholder: q.placeholder,
+          multiline: true,
+        }));
     return (
       <div className="max-w-2xl">
         <div className="flex items-center justify-between mb-2">
@@ -812,7 +887,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           topic="disclosure"
           context={intakeContext}
           initialQuestions={initialQuestions}
-          submitLabel={generating ? "Building your plan..." : "Build my disclosure plan"}
+          plainLanguage={plainLanguage}
+          submitLabel={generating ? "Building your plan..." : "Build my plan"}
           busy={generating}
           onComplete={(answers) => {
             setIntakeAnswers(answers);
@@ -996,11 +1072,11 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
           </div>
         )}
 
-        {/* Legal context */}
+        {/* Legal context (record) / what you have to share (other hurdles) */}
         {plan.legal_context && (
           <div className="bg-t-panel p-5 border border-t-line mb-6">
             <h2 className="font-semibold text-t-white mb-2">
-              Know your rights
+              {isRecord ? "Know your rights" : "What you do and don't have to share"}
             </h2>
             <p className="text-sm text-t-phos leading-relaxed">
               {plan.legal_context}
@@ -1041,11 +1117,8 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
 
         <button
           onClick={() => {
+            if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
             setStep("rehearse");
-            const opener = targetJob
-              ? `Hi there. Thanks for coming in today. I see you're interested in the ${targetJob} position. Tell me a little about yourself and why you're interested in this role.`
-              : "Hi there. Thanks for coming in today. So, tell me a little about yourself and why you're interested in this position.";
-            setRehearsalMessages([{ role: "assistant", content: opener }]);
           }}
           className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
@@ -1056,144 +1129,16 @@ The candidate's record: ${record.type || "criminal record"}, ${record.most_recen
     );
   }
 
-  // --- Step 3: Rehearse ---
+  // --- Step 3: Rehearse -- Confidence Coach (Phase 5.5) ---
   return (
-    <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-t-white">
-            Practice Mode
-          </h1>
-          <p className="text-sm text-t-phos-dim">
-            Practice disclosing with a simulated hiring manager
-            {targetJob ? ` for a ${targetJob} role` : ""}.
-          </p>
-        </div>
-        <button
-          onClick={() => setStep("plan")}
-          className="text-sm text-t-phos-dim hover:text-t-white"
-        >
-          Back to plan
-        </button>
-      </div>
-
-      {/* Strength reminders — compact chips above the chat */}
-      {forge.strengths.length > 0 && (
-        <div className="bg-t-panel px-4 py-3 border border-t-line mb-4">
-          <p className="text-xs text-t-amber-bright font-medium mb-1.5">
-            Pivot to your strengths:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {forge.strengths.map((s, i) => (
-              <span
-                key={i}
-                className="text-xs px-2 py-1 bg-t-panel-2 border border-t-line text-t-phos"
-              >
-                {s.title}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Chat */}
-      <div className="bg-t-panel border border-t-line mb-4">
-        <div className="p-5 space-y-4 max-h-[400px] overflow-y-auto">
-          {rehearsalMessages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-t-amber text-white"
-                    : "bg-t-panel-2 text-t-white border border-t-line"
-                }`}
-              >
-                {msg.content}
-              </div>
-            </div>
-          ))}
-          {rehearsing && (
-            <div className="flex justify-start">
-              <div className="bg-t-panel-2 border border-t-line px-4 py-3 flex gap-1">
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.2s]" />
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            sendRehearsalMessage();
-          }}
-          className="flex gap-2 p-4 border-t border-t-line"
-        >
-          <button
-            type="button"
-            onClick={startVoice}
-            title={recording ? "Stop recording" : "Speak your response"}
-            className={`t-focus p-3 border transition-colors min-h-touch flex-shrink-0 ${
-              recording
-                ? "bg-t-panel-2 border-t-red text-t-red animate-pulse"
-                : "border-t-line text-t-phos-dim hover:border-t-amber hover:text-t-amber-bright"
-            }`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          </button>
-          <input
-            value={rehearsalInput}
-            onChange={(e) => setRehearsalInput(e.target.value)}
-            placeholder={recording ? "Listening..." : "Respond to the interviewer..."}
-            className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
-            disabled={rehearsing}
-          />
-          <button
-            type="submit"
-            disabled={rehearsing || !rehearsalInput.trim()}
-            className="t-focus px-4 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
-          >
-            Send
-          </button>
-        </form>
-      </div>
-
-      {rateLimitError && (
-        <div className="bg-t-panel p-4 border border-t-amber mb-4">
-          <p className="text-sm text-t-amber-bright">{rateLimitError}</p>
-        </div>
-      )}
-
-      <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to rehearse. What you say in this practice
-        conversation is not saved. Your disclosure plan itself is saved
-        privately to your account so you can come back and refine it, and it is
-        never shared unless you choose to connect a support partner. You can
-        delete it anytime.
-      </p>
-
-      {/* t.ROY nudge */}
-      <div className="mt-6 bg-t-panel px-4 py-4 border border-t-line text-center">
-        <p className="text-sm font-medium text-t-amber-bright mb-1">
-          Want live coaching on your response?
-        </p>
-        <p className="text-xs text-t-phos-dim">
-          Ask t.ROY -- the AI assistant available on every page. It knows your
-          Forge profile and can help you sharpen your pivot in real time.
-          Hit the &ldquo;Ask t.ROY&rdquo; button to open it.
-        </p>
-      </div>
-    </div>
+    <ConfidenceCoach
+      targetJob={targetJob}
+      hurdleLabel={hurdleGuidance.label}
+      record={{ type: record.type, most_recent: record.most_recent, supervision: record.supervision }}
+      strengths={forge.strengths.filter((s) => s.title.trim()).map((s) => ({ title: s.title, evidence: s.evidence }))}
+      forgePromptContext={buildForgePromptContext()}
+      onBack={() => setStep("plan")}
+    />
   );
 }
 

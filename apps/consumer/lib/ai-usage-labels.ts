@@ -23,6 +23,8 @@ export const ENDPOINT_LABELS: Record<string, string> = {
   "mini-forge": "Quick Forge",
   "disclosure-guide": "Disclosure planning",
   disclosure: "Disclosure planning",
+  "disclosure-strengths": "Strength discovery",
+  "disclosure-takeaways": "Practice takeaways",
   analyze: "Career analysis",
   "apply-email": "Application email draft",
   "follow-up": "Follow-up draft",

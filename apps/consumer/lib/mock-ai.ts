@@ -197,6 +197,41 @@ export const MOCK_DISCLOSURE_PLAN = {
   ],
 };
 
+// Phase 5.2 -- proposed strengths mined from the user's own history, each with
+// evidence and a source, LABELED as a judgment until the user confirms.
+export const MOCK_DISCLOSURE_STRENGTHS = {
+  proposals: [
+    {
+      title: "Reliable under pressure",
+      evidence:
+        "In your Forge work you described covering back-to-back shifts without missing a day for eight months.",
+      source: "Forge",
+    },
+    {
+      title: "Trains and mentors others",
+      evidence:
+        "You mentioned training three new hires on the floor and one of them became a lead.",
+      source: "Forge",
+    },
+    {
+      title: "Owns the outcome",
+      evidence:
+        "In interview practice you took clear responsibility and pivoted to what you do now, not excuses.",
+      source: "interview practice",
+    },
+  ],
+};
+
+// Phase 5.5 -- warm, never-shaming takeaways from a rehearsal.
+export const MOCK_DISCLOSURE_TAKEAWAYS = {
+  went_well: [
+    "You said the hard part out loud and did not rush past it.",
+    "You pivoted to a real strength instead of over-explaining.",
+  ],
+  try_next:
+    "Next time, pause for a breath after you acknowledge it, then lead with your strongest example.",
+};
+
 export const MOCK_FOLLOW_UP = {
   subject: "Following up -- Warehouse Associate application",
   body: "Hi,\n\nI wanted to follow up on my application for the Warehouse Associate role I submitted last week. I'm still very interested and would welcome the chance to talk about how my eight years of warehouse experience could help your team.\n\nPlease let me know if there's anything else you need from me. Thank you for your time.\n\nBest,\nJordan Williams",

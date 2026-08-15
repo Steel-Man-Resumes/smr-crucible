@@ -1,5 +1,52 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-15 -- PHASE 5 COMPLETE: sensitive practice (encrypted transcripts, Confidence Coach, voice capture). BOTH TROY GATES CLEARED. Phase 6 (vault) next; it is now fully unblocked.
+
+Troy cleared BOTH manual gates: (1) Neon preview branch created + Preview-scoped DATABASE_URL
+set; (2) R2_ENDPOINT fixed to the real bucket URL + R2_BUCKET_NAME set to `crucible-files` in
+both .env.local and Vercel (Prod+Preview), redeployed. R2 LIVE-VERIFIED: full encrypted
+put/get/owner-exclusive/delete round-trip against crucible-files passed (scripts/verify-1c.mjs,
+probe-r2-buckets.mjs). Page-fit decision = A (serverless @sparticuz/chromium, see the task).
+
+PHASE 5 shipped (all 9 items). Migration 041 APPLIED. Verification: core build clean, tsc clean,
+adversarial 446 -> 497, claims clean, prod build clean. Consent model LIVE-VERIFIED
+(scripts/verify-5-consent.mjs). NOTE ON REVIEW: the interview-surface build (5.6-5.9) agent died
+on an API blip AFTER tests went green but before a fresh-context review ran; I did a TARGETED
+safety review of the one critical path (voice transcript capture is text-only + consent-gated +
+inert when unsaved -- confirmed by reading persistVoiceTurn) but a FULL fresh-context review of
+the interview surface is a recommended follow-up.
+
+- **5.1 encrypted conversation store (foundation):** migration 041 -- disclosure_rehearsal_ +
+  interview_voice_ session/chunk tables, per-purpose separation, AES-256-GCM per-turn (crypto.ts,
+  NOT R2), AAD = owner:purpose:session, UNIQUE(session,seq) idempotent, owner-exclusive. Consent
+  layers disclosure_transcript + interview_transcript (opt-in, default declined). Routes
+  /api/conversation/{session,chunk,session/end,sessions,session/[id]}. Wired into delete-data +
+  export-data (decrypted export).
+- **CONSENT MODEL FIX (I caught + fixed a real bug):** the session is the UNIT OF CONSENT. "Save
+  just this run" passes sessionConsent:true to session-create and grants NOTHING durable; only
+  "Always save" grants the durable layer. The chunk route no longer re-checks the durable layer
+  (session ownership is the gate). BEFORE the fix, "just this run" granted the durable layer and
+  a user leaving before "I'm done" kept auto-saving future sessions -- a consent leak for a
+  population practicing disclosure of sensitive records. Live-verified: one-time save stores the
+  transcript but leaves NO durable consent; encryption/idempotency/owner-exclusivity all hold.
+- **5.2-5.5 Disclosure Confidence Coach:** rebuilt rehearsal as a practice space -- red safety
+  banner, 8-persona picker + gentleness dial (rehearsal-personas.ts), consented encrypted
+  recording (opt-in), "I'm done" -> takeaways card, session history (decrypted detail). Strength
+  discovery (propose-with-evidence + accept/edit/reject). Any-hurdle expansion (hurdle-guidance.ts,
+  9 types, record keeps WI/MI jurisdiction path, non-record hurdles get legal-REVIEWED STATIC
+  coaching frames + minimum-collection, NO fabricated statutes). Intake UX: voice input, prominent
+  skip, live sufficiency meter, plain-language mode. 0.4 memory isolation UNTOUCHED.
+- **5.6-5.9 Interview:** JD auto-fill from the 3.2 snapshot (getJdSnapshot, pick saved job, show
+  snapshot age); voice transcript capture (client streams completed Realtime turns to the
+  encrypted store, TEXT ONLY, consent-gated) + LIVE CAPTIONS (aria-live) as a real accessibility
+  fallback; voice ENDINGS now possible (scorecard + PDF from the captured transcript, only when
+  saved; unsaved = today's bare record); struggle tags (struggle-tags.ts) surface "last time you
+  wanted to work on X" on the next setup.
+
+NEXT: Phase 6 (vault + materials) -- NOW FULLY UNBLOCKED (R2 live). Then the page-fit engine
+(decision A). Then final acceptance + Troy's click-through. Ops scripts added: verify-5-consent.mjs,
+probe-r2-buckets.mjs, check-user-fks.mjs, verify-3-tailored-gate.mjs.
+
 ## 2026-08-10 (Fable 5, same session) -- PHASE 8 COMPLETE: Help & Feedback. ALL UNBLOCKED PHASES SHIPPED. Only Troy's 2 gates + page-fit infra + final acceptance remain.
 
 Shipped Phase 8 -- the last phase that needs neither of Troy's gates. Migration 040 APPLIED.
