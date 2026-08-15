@@ -173,8 +173,8 @@ ABSOLUTE RULES (the truth gate -- violating any = failure):
 4. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform duties into achievements using only stated facts.
 5. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
 6. Every bullet starts with a strong action verb.
-7. 3-5 bullets per role -- write fewer rather than padding with invented detail.
-8. 9-12 skills that match the posting AND are supported by the background.
+7. As many CAR bullets as the role's real achievements support (typically 3 to 6) -- write fewer rather than padding with invented detail, more when the background genuinely supports it.
+8. The skills that match the posting AND are supported by the background -- typically 9 to 15. Never pad to a count, never drop a real match.
 9. Carry forward ALL education and certifications from the background -- a certification becomes its own education entry. Never drop them; never add ones not stated.
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
 11. If a title/company pairing is clearly garbled, repair it -- never invent a new employer or title.
