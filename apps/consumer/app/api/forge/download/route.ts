@@ -44,6 +44,7 @@ import {
   stripBulletMarker,
   isCompetencyLine,
   isJobTitleLine,
+  parseResumeHeader,
 } from "@crucible/core/src/pageFitShared";
 
 export const maxDuration = 30;
@@ -194,10 +195,11 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
     }
   }
 
-  // Build navy header block
-  const nameLine = headerLines[0] || "";
-  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
-  const contactLine = headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("\u2022")) || headerLines[1] || "";
+  // Build navy header block. parseResumeHeader (shared with the page-fit
+  // estimator) resolves the four lines order-independently, so the branded
+  // headline is no longer mistaken for the contact line and dropped.
+  const { nameLine, headlineLine, contactLine, publicNotesLine } =
+    parseResumeHeader(headerLines);
 
   // Name (white on navy, centered, 18pt Georgia bold)
   if (nameLine) {
@@ -220,7 +222,7 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
   }
 
   // Headline (light blue on navy, centered, 8pt Arial)
-  if (headlineLine && headlineLine !== contactLine) {
+  if (headlineLine) {
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -251,6 +253,26 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
             size: CONTACT_SIZE,
             font: "Arial",
             color: WHITE,
+          }),
+        ],
+      })
+    );
+  }
+
+  // Public note (opt-in, e.g. "Open to Michigan") -- light blue on navy, 8pt
+  // Arial, closing the header block. Previously dropped by the header parser.
+  if (publicNotesLine) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 20 },
+        shading: { type: ShadingType.CLEAR, fill: NAVY },
+        children: [
+          new TextRun({
+            text: publicNotesLine,
+            size: HEADLINE_SIZE,
+            font: "Arial",
+            color: LIGHT_BLUE,
           }),
         ],
       })

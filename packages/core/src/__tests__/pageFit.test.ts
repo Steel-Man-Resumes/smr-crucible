@@ -36,6 +36,7 @@ import {
   // classification / parsing
   classifyResumeLine,
   parseResumeBlocks,
+  parseResumeHeader,
   isSectionHeader,
   isCompetencyLine,
   isJobTitleLine,
@@ -366,4 +367,58 @@ test("fit loop: ledger omit entries never point at the name or contact block", (
     assert.notEqual(b.type, "contact");
     assert.notEqual(b.type, "headline");
   }
+});
+
+// --- Header parse fix: the branded headline must never be dropped (fidelity bug) ---
+
+test("parseResumeHeader resolves headline even when contact precedes it (emit order name/contact/headline)", () => {
+  const header = [
+    "JANE DOE",
+    "Grand Rapids, MI | (555) 123-4567 | jane@example.com",
+    "Maintenance Technician who keeps lines running",
+    "Open to Michigan",
+  ];
+  const h = parseResumeHeader(header);
+  assert.equal(h.nameLine, "JANE DOE");
+  assert.equal(h.contactLine, "Grand Rapids, MI | (555) 123-4567 | jane@example.com");
+  assert.equal(h.headlineLine, "Maintenance Technician who keeps lines running");
+  assert.equal(h.publicNotesLine, "Open to Michigan");
+});
+
+test("parseResumeHeader is order-independent (name/headline/contact also works)", () => {
+  const h = parseResumeHeader([
+    "JANE DOE",
+    "Maintenance Technician who keeps lines running",
+    "Grand Rapids, MI | jane@example.com",
+  ]);
+  assert.equal(h.headlineLine, "Maintenance Technician who keeps lines running");
+  assert.equal(h.contactLine, "Grand Rapids, MI | jane@example.com");
+  assert.equal(h.publicNotesLine, "");
+});
+
+test("parseResumeBlocks emits the headline + public-note blocks (not dropped)", () => {
+  const content = [
+    "JANE DOE",
+    "Grand Rapids, MI | jane@example.com",
+    "Maintenance Technician who keeps lines running",
+    "Open to Michigan",
+    "",
+    "PROFESSIONAL SUMMARY",
+    "Ten years keeping production lines running.",
+  ].join("\n");
+  const blocks = parseResumeBlocks(content);
+  const headlineBlocks = blocks.filter((b) => b.type === "headline");
+  // one for the branded headline, one for the opt-in public note
+  assert.equal(headlineBlocks.length, 2);
+  assert.ok(
+    headlineBlocks.some((b) => b.text === "Maintenance Technician who keeps lines running"),
+    "branded headline must be present as a header block",
+  );
+  assert.ok(
+    headlineBlocks.some((b) => b.text === "Open to Michigan"),
+    "opt-in public note must be present as a header block",
+  );
+  // contact is still its own block, and the headline is NOT the contact line
+  const contact = blocks.find((b) => b.type === "contact");
+  assert.equal(contact?.text, "Grand Rapids, MI | jane@example.com");
 });

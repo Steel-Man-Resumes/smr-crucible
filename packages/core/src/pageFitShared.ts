@@ -189,12 +189,43 @@ export function classifyResumeLine(line: string): BlockType {
   return "body";
 }
 
+/** The four employer-facing header lines, resolved order-independently. */
+export interface ParsedResumeHeader {
+  nameLine: string;
+  headlineLine: string;
+  contactLine: string;
+  publicNotesLine: string;
+}
+
+/**
+ * Resolve the resume header block into its four employer-facing lines, ORDER-
+ * INDEPENDENTLY. formatResumeDownload emits name / contact / headline / publicNotes,
+ * while the Forge plain-text generator emits name / contact / headline too -- but the
+ * old parser did `headlineLine = headerLines[1]`, which grabbed the CONTACT line and
+ * then dropped the real branded headline (headerLines[1] === contactLine failed the
+ * render guard). We instead identify the contact line by its |/@/bullet shape and take
+ * the remaining non-name, non-contact lines, in order, as headline then publicNotes.
+ * This is the single source of truth the DOCX builder and the page-fit estimator both
+ * use, so the rendered header and the estimate can never disagree.
+ */
+export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
+  const cleaned = headerLines.map((l) => l.trim()).filter(Boolean);
+  const nameLine = cleaned[0] || "";
+  const isContact = (l: string) =>
+    l.includes("|") || l.includes("@") || l.includes("•");
+  const contactLine = cleaned.slice(1).find(isContact) || "";
+  const rest = cleaned.slice(1).filter((l) => l !== contactLine);
+  const headlineLine = rest[0] || "";
+  const publicNotesLine = rest[1] || "";
+  return { nameLine, headlineLine, contactLine, publicNotesLine };
+}
+
 /**
  * Parse plain resume text into ordered blocks, mirroring buildResumeDocx's two
  * passes: (1) collect the header block (first up-to-4 meaningful lines, stopping
- * at a blank or the first section header) and emit name/headline/contact; then
- * (2) walk the remaining lines, skipping the already-rendered header lines, and
- * classify each.
+ * at a blank or the first section header) and emit name/headline/contact/publicNotes
+ * via parseResumeHeader; then (2) walk the remaining lines, skipping the already-
+ * rendered header lines, and classify each.
  */
 export function parseResumeBlocks(content: string): Block[] {
   const lines = content.split("\n");
@@ -216,22 +247,23 @@ export function parseResumeBlocks(content: string): Block[] {
     }
   }
 
-  const nameLine = headerLines[0] || "";
-  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
-  const contactLine =
-    headerLines.find(
-      (l) => l.includes("|") || l.includes("@") || l.includes("•")
-    ) || headerLines[1] || "";
+  const { nameLine, headlineLine, contactLine, publicNotesLine } =
+    parseResumeHeader(headerLines);
 
   if (nameLine) {
     // Route uppercases the name; height is length-invariant so keep as-is.
     blocks.push({ type: "name", text: nameLine, label: "Name" });
   }
-  if (headlineLine && headlineLine !== contactLine) {
+  if (headlineLine) {
     blocks.push({ type: "headline", text: headlineLine, label: "Headline" });
   }
   if (contactLine) {
     blocks.push({ type: "contact", text: contactLine, label: "Contact line" });
+  }
+  if (publicNotesLine) {
+    // Opt-in public note (e.g. "Open to Michigan"). Renders like the headline
+    // (8pt Arial) -- model it as a headline-height block so the estimate matches.
+    blocks.push({ type: "headline", text: publicNotesLine, label: "Open-to note" });
   }
 
   // --- Pass 2: body (route: main loop, skipping header lines) ---
