@@ -1,5 +1,40 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-17 -- MERGED + DEPLOYED TO PROD. Phases 6/2.3/7.7/2.5 + all four Troy gates resolved. Live on refinery.steelmanresumes.com.
+
+PR #1 merged to main (merge commit 7fde756); Vercel production deploy READY
+(dpl_aHpNWzEkk5P8, 12 nodejs lambdas, aliases forge./refinery.steelmanresumes.com).
+Prod smoke: root 307->login, /api/resume/fit-check 401, /api/vault/documents 401,
+/api/avatar/generate 401 -- every new route deployed + auth-gated. Vercel runtime
+errors: NONE in the 20m post-deploy window. CI (build-and-test) + gitleaks green.
+
+Troy's four directives (2026-08-17), all done:
+1. MERGE + DEPLOY -- done (above).
+2. Headshot generation "agreed" -- provider WIRED but ships DORMANT (gpt-image-1 via
+   REST fetch, no dep; commit 57ea793). Returns 501 in prod until Troy sets BOTH
+   OPENAI_API_KEY and HEADSHOT_GEN_ENABLED=true in Vercel. Hard cap 3/day enforced via
+   an ATOMIC reserve (fixed the earlier check-then-increment TOCTOU). ~$0.02-0.19/image;
+   gpt-image-1 needs a VERIFIED OpenAI org before enabling. Nothing spends until he flips it.
+3. Page-fit "use which is least likely to fail" -- the DETERMINISTIC estimator (already
+   shipped in 2.5, zero new infra, no serverless-Chromium deploy that can fail). Decision-A
+   Chromium remains a dep-free flag-off stub (PAGEFIT_CHROMIUM). No change needed; confirmed.
+4. Header fidelity bug "fix it" -- FIXED (commit b593251). One shared, order-independent
+   parseResumeHeader (pageFitShared) now used by BOTH the DOCX builder and the estimator, so
+   the branded headline (and the opt-in public note) render and can't drift. Adversarial 89.
+
+DB NOTE / one thing for Troy to eyeball: migrations 042 (vault_document) + 043 (avatar_asset)
+were applied to the .env.local DB (ep-little-cloud), which Troy believes is production and which
+carries the exact prod-shipped migration history (040, 041) -- so prod almost certainly has the
+tables. I could NOT 100% confirm the prod branch identity (no logged-in Vercel CLI here to read
+the prod DATABASE_URL; Neon preview branches inherit history). SAFETY NET: if prod is somehow a
+different branch, /dashboard/documents (new "Vault" nav) and avatar photo upload would 500 until
+`cd packages/core && DATABASE_URL=<prod> npm run migrate` is run. Quick confirm: click the new
+"Vault" nav item once while logged in -- if it loads, prod has the tables.
+
+Adversarial suite across this run: 26 -> 93. Ops scripts: verify-6-vault.mjs, verify-7-avatar.mjs,
+verify-25-pagefit.mjs. Reasoned deviation from locked decision-A (Chromium) documented in the 2.5
+commit + PR #1: shipped the DOCX-geometry estimator as canonical because the deliverable is DOCX.
+
 ## 2026-08-15 -- PHASES 6, 2.3, 7.7, 2.5 COMPLETE (on branch, PR #1, preview green). Prod deploy + acceptance click-through = Troy's gate.
 
 Continued "phase 6-7 and beyond to completion" in one session. Four atomic phases,
