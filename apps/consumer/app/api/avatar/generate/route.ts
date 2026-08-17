@@ -47,7 +47,9 @@ import { isHeadshotGenEnabled, headshotGenStatus } from "@/lib/headshot-provider
 import { recordFlatUsage } from "@/lib/ai-usage-log";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// gpt-image-1 routinely needs 30-90s; 30 was too short and Vercel killed the
+// function mid-generation. Pro allows up to 300s.
+export const maxDuration = 120;
 
 // Fixed, dignified headshot prompt. Deliberately conservative: it must not alter
 // who the person is, only present them cleanly for a resume.
@@ -164,6 +166,9 @@ export async function POST(request: Request) {
     form.append("model", "gpt-image-1");
     form.append("prompt", HEADSHOT_PROMPT);
     form.append("size", "1024x1024");
+    // "medium" quality is faster and cheaper than the default and is plenty for a
+    // resume headshot preview -- keeps us comfortably under the function timeout.
+    form.append("quality", "medium");
     form.append(
       "image",
       new Blob([new Uint8Array(original.buffer)], { type: source.mime_type }),
@@ -174,6 +179,9 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: form,
+      // Fail cleanly (-> catch -> 502) before the 120s function limit rather than
+      // a hard Vercel kill, if the provider hangs.
+      signal: AbortSignal.timeout(110_000),
     });
 
     if (!resp.ok) {
