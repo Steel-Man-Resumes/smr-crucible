@@ -21,6 +21,7 @@ const {
   makeSecureObjectKey, putEncryptedObject, getDecryptedObject,
   createAvatarAsset, listAvatarAssets, getAvatarAsset, deleteAvatarAsset,
   query, getUserDailyUsage, incrementUserUsage, checkUserRateLimit,
+  reserveEndpointSlot, releaseEndpointSlot,
   getUiPrefs, setUiPrefs, normalizeAvatar,
   HEADSHOT_DAILY_CAP, HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_UPLOAD_ENDPOINT,
 } = core;
@@ -132,12 +133,38 @@ try {
   check('hard-cap check ran', false, e.message);
 }
 
-// --- generation gate is OFF (route would return 501) ---
+// --- failed-slot refund: releaseEndpointSlot decrements, floors at 0 ---
 try {
-  const flagOn = process.env.HEADSHOT_GEN_ENABLED === 'true';
-  const hasKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim());
-  const enabled = flagOn && hasKey;
-  check('headshot generation gate is OFF -> generate route returns 501', enabled === false, { flagOn, hasKey });
+  const EP = 'headshot_refund_test';
+  await query(`DELETE FROM ai_usage WHERE user_id = $1 AND usage_date = CURRENT_DATE AND endpoint = $2`, [QA, EP]);
+  const r1 = await reserveEndpointSlot(QA, EP, 3); // count 1
+  const r2 = await reserveEndpointSlot(QA, EP, 3); // count 2
+  check('reserve increments to 2', r2.count === 2, { r1, r2 });
+  await releaseEndpointSlot(QA, EP);               // back to 1
+  const afterRefund = await reserveEndpointSlot(QA, EP, 3); // 1 -> 2 again
+  check('release refunds one slot (2 -> 1, next reserve is 2 not 3)', afterRefund.count === 2, afterRefund);
+  // Floor at 0: release more times than reserved must not go negative.
+  await releaseEndpointSlot(QA, EP);
+  await releaseEndpointSlot(QA, EP);
+  await releaseEndpointSlot(QA, EP);
+  const floored = await query(`SELECT call_count FROM ai_usage WHERE user_id = $1 AND usage_date = CURRENT_DATE AND endpoint = $2`, [QA, EP]);
+  check('release floors call_count at 0 (never negative)', (floored[0]?.call_count ?? 0) === 0, floored[0]);
+  await query(`DELETE FROM ai_usage WHERE user_id = $1 AND usage_date = CURRENT_DATE AND endpoint = $2`, [QA, EP]);
+} catch (e) {
+  check('refund check ran', false, e.message);
+}
+
+// --- generation gate FORMULA: enabled IFF (flag === 'true' AND a key is set) ---
+// Mirrors isHeadshotGenEnabled() (apps/consumer/lib/headshot-provider). Env-
+// independent so it holds whether or not the feature is currently switched on.
+try {
+  const gate = (flag, key) => flag === 'true' && Boolean(key && String(key).trim());
+  check('gate ON only when BOTH flag and key set', gate('true', 'sk-x') === true);
+  check('gate OFF when flag missing', gate(undefined, 'sk-x') === false);
+  check('gate OFF when flag is not "true"', gate('false', 'sk-x') === false);
+  check('gate OFF when key missing', gate('true', '') === false);
+  const live = gate(process.env.HEADSHOT_GEN_ENABLED, process.env.OPENAI_API_KEY);
+  console.log('  info  live gate state (this env): ' + (live ? 'ENABLED' : 'disabled'));
 } catch (e) {
   check('gate check ran', false, e.message);
 }

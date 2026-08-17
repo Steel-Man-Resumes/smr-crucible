@@ -8,9 +8,10 @@
  * Generation is a real PAID image API call, so it is:
  *   - GATED behind isHeadshotGenEnabled() (a feature flag AND a provider key).
  *     When off, POST returns 501 and does NOT touch the daily cap or call any
- *     paid API. In prod today NEITHER env var is set, so this route is dormant.
+ *     paid API (both env vars must be set for the route to do real work).
  *   - CAPPED at HEADSHOT_DAILY_CAP/day via an ATOMIC reserve (reserveEndpointSlot)
- *     BEFORE the paid call -- see the TOCTOU note below.
+ *     BEFORE the paid call, and REFUNDED (releaseEndpointSlot) on any failure after
+ *     the reserve, so only a successful generation costs the user a slot.
  *
  * ===========================================================================
  * TO ACTIVATE (Troy only -- do NOT set these in code or commit them):
@@ -35,6 +36,7 @@ import { auth } from "@/auth";
 import {
   checkUserRateLimit,
   reserveEndpointSlot,
+  releaseEndpointSlot,
   HEADSHOT_GENERATE_ENDPOINT,
   HEADSHOT_DAILY_CAP,
   getAvatarAsset,
@@ -158,6 +160,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Any failure AFTER the reserve refunds the slot: a failed attempt (provider
+  // error, timeout, or a storage failure) must not cost the user one of their few
+  // daily generations. Only a successful headshot keeps the reservation.
+  const refundAndFail = async (message: string, status: number) => {
+    await releaseEndpointSlot(userId, HEADSHOT_GENERATE_ENDPOINT);
+    return NextResponse.json({ error: message }, { status });
+  };
+
   // ---- The paid provider call: OpenAI gpt-image-1 images/edits ----
   // Dep-free: global fetch + FormData + Blob (Node 20). No openai SDK.
   let generated: Buffer;
@@ -191,7 +201,7 @@ export async function POST(request: Request) {
       console.error(
         `headshot gen provider error: status ${resp.status} ${detail.slice(0, 300)}`
       );
-      return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 502 });
+      return await refundAndFail("Generation failed. Please try again.", 502);
     }
 
     const json: unknown = await resp.json();
@@ -201,15 +211,14 @@ export async function POST(request: Request) {
         : undefined;
     if (typeof b64 !== "string" || b64.length === 0) {
       console.error("headshot gen: provider returned no b64_json image");
-      return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 502 });
+      return await refundAndFail("Generation failed. Please try again.", 502);
     }
     generated = Buffer.from(b64, "base64");
   } catch (err: any) {
-    // Log the message ONLY -- never the API key or image bytes. The slot was
-    // already reserved (counted); acceptable -- a provider/network failure does
-    // not roll back the increment, it just spends one of the day's few slots.
+    // Log the message ONLY -- never the API key or image bytes. Refund the slot:
+    // a provider error, network failure, or timeout must not spend a daily slot.
     console.error("headshot gen error:", err?.message || "unknown error");
-    return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 502 });
+    return await refundAndFail("Generation failed. Please try again.", 502);
   }
 
   // Store the result encrypted, RETAINING the original (a NEW asset pointing at
@@ -260,10 +269,9 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (err: any) {
+    // The paid image was generated but could not be stored. Refund the slot so the
+    // user can retry without penalty for an infrastructure failure on our side.
     console.error("headshot gen store error:", err?.message || "unknown error");
-    return NextResponse.json(
-      { error: "Could not save the generated headshot. Please try again." },
-      { status: 500 }
-    );
+    return await refundAndFail("Could not save the generated headshot. Please try again.", 500);
   }
 }

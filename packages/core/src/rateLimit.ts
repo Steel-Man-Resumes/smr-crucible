@@ -165,6 +165,26 @@ export async function reserveEndpointSlot(
 }
 
 /**
+ * Refund a slot previously taken by reserveEndpointSlot, for when the paid
+ * operation FAILED -- a failed attempt must not cost the user one of their few
+ * daily slots. Atomic decrement with a floor of 0 (GREATEST); a no-op if there is
+ * no row for today. Call ONLY on a failure path after a successful reserve, never
+ * after a success (that would hand back a slot the user actually consumed).
+ */
+export async function releaseEndpointSlot(
+  userId: string,
+  endpoint: string
+): Promise<void> {
+  await getOne(
+    `UPDATE ai_usage
+        SET call_count = GREATEST(call_count - 1, 0), updated_at = now()
+      WHERE user_id = $1 AND endpoint = $2 AND usage_date = CURRENT_DATE
+      RETURNING call_count`,
+    [userId, endpoint]
+  );
+}
+
+/**
  * Atomic increment for IP-based usage. Returns the new count.
  */
 export async function incrementIpUsage(
