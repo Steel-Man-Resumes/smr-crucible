@@ -5,8 +5,23 @@
  */
 
 import { query, getOne } from "./db";
+import { HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_DAILY_CAP } from "./avatarAssetShared";
 
 export const DEFAULT_DAILY_LIMIT = 30;
+
+/**
+ * Per-endpoint HARD daily ceilings for authenticated users. Unlike the tier
+ * daily limit (getUserDailyLimit), a hard cap here applies to EVERY user
+ * regardless of tier -- including admin/unlimited -- because the endpoint is
+ * an expensive paid operation that must never be spammed. An endpoint absent
+ * from this map is governed solely by the tier limit (existing behavior).
+ *
+ * headshot_generate: AI headshot generation is a real paid image call, capped
+ * at a few per day even for unlimited-tier accounts.
+ */
+export const USER_ENDPOINT_HARD_CAPS: Record<string, number> = {
+  [HEADSHOT_GENERATE_ENDPOINT]: HEADSHOT_DAILY_CAP,
+};
 
 export const FORGE_IP_LIMITS: Record<string, number> = {
   analyze: 5,
@@ -39,7 +54,19 @@ export async function checkUserRateLimit(
   userId: string,
   endpoint: string
 ): Promise<RateLimitResult> {
-  const limit = await getUserDailyLimit(userId);
+  const tierLimit = await getUserDailyLimit(userId);
+
+  // A hard per-endpoint cap (if any) applies to every user, even unlimited-tier
+  // accounts (tierLimit === 0). It is a ceiling: the effective limit is the
+  // smaller of the tier limit and the hard cap, treating 0 (unlimited) as
+  // "no tier ceiling" so the hard cap alone governs.
+  const hardCap = USER_ENDPOINT_HARD_CAPS[endpoint];
+  const limit =
+    hardCap === undefined
+      ? tierLimit
+      : tierLimit === 0
+        ? hardCap
+        : Math.min(tierLimit, hardCap);
 
   const row = await getOne<{ call_count: number }>(
     `SELECT call_count FROM ai_usage
@@ -96,6 +123,48 @@ export async function incrementUserUsage(
 }
 
 /**
+ * Pure cap decision for a reserved slot: the increment RETURNING count is within
+ * the cap iff it is <= cap. Extracted so the ok/count sequence is unit-testable
+ * without a DB (see rateLimit.test.ts): counts 1,2,3 against cap 3 are ok, the
+ * 4th (count 4) is not.
+ */
+export function slotWithinCap(count: number, cap: number): boolean {
+  return count <= cap;
+}
+
+/**
+ * ATOMIC reserve-a-slot for a hard-capped, PAID endpoint (fixes the TOCTOU where
+ * a separate check-then-increment let N concurrent callers each read used < cap
+ * before any increment and blow past a paid ceiling).
+ *
+ * This is a SINGLE atomic statement: the upsert increments call_count and RETURNs
+ * the post-increment value, so concurrent callers are serialized by the row lock
+ * and each receives a DISTINCT count (1, 2, 3, ...). Only the first `cap` callers
+ * get ok:true; every caller past the cap gets ok:false and MUST NOT make the paid
+ * call. The extra increment for a rejected caller is harmless -- they are capped
+ * out anyway, and the counter simply reads a little past the cap for the day.
+ *
+ * Matches incrementUserUsage's table/columns/usage_date handling exactly; the
+ * only addition is returning the ok verdict alongside the count.
+ */
+export async function reserveEndpointSlot(
+  userId: string,
+  endpoint: string,
+  cap: number
+): Promise<{ ok: boolean; count: number }> {
+  const row = await getOne<{ call_count: number }>(
+    `INSERT INTO ai_usage (user_id, endpoint, usage_date, call_count)
+     VALUES ($1, $2, CURRENT_DATE, 1)
+     ON CONFLICT (user_id, endpoint, usage_date)
+     DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()
+     RETURNING call_count`,
+    [userId, endpoint]
+  );
+  const count = row?.call_count ?? 1;
+  return { ok: slotWithinCap(count, cap), count };
+}
+
+/**
  * Atomic increment for IP-based usage. Returns the new count.
  */
 export async function incrementIpUsage(
@@ -143,13 +212,29 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
 }
 
 /**
- * Get total usage for a user today (across all endpoints).
+ * Get total AI usage for a user today (across all AI endpoints).
+ *
+ * Non-AI counters that piggy-back on the ai_usage table (e.g. the vault's
+ * "vault_upload" per-day upload ceiling, Phase 6.2) are EXCLUDED here: this
+ * number is surfaced to the user via /api/usage as their AI calls used/remaining,
+ * and a justice-impacted client must never see saving a document to their vault
+ * as burning their AI allowance. The exclusion is display-only -- per-endpoint
+ * enforcement (incrementUserUsage vs getUserDailyLimit) is unaffected, and real
+ * AI endpoints are untouched.
+ *
+ * Phase 7.7: photo UPLOADS (endpoint "headshot_upload") are likewise excluded --
+ * saving a photo is not an AI call. That endpoint is NOT prefixed "vault_", so it
+ * needs its own explicit exclusion clause here. AI headshot GENERATION
+ * ("headshot_generate") IS a real AI call and is deliberately NOT excluded, so it
+ * DOES count toward the displayed AI usage.
  */
 export async function getUserDailyUsage(userId: string): Promise<number> {
   const row = await getOne<{ total: string }>(
     `SELECT COALESCE(SUM(call_count), 0) as total
      FROM ai_usage
-     WHERE user_id = $1 AND usage_date = CURRENT_DATE`,
+     WHERE user_id = $1 AND usage_date = CURRENT_DATE
+       AND endpoint NOT LIKE 'vault_%'
+       AND endpoint <> 'headshot_upload'`,
     [userId]
   );
   return parseInt(row?.total ?? "0", 10);

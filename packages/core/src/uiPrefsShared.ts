@@ -31,6 +31,15 @@ export interface AvatarChoice {
   color: AvatarColor;
   accent: AvatarAccent;
   initial: string;
+  /**
+   * Phase 7.7 photo path. When set to a plausible avatar_asset UUID, the user
+   * has chosen a PHOTO as their avatar and the nav renders that photo (via the
+   * owner-scoped image proxy) instead of the illustrated mark. null/absent =
+   * illustrated (the zero-PII default). This id is NOT an access grant -- the
+   * image proxy re-checks ownership on every fetch, so a forged id renders
+   * nothing for a stranger.
+   */
+  photoAssetId?: string | null;
 }
 
 export interface UiPrefs {
@@ -73,6 +82,19 @@ function normalizeInitial(v: unknown): string {
   return v.trim().charAt(0).toUpperCase();
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Coerce a stored photoAssetId to a plausible UUID string, or null. This is a
+ * FORMAT check only, never an access grant -- the image proxy re-checks that the
+ * asset actually belongs to the signed-in user before returning any bytes. Pure.
+ */
+export function normalizePhotoAssetId(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim().toLowerCase();
+  return UUID_RE.test(s) ? s : null;
+}
+
 /**
  * Coerce any input to a valid avatar choice, or null if it isn't a usable
  * object. Every field falls back to the first option so a partial or corrupt
@@ -91,7 +113,8 @@ export function normalizeAvatar(v: unknown): AvatarChoice | null {
     ? (raw.accent as AvatarAccent)
     : AVATAR_ACCENTS[0];
   const initial = normalizeInitial(raw.initial);
-  return { shape, color, accent, initial };
+  const photoAssetId = normalizePhotoAssetId(raw.photoAssetId);
+  return { shape, color, accent, initial, photoAssetId };
 }
 
 /** Normalize a whole prefs bag (any subset) against the defaults. Pure. */

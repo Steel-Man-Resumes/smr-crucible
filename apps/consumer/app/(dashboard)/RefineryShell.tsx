@@ -92,7 +92,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "My Stuff",
     items: [
-      { href: "/dashboard/vault", label: "My Materials", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/vault", label: "Library", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/documents", label: "Vault", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
     ],
   },

@@ -1,16 +1,27 @@
 "use client";
 
 /**
- * Phase 7.7 (illustrated half) -- Settings -> Account -> Your picture.
+ * Phase 7.7 -- Settings -> Account -> Your picture.
  *
- * Builds a zero-PII illustrated avatar from a small set of options and saves
- * the CHOICE (not an image) to users.ui_avatar via /api/user/ui-prefs. No
- * photo, no upload, no R2. The photo + AI-headshot path is R2-gated and shown
- * only as a "coming soon" note. Saving dispatches UI_PREFS_EVENT so the nav
- * avatar updates without a reload.
+ * Two paths, one section:
+ *  1. Illustrated avatar (the zero-PII DEFAULT): a small deterministic mark built
+ *     from shape/color/accent/initial, saved as a CHOICE (not an image) to
+ *     users.ui_avatar. No photo, no upload, no R2.
+ *  2. Photo path (optional): the user picks an image; the browser crops it to a
+ *     square and compresses it (<canvas>, max 512px) BEFORE upload -- no server
+ *     image library. The photo is stored ENCRYPTED (owner-only) and shown through
+ *     an owner-exclusive proxy. Uploaded photos + any generated headshots appear
+ *     in a compare grid; each is selectable as the avatar, and the original is
+ *     always retained. A photo is NEVER automatically added to a resume.
+ *
+ * AI headshot generation is provider-gated: when it is not turned on, the control
+ * is shown as a plain "not available yet" note (never a broken button).
+ *
+ * Saving/selecting dispatches UI_PREFS_EVENT so the nav avatar updates without a
+ * reload.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { TBtn } from "@crucible/consumer-ui";
 import { IllustratedAvatar, AVATAR_FILLS } from "@/components/IllustratedAvatar";
@@ -38,6 +49,18 @@ const ACCENT_LABELS: Record<AvatarAccent, string> = {
   corner: "Dot",
 };
 
+const MAX_DIM = 512; // client crop/compress target square edge
+
+interface AvatarAssetView {
+  id: string;
+  kind: "original_photo" | "generated_headshot";
+  source_asset_id: string | null;
+  mime_type: string;
+  byte_size: number;
+  created_at: string;
+  imageUrl: string;
+}
+
 export function AvatarSettingsSection() {
   const { data: session } = useSession();
   const fallbackInitial = (session?.user?.name || session?.user?.email || "?")
@@ -50,18 +73,61 @@ export function AvatarSettingsSection() {
     color: "slate",
     accent: "solid",
     initial: "",
+    photoAssetId: null,
   });
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [assets, setAssets] = useState<AvatarAssetView[]>([]);
+  const [genEnabled, setGenEnabled] = useState(false);
+  const [genRemaining, setGenRemaining] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const refreshAssets = useCallback(async () => {
+    try {
+      const r = await fetch("/api/avatar/assets");
+      if (r.ok) {
+        const j = await r.json();
+        setAssets((j?.data ?? []) as AvatarAssetView[]);
+      }
+    } catch {
+      /* leave assets as-is */
+    }
+  }, []);
 
   useEffect(() => {
-    fetch("/api/user/ui-prefs")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (j?.data?.avatar) setChoice(j.data.avatar as AvatarChoice);
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/user/ui-prefs").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch("/api/avatar/assets").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch("/api/avatar/generate").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([prefs, assetList, gen]) => {
+      if (cancelled) return;
+      const av = prefs?.data?.avatar as AvatarChoice | null | undefined;
+      if (av) {
+        setChoice({
+          shape: av.shape,
+          color: av.color,
+          accent: av.accent,
+          initial: av.initial,
+          photoAssetId: av.photoAssetId ?? null,
+        });
+        setSelectedPhotoId(av.photoAssetId ?? null);
+      }
+      if (assetList?.data) setAssets(assetList.data as AvatarAssetView[]);
+      if (gen?.data) {
+        setGenEnabled(Boolean(gen.data.enabled));
+        setGenRemaining(
+          typeof gen.data.remaining === "number" ? gen.data.remaining : null
+        );
+      }
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function update<K extends keyof AvatarChoice>(key: K, value: AvatarChoice[K]) {
@@ -69,9 +135,13 @@ export function AvatarSettingsSection() {
     setStatus("idle");
   }
 
-  async function save() {
+  function dispatchPrefs(prefs: UiPrefs) {
+    window.dispatchEvent(new CustomEvent(UI_PREFS_EVENT, { detail: prefs }));
+  }
+
+  // --- Illustrated: save the choice (does not touch the photo pointer) --------
+  async function saveIllustrated() {
     setStatus("saving");
-    // Fall back to the name/email initial if the user left it blank.
     const toSave: AvatarChoice = {
       ...choice,
       initial: choice.initial || fallbackInitial,
@@ -85,9 +155,7 @@ export function AvatarSettingsSection() {
       if (res.ok) {
         const j = await res.json().catch(() => null);
         setStatus("saved");
-        window.dispatchEvent(
-          new CustomEvent(UI_PREFS_EVENT, { detail: (j?.data ?? {}) as UiPrefs })
-        );
+        if (j?.data) dispatchPrefs(j.data as UiPrefs);
         setTimeout(() => setStatus("idle"), 2500);
       } else {
         setStatus("idle");
@@ -97,16 +165,130 @@ export function AvatarSettingsSection() {
     }
   }
 
+  // --- Photo: client-side crop-to-square + compress, then upload --------------
+  async function onPickFile(file: File) {
+    setMsg(null);
+    setBusy(true);
+    try {
+      const blob = await cropSquareCompress(file);
+      const fd = new FormData();
+      fd.append("file", blob, "avatar.jpg");
+      fd.append("width", String(MAX_DIM));
+      fd.append("height", String(MAX_DIM));
+      const res = await fetch("/api/avatar/photo", { method: "POST", body: fd });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        setMsg(j?.error || "Could not upload that photo.");
+        return;
+      }
+      await refreshAssets();
+      setMsg("Photo uploaded. Choose it below to use it.");
+    } catch {
+      setMsg("Could not read that image. Try a JPG, PNG, or WebP.");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function selectPhoto(assetId: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/avatar/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "photo", assetId }),
+      });
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        setSelectedPhotoId(assetId);
+        if (j?.data) dispatchPrefs(j.data as UiPrefs);
+      } else {
+        setMsg("Could not use that photo.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function useIllustrated() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/avatar/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "illustrated" }),
+      });
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        setSelectedPhotoId(null);
+        if (j?.data) dispatchPrefs(j.data as UiPrefs);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAsset(assetId: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/avatar/${assetId}`, { method: "DELETE" });
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        if (j?.selectionReset) {
+          setSelectedPhotoId(null);
+          // Reflect the reset in the nav immediately.
+          const prefs = await fetch("/api/user/ui-prefs").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+          if (prefs?.data) dispatchPrefs(prefs.data as UiPrefs);
+        }
+        await refreshAssets();
+      } else {
+        setMsg("Could not remove that photo.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateHeadshot(sourceAssetId: string) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/avatar/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceAssetId }),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.ok) {
+        await refreshAssets();
+        setMsg("Headshot generated. Choose it below to use it.");
+        if (typeof j?.data?.remaining === "number") setGenRemaining(j.data.remaining);
+      } else {
+        setMsg(j?.message || "AI headshot generation is not available right now.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!loaded) return null;
+
+  const originals = assets.filter((a) => a.kind === "original_photo");
+  const usingPhoto = selectedPhotoId != null;
 
   return (
     <div className="bg-t-panel p-5 border border-t-line mt-4">
       <h3 className="font-semibold text-t-white mb-1">Your picture</h3>
       <p className="text-sm text-t-phos-dim mb-4">
-        Build a simple icon for your account. It is a drawing, not a photo, and it
-        never goes on your resume.
+        Use a simple drawing or a photo for your account. This picture is only for
+        your account. It is never automatically added to your resume.
       </p>
 
+      {/* ---- Illustrated builder ---- */}
       <div className="flex items-start gap-5">
         <IllustratedAvatar
           choice={choice}
@@ -116,7 +298,6 @@ export function AvatarSettingsSection() {
         />
 
         <div className="flex-1 space-y-4">
-          {/* Shape */}
           <div>
             <label className="text-xs text-t-phos-dim uppercase block mb-2">Shape</label>
             <div className="flex flex-wrap gap-2">
@@ -126,7 +307,6 @@ export function AvatarSettingsSection() {
             </div>
           </div>
 
-          {/* Color */}
           <div>
             <label className="text-xs text-t-phos-dim uppercase block mb-2">Color</label>
             <div className="flex flex-wrap gap-2">
@@ -146,7 +326,6 @@ export function AvatarSettingsSection() {
             </div>
           </div>
 
-          {/* Accent */}
           <div>
             <label className="text-xs text-t-phos-dim uppercase block mb-2">Accent</label>
             <div className="flex flex-wrap gap-2">
@@ -156,7 +335,6 @@ export function AvatarSettingsSection() {
             </div>
           </div>
 
-          {/* Initial */}
           <div>
             <label className="text-xs text-t-phos-dim uppercase block mb-2">Letter</label>
             <input
@@ -171,17 +349,193 @@ export function AvatarSettingsSection() {
       </div>
 
       <div className="flex items-center gap-3 mt-5">
-        <TBtn onClick={save} disabled={status === "saving"} size="sm">
-          {status === "saving" ? "saving..." : "save picture"}
+        <TBtn onClick={saveIllustrated} disabled={status === "saving"} size="sm">
+          {status === "saving" ? "saving..." : "save drawing"}
         </TBtn>
         {status === "saved" && <span className="text-sm text-t-amber-bright">Saved.</span>}
+        {usingPhoto && (
+          <button
+            type="button"
+            onClick={useIllustrated}
+            disabled={busy}
+            className="t-focus text-sm text-t-phos-dim underline hover:text-t-white disabled:opacity-50"
+          >
+            Use this drawing instead of my photo
+          </button>
+        )}
       </div>
 
-      <p className="text-xs text-t-phos-dim mt-4 pt-3 border-t border-t-line">
-        Photo and AI headshot options are coming soon.
-      </p>
+      {/* ---- Photo path ---- */}
+      <div className="mt-6 pt-5 border-t border-t-line">
+        <h4 className="font-semibold text-t-white mb-1">Use a photo</h4>
+        <p className="text-sm text-t-phos-dim mb-3">
+          Add a photo of yourself. It is cropped to a square on your device before
+          it is sent, kept encrypted, and only you can open it. It is never added
+          to your resume.
+        </p>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onPickFile(f);
+            }}
+          />
+          <TBtn
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            size="sm"
+          >
+            {busy ? "working..." : "upload a photo"}
+          </TBtn>
+        </div>
+
+        {assets.length > 0 && (
+          <div className="mt-4">
+            <label className="text-xs text-t-phos-dim uppercase block mb-2">
+              Your photos
+            </label>
+            <div className="flex flex-wrap gap-4" role="group" aria-label="Your photos">
+              {assets.map((a) => {
+                const active = a.id === selectedPhotoId;
+                return (
+                  <div key={a.id} className="flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      aria-pressed={active}
+                      aria-label={
+                        a.kind === "generated_headshot"
+                          ? "Use generated headshot"
+                          : "Use uploaded photo"
+                      }
+                      onClick={() => selectPhoto(a.id)}
+                      disabled={busy}
+                      className={`t-focus relative rounded-full overflow-hidden border-2 transition-transform disabled:opacity-50 ${
+                        active ? "border-t-amber scale-105" : "border-t-line hover:border-t-phos-dim"
+                      }`}
+                      style={{ width: 72, height: 72 }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={a.imageUrl}
+                        alt=""
+                        width={72}
+                        height={72}
+                        style={{ width: 72, height: 72, objectFit: "cover", display: "block" }}
+                      />
+                    </button>
+                    <span className="text-[11px] text-t-phos-dim">
+                      {a.kind === "generated_headshot" ? "Generated" : "Uploaded"}
+                      {active ? " -- in use" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => deleteAsset(a.id)}
+                      disabled={busy}
+                      className="t-focus text-[11px] text-t-phos-dim underline hover:text-t-white disabled:opacity-50"
+                    >
+                      remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ---- AI headshot generation (gated) ---- */}
+        <div className="mt-5 pt-4 border-t border-t-line">
+          <h4 className="font-semibold text-t-white mb-1">AI headshot</h4>
+          {genEnabled ? (
+            <>
+              <p className="text-sm text-t-phos-dim mb-2">
+                Turn one of your uploaded photos into a professional headshot. You
+                can generate up to {genRemaining ?? 3} today. Your original photo
+                is always kept.
+              </p>
+              {originals.length === 0 ? (
+                <p className="text-sm text-t-phos-dim">
+                  Upload a photo first, then you can generate a headshot from it.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {originals.map((o) => (
+                    <TBtn
+                      key={o.id}
+                      onClick={() => generateHeadshot(o.id)}
+                      disabled={busy || (genRemaining !== null && genRemaining <= 0)}
+                      size="sm"
+                    >
+                      generate from this photo
+                    </TBtn>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-t-phos-dim">
+              AI headshot generation is not available yet.
+            </p>
+          )}
+        </div>
+
+        <p className="sr-only" role="status" aria-live="polite">
+          {msg ?? ""}
+        </p>
+        {msg && <p className="text-sm text-t-amber-bright mt-3">{msg}</p>}
+      </div>
     </div>
   );
+}
+
+/**
+ * Read an image File, center-crop to a square, downscale to MAX_DIM, and export
+ * a compressed JPEG Blob. All in the browser -- no bytes leave the device until
+ * upload, and the server never runs an image library. Falls back to rejecting if
+ * the image cannot be decoded.
+ */
+function cropSquareCompress(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const side = Math.min(img.width, img.height);
+      if (!side) {
+        reject(new Error("empty image"));
+        return;
+      }
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      const target = Math.min(MAX_DIM, side);
+      const canvas = document.createElement("canvas");
+      canvas.width = target;
+      canvas.height = target;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("no canvas context"));
+        return;
+      }
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("encode failed"));
+        },
+        "image/jpeg",
+        0.85
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("decode failed"));
+    };
+    img.src = url;
+  });
 }
 
 function Pill({

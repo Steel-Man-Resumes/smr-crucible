@@ -32,6 +32,13 @@
  *   "usage"        -> ai_token_usage totals
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
+ *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
+ *                            source, dimensions, mime, size, sha256, dates --
+ *                            NO bytes. The image is owner-only via its proxy.
+ *   "vault"                -> vault_document METADATA manifest (6.2): category,
+ *                            label, filename, size, sha256, dates, linked job --
+ *                            NO bytes. The actual encrypted files download as a
+ *                            ZIP from the separate /api/user/export-vault route.
  * The `account` block (id/name/email) is always included. If `categories` is
  * missing/empty or contains "everything", the full dump is returned (the
  * default), so old callers are unchanged.
@@ -203,6 +210,39 @@ export async function POST(req: Request) {
           (c) => c.purpose === "interview_voice"
         );
       }
+    }
+    // Phase 6.2: vault inventory (metadata only, no bytes). Joined to
+    // secure_object for real size/mime/sha and to job_application for the link.
+    if (want("vault")) {
+      payload.vaultDocuments = await query(
+        `SELECT vd.id, vd.category, vd.label, vd.original_filename, vd.note,
+                so.mime_type, so.byte_size, so.sha256,
+                vd.created_at, vd.updated_at,
+                vd.linked_job_id,
+                ja.job_title AS linked_job_title, ja.company AS linked_job_company
+           FROM vault_document vd
+           JOIN secure_object so ON so.id = vd.secure_object_id
+           LEFT JOIN job_application ja ON ja.id = vd.linked_job_id
+          WHERE vd.user_id = $1
+          ORDER BY vd.created_at DESC`,
+        [userId]
+      );
+    }
+    // Phase 7.7: avatar photo/headshot inventory (metadata only, no bytes). The
+    // encrypted image bytes are owner-only and reachable solely through the
+    // per-asset image proxy; this manifest records what exists. Metadata-only
+    // (not a zip) is a deliberate choice: an avatar is a single small square the
+    // user chose, and the JSON manifest is enough to know what is stored.
+    if (want("avatar")) {
+      payload.avatarAssets = await query(
+        `SELECT aa.id, aa.kind, aa.source_asset_id, aa.width, aa.height,
+                so.mime_type, so.byte_size, so.sha256, aa.created_at
+           FROM avatar_asset aa
+           JOIN secure_object so ON so.id = aa.secure_object_id
+          WHERE aa.user_id = $1
+          ORDER BY aa.created_at DESC`,
+        [userId]
+      );
     }
     if (want("consent")) payload.consent = consents;
     if (want("usage")) {

@@ -234,7 +234,7 @@ ABSOLUTE RULES (the truth gate -- violating any = failure):
 7. Past roles = past tense. Current role = present tense. No exceptions.
 8. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
 9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
-10. Keep to ONE PAGE (400-600 words). Every word fights for its seat.
+10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance -- never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
 11. Use "--" never an em dash anywhere in the output.
 
 DATA CLEANING -- FIX INPUT ERRORS:
@@ -249,10 +249,10 @@ SECTION ORDER (exact):
 2. Contact line: City, State | Phone | Email (one line, pipe-separated)
 3. Branded Headline (one powerful line — NOT an objective. An identity statement.)
 4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
-5. CORE COMPETENCIES (9-12 terms in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists.)
+5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, never drop real ones -- typically 9 to 15.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start Year - End Year
-   - 3-5 CAR bullets per role, every one quantified
+   - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
 7. EDUCATION
    - Institution, dates. Add relevant coursework if it strengthens the resume.
 8. CERTIFICATIONS (separate section if they have any — don't bury in education)
@@ -321,14 +321,14 @@ CORE COMPETENCIES
 Term 1 | Term 2 | Term 3
 Term 4 | Term 5 | Term 6
 Term 7 | Term 8 | Term 9
-(9-12 terms. No labels. No categories. Just the skills. Pull from ACTUAL job content.)
+(The real competencies the source supports -- typically 9 to 15. No labels. No categories. Just the skills. Pull from ACTUAL job content. Never pad to a count.)
 
 PROFESSIONAL EXPERIENCE
 
 JOB TITLE | Company Name | City, State | Start Year - End Year
-- Strong verb + what was done + quantified result. Every bullet has a number.
-- Strong verb + achievement with scope (headcount, volume, percentage).
-- 3-5 bullets per role.
+- Strong verb + what was done + result, quantified where the source states a number.
+- Strong verb + achievement with scope (headcount, volume, percentage) when the source gives it.
+- As many bullets as the role's real achievements support (typically 3 to 6); write fewer rather than pad.
 
 (Repeat for each role, reverse chronological)
 

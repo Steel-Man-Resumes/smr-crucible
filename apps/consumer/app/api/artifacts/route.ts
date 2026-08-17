@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { listArtifacts, createArtifact, query, invalidateNextStep, snapshotApplicationDocument, recordProgressEvent } from "@crucible/core";
+import { listArtifacts, listArtifactsPaged, createArtifact, query, invalidateNextStep, snapshotApplicationDocument, recordProgressEvent, isResumeGroup } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 
@@ -59,6 +59,36 @@ export async function GET(request: Request) {
   const parsedLimit = limit ? parseInt(limit, 10) : undefined;
   if (limit && (!Number.isFinite(parsedLimit) || parsedLimit! < 1)) {
     return NextResponse.json({ error: "Invalid limit" }, { status: 400 });
+  }
+
+  // Phase 6.1 Library: server-side search/filter/pagination. Engaged only when a
+  // new param is present, so existing ?type=&limit= callers get the exact same
+  // { data } shape and behavior as before (back-compat).
+  const q = searchParams.get("q");
+  const lane = searchParams.get("lane");
+  const groupParam = searchParams.get("group");
+  const offsetParam = searchParams.get("offset");
+  const usesPaged =
+    q !== null || lane !== null || groupParam !== null || offsetParam !== null;
+
+  if (usesPaged) {
+    if (groupParam && !isResumeGroup(groupParam)) {
+      return NextResponse.json({ error: "Invalid group" }, { status: 400 });
+    }
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+    if (offsetParam && (!Number.isFinite(offset) || offset < 0)) {
+      return NextResponse.json({ error: "Invalid offset" }, { status: 400 });
+    }
+    const page = await listArtifactsPaged(userId, {
+      type,
+      q: q ?? undefined,
+      lane: lane ?? undefined,
+      group: groupParam && isResumeGroup(groupParam) ? groupParam : undefined,
+      limit: parsedLimit ? Math.min(parsedLimit, 100) : undefined,
+      offset,
+    });
+    // `data` kept as an alias of `items` so any consumer reading either works.
+    return NextResponse.json({ data: page.items, items: page.items, total: page.total });
   }
 
   const artifacts = await listArtifacts(userId, {

@@ -71,6 +71,36 @@ export function computeCostUsd(model: string, usage: TokenUsage): number {
   return Math.round(cost * 1_000_000) / 1_000_000;
 }
 
+/**
+ * Fire-and-forget flat-cost logger for calls priced PER OPERATION rather than
+ * per token (e.g. image generation). recordTokenUsage derives cost from token
+ * counts against a per-MTok price table; an image model has no token count, so
+ * this records the endpoint + an already-estimated flat cost directly, with zero
+ * tokens. Same ai_token_usage ledger, same never-throw contract.
+ */
+export function recordFlatUsage(
+  provider: string,
+  model: string,
+  costUsd: number,
+  meta?: AiCallMeta
+): void {
+  void (async () => {
+    try {
+      const { query } = await import("@crucible/core");
+      await query(
+        `INSERT INTO ai_token_usage
+           (user_id, endpoint, provider, model, input_tokens, output_tokens,
+            cache_creation_input_tokens, cache_read_input_tokens, cost_usd,
+            audio_seconds)
+         VALUES ($1, $2, $3, $4, 0, 0, 0, 0, $5, 0)`,
+        [meta?.userId || null, meta?.endpoint || "unknown", provider, model, costUsd || 0]
+      );
+    } catch (err) {
+      console.error("ai_token_usage flat insert failed:", err);
+    }
+  })();
+}
+
 /** Fire-and-forget: never throws, never blocks the caller. */
 export function recordTokenUsage(
   provider: string,
