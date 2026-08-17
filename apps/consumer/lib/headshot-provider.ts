@@ -23,8 +23,8 @@ export interface HeadshotGenStatus {
  *   HEADSHOT_GEN_ENABLED === "true"  -- the explicit on switch, and
  *   a provider key present           -- currently OPENAI_API_KEY (gpt-image-1),
  *                                       the intended first provider.
- * Either one missing keeps the feature off. No paid API is called anywhere in
- * this codebase yet; see the TODO(troy-gate) stub in the generate route.
+ * Either one missing keeps the feature off, and the generate route returns 501
+ * before any paid API call. The route reads this to decide whether to run.
  */
 export function isHeadshotGenEnabled(): boolean {
   return headshotGenStatus().enabled;
