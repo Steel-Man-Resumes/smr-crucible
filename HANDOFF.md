@@ -1,5 +1,29 @@
 # SMR Crucible -- Handoff
 
+## 2026-08-18 -- Session close. Headshots live + hardened; refund + slop cleanup done. NEXT: Codex review-only pass of the whole codebase (Troy).
+
+Post-merge follow-ups after the Phase 6/2.3/7.7/2.5 deploy, all live on prod (main
+= f3548e2, deploy READY, 0 runtime errors):
+- HEADSHOT GEN TURNED ON in prod (Troy set OPENAI_API_KEY + HEADSHOT_GEN_ENABLED in
+  Vercel + redeployed) and added HEADSHOT_GEN_ENABLED=true to local .env.local.
+- TIMEOUT FIX (074c982): the first real run hit "Vercel Runtime Timeout after 30s"
+  on /api/avatar/generate -- gpt-image-1 needs 30-90s. Raised maxDuration 30->120,
+  set image quality=medium (faster + cheaper), added a 110s AbortSignal for a clean
+  502 instead of a hard kill.
+- FAILED-SLOT REFUND (56ef036): reserveEndpointSlot now has a matching
+  releaseEndpointSlot (atomic decrement, floor 0); the generate route refunds the
+  daily slot on ANY post-reserve failure (provider error / timeout / storage), so
+  only a successful headshot costs one of the 3/day. Live-verified in verify-7-avatar
+  (reserve/refund/floor + env-independent gate-formula checks). Core suite 93 green.
+- SLOP CLEANUP (f3548e2): swept every file added this run for TODO/FIXME/console.log/
+  @ts-ignore/stale placeholders -- clean except two stale comments (fixed). The
+  codebase is prepped for Troy's Codex review-only pass ("highest caliber, no bloat/
+  slop"). Intentional-not-slop for the reviewer: pagefit-renderer.ts is a documented
+  flag-off decision-A stub; verify-*.mjs match the existing verify-1c/verify-5 pattern;
+  seed-nonprofit-lane.ts is authored-but-unrun (6.3, needs a target user).
+- STILL OPEN (optional, non-blocking): run the nonprofit-lane seed (prod data op);
+  Phase 5 interview-surface fresh review (pre-existing).
+
 ## 2026-08-17 -- MERGED + DEPLOYED TO PROD. Phases 6/2.3/7.7/2.5 + all four Troy gates resolved. Live on refinery.steelmanresumes.com.
 
 PR #1 merged to main (merge commit 7fde756); Vercel production deploy READY
