@@ -8,19 +8,22 @@
  * was invisible and it had no provider failover.
  * With MOCK_AI=true: returns Jordan fixture instantly.
  *
- * RATE LIMIT: Mini Forge runs from a server component (the kiosk/tablet
+ * SPEND CONTROL: Mini Forge runs from a server component (the kiosk/tablet
  * processing page), not an API route, so it cannot use withRateLimit and is
- * unauthenticated by design (no user account yet). It is NOT per-IP rate
- * limited. It is naturally throttled by the tablet-session processing lock
- * (tryClaimProcessing): a session produces exactly one output, and a second
- * concurrent request cannot start a new AI call. If wider abuse protection is
- * wanted, it needs a real route or edge guard -- not faked here.
+ * unauthenticated by design (no user account yet). Three layers bound spend:
+ * (1) session creation is per-IP throttled in the PIN server action
+ * (auth-rate-limit), (2) the tablet-session processing lock (tryClaimProcessing)
+ * guarantees exactly one AI call per session, and (3) assertMiniForgeBudget()
+ * enforces a DB-backed rolling-24h cap on total real calls -- the hard ceiling
+ * that survives serverless cold starts. On cap, MiniForgeCapacityError bubbles
+ * to the processing page, which shows an honest "at capacity" screen.
  */
 
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "./mock-ai";
 import { RESEARCH_CONTEXT } from "./research-context";
 import { MODEL_FAST } from "./ai/models";
 import { callAI } from "./ai-call";
+import { assertMiniForgeBudget } from "./mini-forge-budget";
 
 export interface MiniForgeIntake {
   readiness_stage?: string;
@@ -39,6 +42,10 @@ export async function processMiniForge(
   if (isMockEnabled()) {
     return { ...MOCK_FORGE_OUTPUT, generated_at: new Date().toISOString(), source: "mock" };
   }
+
+  // Hard spend ceiling before any paid call on this unauthenticated public path.
+  // Throws MiniForgeCapacityError when the rolling-24h cap is reached.
+  await assertMiniForgeBudget();
 
   const prompt = buildPrompt(intake);
 

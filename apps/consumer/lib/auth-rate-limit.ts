@@ -43,6 +43,12 @@ export const AUTH_LIMITS = {
   // 120/hr/IP passes any human burst; sustained bot floods do not look human.
   registerPerIp: { maxRequests: 120, windowMs: 3_600_000 } as RateLimitConfig,
   registerPerEmail: { maxRequests: 6, windowMs: 3_600_000 } as RateLimitConfig,
+  // Mini Forge kiosk session creation. A facility tablet room signs many people
+  // up behind one NAT IP, so this is deliberately generous -- enough to clear a
+  // busy kiosk day, low enough that a bot minting thousands of sessions is cut
+  // off. Best-effort (in-memory); the real spend ceiling is the DB-backed
+  // rolling-24h cap in mini-forge-budget (assertMiniForgeBudget).
+  miniForgeSessionPerIp: { maxRequests: 40, windowMs: 3_600_000 } as RateLimitConfig,
 };
 
 export function checkAuthRateLimit(

@@ -19,6 +19,7 @@ import {
 } from "@/lib/tablet-session";
 import { processMiniForge } from "@/lib/mini-forge-ai";
 import type { MiniForgeIntake } from "@/lib/mini-forge-ai";
+import { MiniForgeCapacityError } from "@/lib/mini-forge-budget";
 
 export const maxDuration = 60;
 
@@ -35,6 +36,7 @@ export default async function ProcessingPage() {
   }
 
   // Acquire processing lock. If we win, run AI now and redirect to results.
+  let atCapacity = false;
   if (session.processing_status === "pending") {
     const locked = await tryClaimProcessing(session.id);
     if (locked) {
@@ -45,13 +47,44 @@ export default async function ProcessingPage() {
         await saveOutput(session.id, output);
         saved = true;
       } catch (err) {
-        // Release the claim so the meta-refresh retry can take it again --
-        // otherwise one AI failure strands the session in 'processing' forever.
-        console.error("[mini-forge] processing failed, releasing claim:", err);
+        // Release the claim so a retry can take it again -- otherwise one AI
+        // failure strands the session in 'processing' forever.
         await releaseProcessingClaim(session.id).catch(() => {});
+        if (err instanceof MiniForgeCapacityError) {
+          // Spend ceiling hit: show an honest capacity screen (no auto-refresh
+          // loop, no fabricated plan). The session stays pending so it can run
+          // later once the rolling window clears.
+          atCapacity = true;
+        } else {
+          console.error("[mini-forge] processing failed, releasing claim:", err);
+        }
       }
       if (saved) redirect("/mini-forge/results");
     }
+  }
+
+  if (atCapacity) {
+    return (
+      <div className="py-8 text-center">
+        <h1 className="text-2xl font-semibold text-foreground mb-3">
+          The free kiosk is busy right now.
+        </h1>
+        <p className="text-muted mb-6">
+          A lot of people are using it today. Your answers are saved. Write down
+          your import code below and come back in a little while -- your plan will
+          be ready to build when you return.
+        </p>
+        <div className="bg-card border-2 border-accent rounded-[6px] p-8 mb-8 mx-auto max-w-xs">
+          <p className="text-sm text-muted mb-2 uppercase font-medium">
+            Your import code
+          </p>
+          <p className="text-5xl font-bold text-foreground font-mono">
+            {session.import_code}
+          </p>
+        </div>
+        <p className="mt-2 text-sm text-muted">Need help? Call 211 from any phone.</p>
+      </div>
+    );
   }
 
   // status='processing' -- lock held by a parallel or timed-out request.

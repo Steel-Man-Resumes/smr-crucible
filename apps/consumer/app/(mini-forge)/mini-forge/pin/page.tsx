@@ -4,13 +4,14 @@
  * No client-side JS required -- plain HTML form + server action.
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   createTabletSession,
   TABLET_COOKIE,
   getTabletSession,
 } from "@/lib/tablet-session";
+import { checkAuthRateLimit, AUTH_LIMITS } from "@/lib/auth-rate-limit";
 
 export default async function PinPage({
   searchParams,
@@ -37,6 +38,22 @@ export default async function PinPage({
     }
     if (pin !== confirm) {
       redirect("/mini-forge/pin?error=mismatch");
+    }
+
+    // Per-IP throttle on session creation -- a kiosk room behind one NAT passes
+    // easily; a bot minting sessions to drain the AI budget does not. The hard
+    // spend ceiling is the DB-backed daily cap enforced before the AI call.
+    const h = headers();
+    const ip =
+      h.get("x-real-ip")?.trim() ||
+      h.get("x-forwarded-for")?.split(",").pop()?.trim() ||
+      "unknown";
+    const ipCheck = checkAuthRateLimit(
+      `miniforge:ip:${ip}`,
+      AUTH_LIMITS.miniForgeSessionPerIp
+    );
+    if (!ipCheck.allowed) {
+      redirect("/mini-forge/pin?error=busy");
     }
 
     const session = await createTabletSession(pin);
@@ -77,6 +94,11 @@ export default async function PinPage({
       {error === "invalid" && (
         <div className="bg-warm-100 border border-warm-300 rounded-lg p-4 mb-6 text-foreground">
           Use exactly 4 numbers (like 1234 or 9087).
+        </div>
+      )}
+      {error === "busy" && (
+        <div className="bg-warm-100 border border-warm-300 rounded-lg p-4 mb-6 text-foreground">
+          This kiosk is busy right now. Wait a minute and try again.
         </div>
       )}
 
