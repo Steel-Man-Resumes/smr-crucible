@@ -106,6 +106,10 @@ function DisclosurePlannerPage() {
   const searchParams = useSearchParams();
   const [consentGiven, setConsentGiven] = useState(false);
   const [showConsentGate, setShowConsentGate] = useState(false);
+  // Affirmative consent to send the record to the AI (set ONLY by "I understand
+  // -- let's prepare"). "Not now"/generic leave this false, which both keeps the
+  // record fields locked and tells the server not to process the record.
+  const [aiConsent, setAiConsent] = useState(false);
   const [targetCompany, setTargetCompany] = useState("");
   const [step, setStep] = useState<PlannerStep>("assess");
   const [hurdle, setHurdle] = useState<HurdleType>("record");
@@ -284,8 +288,17 @@ function DisclosurePlannerPage() {
     setForge((prev) => ({ ...prev, strengths: prev.strengths.filter((_, i) => i !== index) }));
   }
 
-  async function generatePlan(refinementNote?: string, answersOverride?: IntakeAnswer[]) {
+  async function generatePlan(
+    refinementNote?: string,
+    answersOverride?: IntakeAnswer[],
+    consentOverride?: boolean
+  ) {
     const answers = answersOverride ?? intakeAnswers;
+    // Record data is sent ONLY with affirmative consent. For the record path
+    // without consent, omit `record` entirely -- the server returns the static
+    // generic template and never sends record detail to a model.
+    const consent = consentOverride ?? aiConsent;
+    const sendRecord = !isRecord || consent;
     setGenerating(true);
     setRateLimitError("");
     try {
@@ -293,7 +306,8 @@ function DisclosurePlannerPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          record,
+          record: sendRecord ? record : undefined,
+          aiProcessingConsent: consent,
           timing,
           hurdle,
           targetJob: targetJob || undefined,
@@ -655,8 +669,9 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
                 Build my personalized plan
               </button>
               <button
-                onClick={() => setConsentGiven(true)}
-                className="px-4 py-2.5 text-t-steel text-sm font-medium hover:opacity-80 transition-colors"
+                onClick={() => generatePlan(undefined, [], false)}
+                disabled={generating}
+                className="px-4 py-2.5 text-t-steel text-sm font-medium hover:opacity-80 transition-colors disabled:opacity-40"
               >
                 Use a generic template
               </button>
@@ -711,6 +726,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               <button
                 onClick={() => {
                   setConsentGiven(true);
+                  setAiConsent(true);
                   setShowConsentGate(false);
                 }}
                 className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
@@ -718,11 +734,9 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
                 I understand — let&apos;s prepare
               </button>
               <button
-                onClick={() => {
-                  setConsentGiven(true);
-                  setShowConsentGate(false);
-                }}
-                className="px-4 py-3 text-t-phos-dim text-sm hover:text-t-white transition-colors min-h-touch"
+                onClick={() => generatePlan(undefined, [], false)}
+                disabled={generating}
+                className="px-4 py-3 text-t-phos-dim text-sm hover:text-t-white transition-colors min-h-touch disabled:opacity-40"
               >
                 Not now — basic guidance
               </button>
@@ -732,7 +746,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
 
         {/* Record info (pre-filled from Forge if available) -- record hurdle only */}
         {isRecord && (
-        <div className={`space-y-4 mb-8 ${!consentGiven ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className={`space-y-4 mb-8 ${!aiConsent ? "opacity-40 pointer-events-none" : ""}`}>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium text-t-white block mb-1">

@@ -24,6 +24,31 @@ export const maxDuration = 30;
 // where quality changes a real outcome for the user.
 const AI_MODEL = MODEL_DEEP;
 
+// Version stamp for the AI-processing consent the record path requires. Bump
+// when the "what we do with your record" disclosure text materially changes so
+// the decision_log records which version each user agreed to.
+const DISCLOSURE_CONSENT_VERSION = "2026-08-18-v1";
+
+// Served for the record path when the user did NOT affirmatively consent to AI
+// processing of their record (they chose "generic template" / "not now"). It is
+// static, legal-reviewed, and generated WITHOUT sending any record detail to a
+// model -- the server-side half of the consent gate. Shape matches the AI plan
+// so the client renders it identically.
+const GENERIC_DISCLOSURE_TEMPLATE = {
+  timing_advice:
+    "You get to choose when and whether to bring up your record. A common approach is to wait until they can see you are a strong fit -- later in the process, not on the first application -- unless a form directly and lawfully asks. You are never required to volunteer it earlier than you are comfortable.",
+  legal_context:
+    "Many states and cities have ban-the-box or fair-chance rules that limit when an employer may ask about a record, and most states have some process to seal or expunge older records. These vary a lot by place, so treat this as general information to verify -- not legal advice. A local reentry legal aid organization can tell you exactly what applies where you live.",
+  script:
+    "I want to be upfront about something in my past. I made a mistake, I took responsibility, and I have spent the time since then building the skills and habits I bring to this job. What I care about now is doing good work here, and I am glad to answer any questions you have.",
+  tips: [
+    "Keep it short -- a sentence or two, then pivot to a real strength.",
+    "Practice it out loud until it feels natural, not rehearsed.",
+    "You decide how much detail to share -- you do not owe anyone more than you want to give.",
+    "For your exact rights and any record-clearing options, check with a local reentry legal aid organization.",
+  ],
+};
+
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
@@ -35,8 +60,24 @@ async function handlePost(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
 
-  const { record, timing, targetJob, forgeContext, refinementNote, intakeAnswers, hurdle } =
-    await request.json();
+  const {
+    record,
+    timing,
+    targetJob,
+    forgeContext,
+    refinementNote,
+    intakeAnswers,
+    hurdle,
+    aiProcessingConsent: aiProcessingConsentRaw,
+  } = await request.json();
+
+  // Affirmative, explicit consent to send the record to an AI provider. The
+  // client sends this true ONLY when the user clicked "I understand -- let's
+  // prepare"; "not now" / "generic template" send false (and omit `record`).
+  // The server enforces it below, so dismissing the gate can never reach the
+  // personalized AI path -- that was the disclosure-consent defect. A missing
+  // or non-true value counts as no consent.
+  const aiProcessingConsent = aiProcessingConsentRaw === true;
 
   // Phase 5.3: the criminal-record hurdle keeps the full jurisdiction /
   // ban-the-box path below. Any OTHER hurdle gets STATIC, legal-reviewed
@@ -152,6 +193,30 @@ Return JSON ONLY:
       return NextResponse.json(nonRecordResult);
     }
 
+    // ── Consent gate (record path) ─────────────────────────────────────────
+    // The record only reaches a real AI provider with the user's affirmative,
+    // versioned consent. Without it, answer with the static generic template --
+    // no record detail is read, no model is called. This is enforced here on the
+    // server so the client cannot reach the personalized path by dismissing the
+    // UI gate; the mock/test path above is unaffected (fixture data, no real PII).
+    if (!aiProcessingConsent) {
+      try {
+        const { logDecision } = await import("@crucible/core");
+        await logDecision({
+          contextPage: "disclosure-guide",
+          modelProvider: "none",
+          modelId: "static-template",
+          input: JSON.stringify({ consent: false }).slice(0, 500),
+          explanation:
+            "Served static generic disclosure template -- user did not consent to AI processing of their record; no record data sent to any model",
+          outputSummary: { type: "disclosure_plan_generic", ai_processing_consent: false },
+        });
+      } catch (err) {
+        console.error("Decision log failed (disclosure generic):", err);
+      }
+      return NextResponse.json(GENERIC_DISCLOSURE_TEMPLATE);
+    }
+
     // Build candidate profile from Forge data
     let candidateBlock = "";
     if (targetJob || forgeContext) {
@@ -246,12 +311,14 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
         contextPage: "disclosure-guide",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
-        input: JSON.stringify({ record, timing }).slice(0, 500),
-        explanation: "Generated disclosure plan based on criminal record type, recency, and jurisdiction",
+        input: JSON.stringify({ record, timing, consentVersion: DISCLOSURE_CONSENT_VERSION }).slice(0, 500),
+        explanation: "Generated disclosure plan based on criminal record type, recency, and jurisdiction (AI-processing consent granted)",
         outputSummary: {
           type: "disclosure_plan",
           has_script: !!result.script,
           tips_count: result.tips?.length ?? 0,
+          ai_processing_consent: true,
+          consent_version: DISCLOSURE_CONSENT_VERSION,
         },
       });
     } catch (err) {
