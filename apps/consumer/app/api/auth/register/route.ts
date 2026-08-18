@@ -139,42 +139,35 @@ export async function POST(request: Request) {
         [trimmedEmail]
       );
 
-      const passwordHash = await bcrypt.hash(password, 12);
-
       if (existing.rows.length > 0) {
-        // Org-invited (or pre-provisioned) accounts that have NEVER signed in
-        // by any door may be claimed by registering: proof of control is the
-        // email address, exactly as it is for a fresh registration. The
-        // guarded UPDATE keeps active accounts (password, magic-link history,
-        // or OAuth link) untouchable -- those still 409 to sign-in.
-        const claimed = await client.query(
-          `UPDATE users u
-              SET password_hash = $2,
-                  "emailVerified" = NOW(),
-                  name = COALESCE(NULLIF($3, ''), u.name)
-            WHERE u.id = $1
-              AND u.password_hash IS NULL
-              AND u."emailVerified" IS NULL
-              AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
-            RETURNING id`,
-          [existing.rows[0].id, passwordHash, cName]
+        // SECURITY (account-takeover fix): this public form NEVER claims or
+        // verifies an existing account. A pre-provisioned org-invite account
+        // (no password, no emailVerified, no OAuth) could previously be claimed
+        // here by anyone who merely knew the email -- setting a password and
+        // marking it verified without any proof of controlling that address.
+        //
+        // The real invitee already has a proof-of-ownership path: the invite
+        // email carries a 7-day magic link that signs them straight in, and a
+        // lost link is re-issued from /login ("Email me a sign-in link").
+        // Existing active accounts sign in with their password or that same
+        // magic link. So any existing email stops here.
+        return NextResponse.json(
+          {
+            error:
+              'An account with this email already exists. If your organization set it up, open the sign-in link in your invite email -- or go to the sign-in page and choose "Email me a sign-in link." If it is already your account, just sign in.',
+          },
+          { status: 409 }
         );
-        if (claimed.rows.length === 0) {
-          return NextResponse.json(
-            { error: "An account with this email already exists. Try signing in instead." },
-            { status: 409 }
-          );
-        }
-        newUserId = claimed.rows[0].id;
-      } else {
-        const result = await client.query(
-          `INSERT INTO users (name, email, "emailVerified", password_hash)
-           VALUES ($1, $2, NOW(), $3)
-           RETURNING id, email`,
-          [cName || trimmedEmail.split("@")[0], trimmedEmail, passwordHash]
-        );
-        newUserId = result.rows[0].id;
       }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const result = await client.query(
+        `INSERT INTO users (name, email, "emailVerified", password_hash)
+         VALUES ($1, $2, NOW(), $3)
+         RETURNING id, email`,
+        [cName || trimmedEmail.split("@")[0], trimmedEmail, passwordHash]
+      );
+      newUserId = result.rows[0].id;
     } finally {
       client.release();
     }
