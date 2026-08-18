@@ -21,6 +21,7 @@ export const runtime = "nodejs";
 export const maxDuration = 15;
 
 const FETCH_TIMEOUT_MS = 8000;
+const MAX_REDIRECTS = 5; // bound manual redirect following (SSRF re-validation per hop)
 const MAX_BYTES = 2_000_000; // stop reading after ~2MB of HTML
 const MAX_TEXT_CHARS = 12_000; // enough for a posting; bounded for the LLM + gate
 const MIN_TEXT_CHARS = 200; // below this, treat as blocked/empty
@@ -90,15 +91,44 @@ async function handlePost(request: Request) {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(target.toString(), {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    // SSRF-safe redirect handling: redirect:"follow" would re-validate nothing,
+    // so an allowlisted public URL that 302s to http://169.254.169.254/ (or any
+    // internal host) would be fetched by the server. Instead follow hops
+    // MANUALLY and run every Location through isDisallowedHost before requesting
+    // it. Bounded hop count also stops redirect loops.
+    // (Known residual: this validates the hostname, not the resolved IP -- a
+    // hostname that DNS-resolves to a private address is not caught here. That
+    // is a separate DNS-rebinding hardening, out of scope for the redirect fix.)
+    let current = target;
+    for (let hop = 0; ; hop++) {
+      res = await fetch(current.toString(), {
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      const isRedirect = res.status >= 300 && res.status < 400;
+      const location = res.headers.get("location");
+      if (!isRedirect || !location) break;
+
+      if (hop >= MAX_REDIRECTS) {
+        return fail("blocked", "That link redirected too many times. Paste the job description text instead.");
+      }
+      let next: URL;
+      try {
+        next = new URL(location, current); // resolve relative Location against current
+      } catch {
+        return fail("blocked", "That page could not be read. Paste the job description text instead.");
+      }
+      if (isDisallowedHost(next)) {
+        return fail("invalid_url", "That link redirects somewhere that cannot be opened. Paste the job description text instead.");
+      }
+      current = next;
+    }
   } catch {
     return fail("timeout", "That page took too long or could not be reached. Paste the job description text instead.");
   } finally {
