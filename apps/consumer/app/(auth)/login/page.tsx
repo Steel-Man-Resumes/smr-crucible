@@ -39,6 +39,9 @@ function LoginForm() {
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Create-account only: explicit Terms/Privacy/AI-processing acceptance,
+  // required before any account or Forge data is persisted server-side.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -172,6 +175,7 @@ function LoginForm() {
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (!name.trim() || !phone.trim()) { setError("Please add your name and phone -- they go on the resumes you build."); return; }
+    if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
 
     // Carry the Forge work onto the new account server-side. The forge_session
@@ -196,7 +200,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge, turnstileToken }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge, turnstileToken, acceptedTerms: true }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -288,7 +292,7 @@ function LoginForm() {
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
     || (twoFactorStep && !totp.trim())
-    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim()));
+    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms));
 
   return (
     <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
@@ -525,6 +529,28 @@ function LoginForm() {
               />
             )}
           </div>
+
+          {/* Terms / Privacy / AI-processing consent -- create mode only.
+              Required before any account or Forge data persists (versioned
+              acceptance recorded server-side at registration). */}
+          {mode === "create" && (
+            <label className="flex items-start gap-2 text-[12px] text-t-phos-dim">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                disabled={sending}
+                className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+              />
+              <span>
+                I agree to the{" "}
+                <a href="https://steelmanresumes.com/terms" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">Terms</a>{" "}
+                and{" "}
+                <a href="https://steelmanresumes.com/privacy" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">Privacy Policy</a>,
+                and I understand my information is processed with AI to build my resume and career tools.
+              </span>
+            </label>
+          )}
 
           {error && <p className="text-sm text-t-red">{error}</p>}
 

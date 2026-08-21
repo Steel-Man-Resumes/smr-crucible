@@ -33,6 +33,11 @@ function accessCodeFromCookie(request: Request): string | null {
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// Version of the Terms/Privacy/AI-processing notice the user accepts at
+// registration. Bump when that notice materially changes so the immutable
+// consent-event history records which version each account agreed to.
+const TERMS_VERSION = "2026-08-21-v1";
+
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_500_000) {
@@ -40,7 +45,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { email, password, name, phone, forge, turnstileToken } =
+    const { email, password, name, phone, forge, turnstileToken, acceptedTerms } =
       await request.json();
 
     // Bot defense -- env-gated: enforced only when TURNSTILE_SECRET_KEY is set
@@ -91,6 +96,18 @@ export async function POST(request: Request) {
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email and password are required." },
+        { status: 400 }
+      );
+    }
+
+    // Product-level consent gate: no account, profile, or Forge data is persisted
+    // without an explicit, versioned Terms/Privacy/AI-processing acceptance. The
+    // client sends acceptedTerms:true only when the box is checked; a direct API
+    // caller must send it too, so acceptance is enforced server-side, not just in
+    // the UI.
+    if (acceptedTerms !== true) {
+      return NextResponse.json(
+        { error: "You must accept the Terms and Privacy Policy to create an account." },
         { status: 400 }
       );
     }
@@ -170,6 +187,33 @@ export async function POST(request: Request) {
       newUserId = result.rows[0].id;
     } finally {
       client.release();
+    }
+
+    // Record the versioned Terms/Privacy/AI-processing acceptance: the mutable
+    // current-state row (consumer_consent 'core') plus the immutable history row
+    // (consumer_consent_event) that compliance trusts. Best-effort: the hard gate
+    // above already blocked signup without acceptance, so a lost audit row is
+    // logged, never a reason to fail an account the user is waiting on.
+    if (newUserId) {
+      try {
+        await query(
+          `INSERT INTO consumer_consent
+             (user_id, consent_layer, status, consent_text_version, collection_context)
+           VALUES ($1, 'core', 'granted', $2, $3)
+           ON CONFLICT (user_id, consent_layer)
+           DO UPDATE SET status = 'granted', granted_at = now(),
+                         consent_text_version = $2, collection_context = $3`,
+          [newUserId, TERMS_VERSION, JSON.stringify({ via: "registration", terms: true, privacy: true, ai_processing: true })]
+        );
+        await query(
+          `INSERT INTO consumer_consent_event
+             (user_id, consent_layer, action, text_version, collection_method, context)
+           VALUES ($1, 'core', 'granted', $2, 'registration', $3)`,
+          [newUserId, TERMS_VERSION, JSON.stringify({ terms: true, privacy: true, ai_processing: true })]
+        );
+      } catch (e: any) {
+        console.error("[register] consent record failed:", e?.message || e);
+      }
     }
 
     // Best-effort: carry the anonymous Forge work onto the new account. Must run
