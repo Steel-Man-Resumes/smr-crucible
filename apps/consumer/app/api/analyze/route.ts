@@ -121,6 +121,11 @@ async function handlePost(request: Request) {
       skills: skills.skills || [],
       career_paths: careerPaths.paths || [],
       barriers: barriers?.barriers || [],
+      // Honest framing surfaced to the user: the organizations, programs, and
+      // legal notes here are AI-generated leads to verify, not a vetted directory
+      // or legal advice. Pairs with the in-prompt sourcing discipline.
+      resources_disclaimer:
+        "The organizations, programs, and legal notes here are AI-generated starting points, not a verified directory or legal advice. Confirm any organization, contact detail, and your own legal options before relying on them -- 211, your local American Job Center, and a local legal-aid office are good places to check.",
     };
     if (WOTC_RE.test(JSON.stringify(rawForge))) {
       console.warn("[analyze] Deterministic guard stripped a WOTC / Form 8850 reference the model emitted");
@@ -234,7 +239,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Note which paths have the lowest barrier to entry for their situation.
 - Name structural obstacles honestly (background check timing, licensing exclusions) and how to navigate them.`,
     barriers: `This person is preparing to move. They need actionable plans.
-- Full resource lists with contact info where possible.
+- Point to verifiable resource types and the authoritative directories to find them; do not invent local org names, phone numbers, or addresses.
 - Legal notes: specific to their situation, actionable.
 - Timelines only as general ballpark, framed to verify ("record-clearing can take months and it varies -- a legal-aid resource can confirm for your case"), never a firm promise.
 - Frame through agency: "here's what you do first."
@@ -255,18 +260,18 @@ const READINESS_DIRECTIVES: Record<string, {
 - Prioritize hard skills and quantifiable competencies.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
-- For each path: name specific fair-chance employers in their area. SHRM data shows 85% of HR pros say JI employees perform equal or better — this person should know that data exists.
+- For each path: show HOW to find fair-chance employers in their area (the state American Job Center, local reentry orgs, national fair-chance job boards) rather than naming a specific local company as fair-chance, which you cannot verify. SHRM data shows 85% of HR pros say JI employees perform equal or better -- this person should know that data exists.
 - Next steps should be specific and immediate ("apply on Indeed this week", "call this organization Monday").
 - Salary ranges with negotiation context.
 - Note seasonal hiring patterns if relevant.
 - Address the structural barrier upfront for each path: what the background check process looks like, timing of disclosure, which employers use individual assessment.`,
     barriers: `This person is actively applying and needs barrier solutions NOW.
-- Maximum resource depth. Real organizations, real contact info.
+- Maximum resource depth: verifiable organizations and how to reach them through authoritative directories, never invented contact details.
 - Legal notes: specific, actionable, with deadlines if applicable.
 - Include "what to say when asked" disclosure strategies.
 - Prioritize resources by immediacy and impact.
 - Frame barriers as solvable logistics, not identity: "The system has this obstacle. Here is exactly how to move through it."
-- Include fair-chance employer intelligence — which specific companies in their area have publicly committed to fair hiring.`,
+- Include fair-chance employer intelligence -- HOW to identify employers open to fair hiring (fair-chance job boards, the state American Job Center, local reentry orgs), never a claim that a specific named company has committed to it without a verifiable source.`,
     careerCount: "3-5",
   },
 };
@@ -274,6 +279,18 @@ const READINESS_DIRECTIVES: Record<string, {
 function getReadinessDirective(stage?: string) {
   return READINESS_DIRECTIVES[stage || "preparation"] || READINESS_DIRECTIVES.preparation;
 }
+
+// Sourcing discipline injected into the career-path and barrier prompts. The
+// Forge names organizations, programs, and employers; a fabricated org name or a
+// wrong phone number sends a justice-impacted person to a dead end. This forbids
+// inventing verifiable-sounding specifics and forces every lead to be either a
+// nationally verifiable institution or a "here is how to find it" instruction the
+// person can confirm themselves.
+const RESOURCE_VERIFICATION_DISCIPLINE = `SOURCING & VERIFICATION DISCIPLINE (non-negotiable):
+- Do NOT fabricate specifics. Never invent an organization name, employer name, phone number, email, street address, website, or a claim that a specific company "is fair-chance" or "has committed to fair hiring." A made-up org or a wrong number is worse than no lead.
+- Name a specific organization ONLY if it is a well-known, nationally verifiable one (examples: 211 / United Way, the state American Job Center or Michigan Works!, the Federal Bonding Program, Goodwill, CareerOneStop, Legal Aid). For anything local, describe the TYPE of organization and tell the person exactly how to find it (a search term, a directory, or who to ask) instead of naming a specific local provider you cannot verify.
+- Attach a phone number, email, or URL ONLY for the nationally verifiable institutions above, and only when you are certain of it. Otherwise give none.
+- Frame every resource and employer as a lead the person should verify for themselves -- not a vetted directory. When in doubt, teach them how to find and confirm it.`;
 
 function buildContext(input: ForgeInput): string {
   const parts: string[] = [];
@@ -460,6 +477,9 @@ RULES:
 - No blue-collar assumptions -- match based on actual skills and interests.
 - Be honest about salary ranges.
 - Use "--" never an em dash anywhere in the output. No emojis.
+
+${RESOURCE_VERIFICATION_DISCIPLINE}
+
 - Output JSON only.`;
 
   const prompt = `Find career paths for this person.
@@ -515,7 +535,10 @@ READINESS-AWARE INSTRUCTIONS:
 ${rd.barriers}
 
 RULES:
-- Be specific, not generic. Real organizations > generic advice.
+- Be specific about the KIND of help and how to reach it, but never at the cost of accuracy: a verifiable "how to find it" beats a fabricated specific.
+
+${RESOURCE_VERIFICATION_DISCIPLINE}
+
 - For criminal records: consider type, recency, and jurisdiction. Reference laws as GENERAL INFORMATION to verify, never as a determination of THIS person's eligibility.
 - LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief -- say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
 - Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all -- it expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / Michigan Works!), and never present any incentive as settled without verification.
