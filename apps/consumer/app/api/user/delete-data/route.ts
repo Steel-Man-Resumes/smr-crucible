@@ -9,7 +9,7 @@
  * - consumer_profile
  * - job_application
  * - decision_log entries
- * - ai_usage entries
+ * - ai_usage entries + ai_token_usage per-call ledger (both usage tables)
  * - coach_conversation (AI coach memory -- full transcript erase)
  * - disclosure_rehearsal + interview_voice sessions/chunks (Phase 5.1
  *   encrypted, text-only transcripts, both purposes)
@@ -113,6 +113,9 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
+    // ai_token_usage is the newer per-call token ledger (migration 022) that the
+    // export reads; it must be cleared too, or usage telemetry survives a delete.
+    await query("DELETE FROM ai_token_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
     // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).
     // Chunks cascade off their session rows; this deletes the sessions.

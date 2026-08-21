@@ -2,8 +2,9 @@
  * POST /api/user/export-data
  *
  * Real server-side data export -- the JBS "download your data" right, done
- * properly. Returns every row Postgres holds for the signed-in user in one
- * JSON payload:
+ * properly. Returns the data Steel Man Resumes holds for the signed-in user in
+ * one JSON payload (their own content, account activity, and consent history --
+ * not internal operational rows like deletion-task queues):
  * - consumer_profile (profile_data, narrative_data, preferences, skills,
  *   career_paths, forge_output)
  * - forge_session content (all sessions ever linked to this user)
@@ -30,6 +31,9 @@
  *   "chat"         -> coach_conversation
  *   "consent"      -> consent event history
  *   "usage"        -> ai_token_usage totals
+ *   "decisions"    -> decision_log rows (the recorded AI decisions about you)
+ *   "login_history"-> user_login_event rows (your own sign-in history)
+ *   "org"          -> access_code_redemption rows (your org membership)
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
  *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
@@ -250,6 +254,28 @@ export async function POST(req: Request) {
         totals: aiUsageTotals[0] ?? { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 },
         perEndpoint: aiUsageByEndpoint,
       };
+    }
+
+    // Account activity + governance the user is entitled to (Phase compliance,
+    // 2026-08-21): the recorded AI decisions about them, their own login history,
+    // and their org membership. SELECT * (their own rows) avoids column drift.
+    if (want("decisions")) {
+      payload.decisions = await query(
+        `SELECT * FROM decision_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 2000`,
+        [userId]
+      );
+    }
+    if (want("login_history")) {
+      payload.loginHistory = await query(
+        `SELECT * FROM user_login_event WHERE user_id = $1 ORDER BY created_at DESC LIMIT 2000`,
+        [userId]
+      );
+    }
+    if (want("org")) {
+      payload.orgMembership = await query(
+        `SELECT * FROM access_code_redemption WHERE user_id = $1`,
+        [userId]
+      );
     }
 
     return new NextResponse(JSON.stringify(payload, null, 2), {
