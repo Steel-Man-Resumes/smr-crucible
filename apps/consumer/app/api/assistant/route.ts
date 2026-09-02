@@ -37,6 +37,7 @@ import {
   buildMemorySection,
   appendCoachMessage,
   isConsentGranted,
+  getOne,
 } from "@crucible/core";
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
@@ -139,6 +140,22 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 - Do not promise any hiring outcome.`
     : baseSystemPrompt;
 
+  // Bug fix: the "Reply in Spanish" toggle writes users.coach_language, but this
+  // t.ROY route never read it, so the toggle was a no-op on this surface. Honor it
+  // for authenticated users. Resumes/cover letters stay in the application language.
+  let localizedSystemPrompt = systemPrompt;
+  if (userId) {
+    const langRow = await getOne<{ coach_language: string | null }>(
+      `SELECT coach_language FROM users WHERE id = $1`,
+      [userId]
+    ).catch(() => null);
+    if (langRow?.coach_language === "es") {
+      localizedSystemPrompt = `${systemPrompt}
+
+LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English -- refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
+    }
+  }
+
   // Persist the user turn for cross-session memory (authed only, and only
   // when the newest message IS the user speaking -- a client-tool
   // continuation POST ends with an assistant tool-result message).
@@ -168,7 +185,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
   const result = streamText({
     model: anthropic(MODEL_CHAT),
-    system: systemPrompt,
+    system: localizedSystemPrompt,
     messages: messages as never,
     maxTokens: responseMaxTokens,
     temperature: 0.7,
