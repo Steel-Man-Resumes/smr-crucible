@@ -59,6 +59,9 @@ function ForgeAssistant() {
           challengeTypes: session.challenges,
           pagesCompleted: session.pagesVisited,
           forgeComplete: !!session.forgeOutput,
+          // Anonymous t.ROY honors the language picked on the welcome page.
+          // (Authenticated t.ROY reads the stored preference in the route.)
+          language: session.language,
         }}
         sessionId={session.startedAt}
       />
