@@ -10,6 +10,8 @@
  * writes at 1.25x input (Anthropic).
  */
 
+import type { LangCode } from "@crucible/core";
+
 interface ModelPrice {
   input: number;
   output: number;
@@ -57,6 +59,14 @@ export interface TokenUsage {
 export interface AiCallMeta {
   userId?: string | null;
   endpoint?: string;
+  /**
+   * Phase 1 multilingual: when set to a non-English code on a COACHING call,
+   * callAI() appends the language directive to the system prompt so the model
+   * replies in the user's language. Artifact routes (resume/cover-letter
+   * generation) deliberately omit this so their output stays in the
+   * application's language. Ignored by the usage-logging inserts below.
+   */
+  language?: LangCode;
 }
 
 export function computeCostUsd(model: string, usage: TokenUsage): number {

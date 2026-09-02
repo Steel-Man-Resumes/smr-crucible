@@ -6,7 +6,7 @@
  */
 
 import bcrypt from "bcryptjs";
-import { query, getOne } from "@crucible/core";
+import { query, getOne, normalizeLanguage, type LangCode } from "@crucible/core";
 
 export const TABLET_COOKIE = "mf_session";
 
@@ -37,6 +37,7 @@ export interface TabletSession {
   forge_output: Record<string, unknown> | null;
   processing_status: string;
   facility_hint: string | null;
+  language: LangCode;
   created_at: Date;
   processed_at: Date | null;
   claimed_at: Date | null;
@@ -45,18 +46,20 @@ export interface TabletSession {
 
 export async function createTabletSession(
   pin: string,
-  facilityHint?: string
+  facilityHint?: string,
+  language: LangCode = "en"
 ): Promise<TabletSession> {
   const pinHash = await hashPin(pin);
+  const lang = normalizeLanguage(language);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const importCode = generateImportCode();
     try {
       const rows = await query<TabletSession>(
-        `INSERT INTO tablet_session (import_code, pin_hash, facility_hint)
-         VALUES ($1, $2, $3)
+        `INSERT INTO tablet_session (import_code, pin_hash, facility_hint, language)
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [importCode, pinHash, facilityHint ?? null]
+        [importCode, pinHash, facilityHint ?? null, lang]
       );
       return rows[0];
     } catch (err: unknown) {

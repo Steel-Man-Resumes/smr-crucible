@@ -12,6 +12,7 @@ import {
   getTabletSession,
 } from "@/lib/tablet-session";
 import { checkAuthRateLimit, AUTH_LIMITS } from "@/lib/auth-rate-limit";
+import { LANGUAGES, normalizeLanguage } from "@crucible/core";
 
 export default async function PinPage({
   searchParams,
@@ -56,7 +57,8 @@ export default async function PinPage({
       redirect("/mini-forge/pin?error=busy");
     }
 
-    const session = await createTabletSession(pin);
+    const language = normalizeLanguage(formData.get("language"));
+    const session = await createTabletSession(pin, undefined, language);
 
     const cookieStore = cookies();
     cookieStore.set(TABLET_COOKIE, session.id, {
@@ -103,6 +105,28 @@ export default async function PinPage({
       )}
 
       <form action={handleSetPin} className="space-y-5">
+        <div>
+          <label
+            htmlFor="language"
+            className="block text-sm font-medium text-foreground mb-2"
+          >
+            Language
+          </label>
+          <select
+            id="language"
+            name="language"
+            defaultValue="en"
+            className="w-full border border-border rounded-lg px-4 py-3 text-lg bg-surface focus:outline-none focus:ring-2 focus:ring-accent min-h-touch"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.native}
+                {l.native !== l.name ? ` -- ${l.name}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div>
           <label
             htmlFor="pin"

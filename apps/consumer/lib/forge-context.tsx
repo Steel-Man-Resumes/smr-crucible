@@ -3,6 +3,7 @@
 import { useState, createContext, useContext, useCallback } from "react";
 import type { ReactNode } from "react";
 import type { ResumeDocument } from "@/components/resume/resumeModel";
+import type { LangCode } from "@crucible/core/src/language";
 
 // --- Forge Session Context ---
 // Tracks user progress through the Forge flow without requiring auth.
@@ -62,6 +63,11 @@ export interface ForgeSessionData {
   startedAt?: string;
   lastPageVisited?: string;
   consentGranted?: boolean;
+
+  // Phase 1 multilingual: the language the anonymous user picked. Sent to
+  // /api/analyze (translates barrier explanations only) and to t.ROY. Resume
+  // output stays in the application language regardless.
+  language?: LangCode;
 }
 
 interface ForgeContextValue {

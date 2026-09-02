@@ -19,6 +19,7 @@ export * from './partnerTracking';
 export * from './getUserProfile';
 export * from './computeNextStep';
 export * from './journeyStages';
+export * from './language';
 export * from './coachPrompt';
 export * from './coachConversation';
 export * from './coachMemory';

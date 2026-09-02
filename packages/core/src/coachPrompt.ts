@@ -14,6 +14,7 @@ import type { UserProfile } from "./getUserProfile";
 import { JOURNEY_STAGES } from "./journeyStages";
 import { computeCurrentBlock, buildBlockSection } from "./currentBlock";
 import { buildWhatsNewSection } from "./platformChangelog";
+import { languageDirective } from "./language";
 
 // Canonical stage vocabulary + the coach-only post-arc stage.
 const STAGE_NAMES: Record<number, string> = {
@@ -51,10 +52,9 @@ export function buildCoachSystemPrompt(p: UserProfile): string {
   const plainRule = p.coachPlainLanguage
     ? "\nPlain language mode is ON: use the simplest possible words. Short sentences. 6th grade reading level or below. No idioms, no jargon."
     : "";
-  const languageRule =
-    p.coachLanguage === "es"
-      ? "\nReply in Spanish (plain, Latin American neutral). The app interface stays in English -- refer to pages and buttons by their English labels."
-      : "";
+  // Phase 1 multilingual: the coach honors the user's full language preference
+  // (was en/es only via coachLanguage). languageDirective is "" for English.
+  const languageRule = languageDirective(p.preferredLanguage);
 
   const careerPaths = p.topCareerPaths.length ? p.topCareerPaths.join(", ") : "not identified yet";
   const skills = p.topSkills.length ? p.topSkills.join(", ") : "not identified yet";

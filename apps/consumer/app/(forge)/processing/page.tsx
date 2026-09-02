@@ -85,6 +85,7 @@ export default function ProcessingPage() {
             criminalRecord: session.criminalRecord,
             challengeNarratives: session.challengeNarratives,
             preferences: session.preferences,
+            language: session.language,
           }),
         });
 

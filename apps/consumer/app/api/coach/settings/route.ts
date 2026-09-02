@@ -10,14 +10,15 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { query, getOne } from "@crucible/core";
+import { query, getOne, SUPPORTED_LANGUAGE_CODES, isSupportedLanguage } from "@crucible/core";
 
 export const maxDuration = 10;
 
 const STYLES = ["supportive", "balanced", "direct"];
 const LENGTHS = ["brief", "full"];
 const FOCI = ["guide", "answer"];
-const LANGUAGES = ["en", "es"];
+// Legacy coach toggle (en/es only); the full set lives in the language registry.
+const LEGACY_LANGUAGES = ["en", "es"];
 
 export async function GET() {
   const session = await auth();
@@ -34,12 +35,16 @@ export async function GET() {
     coach_voice: boolean;
     coach_plain_language: boolean;
     coach_language: string;
+    preferred_language: string;
   }>(
     `SELECT coach_name, coach_style, coach_length, coach_focus, coach_creativity,
-            coach_voice, coach_plain_language, coach_language
+            coach_voice, coach_plain_language, coach_language, preferred_language
        FROM users WHERE id = $1`,
     [userId]
   );
+  const preferredLanguage = isSupportedLanguage(row?.preferred_language)
+    ? row!.preferred_language
+    : "en";
   return NextResponse.json({
     data: {
       coachName: row?.coach_name || "Guide",
@@ -49,7 +54,10 @@ export async function GET() {
       coachCreativity: row?.coach_creativity ?? 50,
       coachVoice: !!row?.coach_voice,
       coachPlainLanguage: !!row?.coach_plain_language,
+      // Legacy field kept for the old Spanish toggle; preferredLanguage is the
+      // full-set source of truth going forward.
       coachLanguage: row?.coach_language === "es" ? "es" : "en",
+      preferredLanguage,
     },
   });
 }
@@ -86,7 +94,19 @@ export async function POST(request: Request) {
   if (typeof body.coachPlainLanguage === "boolean") {
     set("coach_plain_language", body.coachPlainLanguage);
   }
-  if (LANGUAGES.includes(body.coachLanguage)) set("coach_language", body.coachLanguage);
+  // New full-set field. When the picker sends preferredLanguage, it governs every
+  // coaching surface. Mirror to the legacy coach_language column for en/es so any
+  // remaining reader of the old column stays consistent.
+  if (isSupportedLanguage(body.preferredLanguage)) {
+    set("preferred_language", body.preferredLanguage);
+    set("coach_language", body.preferredLanguage === "es" ? "es" : "en");
+  }
+  // Legacy path: the old "Reply in Spanish" toggle posts coachLanguage. Keep it
+  // working and mirror it into preferred_language so the two never drift.
+  else if (LEGACY_LANGUAGES.includes(body.coachLanguage)) {
+    set("coach_language", body.coachLanguage);
+    set("preferred_language", body.coachLanguage);
+  }
 
   if (!sets.length) {
     return NextResponse.json({ ok: true, unchanged: true });

@@ -15,6 +15,7 @@ import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import { LANGUAGES, normalizeLanguage, type LangCode } from "@crucible/core/src/language";
 
 type ReadinessStage =
   | "precontemplation"
@@ -113,13 +114,15 @@ function WelcomePageInner() {
 
   function handleContinue() {
     // Clear old session data before starting fresh
-    // (preserves audience from intro, clears everything else)
+    // (preserves audience from intro and the picked language, clears everything else)
     const audience = session.audience;
+    const language = session.language;
     clearSession();
 
     if (isDemo) {
       updateSession({
         audience,
+        language,
         isDemo: true,
         readinessStage: DEMO_SESSION.readinessStage,
         startedAt: new Date().toISOString(),
@@ -131,6 +134,7 @@ function WelcomePageInner() {
       const readinessStage = STAGE_MAP[selected];
       updateSession({
         audience,
+        language,
         readinessStage,
         startedAt: new Date().toISOString(),
         lastPageVisited: "welcome",
@@ -179,6 +183,32 @@ function WelcomePageInner() {
         selected={isDemo ? (REVERSE_STAGE_MAP[DEMO_SESSION.readinessStage!] || "") : selected}
         onSelect={handleSelect}
       />
+
+      {/* Language: coaching replies in this language. Resumes stay in the job's
+          language. Persists across the flow via the Forge session. */}
+      {!isDemo && (
+        <div className="mt-5 flex items-center justify-between gap-4 bg-t-panel border border-t-line px-4 py-3">
+          <label htmlFor="forge-language" className="text-sm text-t-phos">
+            Language
+          </label>
+          <select
+            id="forge-language"
+            value={session.language ?? "en"}
+            onChange={(e) =>
+              updateSession({ language: normalizeLanguage(e.target.value) as LangCode })
+            }
+            className="t-focus border border-t-line bg-t-panel-2 text-t-white text-sm px-3 py-2 min-h-touch"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.native}
+                {l.native !== l.name ? ` -- ${l.name}` : ""}
+                {l.beta ? " (beta)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* t.ROY acknowledges the selection */}
       {acknowledged && selected && TROY_RESPONSES[selected] && (

@@ -18,6 +18,7 @@
 
 import { MODEL_CHAT, FALLBACK_CHAT } from "./ai/models";
 import { recordTokenUsage, type AiCallMeta } from "./ai-usage-log";
+import { languageDirective } from "@crucible/core";
 
 export const AI_PROVIDER = "anthropic";
 export const AI_MODEL = MODEL_CHAT;
@@ -151,6 +152,16 @@ export async function callAI(
 ): Promise<string> {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
+
+  // Phase 1 multilingual: a coaching caller passes meta.language to make the
+  // model reply in the user's language. languageDirective() is "" for English or
+  // an unset language, so this is a no-op on every existing call site. Artifact
+  // routes (resume/cover-letter) omit meta.language, so their output stays in the
+  // application's language. The directive is appended so it wins over any earlier
+  // "write in English" phrasing in the base prompt.
+  if (meta?.language && meta.language !== "en") {
+    system = `${system}${languageDirective(meta.language)}`;
+  }
 
   if (hasAnthropic) {
     try {

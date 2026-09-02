@@ -13,6 +13,7 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { getPreferredLanguage } from "@crucible/core";
 
 export const maxDuration = 30;
 
@@ -173,7 +174,10 @@ RULES:
       content: m.content,
     }));
 
-    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice" });
+    // Coaching/roleplay output is translated to the user's language; interview
+    // practice has no application-artifact output (the resume is only read, not produced).
+    const language = userId ? await getPreferredLanguage(userId) : "en";
+    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice", language });
 
     if (shouldWrapUp) {
       // Log wrapup decision

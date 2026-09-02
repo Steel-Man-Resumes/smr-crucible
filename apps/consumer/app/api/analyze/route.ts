@@ -21,6 +21,7 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { normalizeLanguage, type LangCode } from "@crucible/core";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
 import { WOTC_RE, stripEmployerTaxCredit, stripEmDashes } from "@/lib/legal-sanitize";
 
@@ -47,6 +48,10 @@ interface ForgeInput {
   challengeNarratives?: Record<string, string>;
   preferences?: Record<string, string>;
   sessionId?: string;
+  /** Phase 1 multilingual: the anonymous Forge carries the picked language in the
+   *  request. Only the barrier explanations are translated -- the narrative,
+   *  skills, and career paths stay in the application language (resume-facing). */
+  language?: LangCode;
 }
 
 async function handlePost(request: Request) {
@@ -356,9 +361,10 @@ function buildContext(input: ForgeInput): string {
 async function callClaude(
   systemPrompt: string,
   userMessage: string,
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  language?: LangCode
 ): Promise<Record<string, unknown>> {
-  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP, { userId, endpoint: "analyze" });
+  const text = await callAI(systemPrompt, [{ role: "user", content: userMessage }], 4000, MODEL_DEEP, { userId, endpoint: "analyze", language });
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in AI response");
   return JSON.parse(jsonMatch[0]);
@@ -569,7 +575,10 @@ Return JSON:
 }`;
 
   try {
-    return await callClaude(system, prompt, userId);
+    // Barrier explanations are coaching the user READS, so they translate. The
+    // narrative/skills/career calls above intentionally omit language -- their
+    // output is resume-facing and must stay in the application language.
+    return await callClaude(system, prompt, userId, normalizeLanguage(input.language));
   } catch (error) {
     console.error("Barrier analysis failed:", error);
     return { barriers: [] };

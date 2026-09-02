@@ -37,6 +37,9 @@ import {
   buildMemorySection,
   appendCoachMessage,
   isConsentGranted,
+  getPreferredLanguage,
+  normalizeLanguage,
+  languageDirective,
 } from "@crucible/core";
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
@@ -126,7 +129,7 @@ export async function POST(request: Request) {
     typeof systemOverride === "string" &&
     systemOverride.trim().length > 0;
 
-  const systemPrompt = allowRoleplayOverride
+  const baseWithRoleplay = allowRoleplayOverride
     ? `${baseSystemPrompt}
 
 ## DISCLOSURE REHEARSAL ROLEPLAY
@@ -138,6 +141,15 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 - Do not give legal advice beyond practical interview preparation.
 - Do not promise any hiring outcome.`
     : baseSystemPrompt;
+
+  // Phase 1 multilingual + t.ROY language fix: authenticated users get their
+  // stored preference; anonymous Forge users get the language they picked (sent
+  // in the context). Previously the "Reply in Spanish" toggle was a no-op here
+  // because this route never read the preference. languageDirective is "" for en.
+  const language = userId
+    ? await getPreferredLanguage(userId)
+    : normalizeLanguage(context.language);
+  const systemPrompt = `${baseWithRoleplay}${languageDirective(language)}`;
 
   // Persist the user turn for cross-session memory (authed only, and only
   // when the newest message IS the user speaking -- a client-tool

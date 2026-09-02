@@ -43,7 +43,7 @@ export default async function ProcessingPage() {
       const intake = (session.forge_intake ?? {}) as MiniForgeIntake;
       let saved = false;
       try {
-        const output = await processMiniForge(intake);
+        const output = await processMiniForge(intake, session.language);
         await saveOutput(session.id, output);
         saved = true;
       } catch (err) {

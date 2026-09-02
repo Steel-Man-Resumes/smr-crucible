@@ -24,6 +24,7 @@ import { RESEARCH_CONTEXT } from "./research-context";
 import { MODEL_FAST } from "./ai/models";
 import { callAI } from "./ai-call";
 import { assertMiniForgeBudget } from "./mini-forge-budget";
+import { normalizeLanguage, type LangCode } from "@crucible/core";
 
 export interface MiniForgeIntake {
   readiness_stage?: string;
@@ -37,7 +38,8 @@ export interface MiniForgeIntake {
 }
 
 export async function processMiniForge(
-  intake: MiniForgeIntake
+  intake: MiniForgeIntake,
+  language: LangCode = "en"
 ): Promise<Record<string, unknown>> {
   if (isMockEnabled()) {
     return { ...MOCK_FORGE_OUTPUT, generated_at: new Date().toISOString(), source: "mock" };
@@ -48,6 +50,9 @@ export async function processMiniForge(
   await assertMiniForgeBudget();
 
   const prompt = buildPrompt(intake);
+  // Coaching output (career paths, next steps, barrier resources) is translated
+  // to the kiosk language; the languageDirective keeps resume_starter in English.
+  const lang = normalizeLanguage(language);
 
   // Mini Forge is pre-auth (kiosk), so there is no userId to attribute. Recording
   // with endpoint "mini-forge" and a null user still makes the cost VISIBLE in
@@ -57,7 +62,7 @@ export async function processMiniForge(
     [{ role: "user", content: prompt }],
     2048,
     MODEL_FAST,
-    { endpoint: "mini-forge", userId: null }
+    { endpoint: "mini-forge", userId: null, language: lang }
   );
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);

@@ -15,11 +15,14 @@
 import { useEffect, useState } from "react";
 import { applyUiPrefs, UI_PREFS_EVENT } from "@/lib/ui-prefs-apply";
 import type { UiPrefs, FontScale, Density } from "@crucible/core";
+// Deep, runtime-pure import: the language registry has no db/pg, so the client
+// bundle stays clean (same pattern as @crucible/core/src/gateRank).
+import { LANGUAGES, isSupportedLanguage, type LangCode } from "@crucible/core/src/language";
 
 interface CoachA11y {
   coachPlainLanguage: boolean;
   coachVoice: boolean;
-  coachLanguage: "en" | "es";
+  preferredLanguage: LangCode;
 }
 
 const FONT_OPTIONS: { value: FontScale; label: string }[] = [
@@ -51,7 +54,9 @@ export function AccessibilitySettingsSection() {
           setCoach({
             coachPlainLanguage: !!j.data.coachPlainLanguage,
             coachVoice: !!j.data.coachVoice,
-            coachLanguage: j.data.coachLanguage === "es" ? "es" : "en",
+            preferredLanguage: isSupportedLanguage(j.data.preferredLanguage)
+              ? j.data.preferredLanguage
+              : "en",
           });
         }
       })
@@ -116,14 +121,33 @@ export function AccessibilitySettingsSection() {
             on={!!coach?.coachVoice}
             onToggle={() => saveCoach({ coachVoice: !coach?.coachVoice })}
           />
-          <ToggleRow
-            label="Spanish (Espanol)"
-            hint="Your coach replies in Spanish."
-            on={coach?.coachLanguage === "es"}
-            onToggle={() =>
-              saveCoach({ coachLanguage: coach?.coachLanguage === "es" ? "en" : "es" })
-            }
-          />
+          {/* Language: governs every coaching surface (coach, t.ROY, disclosure,
+              interview, barriers). Resumes and cover letters stay in the job's
+              language regardless. */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-t-white">Language</p>
+              <p className="text-xs text-t-phos-dim">
+                Your coaching replies in this language. Resumes stay in the job&apos;s language.
+              </p>
+            </div>
+            <select
+              aria-label="Coaching language"
+              value={coach?.preferredLanguage ?? "en"}
+              onChange={(e) =>
+                saveCoach({ preferredLanguage: e.target.value as LangCode })
+              }
+              className="t-focus flex-shrink-0 border border-t-line bg-t-panel-2 text-t-white text-sm px-3 py-2 min-h-touch"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.native}
+                  {l.native !== l.name ? ` -- ${l.name}` : ""}
+                  {l.beta ? " (beta)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

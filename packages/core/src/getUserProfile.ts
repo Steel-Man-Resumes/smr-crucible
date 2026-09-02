@@ -15,6 +15,7 @@
 import { query, getOne } from "./db";
 import type { UserTier } from "./userTier";
 import { TAILORED_PROVENANCES } from "./applicationEvents";
+import { normalizeLanguage, type LangCode } from "./language";
 
 export interface NextStepResult {
   stage: number;
@@ -62,6 +63,9 @@ export interface UserProfile {
   coachVoice: boolean;
   coachPlainLanguage: boolean;
   coachLanguage: "en" | "es";
+  /** Phase 1 multilingual: governs every coaching surface, across the full
+   *  supported set (en/es launched, vi/zh/ht/ar beta). Supersedes coachLanguage. */
+  preferredLanguage: LangCode;
 
   // Job search
   savedJobs: SavedJobSummary[];
@@ -103,6 +107,18 @@ export interface UserProfile {
   smsConsent: boolean;
 }
 
+/**
+ * Lightweight read of just the language preference, for coaching routes that do
+ * not need the full profile. Defaults to English on any miss.
+ */
+export async function getPreferredLanguage(userId: string): Promise<LangCode> {
+  const row = await getOne<{ preferred_language: string | null }>(
+    `SELECT preferred_language FROM users WHERE id = $1`,
+    [userId]
+  );
+  return normalizeLanguage(row?.preferred_language);
+}
+
 /** Pull a human label out of a career-path or skill element of unknown shape. */
 function labelOf(el: unknown): string | null {
   if (typeof el === "string") return el;
@@ -142,12 +158,13 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     coach_voice: boolean | null;
     coach_plain_language: boolean | null;
     coach_language: string | null;
+    preferred_language: string | null;
   }>(
     `SELECT id, name, email, tier, current_stage,
             onboarding_tour_complete, onboarding_tour_deferrals,
             next_step_cache, next_step_cached_at,
             coach_name, coach_style, coach_length, coach_focus, coach_creativity,
-            coach_voice, coach_plain_language, coach_language
+            coach_voice, coach_plain_language, coach_language, preferred_language
      FROM users WHERE id = $1`,
     [userId]
   );
@@ -293,6 +310,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     coachVoice: !!user.coach_voice,
     coachPlainLanguage: !!user.coach_plain_language,
     coachLanguage: user.coach_language === "es" ? "es" : "en",
+    preferredLanguage: normalizeLanguage(user.preferred_language),
 
     savedJobs,
     applicationCount: jobs.filter((j) => j.status !== "saved").length,

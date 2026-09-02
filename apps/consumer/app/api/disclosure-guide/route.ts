@@ -17,6 +17,7 @@ import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getHurdleGuidance, isRecordHurdle } from "@/lib/hurdle-guidance";
+import { getPreferredLanguage } from "@crucible/core";
 
 export const maxDuration = 30;
 
@@ -59,6 +60,11 @@ async function handlePost(request: Request) {
   // the time handlePost runs -- re-derive here to attribute the AI call.
   const session = await auth();
   const userId = session?.user?.id;
+
+  // Disclosure coaching (timing, script, tips) is translated to the user's
+  // language. legal_context stays the reviewed frame; the directive keeps any
+  // resume/application text in the application's language.
+  const language = userId ? await getPreferredLanguage(userId) : "en";
 
   const {
     record,
@@ -155,6 +161,7 @@ Return JSON ONLY:
       const raw = await callAI("", [{ role: "user", content: nonRecordPrompt }], 1200, MODEL_DEEP, {
         userId,
         endpoint: "disclosure-guide",
+        language,
       });
       const m = raw.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("No JSON in response");
@@ -298,7 +305,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
 - 6th grade reading level. Use "--" never an em dash
 - JSON only`;
 
-    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { userId, endpoint: "disclosure-guide" });
+    const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { userId, endpoint: "disclosure-guide", language });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 

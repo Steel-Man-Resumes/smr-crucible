@@ -65,6 +65,10 @@ export interface AssistantContext {
   forgeComplete?: boolean;
   /** Full user journey context from /api/user/context */
   userFullContext?: UserFullContext | null;
+  /** Phase 1 multilingual: the language the anonymous Forge user picked, carried
+   *  from the client. For authenticated users the route reads their stored
+   *  preference instead. Applied as a directive by the assistant route. */
+  language?: string;
 }
 
 function buildAudienceDirective(audience?: string): string {
