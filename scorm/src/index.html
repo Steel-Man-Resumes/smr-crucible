@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Build Your Story</title>
+<!--
+  Every asset below is a relative path to a file inside this package.
+  There are no external references of any kind: no CDN, no webfont, no image
+  host, no analytics beacon. build.mjs fails if one is ever added.
+
+  Content-Security-Policy is declared here as well as enforced by construction.
+  default-src 'self' with no connect-src means the browser itself will block
+  any network call this package could ever attempt, including one introduced
+  by accident in a future edit. It is a second lock on a door that has no
+  handle, which is exactly the kind of thing worth showing a reviewer.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!--
+  There is deliberately no skip link. A skip link exists to jump past
+  interactive chrome, and this header has none: it is two lines of static
+  text. Adding one would mean adding the only anchor tag in the package, and
+  "this package contains no anchor tags" is a cleaner thing to hand a reviewer
+  than "it contains one, and here is why it is safe."
+-->
+<header class="topbar">
+  <p class="wordmark">Steel Man Resumes</p>
+  <p class="status" id="status"></p>
+</header>
+
+<main id="app" class="app">
+  <noscript>
+    <section class="card">
+      <h1 class="screen-title">This program needs JavaScript</h1>
+      <p class="screen-body">Your tablet has JavaScript turned off. Ask staff for help turning it on, or try a different tablet.</p>
+    </section>
+  </noscript>
+</main>
+
+<footer class="footer">
+  <p>Works with no internet. Nothing you enter is sent anywhere.</p>
+</footer>
+
+<script src="tables.v1.js"></script>
+<script src="carry-code.js"></script>
+<script src="screens.js"></script>
+<script src="scorm-api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

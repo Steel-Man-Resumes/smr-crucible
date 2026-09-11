@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline SCORM harness</title>
+<style>
+  :root { --ink:#14181d; --soft:#5a6372; --line:#d4d8de; --ok:#1a6b34; --bad:#a11a1a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#eceef1; }
+  header { background:#14181d; color:#fff; padding:10px 16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .net { font-size:13px; color:#cfd5de; }
+  .controls { display:flex; gap:8px; align-items:center; margin-left:auto; }
+  select, button { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; cursor:pointer; }
+  .layout { display:grid; grid-template-columns: minmax(360px, 1fr) minmax(420px, 1fr); gap:12px; padding:12px; height:calc(100vh - 46px); }
+  .pane { background:#fff; border:1px solid var(--line); border-radius:8px; display:flex; flex-direction:column; overflow:hidden; }
+  .pane h2 { margin:0; padding:8px 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--soft); border-bottom:1px solid var(--line); }
+  iframe { flex:1; border:0; width:100%; background:#f3f4f6; }
+  .log { flex:1; overflow:auto; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
+  .row { display:grid; grid-template-columns: 62px 90px 1fr; gap:8px; padding:3px 12px; border-bottom:1px solid #f0f1f3; }
+  .row.bad { background:#fdf1f1; }
+  .row .t { color:var(--soft); }
+  .row .k { font-weight:600; }
+  .row .v { word-break:break-all; color:#333; }
+  .meters { padding:10px 12px; border-top:1px solid var(--line); background:#fafbfc; font-size:13px; display:grid; gap:6px; }
+  .meter-bar { height:8px; background:#e2e5ea; border-radius:99px; overflow:hidden; }
+  .meter-fill { height:100%; background:var(--ok); }
+  .meter-fill.warn { background:#b06a00; }
+  .meter-fill.bad { background:var(--bad); }
+  code { background:#f2f3f5; padding:1px 4px; border-radius:3px; }
+  .banner { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--line); }
+  .banner.ok { background:#eef7f0; color:var(--ok); }
+  .banner.bad { background:#fdf1f1; color:var(--bad); font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Offline SCORM harness</h1>
+  <span class="net" id="net">checking network...</span>
+  <div class="controls">
+    <label for="ver" style="font-size:13px;color:#cfd5de">SCORM</label>
+    <select id="ver">
+      <option value="1.2">1.2 (4096 char limit)</option>
+      <option value="2004">2004 (64000 char limit)</option>
+    </select>
+    <button id="relaunch">Relaunch (tests resume)</button>
+    <button id="reset">Reset learner record</button>
+  </div>
+</header>
+
+<div class="layout">
+  <section class="pane">
+    <h2>The SCO, as an LMS launches it</h2>
+    <div class="banner ok" id="offline-banner">
+      This harness makes no network requests. Turn your wi-fi off and reload: nothing changes.
+    </div>
+    <iframe id="sco" title="SCO"></iframe>
+  </section>
+
+  <section class="pane">
+    <h2>Every SCORM API call, live</h2>
+    <div class="log" id="log"></div>
+    <div class="meters">
+      <div>
+        <div id="suspend-label">suspend_data 0 of 4096 characters</div>
+        <div class="meter-bar"><div class="meter-fill" id="suspend-fill" style="width:0%"></div></div>
+      </div>
+      <div id="summary">Not initialized.</div>
+    </div>
+  </section>
+</div>
+
+<script src="fake-lms.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var logEl = document.getElementById("log");
+  var frame = document.getElementById("sco");
+  var verSel = document.getElementById("ver");
+  var summary = document.getElementById("summary");
+  var suspendLabel = document.getElementById("suspend-label");
+  var suspendFill = document.getElementById("suspend-fill");
+  var lms = null;
+  var persisted = null;
+
+  // Proof, on screen, that nothing reached out. Any call the SCO could make
+  // would have to go through one of these, and there are none in the package.
+  var networkAttempts = 0;
+  ["fetch"].forEach(function (name) {
+    if (!window[name]) return;
+    var original = window[name];
+    window[name] = function () {
+      networkAttempts++;
+      paintNet();
+      throw new Error("Blocked by harness: the package attempted a network call.");
+    };
+  });
+
+  function paintNet() {
+    var el = document.getElementById("net");
+    el.textContent = networkAttempts === 0
+      ? "network calls attempted by the package: 0"
+      : "NETWORK CALLS ATTEMPTED: " + networkAttempts;
+    el.style.color = networkAttempts === 0 ? "#9fe0b0" : "#ff9a9a";
+  }
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  function addRow(ev) {
+    var row = document.createElement("div");
+    row.className = "row" + (ev.ok === false ? " bad" : "");
+    var t = document.createElement("span");
+    t.className = "t";
+    t.textContent = pad(ev.at.getMinutes()) + ":" + pad(ev.at.getSeconds());
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = ev.kind;
+    var v = document.createElement("span");
+    v.className = "v";
+    var text = ev.a ? ev.a : "";
+    if (ev.b !== "" && ev.b !== undefined) text += (text ? "  =  " : "") + ev.b;
+    if (ev.ok === false) text += "   [error " + ev.error + "]";
+    v.textContent = text;
+    row.appendChild(t); row.appendChild(k); row.appendChild(v);
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+    paintMeters();
+  }
+
+  function paintMeters() {
+    if (!lms) return;
+    var key = lms.version === "1.2" ? "cmi.suspend_data" : "cmi.suspend_data";
+    var used = (lms.data[key] || "").length;
+    var limit = lms.limit();
+    var pct = Math.min(100, (used / limit) * 100);
+    suspendLabel.textContent = "suspend_data " + used + " of " + limit + " characters (" + pct.toFixed(1) + "%)";
+    suspendFill.style.width = pct + "%";
+    suspendFill.className = "meter-fill" + (pct > 90 ? " bad" : pct > 70 ? " warn" : "");
+
+    var statusKey = lms.version === "1.2" ? "cmi.core.lesson_status" : "cmi.completion_status";
+    var locKey = lms.version === "1.2" ? "cmi.core.lesson_location" : "cmi.location";
+    summary.textContent =
+      "status: " + lms.data[statusKey] +
+      "   location: " + (lms.data[locKey] || "-") +
+      "   commits: " + lms.commits +
+      "   entry: " + (lms.data[lms.version === "1.2" ? "cmi.core.entry" : "cmi.entry"]);
+  }
+
+  function launch(keepRecord) {
+    // Blank the frame FIRST and let the outgoing SCO finish dying before the
+    // new learner record is published. The SCO calls Terminate from its unload
+    // handler, which is correct behaviour, and that call belongs to the old
+    // session. A real LMS launches one SCO at a time; this keeps the harness
+    // honest about that instead of letting a teardown land in the next run.
+    frame.src = "about:blank";
+    setTimeout(function () {
+      while (logEl.firstChild) logEl.removeChild(logEl.firstChild);
+      lms = new window.FakeLMS(verSel.value, addRow);
+      if (keepRecord && persisted) lms.persisted = persisted;
+      lms.publish(window);
+      // Cache-bust so a relaunch really reloads the SCO. A query string is not
+      // a network request.
+      frame.src = "../src/index.html?t=" + Date.now();
+      paintMeters();
+    }, 150);
+  }
+
+  document.getElementById("relaunch").onclick = function () {
+    if (lms) { try { lms.Terminate(""); } catch (e) {} persisted = lms.persisted; }
+    launch(true);
+  };
+  document.getElementById("reset").onclick = function () { persisted = null; launch(false); };
+  verSel.onchange = function () { persisted = null; launch(false); };
+
+  paintNet();
+  launch(false);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "smr-scorm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Offline, deterministic in-facility intake, packaged as SCORM. Zero runtime dependencies and zero build dependencies, on purpose.",
+  "license": "AGPL-3.0-or-later",
+  "//type": "Deliberately NOT \"module\". Everything under src/ is a plain browser script that also happens to load under require(), which is what lets test.mjs exercise the exact bytes that ship. The build tooling is .mjs and is explicit about it.",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:12": "node build.mjs --scorm 1.2",
+    "build:2004": "node build.mjs --scorm 2004",
+    "test": "node test.mjs",
+    "harness": "node harness/serve.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
