@@ -931,15 +931,33 @@
       card.appendChild(edit);
     },
 
+    /**
+     * THE CARRY-OUT KIT.
+     *
+     * Two exits, and they are complementary rather than redundant.
+     *
+     * THE CODE carries everything that is an index, a flag or a number,
+     * including the years the narrowing ladder recovered. Those years were the
+     * hardest thing in the whole session to get back and they cost four
+     * characters.
+     *
+     * THE SHEET carries the words, because words do not fit in a code and the
+     * bullets are the product. It is laid out for one purpose: being copied
+     * onto paper, in a facility, possibly across more than one sitting.
+     *
+     * Neither one alone is the plan.
+     */
     done: function (card) {
-      var code = CarryCode.encode({
+      var code = CarryCode.encodeFull({
         readiness_stage: state.answers.readiness_stage,
         goals: state.answers.goals,
         challenges: state.answers.challenges,
         work_type: state.answers.work_type,
         skills: state.answers.skills,
         state: state.answers.state
-      });
+      }, Resume.minedJobs(state.jobs).map(function (j) {
+        return { kind: j.kind, year_started: j.year_started, year_approx: j.year_approx };
+      }));
 
       var box = el("div", "code-box");
       box.appendChild(el("p", "code-label", "Your code"));
@@ -947,13 +965,62 @@
       codeEl.setAttribute("aria-label", spellOut(code));
       box.appendChild(codeEl);
       box.appendChild(el("p", "code-note",
-        "Ten characters. Codes never use the letter O, the letter I, the number zero, or the number one."));
+        code.length + " characters, in groups of five. Codes never use the letter O, the letter I, the number zero, or the number one."));
       card.insertBefore(box, card.firstChild.nextSibling);
 
-      card.appendChild(el("p", "footnote",
-        "You are done. You can close this now, or leave it open to copy the code down."));
+      var built = Resume.build(resumeData());
+      var history = built.sections.filter(function (sec) { return sec.kind === "history"; })[0];
+      if (!history || history.jobs.length === 0) return;
+
+      card.appendChild(el("h2", "sheet-title", "Now copy these down"));
+      card.appendChild(el("p", "screen-help",
+        "One at a time. Tick each one off as you go so you do not lose your place."));
+
+      var sheet = el("div", "sheet");
+      var n = 0;
+      for (var j = 0; j < history.jobs.length; j++) {
+        var job = history.jobs[j];
+        var block = el("div", "sheet-job");
+
+        var head = el("p", "sheet-job-head",
+          job.employer
+            ? job.employer + (job.year ? "  --  " + (job.approx ? "about " : "") + job.year : "")
+            : job.title);
+        block.appendChild(head);
+
+        for (var b = 0; b < job.bullets.length; b++) {
+          n++;
+          block.appendChild(sheetLine(n, job.bullets[b]));
+        }
+        sheet.appendChild(block);
+      }
+      card.appendChild(sheet);
+
+      card.appendChild(el("p", "punch",
+        n === 1 ? "One line and a code. That is the whole thing."
+                : n + " lines and a code. That is the whole thing."));
     }
   };
+
+  /**
+   * One line of the write-down sheet. The checkbox is not saved anywhere and
+   * is not meant to be: it exists so somebody copying twenty lines by hand on
+   * a tablet can see where they got to. Losing your place is the actual
+   * failure mode here, not losing the data.
+   */
+  function sheetLine(number, text) {
+    var row = el("label", "sheet-line");
+    var box = doc.createElement("input");
+    box.type = "checkbox";
+    box.className = "sheet-check";
+    box.setAttribute("aria-label", "Copied line " + number);
+    row.appendChild(box);
+    var body = el("div", "sheet-line-body");
+    body.appendChild(el("span", "sheet-number", number + "."));
+    body.appendChild(el("span", "sheet-text", text));
+    row.appendChild(body);
+    return row;
+  }
 
   function jobOptionRow(field, entry, checked) {
     var job = currentJob();

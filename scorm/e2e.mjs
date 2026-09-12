@@ -450,7 +450,9 @@ async function main() {
     console.log("\nTHE WALL CROSSING\n");
 
     const shown = (await sco.locator(".code-value").textContent()).trim();
-    check("a carry code is displayed", /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{2}$/.test(shown), "saw: " + shown);
+    // Version 2 codes are variable length, grouped in fives.
+    check("a carry code is displayed", /^[A-Z0-9]{5}(-[A-Z0-9]{1,5})+$/.test(shown), "saw: " + shown);
+    console.log("        " + shown + "  (" + shown.replace(/-/g, "").length + " characters)");
 
     const decoded = CarryCode.decode(shown);
     check("the displayed code decodes", decoded.ok, decoded.message);
@@ -463,7 +465,40 @@ async function main() {
       check("decoded work type matches", got.work_type === intent.work_type, got.work_type);
       check("decoded skills match", same(got.skills, intent.skills), JSON.stringify(got.skills));
       check("decoded state matches", got.state === intent.state, got.state);
+
+      // The whole reason version 2 exists: the year the narrowing ladder
+      // recovered rides out with them.
+      check("the mined job rode out in the code", decoded.jobs.length === 1,
+        "jobs in code: " + JSON.stringify(decoded.jobs));
+      if (decoded.jobs.length) {
+        check("the recovered year survived the wall",
+          decoded.jobs[0].year_started === 2018 && decoded.jobs[0].year_approx === true,
+          JSON.stringify(decoded.jobs[0]));
+        check("the unmined job did not take up space in the code",
+          decoded.jobs.every((j) => j.kind === "warehouse"),
+          JSON.stringify(decoded.jobs));
+      }
     }
+
+    console.log("\nTHE WRITE-DOWN SHEET\n");
+
+    const sheetLines = await sco.locator(".sheet-line").count();
+    check("the bullets are laid out to be copied", sheetLines >= 1, sheetLines + " lines on the sheet");
+    const sheetText = await sco.locator(".sheet").innerText();
+    check("the full bullet text is on the sheet, not a summary of it",
+      sheetText.includes("Loaded pallets of dry goods off the night truck"), sheetText.slice(0, 200));
+    check("each line is numbered so somebody can keep their place",
+      /^\s*1\./m.test(sheetText), sheetText.slice(0, 200));
+    // innerText returns rendered text and the block header is uppercased in CSS.
+    check("the employer and year head the block",
+      /miller brothers/i.test(sheetText) && /about 2018/i.test(sheetText), sheetText.slice(0, 200));
+
+    // The checkbox is a place-keeper, not data. It must not be wired to
+    // anything that could fail or persist.
+    await sco.locator(".sheet-check").first().check();
+    check("ticking a line off does not throw or navigate",
+      (await sco.locator("#screen-title").textContent()).includes("Write this down"),
+      "ticking a line moved the screen");
 
     console.log("\nLMS REPORTING\n");
 

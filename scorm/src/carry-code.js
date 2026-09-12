@@ -20,6 +20,26 @@
  * never arrives, the two free-text questions are re-asked outside in under a
  * minute. Nothing important is lost.
  *
+ * ---------------------------------------------------------------------------
+ * WHAT RIDES IN THE CODE, AND WHAT DOES NOT
+ * ---------------------------------------------------------------------------
+ * Version 2 adds the work history skeleton, and the reason is one field:
+ * THE YEARS.
+ *
+ * A person spends ten minutes on the narrowing ladder working out that they
+ * started at Miller Brothers in about 2018. That number was genuinely hard to
+ * recover and it is four characters of code. Losing it would mean doing the
+ * hardest part of the recall twice.
+ *
+ * What deliberately does NOT ride: the bullets themselves, employer names, and
+ * the free text. Those are prose, they would multiply the code length several
+ * times over, and the person is writing them on paper anyway. The write-down
+ * sheet carries the words; the code carries everything that is an index, a
+ * flag or a number.
+ *
+ * So the two exits are complementary by design rather than redundant. Neither
+ * one alone is the plan.
+ *
  * BIT LAYOUT, VERSION 1 (MSB first, total 50 bits)
  *
  *   bits  0-3   version         4 bits   value 1
@@ -32,6 +52,25 @@
  *   bits 43-49  checksum        7 bits   CRC-7 over bits 0-42
  *
  * Bit 0 of a bitmask is the FIRST entry in its table.
+ *
+ * BIT LAYOUT, VERSION 2 (MSB first, 53 + 12n bits for n jobs)
+ *
+ *   bits  0-3   version         4 bits   value 2
+ *   bits  4-42  the same 39 bits of intake as version 1
+ *   bits 43-45  job count       3 bits   0 to 7
+ *   then, per job, 12 bits:
+ *                 kind          4 bits   index into TABLES.WORK_KINDS
+ *                 year          7 bits   0 = not known, else 1959 + value
+ *                 approximate   1 bit    the year came from a range
+ *   last 7 bits  checksum       7 bits   CRC-7 over everything before it
+ *
+ * The length is therefore a checksum in its own right: a code whose character
+ * count does not match its declared job count is rejected before the CRC is
+ * even consulted.
+ *
+ * VERSION 1 CODES STILL DECODE, FOREVER. Somebody may have written one on a
+ * piece of paper. decode() dispatches on the version nibble and the version 1
+ * path below is frozen.
  *
  * ALPHABET
  * The same 32 characters the online Mini Forge already uses for import codes:
@@ -52,9 +91,17 @@
   "use strict";
 
   var ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  var CODE_LENGTH = 10;
-  var PAYLOAD_BITS = 43;
+  var CODE_LENGTH = 10;          // version 1, intake only
+  var PAYLOAD_BITS = 43;         // version 1 payload
   var CHECK_BITS = 7;
+
+  var VERSION = 2;
+  var INTAKE_BITS = 43;          // version, readiness, goals, challenges, work, skills, state
+  var COUNT_BITS = 3;            // up to 7 jobs
+  var JOB_BITS = 12;             // kind 4, year 7, approx 1
+  var MAX_JOBS = 7;
+  var YEAR_BASE = 1959;          // year field 1..127 maps to 1960..2086
+  var YEAR_MAX_OFFSET = 127;
 
   var LAYOUT = [
     { key: "version", bits: 4 },
@@ -167,9 +214,83 @@
     return code;
   }
 
-  /** "ABCDEFGHJK" -> "ABCD-EFGH-JK". Display only. */
+  /**
+   * Version 2. The intake plus the work history skeleton.
+   *
+   * @param {object} intake  the same fields encode() takes
+   * @param {Array}  jobs    [{ kind, year_started, year_approx }]
+   */
+  function encodeFull(intake, jobs) {
+    intake = intake || {};
+    jobs = (jobs || []).slice(0, MAX_JOBS);
+
+    var readiness = indexOfId(TABLES.READINESS, intake.readiness_stage);
+    var workType = indexOfId(TABLES.WORK_TYPE, intake.work_type);
+    var state = indexOfId(TABLES.STATES, intake.state || "");
+
+    var w = new BitWriter();
+    w.write(VERSION, 4);
+    w.write(readiness < 0 ? 0 : readiness, 2);
+    w.write(maskFromIds(TABLES.GOALS, intake.goals), 6);
+    w.write(maskFromIds(TABLES.CHALLENGES, intake.challenges), 9);
+    w.write(workType < 0 ? 0 : workType, 2);
+    w.write(maskFromIds(TABLES.SKILLS, intake.skills), 14);
+    w.write(state < 0 ? 0 : state, 6);
+    w.write(jobs.length, COUNT_BITS);
+
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i] || {};
+      var kind = indexOfId(TABLES.WORK_KINDS, job.kind);
+      w.write(kind < 0 ? 0 : kind, 4);
+      w.write(yearToField(job.year_started), 7);
+      w.write(job.year_approx ? 1 : 0, 1);
+    }
+
+    var expected = INTAKE_BITS + COUNT_BITS + JOB_BITS * jobs.length;
+    if (w.bits.length !== expected) {
+      throw new Error("carry-code: payload is " + w.bits.length + " bits, expected " + expected);
+    }
+
+    var check = crc7(w.bits);
+    for (var c = CHECK_BITS - 1; c >= 0; c--) w.bits.push((check >> c) & 1);
+
+    // Pad to a whole number of characters with zeros. The decoder knows the
+    // real length from the job count, so padding is unambiguous.
+    while (w.bits.length % 5 !== 0) w.bits.push(0);
+
+    var code = "";
+    for (var b = 0; b < w.bits.length; b += 5) {
+      code += ALPHABET.charAt(readBits(w.bits, b, 5));
+    }
+    return code;
+  }
+
+  /** A year to its 7 bit field. 0 means the person could not place it. */
+  function yearToField(year) {
+    if (typeof year !== "number" || !isFinite(year)) return 0;
+    var offset = year - YEAR_BASE;
+    if (offset < 1 || offset > YEAR_MAX_OFFSET) return 0;
+    return offset;
+  }
+
+  function fieldToYear(field) {
+    return field === 0 ? null : YEAR_BASE + field;
+  }
+
+  /** How many characters a version 2 code with n jobs must be. */
+  function lengthForJobs(n) {
+    var bits = INTAKE_BITS + COUNT_BITS + JOB_BITS * n + CHECK_BITS;
+    return Math.ceil(bits / 5);
+  }
+
+  /**
+   * Groups of five, which is how people copy things down without losing their
+   * place. Works for any length.
+   */
   function format(code) {
-    return code.slice(0, 4) + "-" + code.slice(4, 8) + "-" + code.slice(8, 10);
+    var out = [];
+    for (var i = 0; i < code.length; i += 5) out.push(code.slice(i, i + 5));
+    return out.join("-");
   }
 
   // -------------------------------------------------------------- decoding
@@ -193,28 +314,46 @@
         );
       }
     }
-    if (raw.length !== CODE_LENGTH) {
-      return fail(
-        "bad_length",
-        "Codes are " + CODE_LENGTH + " characters. You entered " + raw.length + "."
-      );
-    }
-
     var bits = [];
     for (var c = 0; c < raw.length; c++) {
       var v = ALPHABET.indexOf(raw.charAt(c));
       for (var k = 4; k >= 0; k--) bits.push((v >> k) & 1);
     }
 
+    // Length before version. A five character typo would otherwise read its
+    // version nibble out of the first character, land on a version nobody has
+    // ever issued, and tell the person their code came from a different tool.
+    // "You are missing characters" is both true and actionable; "wrong
+    // version" is neither.
+    if (raw.length < CODE_LENGTH) {
+      return fail(
+        "bad_length",
+        "That code is too short. The shortest one we make is " + CODE_LENGTH +
+        " characters and you entered " + raw.length + "."
+      );
+    }
+
+    var version = readBits(bits, 0, 4);
+
+    // Version 1 codes may be sitting on somebody's paperwork. They decode
+    // forever, unchanged.
+    if (version === 1) return decodeV1(raw, bits);
+    if (version === VERSION) return decodeV2(raw, bits);
+    return fail("version", "That code was made by a different version of this tool.");
+  }
+
+  function decodeV1(raw, bits) {
+    if (raw.length !== CODE_LENGTH) {
+      return fail(
+        "bad_length",
+        "Codes like that one are " + CODE_LENGTH + " characters. You entered " + raw.length + "."
+      );
+    }
+
     var payload = bits.slice(0, PAYLOAD_BITS);
     var given = readBits(bits, PAYLOAD_BITS, CHECK_BITS);
     if (crc7(payload) !== given) {
       return fail("checksum", "That code did not check out. Look for a character that is easy to mix up and try again.");
-    }
-
-    var version = readBits(payload, 0, 4);
-    if (version !== TABLES.VERSION) {
-      return fail("version", "That code was made by a different version of this tool.");
     }
 
     // STATES is the one field whose bit width (6 bits, 64 values) is wider
@@ -227,8 +366,71 @@
 
     return {
       ok: true,
+      jobs: [],
       intake: {
-        carry_code_version: version,
+        carry_code_version: 1,
+        readiness_stage: TABLES.READINESS[readBits(payload, 4, 2)].id,
+        goals: idsFromMask(TABLES.GOALS, readBits(payload, 6, 6)),
+        challenges: idsFromMask(TABLES.CHALLENGES, readBits(payload, 12, 9)),
+        work_type: TABLES.WORK_TYPE[readBits(payload, 21, 2)].id,
+        skills: idsFromMask(TABLES.SKILLS, readBits(payload, 23, 14)),
+        state: stateEntry.id
+      }
+    };
+  }
+
+  /**
+   * Version 2. The length is checked against the declared job count BEFORE the
+   * CRC, because a length mismatch tells the person something useful ("you are
+   * missing characters") where a checksum failure only tells them something is
+   * wrong somewhere.
+   */
+  function decodeV2(raw, bits) {
+    if (bits.length < INTAKE_BITS + COUNT_BITS + CHECK_BITS) {
+      return fail("bad_length", "That code is missing characters. Check you copied all of it.");
+    }
+
+    var jobCount = readBits(bits, INTAKE_BITS, COUNT_BITS);
+    var expected = lengthForJobs(jobCount);
+    if (raw.length !== expected) {
+      return fail(
+        "bad_length",
+        "That code should be " + expected + " characters and you entered " + raw.length + ". " +
+        "Check for a missing character rather than a wrong one."
+      );
+    }
+
+    var payloadBits = INTAKE_BITS + COUNT_BITS + JOB_BITS * jobCount;
+    var payload = bits.slice(0, payloadBits);
+    var given = readBits(bits, payloadBits, CHECK_BITS);
+    if (crc7(payload) !== given) {
+      return fail("checksum", "That code did not check out. Look for a character that is easy to mix up and try again.");
+    }
+
+    var stateEntry = TABLES.STATES[readBits(payload, 37, 6)];
+    if (!stateEntry) {
+      return fail("checksum", "That code did not check out. Check each character and try again.");
+    }
+
+    var jobs = [];
+    for (var i = 0; i < jobCount; i++) {
+      var at = INTAKE_BITS + COUNT_BITS + JOB_BITS * i;
+      var kindEntry = TABLES.WORK_KINDS[readBits(payload, at, 4)];
+      if (!kindEntry) {
+        return fail("checksum", "That code did not check out. Check each character and try again.");
+      }
+      jobs.push({
+        kind: kindEntry.id,
+        year_started: fieldToYear(readBits(payload, at + 4, 7)),
+        year_approx: readBits(payload, at + 11, 1) === 1
+      });
+    }
+
+    return {
+      ok: true,
+      jobs: jobs,
+      intake: {
+        carry_code_version: 2,
         readiness_stage: TABLES.READINESS[readBits(payload, 4, 2)].id,
         goals: idsFromMask(TABLES.GOALS, readBits(payload, 6, 6)),
         challenges: idsFromMask(TABLES.CHALLENGES, readBits(payload, 12, 9)),
@@ -246,9 +448,13 @@
   return {
     ALPHABET: ALPHABET,
     CODE_LENGTH: CODE_LENGTH,
+    VERSION: VERSION,
+    MAX_JOBS: MAX_JOBS,
     LAYOUT: LAYOUT,
     encode: encode,
+    encodeFull: encodeFull,
     decode: decode,
-    format: format
+    format: format,
+    lengthForJobs: lengthForJobs
   };
 });

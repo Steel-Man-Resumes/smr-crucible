@@ -22,7 +22,7 @@
  */
 
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -212,8 +212,141 @@ check("rejects wrong lengths with a countable message", () => {
   assert(out.message.includes("5"), "message did not say how many were entered");
 });
 
-check("formats as three readable groups", () => {
-  equal(CarryCode.format("ABCDEFGHJK"), "ABCD-EFGH-JK");
+check("formats in groups of five, whatever the length", () => {
+  // Version 2 codes are variable length, so fixed grouping cannot work.
+  // Fives are what people copy without losing their place.
+  equal(CarryCode.format("ABCDEFGHJK"), "ABCDE-FGHJK");
+  equal(CarryCode.format("ABCDEFGHJKLMNPQR"), "ABCDE-FGHJK-LMNPQ-R");
+});
+
+console.log("\nTHE LONG CODE (VERSION 2)\n");
+
+const V2_INTAKE = {
+  readiness_stage: "preparation",
+  goals: ["stability", "growth"],
+  challenges: ["criminal_record", "transportation"],
+  work_type: "physical",
+  skills: ["driving", "forklift", "leadership"],
+  state: "MT"
+};
+const V2_JOBS = [
+  { kind: "warehouse", year_started: 2018, year_approx: true },
+  { kind: "kitchen", year_started: 2022, year_approx: false }
+];
+
+check("the whole skeleton round trips", () => {
+  const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, V2_JOBS));
+  assert(out.ok, "decode failed: " + out.message);
+  equal(out.intake.goals, V2_INTAKE.goals);
+  equal(out.intake.skills, V2_INTAKE.skills);
+  equal(out.intake.state, "MT");
+  equal(out.jobs, V2_JOBS);
+});
+
+check("the years survive, which is the entire reason version 2 exists", () => {
+  // A person spends ten minutes on the narrowing ladder recovering a year.
+  // Losing it in the code would mean doing the hardest part of recall twice.
+  const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, V2_JOBS));
+  assert(out.jobs[0].year_started === 2018, "the year did not survive");
+  assert(out.jobs[0].year_approx === true, "the approximate flag did not survive");
+  assert(out.jobs[1].year_approx === false, "a known year came back marked approximate");
+});
+
+check("a job whose year was never settled comes back unsettled, not guessed", () => {
+  const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, [
+    { kind: "warehouse", year_started: null, year_approx: false }
+  ]));
+  assert(out.ok, out.message);
+  assert(out.jobs[0].year_started === null,
+    "a missing year came back as " + out.jobs[0].year_started + " rather than staying missing");
+});
+
+check("every work kind round trips", () => {
+  for (const kind of TABLES.WORK_KINDS) {
+    const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, [
+      { kind: kind.id, year_started: 2020, year_approx: false }
+    ]));
+    assert(out.ok, "decode failed for " + kind.id + ": " + out.message);
+    assert(out.jobs[0].kind === kind.id, kind.id + " came back as " + out.jobs[0].kind);
+  }
+});
+
+check("years round trip across the whole supported range", () => {
+  for (const year of [1960, 1985, 1999, 2015, 2026, 2050, 2086]) {
+    const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, [
+      { kind: "warehouse", year_started: year, year_approx: false }
+    ]));
+    assert(out.ok, year + " failed: " + out.message);
+    assert(out.jobs[0].year_started === year, year + " came back as " + out.jobs[0].year_started);
+  }
+});
+
+check("a year outside the range degrades to unknown rather than to a wrong year", () => {
+  const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, [
+    { kind: "warehouse", year_started: 1800, year_approx: false }
+  ]));
+  assert(out.ok, out.message);
+  assert(out.jobs[0].year_started === null, "an impossible year became " + out.jobs[0].year_started);
+});
+
+check("the code stays short enough to copy by hand", () => {
+  for (let n = 0; n <= CarryCode.MAX_JOBS; n++) {
+    const jobs = [];
+    for (let i = 0; i < n; i++) jobs.push({ kind: "warehouse", year_started: 2020, year_approx: true });
+    const code = CarryCode.encodeFull(V2_INTAKE, jobs);
+    assert(code.length === CarryCode.lengthForJobs(n),
+      n + " jobs produced " + code.length + " characters, expected " + CarryCode.lengthForJobs(n));
+    assert(code.length <= 30,
+      n + " jobs produced a " + code.length + " character code. Past thirty, people stop copying it.");
+  }
+  console.log("        0 jobs " + CarryCode.lengthForJobs(0) + " chars, " +
+    "2 jobs " + CarryCode.lengthForJobs(2) + ", " +
+    CarryCode.MAX_JOBS + " jobs " + CarryCode.lengthForJobs(CarryCode.MAX_JOBS));
+});
+
+check("version 1 codes still decode, forever", () => {
+  // Somebody may have written one on a piece of paper. The frozen path stays.
+  const old = CarryCode.encode(V2_INTAKE);
+  const out = CarryCode.decode(old);
+  assert(out.ok, "a version 1 code stopped decoding: " + out.message);
+  assert(out.intake.carry_code_version === 1, "version 1 reported itself as " + out.intake.carry_code_version);
+  equal(out.jobs, [], "version 1 should report no jobs rather than undefined");
+  equal(out.intake.goals, V2_INTAKE.goals);
+});
+
+check("a missing character is reported as missing, not as a wrong version", () => {
+  // The failure a person actually has. "You are missing characters" is
+  // actionable; "that came from a different tool" is not.
+  const code = CarryCode.encodeFull(V2_INTAKE, V2_JOBS);
+  const short = CarryCode.decode(code.slice(0, code.length - 1));
+  assert(!short.ok, "a truncated code was accepted");
+  assert(short.error === "bad_length", "truncation reported as " + short.error);
+  assert(/\d/.test(short.message), "the message does not say how many characters are missing");
+});
+
+check("a single wrong character in a long code is caught", () => {
+  const code = CarryCode.encodeFull(V2_INTAKE, V2_JOBS);
+  let caught = 0, total = 0;
+  for (let i = 0; i < code.length; i++) {
+    for (const ch of CarryCode.ALPHABET) {
+      if (ch === code[i]) continue;
+      total++;
+      if (!CarryCode.decode(code.slice(0, i) + ch + code.slice(i + 1)).ok) caught++;
+    }
+  }
+  const rate = caught / total;
+  assert(rate > 0.9,
+    "only caught " + caught + " of " + total + " single character errors (" + (rate * 100).toFixed(1) + "%)");
+  console.log("        caught " + (rate * 100).toFixed(1) + "% of single character errors across " + total + " cases");
+});
+
+check("the job list never exceeds what the code can carry", () => {
+  const tooMany = [];
+  for (let i = 0; i < 12; i++) tooMany.push({ kind: "warehouse", year_started: 2020, year_approx: false });
+  const out = CarryCode.decode(CarryCode.encodeFull(V2_INTAKE, tooMany));
+  assert(out.ok, "encoding more jobs than the format holds produced an invalid code");
+  assert(out.jobs.length === CarryCode.MAX_JOBS,
+    "expected the list to cap at " + CarryCode.MAX_JOBS + ", got " + out.jobs.length);
 });
 
 console.log("\nTABLE INTEGRITY\n");
@@ -1224,6 +1357,50 @@ check("everything printable goes through the gate", () => {
 check("a clean resume passes the gate end to end", () => {
   const found = PaperGate.gate(Resume.printableFields(Resume.build(RESUME_DATA)));
   assert(found.clean, "a clean resume was flagged: " + JSON.stringify(found.blocked));
+});
+
+console.log("\nTHE SOURCE ITSELF\n");
+
+check("every shipped script parses", () => {
+  // Cheap, and it catches the class of damage that otherwise surfaces as a
+  // thirty second browser timeout with no useful message: a patch that eats a
+  // closing brace leaves the whole package dead on load, while every other
+  // test here still passes because they import the modules individually.
+  const broken = [];
+  for (const file of readdirSync(join(HERE, "src")).filter((f) => f.endsWith(".js"))) {
+    const source = readFileSync(join(HERE, "src", file), "utf8");
+    try {
+      new Function(source);
+    } catch (err) {
+      broken.push(file + ": " + err.message);
+    }
+  }
+  assert(broken.length === 0, broken.join("\n        "));
+});
+
+check("index.html loads every shipped script, in an order that works", () => {
+  const html = readFileSync(join(HERE, "src", "index.html"), "utf8");
+  const loaded = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  const onDisk = readdirSync(join(HERE, "src")).filter((f) => f.endsWith(".js")).sort();
+
+  const missing = onDisk.filter((f) => !loaded.includes(f));
+  assert(missing.length === 0,
+    "scripts in src/ that index.html never loads: " + missing.join(", ") +
+    ". A global nobody defines is a button that does nothing.");
+
+  // Data before the engines that read it.
+  const pairs = [
+    ["tables.v1.js", "carry-code.js"],
+    ["narrowings.v1.js", "narrowing.js"],
+    ["mining.v1.js", "bullet.js"],
+    ["identity.v1.js", "identity.js"],
+    ["paper-gate.v1.js", "paper-gate.js"]
+  ];
+  for (const [data, engine] of pairs) {
+    assert(loaded.indexOf(data) < loaded.indexOf(engine),
+      data + " loads after " + engine + ", so the engine sees an undefined global");
+  }
+  assert(loaded[loaded.length - 1] === "app.js", "app.js is not loaded last");
 });
 
 console.log("\nSTYLESHEET\n");

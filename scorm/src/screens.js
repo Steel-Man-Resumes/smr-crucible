@@ -728,10 +728,10 @@
       kind: "done",
       title: "Write this down",
       body: [
-        "This code is your answers. It is not a password and it is not tied to your name.",
-        "Go to steelmanresumes.com when you are out, enter the code, and everything you just did is there waiting.",
-        "If you lose the code you can answer the questions again. It takes a few minutes. Nothing is lost forever."
-      ]
+        "Two things leave this room with you. The code carries everything you picked, including the years you worked out. The lines below carry the words, because words do not fit in a code.",
+        "Copy both onto paper. Take your time. This is the last thing and it is the part that makes the rest of it count."
+      ],
+      footnote: "If you lose it, you can do this again. It is a few minutes and nothing is gone forever. But it is a lot easier to copy it down now."
     }
   ];
 
