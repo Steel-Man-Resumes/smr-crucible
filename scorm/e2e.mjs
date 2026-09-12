@@ -121,7 +121,30 @@ async function main() {
     console.log("WALKTHROUGH\n");
 
     await sco.locator("button.btn-primary").click();          // welcome
+    const proofTitle = await sco.locator("#screen-title").textContent();
+    check("the proof screen comes before any question", proofTitle.includes("Two ways"), "saw: " + proofTitle);
+    const proofText = await sco.locator(".card").innerText();
+    check("the proof shows both versions and the honest limit",
+      proofText.includes("Responsible for stocking") && proofText.includes("2,000-piece") &&
+      proofText.toLowerCase().includes("nobody can promise"),
+      proofText.slice(0, 160));
+    await sco.locator("button.btn-primary").click();          // proof
     await sco.locator("button.btn-primary").click();          // consent
+
+    // The Why panel is the structural answer to "this must not be a form
+    // builder", so it gets asserted in the browser, not just in the unit tests.
+    const whyButton = sco.locator("button.link-why");
+    check("a question screen offers its reasoning", await whyButton.count() === 1, "no why button on q1");
+    await whyButton.click();
+    // innerText returns rendered text, and the labels are uppercased in CSS.
+    const whyText = (await sco.locator(".panel-why").innerText()).toLowerCase();
+    check("the why panel names the difficulty and what digging gets you",
+      whyText.includes("why it is hard") && whyText.includes("what digging gets you") &&
+      whyText.includes("why we think so"),
+      whyText.slice(0, 160));
+    check("the why panel actually says something, not just headings",
+      whyText.length > 400, "only " + whyText.length + " characters of reasoning");
+    await whyButton.click();
 
     await sco.locator("#readiness_stage-" + intent.readiness_stage).check();
     await sco.locator("button.btn-primary").click();

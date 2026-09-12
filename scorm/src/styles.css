@@ -49,12 +49,23 @@
   --accent: #4f6b57;
   --surface-elevated: #f5f6f4;
   --focus: #9b6d1d;
+  --accent-hover: #435a4a;
+  --on-accent: #ffffff;
+  --on-dark-muted: #9aa394;   /* secondary text in the topbar */
+  --line-hover: #b9c1b7;
+  --line-selected: #c4cfc2;
+  --danger: #8a3121;          /* validation only, never decoration */
 
   /* Terminal input, the most recognisable SMR detail. */
   --term-bg: #10110f;
   --term-ink: #a7cf98;
   --term-line: #3b4039;
   --term-caret: #d7b86e;
+  /* Same value as the caret, different role: labels on the terminal ground.
+     Named separately so a change to one does not silently move the other. */
+  --term-gold: #d7b86e;
+  --term-placeholder: #6d7a68;
+  --term-note: #8a9685;
 
   --sans: "IBM Plex Sans Var", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
   --mono: "IBM Plex Mono Bundled", "IBM Plex Mono", Consolas, monospace;
@@ -93,7 +104,7 @@ html, body {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #9aa394;
+  color: var(--on-dark-muted);
 }
 .product {
   margin: 1px 0 0;
@@ -105,7 +116,7 @@ html, body {
   margin: 6px 0 0;
   font-size: 13px;
   line-height: 1.45;
-  color: #9aa394;
+  color: var(--on-dark-muted);
 }
 
 .app {
@@ -145,17 +156,36 @@ html, body {
   transition: width 160ms ease-out;
 }
 
-.help-panel {
+.panel-buttons { display: flex; align-items: center; gap: 16px; }
+
+.panel {
   margin-top: 14px;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--focus);
   border-radius: 6px;
   padding: 16px 18px;
 }
-.help-title { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
-.help-panel p { margin: 0 0 10px; font-size: 17px; }
-.help-panel p:last-child { margin-bottom: 0; }
+.panel-help { border-left: 4px solid var(--focus); }
+.panel-help .panel-title { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+.panel-help p { margin: 0 0 10px; font-size: 17px; }
+.panel-help p:last-child { margin-bottom: 0; }
+
+/* The Why panel. Four fixed parts, same order every time, so it reads as a
+   rhythm rather than a lecture. The accent rule marks it as the method
+   speaking, which is a different voice from the help panel's amber. */
+.panel-why { border-left: 4px solid var(--accent); }
+.why-label {
+  margin: 0 0 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.why-text { margin: 0 0 16px; font-size: 17px; line-height: 1.55; }
+.panel-why .why-text:last-child { margin-bottom: 0; }
+.link-why { color: var(--accent); }
 
 /* ------------------------------------------------------------------- card */
 
@@ -201,7 +231,7 @@ html, body {
   border-radius: 6px;
   cursor: pointer;
 }
-.option:hover { border-color: #b9c1b7; border-left-color: #b9c1b7; }
+.option:hover { border-color: var(--line-hover); border-left-color: var(--line-hover); }
 .option:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .option-input {
@@ -215,7 +245,7 @@ html, body {
    color alone. */
 .option-input:checked ~ .option-text .option-label { font-weight: 600; }
 .option:has(.option-input:checked) {
-  border-color: #c4cfc2;
+  border-color: var(--line-selected);
   border-left-color: var(--accent);
   background: var(--surface-elevated);
 }
@@ -245,7 +275,7 @@ html, body {
   min-height: 52px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
-.input::placeholder, .textarea::placeholder { color: #6d7a68; }
+.input::placeholder, .textarea::placeholder { color: var(--term-placeholder); }
 .textarea { resize: vertical; line-height: 1.6; }
 
 .select {
@@ -303,7 +333,85 @@ html, body {
   color: var(--term-ink);
   word-break: break-all;
 }
-.code-note { margin: 14px 0 0; font-size: 15px; color: #8a9685; }
+.code-note { margin: 14px 0 0; font-size: 15px; color: var(--term-note); }
+
+/* ------------------------------------------------------------------ proof */
+
+/* The two samples are deliberately NOT symmetrical. The skimmed one is flat
+   and grey and sits in the page. The mined one is on the terminal ground with
+   the accent rule, because the whole point is that one of them looks like work
+   and the other looks like a shrug. */
+.sample {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-radius: 6px;
+}
+.sample-label {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sample-text { margin: 0; font-size: 17px; line-height: 1.5; }
+
+.sample-skimmed {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+.sample-skimmed .sample-label { color: var(--muted); }
+.sample-skimmed .sample-text { color: var(--muted); }
+
+.sample-mined {
+  background: var(--term-bg);
+  border: 1px solid var(--term-line);
+  border-left: 4px solid var(--accent);
+}
+.sample-mined .sample-label { color: var(--term-gold); }
+.sample-mined .sample-text { color: var(--term-ink); }
+
+.punch {
+  margin: 22px 0 18px;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* -------------------------------------------------------------- expectations */
+
+.expect {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.expect-title { margin: 0 0 14px; font-size: 18px; font-weight: 600; }
+.expect-row { margin-bottom: 14px; }
+.expect-label {
+  margin: 0 0 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.expect-text { margin: 0; font-size: 17px; }
+
+/* The line about what nobody can promise. It is not a disclaimer and it should
+   not look like one. In a facility, being the one thing that does not oversell
+   is worth more than any feature. */
+.expect-honest {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+}
 
 /* ---------------------------------------------------------- nav and misc */
 
@@ -321,8 +429,8 @@ html, body {
   margin-bottom: 10px;
   cursor: pointer;
 }
-.btn-primary { background: var(--accent); color: #ffffff; border: 1px solid var(--accent); }
-.btn-primary:hover { background: #435a4a; border-color: #435a4a; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-secondary { background: var(--card); color: var(--foreground); border: 1px solid var(--muted); }
 .btn-secondary:hover { background: var(--surface-elevated); }
 
@@ -344,7 +452,7 @@ html, body {
   margin: 4px 0 0;
   min-height: 24px;
   font-weight: 600;
-  color: #8a3121;
+  color: var(--danger);
 }
 .error-slot:empty { min-height: 0; }
 

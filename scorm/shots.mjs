@@ -58,14 +58,15 @@ async function main() {
 
     await shot("01-welcome");
     await page.locator("button.btn-primary").click();
-    await shot("02-consent");
-    await page.locator("button.link-button").click();
-    await shot("03-help-panel");
-    await page.locator("button.link-button").click();
+    await shot("02-the-proof");
+    await page.locator("button.btn-primary").click();
+    await shot("03-consent");
     await page.locator("button.btn-primary").click();
     await shot("04-q1-readiness");
+    await page.locator("button.link-why").click();
+    await shot("05-why-panel");
+    await page.locator("button.link-why").click();
     await page.locator("#readiness_stage-preparation").check();
-    await shot("05-q1-selected");
     await page.locator("button.btn-primary").click();
     await page.locator("#goals-stability").check();
     await page.locator("#goals-growth").check();

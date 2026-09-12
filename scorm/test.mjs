@@ -294,16 +294,120 @@ check("the seven counted questions all exist as screens", () => {
   assert(SCREENS.questionIds.length === 7, "expected 7 counted questions, found " + SCREENS.questionIds.length);
 });
 
+/** Everything a person can read, as one string. Add new blocks here. */
+function allReadableCopy() {
+  return [SCREENS.SCREENS, SCREENS.HELP_PANEL, SCREENS.LEGEND, SCREENS.PROOF, SCREENS.EXPECTATIONS]
+    .map((block) => JSON.stringify(block))
+    .join(" ");
+}
+
 check("no em dashes anywhere in the script the person reads", () => {
-  const text = JSON.stringify(SCREENS.SCREENS) + JSON.stringify(SCREENS.HELP_PANEL) + JSON.stringify(SCREENS.LEGEND);
-  assert(!text.includes("—"), "an em dash is in the script copy");
+  assert(!allReadableCopy().includes("—"), "an em dash is in the script copy");
 });
 
 check("no prohibited language in anything the person reads", () => {
-  const text = (JSON.stringify(SCREENS.SCREENS) + JSON.stringify(SCREENS.HELP_PANEL)).toLowerCase();
+  const text = allReadableCopy().toLowerCase();
   for (const word of ["felon", "offender", "ex-con", "second chance", "inmate", "convict"]) {
     assert(!text.includes(word), 'the script contains "' + word + '"');
   }
+});
+
+console.log("\nSTYLESHEET\n");
+
+check("every CSS variable used is actually defined", () => {
+  // An undefined custom property does not error. It renders as nothing, which
+  // on a dark panel means invisible text. Caught exactly that in review: a
+  // label written against --term-gold when the token was named --term-caret.
+  const css = readFileSync(join(HERE, "src", "styles.css"), "utf8");
+  const used = new Set([...css.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map((m) => m[1]));
+  const defined = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gim)].map((m) => m[1]));
+  const undef = [...used].filter((v) => !defined.has(v));
+  assert(undef.length === 0, "used but never defined: " + undef.join(", "));
+});
+
+check("no color is written as a bare hex outside the token block", () => {
+  // Tokens are the theme. A literal hex buried in a rule is how a palette
+  // drifts and how one element ends up unreadable after a token change.
+  const css = readFileSync(join(HERE, "src", "styles.css"), "utf8");
+  const rootEnd = css.indexOf("}", css.indexOf(":root"));
+  const body = css.slice(rootEnd);
+  const strays = [...body.matchAll(/:\s*(#[0-9a-f]{3,8})\b/gi)].map((m) => m[1]);
+  // A small number of one-off shades is tolerable; a drift is not.
+  assert(strays.length <= 6,
+    strays.length + " bare hex colors outside :root: " + strays.join(", ") +
+    ". Promote the recurring ones to tokens.");
+});
+
+console.log("\nTHE WHY LAYER\n");
+
+// This is the structural enforcement of "not another form builder". A question
+// screen that cannot say why it is asking has no business asking.
+check("every question screen carries a why", () => {
+  const missing = SCREENS.questionIds.filter((id) => {
+    const screen = SCREENS.SCREENS.find((s) => s.id === id);
+    return !screen || !screen.why;
+  });
+  assert(missing.length === 0,
+    "question screens with no why: " + missing.join(", ") + ". A screen that cannot " +
+    "say why it is asking is a form field, which is the thing this product is not.");
+});
+
+check("every why has all four parts, in full", () => {
+  const parts = ["forWhat", "hard", "buys", "evidence"];
+  const broken = [];
+  for (const screen of SCREENS.SCREENS) {
+    if (!screen.why) continue;
+    for (const part of parts) {
+      const v = screen.why[part];
+      if (typeof v !== "string" || v.trim().length < 25) {
+        broken.push(screen.id + "." + part);
+      }
+    }
+  }
+  assert(broken.length === 0, "missing or stub why parts: " + broken.join(", "));
+});
+
+check("no why part is padded past what someone will actually read", () => {
+  const tooLong = [];
+  for (const screen of SCREENS.SCREENS) {
+    if (!screen.why) continue;
+    for (const [part, text] of Object.entries(screen.why)) {
+      if (text.length > 320) tooLong.push(screen.id + "." + part + " (" + text.length + " chars)");
+    }
+  }
+  assert(tooLong.length === 0, "why parts over 320 characters: " + tooLong.join(", "));
+});
+
+check("the proof shows a real difference, not a rigged one", () => {
+  const P = SCREENS.PROOF;
+  assert(P && P.skimmed && P.mined, "proof block is missing a side");
+  // If the mined version is not substantially richer, the comparison is a lie
+  // and a person will feel it before they can explain it.
+  assert(P.mined.text.length > P.skimmed.text.length * 2,
+    "the mined example is not meaningfully richer than the skimmed one");
+  assert(/\d/.test(P.mined.text), "the mined example has no numbers in it, which is the whole method");
+  assert(!/\d/.test(P.skimmed.text), "the skimmed example already has numbers, so it is not a fair before");
+});
+
+check("expectations state the limit as well as the promise", () => {
+  const E = SCREENS.EXPECTATIONS;
+  assert(E && E.dig && E.skim && E.honest, "expectations block is incomplete");
+  assert(/job/i.test(E.honest), "the honest line does not name the thing we cannot promise");
+});
+
+check("nothing anywhere promises an outcome we cannot deliver", () => {
+  const text = allReadableCopy().toLowerCase();
+  for (const phrase of ["guarantee", "will get you a job", "land you a job", "get hired"]) {
+    assert(!text.includes(phrase), 'the script promises "' + phrase + '"');
+  }
+});
+
+check("no number of people helped appears anywhere", () => {
+  // Standing brand rule. A count is the easiest credibility shortcut to reach
+  // for and it is not one we take.
+  const text = allReadableCopy();
+  const claim = text.match(/[\d,]+\s*(people|clients|users|men|women|folks)\s+(helped|served|placed)/i);
+  assert(!claim, "found a people-helped claim: " + (claim && claim[0]));
 });
 
 console.log("\n" + (failed === 0 ? "ALL PASS" : "FAILURES") + "  " + passed + " passed, " + failed + " failed\n");

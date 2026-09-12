@@ -42,7 +42,9 @@
     }
   };
 
-  var mount, statusBar, helpOpen = false;
+  var mount, statusBar;
+  // Only one panel is ever open. "why" | "help" | null.
+  var openPanel = null;
 
   // ------------------------------------------------------------ suspend io
 
@@ -168,11 +170,16 @@
     row.appendChild(el("span", "progress-label",
       qIndex >= 0 ? "Question " + (qIndex + 1) + " of " + total : " "));
 
-    var help = el("button", "link-button", "Need help?");
-    help.type = "button";
-    help.setAttribute("aria-expanded", helpOpen ? "true" : "false");
-    help.onclick = function () { helpOpen = !helpOpen; render(); };
-    row.appendChild(help);
+    var buttons = el("div", "panel-buttons");
+
+    // The Why button is deliberately first and deliberately not called "info".
+    // It is the thing that makes this not a form, so it gets the prominent
+    // slot on every screen that has one.
+    if (screen.why) {
+      buttons.appendChild(panelButton("why", "Why am I being asked this?"));
+    }
+    buttons.appendChild(panelButton("help", "Need help?"));
+    row.appendChild(buttons);
     wrap.appendChild(row);
 
     // Only the seven counted questions get a bar. An empty bar on the welcome
@@ -190,17 +197,55 @@
       wrap.appendChild(bar);
     }
 
-    if (helpOpen) {
-      var panel = el("div", "help-panel");
-      panel.setAttribute("role", "note");
-      panel.appendChild(el("h2", "help-title", S.HELP_PANEL.title));
-      for (var i = 0; i < S.HELP_PANEL.body.length; i++) {
-        panel.appendChild(el("p", null, S.HELP_PANEL.body[i]));
-      }
-      wrap.appendChild(panel);
-    }
+    if (openPanel === "help") wrap.appendChild(buildHelpPanel());
+    if (openPanel === "why" && screen.why) wrap.appendChild(buildWhyPanel(screen.why));
 
     return wrap;
+  }
+
+  function panelButton(which, label) {
+    var b = el("button", "link-button" + (which === "why" ? " link-why" : ""), label);
+    b.type = "button";
+    b.setAttribute("aria-expanded", openPanel === which ? "true" : "false");
+    b.onclick = function () {
+      openPanel = openPanel === which ? null : which;
+      render();
+    };
+    return b;
+  }
+
+  function buildHelpPanel() {
+    var panel = el("div", "panel panel-help");
+    panel.setAttribute("role", "note");
+    panel.appendChild(el("h2", "panel-title", S.HELP_PANEL.title));
+    for (var i = 0; i < S.HELP_PANEL.body.length; i++) {
+      panel.appendChild(el("p", null, S.HELP_PANEL.body[i]));
+    }
+    return panel;
+  }
+
+  /**
+   * The four parts always render in the same order, whether or not the person
+   * reads all of them, because the rhythm is the point. See the Why layer note
+   * at the top of screens.js.
+   */
+  var WHY_PARTS = [
+    { key: "forWhat", label: "What this is for" },
+    { key: "hard", label: "Why it is hard" },
+    { key: "buys", label: "What digging gets you" },
+    { key: "evidence", label: "Why we think so" }
+  ];
+
+  function buildWhyPanel(why) {
+    var panel = el("div", "panel panel-why");
+    panel.setAttribute("role", "note");
+    for (var i = 0; i < WHY_PARTS.length; i++) {
+      var part = WHY_PARTS[i];
+      if (!why[part.key]) continue;
+      panel.appendChild(el("p", "why-label", part.label));
+      panel.appendChild(el("p", "why-text", why[part.key]));
+    }
+    return panel;
   }
 
   function buildNav(screen) {
@@ -239,6 +284,38 @@
 
   var BUILDERS = {
     info: function () { /* title, body and footnote already rendered */ },
+
+    /**
+     * THE PROOF.
+     *
+     * Shown before the work starts, not after. Nobody digs because they were
+     * told digging is good. They dig because they saw the difference between
+     * two sentences about the same shift.
+     *
+     * Followed immediately by the expectations block, including the line about
+     * what nobody can promise. That line is not hedging. It is the reason the
+     * rest of this is believable.
+     */
+    proof: function (card) {
+      var P = S.PROOF;
+      card.appendChild(el("p", "screen-help", P.intro));
+
+      card.appendChild(sample("sample sample-skimmed", P.skimmed.label, P.skimmed.text));
+      card.appendChild(sample("sample sample-mined", P.mined.label, P.mined.text));
+
+      card.appendChild(el("p", "punch", P.punch));
+      for (var i = 0; i < P.body.length; i++) {
+        card.appendChild(el("p", "screen-body", P.body[i]));
+      }
+
+      var E = S.EXPECTATIONS;
+      var box = el("div", "expect");
+      box.appendChild(el("h2", "expect-title", E.title));
+      box.appendChild(expectRow(E.dig.label, E.dig.text));
+      box.appendChild(expectRow(E.skim.label, E.skim.text));
+      box.appendChild(el("p", "expect-honest", E.honest));
+      card.appendChild(box);
+    },
 
     single: function (card, screen) {
       var table = TABLES[screen.table];
@@ -338,6 +415,20 @@
     }
   };
 
+  function sample(className, label, text) {
+    var box = el("div", className);
+    box.appendChild(el("p", "sample-label", label));
+    box.appendChild(el("p", "sample-text", text));
+    return box;
+  }
+
+  function expectRow(label, text) {
+    var row = el("div", "expect-row");
+    row.appendChild(el("p", "expect-label", label));
+    row.appendChild(el("p", "expect-text", text));
+    return row;
+  }
+
   function optionRow(type, field, entry, checked, screen) {
     var id = field + "-" + entry.id;
     var label = el("label", "option");
@@ -435,7 +526,7 @@
 
   function go(index) {
     state.index = index;
-    helpOpen = false;
+    openPanel = null;
     // Commit on every transition. A tablet that dies between screens should
     // cost the person one screen, not the whole session.
     save();
