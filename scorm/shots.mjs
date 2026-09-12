@@ -172,9 +172,13 @@ async function main() {
     await page.locator("button.option-tap", { hasText: "That is enough for now" }).click();
     await shot("27-LOOK-WHAT-YOU-PROVED");
     await page.locator("button.btn-primary").click();
-    await shot("27b-review");
+    await shot("28-resume-intro");
     await page.locator("button.btn-primary").click();
-    await shot("28-carry-code");
+    await shot("29-THE-RESUME");
+    await page.locator("button.btn-primary").click();
+    await shot("30-review");
+    await page.locator("button.btn-primary").click();
+    await shot("31-carry-code");
 
     // The harness view, which is the one that goes in the evidence video.
     await page.setViewportSize({ width: 1500, height: 950 });

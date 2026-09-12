@@ -55,6 +55,7 @@
   --line-hover: #b9c1b7;
   --line-selected: #c4cfc2;
   --danger: #8a3121;          /* validation only, never decoration */
+  --line-strong: #8d968a;     /* the resume page border, heavier than a card */
 
   /* Terminal input, the most recognisable SMR detail. */
   --term-bg: #10110f;
@@ -498,6 +499,139 @@ html, body {
 .moved-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
 .moved p { margin: 0 0 10px; font-size: 17px; }
 .moved p:last-child { margin-bottom: 0; }
+
+/* -------------------------------------------------------------- the page */
+
+/* The resume itself. White, bordered, and visually a DOCUMENT rather than
+   another screen in the flow, because the whole point of this moment is that
+   a thing now exists. */
+.layout-note {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+}
+.layout-name { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.layout-why { margin: 0 0 8px; font-size: 16px; color: var(--muted); line-height: 1.5; }
+
+.page {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 26px 24px;
+}
+.page-section { margin-bottom: 26px; }
+.page-section:last-child { margin-bottom: 0; }
+
+/* The deliberate hole. Dashed, labelled, and explained, so it reads as a
+   space waiting to be filled rather than as something missing. */
+.page-contact {
+  border: 2px dashed var(--line-hover);
+  border-radius: 6px;
+  padding: 18px;
+  text-align: center;
+}
+.page-nameline { margin: 0 0 6px; font-size: 20px; font-weight: 600; color: var(--muted); }
+.page-placeholder {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--line-hover);
+}
+.page-note { margin: 0; font-size: 15px; color: var(--muted); line-height: 1.5; }
+
+.page-heading {
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 2px solid var(--border);
+}
+
+.page-job { margin-bottom: 20px; }
+.page-job:last-child { margin-bottom: 0; }
+.page-job-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.page-job-title { margin: 0; font-size: 18px; font-weight: 600; }
+.page-job-year {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.page-job-employer { margin: 1px 0 8px; font-size: 17px; color: var(--muted); }
+
+.page-bullets { margin: 0; padding-left: 20px; }
+.page-bullet { margin-bottom: 8px; font-size: 17px; line-height: 1.5; }
+.page-bullet:last-child { margin-bottom: 0; }
+
+.page-skills {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.page-skill {
+  padding: 6px 12px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 16px;
+}
+.page-empty { margin: 0; font-size: 16px; color: var(--muted); }
+
+/* ------------------------------------------------------------ paper gate */
+
+.gate-item {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--card);
+}
+.gate-item-blocked { border-left-color: var(--danger); }
+.gate-item-label {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.gate-found {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  background: var(--term-bg);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--term-note);
+  text-decoration: line-through;
+}
+.gate-swap {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  background: var(--term-bg);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--term-ink);
+}
+.gate-note { margin: 0; font-size: 16px; color: var(--muted); line-height: 1.5; }
 
 /* ------------------------------------------------------------- dead words */
 

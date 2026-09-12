@@ -389,6 +389,56 @@ async function main() {
 
     await sco.locator("button.btn-primary").click();
 
+    console.log("\nTHE RESUME\n");
+
+    const resumeIntro = await sco.locator("#screen-title").textContent();
+    check("the resume comes after the identity beat", resumeIntro.includes("on a page"), "saw: " + resumeIntro);
+    await sco.locator("button.btn-primary").click();
+
+    // Clean text, so the paper gate should have stepped out of the way rather
+    // than showing a screen that says nothing was found.
+    const resumeTitle = await sco.locator("#screen-title").textContent();
+    check("the paper gate stays out of the way when there is nothing to say",
+      resumeTitle.includes("Your resume"), "saw: " + resumeTitle);
+
+    const layoutNote = await sco.locator(".layout-note").innerText();
+    check("the layout was chosen and the reason is given",
+      /work history first|skills first/i.test(layoutNote) && layoutNote.length > 80,
+      layoutNote.slice(0, 200));
+
+    // NOT named `page`: that shadows the Playwright page for this whole block
+    // and puts the outer one in the temporal dead zone.
+    const doc = await sco.locator(".page").innerText();
+    check("the contact block is a labelled hole with an explanation",
+      doc.toLowerCase().includes("your name goes here") &&
+      /day you get out/i.test(doc),
+      doc.slice(0, 240));
+    check("their mined line is on the page",
+      doc.includes("Loaded pallets of dry goods"), doc.slice(0, 300));
+    // Only the warehouse job was mined in this run. The diner was recalled but
+    // never described, and a job nobody described is not evidence of anything,
+    // so it must NOT print as an empty entry on somebody's resume.
+    check("the mined job is on the page", doc.includes("Miller Brothers"), doc.slice(0, 400));
+    check("the recalled but unmined job stays off the page",
+      !doc.includes("The diner on Third"),
+      "an empty job entry was printed");
+    check("approximate years are still marked as approximate on the document",
+      /About 20\d\d/.test(doc), doc.slice(0, 400));
+    check("the equipment they named became a skill",
+      /forklift/i.test(doc) && /RF scanner/i.test(doc), doc.slice(0, 500));
+
+    const beforeSwap = await sco.locator(".page-section").nth(1).innerText();
+    await sco.locator(".layout-note button.link-button").click();
+    await sleep(200);
+    const afterSwap = await sco.locator(".page-section").nth(1).innerText();
+    check("the person can override the layout and the page actually reorders",
+      beforeSwap !== afterSwap,
+      "section two was identical before and after the swap");
+
+    console.log("        " + (await sco.locator(".punch").innerText()).trim());
+
+    await sco.locator("button.btn-primary").click();
+
     const reviewTitle = await sco.locator("#screen-title").textContent();
     check("reached the review screen", reviewTitle.includes("Check your answers"), "saw: " + reviewTitle);
     const reviewText = await sco.locator(".review-list").innerText();

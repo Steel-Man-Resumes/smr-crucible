@@ -650,12 +650,62 @@
       kind: "proved",
       title: "Look what you just proved",
       help: "This is not encouragement. Every line below is something you can point at.",
-      goTo: "review",
+      goTo: "resume_intro",
       why: {
         forWhat: "Reading back what your own answers say about you, with the proof next to each one.",
         hard: "Most people skim this part, or decide it is being nice to them. It is not being nice. It is reporting.",
         buys: "The document expires. What you now know about your own history does not.",
         evidence: "People sustain a change when they buy a new story about themselves, and a story only holds if the evidence is checkable."
+      }
+    },
+
+    // ---- THE RESUME -----------------------------------------------------
+
+    {
+      id: "resume_intro",
+      kind: "info",
+      title: "Now we put it on a page",
+      body: [
+        "Everything you built goes onto one page, laid out the way a hiring manager reads one.",
+        "Nothing gets added. Nothing gets dressed up. It is your lines, in an order that works."
+      ],
+      footnote: "One part of the page has to stay blank until you are out. We will show you which part and why.",
+      next: "Show me the page",
+      goTo: "paper_gate",
+      why: {
+        forWhat: "Turning your lines into the document you actually hand somebody.",
+        hard: "Nothing hard left. You already did the work; this part is arranging it.",
+        buys: "A page you can read, copy down, and use.",
+        evidence: "Layout is chosen from your own dates rather than from a template, and we tell you why."
+      }
+    },
+
+    // Sits between the resume and the person. Only ever shown when there is
+    // something to show; the runtime skips straight past it when the text is
+    // clean, which is most of the time.
+    {
+      id: "paper_gate",
+      kind: "paper_gate",
+      title: "One thing before this goes on paper",
+      goTo: "resume",
+      why: {
+        forWhat: "Keeping a word off the page that would get read the wrong way, in six seconds, by somebody who does not know you.",
+        hard: "It can feel like being told to hide. It is not that. It is that paper cannot carry context and a conversation can.",
+        buys: "A resume that gets read on what you can do, and a disclosure conversation that happens on your timing instead of a stranger's.",
+        evidence: "Your resume's job is to show what you can do. The other conversation is real, and it gets prepared properly and separately."
+      }
+    },
+
+    {
+      id: "resume",
+      kind: "resume",
+      title: "Your resume",
+      goTo: "review",
+      why: {
+        forWhat: "The document. This is the thing this whole program was building.",
+        hard: "It will look short compared to what you imagined. Short and true beats long and padded, every time.",
+        buys: "Something to copy down, and something to pick back up outside with your code.",
+        evidence: "The layout was chosen from your own dates. Tap the reason under the heading to see why this order and not the other one."
       }
     },
 

@@ -41,6 +41,9 @@ const MINING = require("./src/mining.v1.js");
 const Bullet = require("./src/bullet.js");
 const Identity = require("./src/identity.js");
 const IDENTITY = require("./src/identity.v1.js");
+const PaperGate = require("./src/paper-gate.js");
+const GATE = require("./src/paper-gate.v1.js");
+const Resume = require("./src/resume.js");
 
 let passed = 0;
 let failed = 0;
@@ -984,6 +987,243 @@ check("no em dashes or prohibited language in the identity copy", () => {
 check("every kind of work maps to a field name", () => {
   const missing = TABLES.WORK_KINDS.map((k) => k.id).filter((id) => !IDENTITY.FIELDS[id]);
   assert(missing.length === 0, "work kinds with no field name: " + missing.join(", "));
+});
+
+console.log("\nTHE PAPER GATE\n");
+
+// Two failure modes, from inside-experience-reframe doctrine, and the tests
+// have to cover both:
+//   EXPOSURE -- a carceral word reaches the page and triggers bias before a
+//   human is ever met.
+//   ERASURE -- the filter is blunt, eats real work history, and a gap appears
+//   where the person's hardest-won experience was.
+
+check("every word the doctrine names is blocked", () => {
+  // The exact nine from SKILL.md.
+  const doctrine = ["incarceration", "prison", "jail", "inmate", "offender",
+                    "felon", "parole", "probation", "correctional"];
+  for (const word of doctrine) {
+    const found = PaperGate.inspect("Worked in the " + word + " area daily");
+    assert(!found.clean, '"' + word + '" reached the page');
+  }
+});
+
+check("blocked words are caught anywhere in the text, in any case", () => {
+  for (const text of ["PRISON kitchen", "a Jail laundry", "worked parole office", "state Corrections"]) {
+    assert(!PaperGate.inspect(text).clean, "missed: " + text);
+  }
+});
+
+check("real job titles are NOT eaten by the filter", () => {
+  // The erasure failure mode. Every one of these is a legitimate thing to have
+  // on a resume, and a substring match would destroy them.
+  const legitimate = [
+    "Custodian for a school district",
+    "Docked and unloaded freight",
+    "Worked with Dr. Alvarez",
+    "Documented every delivery",
+    "Ran the loading dock",
+    "Probationary period review",
+    "Paroled equipment to the crew"
+  ];
+  const eaten = legitimate.filter((t) => {
+    const found = PaperGate.inspect(t);
+    // "probationary" and "paroled" SHOULD survive: they are different words.
+    return !found.clean;
+  });
+  assert(eaten.length === 0,
+    "the filter ate legitimate work history: " + eaten.join(" | ") +
+    ". That is the erasure failure mode the doctrine warns about.");
+});
+
+check("custodian survives while custody does not", () => {
+  assert(PaperGate.inspect("Custodian, night shift").clean, "custodian was blocked");
+  assert(!PaperGate.inspect("Held in custody").clean, "custody got through");
+});
+
+check("DOC is blocked but dock and documented are not", () => {
+  assert(!PaperGate.inspect("Worked for the DOC").clean, "DOC got through");
+  assert(PaperGate.inspect("Ran the dock and documented loads").clean, "dock or documented was blocked");
+});
+
+check("clean resume text passes untouched", () => {
+  const found = PaperGate.inspect(
+    "Loaded pallets of dry goods off the night truck using a forklift and an RF scanner, every shift."
+  );
+  assert(found.clean, "a clean bullet was flagged: " + JSON.stringify(found.blocked));
+  equal(found.translations, []);
+});
+
+check("the doctrine translations fire and keep the skill", () => {
+  const found = PaperGate.inspect("Worked in the prison kitchen");
+  assert(found.translations.length > 0, "no translation offered for prison kitchen");
+  assert(found.translations[0].to.toLowerCase().includes("institutional kitchen"),
+    "translation lost the kitchen: " + found.translations[0].to);
+});
+
+check("peer roles translate into the strongest version of themselves", () => {
+  const found = PaperGate.inspect("Was a peer tutor for two years");
+  assert(found.translations.some((t) => /peer educator/i.test(t.to || "")),
+    "peer tutoring did not translate");
+});
+
+check("suggest() rewrites what it can and leaves the rest to the person", () => {
+  const out = PaperGate.suggest("Ran the prison kitchen");
+  assert(/institutional kitchen/i.test(out), "the swap did not apply: " + out);
+  assert(PaperGate.inspect(out).clean, "the suggested rewrite still fails the gate: " + out);
+
+  // A word with no swap must NOT be silently deleted. Only the person knows
+  // what to say instead.
+  const noSwap = PaperGate.suggest("Convicted in 2015");
+  assert(/convicted/i.test(noSwap), "a word with no swap was silently removed");
+});
+
+check("every blocked entry explains itself", () => {
+  for (const entry of GATE.BLOCKED) {
+    assert(entry.why && entry.why.length > 15, '"' + entry.word + '" is blocked with no reason given');
+  }
+});
+
+check("the gate copy never scolds the person", () => {
+  const text = JSON.stringify(GATE.COPY).toLowerCase();
+  for (const scold of ["you should not", "mistake", "wrong to", "never say", "do not write"]) {
+    assert(!text.includes(scold), 'the gate copy scolds: "' + scold + '"');
+  }
+  assert(text.includes("not because you did anything wrong"),
+    "the gate does not say the thing that keeps this from landing as a correction");
+});
+
+console.log("\nTHE RESUME\n");
+
+const RESUME_DATA = {
+  thisYear: 2026,
+  skills: ["driving", "forklift"],
+  skills_freetext: "Welding",
+  jobs: [
+    {
+      kind: "warehouse", employer: "Miller Brothers", year_started: 2024, year_approx: true,
+      bullets: [{
+        verb: "Loaded", object: "pallets of dry goods off the night truck",
+        tools: ["a forklift", "an RF scanner"], frequency: "every shift",
+        scale: "two or three truckloads a day", result: "stopped losing product on the night shift"
+      }]
+    },
+    {
+      kind: "kitchen", employer: "The diner on Third", year_started: 2022, year_approx: true,
+      bullets: [{ verb: "Cooked", object: "the line", tools: ["a flat top"], frequency: "most days", scale: "", result: "" }]
+    }
+  ]
+};
+
+check("the document is built only from what was mined", () => {
+  const built = Resume.build(RESUME_DATA);
+  const history = built.sections.find((s) => s.kind === "history");
+  assert(history.jobs.length === 2, "expected 2 mined jobs, got " + history.jobs.length);
+  assert(history.jobs[0].bullets[0].includes("Loaded pallets"), "the bullet did not make the page");
+});
+
+check("an unmined job never reaches the page", () => {
+  const withEmpty = {
+    ...RESUME_DATA,
+    jobs: RESUME_DATA.jobs.concat([{ kind: "retail", employer: "Ghost Store", year_started: 2019, bullets: [] }])
+  };
+  const built = Resume.build(withEmpty);
+  const history = built.sections.find((s) => s.kind === "history");
+  assert(!history.jobs.some((j) => j.employer === "Ghost Store"),
+    "a job with no bullets was printed, which puts an empty entry on somebody's resume");
+});
+
+check("jobs print newest first, undated last", () => {
+  const built = Resume.build(RESUME_DATA);
+  const years = built.sections.find((s) => s.kind === "history").jobs.map((j) => j.year);
+  equal(years, [2024, 2022]);
+});
+
+check("layout is chosen from their dates, not from a default", () => {
+  // Two jobs, two years apart, still working: chronological.
+  assert(Resume.chooseLayout(RESUME_DATA).id === "chronological",
+    "a clean recent run did not get the chronological layout");
+
+  // A long stretch the dates do not cover: skills first.
+  const gapped = { ...RESUME_DATA, jobs: [
+    { kind: "warehouse", year_started: 2012, bullets: [{ verb: "Loaded", object: "freight" }] },
+    { kind: "warehouse", year_started: 2010, bullets: [{ verb: "Loaded", object: "freight" }] }
+  ]};
+  assert(Resume.chooseLayout(gapped).id === "skillsFirst",
+    "a fourteen year gap still led with work history");
+
+  // One job is thin material either way.
+  const single = { ...RESUME_DATA, jobs: [RESUME_DATA.jobs[0]] };
+  assert(Resume.chooseLayout(single).id === "skillsFirst", "a single job did not lead with skills");
+});
+
+check("every layout explains why it was chosen", () => {
+  for (const layout of Object.values(Resume.LAYOUTS)) {
+    assert(layout.why && layout.why.length > 40, layout.id + " gives no reason");
+    assert(layout.name && layout.name.length > 0, layout.id + " has no name");
+  }
+});
+
+check("the layout can be overridden by the person", () => {
+  const forced = Resume.build({ ...RESUME_DATA, layoutOverride: "skillsFirst" });
+  assert(forced.layout.id === "skillsFirst", "an override was ignored");
+  assert(forced.sections[1].kind === "skills", "the override did not reorder the page");
+});
+
+check("the contact block is a labelled hole, not a missing section", () => {
+  const built = Resume.build(RESUME_DATA);
+  const contact = built.sections[0];
+  assert(contact.kind === "contact", "contact is not first on the page");
+  assert(contact.note && /out|release|day/i.test(contact.note),
+    "the empty block does not explain itself, so it reads as the program being broken");
+});
+
+check("skills lead with the equipment they actually named", () => {
+  const built = Resume.build(RESUME_DATA);
+  const skills = built.sections.find((s) => s.kind === "skills");
+  assert(/forklift/i.test(skills.items[0]), "mined equipment did not lead: " + skills.items.join(", "));
+  assert(skills.items.some((i) => /welding/i.test(i)), "their own typed skill was dropped");
+});
+
+check("near-duplicate skills are collapsed, not both printed", () => {
+  // A person who taps the Forklift jogger while mining AND picks "Forklift or
+  // equipment" in the intake must not get both on the finished page.
+  const built = Resume.build(RESUME_DATA);
+  const items = built.sections.find((s) => s.kind === "skills").items;
+  const forklifts = items.filter((i) => /forklift/i.test(i));
+  assert(forklifts.length === 1,
+    "forklift appears " + forklifts.length + " times: " + forklifts.join(" | "));
+  // The specific one, earned while mining, is the one that survives.
+  assert(forklifts[0] === "Forklift", "the vaguer intake label won: " + forklifts[0]);
+});
+
+check("no skill is listed twice", () => {
+  const built = Resume.build(RESUME_DATA);
+  const items = built.sections.find((s) => s.kind === "skills").items.map((i) => i.toLowerCase());
+  assert(new Set(items).size === items.length, "duplicate skills: " + items.join(", "));
+});
+
+check("everything printable goes through the gate", () => {
+  // The whole point: the gate runs on the ASSEMBLED page, after everything
+  // else, so nothing can sneak in through a field nobody thought about.
+  const dirty = {
+    ...RESUME_DATA,
+    jobs: [{
+      kind: "kitchen", employer: "State Prison", year_started: 2020,
+      bullets: [{ verb: "Cooked", object: "for the cellblock", tools: [], frequency: "", scale: "", result: "" }]
+    }]
+  };
+  const fields = Resume.printableFields(Resume.build(dirty));
+  const found = PaperGate.gate(fields);
+  assert(!found.clean, "a facility name and a cellblock reached the page");
+  const words = found.blocked.map((b) => b.word);
+  assert(words.includes("prison") && words.includes("cellblock"),
+    "the gate missed one of them: " + words.join(", "));
+});
+
+check("a clean resume passes the gate end to end", () => {
+  const found = PaperGate.gate(Resume.printableFields(Resume.build(RESUME_DATA)));
+  assert(found.clean, "a clean resume was flagged: " + JSON.stringify(found.blocked));
 });
 
 console.log("\nSTYLESHEET\n");

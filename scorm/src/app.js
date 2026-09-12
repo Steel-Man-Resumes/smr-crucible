@@ -34,6 +34,9 @@
   var Bullet = root.Bullet;
   var Identity = root.Identity;
   var IDENTITY = root.IDENTITY_V1;
+  var PaperGate = root.PaperGate;
+  var GATE = root.PAPER_GATE_V1;
+  var Resume = root.Resume;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -821,6 +824,90 @@
       }
     },
 
+    /**
+     * THE PAPER GATE, on screen.
+     *
+     * Never a scolding. A person who wrote "prison kitchen" described their
+     * life accurately; the issue is what paper can carry in six seconds, not
+     * what is true.
+     */
+    paper_gate: function (card) {
+      var built = Resume.build(resumeData());
+      var found = PaperGate.gate(Resume.printableFields(built));
+
+      for (var i = 0; i < GATE.COPY.intro.length; i++) {
+        card.appendChild(el("p", "screen-body", GATE.COPY.intro[i]));
+      }
+
+      // Translations first: these are offers, and an offer lands better than
+      // a refusal. Doctrine: "The correct move is always translation."
+      for (var t = 0; t < found.translations.length; t++) {
+        var tr = found.translations[t];
+        var box = el("div", "gate-item");
+        box.appendChild(el("p", "gate-item-label", GATE.COPY.translationLabel));
+        box.appendChild(el("p", "gate-found", tr.found));
+        if (tr.to) box.appendChild(el("p", "gate-swap", tr.to));
+        box.appendChild(el("p", "gate-note", tr.note));
+        card.appendChild(box);
+      }
+
+      for (var b = 0; b < found.blocked.length; b++) {
+        var hit = found.blocked[b];
+        var row = el("div", "gate-item gate-item-blocked");
+        row.appendChild(el("p", "gate-item-label", GATE.COPY.blockedLabel));
+        row.appendChild(el("p", "gate-found", hit.word));
+        row.appendChild(el("p", "gate-note", hit.why));
+        if (hit.swap) row.appendChild(el("p", "gate-swap", "Use: " + hit.swap));
+        else row.appendChild(el("p", "gate-note", GATE.COPY.noSwapNote));
+        card.appendChild(row);
+      }
+
+      card.appendChild(el("p", "footnote", GATE.COPY.outro));
+
+      var fix = el("button", "btn btn-primary", GATE.COPY.keepWorking);
+      fix.type = "button";
+      fix.onclick = function () { go("mine_more"); };
+      card.appendChild(fix);
+    },
+
+    /**
+     * THE DOCUMENT.
+     *
+     * Rendered from resume.js sections. This builder decides nothing about
+     * what goes on the page, only how it looks.
+     */
+    resume: function (card) {
+      var built = Resume.build(resumeData());
+
+      // Why this order and not the other one. Stated, because deciding FOR
+      // somebody and then explaining is respectful, and making them pick
+      // between two formats they have never heard of is not.
+      var choice = el("div", "layout-note");
+      choice.appendChild(el("p", "layout-name", built.layout.name));
+      choice.appendChild(el("p", "layout-why", built.layout.why));
+      var swap = el("button", "link-button",
+        built.layout.id === "chronological" ? "Put my skills first instead" : "Put my work history first instead");
+      swap.type = "button";
+      swap.onclick = function () {
+        state.layoutOverride = built.layout.id === "chronological" ? "skillsFirst" : "chronological";
+        save();
+        render();
+      };
+      choice.appendChild(swap);
+      card.appendChild(choice);
+
+      var page = el("div", "page");
+      for (var i = 0; i < built.sections.length; i++) {
+        page.appendChild(sectionNode(built.sections[i]));
+      }
+      card.appendChild(page);
+
+      card.appendChild(el("p", "punch",
+        built.lineCount === 1
+          ? "One line, and it is yours."
+          : built.lineCount + " lines, and every one of them is yours."));
+    },
+
     review: function (card) {
       var list = el("dl", "review-list");
       var rows = [
@@ -980,6 +1067,17 @@
     return box;
   }
 
+  /** The shape resume.js and the paper gate both read from. */
+  function resumeData() {
+    return {
+      jobs: state.jobs,
+      skills: state.answers.skills,
+      skills_freetext: state.answers.skills_freetext,
+      thisYear: THIS_YEAR,
+      layoutOverride: state.layoutOverride || null
+    };
+  }
+
   function miningKind() {
     return MINING.KINDS[currentJob().kind] || MINING.KINDS.other_work;
   }
@@ -1109,6 +1207,65 @@
       row.appendChild(doc.createTextNode("  " + hits[i].why));
       slot.appendChild(row);
     }
+  }
+
+  function sectionNode(section) {
+    if (section.kind === "contact") return contactSection(section);
+    if (section.kind === "skills") return skillsSection(section);
+    return historySection(section);
+  }
+
+  /**
+   * The deliberate hole. A labelled empty space with a sentence explaining it,
+   * rather than a missing block that reads as the program being broken.
+   */
+  function contactSection(section) {
+    var node = el("section", "page-section page-contact");
+    node.appendChild(el("p", "page-nameline", section.heading));
+    node.appendChild(el("p", "page-placeholder", section.placeholder));
+    node.appendChild(el("p", "page-note", section.note));
+    return node;
+  }
+
+  function skillsSection(section) {
+    var node = el("section", "page-section");
+    node.appendChild(el("h2", "page-heading", section.heading));
+    if (section.items.length === 0) {
+      node.appendChild(el("p", "page-empty", "Nothing here yet."));
+      return node;
+    }
+    var list = el("ul", "page-skills");
+    for (var i = 0; i < section.items.length; i++) {
+      list.appendChild(el("li", "page-skill", section.items[i]));
+    }
+    node.appendChild(list);
+    return node;
+  }
+
+  function historySection(section) {
+    var node = el("section", "page-section");
+    node.appendChild(el("h2", "page-heading", section.heading));
+    for (var i = 0; i < section.jobs.length; i++) {
+      var job = section.jobs[i];
+      var entry = el("div", "page-job");
+
+      var head = el("div", "page-job-head");
+      head.appendChild(el("p", "page-job-title", job.title));
+      if (job.year) {
+        head.appendChild(el("p", "page-job-year", (job.approx ? "About " : "") + job.year));
+      }
+      entry.appendChild(head);
+
+      if (job.employer) entry.appendChild(el("p", "page-job-employer", job.employer));
+
+      var list = el("ul", "page-bullets");
+      for (var b = 0; b < job.bullets.length; b++) {
+        list.appendChild(el("li", "page-bullet", job.bullets[b]));
+      }
+      entry.appendChild(list);
+      node.appendChild(entry);
+    }
+    return node;
   }
 
   function claimCard(claim) {
@@ -1251,6 +1408,14 @@
 
     var target = Flow.resolve(screen.goTo, state);
     if (!target) return;
+
+    // The paper gate only exists when it has something to show. Walking a
+    // person through a screen that says "nothing found" would train them to
+    // tap past it, which is the one thing it cannot afford.
+    if (target === "paper_gate") {
+      var built = Resume.build(resumeData());
+      if (PaperGate.gate(Resume.printableFields(built)).clean) target = "resume";
+    }
 
     // Recall walks forward through the job list, so jobIndex is left pointing
     // at the LAST job entered. Mining must start at the first one, because the
