@@ -1,30 +1,63 @@
 /*
-  Built for a scratched, low-brightness, fingerprinted corrections tablet held
-  at arm's length, and for a reviewer opening the file on a laptop.
+  FORGE TABLET -- Steel Man Resumes
 
-  Constraints that drove every choice here:
-  - System fonts only. A bundled webfont is weight and one more file for a
-    reviewer to account for, and it buys nothing at this reading level.
+  Same design system as the Crucible (apps/consumer/app/globals.css): the sage
+  accent, the warm paper ground, the amber focus ring, IBM Plex, and the
+  terminal-styled text input. Tokens are copied here rather than imported
+  because this package ships alone and must not depend on anything outside its
+  own zip.
+
+  What is deliberately simpler than the web app: one column, no shadows worth
+  the name, no motion beyond a progress bar, and no component library. This
+  runs on a scratched, low-brightness, fingerprinted corrections tablet held at
+  arm's length, and it also has to be read by a security reviewer on a laptop.
+
+  Constraints that drove the rest:
+  - Fonts are BUNDLED (fonts/*.woff2, IBM Plex, OFL-1.1). Never a CDN. A single
+    remote font reference is an automatic security rejection.
   - Minimum 48px touch targets. Resistive tablet screens are imprecise.
-  - Body text 18px, never smaller than 15px anywhere.
-  - WCAG 2.1 AA contrast on every pair below. Montana's ADA Title II deadline
-    is 2027-04-26 and retrofitting contrast later costs more than getting it
-    right now.
-  - Focus is always visible. Some tablets ship with an attached keyboard and
-    some people navigate that way by preference.
+  - Body text 18px, nothing below 15px anywhere.
+  - WCAG 2.1 AA contrast on every pair. Montana's ADA Title II deadline is
+    2027-04-26 and retrofitting contrast costs more than getting it right now.
+  - Focus is always visible; some tablets ship with a keyboard.
   - No color-only meaning anywhere.
 */
 
+/* IBM Plex Sans Variable, latin subset. Relative path, inside the package. */
+@font-face {
+  font-family: "IBM Plex Sans Var";
+  src: url("fonts/ibm-plex-sans-var.woff2") format("woff2-variations");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono Bundled";
+  src: url("fonts/ibm-plex-mono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --ink: #14181d;
-  --ink-soft: #4a5361;
-  --paper: #ffffff;
-  --ground: #f3f4f6;
-  --line: #c3c9d2;
-  --line-strong: #6b7482;
-  --accent: #8c1d1d;        /* 8.3:1 on white */
-  --accent-soft: #fdf2f2;
-  --focus: #0b4fb8;         /* 6.9:1 on white */
+  /* Crucible tokens, verbatim. */
+  --background: #eaede9;
+  --foreground: #1c1e1b;
+  --muted: #54594f;
+  --border: #d3d8d1;
+  --card: #ffffff;
+  --accent: #4f6b57;
+  --surface-elevated: #f5f6f4;
+  --focus: #9b6d1d;
+
+  /* Terminal input, the most recognisable SMR detail. */
+  --term-bg: #10110f;
+  --term-ink: #a7cf98;
+  --term-line: #3b4039;
+  --term-caret: #d7b86e;
+
+  --sans: "IBM Plex Sans Var", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --mono: "IBM Plex Mono Bundled", "IBM Plex Mono", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -32,30 +65,47 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--sans);
   font-size: 18px;
   line-height: 1.55;
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
 }
 
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ----------------------------------------------------------------- topbar */
+
 .topbar {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--foreground);
+  color: var(--background);
   padding: 12px 20px;
 }
 .wordmark {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: #9aa394;
+}
+.product {
+  margin: 1px 0 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .status {
-  margin: 4px 0 0;
-  font-size: 14px;
-  color: #cfd5de;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #9aa394;
 }
 
 .app {
@@ -64,7 +114,7 @@ html, body {
   padding: 20px 16px 40px;
 }
 
-/* ---------------------------------------------------------------- progress */
+/* --------------------------------------------------------------- progress */
 
 .progress-wrap { margin-bottom: 16px; }
 .progress-row {
@@ -75,12 +125,17 @@ html, body {
   margin-bottom: 8px;
   min-height: 44px;
 }
-.progress-label { font-size: 16px; color: var(--ink-soft); font-weight: 600; }
+.progress-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
 .progress-bar {
-  height: 10px;
-  background: #dfe3e9;
-  border: 1px solid var(--line);
+  height: 8px;
+  background: var(--border);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -92,46 +147,44 @@ html, body {
 
 .help-panel {
   margin-top: 14px;
-  background: var(--accent-soft);
-  border: 2px solid var(--accent);
-  border-radius: 8px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--focus);
+  border-radius: 6px;
   padding: 16px 18px;
 }
-.help-title { margin: 0 0 8px; font-size: 18px; }
-.help-panel p { margin: 0 0 10px; }
+.help-title { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+.help-panel p { margin: 0 0 10px; font-size: 17px; }
 .help-panel p:last-child { margin-bottom: 0; }
 
-/* -------------------------------------------------------------------- card */
+/* ------------------------------------------------------------------- card */
 
 .card {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 22px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 26px 22px;
 }
 .screen-title {
   margin: 0 0 10px;
-  font-size: 26px;
+  font-size: 27px;
   line-height: 1.25;
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
-/* The heading receives focus on every screen change so screen readers announce
-   it. :focus-visible rather than :focus so a person tapping through on a
-   tablet does not see a ring around every title, while a person on a keyboard
-   still gets one. */
 .screen-title:focus { outline: none; }
 .screen-title:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
-.screen-help { margin: 0 0 20px; color: var(--ink-soft); }
+.screen-help { margin: 0 0 22px; color: var(--muted); }
 .screen-body { margin: 0 0 14px; }
 .footnote {
-  margin: 20px 0 0;
+  margin: 22px 0 0;
   font-size: 16px;
-  color: var(--ink-soft);
-  border-top: 1px solid var(--line);
+  color: var(--muted);
+  border-top: 1px solid var(--border);
   padding-top: 14px;
 }
 
-/* ----------------------------------------------------------------- options */
+/* ---------------------------------------------------------------- options */
 
 .options { border: 0; margin: 0; padding: 0; display: block; }
 
@@ -141,103 +194,118 @@ html, body {
   gap: 14px;
   min-height: 56px;
   padding: 14px 16px;
-  margin-bottom: 10px;
-  background: var(--paper);
-  border: 2px solid var(--line);
-  border-radius: 8px;
+  margin-bottom: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 6px;
   cursor: pointer;
 }
-.option:hover { border-color: var(--line-strong); }
+.option:hover { border-color: #b9c1b7; border-left-color: #b9c1b7; }
 .option:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .option-input {
   width: 24px;
   height: 24px;
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   flex: 0 0 auto;
   accent-color: var(--accent);
 }
-/* Selection is marked by border weight and background as well as the control,
-   so it never depends on color alone. */
-.option-input:checked ~ .option-text .option-label { font-weight: 700; }
+/* Selection is carried by the left rule, the fill and the weight, never by
+   color alone. */
+.option-input:checked ~ .option-text .option-label { font-weight: 600; }
 .option:has(.option-input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: #c4cfc2;
+  border-left-color: var(--accent);
+  background: var(--surface-elevated);
 }
 
 .option-text { display: flex; flex-direction: column; gap: 2px; }
 .option-label { font-size: 18px; }
-.option-desc { font-size: 16px; color: var(--ink-soft); }
+.option-desc { font-size: 16px; color: var(--muted); }
 
-/* ------------------------------------------------------------------ fields */
+/* ----------------------------------------------------------------- fields */
 
-.field { margin-top: 22px; }
-.field-label { display: block; font-weight: 600; margin-bottom: 8px; }
-.field-hint { margin: 6px 0 0; font-size: 15px; color: var(--ink-soft); }
+.field { margin-top: 24px; }
+.field-label { display: block; font-weight: 600; font-size: 17px; margin-bottom: 8px; }
+.field-hint { margin: 6px 0 0; font-size: 15px; color: var(--muted); }
 
-.input, .textarea, .select {
+/* The terminal input. Straight from the Crucible. High contrast, and it makes
+   a free-text answer feel like a different kind of act than ticking a box. */
+.input, .textarea {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--term-ink);
+  background: var(--term-bg);
+  caret-color: var(--term-caret);
+  border: 1px solid var(--term-line);
+  border-radius: 5px;
+  padding: 13px 14px;
+  min-height: 52px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.input::placeholder, .textarea::placeholder { color: #6d7a68; }
+.textarea { resize: vertical; line-height: 1.6; }
+
+.select {
   width: 100%;
   font: inherit;
-  color: var(--ink);
-  background: var(--paper);
-  border: 2px solid var(--line-strong);
-  border-radius: 8px;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--muted);
+  border-radius: 5px;
   padding: 12px 14px;
   min-height: 52px;
 }
-.textarea { resize: vertical; line-height: 1.5; }
-.input:focus, .textarea:focus, .select:focus {
-  outline: 3px solid var(--focus);
-  outline-offset: 1px;
-  border-color: var(--focus);
-}
 
-/* ------------------------------------------------------------------ review */
+/* ----------------------------------------------------------------- review */
 
 .review-list { margin: 4px 0 24px; }
 .review-term {
-  font-size: 15px;
+  font-size: 13px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-  font-weight: 700;
-  margin-top: 16px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 18px;
 }
 .review-value {
   margin: 4px 0 0;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
 }
 
-/* -------------------------------------------------------------------- code */
+/* ------------------------------------------------------------------- code */
 
 .code-box {
-  margin: 20px 0 24px;
-  padding: 22px 18px;
+  margin: 22px 0 26px;
+  padding: 24px 18px;
   text-align: center;
-  background: var(--accent-soft);
-  border: 3px solid var(--accent);
-  border-radius: 10px;
+  background: var(--term-bg);
+  border: 1px solid var(--term-line);
+  border-radius: 6px;
 }
 .code-label {
-  margin: 0 0 10px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--term-caret);
 }
 .code-value {
   margin: 0;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-family: var(--mono);
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--term-ink);
   word-break: break-all;
 }
-.code-note { margin: 12px 0 0; font-size: 15px; color: var(--ink-soft); }
+.code-note { margin: 14px 0 0; font-size: 15px; color: #8a9685; }
 
-/* --------------------------------------------------------------- nav, misc */
+/* ---------------------------------------------------------- nav and misc */
 
 .nav { margin-top: 24px; }
 
@@ -247,17 +315,16 @@ html, body {
   min-height: 56px;
   font: inherit;
   font-size: 19px;
-  font-weight: 650;
-  border-radius: 8px;
+  font-weight: 600;
+  border-radius: 6px;
   padding: 14px 20px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   cursor: pointer;
 }
-.btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
-.btn-primary { background: var(--accent); color: var(--paper); border: 2px solid var(--accent); }
-.btn-primary:hover { background: #731717; }
-.btn-secondary { background: var(--paper); color: var(--ink); border: 2px solid var(--line-strong); }
-.btn-secondary:hover { background: var(--ground); }
+.btn-primary { background: var(--accent); color: #ffffff; border: 1px solid var(--accent); }
+.btn-primary:hover { background: #435a4a; border-color: #435a4a; }
+.btn-secondary { background: var(--card); color: var(--foreground); border: 1px solid var(--muted); }
+.btn-secondary:hover { background: var(--surface-elevated); }
 
 .link-button {
   background: none;
@@ -267,17 +334,17 @@ html, body {
   font-weight: 600;
   color: var(--accent);
   text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
   min-height: 44px;
   padding: 0 4px;
 }
-.link-button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .error-slot {
   margin: 4px 0 0;
   min-height: 24px;
-  font-weight: 650;
-  color: var(--accent);
+  font-weight: 600;
+  color: #8a3121;
 }
 .error-slot:empty { min-height: 0; }
 
@@ -285,8 +352,8 @@ html, body {
   max-width: 680px;
   margin: 0 auto;
   padding: 0 16px 32px;
-  font-size: 15px;
-  color: var(--ink-soft);
+  font-size: 14px;
+  color: var(--muted);
 }
 .footer p { margin: 0; }
 

@@ -39,18 +39,24 @@ const DIST = join(HERE, "dist");
 /* ------------------------------------------------------------- identity */
 
 /**
- * The product has not been named yet. That is Troy's call.
+ * FORGE TABLET. Named by Troy 2026-09-11.
  *
- * Everything a human sees is in this one object so renaming is a one-line
- * change followed by a rebuild. The identifier is what the LMS stores, so once
- * a package has been submitted for vetting, PACKAGE_ID should not change: a
- * new identifier reads to an LMS as an unrelated course and disconnects every
- * learner record already attached to the old one.
+ * The naming convention across the family is literal and descriptive: The
+ * Forge and The Refinery on the web, Forge Tablet in a facility, and Refinery
+ * Tablet if and when that one is built. A person in a facility and a vetting
+ * reviewer reading a catalog listing should both be able to tell what it is
+ * without being told.
+ *
+ * Everything a human sees is in this one object, so a rename is a one-line
+ * change and a rebuild. PACKAGE_ID is the exception: it is what the LMS
+ * stores, so once a package has been submitted for vetting it must not change.
+ * A new identifier reads to an LMS as an unrelated course and disconnects
+ * every learner record already attached to the old one.
  */
 const BRAND = {
-  PACKAGE_ID: "SMR_INFACILITY_INTAKE",
-  COURSE_TITLE: "Build Your Story",
-  ITEM_TITLE: "Build Your Story",
+  PACKAGE_ID: "SMR_FORGE_TABLET",
+  COURSE_TITLE: "Forge Tablet",
+  ITEM_TITLE: "Forge Tablet",
   ORGANIZATION: "Steel Man Resumes",
   DESCRIPTION:
     "A short, offline career intake. Seven questions about what you are good at " +

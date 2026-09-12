@@ -1,12 +1,18 @@
-# In-facility intake, packaged as SCORM
+# Forge Tablet
 
 An offline, deterministic career intake built to run on a corrections tablet
 inside a facility, and to survive the security vetting that gets content onto
 one.
 
-**This product does not have a name yet. That is Troy's call.** Everything a
-person sees comes from `BRAND` at the top of `build.mjs` and from `src/screens.js`,
-so naming it is a one-line change and a rebuild.
+**Named by Troy 2026-09-11.** The convention across the family is literal and
+descriptive: The Forge and The Refinery on the web, **Forge Tablet** in a
+facility, Refinery Tablet if and when that one gets built. A person in a
+facility and a reviewer reading a catalog listing should both be able to tell
+what it is without being told.
+
+Everything a human sees comes from `BRAND` at the top of `build.mjs` and from
+`src/screens.js`. `PACKAGE_ID` is the exception: it is what the LMS stores, so
+once a package is submitted for vetting it must not change.
 
 ---
 
@@ -90,13 +96,16 @@ src/             the package itself. everything in here ships
   carry-code.js  the codec
   scorm-api.js   SCORM 1.2 and 2004 adapter
   styles.css
+  fonts/         IBM Plex Sans and Mono, latin subset, OFL-1.1. bundled, never a CDN
 harness/         a fake LMS for offline testing. NEVER ships
 dist/            build output. gitignored
 ```
 
 Zero runtime dependencies. Zero build dependencies. Nothing to `npm install`.
+The only third-party bytes in the package are two IBM Plex font files under the
+SIL Open Font License 1.1, bundled locally and hashed in the report.
 That is not minimalism for its own sake: **auditability is a security feature
-here.** A reviewer facing eight readable files can approve it. A reviewer facing
+here.** A reviewer facing eight readable source files and two fonts can approve it. A reviewer facing
 a minified bundle with a thousand transitive dependencies has to either trust us
 or say no, and their job is to say no.
 
@@ -111,6 +120,7 @@ node test.mjs                 # static tests
 node e2e.mjs                  # browser run, SCORM 1.2
 node e2e.mjs --scorm 2004     # browser run, SCORM 2004
 node shots.mjs                # screenshots into dist/shots/
+node preview.mjs              # one self-contained HTML file, for showing people
 node harness/serve.mjs        # then open http://127.0.0.1:8787/harness/
 ```
 
@@ -182,7 +192,7 @@ compression library is needed, on either SCORM version.**
 | Browser run, SCORM 2004 | 26 of 26 pass |
 | Containment report | PASS, both packages |
 | Zip structure | manifest at root and first entry, CRC verified |
-| SCORM Cloud | **not yet run. This is the next gate.** |
+| SCORM Cloud | account created 2026-09-11. **Upload is the next gate.** |
 | Real LMS | not yet |
 
 `e2e.mjs` asserts, in a real browser, that:
@@ -217,23 +227,20 @@ any document.
 
 ## What is still owed
 
-1. **The name.** Troy's call.
-2. **The script design pass.** `src/screens.js` is a faithful port of the live
+1. **The script design pass.** `src/screens.js` is a faithful port of the live
    Mini Forge intake plus the three screens a facility deployment needs
    (consent, review, carry code). It works. It has not had the deterministic
    design pass the build handoff asked for, which is collaborative and is the
    real centerpiece of this product.
-3. **SCORM Cloud.** Run both zips through the free tier before anything goes to
+2. **SCORM Cloud.** Run both zips through the free tier before anything goes to
    CypherWorx.
-4. **Redemption on the outside.** The consumer app currently treats an import
+3. **Redemption on the outside.** The consumer app currently treats an import
    code as a pointer to a database row. A carry code is not a pointer, it is the
    payload. That is a separate, small piece of work in `apps/consumer`.
-5. **The data-ownership position.** The doctrine says users own their data, no
-   surveillance, no law-enforcement data sharing. A facility may expect access
-   the doctrine refuses. The consent screen currently states the strong version:
-   nobody reads your answers. **That is a commitment, and it needs to be Troy's
-   decision, not a default that got shipped.**
-6. **Accessibility audit.** Built to WCAG 2.1 AA by construction, not yet
+4. ~~**The data-ownership position.**~~ **Decided 2026-09-11:** keep the strong
+   version on screen and put it in writing for the 9/22 packet. See
+   `~/todash/smr/SCORM-DATA-FLOW-ONE-PAGER-2026-09-11.md`. No code change.
+5. **Accessibility audit.** Built to WCAG 2.1 AA by construction, not yet
    audited against it. Montana's ADA Title II deadline is 2027-04-26.
 
 ---
