@@ -342,6 +342,64 @@ async function main() {
     check("nothing written to localStorage", storage.ls === 0, "length " + storage.ls);
     check("nothing written to sessionStorage", storage.ss === 0, "length " + storage.ss);
     check("no cookies set", storage.ck === "", storage.ck);
+
+    console.log("\nTHE PREVIEW FILE\n");
+
+    // This is the gap that shipped a broken preview. The harness run above
+    // exercises src/ directly, and the preview is a SEPARATE build that
+    // re-inlines those files. When Phase 1 added three scripts, the preview's
+    // hand-written script list did not get them, so every button threw on an
+    // undefined global -- in the exact file Troy was clicking, while every
+    // test here stayed green.
+    //
+    // So the preview gets driven too, in a real browser, every run.
+    const previewPath = join(HERE, "dist", "forge-tablet-preview.html");
+    if (!existsSync(previewPath)) {
+      check("the preview file exists", false, "run node preview.mjs first");
+    } else {
+      const pv = await context.newPage();
+      const previewErrors = [];
+      pv.on("pageerror", (e) => previewErrors.push(String(e)));
+
+      await pv.goto(`${ORIGIN}/dist/forge-tablet-preview.html`, { waitUntil: "load" });
+
+      const globals = await pv.evaluate(() => ({
+        tables: typeof window.TABLES_V1,
+        carry: typeof window.CarryCode,
+        screens: typeof window.SCREENS,
+        flow: typeof window.Flow,
+        narrowing: typeof window.Narrowing,
+        ladders: typeof window.NARROWINGS_V1,
+        scorm: typeof window.Scorm
+      }));
+      const undefinedGlobals = Object.entries(globals)
+        .filter(([, t]) => t === "undefined")
+        .map(([k]) => k);
+      check("every global the runtime needs is defined in the preview",
+        undefinedGlobals.length === 0,
+        "missing: " + undefinedGlobals.join(", ") + " -- a script in src/ is not inlined");
+
+      // The actual reported symptom: the first button does nothing.
+      const firstTitle = await pv.locator("#screen-title").textContent();
+      await pv.locator("button.btn-primary").click();
+      await sleep(200);
+      const secondTitle = await pv.locator("#screen-title").textContent();
+      check("the first button advances the screen", firstTitle !== secondTitle,
+        'stayed on "' + firstTitle + '"');
+
+      // And keep going far enough to cross a route branch and a narrowing,
+      // because those are the parts that depend on the new globals.
+      await pv.locator("button.btn-primary").click();   // proof
+      await pv.locator("button.btn-primary").click();   // consent
+      await pv.locator("#readiness_stage-action").check();
+      await pv.locator("button.btn-primary").click();
+      const routed = await pv.locator("#screen-title").textContent();
+      check("the router works in the preview", routed.includes("not waste your time"), "saw: " + routed);
+
+      check("no page errors anywhere in the preview", previewErrors.length === 0,
+        previewErrors.slice(0, 3).join("\n        "));
+      await pv.close();
+    }
   } finally {
     await browser.close();
     server.kill();

@@ -27,7 +27,7 @@
  * can be made by clicking through the thing rather than reading about it.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,7 +57,25 @@ function main() {
   if (!bodyMatch) throw new Error("could not find <body> in src/index.html");
   const body = bodyMatch[1].replace(/<script src="[^"]+"><\/script>\s*/g, "").trim();
 
-  const scripts = ["tables.v1.js", "carry-code.js", "screens.js", "scorm-api.js", "app.js"]
+  // Read the script list OUT of index.html, in order, rather than keeping a
+  // second copy here. A hand-maintained list is how this broke: Phase 1 added
+  // flow.js, narrowing.js and narrowings.v1.js to the package, the preview's
+  // hard-coded list did not get them, and every button in the preview threw on
+  // an undefined global while the real package worked fine.
+  const scriptNames = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  if (scriptNames.length === 0) throw new Error("no scripts found in src/index.html");
+
+  // And prove the two never diverge again: every .js in src/ must be loaded.
+  const onDisk = readdirSync(SRC).filter((f) => f.endsWith(".js")).sort();
+  const missing = onDisk.filter((f) => !scriptNames.includes(f));
+  if (missing.length) {
+    throw new Error(
+      "src/ contains scripts that index.html never loads: " + missing.join(", ") +
+      "\nEither load them or delete them. A script nobody loads is a global nobody defines."
+    );
+  }
+
+  const scripts = scriptNames
     .map((f) => "<script>\n/* ===== " + f + " ===== */\n" + read(f) + "\n</script>")
     .join("\n");
 
