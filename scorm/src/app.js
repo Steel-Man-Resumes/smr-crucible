@@ -34,6 +34,8 @@
   var Bullet = root.Bullet;
   var Identity = root.Identity;
   var IDENTITY = root.IDENTITY_V1;
+  var Safety = root.Safety;
+  var SAFETY = root.SAFETY_V1;
   var PaperGate = root.PaperGate;
   var GATE = root.PAPER_GATE_V1;
   var Resume = root.Resume;
@@ -54,6 +56,15 @@
     // The bullet currently being mined. Pushed onto the job when confirmed,
     // discarded if the person walks away from it.
     draft: emptyDraft(),
+    // What the safety layer noticed on THIS screen, for the length of ONE
+    // transition. Set just before the transition resolves, cleared the moment
+    // the next screen renders. It is not in pack() and it must never be: see
+    // the test that fails the build if a safety flag ever reaches the saved
+    // payload.
+    safetyLevel: null,
+    // Where to come back to after a safety detour. Ephemeral for the same
+    // reason.
+    safetyReturn: null,
     // The minimizer nudge fires once per draft, never twice. Chasing the same
     // "just" a second time stops being a good question and starts being an
     // argument.
@@ -83,8 +94,8 @@
     var a = state.answers;
     return JSON.stringify({
       v: 2,
-      at: state.at,
-      h: state.history,
+      at: reportableLocation(),
+      h: reportableHistory(),
       rt: state.route,
       j: state.jobs,
       ji: state.jobIndex,
@@ -179,6 +190,56 @@
     return out;
   }
 
+  /**
+   * SCREENS THE LMS MUST NEVER SEE.
+   *
+   * cmi.core.lesson_location is reported to the LMS and is visible to the
+   * institution. suspend_data is the same. So writing "safety_crisis" into
+   * either one tells a facility that this person hit a crisis screen, which is
+   * exactly the surveillance safety.v1.js promises is structurally impossible.
+   *
+   * Caught by a browser test asserting no safety token reaches the SCORM call
+   * log, not by inspection. It would have shipped otherwise, and it would have
+   * made the consent screen a lie.
+   *
+   * Anywhere in the safety layer reports as the screen the person will return
+   * to. Resume still lands them in the right place and the record shows them
+   * working on their resume, which is what they were doing.
+   */
+  function reportableLocation() {
+    var screen = currentScreen();
+    if (screen && screen.kind && screen.kind.indexOf("safety_") === 0) {
+      return state.safetyReturn || "review";
+    }
+    if (state.at === "pause") return state.safetyReturn || "review";
+    return state.at;
+  }
+
+  /**
+   * The same rule, applied to the trail rather than the current position.
+   *
+   * state.history is what Back walks, so it has to hold every screen in
+   * memory. The SAVED copy must not: a history containing safety_crisis tells
+   * the institution the person was there just as plainly as a location field
+   * would, and it survives in the learner record for as long as the record
+   * does.
+   *
+   * Second half of the same leak, and it was still failing the browser test
+   * after the location fix. Worth remembering that a privacy property has to
+   * be checked against everything that gets written, not against the one
+   * field you thought of first.
+   */
+  function reportableHistory() {
+    var out = [];
+    for (var i = 0; i < state.history.length; i++) {
+      var id = state.history[i];
+      var screen = byId(id);
+      var isSafety = (screen && screen.kind && screen.kind.indexOf("safety_") === 0) || id === "pause";
+      if (!isSafety) out.push(id);
+    }
+    return out;
+  }
+
   function save() {
     var n = scorm.names();
     var payload = pack();
@@ -190,7 +251,7 @@
       payload = pack();
     }
     scorm.set(n.suspend, payload);
-    scorm.set(n.location, state.at);
+    scorm.set(n.location, reportableLocation());
     scorm.commit();
     renderStatus();
   }
@@ -352,6 +413,13 @@
   // is not merely redundant, it is a trapdoor: on a narrowing screen it
   // resolved the transition and moved on with no year recorded at all.
   var TAP_TO_ADVANCE = {
+    safety_crisis: true,
+    safety_heavy: true,
+    safety_paths: true,
+    safety_breathing: true,
+    safety_grounding: true,
+    safety_return: true,
+    pause: true,
     narrowing: true,
     job_more: true,
     // The truth gate lives on this screen. A Next button beside it walks past
@@ -908,6 +976,112 @@
           : built.lineCount + " lines, and every one of them is yours."));
     },
 
+    // ---- THE SAFETY LAYER ----------------------------------------------
+    // Nothing on these screens is saved, counted, or reported. The person is
+    // told that, in the first breath, because being noticed by software is
+    // frightening in a facility unless you know where the noticing goes.
+
+    safety_crisis: function (card) {
+      safetyScreen(card, SAFETY.CRISIS_SCREEN, "safety_paths", "safety_breathing");
+    },
+
+    safety_heavy: function (card) {
+      safetyScreen(card, SAFETY.HEAVY_SCREEN, "safety_breathing", "safety_paths");
+    },
+
+    safety_paths: function (card) {
+      var P = SAFETY.PATHS;
+      card.appendChild(el("p", "screen-body", P.intro));
+      var list = el("div", "paths");
+      for (var i = 0; i < P.items.length; i++) {
+        var row = el("div", "path");
+        row.appendChild(el("p", "path-name", P.items[i].name));
+        row.appendChild(el("p", "path-detail", P.items[i].detail));
+        list.appendChild(row);
+      }
+      card.appendChild(list);
+      card.appendChild(el("p", "footnote", P.closing));
+      card.appendChild(bigButton("Take me back", function () { safetyBack(); }));
+      card.appendChild(secondaryButton("Help me get through the next minute", function () { go("safety_breathing"); }));
+    },
+
+    /**
+     * Box breathing, on a tablet, with no internet and no model. Four counts
+     * a side, four cycles. This is the part that does something in the next
+     * sixty seconds rather than handing somebody a phone number they cannot
+     * dial from where they are.
+     */
+    safety_breathing: function (card) {
+      var B = SAFETY.BREATHING;
+      card.appendChild(el("p", "screen-body", B.intro));
+
+      var box = el("div", "breath");
+      var ring = el("div", "breath-ring");
+      var phase = el("p", "breath-phase", B.phases[0].label);
+      var count = el("p", "breath-count", String(B.seconds));
+      ring.appendChild(phase);
+      ring.appendChild(count);
+      box.appendChild(ring);
+      var cycle = el("p", "breath-cycle", "Round 1 of " + B.cycles);
+      box.appendChild(cycle);
+      card.appendChild(box);
+
+      var startedAt = Date.now();
+      stopBreathing();
+      breathTimer = root.setInterval(function () {
+        var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        var at = Safety.breathAt(elapsed);
+        if (at.finished) {
+          stopBreathing();
+          clear(phase); phase.appendChild(doc.createTextNode("Done"));
+          clear(count); count.appendChild(doc.createTextNode(""));
+          clear(cycle); cycle.appendChild(doc.createTextNode(B.done));
+          ring.className = "breath-ring breath-done";
+          return;
+        }
+        clear(phase); phase.appendChild(doc.createTextNode(at.phase.label));
+        clear(count); count.appendChild(doc.createTextNode(String(at.secondsLeft)));
+        clear(cycle); cycle.appendChild(doc.createTextNode("Round " + at.cycle + " of " + B.cycles));
+        ring.className = "breath-ring breath-" + at.phase.id;
+      }, 250);
+
+      card.appendChild(bigButton("I am done with this", function () { stopBreathing(); safetyBack(); }));
+      card.appendChild(secondaryButton("Try the five things instead", function () { stopBreathing(); go("safety_grounding"); }));
+    },
+
+    safety_grounding: function (card) {
+      var G = SAFETY.GROUNDING;
+      card.appendChild(el("p", "screen-body", G.intro));
+      var list = el("div", "grounding");
+      for (var i = 0; i < G.steps.length; i++) {
+        var step = G.steps[i];
+        var row = el("div", "ground-step");
+        row.appendChild(el("p", "ground-count", String(step.count)));
+        var body = el("div", "ground-body");
+        body.appendChild(el("p", "ground-sense", "things " + step.sense));
+        body.appendChild(el("p", "ground-hint", step.hint));
+        row.appendChild(body);
+        list.appendChild(row);
+      }
+      card.appendChild(list);
+      card.appendChild(el("p", "footnote", G.done));
+      card.appendChild(bigButton("Take me back", function () { safetyBack(); }));
+    },
+
+    safety_return: function (card) {
+      card.appendChild(el("p", "screen-body",
+        "Nothing you did is lost, whichever you pick."));
+      card.appendChild(bigButton("Carry on where I was", function () { safetyBack(); }));
+      card.appendChild(secondaryButton(SAFETY.PAUSE.confirm, function () { go("pause"); }));
+    },
+
+    pause: function (card) {
+      for (var i = 0; i < SAFETY.PAUSE.body.length; i++) {
+        card.appendChild(el("p", "screen-body", SAFETY.PAUSE.body[i]));
+      }
+      card.appendChild(bigButton("Carry on after all", function () { safetyBack(); }));
+    },
+
     review: function (card) {
       var list = el("dl", "review-list");
       var rows = [
@@ -1276,6 +1450,52 @@
     }
   }
 
+  var breathTimer = null;
+  function stopBreathing() {
+    if (breathTimer) { root.clearInterval(breathTimer); breathTimer = null; }
+  }
+
+  /**
+   * Shared shape for the two response screens. The order of the two offers
+   * differs by level: somebody who wrote something explicit is pointed at a
+   * person first, somebody who wrote something heavy is offered a minute to
+   * settle first. Neither is forced and both can be declined.
+   */
+  function safetyScreen(card, copy, primaryTarget, secondaryTarget) {
+    for (var i = 0; i < copy.body.length; i++) {
+      card.appendChild(el("p", "screen-body", copy.body[i]));
+    }
+    card.appendChild(bigButton(copy.primary, function () { go(primaryTarget); }));
+    card.appendChild(secondaryButton(copy.secondary, function () { go(secondaryTarget); }));
+    card.appendChild(secondaryButton(copy.dismiss, function () { safetyBack(); }));
+  }
+
+  /**
+   * Back to where they were writing. Writing something honest must never cost
+   * somebody their place, so this returns to the screen the detour came from
+   * rather than dropping them at the start of anything.
+   */
+  function safetyBack() {
+    stopBreathing();
+    var target = state.safetyReturn;
+    state.safetyReturn = null;
+    go(target || "review");
+  }
+
+  function bigButton(label, onClick) {
+    var b = el("button", "btn btn-primary", label);
+    b.type = "button";
+    b.onclick = onClick;
+    return b;
+  }
+
+  function secondaryButton(label, onClick) {
+    var b = el("button", "btn btn-secondary", label);
+    b.type = "button";
+    b.onclick = onClick;
+    return b;
+  }
+
   function sectionNode(section) {
     if (section.kind === "contact") return contactSection(section);
     if (section.kind === "skills") return skillsSection(section);
@@ -1468,6 +1688,17 @@
     // The dig site. Fires once per draft, on the way out of the free-text
     // answer, and never blocks: a person who means "just" gets to say it.
     // The detour itself is declared on the screen, not jumped to from here.
+    // The safety layer is allowed to notice and not to remember. It looks at
+    // what is on THIS screen, routes once, and the flag is gone.
+    if (screen.goTo && screen.goTo.safety) {
+      var field = screen.text && screen.text.field;
+      var written = field
+        ? (state.draft[field] !== undefined ? state.draft[field] : state.answers[field])
+        : "";
+      state.safetyLevel = Safety.detect(written);
+      if (state.safetyLevel) state.safetyReturn = Flow.resolve({ safety: {}, fallback: screen.goTo.fallback }, state);
+    }
+
     if (screen.id === "mine_object") {
       state.minimizerHit = !state.nudged && !!Bullet.minimizer(state.draft.object);
       if (state.minimizerHit) state.nudged = true;
@@ -1504,6 +1735,8 @@
   function go(id) {
     if (state.at !== id) state.history.push(state.at);
     state.at = id;
+    // One transition, then forgotten.
+    state.safetyLevel = null;
     state.rung = null;
     openPanel = null;
     // Commit on every transition. A tablet that dies between screens should

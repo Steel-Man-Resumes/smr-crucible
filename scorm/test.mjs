@@ -44,6 +44,8 @@ const IDENTITY = require("./src/identity.v1.js");
 const PaperGate = require("./src/paper-gate.js");
 const GATE = require("./src/paper-gate.v1.js");
 const Resume = require("./src/resume.js");
+const Safety = require("./src/safety.js");
+const SAFETY = require("./src/safety.v1.js");
 
 let passed = 0;
 let failed = 0;
@@ -494,7 +496,7 @@ const SCREEN_IDS = new Set(SCREENS.SCREENS.map((s) => s.id));
 check("every transition points at a screen that exists", () => {
   const broken = [];
   for (const screen of SCREENS.SCREENS) {
-    for (const target of Flow.targetsOf(screen.goTo)) {
+    for (const target of Flow.reachableFrom(screen)) {
       if (!SCREEN_IDS.has(target)) broken.push(screen.id + " -> " + target);
     }
   }
@@ -511,7 +513,7 @@ check("every screen is reachable from the start", () => {
     const id = queue.shift();
     const screen = SCREENS.SCREENS.find((s) => s.id === id);
     if (!screen) continue;
-    for (const target of Flow.targetsOf(screen.goTo)) {
+    for (const target of Flow.reachableFrom(screen)) {
       if (!seen.has(target)) { seen.add(target); queue.push(target); }
     }
   }
@@ -1401,6 +1403,208 @@ check("index.html loads every shipped script, in an order that works", () => {
       data + " loads after " + engine + ", so the engine sees an undefined global");
   }
   assert(loaded[loaded.length - 1] === "app.js", "app.js is not loaded last");
+});
+
+console.log("\nTHE SAFETY LAYER\n");
+
+check("explicit statements are noticed", () => {
+  const said = [
+    "sometimes I want to die",
+    "I think about killing myself",
+    "everyone would be better off without me",
+    "there is nothing to live for anymore",
+    "I have been hurting myself again"
+  ];
+  for (const line of said) {
+    assert(Safety.detect(line) === "crisis", 'missed: "' + line + '"');
+  }
+});
+
+check("heavy is treated as heavy, not as crisis", () => {
+  // Getting this wrong in the alarming direction teaches somebody to stop
+  // writing honestly, which costs them the entire product.
+  for (const line of ["I hate myself for it", "I wasted my life", "I am a failure"]) {
+    assert(Safety.detect(line) === "heavy",
+      '"' + line + '" came back as ' + Safety.detect(line) + " rather than heavy");
+  }
+});
+
+check("ordinary writing is left completely alone", () => {
+  // Every one of these is something somebody in this population plausibly
+  // writes about work, and a crisis screen on any of them would be a failure.
+  const ordinary = [
+    "that job killed me but the money was good",
+    "I was dying to get off the night shift",
+    "the dead end of that place",
+    "I killed it on the sales floor",
+    "my back was killing me by the end of a double",
+    "we had a dead stop on the line",
+    "I would die for a job like that",
+    "cutting steel all day",
+    "I cut my hours back to take classes"
+  ];
+  for (const line of ordinary) {
+    assert(Safety.detect(line) === null,
+      'false positive on: "' + line + '" -> ' + Safety.detect(line));
+  }
+});
+
+check("negation is respected, which is the biggest false positive there is", () => {
+  const negated = [
+    "I don't want to die, I want to work",
+    "I never think about hurting myself",
+    "I used to hate myself but not now",
+    "I do not want to kill myself"
+  ];
+  for (const line of negated) {
+    assert(Safety.detect(line) === null,
+      'fired on a negated sentence: "' + line + '" -> ' + Safety.detect(line));
+  }
+});
+
+check("a phrase that carries its own negation is not cancelled by an earlier one", () => {
+  // The failure mode of the negation guard itself, and the more dangerous of
+  // the two errors it can make.
+  assert(Safety.detect("i dont want to live, nothing to live for") === "crisis",
+    "the negation guard suppressed a real crisis phrase");
+  assert(Safety.detect("no point, I am better off dead") === "crisis",
+    "an already-negative phrase was cancelled");
+  // And the guard still works on the phrases it is actually for.
+  assert(Safety.detect("I don't want to die") === null, "the guard stopped working");
+});
+
+check("punctuation and spelling do not defeat it", () => {
+  for (const line of ["i wanna die.", "I  WANT  TO  DIE", "i dont want to live -- nothing to live for"]) {
+    assert(Safety.detect(line) !== null, 'missed: "' + line + '"');
+  }
+});
+
+check("empty and junk input is safe", () => {
+  for (const junk of ["", null, undefined, "   ", "!!!", 12345]) {
+    assert(Safety.detect(junk) === null, "detect() misbehaved on " + JSON.stringify(junk));
+  }
+});
+
+check("the detector has no memory", () => {
+  // The property the whole consent promise rests on. detect() must be pure:
+  // calling it with something alarming cannot change what it says next time.
+  Safety.detect("I want to die");
+  assert(Safety.detect("loaded pallets all day") === null,
+    "the detector carried state from one call to the next");
+  assert(Safety.detect("I want to die") === "crisis", "the detector is not stable across calls");
+  assert(typeof Safety.detect === "function" && Object.keys(Safety).length === 3,
+    "the safety module exposes more surface than detect, breathAt and normalize");
+});
+
+check("NOTHING the safety layer notices can reach the saved payload", () => {
+  // The line between a safety feature and a surveillance feature. If a flag
+  // ever lands in pack(), the consent screen is lying and this product should
+  // not ship.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  const packBody = app.slice(app.indexOf("function pack()"), app.indexOf("function unpack("));
+  for (const token of ["safetyLevel", "Safety.detect"]) {
+    assert(!packBody.includes(token),
+      'pack() references "' + token + '". Nothing the safety layer notices may be persisted.');
+  }
+  // pack() is REQUIRED to call reportableLocation(), which is what keeps a
+  // safety screen id out of the saved position. Its absence is the bug.
+  assert(packBody.includes("reportableLocation()"),
+    "pack() writes state.at directly, so closing the tablet on a safety screen " +
+    "leaves that screen id in the learner record.");
+  // And it must not be readable back out either.
+  const unpackBody = app.slice(app.indexOf("function unpack("), app.indexOf("function emptyDraft("));
+  for (const token of ["safetyLevel", "safetyReturn"]) {
+    assert(!unpackBody.includes(token), 'unpack() restores "' + token + '"');
+  }
+});
+
+check("the safety copy never promises to tell anyone, and never threatens to", () => {
+  const text = JSON.stringify(SAFETY).toLowerCase();
+  // Affirmative constructions only. The crisis screen deliberately contains
+  // "nothing has been flagged to staff", which is the true statement and the
+  // whole point, so a blunt substring check on that phrase fails on the
+  // correct copy.
+  for (const phrase of ["we will notify", "staff will be told", "will be reported",
+                        "we have alerted", "we are required to report"]) {
+    assert(!text.includes(phrase), 'the safety copy says "' + phrase + '"');
+  }
+  // And it must say the true thing out loud.
+  assert(text.includes("nothing has been flagged to staff") || text.includes("nobody is being told"),
+    "the crisis screen does not tell the person that nobody is being told");
+});
+
+check("no phone numbers, because none of them work from a tablet inside", () => {
+  const text = JSON.stringify(SAFETY);
+  assert(!/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(text), "a phone number is in the safety copy");
+  assert(!/\b988\b|\b911\b/.test(text), "a hotline number is in the safety copy");
+});
+
+check("every path named is something that exists inside a facility", () => {
+  const names = SAFETY.PATHS.items.map((i) => i.name.toLowerCase()).join(" ");
+  assert(/officer/.test(names), "no officer path");
+  assert(/medical|mental health/.test(names), "no medical or mental health request path");
+  for (const item of SAFETY.PATHS.items) {
+    assert(item.detail && item.detail.length > 25, '"' + item.name + '" has no useful detail');
+  }
+});
+
+check("both response screens offer a way to decline", () => {
+  for (const screen of [SAFETY.CRISIS_SCREEN, SAFETY.HEAVY_SCREEN]) {
+    assert(screen.dismiss && screen.dismiss.length > 0,
+      '"' + screen.title + '" has no way to carry on');
+    assert(screen.primary && screen.secondary, '"' + screen.title + '" is missing an offer');
+  }
+});
+
+check("box breathing paces correctly, all the way through", () => {
+  const B = SAFETY.BREATHING;
+  const per = B.seconds;
+
+  const start = Safety.breathAt(0);
+  assert(start.phase.id === "in" && start.secondsLeft === per && start.cycle === 1,
+    "the first second is wrong: " + JSON.stringify(start));
+
+  assert(Safety.breathAt(per).phase.id === "hold1", "did not move to the first hold");
+  assert(Safety.breathAt(per * 2).phase.id === "out", "did not move to the out breath");
+  assert(Safety.breathAt(per * 3).phase.id === "hold2", "did not move to the second hold");
+  assert(Safety.breathAt(per * 4).cycle === 2, "did not start a second round");
+
+  const total = per * B.phases.length * B.cycles;
+  assert(Safety.breathAt(total).finished === true, "did not finish after " + total + " seconds");
+  assert(Safety.breathAt(total + 30).finished === true, "un-finished itself after the end");
+  assert(!Safety.breathAt(total - 1).finished, "finished a second early");
+});
+
+check("the whole exercise is short enough that somebody in distress will do it", () => {
+  const B = SAFETY.BREATHING;
+  const total = B.seconds * B.phases.length * B.cycles;
+  assert(total >= 30 && total <= 90,
+    "the breathing exercise runs " + total + " seconds. Under thirty does nothing; over ninety nobody finishes.");
+  console.log("        box breathing runs " + total + " seconds across " + B.cycles + " rounds");
+});
+
+check("grounding walks the senses down, five to one", () => {
+  const counts = SAFETY.GROUNDING.steps.map((s) => s.count);
+  equal(counts, [5, 4, 3, 2, 1]);
+  for (const step of SAFETY.GROUNDING.steps) {
+    assert(step.sense && step.hint, "a grounding step is missing its sense or hint");
+  }
+});
+
+check("the heads-up screens come with a way to say not today", () => {
+  for (const [id, copy] of Object.entries(SAFETY.HEADS_UP)) {
+    assert(copy.go && copy.later, id + " does not let somebody defer");
+    assert(/not|later|today/i.test(copy.later), id + " defer option does not read as a real option");
+  }
+});
+
+check("no em dashes or prohibited language in the safety copy", () => {
+  const text = JSON.stringify(SAFETY);
+  assert(!text.includes("—"), "an em dash is in the safety copy");
+  const lower = text.toLowerCase();
+  for (const word of ["felon", "offender", "ex-con", "second chance", "inmate", "convict"]) {
+    assert(!lower.includes(word), 'the safety copy contains "' + word + '"');
+  }
 });
 
 console.log("\nSTYLESHEET\n");

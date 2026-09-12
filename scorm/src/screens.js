@@ -334,7 +334,7 @@
         buys: "This becomes the top of your resume. The few lines that decide whether somebody reads the rest of it.",
         evidence: "Writing about what matters to you does measurable good on its own, whatever comes of the job hunt."
       },
-      goTo: "recall_intro"
+      goTo: { safety: { crisis: "safety_crisis", heavy: "safety_heavy" }, fallback: "recall_intro" }
     },
 
     // ---- RECALL ---------------------------------------------------------
@@ -593,7 +593,7 @@
         rows: 2
       },
       footnote: "Skip it if nothing comes to mind. A strong line does not need this part, it just gets stronger with it.",
-      goTo: "bullet_done",
+      goTo: { safety: { crisis: "safety_crisis", heavy: "safety_heavy" }, fallback: "bullet_done" },
       why: {
         forWhat: "The part that turns a description of a job into evidence of a person.",
         hard: "This is the hardest of the five, because it means claiming you made a difference. Most people will not do that unprompted.",
@@ -707,6 +707,68 @@
         buys: "Something to copy down, and something to pick back up outside with your code.",
         evidence: "The layout was chosen from your own dates. Tap the reason under the heading to see why this order and not the other one."
       }
+    },
+
+    // ---- THE SAFETY LAYER ------------------------------------------------
+    // Reached only by the safety detour declared on the two deepest free-text
+    // screens. Every one of these leads back to where the person was, because
+    // the alternative is that writing something honest costs you your place.
+    //
+    // None of these screens has a `why` panel. A person who has just been
+    // stopped mid-sentence does not need the methodology explained to them.
+
+    {
+      id: "safety_crisis",
+      kind: "safety_crisis",
+      title: "Stop for a second",
+      goTo: "safety_paths"
+    },
+
+    {
+      id: "safety_heavy",
+      kind: "safety_heavy",
+      title: "That was a hard thing to write down",
+      goTo: "safety_breathing"
+    },
+
+    {
+      id: "safety_paths",
+      kind: "safety_paths",
+      title: "Who can actually reach you",
+      goTo: "safety_return"
+    },
+
+    {
+      id: "safety_breathing",
+      kind: "safety_breathing",
+      title: "Breathe with the box",
+      goTo: "safety_return",
+      // Buttons on this screen also lead here. Declared so the route map
+      // stays complete: a screen you can only reach by pressing something is
+      // still a route, and an undeclared one is invisible to a reviewer.
+      alsoReaches: ["safety_grounding"]
+    },
+
+    {
+      id: "safety_grounding",
+      kind: "safety_grounding",
+      title: "Five things",
+      goTo: "safety_return"
+    },
+
+    {
+      id: "safety_return",
+      kind: "safety_return",
+      title: "What do you want to do?",
+      goTo: "review",
+      alsoReaches: ["pause"]
+    },
+
+    {
+      id: "pause",
+      kind: "pause",
+      title: "Put it down",
+      goTo: "review"
     },
 
     {

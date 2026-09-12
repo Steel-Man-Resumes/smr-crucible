@@ -34,6 +34,13 @@
  *   5. { when, then, else }
  *         one of the named predicates in PREDICATES. That list is short and
  *         stays short; each one is a single readable line.
+ *
+ *   6. { safety, fallback }
+ *         route by what the safety layer noticed on this screen. Its own
+ *         shape rather than a generic predicate ON PURPOSE: a reviewer asking
+ *         "where can this product send somebody who writes something
+ *         alarming" should be able to find the answer by scanning for one
+ *         word, not by unpicking a chain of boolean helpers.
  * ---------------------------------------------------------------------------
  */
 
@@ -173,7 +180,27 @@
       return predicate(state) ? next.then : next["else"];
     }
 
+    // The safety detour. state.safetyLevel is set by the runtime immediately
+    // before the transition resolves and cleared immediately after, so it is
+    // never persisted. See safety.js.
+    if (next.safety) {
+      var level = state.safetyLevel;
+      if (level && next.safety[level] !== undefined) return next.safety[level];
+      return next.fallback;
+    }
+
     throw new Error("flow: transition has no recognised shape");
+  }
+
+  /**
+   * Every screen a given screen can lead to, including the ones reached by a
+   * button rather than by an answer. `alsoReaches` is how an in-screen jump
+   * declares itself; without it those routes exist but are invisible in the
+   * transition table, which is exactly the property this file is built to
+   * protect.
+   */
+  function reachableFrom(screen) {
+    return targetsOf(screen.goTo).concat(screen.alsoReaches || []);
   }
 
   /**
@@ -190,6 +217,7 @@
     if (next.then !== undefined) out.push(next.then);
     if (next["else"] !== undefined) out.push(next["else"]);
     if (next.route) for (var r in next.route) out.push(next.route[r]);
+    if (next.safety) for (var sl in next.safety) out.push(next.safety[sl]);
     return out.filter(function (t) { return typeof t === "string"; });
   }
 
@@ -197,6 +225,7 @@
     ROUTES: ROUTES,
     ROUTE_FROM_READINESS: ROUTE_FROM_READINESS,
     PREDICATES: PREDICATES,
+    reachableFrom: reachableFrom,
     routeFromReadiness: routeFromReadiness,
     reviseRouteForMaterial: reviseRouteForMaterial,
     promoteRoute: promoteRoute,

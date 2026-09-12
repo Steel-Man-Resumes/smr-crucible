@@ -563,6 +563,99 @@ async function main() {
     check("nothing written to sessionStorage", storage.ss === 0, "length " + storage.ss);
     check("no cookies set", storage.ck === "", storage.ck);
 
+    console.log("\nTHE SAFETY LAYER\n");
+
+    // Driven on a fresh page rather than in the harness run above, because the
+    // whole point is what happens when somebody writes something the main
+    // walkthrough deliberately does not write.
+    const sp = await context.newPage();
+    const safetyErrors = [];
+    sp.on("pageerror", (e) => safetyErrors.push(String(e)));
+    await sp.goto(`${ORIGIN}/src/index.html`, { waitUntil: "load" });
+
+    // Straight to the deepest free-text question.
+    await sp.locator("button.btn-primary").click();   // welcome
+    await sp.locator("button.btn-primary").click();   // proof
+    await sp.locator("button.btn-primary").click();   // consent
+    await sp.locator("#readiness_stage-preparation").check();
+    await sp.locator("button.btn-primary").click();
+    await sp.locator("button.btn-primary").click();   // route
+    await sp.locator("button.btn-primary").click();   // goals
+    await sp.locator("button.btn-primary").click();   // challenges
+    await sp.locator("#work_type-physical").check();
+    await sp.locator("button.btn-primary").click();
+    await sp.locator("button.btn-primary").click();   // skills
+    await sp.locator("#state-select").selectOption("MT");
+    await sp.locator("button.btn-primary").click();
+
+    const hookTitle = await sp.locator("#screen-title").textContent();
+    check("reached the deepest free-text question", hookTitle.includes("feel like yours"), "saw: " + hookTitle);
+
+    // Ordinary writing must pass straight through. This is the false positive
+    // that would do the most damage, so it is asserted before the true one.
+    await sp.locator("#hook_narrative").fill("That job killed me but I was dying to get back on days.");
+    await sp.locator("button.btn-primary").click();
+    const passedThrough = await sp.locator("#screen-title").textContent();
+    check("ordinary writing about work is not intercepted",
+      passedThrough.includes("work you have done"), "intercepted on: " + passedThrough);
+
+    // Back, and write the real thing.
+    await sp.locator("button.btn-secondary", { hasText: "Back" }).click();
+    await sp.locator("#hook_narrative").fill("Honestly some days I just want to die and nothing to live for.");
+    await sp.locator("button.btn-primary").click();
+
+    const crisisTitle = await sp.locator("#screen-title").textContent();
+    check("an explicit statement is noticed", crisisTitle.includes("Stop for a second"), "saw: " + crisisTitle);
+
+    const crisisBody = await sp.locator(".card").innerText();
+    check("it says plainly that nobody is being told",
+      /nobody is being told/i.test(crisisBody) && /has not been sent|nothing you wrote has been sent/i.test(crisisBody),
+      crisisBody.slice(0, 300));
+    check("it offers a way to decline without argument",
+      /i am all right/i.test(crisisBody), crisisBody.slice(0, 300));
+
+    // The paths. No phone numbers, real routes.
+    await sp.locator("button.btn-primary", { hasText: "who I can actually talk to" }).click();
+    const pathsBody = await sp.locator(".card").innerText();
+    check("the paths are things that exist inside a facility",
+      /officer/i.test(pathsBody) && /medical|mental health/i.test(pathsBody), pathsBody.slice(0, 300));
+    check("no phone number is offered", !/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(pathsBody), pathsBody.slice(0, 300));
+
+    // The thing a hotline number cannot do: handle the next sixty seconds.
+    await sp.locator("button.btn-secondary", { hasText: "next minute" }).click();
+    const breathTitle = await sp.locator("#screen-title").textContent();
+    check("paced breathing is available offline", breathTitle.includes("Breathe"), "saw: " + breathTitle);
+
+    const firstPhase = await sp.locator(".breath-phase").innerText();
+    const firstCount = await sp.locator(".breath-count").innerText();
+    check("the breathing guide starts on the in-breath", /breathe in/i.test(firstPhase), firstPhase);
+    await sleep(2200);
+    const laterCount = await sp.locator(".breath-count").innerText();
+    check("the count actually moves", laterCount !== firstCount,
+      "stuck on " + firstCount + " after two seconds");
+
+    // And the off-ramp returns them to their own sentence, not to the start.
+    await sp.locator("button.btn-primary", { hasText: "done with this" }).click();
+    const returned = await sp.locator("#screen-title").textContent();
+    check("leaving the safety layer returns them to where they were writing",
+      returned.includes("work you have done") || returned.includes("feel like yours"),
+      "landed on: " + returned);
+
+    check("no page errors anywhere in the safety flow", safetyErrors.length === 0,
+      safetyErrors.slice(0, 3).join("\n        "));
+
+    // The line between a safety feature and a surveillance feature, checked in
+    // the browser against the real saved payload rather than by reading code.
+    const saved = await sp.evaluate(() => {
+      try { return JSON.stringify(window.__scormLog ? window.__scormLog() : []); }
+      catch (e) { return "[]"; }
+    });
+    check("nothing the safety layer noticed reached the LMS",
+      !/safety|crisis|heavy/i.test(saved),
+      "a safety flag appears in the SCORM call log");
+
+    await sp.close();
+
     console.log("\nTHE PREVIEW FILE\n");
 
     // This is the gap that shipped a broken preview. The harness run above
