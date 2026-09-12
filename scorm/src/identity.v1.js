@@ -34,8 +34,8 @@
  * fails the build.
  * ---------------------------------------------------------------------------
  *
- * STATUS: CC's draft. Troy rewrites. These are the sentences a person reads
- * about themselves at the moment the work pays off, and that voice is his.
+ * VOICE, set by Troy 2026-09-12: confident, competent, affirming, never
+ * fawning. See the note above CLAIMS for what that means line by line.
  */
 
 /* eslint-disable */
@@ -65,20 +65,42 @@
     other_work: "skilled work"
   };
 
-  /** Tool phrases that mean machinery, not paperwork. */
+  /**
+   * Tool phrases that mean machinery, not paperwork. Kept in step with the
+   * jogger lists in mining.v1.js: a tool a person can tap but that nothing
+   * here recognises is a claim they earned and never got told about. There is
+   * a test that walks every jogger in the corpus against these two lists.
+   */
   var MACHINERY = [
-    "forklift", "pallet jack", "skid steer", "concrete saw", "nail gun", "lift gate",
-    "box truck", "sprinter van", "press", "conveyor", "zero-turn mower", "trimmer",
-    "chainsaw", "blower", "tractor", "baler", "floor buffer", "carpet extractor",
-    "handheld scanner", "rf scanner", "scan tool", "torque wrench", "impact gun",
-    "a lift", "flat top", "fryer", "clippers", "shears", "straight razor",
-    "livestock chute", "metal detector", "camera system", "hoyer lift"
+    // lifting and moving
+    "forklift", "pallet jack", "order picker", "skid steer", "excavator",
+    "lift gate", "dock plate", "hoyer lift", "a lift", "auger", "hay wagon",
+    // vehicles
+    "box truck", "sprinter van", "tractor", "baler", "a vehicle", "trailer",
+    // cutting and driving
+    "concrete saw", "chop saw", "chainsaw", "nail gun", "impact gun",
+    "stump grinder", "slicer", "tire machine",
+    // measuring and diagnostic
+    "scan tool", "multimeter", "torque wrench", "torque driver", "calipers",
+    "laser level", "rf scanner", "handheld scanner", "metal detector",
+    // lines and stations
+    "press", "conveyor", "a register", "camera system", "livestock chute",
+    // floor care
+    "floor buffer", "auto scrubber", "carpet extractor", "wet vac",
+    // grounds
+    "zero-turn mower", "string trimmer", "trimmer", "blower", "spreader",
+    "irrigation lines",
+    // kitchen and shop
+    "flat top", "fryer", "convection oven", "clippers", "shears",
+    "straight razor", "an edger"
   ];
 
   /** Tool phrases that mean a written standard was being kept. */
   var RECORDS = [
     "log", "sheet", "record", "order", "checklist", "plan", "ticket", "manual",
-    "note", "count", "inspection", "data sheet", "blueprint", "planogram"
+    "note", "count", "inspection", "data sheet", "blueprint", "planogram",
+    "bills of lading", "vitals", "workbook", "practice test", "intake form",
+    "access badges", "lockout tagout"
   ];
 
   /** Verbs that mean other people were in their hands. */
@@ -87,70 +109,84 @@
   /**
    * The claims, strongest first. `when` names a trigger the evaluator knows;
    * `evidence` names which mined part gets quoted back as the receipt.
+   *
+   * VOICE: confident, competent, affirming. Never fawning.
+   *
+   * The receipts are what make that possible. Because every sentence below is
+   * bolted to something the person actually said, the copy can state a thing
+   * flatly instead of hedging it into mush. "That is a hiring category" reads
+   * as competence. "That might be something employers could value" reads as a
+   * program that does not believe itself.
+   *
+   * The line that separates affirming from fawning: these sentences are about
+   * the WORK, not about the person's character. Nothing here says brave, or
+   * amazing, or should be proud. It says what the evidence means to somebody
+   * who hires people. That is a bigger compliment and it survives contact with
+   * an interview.
    */
   var CLAIMS = [
     {
       id: "trade",
       when: "sameFieldTwice",
       evidence: "field",
-      title: "This is a field, not a run of jobs",
-      says: "You did not bounce around. You went back to the same kind of work, which is what a trade looks like from the outside."
+      title: "This is a trade, not a run of jobs",
+      says: "You went back to the same work more than once. That is what a trade looks like from the outside, and it is what separates an experienced hire from a warm body."
     },
     {
       id: "equipment",
       when: "ranMachinery",
       evidence: "tools",
       title: "You run equipment",
-      says: "That is its own hiring category. Employers filter for it, and most people applying cannot claim it."
+      says: "That is a hiring category, not a soft skill. Employers filter for it, and most people applying cannot claim it. You can, and now it is written down."
     },
     {
       id: "people",
       when: "heldPeople",
       evidence: "verb",
-      title: "Somebody put new people in your hands",
-      says: "Nobody gets handed training or a crew by accident. That was a judgment about you, made by someone who watched you work."
+      title: "Somebody put people in your hands",
+      says: "Nobody gets handed a trainee or a crew by accident. That was a judgment about you, made by someone who watched you work every day. It counts as supervisory experience because it was."
     },
     {
       id: "volume",
       when: "carriedVolume",
       evidence: "scale",
-      title: "You were trusted with volume",
-      says: "Scale is the thing a reader uses to decide whether you can handle their operation. You have a number now."
+      title: "You carried real volume",
+      says: "Scale is how a reader decides whether you can handle their operation. Most resumes never answer it. Yours does, with a number you can stand behind."
     },
     {
       id: "reliability",
       when: "showedUp",
       evidence: "frequency",
-      title: "You did it again and again",
-      says: "Showing up is the thing employers are most worried about with anybody. You just answered it with a fact instead of a promise."
+      title: "You did it again, and again, and again",
+      says: "Reliability is the thing every employer is quietly worried about. You just answered it with a fact instead of a promise, which is the only way that question ever gets answered well."
     },
     {
       id: "improved",
       when: "changedSomething",
       evidence: "result",
       title: "You left it better than you found it",
-      says: "Most people describe what they were assigned. You described what changed. Those are different people on paper."
+      says: "Most people describe what they were assigned. You described what changed because you were there. On paper those are two different candidates, and the second one gets called."
     },
     {
       id: "standard",
       when: "keptRecords",
       evidence: "tools",
       title: "You worked to a written standard",
-      says: "Logs, tickets and checklists mean somebody could audit your work and it held up."
+      says: "Logs, tickets and checklists mean your work could be audited and it held up. Employers in regulated trades screen for exactly that, and it is hard to fake."
     },
     {
       id: "span",
       when: "spansYears",
       evidence: "years",
       title: "This covers real ground",
-      says: "A work history with years on it reads as a life with work in it. That is not nothing, and it is not what a gap looks like."
+      says: "Years of work, written down with the dates lining up. That is a work history. It is not a gap, and it should never be described as one again."
     },
     {
       id: "breadth",
       when: "crossedTrades",
       evidence: "field",
-      title: "You have worked across more than one trade",
-      says: "That reads as somebody who learns a new job fast, which is worth saying out loud rather than apologising for."
+      title: "You have held your own in more than one trade",
+      says: "That reads as somebody who picks up a new job fast and does not need hand-holding. Lead with it rather than apologising for it."
     }
   ];
 
@@ -160,7 +196,7 @@
    */
   var CLOSING = {
     withField: "That is what a __FIELD__ resume looks like. That is who this is.",
-    withoutField: "That is what your work looks like written down properly.",
+    withoutField: "That is what your work looks like when somebody finally writes it down properly.",
     // Shown only when the person said they were not thinking about work yet
     // and then went and mined real lines anyway. Doctrine: behaviour updates
     // the stage, and the best thing the program can do is notice out loud.

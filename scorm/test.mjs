@@ -620,6 +620,87 @@ check("the frequency ladder has a way out like every other range", () => {
     "no escape on the frequency question");
 });
 
+check("every trade can earn a tool-based claim", () => {
+  // A trade where nothing a person taps is recognised as either machinery or
+  // a written standard is a trade where the identity screen stays silent about
+  // the tools, which is the most commonly earned claim in the product.
+  const silent = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    const recognised = kind.joggers.some((j) => {
+      const phrase = j.phrase.toLowerCase();
+      return IDENTITY.MACHINERY.some((m) => phrase.includes(m)) ||
+             IDENTITY.RECORDS.some((r) => phrase.includes(r));
+    });
+    if (!recognised) silent.push(id);
+  }
+  assert(silent.length === 0,
+    "trades whose tools nobody recognises: " + silent.join(", ") +
+    ". Someone in that trade taps a tool and earns nothing for it.");
+});
+
+check("the verbs read like the trade, not like a resume template", () => {
+  // Generic verbs are the tell that nobody who does the job wrote the list.
+  const generic = ["handled", "assisted", "performed", "utilized", "helped",
+                   "worked", "did", "responsible", "participated", "supported tasks"];
+  const bad = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    for (const verb of kind.verbs) {
+      if (generic.includes(verb.toLowerCase())) bad.push(id + "." + verb);
+    }
+  }
+  // "Supported" survives in care work, where it is the actual word for the job.
+  assert(bad.length === 0, "generic resume verbs in the corpus: " + bad.join(", "));
+});
+
+check("every trade offers at least one verb a person would not claim alone", () => {
+  // Ran, Trained, Set up, Built, Dispatched. These are usually the truest
+  // thing on the page and almost nobody volunteers them, so the list has to
+  // put them where they can be recognised instead.
+  const claimVerbs = ["ran", "trained", "set up", "built", "dispatched", "managed",
+                      "coached", "mentored", "advocated", "facilitated", "taught",
+                      "controlled", "routed", "expedited", "diagnosed", "audited",
+                      "recovered", "organized", "quoted", "assessed", "inspected",
+                      "de-escalated", "troubleshot", "laid out", "secured"];
+  const missing = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    const has = kind.verbs.some((v) => claimVerbs.includes(v.toLowerCase()));
+    if (!has) missing.push(id);
+  }
+  assert(missing.length === 0,
+    "trades with no verb that lets somebody claim more than labour: " + missing.join(", "));
+});
+
+check("no jogger is a category when it should be an object", () => {
+  // The jogger test is "somebody who did the job says oh yeah, I did use
+  // that." Categories fail that test and get scrolled past.
+  const vague = ["equipment", "tools", "machinery", "paperwork", "software",
+                 "systems", "supplies", "materials", "devices"];
+  const bad = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    for (const j of kind.joggers) {
+      const label = j.label.toLowerCase();
+      // "My own tools" is deliberate in the catch-all trade: it is the object
+      // for somebody whose work had no standard kit.
+      if (id === "other_work") continue;
+      if (vague.some((v) => label === v || label === "a " + v)) bad.push(id + "." + j.label);
+    }
+  }
+  assert(bad.length === 0, "joggers that are categories, not objects: " + bad.join(", "));
+});
+
+check("no duplicate verbs or joggers inside a trade", () => {
+  const dupes = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    const verbs = kind.verbs.map((v) => v.toLowerCase());
+    if (new Set(verbs).size !== verbs.length) dupes.push(id + " verbs");
+    const labels = kind.joggers.map((j) => j.label.toLowerCase());
+    if (new Set(labels).size !== labels.length) dupes.push(id + " joggers");
+    const phrases = kind.joggers.map((j) => j.phrase.toLowerCase());
+    if (new Set(phrases).size !== phrases.length) dupes.push(id + " jogger phrases");
+  }
+  assert(dupes.length === 0, dupes.join(", "));
+});
+
 console.log("\nBULLET ASSEMBLY\n");
 
 const FULL = {

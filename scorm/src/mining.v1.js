@@ -8,34 +8,42 @@
  *    story OUT of a real life."
  *
  * On the web a model does the extracting. Inside the wall there is no model,
- * so the extraction is carried by this file: the verbs, the memory joggers,
- * and the ranges. It is the largest piece of content in the package and it is
- * the piece that decides whether a bullet is worth reading.
+ * so the extraction is carried by this file. It is the largest piece of
+ * content in the package and it decides whether a bullet is worth reading.
  *
  * ---------------------------------------------------------------------------
- * FOUR RULES THIS FILE FOLLOWS
+ * HOW THE WORDS WERE CHOSEN
  * ---------------------------------------------------------------------------
+ *
+ * VERBS ARE TRADE WORDS, NOT RESUME WORDS. A warehouse worker says picked and
+ * staged, not handled. A cook says fired and expedited, not prepared food. A
+ * barber says faded and lined. Using the word the trade uses does two things:
+ * it proves to a hiring manager that this person actually did the job, and it
+ * tells the person we know what their work was. Generic verbs -- handled,
+ * assisted, performed, utilized -- are absent on purpose.
+ *
+ * EVERY LIST CARRIES A CLAIM VERB. Ran, Trained, Set up, Dispatched, Built.
+ * Most people will not reach for these about themselves, and they are usually
+ * the truest thing on the page. They sit in the list so a person can recognise
+ * one rather than having to volunteer it.
+ *
+ * THE JOGGER TEST: somebody who did the job says "oh yeah, I did use that."
+ * Joggers are the specific object, never the category. Not "equipment" but a
+ * cherry picker. Not "paperwork" but a bill of lading. Specific unlocks the
+ * memory; general is what people scroll past.
  *
  * JOGGERS ARE QUESTIONS, NEVER ASSUMPTIONS. Doctrine is explicit: offer them
  * as "operators in your role often used pallet jacks, RF scanners -- did you?"
- * Never as a statement about what this person did. Nothing in this file asserts
- * anything about anybody.
+ * Nothing in this file asserts anything about anybody.
  *
- * RANGES ARE WRITTEN AS FINISHED PHRASES. This is the trick that makes
- * deterministic assembly read like English. A bucket does not resolve to a
- * number that then has to be worded; the bucket label IS the wording. "About a
- * truckload a day" drops straight into a sentence.
+ * RANGES ARE WRITTEN AS FINISHED PHRASES. The bucket label IS the wording, so
+ * deterministic assembly reads like English instead of like slots.
  *
- * THE PROMPTS DO THE GRAMMAR. Rather than trying to conjugate a person's
- * fragment into a slot, each question is phrased so the natural answer already
- * fits: "Because I was there, we..." produces a fragment that joins cleanly.
- * Prompt design instead of string surgery.
+ * THE PROMPTS DO THE GRAMMAR. "Because I was there, we..." produces a fragment
+ * that joins cleanly. Prompt design instead of string surgery.
  *
  * NOTHING HERE INVENTS A FACT. Every entry is an option a person picks or
  * declines. The assembled bullet contains only what they chose or typed.
- *
- * STATUS: CC's draft. Troy rewrites. Doctrine says the joggers must sound like
- * someone who has done the job, and that voice is his.
  */
 
 /* eslint-disable */
@@ -46,8 +54,8 @@
   "use strict";
 
   /**
-   * How often. Shared across every kind of work, because frequency reads the
-   * same everywhere. Doctrine: "Frequency is evidence of reliability."
+   * How often. Shared across every trade, because frequency reads the same
+   * everywhere. Doctrine: "Frequency is evidence of reliability."
    */
   var FREQUENCY = [
     { id: "every_shift", label: "Every shift", phrase: "every shift" },
@@ -58,14 +66,12 @@
   ];
 
   /**
-   * Per kind of work: the verbs, the joggers, and the scale.
+   * Per trade: the verbs, the joggers, and the scale.
    *
-   * verbs    Strong, plain, and true to the trade. Doctrine kills
+   * verbs    Past tense, active, true to the trade. Doctrine kills
    *          "Responsible for" on sight, so nothing here is a state of being.
-     * joggers  Tools, equipment and systems, offered as a question. Each carries
-   *          the label a person taps AND the phrase it becomes inside a
-   *          sentence, for the same reason the ranges do: "Forklift" is right
-   *          on a button and wrong mid-line. Written out rather than derived,
+   * joggers  The specific object, with the label a person taps AND the phrase
+   *          it becomes inside a sentence. Written out rather than derived,
    *          because "a forklift" against "an RF scanner" against "calipers"
    *          is not reliably guessable and the bullet is the product.
    * unit     The noun the scale question is about, in their language.
@@ -74,14 +80,16 @@
   var KINDS = {
 
     warehouse: {
-      verbs: ["Loaded", "Unloaded", "Picked", "Staged", "Scanned", "Stacked", "Counted", "Ran"],
+      verbs: ["Picked", "Packed", "Staged", "Loaded", "Unloaded", "Scanned", "Cycle-counted", "Received", "Shipped", "Ran"],
       joggers: [
         { label: "Forklift", phrase: "a forklift" },
         { label: "Pallet jack", phrase: "a pallet jack" },
+        { label: "Order picker or cherry picker", phrase: "an order picker" },
         { label: "RF scanner", phrase: "an RF scanner" },
-        { label: "Hand truck", phrase: "a hand truck" },
         { label: "Shrink wrapper", phrase: "a shrink wrapper" },
-        { label: "Pick ticket", phrase: "pick tickets" }
+        { label: "Dock plate", phrase: "a dock plate" },
+        { label: "Pick tickets", phrase: "pick tickets" },
+        { label: "Bills of lading", phrase: "bills of lading" }
       ],
       unit: "freight",
       scale: [
@@ -93,11 +101,13 @@
     },
 
     construction: {
-      verbs: ["Framed", "Poured", "Finished", "Installed", "Demolished", "Measured", "Rigged", "Ran"],
+      verbs: ["Framed", "Poured", "Finished", "Hung", "Installed", "Demolished", "Rigged", "Trenched", "Laid out", "Ran"],
       joggers: [
         { label: "Skid steer", phrase: "a skid steer" },
+        { label: "Excavator", phrase: "an excavator" },
         { label: "Nail gun", phrase: "a nail gun" },
         { label: "Concrete saw", phrase: "a concrete saw" },
+        { label: "Chop saw", phrase: "a chop saw" },
         { label: "Laser level", phrase: "a laser level" },
         { label: "Scaffold", phrase: "scaffolding" },
         { label: "Blueprints", phrase: "blueprints" }
@@ -112,14 +122,16 @@
     },
 
     kitchen: {
-      verbs: ["Prepped", "Cooked", "Plated", "Ran", "Closed", "Stocked", "Trained", "Held"],
+      verbs: ["Prepped", "Fired", "Plated", "Expedited", "Portioned", "Butchered", "Stocked", "Closed", "Trained", "Ran"],
       joggers: [
         { label: "Flat top", phrase: "a flat top" },
         { label: "Fryer", phrase: "a fryer" },
+        { label: "Convection oven", phrase: "a convection oven" },
+        { label: "Slicer", phrase: "a slicer" },
         { label: "Walk-in", phrase: "a walk-in" },
-        { label: "Ticket rail", phrase: "a ticket rail" },
-        { label: "Prep list", phrase: "prep lists" },
-        { label: "Temp log", phrase: "temp logs" }
+        { label: "Ticket rail or expo window", phrase: "the ticket rail" },
+        { label: "Prep lists", phrase: "prep lists" },
+        { label: "Temp logs", phrase: "temp logs" }
       ],
       unit: "meals",
       scale: [
@@ -131,14 +143,16 @@
     },
 
     cleaning: {
-      verbs: ["Cleaned", "Stripped", "Buffed", "Sanitized", "Stocked", "Cleared", "Inspected", "Ran"],
+      verbs: ["Stripped", "Waxed", "Buffed", "Extracted", "Sanitized", "Disinfected", "Restocked", "Turned", "Inspected", "Ran"],
       joggers: [
         { label: "Floor buffer", phrase: "a floor buffer" },
+        { label: "Auto scrubber", phrase: "an auto scrubber" },
         { label: "Carpet extractor", phrase: "a carpet extractor" },
-        { label: "Chemical dilution", phrase: "chemical dilution" },
+        { label: "Wet vac", phrase: "a wet vac" },
+        { label: "Chemical dilution station", phrase: "a dilution station" },
         { label: "Safety data sheets", phrase: "safety data sheets" },
-        { label: "Key ring", phrase: "a key ring" },
-        { label: "Checklist", phrase: "checklists" }
+        { label: "Master key ring", phrase: "a master key ring" },
+        { label: "Room checklists", phrase: "room checklists" }
       ],
       unit: "space",
       scale: [
@@ -150,14 +164,16 @@
     },
 
     driving: {
-      verbs: ["Drove", "Delivered", "Routed", "Loaded", "Inspected", "Logged", "Dispatched", "Ran"],
+      verbs: ["Ran", "Delivered", "Hauled", "Backed", "Secured", "Routed", "Dispatched", "Inspected", "Logged", "Unloaded"],
       joggers: [
         { label: "Box truck", phrase: "a box truck" },
         { label: "Sprinter van", phrase: "a sprinter van" },
-        { label: "Pre-trip inspection", phrase: "pre-trip inspections" },
-        { label: "Route sheet", phrase: "route sheets" },
+        { label: "Lift gate", phrase: "a lift gate" },
+        { label: "Load straps and binders", phrase: "load straps" },
+        { label: "Pre-trip inspections", phrase: "pre-trip inspections" },
+        { label: "Route sheets", phrase: "route sheets" },
         { label: "Handheld scanner", phrase: "a handheld scanner" },
-        { label: "Lift gate", phrase: "a lift gate" }
+        { label: "Logbook or ELD", phrase: "a logbook" }
       ],
       unit: "stops",
       scale: [
@@ -169,14 +185,16 @@
     },
 
     production: {
-      verbs: ["Operated", "Assembled", "Inspected", "Packed", "Changed over", "Logged", "Troubleshot", "Ran"],
+      verbs: ["Operated", "Set up", "Changed over", "Assembled", "Gauged", "Inspected", "Packed", "Troubleshot", "Logged", "Ran"],
       joggers: [
         { label: "Press", phrase: "a press" },
-        { label: "Conveyor", phrase: "a conveyor" },
-        { label: "Calipers", phrase: "calipers" },
-        { label: "Work order", phrase: "work orders" },
+        { label: "Conveyor line", phrase: "a conveyor line" },
+        { label: "Calipers or micrometer", phrase: "calipers" },
+        { label: "Torque driver", phrase: "a torque driver" },
+        { label: "Pallet scale", phrase: "a pallet scale" },
+        { label: "Work orders", phrase: "work orders" },
         { label: "Lockout tagout", phrase: "lockout tagout" },
-        { label: "Quality log", phrase: "quality logs" }
+        { label: "Quality logs", phrase: "quality logs" }
       ],
       unit: "output",
       scale: [
@@ -188,14 +206,16 @@
     },
 
     grounds: {
-      verbs: ["Mowed", "Trimmed", "Planted", "Hauled", "Graded", "Cleared", "Maintained", "Ran"],
+      verbs: ["Mowed", "Edged", "Trimmed", "Planted", "Mulched", "Graded", "Plowed", "Hauled", "Maintained", "Ran"],
       joggers: [
         { label: "Zero-turn mower", phrase: "a zero-turn mower" },
-        { label: "Trimmer", phrase: "a trimmer" },
+        { label: "String trimmer", phrase: "a string trimmer" },
+        { label: "Backpack blower", phrase: "a backpack blower" },
         { label: "Chainsaw", phrase: "a chainsaw" },
+        { label: "Stump grinder", phrase: "a stump grinder" },
+        { label: "Spreader", phrase: "a spreader" },
         { label: "Trailer", phrase: "a trailer" },
-        { label: "Irrigation timer", phrase: "irrigation timers" },
-        { label: "Blower", phrase: "a blower" }
+        { label: "Irrigation timers", phrase: "irrigation timers" }
       ],
       unit: "properties",
       scale: [
@@ -207,14 +227,16 @@
     },
 
     retail: {
-      verbs: ["Stocked", "Rotated", "Rang", "Counted", "Merchandised", "Opened", "Closed", "Trained"],
+      verbs: ["Stocked", "Faced", "Rotated", "Rang", "Counted", "Merchandised", "Recovered", "Opened", "Closed", "Trained"],
       joggers: [
-        { label: "Register", phrase: "a register" },
+        { label: "Register or POS", phrase: "a register" },
         { label: "Price gun", phrase: "a price gun" },
-        { label: "Planogram", phrase: "planograms" },
+        { label: "Planograms", phrase: "planograms" },
         { label: "Backstock", phrase: "backstock" },
         { label: "Pallet jack", phrase: "a pallet jack" },
-        { label: "Shift count", phrase: "shift counts" }
+        { label: "Shift counts", phrase: "shift counts" },
+        { label: "Return desk", phrase: "the return desk" },
+        { label: "Truck day", phrase: "truck days" }
       ],
       unit: "floor",
       scale: [
@@ -226,14 +248,16 @@
     },
 
     auto: {
-      verbs: ["Diagnosed", "Repaired", "Replaced", "Serviced", "Inspected", "Aligned", "Rebuilt", "Ran"],
+      verbs: ["Diagnosed", "Repaired", "Replaced", "Serviced", "Aligned", "Rebuilt", "Mounted", "Balanced", "Bled", "Road-tested"],
       joggers: [
         { label: "Lift", phrase: "a lift" },
         { label: "Scan tool", phrase: "a scan tool" },
+        { label: "Multimeter", phrase: "a multimeter" },
         { label: "Torque wrench", phrase: "a torque wrench" },
         { label: "Impact gun", phrase: "an impact gun" },
-        { label: "Service manual", phrase: "service manuals" },
-        { label: "Work order", phrase: "work orders" }
+        { label: "Tire machine", phrase: "a tire machine" },
+        { label: "Service manuals", phrase: "service manuals" },
+        { label: "Work orders", phrase: "work orders" }
       ],
       unit: "vehicles",
       scale: [
@@ -245,14 +269,16 @@
     },
 
     care: {
-      verbs: ["Supported", "Assisted", "Monitored", "Charted", "Transported", "De-escalated", "Bathed", "Advocated"],
+      verbs: ["Supported", "Repositioned", "Transferred", "Ambulated", "Monitored", "Charted", "De-escalated", "Bathed", "Advocated", "Trained"],
       joggers: [
-        { label: "Care plan", phrase: "care plans" },
+        { label: "Care plans", phrase: "care plans" },
         { label: "Hoyer lift", phrase: "a Hoyer lift" },
+        { label: "Gait belt", phrase: "a gait belt" },
         { label: "Vitals", phrase: "vitals" },
         { label: "Shift notes", phrase: "shift notes" },
         { label: "Med reminders", phrase: "med reminders" },
-        { label: "Transfer belt", phrase: "a transfer belt" }
+        { label: "Call lights", phrase: "call lights" },
+        { label: "Incident reports", phrase: "incident reports" }
       ],
       unit: "people",
       scale: [
@@ -264,14 +290,16 @@
     },
 
     office: {
-      verbs: ["Scheduled", "Filed", "Processed", "Answered", "Reconciled", "Tracked", "Coordinated", "Entered"],
+      verbs: ["Scheduled", "Processed", "Reconciled", "Fielded", "Tracked", "Coordinated", "Entered", "Invoiced", "Audited", "Ran"],
       joggers: [
         { label: "Multi-line phone", phrase: "a multi-line phone" },
         { label: "Spreadsheets", phrase: "spreadsheets" },
+        { label: "Scheduling software", phrase: "scheduling software" },
         { label: "Filing system", phrase: "a filing system" },
         { label: "Scanner", phrase: "a scanner" },
-        { label: "Scheduling software", phrase: "scheduling software" },
-        { label: "Cash drawer", phrase: "a cash drawer" }
+        { label: "Cash drawer", phrase: "a cash drawer" },
+        { label: "Deposit logs", phrase: "deposit logs" },
+        { label: "Intake forms", phrase: "intake forms" }
       ],
       unit: "workload",
       scale: [
@@ -283,14 +311,16 @@
     },
 
     security: {
-      verbs: ["Patrolled", "Monitored", "Logged", "Screened", "Responded", "Secured", "Reported", "De-escalated"],
+      verbs: ["Patrolled", "Monitored", "Screened", "Responded", "Escorted", "Secured", "Logged", "Reported", "De-escalated", "Controlled"],
       joggers: [
         { label: "Camera system", phrase: "a camera system" },
         { label: "Radio", phrase: "a radio" },
-        { label: "Incident log", phrase: "incident logs" },
+        { label: "Metal detector", phrase: "a metal detector" },
         { label: "Access badges", phrase: "access badges" },
-        { label: "Rounds sheet", phrase: "rounds sheets" },
-        { label: "Metal detector", phrase: "a metal detector" }
+        { label: "Rounds sheets", phrase: "rounds sheets" },
+        { label: "Incident logs", phrase: "incident logs" },
+        { label: "Visitor log", phrase: "a visitor log" },
+        { label: "Duty belt", phrase: "a duty belt" }
       ],
       unit: "site",
       scale: [
@@ -302,14 +332,16 @@
     },
 
     personal: {
-      verbs: ["Cut", "Styled", "Shaved", "Booked", "Advised", "Built", "Maintained", "Trained"],
+      verbs: ["Cut", "Faded", "Lined", "Shaved", "Styled", "Booked", "Built", "Advised", "Sanitized", "Trained"],
       joggers: [
         { label: "Clippers", phrase: "clippers" },
         { label: "Shears", phrase: "shears" },
         { label: "Straight razor", phrase: "a straight razor" },
+        { label: "Edger or trimmer", phrase: "an edger" },
         { label: "Booking app", phrase: "a booking app" },
-        { label: "Sanitation log", phrase: "sanitation logs" },
-        { label: "Chair rental", phrase: "a rented chair" }
+        { label: "Barbicide and sanitation log", phrase: "a sanitation log" },
+        { label: "Chair rental", phrase: "a rented chair" },
+        { label: "Retail product", phrase: "retail product" }
       ],
       unit: "clients",
       scale: [
@@ -321,12 +353,14 @@
     },
 
     farm: {
-      verbs: ["Planted", "Harvested", "Fed", "Irrigated", "Fenced", "Hauled", "Maintained", "Ran"],
+      verbs: ["Planted", "Harvested", "Fed", "Watered", "Fenced", "Baled", "Calved", "Irrigated", "Hauled", "Ran"],
       joggers: [
         { label: "Tractor", phrase: "a tractor" },
         { label: "Baler", phrase: "a baler" },
-        { label: "Irrigation lines", phrase: "irrigation lines" },
+        { label: "Auger", phrase: "an auger" },
         { label: "Livestock chute", phrase: "a livestock chute" },
+        { label: "Irrigation lines", phrase: "irrigation lines" },
+        { label: "Hay wagon", phrase: "a hay wagon" },
         { label: "Feed records", phrase: "feed records" },
         { label: "Trailer", phrase: "a trailer" }
       ],
@@ -340,13 +374,15 @@
     },
 
     teaching: {
-      verbs: ["Taught", "Tutored", "Mentored", "Led", "Prepared", "Tracked", "Coached", "Ran"],
+      verbs: ["Taught", "Tutored", "Mentored", "Facilitated", "Coached", "Prepared", "Assessed", "Tracked", "Adapted", "Ran"],
       joggers: [
         { label: "Lesson plans", phrase: "lesson plans" },
         { label: "Workbooks", phrase: "workbooks" },
+        { label: "Practice tests", phrase: "practice tests" },
         { label: "Progress notes", phrase: "progress notes" },
         { label: "Small groups", phrase: "small groups" },
         { label: "One-on-one sessions", phrase: "one-on-one sessions" },
+        { label: "Whiteboard", phrase: "a whiteboard" },
         { label: "Sign-in sheets", phrase: "sign-in sheets" }
       ],
       unit: "learners",
@@ -358,15 +394,21 @@
       ]
     },
 
+    // The catch-all, and the one that has to work hardest. A person lands here
+    // when the work was theirs to run: side work, a hustle, a family shop,
+    // something nobody ever gave a title to. The joggers are phrased in the
+    // first person for exactly that reason.
     other_work: {
-      verbs: ["Ran", "Built", "Managed", "Handled", "Fixed", "Organized", "Delivered", "Trained"],
+      verbs: ["Ran", "Built", "Managed", "Fixed", "Organized", "Delivered", "Quoted", "Scheduled", "Collected", "Trained"],
       joggers: [
-        { label: "Tools you supplied", phrase: "my own tools" },
+        { label: "My own tools", phrase: "my own tools" },
         { label: "A vehicle", phrase: "a vehicle" },
-        { label: "A phone or scheduling system", phrase: "a scheduling system" },
-        { label: "Records you kept", phrase: "records I kept" },
-        { label: "Money you handled", phrase: "cash handling" },
-        { label: "People you directed", phrase: "a crew I directed" }
+        { label: "A phone or booking system", phrase: "a booking system" },
+        { label: "Records I kept", phrase: "records I kept" },
+        { label: "Money I handled", phrase: "cash handling" },
+        { label: "Materials I bought", phrase: "materials I sourced" },
+        { label: "My own customers", phrase: "my own customers" },
+        { label: "People I directed", phrase: "a crew I directed" }
       ],
       unit: "work",
       scale: [
@@ -380,7 +422,7 @@
 
   /**
    * Killed on sight. Doctrine names these exactly. Empty phrases that say
-   * nothing and signal to a reader that nothing specific was available.
+   * nothing, and signal to a reader that nothing specific was available.
    */
   var KILL_LIST = [
     { phrase: "hard worker", why: "Everyone writes it, so it tells a reader nothing." },
@@ -392,9 +434,12 @@
     { phrase: "go-getter", why: "Says nothing about what you did." },
     { phrase: "go getter", why: "Says nothing about what you did." },
     { phrase: "self-starter", why: "Says nothing about what you did." },
+    { phrase: "fast learner", why: "Name the thing you learned fast. That is the proof." },
     { phrase: "responsible for", why: "Start with what you DID. Responsible for is where strong bullets go to die." },
     { phrase: "duties included", why: "Start with what you DID, not what the job description said." },
-    { phrase: "various tasks", why: "Name one of them. One real task beats the word various." }
+    { phrase: "various tasks", why: "Name one of them. One real task beats the word various." },
+    { phrase: "helped with", why: "You did more than help. Say the part that was yours." },
+    { phrase: "worked on", why: "Worked on hides the work. What did you actually do to it?" }
   ];
 
   /**
@@ -403,10 +448,13 @@
    *
    * These never block anything. They open one more question, once, and then
    * get out of the way. A person who means it should be able to say it.
+   *
+   * Trailing spaces matter: "just " must not fire on "justified".
    */
   var MINIMIZERS = [
     "just ", "only ", "nothing really", "nothing much", "basic ", "kind of",
-    "sort of", "i guess", "a little", "not much", "wasn't much", "was not much"
+    "sort of", "i guess", "a little", "not much", "wasn't much", "was not much",
+    "pretty much just", "mostly just", "nothing special"
   ];
 
   var MINIMIZER_NUDGE = {
