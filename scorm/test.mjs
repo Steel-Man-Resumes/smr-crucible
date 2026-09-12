@@ -37,6 +37,8 @@ const SCREENS = require("./src/screens.js");
 const Flow = require("./src/flow.js");
 const Narrowing = require("./src/narrowing.js");
 const LADDERS = require("./src/narrowings.v1.js");
+const MINING = require("./src/mining.v1.js");
+const Bullet = require("./src/bullet.js");
 
 let passed = 0;
 let failed = 0;
@@ -555,6 +557,169 @@ check("every rung leaves a door open for someone who does not know", () => {
   assert(trapped.length === 0,
     "rungs with no way out: " + trapped.join(", ") +
     ". Nobody gets held on a screen demanding a fact they do not have.");
+});
+
+console.log("\nTHE MINING CORPUS\n");
+
+check("every kind of work a person can pick has a corpus behind it", () => {
+  const missing = TABLES.WORK_KINDS
+    .map((k) => k.id)
+    .filter((id) => !MINING.KINDS[id]);
+  assert(missing.length === 0,
+    "work kinds with no verbs, joggers or ranges: " + missing.join(", ") +
+    ". Someone picking one of those gets an empty screen.");
+});
+
+check("no corpus entry is thin", () => {
+  const thin = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    if ((kind.verbs || []).length < 6) thin.push(id + " has " + kind.verbs.length + " verbs");
+    if ((kind.joggers || []).length < 4) thin.push(id + " has " + kind.joggers.length + " joggers");
+    if ((kind.scale || []).length < 3) thin.push(id + " has " + kind.scale.length + " ranges");
+  }
+  assert(thin.length === 0, thin.join("; "));
+});
+
+check("no verb in the corpus is one the doctrine kills", () => {
+  const bad = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    for (const verb of kind.verbs) {
+      if (/^(responsible|duties|various|assisted with|helped with)/i.test(verb)) {
+        bad.push(id + "." + verb);
+      }
+      // A verb is a past-tense action, not a state of being.
+      if (/^(was|were|am|is)\b/i.test(verb)) bad.push(id + "." + verb);
+    }
+  }
+  assert(bad.length === 0, "weak verbs in the corpus: " + bad.join(", "));
+});
+
+check("every jogger and range carries the phrase it becomes in a sentence", () => {
+  const broken = [];
+  for (const [id, kind] of Object.entries(MINING.KINDS)) {
+    for (const j of kind.joggers) {
+      if (!j.label || !j.phrase) broken.push(id + " jogger missing label or phrase");
+      // A phrase drops mid-sentence, so it must not open with a capital unless
+      // it is a proper noun or an acronym.
+      else if (/^[A-Z]/.test(j.phrase) && !/^[A-Z]{2,}/.test(j.phrase) && !/^(Hoyer)/.test(j.phrase)) {
+        broken.push(id + " jogger phrase starts capitalised: " + j.phrase);
+      }
+    }
+    for (const sc of kind.scale) {
+      if (!sc.label || !sc.phrase) broken.push(id + " range missing label or phrase");
+      else if (/^[A-Z]/.test(sc.phrase)) broken.push(id + " range phrase starts capitalised: " + sc.phrase);
+    }
+  }
+  assert(broken.length === 0, broken.join("; "));
+});
+
+check("the frequency ladder has a way out like every other range", () => {
+  assert(MINING.FREQUENCY.some((f) => f.escape === true && f.phrase === null),
+    "no escape on the frequency question");
+});
+
+console.log("\nBULLET ASSEMBLY\n");
+
+const FULL = {
+  verb: "Loaded",
+  object: "pallets of dry goods off the night truck",
+  tools: ["a forklift", "an RF scanner"],
+  frequency: "every shift",
+  scale: "two or three truckloads a day",
+  result: "stopped losing product on the night shift"
+};
+
+check("a fully mined bullet reads as one sentence", () => {
+  equal(Bullet.assemble(FULL),
+    "Loaded pallets of dry goods off the night truck using a forklift and an RF scanner, " +
+    "every shift, two or three truckloads a day, and stopped losing product on the night shift.");
+});
+
+check("a skipped slot produces no words at all", () => {
+  // The doctrine's clause: "including ONLY the elements actually mined."
+  // No filler, no smoothing, no sentence that exists because a template had a
+  // hole in it.
+  equal(Bullet.assemble({ verb: "Loaded", object: "trucks" }), "Loaded trucks.");
+  equal(Bullet.assemble({ verb: "Loaded", object: "trucks", frequency: "every shift" }),
+    "Loaded trucks, every shift.");
+  equal(Bullet.assemble({ verb: "Loaded", object: "trucks", tools: ["a forklift"] }),
+    "Loaded trucks using a forklift.");
+});
+
+check("no verb or no object means no bullet, rather than a broken one", () => {
+  equal(Bullet.assemble({ object: "trucks", frequency: "every shift" }), "");
+  equal(Bullet.assemble({ verb: "Loaded", frequency: "every shift" }), "");
+  equal(Bullet.assemble({}), "");
+  equal(Bullet.assemble(null), "");
+});
+
+check("tools join the way a person would say them", () => {
+  const one = Bullet.assemble({ verb: "Ran", object: "the line", tools: ["a press"] });
+  assert(one.includes("using a press."), one);
+  const three = Bullet.assemble({ verb: "Ran", object: "the line", tools: ["a press", "calipers", "work orders"] });
+  assert(three.includes("using a press, calipers and work orders"), three);
+});
+
+check("the result fragment joins without being re-capitalised mid-sentence", () => {
+  const out = Bullet.assemble({ verb: "Ran", object: "the line", result: "Cut scrap in half" });
+  assert(out.includes(", and cut scrap in half."), out);
+});
+
+check("an acronym the person typed keeps its capitals", () => {
+  const out = Bullet.assemble({ verb: "Ran", object: "the line", result: "OSHA recordables went to zero" });
+  assert(out.includes(", and OSHA recordables went to zero."), out);
+});
+
+check("every fragment of a bullet can be traced to where it came from", () => {
+  const rows = Bullet.trace(FULL);
+  const parts = rows.map((r) => r.part);
+  for (const expected of ["verb", "what", "tool", "how often", "how much", "result"]) {
+    assert(parts.includes(expected), "trace is missing " + expected);
+  }
+  for (const row of rows) {
+    assert(/picked from a (list|range)|typed by the person/.test(row.source),
+      "a fragment has no provenance: " + JSON.stringify(row));
+  }
+});
+
+check("depth counts what was answered, not what was asked", () => {
+  assert(Bullet.depth(FULL) === 5, "full bullet did not score 5");
+  assert(Bullet.depth({ verb: "Loaded", object: "trucks" }) === 1, "minimum bullet did not score 1");
+  assert(Bullet.depth({}) === 0, "empty bullet did not score 0");
+});
+
+console.log("\nTHE KILL LIST AND THE DIG SITE\n");
+
+check("every phrase the doctrine kills is caught, with a reason", () => {
+  for (const entry of MINING.KILL_LIST) {
+    const hits = Bullet.deadWords("I am a " + entry.phrase + " and so on");
+    assert(hits.length > 0, 'missed "' + entry.phrase + '"');
+    assert(hits[0].why && hits[0].why.length > 20,
+      '"' + entry.phrase + '" is flagged with no useful reason');
+  }
+});
+
+check("responsible for is caught, because it is the one that matters most", () => {
+  const hits = Bullet.deadWords("Responsible for stocking shelves");
+  assert(hits.length === 1, "expected exactly one hit, got " + hits.length);
+  assert(hits[0].why.toLowerCase().includes("did"), "the reason does not tell them what to do instead");
+});
+
+check("clean text is left alone", () => {
+  equal(Bullet.deadWords("Loaded two trucks a day with no damage claims"), []);
+  equal(Bullet.deadWords(""), []);
+});
+
+check("the word just is the dig site", () => {
+  assert(Bullet.minimizer("I just stocked shelves") === "just", "missed the classic");
+  assert(Bullet.minimizer("it was nothing really") !== null, "missed a soft minimizer");
+  assert(Bullet.minimizer("Stocked a 12-aisle floor") === null, "flagged a strong sentence");
+});
+
+check("a word that merely contains a minimizer is not chased", () => {
+  // "justified" and "only" inside another word should not trigger a nudge.
+  assert(Bullet.minimizer("Justified the variance to the auditor") === null,
+    "chased the word justified");
 });
 
 console.log("\nSTYLESHEET\n");

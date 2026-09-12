@@ -375,6 +375,109 @@ html, body {
 
 .input-number { max-width: 140px; font-size: 20px; }
 
+/* ----------------------------------------------------------- the bullet */
+
+/* The payoff. On the terminal ground, the same treatment the mined example
+   got on the proof screen at the very start, so when a person reaches their
+   own first line they recognise the format they were promised. */
+.bullet-box {
+  background: var(--term-bg);
+  border: 1px solid var(--term-line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 20px 18px;
+  margin: 6px 0 20px;
+}
+.bullet-label {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--term-gold);
+}
+.bullet-text {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--term-ink);
+}
+
+.bulletlist { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 0; }
+.bulletlist-item {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+/* -------------------------------------------------------- the truth gate */
+
+.gate {
+  margin: 24px 0 18px;
+  padding: 18px;
+  background: var(--card);
+  border: 2px solid var(--focus);
+  border-radius: 6px;
+}
+.gate-question { margin: 0 0 8px; font-size: 19px; font-weight: 600; line-height: 1.35; }
+.gate-note { margin: 0; font-size: 16px; color: var(--muted); }
+
+/* Provenance. Quiet by design: it is there to be checked, not read. */
+.trace {
+  margin: 24px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.trace-title {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.trace-row {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------- dead words */
+
+/* Shown live, never enforced. The person is the expert on their own work;
+   this only tells them what a reader will do with a phrase. */
+.deadwords { margin-top: 10px; }
+.deadword {
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.deadword-phrase {
+  font-weight: 600;
+  color: var(--danger);
+  text-transform: uppercase;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.option-picked { border-left-color: var(--accent); background: var(--surface-elevated); }
+.option-picked .option-label { font-weight: 600; }
+
 /* ---------------------------------------------------------------- joblist */
 
 .joblist { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 22px; }

@@ -30,6 +30,8 @@
   var Flow = root.Flow;
   var Narrowing = root.Narrowing;
   var LADDERS = root.NARROWINGS_V1;
+  var MINING = root.MINING_V1;
+  var Bullet = root.Bullet;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -44,6 +46,13 @@
     addAnother: false,
     // Where we are inside a narrowing ladder, if we are in one.
     rung: null,
+    // The bullet currently being mined. Pushed onto the job when confirmed,
+    // discarded if the person walks away from it.
+    draft: emptyDraft(),
+    // The minimizer nudge fires once per draft, never twice. Chasing the same
+    // "just" a second time stops being a good question and starts being an
+    // argument.
+    nudged: false,
     answers: {
       readiness_stage: "",
       goals: [],
@@ -115,6 +124,10 @@
     return true;
   }
 
+  function emptyDraft() {
+    return { verb: "", object: "", tools: [], frequency: "", scale: "", result: "" };
+  }
+
   function str(v) { return typeof v === "string" ? v : ""; }
 
   /** Jobs come back out of the LMS record, so they are treated as untrusted
@@ -129,7 +142,26 @@
         kind: str(j.kind),
         employer: str(j.employer).slice(0, 60),
         year_started: typeof j.year_started === "number" ? j.year_started : null,
-        year_approx: j.year_approx === true
+        year_approx: j.year_approx === true,
+        bullets: sanitizeBullets(j.bullets)
+      });
+    }
+    return out;
+  }
+
+  function sanitizeBullets(v) {
+    if (!v || typeof v.length !== "number") return [];
+    var out = [];
+    for (var i = 0; i < v.length && i < 8; i++) {
+      var b = v[i];
+      if (!b || typeof b !== "object") continue;
+      out.push({
+        verb: str(b.verb).slice(0, 40),
+        object: str(b.object).slice(0, 110),
+        tools: arr(b.tools).slice(0, 6),
+        frequency: str(b.frequency).slice(0, 40),
+        scale: str(b.scale).slice(0, 60),
+        result: str(b.result).slice(0, 120)
       });
     }
     return out;
@@ -180,7 +212,7 @@
   function currentScreen() { return byId(state.at) || S.SCREENS[0]; }
   function currentJob() {
     if (!state.jobs[state.jobIndex]) {
-      state.jobs[state.jobIndex] = { kind: "", employer: "", year_started: null, year_approx: false };
+      state.jobs[state.jobIndex] = { kind: "", employer: "", year_started: null, year_approx: false, bullets: [] };
     }
     return state.jobs[state.jobIndex];
   }
@@ -314,7 +346,17 @@
   // Screens where the choice is the navigation. A Next button on one of these
   // is not merely redundant, it is a trapdoor: on a narrowing screen it
   // resolved the transition and moved on with no year recorded at all.
-  var TAP_TO_ADVANCE = { narrowing: true, job_more: true };
+  var TAP_TO_ADVANCE = {
+    narrowing: true,
+    job_more: true,
+    // The truth gate lives on this screen. A Next button beside it walks past
+    // the question AND drops the line, because the draft is only committed by
+    // the Keep button. Second time this exact trapdoor appeared, which is why
+    // there is now a test for it rather than a note.
+    bullet_done: true,
+    minimizer_nudge: true,
+    mine_more: true
+  };
 
   function buildNav(screen) {
     var nav = el("div", "nav");
@@ -541,6 +583,190 @@
         "Next we take these one at a time and find out what you actually did in them. That is the part that turns this into a resume."));
     },
 
+    // ---- THE BULLET FORGE ----------------------------------------------
+
+    /** Question 1. Verbs scoped to the trade, plus their own words. */
+    mine_verb: function (card, screen) {
+      var kind = miningKind();
+      var group = el("div", "options");
+      for (var i = 0; i < kind.verbs.length; i++) {
+        group.appendChild(pickOne(kind.verbs[i], state.draft.verb === kind.verbs[i], function (v) {
+          state.draft.verb = v;
+          goNext(screen);
+        }));
+      }
+      card.appendChild(group);
+
+      var own = el("div", "field");
+      var label = el("label", "field-label", "Or write your own");
+      label.htmlFor = "own-verb";
+      own.appendChild(label);
+      var input = doc.createElement("input");
+      input.id = "own-verb";
+      input.className = "input";
+      input.maxLength = 40;
+      input.placeholder = "Welded";
+      input.value = state.draft.verb || "";
+      input.oninput = function () { state.draft.verb = input.value; };
+      own.appendChild(input);
+      card.appendChild(own);
+
+      var go = el("button", "btn btn-primary", "Use what I wrote");
+      go.type = "button";
+      go.onclick = function () {
+        if (!String(state.draft.verb || "").trim()) {
+          showError("Pick one above, or write a word here.");
+          return;
+        }
+        goNext(screen);
+      };
+      card.appendChild(go);
+    },
+
+    /** Question 2. The only genuinely free-text answer in the five. */
+    mine_object: function (card, screen) {
+      card.appendChild(miningTextField(screen.text, "object"));
+      card.appendChild(deadWordSlot("object"));
+    },
+
+    /** Question 3. Joggers, asked as a question. Never asserted. */
+    mine_tools: function (card, screen) {
+      var kind = miningKind();
+      var group = el("fieldset", "options");
+      group.appendChild(el("legend", "visually-hidden", screen.title));
+      for (var i = 0; i < kind.joggers.length; i++) {
+        group.appendChild(toolRow(kind.joggers[i]));
+      }
+      card.appendChild(group);
+      card.appendChild(el("p", "screen-help", "Used something that is not listed? Add it on the next pass, or leave it. Nothing here is a test."));
+    },
+
+    mine_frequency: function (card, screen) {
+      var group = el("div", "options");
+      for (var i = 0; i < MINING.FREQUENCY.length; i++) {
+        group.appendChild(frequencyRow(MINING.FREQUENCY[i], screen));
+      }
+      card.appendChild(group);
+    },
+
+    mine_scale: function (card, screen) {
+      var kind = miningKind();
+      var group = el("div", "options");
+      for (var i = 0; i < kind.scale.length; i++) {
+        group.appendChild(scaleRow(kind.scale[i], screen));
+      }
+      group.appendChild(scaleRow({ id: "skip", label: "I would rather not put a number on it", phrase: null, escape: true }, screen));
+      card.appendChild(group);
+    },
+
+    mine_result: function (card, screen) {
+      card.appendChild(miningTextField(screen.text, "result"));
+      card.appendChild(deadWordSlot("result"));
+      card.appendChild(el("p", "screen-help",
+        "Examples: fewer mistakes went out. New people got trained faster. Nothing got lost on my shift."));
+    },
+
+    /**
+     * THE PAYOFF.
+     *
+     * Shown the moment the bullet exists, not at the end of everything.
+     * Doctrine on why: people quit long sessions, and the only reliable way to
+     * earn a second pass is to hand them the first one first.
+     */
+    bullet_done: function (card) {
+      var text = Bullet.assemble(state.draft);
+
+      var box = el("div", "bullet-box");
+      box.appendChild(el("p", "bullet-label", "Your line"));
+      box.appendChild(el("p", "bullet-text", text));
+      card.appendChild(box);
+
+      var depth = Bullet.depth(state.draft);
+      card.appendChild(el("p", "punch",
+        depth >= 4 ? "That is a strong line. Nobody could have written it but you."
+                   : "That is a real line. It gets stronger if you come back and add the parts you skipped."));
+
+      // The truth gate, asked out loud.
+      var gate = el("div", "gate");
+      gate.appendChild(el("p", "gate-question",
+        "Could you talk about this for two minutes if somebody asked you to?"));
+      gate.appendChild(el("p", "gate-note",
+        "If the answer is no, take it back a step now. A line that falls apart in a room is worse than no line at all."));
+      card.appendChild(gate);
+
+      var keep = el("button", "btn btn-primary", "Yes. Keep it.");
+      keep.type = "button";
+      keep.onclick = function () { commitDraft(); goNext(currentScreen()); };
+      card.appendChild(keep);
+
+      var fix = el("button", "btn btn-secondary", "No. Let me pull it back.");
+      fix.type = "button";
+      fix.onclick = function () { go("mine_object"); };
+      card.appendChild(fix);
+
+      // Provenance. The machine-checkable half of the truth gate.
+      var trace = Bullet.trace(state.draft);
+      var list = el("dl", "trace");
+      list.appendChild(el("dt", "trace-title", "Where every word came from"));
+      for (var i = 0; i < trace.length; i++) {
+        list.appendChild(el("dd", "trace-row", trace[i].value + "  --  " + trace[i].source));
+      }
+      card.appendChild(list);
+    },
+
+    mine_more: function (card) {
+      var job = currentJob();
+      var group = el("div", "options");
+
+      group.appendChild(bigChoice("Another thing I did at this job", function () {
+        state.mineNext = false;
+        state.draft = emptyDraft();
+        state.nudged = false;
+        go("mine_verb");
+      }));
+
+      if (state.jobIndex < state.jobs.length - 1) {
+        group.appendChild(bigChoice("Move on to the next job", function () {
+          state.mineNext = true;
+          state.jobIndex = state.jobIndex + 1;
+          state.draft = emptyDraft();
+          state.nudged = false;
+          goNext(currentScreen());
+        }));
+      }
+
+      group.appendChild(bigChoice("That is enough for now", function () {
+        state.mineNext = false;
+        goNext(currentScreen());
+      }));
+      card.appendChild(group);
+
+      var made = countBullets();
+      card.appendChild(el("p", "punch",
+        made === 1 ? "One line built." : made + " lines built."));
+      if (job.bullets.length) {
+        var list = el("div", "bulletlist");
+        for (var i = 0; i < job.bullets.length; i++) {
+          list.appendChild(el("p", "bulletlist-item", Bullet.assemble(job.bullets[i])));
+        }
+        card.appendChild(list);
+      }
+    },
+
+    /** Fires once per draft. Doctrine: the word "just" is the dig site. */
+    minimizer_nudge: function (card) {
+      var N = MINING.MINIMIZER_NUDGE;
+      for (var i = 0; i < N.body.length; i++) card.appendChild(el("p", "screen-body", N.body[i]));
+      var revise = el("button", "btn btn-primary", N.revise);
+      revise.type = "button";
+      revise.onclick = function () { go("mine_object"); };
+      card.appendChild(revise);
+      var keep = el("button", "btn btn-secondary", N.keep);
+      keep.type = "button";
+      keep.onclick = function () { go("mine_tools"); };
+      card.appendChild(keep);
+    },
+
     review: function (card) {
       var list = el("dl", "review-list");
       var rows = [
@@ -700,6 +926,134 @@
     return box;
   }
 
+  function miningKind() {
+    return MINING.KINDS[currentJob().kind] || MINING.KINDS.other_work;
+  }
+
+  function countBullets() {
+    var n = 0;
+    for (var i = 0; i < state.jobs.length; i++) n += (state.jobs[i].bullets || []).length;
+    return n;
+  }
+
+  function commitDraft() {
+    var job = currentJob();
+    if (!job.bullets) job.bullets = [];
+    job.bullets.push({
+      verb: state.draft.verb,
+      object: state.draft.object,
+      tools: state.draft.tools.slice(),
+      frequency: state.draft.frequency,
+      scale: state.draft.scale,
+      result: state.draft.result
+    });
+    // Doctrine: behaviour updates the stage. Somebody who said they were not
+    // thinking about it and then mined three real lines has moved.
+    var moved = Flow.promoteRoute(state.route, countBullets());
+    if (moved.changed) state.route = moved.route;
+    state.draft = emptyDraft();
+    state.nudged = false;
+  }
+
+  function pickOne(label, selected, onPick) {
+    var button = el("button", "option option-tap" + (selected ? " option-picked" : ""), null);
+    button.type = "button";
+    button.appendChild(el("span", "option-label", label));
+    button.onclick = function () { onPick(label); };
+    return button;
+  }
+
+  function toolRow(jogger) {
+    var name = jogger.label;
+    var id = "tool-" + name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    var label = el("label", "option");
+    label.htmlFor = id;
+    var input = doc.createElement("input");
+    input.type = "checkbox";
+    input.id = id;
+    input.className = "option-input";
+    // The PHRASE is what gets stored, because that is what lands in the
+    // sentence. The label only ever exists on this button.
+    input.checked = state.draft.tools.indexOf(jogger.phrase) >= 0;
+    input.onchange = function () {
+      var at = state.draft.tools.indexOf(jogger.phrase);
+      if (input.checked && at < 0) state.draft.tools.push(jogger.phrase);
+      if (!input.checked && at >= 0) state.draft.tools.splice(at, 1);
+    };
+    label.appendChild(input);
+    var wrap = el("div", "option-text");
+    wrap.appendChild(el("span", "option-label", name));
+    label.appendChild(wrap);
+    return label;
+  }
+
+  function frequencyRow(entry, screen) {
+    return pickOne(entry.label, state.draft.frequency === entry.phrase, function () {
+      state.draft.frequency = entry.phrase || "";
+      goNext(screen);
+    });
+  }
+
+  function scaleRow(entry, screen) {
+    var button = pickOne(entry.label, state.draft.scale === entry.phrase, function () {
+      state.draft.scale = entry.phrase || "";
+      goNext(screen);
+    });
+    if (entry.escape) button.className += " option-escape";
+    return button;
+  }
+
+  /**
+   * Text field for a mined answer. Runs the kill list live as they type,
+   * because a person fixing their own phrasing is the doctrine working, and a
+   * refusal at the end is not.
+   */
+  function miningTextField(spec, field) {
+    var wrap = el("div", "field");
+    var label = el("label", "field-label", spec.label);
+    label.htmlFor = spec.field;
+    wrap.appendChild(label);
+
+    var input = doc.createElement(spec.rows > 1 ? "textarea" : "input");
+    input.id = spec.field;
+    input.className = spec.rows > 1 ? "textarea" : "input";
+    input.maxLength = spec.maxLength;
+    input.placeholder = spec.placeholder || "";
+    input.value = state.draft[field] || "";
+    if (spec.rows > 1) input.rows = spec.rows;
+    input.oninput = function () {
+      state.draft[field] = input.value;
+      paintDeadWords(field, input.value);
+    };
+    wrap.appendChild(input);
+    wrap.appendChild(el("p", "field-hint", "Up to " + spec.maxLength + " characters."));
+    return wrap;
+  }
+
+  function deadWordSlot(field) {
+    var slot = el("div", "deadwords");
+    slot.id = "deadwords-" + field;
+    return slot;
+  }
+
+  /**
+   * Shown, never enforced. The person is the expert on their own work; the
+   * program's job is to tell them what a reader will do with a phrase, not to
+   * refuse it.
+   */
+  function paintDeadWords(field, value) {
+    var slot = doc.getElementById("deadwords-" + field);
+    if (!slot) return;
+    clear(slot);
+    var hits = Bullet.deadWords(value);
+    for (var i = 0; i < hits.length; i++) {
+      var row = el("p", "deadword");
+      row.appendChild(el("span", "deadword-phrase", hits[i].phrase));
+      row.appendChild(doc.createTextNode("  " + hits[i].why));
+      slot.appendChild(row);
+    }
+  }
+
   function sample(className, label, text) {
     var box = el("div", className);
     box.appendChild(el("p", "sample-label", label));
@@ -818,12 +1172,27 @@
       state.route = Flow.routeFromReadiness(state.answers.readiness_stage);
     }
 
+    // The dig site. Fires once per draft, on the way out of the free-text
+    // answer, and never blocks: a person who means "just" gets to say it.
+    // The detour itself is declared on the screen, not jumped to from here.
+    if (screen.id === "mine_object") {
+      state.minimizerHit = !state.nudged && !!Bullet.minimizer(state.draft.object);
+      if (state.minimizerHit) state.nudged = true;
+    }
+
     var target = Flow.resolve(screen.goTo, state);
     if (!target) return;
 
+    // Recall walks forward through the job list, so jobIndex is left pointing
+    // at the LAST job entered. Mining must start at the first one, because the
+    // person was told to start with the job they were best at and that is the
+    // one they put in first. Opening on their last job would quietly throw
+    // away the whole point of best-job-first.
+    if (screen.id === "recall_review") state.jobIndex = 0;
+
     // Adding a job means the next job_kind writes into a fresh entry.
     if (screen.id === "job_more" && state.addAnother) {
-      state.jobs.push({ kind: "", employer: "", year_started: null, year_approx: false });
+      state.jobs.push({ kind: "", employer: "", year_started: null, year_approx: false, bullets: [] });
       state.jobIndex = state.jobs.length - 1;
       state.addAnother = false;
     }

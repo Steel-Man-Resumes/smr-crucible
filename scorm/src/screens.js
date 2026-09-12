@@ -459,13 +459,181 @@
       kind: "recall_review",
       title: "Here is what you have got",
       help: "This is your work history. Nothing has been added and nothing has been changed.",
-      goTo: "review",
+      goTo: "mine_intro",
       why: {
         forWhat: "Seeing the frame before we start filling it in.",
         hard: "It can look thin written down. It usually is not. It just has not been mined yet.",
         buys: "Next comes the part where each of these turns into something worth reading.",
         evidence: "A year marked about is honest. Leave it, and correct it later if you find out different."
       }
+    },
+
+    // ---- THE BULLET FORGE ------------------------------------------------
+    // The five questions from bullet-mining/SKILL.md, one per screen, asked
+    // about one job at a time.
+    //
+    // On the web these five run as a prompt AFTER the person dumps their raw
+    // material, and a model does the mining. Inside the wall there is no
+    // afterward, so the five questions ARE the interface. That is the whole
+    // difference between this and a form.
+    //
+    // Doctrine: "One question at a time. This population has been interrogated
+    // enough; this should feel like a conversation with someone impressed, not
+    // an audit."
+
+    {
+      id: "mine_intro",
+      kind: "info",
+      title: "Now the part that matters",
+      body: [
+        "We take one job and find out what you actually did in it. Five questions, one at a time.",
+        "Nobody has ever asked you most of these about a job you had. That is exactly why the answers are worth something.",
+        "You can stop after one. You can do five. Every one you finish is a line on your resume that was not there before."
+      ],
+      footnote: "Nothing here gets made up. Every word that ends up on the page is a word you picked or typed.",
+      next: "Ask me the first one",
+      goTo: "mine_verb",
+      why: {
+        forWhat: "Turning a job title into evidence that you can do the work.",
+        hard: "Most people go blank here, because nobody has ever asked them to describe their own work in detail.",
+        buys: "This is the difference between the two sentences you were shown at the start. All of it is here.",
+        evidence: "The questions are the method. Answer them honestly and the bullet writes itself."
+      }
+    },
+
+    {
+      id: "mine_verb",
+      kind: "mine_verb",
+      title: "What did you actually do there?",
+      help: "Pick the one closest to the work. You can write your own at the bottom.",
+      goTo: "mine_object",
+      why: {
+        forWhat: "The first word of the bullet, which is the word that does the most work.",
+        hard: "The pull is toward a job title. A title says where you stood. A verb says what you did.",
+        buys: "A line that starts with an action instead of the words responsible for.",
+        evidence: "Strong verb first is the single most reliable thing about a resume line that gets read."
+      }
+    },
+
+    {
+      id: "mine_object",
+      kind: "mine_object",
+      title: "What did you do it to, or for?",
+      help: "Plain words. What was in front of you.",
+      text: {
+        field: "object",
+        label: "In your words",
+        placeholder: "pallets of dry goods off the night truck",
+        maxLength: 110,
+        rows: 2
+      },
+      goTo: { when: "minimizerNotChased", then: "minimizer_nudge", "else": "mine_tools" },
+      why: {
+        forWhat: "The thing the verb acted on. Without it the line says nothing.",
+        hard: "This is where people write something small. If you are about to type the word just, that is the sign there is more.",
+        buys: "Specifics. A reader can picture specifics, and cannot picture a summary.",
+        evidence: "They speak plain and it reads strong. Plain is the right register here."
+      }
+    },
+
+    {
+      id: "mine_tools",
+      kind: "mine_tools",
+      title: "Did you use any of these?",
+      help: "Tap anything you actually used. Skip anything you did not.",
+      footnote: "These are a memory jogger, not a guess about you. Tools are what turn work into a recognisable skill.",
+      goTo: "mine_frequency",
+      why: {
+        forWhat: "Naming the equipment and systems you can already operate.",
+        hard: "People forget tools because the tools were obvious to them. Obvious to you is not obvious on paper.",
+        buys: "Named equipment is the fastest way a hiring manager decides you can actually do the job.",
+        evidence: "Tools turn vague labor into recognisable skill."
+      }
+    },
+
+    {
+      id: "mine_frequency",
+      kind: "mine_frequency",
+      title: "How often?",
+      help: "Roughly. Nearest one is fine.",
+      goTo: "mine_scale",
+      why: {
+        forWhat: "Showing this was the job, not something you did once.",
+        hard: "It feels like a small detail. It is not.",
+        buys: "Evidence you showed up and did it repeatedly, which is the thing employers are most worried about.",
+        evidence: "Frequency is evidence of reliability."
+      }
+    },
+
+    {
+      id: "mine_scale",
+      kind: "mine_scale",
+      title: "About how much?",
+      help: "Pick the range that fits. You do not need an exact number.",
+      footnote: "A range you picked is more honest than a number you guessed, and it holds up if somebody asks you about it.",
+      goTo: "mine_result",
+      why: {
+        forWhat: "The size of what you were handling.",
+        hard: "Almost nobody has been asked this, so almost nobody knows their own numbers. That is why it is a range.",
+        buys: "Scale is what separates a line that sounds like anybody from a line that sounds like you.",
+        evidence: "Most people HAVE numbers and have never been asked."
+      }
+    },
+
+    {
+      id: "mine_result",
+      kind: "mine_result",
+      title: "What got better because you were there?",
+      help: "Finish this sentence: because I was there, we...",
+      text: {
+        field: "result",
+        label: "Because I was there, we... (optional)",
+        placeholder: "stopped losing product on the night shift",
+        maxLength: 120,
+        rows: 2
+      },
+      footnote: "Skip it if nothing comes to mind. A strong line does not need this part, it just gets stronger with it.",
+      goTo: "bullet_done",
+      why: {
+        forWhat: "The part that turns a description of a job into evidence of a person.",
+        hard: "This is the hardest of the five, because it means claiming you made a difference. Most people will not do that unprompted.",
+        buys: "The line a reader remembers. Not what you handled, but what changed.",
+        evidence: "Impact does not require a percentage. Fewer mistakes counts. A manager who could finally take a day off counts."
+      }
+    },
+
+    {
+      id: "bullet_done",
+      kind: "bullet_done",
+      title: "Here it is",
+      goTo: "mine_more",
+      why: {
+        forWhat: "Reading back exactly what you just built, before it goes anywhere.",
+        hard: "If any part of this is bigger than the truth, this is the moment to pull it back. Not later, in a room, in front of somebody.",
+        buys: "A line you can defend out loud. That is the only kind worth having.",
+        evidence: "Every word in it came from a list you picked or a box you typed in. Nothing was added."
+      }
+    },
+
+    {
+      id: "mine_more",
+      kind: "mine_more",
+      title: "What next?",
+      help: "Keep going while it is flowing. Stop whenever you want.",
+      goTo: { when: "hasAnotherJobToMine", then: "mine_verb", "else": "review" },
+      why: {
+        forWhat: "Deciding whether to keep mining or stop here.",
+        hard: "Three strong lines beat eight thin ones. Stopping is a real option, not giving up.",
+        buys: "Depth on one job often beats one line each on four.",
+        evidence: "Stop at enough. Three mined bullets that are true and strong beat eight that are padded."
+      }
+    },
+
+    {
+      id: "minimizer_nudge",
+      kind: "minimizer_nudge",
+      title: "Hold on a second",
+      goTo: "mine_tools"
     },
 
     {

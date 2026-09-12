@@ -125,6 +125,12 @@
    */
   var PREDICATES = {
     hasAnotherJobToAdd: function (s) { return s.addAnother === true; },
+    hasAnotherJobToMine: function (s) { return s.mineNext === true; },
+    // Set by the runtime just before the transition resolves, because the
+    // minimizer list lives in the mining corpus, not here. Kept as a predicate
+    // rather than an imperative jump so the detour stays IN the declared
+    // graph -- an undeclared jump is a route no reviewer can see.
+    minimizerNotChased: function (s) { return s.minimizerHit === true; },
     hasAnyJob: function (s) { return (s.jobs || []).length > 0; },
     hasUnpaidWork: function (s) { return s.answers.unpaid_work === "yes"; },
     knowsTheYear: function (s) { return !!currentJob(s).year_started; }

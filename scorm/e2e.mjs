@@ -252,7 +252,111 @@ async function main() {
       skeleton.includes("working life"), skeleton.slice(0, 300));
     console.log("        " + skeleton.split("\n").filter(Boolean).slice(0, 3).join(" / "));
 
-    await sco.locator("button.btn-primary").click();          // -> review
+    await sco.locator("button.btn-primary").click();          // -> mine_intro
+
+    console.log("\nTHE BULLET FORGE\n");
+
+    const mineIntro = await sco.locator(".card").innerText();
+    check("mining opens by saying nothing gets made up",
+      mineIntro.toLowerCase().includes("nothing here gets made up"), mineIntro.slice(0, 200));
+    await sco.locator("button.btn-primary").click();
+
+    // Q1: the verb, scoped to warehouse work.
+    const verbs = await sco.locator(".option-tap .option-label").allInnerTexts();
+    check("the verbs belong to the trade, not to a generic list",
+      verbs.includes("Loaded") && verbs.includes("Scanned") && !verbs.includes("Cooked"),
+      verbs.join(", "));
+    await sco.getByRole("button", { name: "Loaded", exact: true }).click();
+
+    // Q2: the minimizer. Write the exact thing the doctrine says to chase.
+    await sco.locator("#object").fill("just pallets off the truck");
+    await sco.locator("button.btn-primary").click();
+
+    const nudge = await sco.locator(".card").innerText();
+    check("the word just is chased, once",
+      nudge.toLowerCase().includes("small is almost never true"), nudge.slice(0, 200));
+    await sco.locator("button.btn-primary", { hasText: "say it properly" }).click();
+
+    await sco.locator("#object").fill("pallets of dry goods off the night truck");
+
+    // The kill list, live, while they type.
+    await sco.locator("#object").fill("responsible for pallets off the night truck");
+    await sleep(150);
+    const dead = await sco.locator(".deadwords").innerText();
+    check("the kill list explains itself rather than just refusing",
+      dead.toLowerCase().includes("responsible for") && dead.toLowerCase().includes("where strong bullets go to die"),
+      dead.slice(0, 200));
+    await sco.locator("#object").fill("pallets of dry goods off the night truck");
+    await sleep(150);
+    const cleared = await sco.locator(".deadwords").innerText();
+    check("the warning clears when the phrase does", cleared.trim() === "", cleared);
+    await sco.locator("button.btn-primary").click();
+
+    // Q3: joggers, as a question.
+    const toolsBody = await sco.locator(".card").innerText();
+    check("tools are offered as a jogger, not asserted about the person",
+      toolsBody.toLowerCase().includes("memory jogger, not a guess about you"), toolsBody.slice(0, 240));
+    check("the joggers belong to the trade",
+      toolsBody.includes("Forklift") && toolsBody.includes("RF scanner"), toolsBody.slice(0, 240));
+    await sco.locator("#tool-forklift").check();
+    await sco.locator("#tool-rf-scanner").check();
+    await sco.locator("button.btn-primary").click();
+
+    // Q4 and Q5: both ranges, both one tap.
+    await sco.locator("button.option-tap", { hasText: "Every shift" }).click();
+    const scaleBody = await sco.locator(".card").innerText();
+    check("scale is offered as a range, with an out",
+      scaleBody.includes("two or three trucks a day") || scaleBody.includes("Two or three trucks a day"),
+      scaleBody.slice(0, 240));
+    check("there is a way to decline putting a number on it",
+      scaleBody.toLowerCase().includes("rather not put a number"), scaleBody.slice(0, 240));
+    await sco.locator("button.option-tap", { hasText: "Two or three trucks a day" }).click();
+
+    const resultBody = await sco.locator(".card").innerText();
+    check("the result question is phrased so the answer fits the sentence",
+      resultBody.toLowerCase().includes("because i was there, we"), resultBody.slice(0, 200));
+    await sco.locator("#result").fill("stopped losing product on the night shift");
+    await sco.locator("button.btn-primary").click();
+
+    console.log("\nTHE PAYOFF\n");
+
+    const bullet = (await sco.locator(".bullet-text").innerText()).trim();
+    console.log("        " + bullet);
+    check("the bullet reads as one sentence, not as slots",
+      /^Loaded pallets of dry goods off the night truck using a forklift and an RF scanner, every shift, two or three truckloads a day, and stopped losing product on the night shift\.$/.test(bullet),
+      "got: " + bullet);
+    check("every mined element made it in",
+      bullet.includes("a forklift") && bullet.includes("every shift") &&
+      bullet.includes("truckloads a day") && bullet.includes("stopped losing product"),
+      bullet);
+
+    const gate = await sco.locator(".gate").innerText();
+    check("the truth gate is asked before the line is kept",
+      gate.toLowerCase().includes("two minutes"), gate.slice(0, 200));
+
+    // This trapdoor has now appeared twice: a generic Next rendered beside a
+    // screen whose choice IS the navigation. On the narrowing screen it moved
+    // on with no year recorded. Here it walks past the truth gate AND drops
+    // the line, because only the Keep button commits the draft.
+    const navButtons = await sco.locator(".nav button").allInnerTexts();
+    check("no generic Next can walk past the truth gate",
+      !navButtons.some((t) => t.trim() === "Next"),
+      "nav buttons on the bullet screen: " + navButtons.join(" / "));
+    const trace = await sco.locator(".trace").innerText();
+    check("every fragment shows where it came from",
+      trace.toLowerCase().includes("picked from a list") && trace.toLowerCase().includes("typed by the person"),
+      trace.slice(0, 240));
+
+    await sco.locator("button.btn-primary", { hasText: "Keep it" }).click();
+
+    const after = await sco.locator(".card").innerText();
+    check("the kept line is shown back immediately", after.includes("Loaded pallets"), after.slice(0, 200));
+    check("progress is counted in lines built, not screens done",
+      after.includes("1 line built") || after.includes("One line built"), after.slice(0, 200));
+    check("moving to the next job is offered while jobs remain",
+      after.toLowerCase().includes("next job"), after.slice(0, 240));
+
+    await sco.locator("button.option-tap", { hasText: "That is enough for now" }).click();
 
     const reviewTitle = await sco.locator("#screen-title").textContent();
     check("reached the review screen", reviewTitle.includes("Check your answers"), "saw: " + reviewTitle);

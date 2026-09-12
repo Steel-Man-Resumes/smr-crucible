@@ -139,9 +139,40 @@ async function main() {
     await page.locator("button.option-tap", { hasText: "that is all of them" }).click();
     await shot("15-the-skeleton");
     await page.locator("button.btn-primary").click();
-    await shot("16-review");
+
+    // The Bullet Forge.
+    await shot("16-mine-intro");
     await page.locator("button.btn-primary").click();
-    await shot("17-carry-code");
+    await shot("17-q1-verb");
+    await page.getByRole("button", { name: "Loaded", exact: true }).click();
+    await page.locator("#object").fill("just pallets off the truck");
+    await shot("18-q2-what");
+    await page.locator("button.btn-primary").click();
+    await shot("19-chasing-the-just");
+    await page.locator("button.btn-primary", { hasText: "say it properly" }).click();
+    await page.locator("#object").fill("responsible for pallets of dry goods off the night truck");
+    await sleep(200);
+    await shot("20-kill-list-live");
+    await page.locator("#object").fill("pallets of dry goods off the night truck");
+    await page.locator("button.btn-primary").click();
+    await shot("21-q3-joggers");
+    await page.locator("#tool-forklift").check();
+    await page.locator("#tool-rf-scanner").check();
+    await page.locator("button.btn-primary").click();
+    await shot("22-q4-how-often");
+    await page.locator("button.option-tap", { hasText: "Every shift" }).click();
+    await shot("23-q5-how-much");
+    await page.locator("button.option-tap", { hasText: "Two or three trucks a day" }).click();
+    await page.locator("#result").fill("stopped losing product on the night shift");
+    await shot("24-q6-what-got-better");
+    await page.locator("button.btn-primary").click();
+    await shot("25-THE-BULLET");
+    await page.getByRole("button", { name: "Yes. Keep it." }).click();
+    await shot("26-what-next");
+    await page.locator("button.option-tap", { hasText: "That is enough for now" }).click();
+    await shot("27-review");
+    await page.locator("button.btn-primary").click();
+    await shot("28-carry-code");
 
     // The harness view, which is the one that goes in the evidence video.
     await page.setViewportSize({ width: 1500, height: 950 });
