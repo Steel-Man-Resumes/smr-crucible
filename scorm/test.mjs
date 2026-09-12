@@ -39,6 +39,8 @@ const Narrowing = require("./src/narrowing.js");
 const LADDERS = require("./src/narrowings.v1.js");
 const MINING = require("./src/mining.v1.js");
 const Bullet = require("./src/bullet.js");
+const Identity = require("./src/identity.js");
+const IDENTITY = require("./src/identity.v1.js");
 
 let passed = 0;
 let failed = 0;
@@ -720,6 +722,187 @@ check("a word that merely contains a minimizer is not chased", () => {
   // "justified" and "only" inside another word should not trigger a nudge.
   assert(Bullet.minimizer("Justified the variance to the auditor") === null,
     "chased the word justified");
+});
+
+console.log("\nTHE IDENTITY BEAT\n");
+
+// The rule this whole screen lives or dies by: NO CLAIM WITHOUT A RECEIPT.
+// An unverifiable compliment to somebody in a facility is the exact move that
+// has been run on them before. They spot it, and then they stop believing the
+// true things too.
+
+const MINED_JOB = {
+  kind: "warehouse",
+  employer: "Miller Brothers",
+  year_started: 2018,
+  year_approx: true,
+  bullets: [{
+    verb: "Loaded",
+    object: "pallets of dry goods off the night truck",
+    tools: ["a forklift", "an RF scanner"],
+    frequency: "every shift",
+    scale: "two or three truckloads a day",
+    result: "stopped losing product on the night shift"
+  }]
+};
+
+check("a fully mined job earns claims, and every one carries its proof", () => {
+  const read = Identity.evaluate({ jobs: [MINED_JOB] });
+  assert(read.claims.length >= 3, "only earned " + read.claims.length + " claims from a full bullet");
+  for (const claim of read.claims) {
+    assert(claim.evidence && claim.evidence.trim().length > 0,
+      'claim "' + claim.id + '" has no receipt');
+    assert(claim.title && claim.says, 'claim "' + claim.id + '" is missing copy');
+  }
+});
+
+check("every receipt is drawn from what the person actually said", () => {
+  const read = Identity.evaluate({ jobs: [MINED_JOB] });
+  const said = [
+    "a forklift", "an RF scanner", "every shift", "two or three truckloads a day",
+    "stopped losing product on the night shift", "logistics", "Loaded"
+  ].map((x) => x.toLowerCase());
+  for (const claim of read.claims) {
+    const ev = claim.evidence.toLowerCase();
+    assert(said.some((x) => ev.includes(x) || x.includes(ev)),
+      'claim "' + claim.id + '" quotes something the person never said: ' + claim.evidence);
+  }
+});
+
+check("nothing mined means nothing claimed", () => {
+  // The most important negative case. A person who did no mining must not be
+  // congratulated for arriving.
+  const empty = Identity.evaluate({ jobs: [] });
+  equal(empty.claims, []);
+  assert(empty.closing === "", "a closing line fired with no evidence behind it");
+
+  const unmined = Identity.evaluate({ jobs: [{ kind: "warehouse", employer: "X", bullets: [] }] });
+  equal(unmined.claims, [], "an unmined job earned claims");
+});
+
+check("a thin bullet earns a short screen, not a padded one", () => {
+  const thin = Identity.evaluate({
+    jobs: [{ kind: "warehouse", bullets: [{ verb: "Loaded", object: "trucks", tools: [] }] }]
+  });
+  assert(thin.claims.length <= 2,
+    "a bare verb-and-object earned " + thin.claims.length + " claims. That is padding.");
+});
+
+check("no claim can fire without its evidence source returning something", () => {
+  // Walk every claim against a deliberately hollow dataset and confirm none of
+  // them slip through with an empty receipt.
+  const hollow = {
+    jobs: [{ kind: "", employer: "", year_started: null, bullets: [{ verb: "", object: "", tools: [] }] }]
+  };
+  const read = Identity.evaluate(hollow);
+  for (const claim of read.claims) {
+    assert(claim.evidence.trim().length > 0, 'claim "' + claim.id + '" fired bare on hollow data');
+  }
+});
+
+check("every claim names a trigger and an evidence source that exist", () => {
+  for (const claim of IDENTITY.CLAIMS) {
+    assert(typeof Identity.TRIGGERS[claim.when] === "function",
+      claim.id + " names unknown trigger " + claim.when);
+    assert(typeof Identity.EVIDENCE[claim.evidence] === "function",
+      claim.id + " names unknown evidence source " + claim.evidence);
+  }
+});
+
+check("every claim is reachable by some real combination of answers", () => {
+  // A claim nobody can earn is dead copy that reads as a promise of something
+  // the product does not do.
+  const rich = {
+    jobs: [
+      {
+        kind: "warehouse", year_started: 2015, bullets: [{
+          verb: "Trained", object: "new hires on the pick route",
+          tools: ["a forklift", "pick tickets"], frequency: "every shift",
+          scale: "two or three truckloads a day", result: "cut damage claims to zero"
+        }]
+      },
+      {
+        kind: "warehouse", year_started: 2020, bullets: [{
+          verb: "Loaded", object: "freight", tools: ["a pallet jack"],
+          frequency: "most days", scale: "about a truckload a day", result: ""
+        }]
+      },
+      {
+        kind: "kitchen", year_started: 2022, bullets: [{
+          verb: "Cooked", object: "the line", tools: ["a flat top"],
+          frequency: "every shift", scale: "150 to 400 meals a shift", result: ""
+        }]
+      }
+    ]
+  };
+  const earnedIds = new Set(Identity.evaluate(rich).claims.map((c) => c.id));
+  // evaluate() caps at five, so check the triggers directly for reachability.
+  const unreachable = IDENTITY.CLAIMS
+    .filter((c) => !Identity.TRIGGERS[c.when](rich))
+    .map((c) => c.id);
+  assert(unreachable.length === 0, "claims nobody can earn: " + unreachable.join(", "));
+  assert(earnedIds.size === 5, "the cap should hold at five, got " + earnedIds.size);
+});
+
+check("the screen never turns into a sales page", () => {
+  const rich = { jobs: [] };
+  for (let i = 0; i < 6; i++) {
+    rich.jobs.push({
+      kind: i % 2 ? "kitchen" : "warehouse",
+      year_started: 2010 + i,
+      bullets: [{
+        verb: "Trained", object: "a crew", tools: ["a forklift", "work orders"],
+        frequency: "every shift", scale: "several truckloads a day", result: "it ran better"
+      }]
+    });
+  }
+  assert(Identity.evaluate(rich).claims.length <= 5,
+    "more than five claims made it onto one screen");
+});
+
+check("the year span comes from mined jobs only", () => {
+  // An unmined job is not evidence of anything, including time served at work.
+  const mixed = {
+    jobs: [
+      { kind: "warehouse", year_started: 2010, bullets: [] },
+      { kind: "warehouse", year_started: 2020, bullets: [{ verb: "Loaded", object: "freight" }] }
+    ]
+  };
+  assert(Identity.yearSpan(mixed.jobs) === 0,
+    "an unmined job was counted toward the span");
+});
+
+check("the closing line names the field only when there is one field", () => {
+  const one = Identity.evaluate({ jobs: [MINED_JOB] });
+  assert(one.closing.includes("logistics"), "single-field closing did not name it: " + one.closing);
+  const two = Identity.evaluate({
+    jobs: [MINED_JOB, { kind: "kitchen", year_started: 2021, bullets: [{ verb: "Cooked", object: "the line" }] }]
+  });
+  assert(!two.closing.includes("logistics and food service resume"),
+    "the closing tried to name two fields at once: " + two.closing);
+});
+
+check("nothing on this screen promises an outcome", () => {
+  const text = (JSON.stringify(IDENTITY.CLAIMS) + JSON.stringify(IDENTITY.CLOSING) +
+                JSON.stringify(IDENTITY.EMPTY)).toLowerCase();
+  for (const phrase of ["guarantee", "will get", "land you", "hired", "employers will"]) {
+    assert(!text.includes(phrase), 'the identity copy promises "' + phrase + '"');
+  }
+});
+
+check("no em dashes or prohibited language in the identity copy", () => {
+  const text = JSON.stringify(IDENTITY.CLAIMS) + JSON.stringify(IDENTITY.CLOSING) +
+               JSON.stringify(IDENTITY.EMPTY);
+  assert(!text.includes("—"), "an em dash is in the identity copy");
+  const lower = text.toLowerCase();
+  for (const word of ["felon", "offender", "ex-con", "second chance", "inmate", "convict"]) {
+    assert(!lower.includes(word), 'the identity copy contains "' + word + '"');
+  }
+});
+
+check("every kind of work maps to a field name", () => {
+  const missing = TABLES.WORK_KINDS.map((k) => k.id).filter((id) => !IDENTITY.FIELDS[id]);
+  assert(missing.length === 0, "work kinds with no field name: " + missing.join(", "));
 });
 
 console.log("\nSTYLESHEET\n");

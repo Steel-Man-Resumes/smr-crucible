@@ -358,6 +358,37 @@ async function main() {
 
     await sco.locator("button.option-tap", { hasText: "That is enough for now" }).click();
 
+    console.log("\nTHE IDENTITY BEAT\n");
+
+    const provedTitle = await sco.locator("#screen-title").textContent();
+    check("the identity screen comes after the mining, not before",
+      provedTitle.includes("just proved"), "saw: " + provedTitle);
+
+    const provedBody = await sco.locator(".card").innerText();
+    check("it opens by saying it is reporting, not encouraging",
+      provedBody.toLowerCase().includes("not encouragement"), provedBody.slice(0, 200));
+    check("their own line is on the screen while they read what it means",
+      provedBody.includes("Loaded pallets of dry goods"), provedBody.slice(0, 300));
+
+    const claims = await sco.locator(".claim").count();
+    check("claims were earned from the mined bullet", claims >= 3, "only " + claims + " claims");
+
+    // The rule the whole screen rests on.
+    const proofs = await sco.locator(".claim-proof").allInnerTexts();
+    check("every claim carries a receipt", proofs.length === claims,
+      claims + " claims but " + proofs.length + " receipts");
+    const said = ["forklift", "RF scanner", "every shift", "truckloads", "stopped losing product", "logistics"];
+    const unsupported = proofs.filter((t) => !said.some((x) => t.toLowerCase().includes(x.toLowerCase())));
+    check("no receipt quotes anything the person did not say",
+      unsupported.length === 0, unsupported.join(" | "));
+
+    const closing = await sco.locator(".punch").innerText();
+    check("the closing names the field from their own work",
+      closing.toLowerCase().includes("logistics"), closing);
+    console.log("        " + closing.trim());
+
+    await sco.locator("button.btn-primary").click();
+
     const reviewTitle = await sco.locator("#screen-title").textContent();
     check("reached the review screen", reviewTitle.includes("Check your answers"), "saw: " + reviewTitle);
     const reviewText = await sco.locator(".review-list").innerText();

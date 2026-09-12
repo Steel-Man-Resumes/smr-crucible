@@ -32,6 +32,8 @@
   var LADDERS = root.NARROWINGS_V1;
   var MINING = root.MINING_V1;
   var Bullet = root.Bullet;
+  var Identity = root.Identity;
+  var IDENTITY = root.IDENTITY_V1;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -767,6 +769,58 @@
       card.appendChild(keep);
     },
 
+    /**
+     * THE IDENTITY BEAT.
+     *
+     * Their bullets, then what those bullets prove, with the receipt attached
+     * to each claim. Nothing on this screen fires on effort or completion; a
+     * thin session produces a short screen, and a short honest screen is the
+     * right output for one.
+     */
+    proved: function (card) {
+      var read = Identity.evaluate({ jobs: state.jobs });
+
+      if (read.bulletCount === 0) {
+        for (var e = 0; e < IDENTITY.EMPTY.body.length; e++) {
+          card.appendChild(el("p", "screen-body", IDENTITY.EMPTY.body[e]));
+        }
+        var back = el("button", "btn btn-secondary", "Take me back to do one");
+        back.type = "button";
+        back.onclick = function () { go("mine_verb"); };
+        card.appendChild(back);
+        return;
+      }
+
+      // Their own lines first. The claims below are about these, and the
+      // person should be looking at them while they read what they mean.
+      var lines = el("div", "bulletlist");
+      var all = Identity.allBullets(state.jobs);
+      for (var i = 0; i < all.length; i++) {
+        lines.appendChild(el("p", "bulletlist-item", Bullet.assemble(all[i].bullet)));
+      }
+      card.appendChild(lines);
+
+      var claims = el("div", "claims");
+      for (var c = 0; c < read.claims.length; c++) {
+        claims.appendChild(claimCard(read.claims[c]));
+      }
+      card.appendChild(claims);
+
+      if (read.closing) card.appendChild(el("p", "punch", read.closing));
+
+      // Doctrine: behaviour updates the stage, and the program should notice
+      // out loud. Somebody who said they were not thinking about work and then
+      // mined three real lines has moved, and telling them is the whole point.
+      if (state.routeMoved) {
+        var moved = el("div", "moved");
+        moved.appendChild(el("h2", "moved-title", IDENTITY.CLOSING.moved.title));
+        for (var m = 0; m < IDENTITY.CLOSING.moved.body.length; m++) {
+          moved.appendChild(el("p", null, IDENTITY.CLOSING.moved.body[m]));
+        }
+        card.appendChild(moved);
+      }
+    },
+
     review: function (card) {
       var list = el("dl", "review-list");
       var rows = [
@@ -950,7 +1004,10 @@
     // Doctrine: behaviour updates the stage. Somebody who said they were not
     // thinking about it and then mined three real lines has moved.
     var moved = Flow.promoteRoute(state.route, countBullets());
-    if (moved.changed) state.route = moved.route;
+    if (moved.changed) {
+      state.route = moved.route;
+      state.routeMoved = true;
+    }
     state.draft = emptyDraft();
     state.nudged = false;
   }
@@ -1052,6 +1109,18 @@
       row.appendChild(doc.createTextNode("  " + hits[i].why));
       slot.appendChild(row);
     }
+  }
+
+  function claimCard(claim) {
+    var box = el("div", "claim");
+    box.appendChild(el("p", "claim-title", claim.title));
+    box.appendChild(el("p", "claim-says", claim.says));
+    // The receipt. Labelled, so it reads as a citation rather than a flourish.
+    var proof = el("p", "claim-proof");
+    proof.appendChild(el("span", "claim-proof-label", "Because you said"));
+    proof.appendChild(doc.createTextNode(claim.evidence));
+    box.appendChild(proof);
+    return box;
   }
 
   function sample(className, label, text) {

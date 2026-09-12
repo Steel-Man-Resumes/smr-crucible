@@ -170,7 +170,9 @@ async function main() {
     await page.getByRole("button", { name: "Yes. Keep it." }).click();
     await shot("26-what-next");
     await page.locator("button.option-tap", { hasText: "That is enough for now" }).click();
-    await shot("27-review");
+    await shot("27-LOOK-WHAT-YOU-PROVED");
+    await page.locator("button.btn-primary").click();
+    await shot("27b-review");
     await page.locator("button.btn-primary").click();
     await shot("28-carry-code");
 

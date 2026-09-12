@@ -620,7 +620,7 @@
       kind: "mine_more",
       title: "What next?",
       help: "Keep going while it is flowing. Stop whenever you want.",
-      goTo: { when: "hasAnotherJobToMine", then: "mine_verb", "else": "review" },
+      goTo: { when: "hasAnotherJobToMine", then: "mine_verb", "else": "proved" },
       why: {
         forWhat: "Deciding whether to keep mining or stop here.",
         hard: "Three strong lines beat eight thin ones. Stopping is a real option, not giving up.",
@@ -634,6 +634,29 @@
       kind: "minimizer_nudge",
       title: "Hold on a second",
       goTo: "mine_tools"
+    },
+
+    // ---- THE IDENTITY BEAT ----------------------------------------------
+    // Doctrine: "Name the identity evidence when it appears... because the
+    // document expires, and the identity doesn't."
+    //
+    // The rule this screen is built to: NO CLAIM WITHOUT A RECEIPT. Telling
+    // somebody in a facility something flattering they cannot check is the
+    // exact move that has been run on them before. They will spot it and stop
+    // believing the rest.
+
+    {
+      id: "proved",
+      kind: "proved",
+      title: "Look what you just proved",
+      help: "This is not encouragement. Every line below is something you can point at.",
+      goTo: "review",
+      why: {
+        forWhat: "Reading back what your own answers say about you, with the proof next to each one.",
+        hard: "Most people skim this part, or decide it is being nice to them. It is not being nice. It is reporting.",
+        buys: "The document expires. What you now know about your own history does not.",
+        evidence: "People sustain a change when they buy a new story about themselves, and a story only holds if the evidence is checkable."
+      }
     },
 
     {
