@@ -136,7 +136,6 @@ async function main() {
     const whyButton = sco.locator("button.link-why");
     check("a question screen offers its reasoning", await whyButton.count() === 1, "no why button on q1");
     await whyButton.click();
-    // innerText returns rendered text, and the labels are uppercased in CSS.
     const whyText = (await sco.locator(".panel-why").innerText()).toLowerCase();
     check("the why panel names the difficulty and what digging gets you",
       whyText.includes("why it is hard") && whyText.includes("what digging gets you") &&
@@ -146,7 +145,12 @@ async function main() {
       whyText.length > 400, "only " + whyText.length + " characters of reasoning");
     await whyButton.click();
 
+    // THE ROUTER. "Ready to go" must not walk the same road as everyone else.
     await sco.locator("#readiness_stage-" + intent.readiness_stage).check();
+    await sco.locator("button.btn-primary").click();
+    const routeTitle = await sco.locator("#screen-title").textContent();
+    check("the readiness answer opens a route of its own",
+      routeTitle.includes("properly"), "saw: " + routeTitle);
     await sco.locator("button.btn-primary").click();
 
     for (const g of intent.goals) await sco.locator("#goals-" + g).check();
@@ -158,7 +162,7 @@ async function main() {
     await sco.locator("#work_type-" + intent.work_type).check();
     await sco.locator("button.btn-primary").click();
 
-    for (const s of intent.skills) await sco.locator("#skills-" + s).check();
+    for (const sk of intent.skills) await sco.locator("#skills-" + sk).check();
     await sco.locator("#skills_freetext").fill("Welding and small engine repair");
     await sco.locator("button.btn-primary").click();
 
@@ -169,16 +173,93 @@ async function main() {
     await sco.locator("#hook_narrative").fill(
       "A day where I finish something and it stays finished. Where somebody newer asks me how to do it and I know the answer."
     );
-    await sco.locator("button.btn-primary").click();          // to review
+    await sco.locator("button.btn-primary").click();          // -> recall_intro
+
+    console.log("\nRECALL\n");
+
+    const recallTitle = await sco.locator("#screen-title").textContent();
+    check("recall comes after the intake", recallTitle.includes("work you have done"), "saw: " + recallTitle);
+    const recallBody = await sco.locator(".card").innerText();
+    check("recall opens by telling them not to start at the beginning",
+      recallBody.toLowerCase().includes("best at"), recallBody.slice(0, 200));
+    await sco.locator("button.btn-primary").click();
+
+    const unpaidBody = await sco.locator(".card").innerText();
+    check("the pay-stub question is asked, and normalised",
+      unpaidBody.toLowerCase().includes("pay stub") && unpaidBody.toLowerCase().includes("it counts"),
+      unpaidBody.slice(0, 200));
+    await sco.locator("#unpaid_work-yes").check();
+    await sco.locator("button.btn-primary").click();
+
+    // Job one.
+    await sco.locator("#job-kind-warehouse").check();
+    await sco.locator("button.btn-primary").click();
+    await sco.locator("#employer").fill("Miller Brothers");
+    await sco.locator("button.btn-primary").click();
+
+    console.log("\nTHE NARROWING\n");
+
+    const rung1 = await sco.locator(".card").innerText();
+    check("the year question never asks for a year outright",
+      rung1.includes("I know about what year") && rung1.includes("I really cannot place it"),
+      rung1.slice(0, 220));
+    check("every rung offers a way out for someone who does not know",
+      rung1.includes("cannot place it"), "no escape on the first rung");
+
+    // Narrow: "I know roughly how long ago" -> "Six to ten years back".
+    await sco.locator("button.option-tap", { hasText: "roughly how long ago" }).click();
+    const rung2 = await sco.locator(".card").innerText();
+    check("picking a path climbs to a narrower question",
+      rung2.includes("About how long ago"), rung2.slice(0, 160));
+    await sco.locator("button.option-tap", { hasText: "Six to ten years back" }).click();
+
+    const moreBody = await sco.locator(".card").innerText();
+    check("resolving the year advances to the next job prompt",
+      moreBody.includes("another one"), moreBody.slice(0, 160));
+
+    // Job two, via the age anchor this time.
+    await sco.locator("button.option-tap", { hasText: "Yes, there was another" }).click();
+    await sco.locator("#job-kind-kitchen").check();
+    await sco.locator("button.btn-primary").click();
+    await sco.locator("#employer").fill("The diner on Third");
+    await sco.locator("button.btn-primary").click();
+    await sco.locator("button.option-tap", { hasText: "I remember other things" }).click();
+    await sco.locator("button.option-tap", { hasText: "How old someone in my family" }).click();
+
+    const anchorBody = await sco.locator(".card").innerText();
+    check("the age anchor asks two things nobody forgets",
+      anchorBody.includes("How old are they now"), anchorBody.slice(0, 200));
+    await sco.locator("#age-now").fill("20");
+    await sco.locator("#age-then").fill("11");
+    await sco.locator("button.btn-primary", { hasText: "Work it out" }).click();
+
+    await sco.locator("button.option-tap", { hasText: "that is all of them" }).click();
+
+    console.log("\nTHE SKELETON\n");
+
+    const skeleton = await sco.locator(".card").innerText();
+    check("both jobs came through with their kind and employer",
+      skeleton.includes("Warehouse or shipping") && skeleton.includes("Miller Brothers") &&
+      skeleton.includes("Kitchen or food service") && skeleton.includes("The diner on Third"),
+      skeleton.slice(0, 300));
+    check("years recovered from memory are shown as approximate, not as facts",
+      skeleton.includes("About 2018") && skeleton.includes("About 2017"),
+      skeleton.slice(0, 300));
+    check("the approximation is explained rather than left to be noticed",
+      skeleton.toLowerCase().includes("close, not exact"),
+      skeleton.slice(0, 300));
+    check("two jobs reads back as a working life, not as a count",
+      skeleton.includes("working life"), skeleton.slice(0, 300));
+    console.log("        " + skeleton.split("\n").filter(Boolean).slice(0, 3).join(" / "));
+
+    await sco.locator("button.btn-primary").click();          // -> review
 
     const reviewTitle = await sco.locator("#screen-title").textContent();
     check("reached the review screen", reviewTitle.includes("Check your answers"), "saw: " + reviewTitle);
-
     const reviewText = await sco.locator(".review-list").innerText();
     check("review shows the picked labels, not raw ids",
       reviewText.includes("Getting ready") && reviewText.includes("Forklift") && reviewText.includes("Montana"),
       reviewText.slice(0, 200));
-
     await sco.locator("button.btn-primary").click();          // finish
 
     console.log("\nTHE WALL CROSSING\n");

@@ -335,6 +335,71 @@ html, body {
 }
 .code-note { margin: 14px 0 0; font-size: 15px; color: var(--term-note); }
 
+/* -------------------------------------------------------------- narrowing */
+
+/* The rung question sits above the options and carries the weight, because on
+   a narrowing screen the card title is the topic and the rung is the actual
+   question being asked right now. */
+.narrow-question {
+  margin: 0 0 6px;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* A tappable option is a button, not a radio: on a ladder the choice IS the
+   navigation, so there is nothing to confirm and no Next to press. One tap,
+   one rung. */
+.option-tap {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  align-items: center;
+  background: var(--card);
+}
+.option-tap:hover { border-color: var(--line-hover); border-left-color: var(--accent); }
+.option-tap:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* The way out. Present on every rung, and deliberately quieter than the real
+   answers so it reads as permitted rather than as the easy option. */
+/* The way out. Quieter than the real answers so it reads as permitted rather
+   than as the easy option, and with no accent rule, because it is not a
+   choice about the job. */
+.option-escape {
+  background: transparent;
+  border: 1px dashed var(--line-hover);
+  border-left: 1px dashed var(--line-hover);
+}
+.option-escape .option-label { color: var(--muted); }
+
+.input-number { max-width: 140px; font-size: 20px; }
+
+/* ---------------------------------------------------------------- joblist */
+
+.joblist { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 22px; }
+
+.jobcard {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.jobcard-index {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.jobcard-kind { margin: 0; font-size: 18px; font-weight: 600; }
+.jobcard-employer { margin: 2px 0 0; font-size: 17px; }
+.jobcard-when { margin: 2px 0 0; font-size: 16px; color: var(--muted); }
+.jobcard-note { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
+
 /* ------------------------------------------------------------------ proof */
 
 /* The two samples are deliberately NOT symmetrical. The skimmed one is flat

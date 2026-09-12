@@ -120,8 +120,41 @@
     { id: "WY", label: "Wyoming" }
   ];
 
+  // 16 entries, 4 bits. Single select, per job.
+  // ADDED 2026-09-12 for recall. Additive only, same freeze rules as above.
+  // Deliberately broad: this is the first thing someone picks about a job they
+  // may not have thought of as a job at all, so the categories have to be
+  // recognisable at a glance rather than precise.
+  var WORK_KINDS = [
+    { id: "warehouse", label: "Warehouse or shipping" },
+    { id: "construction", label: "Construction or trades" },
+    { id: "kitchen", label: "Kitchen or food service" },
+    { id: "cleaning", label: "Cleaning or janitorial" },
+    { id: "driving", label: "Driving or delivery" },
+    { id: "production", label: "Factory or production" },
+    { id: "grounds", label: "Landscaping or grounds" },
+    { id: "retail", label: "Store or retail" },
+    { id: "auto", label: "Auto or mechanical" },
+    { id: "care", label: "Taking care of people" },
+    { id: "office", label: "Office or clerical" },
+    { id: "security", label: "Security" },
+    { id: "personal", label: "Barbering or personal services" },
+    { id: "farm", label: "Farm or outdoor labor" },
+    { id: "teaching", label: "Teaching, tutoring or mentoring" },
+    { id: "other_work", label: "Something else" }
+  ];
+
+  // 2 entries, 1 bit. Wording is deliberate: "yes" is phrased as the ordinary
+  // case so that saying yes does not feel like a confession.
+  var YES_NO = [
+    { id: "yes", label: "Yes, I have done work like that" },
+    { id: "no", label: "No, everything I did was on the books" }
+  ];
+
   return {
     VERSION: 1,
+    YES_NO: YES_NO,
+    WORK_KINDS: WORK_KINDS,
     READINESS: READINESS,
     GOALS: GOALS,
     CHALLENGES: CHALLENGES,

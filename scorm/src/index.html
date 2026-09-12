@@ -45,9 +45,17 @@
   <p>Works with no internet. Nothing you enter is sent anywhere.</p>
 </footer>
 
+<!--
+  Load order is data first, then engines, then the runtime. Every one of these
+  is a plain script that attaches one global; there is no module loader and
+  nothing is fetched.
+-->
 <script src="tables.v1.js"></script>
+<script src="narrowings.v1.js"></script>
 <script src="carry-code.js"></script>
 <script src="screens.js"></script>
+<script src="flow.js"></script>
+<script src="narrowing.js"></script>
 <script src="scorm-api.js"></script>
 <script src="app.js"></script>
 </body>

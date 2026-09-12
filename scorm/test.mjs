@@ -34,6 +34,9 @@ const CarryCode = require("./src/carry-code.js");
 
 // screens.js expects a browser global or CommonJS. Give it CommonJS.
 const SCREENS = require("./src/screens.js");
+const Flow = require("./src/flow.js");
+const Narrowing = require("./src/narrowing.js");
+const LADDERS = require("./src/narrowings.v1.js");
 
 let passed = 0;
 let failed = 0;
@@ -227,16 +230,43 @@ check("no duplicate ids in any table", () => {
   }
 });
 
-check("option ids still match the online Mini Forge intake", () => {
-  // If these drift, a carry code decodes into fields the web app does not
-  // recognise, and the person's answers quietly vanish on redemption.
+/**
+ * Which tables have a counterpart in the web app today.
+ *
+ * SHARED tables must match exactly: a carry code built inside decodes into the
+ * web app's fields, and a drifted id means someone's answers quietly vanish on
+ * redemption months later.
+ *
+ * INSIDE_ONLY tables have no web counterpart yet because the web product has
+ * no equivalent step. Each one carries the reason and the condition that ends
+ * the exemption. A table cannot sit in neither list, so adding one forces this
+ * decision rather than silently skipping the check.
+ */
+const SHARED_WITH_WEB = ["READINESS", "GOALS", "CHALLENGES", "WORK_TYPE", "SKILLS"];
+const INSIDE_ONLY = {
+  STATES: "The web intake takes a free-text location. Nothing to compare against.",
+  WORK_KINDS: "Recall has no web counterpart. Becomes SHARED when jobs ride the carry code.",
+  YES_NO: "A local control, never carried."
+};
+
+check("every table is declared as either shared with the web or inside-only", () => {
+  const undeclared = Object.keys(TABLES)
+    .filter((name) => Array.isArray(TABLES[name]))
+    .filter((name) => !SHARED_WITH_WEB.includes(name) && !INSIDE_ONLY[name]);
+  assert(undeclared.length === 0,
+    "tables in neither list: " + undeclared.join(", ") +
+    ". Decide whether the web app needs to know about it before shipping.");
+});
+
+check("shared option ids still match the online Mini Forge intake", () => {
   const web = readFileSync(
     join(HERE, "..", "apps", "consumer", "app", "(mini-forge)", "mini-forge", "q", "[step]", "page.tsx"),
     "utf8"
   );
   const drifted = [];
-  for (const [name, table] of Object.entries(TABLES)) {
-    if (!Array.isArray(table) || name === "STATES") continue;
+  for (const name of SHARED_WITH_WEB) {
+    const table = TABLES[name];
+    assert(Array.isArray(table), name + " is declared shared but does not exist");
     for (const entry of table) {
       if (!entry.id) continue;
       if (!web.includes('id: "' + entry.id + '"')) drifted.push(name + "." + entry.id);
@@ -310,6 +340,221 @@ check("no prohibited language in anything the person reads", () => {
   for (const word of ["felon", "offender", "ex-con", "second chance", "inmate", "convict"]) {
     assert(!text.includes(word), 'the script contains "' + word + '"');
   }
+});
+
+console.log("\nTHE FLOW GRAPH\n");
+
+// A flow graph fails in ways a linear array cannot: a transition that points
+// at nothing, a screen nobody can reach, a route that dead-ends on a screen
+// with no exit. All three strand a person mid-session with no way forward, so
+// all three are build failures rather than review items.
+
+const SCREEN_IDS = new Set(SCREENS.SCREENS.map((s) => s.id));
+
+check("every transition points at a screen that exists", () => {
+  const broken = [];
+  for (const screen of SCREENS.SCREENS) {
+    for (const target of Flow.targetsOf(screen.goTo)) {
+      if (!SCREEN_IDS.has(target)) broken.push(screen.id + " -> " + target);
+    }
+  }
+  assert(broken.length === 0, "dangling transitions: " + broken.join(", "));
+});
+
+check("every screen is reachable from the start", () => {
+  const seen = new Set(["welcome"]);
+  const queue = ["welcome"];
+  while (queue.length) {
+    // shift() once, into a variable. Calling it inside a find() predicate runs
+    // it once per array element, which is how this test first "proved" that
+    // every screen after the second was unreachable.
+    const id = queue.shift();
+    const screen = SCREENS.SCREENS.find((s) => s.id === id);
+    if (!screen) continue;
+    for (const target of Flow.targetsOf(screen.goTo)) {
+      if (!seen.has(target)) { seen.add(target); queue.push(target); }
+    }
+  }
+  const orphans = [...SCREEN_IDS].filter((id) => !seen.has(id));
+  assert(orphans.length === 0, "unreachable screens: " + orphans.join(", "));
+});
+
+check("no screen dead-ends except the last one", () => {
+  const dead = SCREENS.SCREENS
+    .filter((s) => s.kind !== "done" && !s.goTo)
+    .map((s) => s.id);
+  assert(dead.length === 0, "screens with no way forward: " + dead.join(", "));
+});
+
+check("the readiness answer genuinely parts company", () => {
+  // The rule that started all this: a choice that leads everywhere to the same
+  // place is theater, and this population has filled out enough of those.
+  const readiness = SCREENS.SCREENS.find((s) => s.id === "readiness");
+  const destinations = new Set(Flow.targetsOf(readiness.goTo));
+  assert(destinations.size >= 3,
+    "readiness leads to only " + destinations.size + " distinct screens. " +
+    "If every answer lands in the same place, the question is decoration.");
+});
+
+check("each readiness answer maps to a route, and the routes are distinct", () => {
+  const routes = new Set();
+  for (const option of TABLES.READINESS) {
+    const route = Flow.routeFromReadiness(option.id);
+    assert(Flow.ROUTES[route], option.id + " maps to unknown route " + route);
+    routes.add(route);
+  }
+  assert(routes.size >= 3, "only " + routes.size + " distinct routes across four answers");
+});
+
+check("every named predicate exists and is a function", () => {
+  const used = new Set();
+  for (const screen of SCREENS.SCREENS) {
+    if (screen.goTo && screen.goTo.when) used.add(screen.goTo.when);
+  }
+  for (const name of used) {
+    assert(typeof Flow.PREDICATES[name] === "function", "unknown predicate: " + name);
+  }
+});
+
+check("each route walks a visibly different path", () => {
+  // Walk the graph once per route with a fixed set of answers and confirm the
+  // three journeys are not the same journey with different wallpaper.
+  function walk(route, readiness) {
+    const state = {
+      route,
+      addAnother: false,
+      jobs: [],
+      jobIndex: 0,
+      answers: {
+        readiness_stage: readiness,
+        goals: [], challenges: [], skills: [],
+        work_type: "physical", state: "MT", unpaid_work: "no"
+      }
+    };
+    const path = [];
+    let at = "readiness";
+    for (let hops = 0; hops < 60; hops++) {
+      path.push(at);
+      const screen = SCREENS.SCREENS.find((s) => s.id === at);
+      if (!screen || !screen.goTo) break;
+      const next = Flow.resolve(screen.goTo, state);
+      if (!next || next === at) break;
+      at = next;
+      if (at === "recall_intro") break;
+    }
+    return path;
+  }
+  const exploring = walk("exploring", "precontemplation").join(">");
+  const preparing = walk("preparing", "preparation").join(">");
+  const acting = walk("acting", "action").join(">");
+  assert(new Set([exploring, preparing, acting]).size === 3,
+    "two routes walk the same path:\n        " + exploring + "\n        " + preparing + "\n        " + acting);
+  // Doctrine: acting "resents delay". It must not be the longest road in.
+  assert(walk("acting", "action").length < walk("preparing", "preparation").length,
+    "the acting route is not shorter than the preparing route, which the doctrine says is an insult");
+  console.log("        exploring " + walk("exploring", "precontemplation").length + " steps to recall, " +
+    "preparing " + walk("preparing", "preparation").length + ", acting " + walk("acting", "action").length);
+});
+
+check("route revision slows a thin-material sprinter, and says why", () => {
+  const revised = Flow.reviseRouteForMaterial("acting", 1);
+  assert(revised.route === "preparing" && revised.changed, "an acting route with one job was not slowed");
+  assert(revised.reason, "the revision carries no reason, so nothing can explain it to the person");
+  const untouched = Flow.reviseRouteForMaterial("acting", 4);
+  assert(!untouched.changed, "an acting route with real material was slowed anyway");
+});
+
+check("behaviour promotes a route, and never demotes one", () => {
+  assert(Flow.promoteRoute("exploring", 3).route === "preparing", "three mined bullets did not move an explorer");
+  assert(!Flow.promoteRoute("exploring", 1).changed, "one bullet moved someone prematurely");
+  // "Never gatekeep backwards."
+  assert(!Flow.promoteRoute("acting", 0).changed, "someone who declared themselves ready was demoted");
+});
+
+console.log("\nNARROWING LADDERS\n");
+
+check("every ladder is well formed", () => {
+  for (const [name, ladder] of Object.entries(LADDERS.ALL)) {
+    const problems = Narrowing.validate(ladder);
+    assert(problems.length === 0, name + ":\n        " + problems.join("\n        "));
+  }
+});
+
+check("no rung offers more than four options", () => {
+  const wide = [];
+  for (const [name, ladder] of Object.entries(LADDERS.ALL)) {
+    for (const [rungName, rung] of Object.entries(ladder.rungs)) {
+      if ((rung.options || []).length > 4) wide.push(name + "." + rungName);
+    }
+  }
+  assert(wide.length === 0, "rungs over four options: " + wide.join(", "));
+});
+
+check("every ladder terminates from every rung", () => {
+  // Walk every path. A cycle with no resolving option traps someone forever.
+  for (const [name, ladder] of Object.entries(LADDERS.ALL)) {
+    for (const startRung of Object.keys(ladder.rungs)) {
+      const seen = new Set();
+      const queue = [startRung];
+      let resolves = false;
+      while (queue.length) {
+        const rungName = queue.shift();
+        if (seen.has(rungName)) continue;
+        seen.add(rungName);
+        const rung = ladder.rungs[rungName];
+        if (!rung) continue;
+        if (rung.kind) { resolves = true; continue; }
+        for (const option of rung.options || []) {
+          if (option.goto) queue.push(option.goto);
+          else resolves = true;
+        }
+      }
+      assert(resolves, name + "." + startRung + " can never resolve");
+    }
+  }
+});
+
+check("the age anchor arithmetic is right, and refuses nonsense", () => {
+  assert(Narrowing.yearFromAgeAnchor(2026, 20, 11) === 2017, "20 now, 11 then, should be 2017");
+  assert(Narrowing.yearFromAgeAnchor(2026, 8, 8) === 2026, "same age means this year");
+  assert(Narrowing.yearFromAgeAnchor(2026, 11, 20) === null, "younger now than then was accepted");
+  assert(Narrowing.yearFromAgeAnchor(2026, "x", 4) === null, "non-numeric input was accepted");
+  assert(Narrowing.yearFromAgeAnchor(2026, 200, 4) === null, "an impossible age was accepted");
+});
+
+check("relative distances resolve against the clock, not a hard-coded year", () => {
+  assert(Narrowing.yearFromYearsAgo(2026, 8) === 2018, "eight years back from 2026 is 2018");
+  assert(Narrowing.yearFromYearsAgo(2030, 8) === 2022, "the ladder did not move with the clock");
+  assert(Narrowing.yearFromYearsAgo(2026, -1) === null, "a negative distance was accepted");
+});
+
+check("every resolved year is marked approximate, because every one is", () => {
+  const ladder = LADDERS.YEAR_STARTED;
+  const unmarked = [];
+  for (const [rungName, rung] of Object.entries(ladder.rungs)) {
+    for (const option of rung.options || []) {
+      const resolvesToYear =
+        (typeof option.value === "number") || (option.yearsAgo !== undefined);
+      if (resolvesToYear && option.approx !== true) unmarked.push(rungName + "." + option.id);
+    }
+  }
+  assert(unmarked.length === 0,
+    "options resolving to a year without marking it approximate: " + unmarked.join(", ") +
+    ". A bucket the person picked is honest; presenting it as a known fact is not.");
+});
+
+check("every rung leaves a door open for someone who does not know", () => {
+  const trapped = [];
+  for (const [name, ladder] of Object.entries(LADDERS.ALL)) {
+    for (const [rungName, rung] of Object.entries(ladder.rungs)) {
+      if (rung.kind || rung.terminal) continue;
+      const hasDoor = (rung.options || []).some((o) => o.value === null || o.escape === true);
+      if (!hasDoor) trapped.push(name + "." + rungName);
+    }
+  }
+  assert(trapped.length === 0,
+    "rungs with no way out: " + trapped.join(", ") +
+    ". Nobody gets held on a screen demanding a fact they do not have.");
 });
 
 console.log("\nSTYLESHEET\n");

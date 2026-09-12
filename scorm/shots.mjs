@@ -66,14 +66,31 @@ async function main() {
     await page.locator("button.link-why").click();
     await shot("05-why-panel");
     await page.locator("button.link-why").click();
+
+    // The router. Take the exploring road first to show it is genuinely
+    // different, then restart and take the preparing road for the rest.
+    await page.locator("#readiness_stage-precontemplation").check();
+    await page.locator("button.btn-primary").click();
+    await shot("06-route-exploring");
+
+    // Fresh load rather than history navigation: detached preview state lives
+    // in memory, so a clean goto is the only reliable way back to the start.
+    await page.goto(`http://127.0.0.1:${PORT}/src/index.html`);
+    await sleep(250);
+
+    await page.locator("button.btn-primary").click();  // welcome
+    await page.locator("button.btn-primary").click();  // proof
+    await page.locator("button.btn-primary").click();  // consent
     await page.locator("#readiness_stage-preparation").check();
     await page.locator("button.btn-primary").click();
+    await shot("07-route-preparing");
+    await page.locator("button.btn-primary").click();
+
     await page.locator("#goals-stability").check();
     await page.locator("#goals-growth").check();
     await page.locator("button.btn-primary").click();
     await page.locator("#challenges-criminal_record").check();
     await page.locator("#challenges-transportation").check();
-    await shot("06-q3-challenges");
     await page.locator("button.btn-primary").click();
     await page.locator("#work_type-physical").check();
     await page.locator("button.btn-primary").click();
@@ -81,7 +98,6 @@ async function main() {
     await page.locator("#skills-forklift").check();
     await page.locator("#skills-leadership").check();
     await page.locator("#skills_freetext").fill("Welding and small engine repair");
-    await shot("07-q5-skills");
     await page.locator("button.btn-primary").click();
     await page.locator("#state-select").selectOption("MT");
     await page.locator("#location_city").fill("Libby");
@@ -89,18 +105,50 @@ async function main() {
     await page.locator("#hook_narrative").fill(
       "A day where I finish something and it stays finished. Where somebody newer asks me how to do it and I know the answer."
     );
-    await shot("08-q7-in-their-words");
     await page.locator("button.btn-primary").click();
-    await shot("09-review");
+
+    await shot("08-recall-intro");
     await page.locator("button.btn-primary").click();
-    await shot("10-carry-code");
+    await shot("09-pay-stub");
+    await page.locator("#unpaid_work-yes").check();
+    await page.locator("button.btn-primary").click();
+
+    await shot("10-job-kind");
+    await page.locator("#job-kind-warehouse").check();
+    await page.locator("button.btn-primary").click();
+    await page.locator("#employer").fill("Miller Brothers");
+    await page.locator("button.btn-primary").click();
+
+    await shot("11-narrowing-first-rung");
+    await page.locator("button.option-tap", { hasText: "roughly how long ago" }).click();
+    await shot("12-narrowing-second-rung");
+    await page.locator("button.option-tap", { hasText: "Six to ten years back" }).click();
+
+    await page.locator("button.option-tap", { hasText: "Yes, there was another" }).click();
+    await page.locator("#job-kind-kitchen").check();
+    await page.locator("button.btn-primary").click();
+    await page.locator("#employer").fill("The diner on Third");
+    await page.locator("button.btn-primary").click();
+    await page.locator("button.option-tap", { hasText: "I remember other things" }).click();
+    await shot("13-anchor-choice");
+    await page.locator("button.option-tap", { hasText: "How old someone in my family" }).click();
+    await page.locator("#age-now").fill("20");
+    await page.locator("#age-then").fill("11");
+    await shot("14-age-anchor");
+    await page.locator("button.btn-primary", { hasText: "Work it out" }).click();
+    await page.locator("button.option-tap", { hasText: "that is all of them" }).click();
+    await shot("15-the-skeleton");
+    await page.locator("button.btn-primary").click();
+    await shot("16-review");
+    await page.locator("button.btn-primary").click();
+    await shot("17-carry-code");
 
     // The harness view, which is the one that goes in the evidence video.
     await page.setViewportSize({ width: 1500, height: 950 });
     await page.goto(`http://127.0.0.1:${PORT}/harness/`);
     await sleep(900);
-    await page.screenshot({ path: join(OUT, "11-harness.png") });
-    console.log("  11-harness.png");
+    await page.screenshot({ path: join(OUT, "18-harness.png") });
+    console.log("  18-harness.png");
   } finally {
     await browser.close();
     server.kill();

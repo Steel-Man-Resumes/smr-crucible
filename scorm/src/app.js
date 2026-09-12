@@ -27,8 +27,23 @@
   var S = root.SCREENS;
   var scorm = new root.Scorm();
 
+  var Flow = root.Flow;
+  var Narrowing = root.Narrowing;
+  var LADDERS = root.NARROWINGS_V1;
+  var THIS_YEAR = new Date().getFullYear();
+
   var state = {
-    index: 0,
+    // Screen ID, never an index. An index is meaningless the moment the graph
+    // changes, and a saved index would silently land a returning person on the
+    // wrong screen after any edit to the script.
+    at: "welcome",
+    history: [],
+    route: "preparing",
+    jobs: [],
+    jobIndex: 0,
+    addAnother: false,
+    // Where we are inside a narrowing ladder, if we are in one.
+    rung: null,
     answers: {
       readiness_stage: "",
       goals: [],
@@ -38,7 +53,8 @@
       state: "",
       skills_freetext: "",
       location_city: "",
-      hook_narrative: ""
+      hook_narrative: "",
+      unpaid_work: ""
     }
   };
 
@@ -52,8 +68,13 @@
   function pack() {
     var a = state.answers;
     return JSON.stringify({
-      v: 1,
-      i: state.index,
+      v: 2,
+      at: state.at,
+      h: state.history,
+      rt: state.route,
+      j: state.jobs,
+      ji: state.jobIndex,
+      u: a.unpaid_work,
       r: a.readiness_stage,
       g: a.goals,
       c: a.challenges,
@@ -71,7 +92,10 @@
     var d;
     // JSON.parse is a parser, not an evaluator. It cannot execute anything.
     try { d = JSON.parse(raw); } catch (e) { return false; }
-    if (!d || d.v !== 1) return false;
+    // v1 saves came from the linear build. There is no honest way to place an
+    // old index on the new graph, so they start over rather than land
+    // somewhere wrong. Nobody has one outside this repo.
+    if (!d || d.v !== 2) return false;
     var a = state.answers;
     a.readiness_stage = str(d.r);
     a.goals = arr(d.g);
@@ -82,11 +106,35 @@
     a.skills_freetext = str(d.sf);
     a.location_city = str(d.lc);
     a.hook_narrative = str(d.hn);
-    state.index = typeof d.i === "number" && d.i >= 0 && d.i < S.SCREENS.length ? d.i : 0;
+    a.unpaid_work = str(d.u);
+    state.route = ["exploring", "preparing", "acting"].indexOf(str(d.rt)) >= 0 ? d.rt : "preparing";
+    state.jobs = sanitizeJobs(d.j);
+    state.jobIndex = typeof d.ji === "number" && d.ji >= 0 ? Math.min(d.ji, Math.max(0, state.jobs.length - 1)) : 0;
+    state.history = arr(d.h).filter(byId);
+    state.at = byId(str(d.at)) ? d.at : "welcome";
     return true;
   }
 
   function str(v) { return typeof v === "string" ? v : ""; }
+
+  /** Jobs come back out of the LMS record, so they are treated as untrusted
+   *  shape. Only the four declared fields survive, at their declared types. */
+  function sanitizeJobs(v) {
+    if (!v || typeof v.length !== "number") return [];
+    var out = [];
+    for (var i = 0; i < v.length && i < 12; i++) {
+      var j = v[i];
+      if (!j || typeof j !== "object") continue;
+      out.push({
+        kind: str(j.kind),
+        employer: str(j.employer).slice(0, 60),
+        year_started: typeof j.year_started === "number" ? j.year_started : null,
+        year_approx: j.year_approx === true
+      });
+    }
+    return out;
+  }
+
   function arr(v) {
     if (!v || typeof v.length !== "number") return [];
     var out = [];
@@ -105,7 +153,7 @@
       payload = pack();
     }
     scorm.set(n.suspend, payload);
-    scorm.set(n.location, S.SCREENS[state.index].id);
+    scorm.set(n.location, state.at);
     scorm.commit();
     renderStatus();
   }
@@ -125,7 +173,17 @@
 
   // ---------------------------------------------------------------- render
 
-  function currentScreen() { return S.SCREENS[state.index]; }
+  var BY_ID = {};
+  for (var si = 0; si < S.SCREENS.length; si++) BY_ID[S.SCREENS[si].id] = S.SCREENS[si];
+
+  function byId(id) { return BY_ID[id] || null; }
+  function currentScreen() { return byId(state.at) || S.SCREENS[0]; }
+  function currentJob() {
+    if (!state.jobs[state.jobIndex]) {
+      state.jobs[state.jobIndex] = { kind: "", employer: "", year_started: null, year_approx: false };
+    }
+    return state.jobs[state.jobIndex];
+  }
 
   function render() {
     var screen = currentScreen();
@@ -136,7 +194,12 @@
     var card = el("section", "card");
     card.setAttribute("aria-labelledby", "screen-title");
 
-    var h = el("h1", "screen-title", screen.title);
+    // On a narrowing screen the rung IS the question, and it changes as the
+    // person climbs. Using it as the heading removes the duplicate title and
+    // means a screen reader announces the new question at every rung instead
+    // of repeating the topic.
+    var heading = screen.kind === "narrowing" ? rungQuestion(screen) : screen.title;
+    var h = el("h1", "screen-title", heading);
     h.id = "screen-title";
     card.appendChild(h);
 
@@ -248,20 +311,27 @@
     return panel;
   }
 
+  // Screens where the choice is the navigation. A Next button on one of these
+  // is not merely redundant, it is a trapdoor: on a narrowing screen it
+  // resolved the transition and moved on with no year recorded at all.
+  var TAP_TO_ADVANCE = { narrowing: true, job_more: true };
+
   function buildNav(screen) {
     var nav = el("div", "nav");
     if (screen.kind === "done") return nav;
 
-    var next = el("button", "btn btn-primary",
-      screen.next || (screen.kind === "review" ? "Finish" : "Next"));
-    next.type = "button";
-    next.onclick = function () { goNext(screen); };
-    nav.appendChild(next);
+    if (!TAP_TO_ADVANCE[screen.kind]) {
+      var next = el("button", "btn btn-primary",
+        screen.next || (screen.kind === "review" ? "Finish" : "Next"));
+      next.type = "button";
+      next.onclick = function () { goNext(screen); };
+      nav.appendChild(next);
+    }
 
-    if (state.index > 0) {
+    if (state.history.length > 0) {
       var back = el("button", "btn btn-secondary", "Back");
       back.type = "button";
-      back.onclick = function () { go(state.index - 1); };
+      back.onclick = function () { goBack(); };
       nav.appendChild(back);
     }
 
@@ -368,6 +438,109 @@
       card.appendChild(textField(screen.text));
     },
 
+    /** Single select that answers about the job being worked on, not the person. */
+    job_single: function (card, screen) {
+      var table = TABLES[screen.table];
+      var job = currentJob();
+      var group = el("div", "options");
+      group.setAttribute("role", "radiogroup");
+      group.setAttribute("aria-labelledby", "screen-title");
+      for (var i = 0; i < table.length; i++) {
+        group.appendChild(jobOptionRow(screen.field, table[i], job[screen.field] === table[i].id));
+      }
+      card.appendChild(group);
+    },
+
+    job_text: function (card, screen) {
+      var job = currentJob();
+      var spec = screen.text;
+      var wrap = el("div", "field");
+      var label = el("label", "field-label", spec.label);
+      label.htmlFor = spec.field;
+      wrap.appendChild(label);
+
+      var input = doc.createElement("input");
+      input.id = spec.field;
+      input.className = "input";
+      input.maxLength = spec.maxLength;
+      input.placeholder = spec.placeholder || "";
+      input.value = job[screen.field] || "";
+      input.oninput = function () { job[screen.field] = input.value; };
+      wrap.appendChild(input);
+      card.appendChild(wrap);
+    },
+
+    /**
+     * THE NARROWING, on screen.
+     *
+     * One rung at a time. Never more than four options. Always a way out that
+     * does not require knowing the answer, because the alternative is trapping
+     * somebody on a question they cannot answer, and this population has had
+     * enough of that.
+     */
+    narrowing: function (card, screen) {
+      var ladder = ladderOf(screen);
+      var rungName = state.rung || ladder.start;
+      var rung = ladder.rungs[rungName];
+      if (!rung) return;
+
+      if (rung.kind === "age_anchor") return buildAgeAnchor(card, rung);
+
+      // The question is already the heading. Only the help line belongs here.
+      if (rung.help) card.appendChild(el("p", "screen-help", rung.help));
+
+      var group = el("div", "options");
+      for (var i = 0; i < rung.options.length; i++) {
+        group.appendChild(narrowOption(screen, rung.options[i]));
+      }
+      card.appendChild(group);
+
+      // A breadcrumb, so narrowing feels like being walked down a path rather
+      // than being asked the same thing over and over.
+      if (state.rung && state.rung !== ladder.start) {
+        card.appendChild(el("p", "footnote", "Getting closer. Pick the nearest one."));
+      }
+    },
+
+    job_more: function (card) {
+      var group = el("div", "options");
+      group.appendChild(bigChoice("Yes, there was another", function () {
+        state.addAnother = true;
+        goNext(currentScreen());
+      }));
+      group.appendChild(bigChoice(
+        state.jobs.length > 1 ? "No, that is all of them" : "No, that is the only one",
+        function () {
+          state.addAnother = false;
+          goNext(currentScreen());
+        }));
+      card.appendChild(group);
+    },
+
+    recall_review: function (card) {
+      var list = el("div", "joblist");
+      for (var i = 0; i < state.jobs.length; i++) {
+        list.appendChild(jobCard(state.jobs[i], i));
+      }
+      card.appendChild(list);
+
+      // Said once, under the list, rather than stamped on every card. A note
+      // repeated on each job reads as a disclaimer; said once it reads as the
+      // program being straight with them.
+      var anyApprox = state.jobs.some(function (j) { return j.year_approx; });
+      if (anyApprox) {
+        card.appendChild(el("p", "jobcard-note",
+          "The years marked about are close, not exact. That is the honest version, and you can fix any of them later if you find out different."));
+      }
+
+      var n = state.jobs.length;
+      card.appendChild(el("p", "punch",
+        n === 1 ? "One job. That is a start, and it is enough to work with."
+                : n + " jobs. That is a working life, written down."));
+      card.appendChild(el("p", "screen-body",
+        "Next we take these one at a time and find out what you actually did in them. That is the part that turns this into a resume."));
+    },
+
     review: function (card) {
       var list = el("dl", "review-list");
       var rows = [
@@ -387,7 +560,7 @@
 
       var edit = el("button", "btn btn-secondary", "Go back and change something");
       edit.type = "button";
-      edit.onclick = function () { go(indexOfScreen("readiness")); };
+      edit.onclick = function () { go("readiness"); };
       card.appendChild(edit);
     },
 
@@ -414,6 +587,118 @@
         "You are done. You can close this now, or leave it open to copy the code down."));
     }
   };
+
+  function jobOptionRow(field, entry, checked) {
+    var job = currentJob();
+    var id = "job-" + field + "-" + entry.id;
+    var label = el("label", "option");
+    label.htmlFor = id;
+    var input = doc.createElement("input");
+    input.type = "radio";
+    input.name = "job-" + field;
+    input.id = id;
+    input.value = entry.id;
+    input.checked = checked;
+    input.className = "option-input";
+    input.onchange = function () { job[field] = entry.id; showError(""); };
+    label.appendChild(input);
+    var textWrap = el("div", "option-text");
+    textWrap.appendChild(el("span", "option-label", entry.label));
+    label.appendChild(textWrap);
+    return label;
+  }
+
+  function narrowOption(screen, option) {
+    var button = el("button", "option option-tap" + (option.escape ? " option-escape" : ""), null);
+    button.type = "button";
+    button.appendChild(el("span", "option-label", option.label));
+    button.onclick = function () {
+      var result = Narrowing.step(option, THIS_YEAR);
+      if (!result.done) {
+        state.rung = result.rung;
+        openPanel = null;
+        render();
+        return;
+      }
+      applyNarrowResult(screen, result);
+    };
+    return button;
+  }
+
+  function applyNarrowResult(screen, result) {
+    var job = currentJob();
+    job[screen.field] = result.value;
+    job.year_approx = result.approx === true;
+    goNext(screen);
+  }
+
+  /**
+   * The age anchor. Two numbers nobody forgets produce a year nobody can
+   * recall directly. The arithmetic happens here, on the device.
+   */
+  function buildAgeAnchor(card, rung) {
+    var screen = currentScreen();
+    card.appendChild(el("p", "screen-help", rung.help));
+
+    var now = numberField("age-now", "How old are they now?");
+    var then = numberField("age-then", "About how old were they when you started that job?");
+    card.appendChild(now.wrap);
+    card.appendChild(then.wrap);
+
+    var work = el("button", "btn btn-primary", "Work it out");
+    work.type = "button";
+    work.onclick = function () {
+      var year = Narrowing.yearFromAgeAnchor(THIS_YEAR, now.input.value, then.input.value);
+      if (year === null) {
+        showError("Put a number in both boxes, with the bigger one first.");
+        return;
+      }
+      applyNarrowResult(screen, { done: true, value: year, approx: true });
+    };
+    card.appendChild(work);
+
+    var skip = el("button", "btn btn-secondary", "I cannot work it out that way");
+    skip.type = "button";
+    skip.onclick = function () {
+      applyNarrowResult(screen, { done: true, value: null, approx: false });
+    };
+    card.appendChild(skip);
+  }
+
+  function numberField(id, labelText) {
+    var wrap = el("div", "field");
+    var label = el("label", "field-label", labelText);
+    label.htmlFor = id;
+    wrap.appendChild(label);
+    var input = doc.createElement("input");
+    input.id = id;
+    input.className = "input input-number";
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.maxLength = 3;
+    wrap.appendChild(input);
+    return { wrap: wrap, input: input };
+  }
+
+  function bigChoice(label, onClick) {
+    var button = el("button", "option option-tap", null);
+    button.type = "button";
+    button.appendChild(el("span", "option-label", label));
+    button.onclick = onClick;
+    return button;
+  }
+
+  function jobCard(job, index) {
+    var box = el("div", "jobcard");
+    box.appendChild(el("p", "jobcard-index", "Job " + (index + 1)));
+    box.appendChild(el("p", "jobcard-kind", labelFor("WORK_KINDS", job.kind) || "Work"));
+    if (job.employer) box.appendChild(el("p", "jobcard-employer", job.employer));
+    var when = job.year_started
+      ? (job.year_approx ? "About " + job.year_started : String(job.year_started))
+      : "Year not settled yet";
+    box.appendChild(el("p", "jobcard-when", when));
+    return box;
+  }
 
   function sample(className, label, text) {
     var box = el("div", className);
@@ -516,24 +801,73 @@
   // ------------------------------------------------------------ navigation
 
   function goNext(screen) {
-    if (screen.required && !state.answers[screen.field]) {
-      showError("Pick one to keep going.");
-      return;
+    // Required checks read from the right place: some screens answer into the
+    // shared answer set, some into the job being worked on.
+    if (screen.required) {
+      var missing = screen.kind === "job_single"
+        ? !currentJob()[screen.field]
+        : !state.answers[screen.field];
+      if (missing) {
+        showError("Pick one to keep going.");
+        return;
+      }
     }
-    if (state.index >= S.SCREENS.length - 1) return;
-    go(state.index + 1);
+
+    // The readiness answer is the only place the route is set.
+    if (screen.id === "readiness") {
+      state.route = Flow.routeFromReadiness(state.answers.readiness_stage);
+    }
+
+    var target = Flow.resolve(screen.goTo, state);
+    if (!target) return;
+
+    // Adding a job means the next job_kind writes into a fresh entry.
+    if (screen.id === "job_more" && state.addAnother) {
+      state.jobs.push({ kind: "", employer: "", year_started: null, year_approx: false });
+      state.jobIndex = state.jobs.length - 1;
+      state.addAnother = false;
+    }
+
+    go(target);
   }
 
-  function go(index) {
-    state.index = index;
+  function go(id) {
+    if (state.at !== id) state.history.push(state.at);
+    state.at = id;
+    state.rung = null;
     openPanel = null;
     // Commit on every transition. A tablet that dies between screens should
     // cost the person one screen, not the whole session.
     save();
-    if (currentScreen().kind === "done") {
-      scorm.complete();
-    }
+    if (currentScreen().kind === "done") scorm.complete();
     render();
+  }
+
+  function goBack() {
+    // Inside a ladder, Back climbs down one rung rather than leaving the
+    // screen, because a person narrowing a year who mis-taps should not be
+    // thrown out of the question.
+    if (state.rung && state.rung !== ladderOf(currentScreen()).start) {
+      state.rung = null;
+      openPanel = null;
+      render();
+      return;
+    }
+    var previous = state.history.pop();
+    if (!previous) return;
+    state.at = previous;
+    state.rung = null;
+    openPanel = null;
+    save();
+    render();
+  }
+
+  function ladderOf(screen) { return LADDERS.ALL[screen.ladder]; }
+
+  function rungQuestion(screen) {
+    var ladder = ladderOf(screen);
+    var rung = ladder && ladder.rungs[state.rung || ladder.start];
+    return rung ? rung.question : screen.title;
   }
 
   function renderStatus() {
@@ -553,7 +887,7 @@
     scorm.initialize();
     var resumed = unpack(scorm.get(scorm.names().suspend));
     // Never resume onto the done screen. Regenerate it by walking in.
-    if (resumed && currentScreen().kind === "done") state.index = indexOfScreen("review");
+    if (resumed && currentScreen().kind === "done") state.at = "review";
 
     renderStatus();
     render();
