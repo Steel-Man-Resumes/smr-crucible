@@ -1173,6 +1173,19 @@
       card.appendChild(el("p", "punch",
         n === 1 ? "One line and a code. That is the whole thing."
                 : n + " lines and a code. That is the whole thing."));
+
+      card.appendChild(finishBlock());
+    },
+
+    /**
+     * After they press the finish button. The code stays on screen, because
+     * somebody who pressed it before copying the code down should not lose it.
+     */
+    closed: function (card) {
+      card.appendChild(el("p", "screen-body",
+        "Your learning record is saved. You can close this window."));
+      card.appendChild(el("p", "screen-body",
+        "If the window does not close on its own, close it the way you close anything else on this tablet."));
     }
   };
 
@@ -1182,6 +1195,41 @@
    * a tablet can see where they got to. Losing your place is the actual
    * failure mode here, not losing the data.
    */
+  /**
+   * THE WAY BACK TO THE LMS.
+   *
+   * Troy ran the whole thing in SCORM Cloud and reported "no clear end back to
+   * scorm". He was right: the last screen had no navigation at all, so a
+   * person who finished was left holding a code with nothing to press.
+   *
+   * The data was never at risk -- onbeforeunload has always reported to the
+   * LMS on close -- but "your work is safe" is not the same as "you know you
+   * are finished", and a course with no visible ending reads as broken to a
+   * learner and as unfinished to a reviewer.
+   *
+   * window.close() is allowed here: this window was opened BY the LMS, so
+   * closing it is returning to where they came from rather than navigating
+   * anywhere. It is not an escape vector and the containment scanner's
+   * window.open rule is untouched. Where a browser refuses to honour it, the
+   * closed screen says so plainly instead of leaving them guessing.
+   */
+  function finishBlock() {
+    var wrap = el("div", "finish-block");
+    wrap.appendChild(el("p", "finish-note",
+      "Copy the code and the lines down first. Once you close this, you would have to do it again."));
+
+    var done = el("button", "btn btn-primary", "I have written it down. I am finished.");
+    done.type = "button";
+    done.onclick = function () {
+      scorm.complete();
+      scorm.finish("");
+      go("closed");
+      try { root.close(); } catch (e) { /* the browser may refuse; the screen covers it */ }
+    };
+    wrap.appendChild(done);
+    return wrap;
+  }
+
   function sheetLine(number, text) {
     var row = el("label", "sheet-line");
     var box = doc.createElement("input");
@@ -1797,8 +1845,11 @@
 
     // Facilities time tablets out and people hand them off. Finish on the way
     // out so the LMS records a suspend rather than an abandoned attempt.
-    root.onbeforeunload = function () { scorm.finish("suspend"); };
-    root.onunload = function () { scorm.finish("suspend"); };
+    // No exit mode passed: the adapter reports "" when the course was
+    // completed and "suspend" when it was not, rather than calling every
+    // close a suspension.
+    root.onbeforeunload = function () { scorm.finish(); };
+    root.onunload = function () { scorm.finish(); };
 
     // Expose the API call log for the offline test harness only. It is read,
     // never sent. Nothing in this package can send anything.

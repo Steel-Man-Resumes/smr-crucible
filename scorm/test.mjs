@@ -578,8 +578,11 @@ check("every screen is reachable from the start", () => {
 });
 
 check("no screen dead-ends except the last one", () => {
+  // A screen is allowed to have no way forward only if it SAYS it is the end.
+  // Inferring that from a missing goTo cannot tell a deliberate ending from a
+  // forgotten transition, which is the bug this test exists to catch.
   const dead = SCREENS.SCREENS
-    .filter((s) => s.kind !== "done" && !s.goTo)
+    .filter((s) => !s.terminal && !s.goTo)
     .map((s) => s.id);
   assert(dead.length === 0, "screens with no way forward: " + dead.join(", "));
 });
@@ -1661,6 +1664,43 @@ check("no em dashes or prohibited language in the safety copy", () => {
   for (const word of ["felon", "offender", "ex-con", "second chance", "inmate", "convict"]) {
     assert(!lower.includes(word), 'the safety copy contains "' + word + '"');
   }
+});
+
+console.log("\nTHE WAY BACK TO THE LMS\n");
+
+check("a completed course does not report itself as suspended", () => {
+  // Troy found this in SCORM Cloud. finish() is wired to onbeforeunload, so it
+  // runs when somebody closes the window AFTER finishing. Defaulting to
+  // "suspend" unconditionally told the LMS they walked away mid-attempt when
+  // in fact they had finished.
+  const api = readFileSync(join(HERE, "src", "scorm-api.js"), "utf8");
+  assert(/this\.completed\s*=\s*true/.test(api),
+    "complete() does not record that the course was completed");
+  assert(/this\.completed\s*\?\s*""\s*:\s*"suspend"/.test(api),
+    "finish() still defaults to suspend regardless of whether the course completed");
+
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(!/onbeforeunload[^;]*finish\("suspend"\)/.test(app),
+    "the unload handler still hard-codes suspend, which overrides a completion");
+});
+
+check("the last screen has a way out", () => {
+  // A course with no visible ending reads as broken to a learner and as
+  // unfinished to a reviewer, even though the data was never at risk.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(app.includes("finishBlock()"), "the done screen offers nothing to press");
+  assert(/closed:\s*function/.test(app), "there is no screen confirming they are finished");
+  const done = SCREENS.SCREENS.find((x) => x.id === "done");
+  assert((done.alsoReaches || []).includes("closed"),
+    "the route from done to closed is not declared, so it is invisible in the route map");
+});
+
+check("the finish button tells them to copy the code down first", () => {
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  const block = app.slice(app.indexOf("function finishBlock"), app.indexOf("function sheetLine"));
+  assert(/written it down/i.test(block), "the button does not confirm they copied it");
+  assert(/do it again/i.test(block) || /copy the code/i.test(block),
+    "nothing warns them that closing costs them the code");
 });
 
 console.log("\nSTYLESHEET\n");

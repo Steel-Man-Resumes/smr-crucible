@@ -742,6 +742,15 @@ html, body {
 .ground-sense { margin: 0; font-size: 18px; font-weight: 600; }
 .ground-hint { margin: 0; font-size: 16px; color: var(--muted); line-height: 1.5; }
 
+/* ------------------------------------------------------- the way out */
+
+.finish-block {
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.finish-note { margin: 0 0 14px; font-size: 16px; color: var(--muted); line-height: 1.5; }
+
 /* ------------------------------------------------------------ paper gate */
 
 .gate-item {

@@ -36,6 +36,7 @@
     this.mode = "detached";   // "lms" | "detached"
     this.initialized = false;
     this.finished = false;
+    this.completed = false;
     this.startedAt = Date.now();
     this.log = [];            // in-memory only, never transmitted
     this.detachedStore = {};
@@ -184,6 +185,9 @@
 
   Scorm.prototype.complete = function () {
     var n = this.names();
+    // Remembered so that closing the window afterwards does not report the
+    // attempt as suspended. See finish().
+    this.completed = true;
     this.set(n.status, n.completeValue);
     if (this.version === "2004") {
       this.set("cmi.success_status", "passed");
@@ -199,12 +203,26 @@
    * as abandoned, which in a corrections reporting context reads as the person
    * not completing the program.
    */
+  /**
+   * @param {string} [exitMode] "suspend" to come back, "" when they are done.
+   *
+   * THE DEFAULT MATTERS. This is wired to onbeforeunload, so it runs when a
+   * person closes the window -- including the window they close AFTER
+   * finishing. Defaulting to "suspend" unconditionally meant a completed
+   * course reported cmi.core.exit = suspend, telling the LMS the learner
+   * walked away mid-attempt when in fact they finished.
+   *
+   * Found by Troy in SCORM Cloud: he completed the whole thing and there was
+   * no clean way back to the LMS. That symptom and this bug are the same
+   * bug wearing two faces.
+   */
   Scorm.prototype.finish = function (exitMode) {
     if (this.finished) return true;
     this.finished = true;
     var n = this.names();
     if (this.mode === "detached") { this.record("finish", "", "detached"); return true; }
-    this.set(n.exit, exitMode === undefined ? "suspend" : exitMode);
+    if (exitMode === undefined) exitMode = this.completed ? "" : "suspend";
+    this.set(n.exit, exitMode);
     this.set(n.sessionTime, this.sessionTime());
     this.commit();
     var ok = String(this.api[n.finish](""))=== "true";

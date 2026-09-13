@@ -785,9 +785,21 @@
       }
     },
 
+    // The actual end of the product. `terminal` says so out loud rather than
+    // leaving the reachability test to infer it from a missing goTo, which
+    // cannot tell a deliberate ending from a forgotten transition.
+    {
+      id: "closed",
+      kind: "closed",
+      title: "You are done",
+      terminal: true
+    },
+
     {
       id: "done",
       kind: "done",
+      terminal: true,
+      alsoReaches: ["closed"],
       title: "Write this down",
       body: [
         "Two things leave this room with you. The code carries everything you picked, including the years you worked out. The lines below carry the words, because words do not fit in a code.",
