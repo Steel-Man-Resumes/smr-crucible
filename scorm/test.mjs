@@ -46,6 +46,9 @@ const GATE = require("./src/paper-gate.v1.js");
 const Resume = require("./src/resume.js");
 const Safety = require("./src/safety.js");
 const SAFETY = require("./src/safety.v1.js");
+const DEEPER = require("./src/deeper.v1.js");
+const TITLES = require("./src/titles.v1.js");
+const CREDS = require("./src/credentials.v1.js");
 
 // The containment scanner is an ES module, not a CommonJS one.
 import { RULES as PREFLIGHT_RULES } from "./preflight.mjs";
@@ -361,7 +364,7 @@ check("the consumer app's copy of the codec is byte-identical", () => {
   // answers. Not an error, not a failure they would notice -- a wrong resume.
   // That is the one failure in this system that cannot be apologised for, so
   // the two copies are compared byte for byte rather than behaviourally.
-  for (const file of ["carry-code.js", "tables.v1.js"]) {
+  for (const file of ["carry-code.js", "tables.v1.js", "titles.v1.js", "credentials.v1.js"]) {
     const inside = readFileSync(join(HERE, "src", file), "utf8");
     const outside = readFileSync(join(HERE, "..", "apps", "consumer", "lib", file), "utf8");
     assert(inside === outside,
@@ -1454,7 +1457,7 @@ check("index.html loads every shipped script, in an order that works", () => {
 
   // Data before the engines that read it.
   const pairs = [
-    ["tables.v1.js", "carry-code.js"],
+    ["tables.v1.js", "titles.v1.js", "credentials.v1.js", "carry-code.js"],
     ["narrowings.v1.js", "narrowing.js"],
     ["mining.v1.js", "bullet.js"],
     ["identity.v1.js", "identity.js"],
@@ -1704,6 +1707,305 @@ check("the finish button tells them to copy the code down first", () => {
   assert(/written it down/i.test(block), "the button does not confirm they copied it");
   assert(/do it again/i.test(block) || /copy the code/i.test(block),
     "nothing warns them that closing costs them the code");
+});
+
+console.log("\nTHE DEPTH LADDER\n");
+
+// Troy: "there should be the option to get more details, reasons, lessons,
+// etc -- we must meet them where they are, and never overwhelm nor blindly ask
+// them to just trust."
+check("the longer version exists, and is not reachable from the screen itself", () => {
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(/openPanel === "deeper"/.test(app), "there is no deeper panel");
+  // If it were a third button in the row it would be a wall, not a ladder:
+  // everybody would see it, which is the overwhelm this is built to avoid.
+  assert(!/panelButton\("deeper"/.test(app),
+    "the longer version is a button on every screen, which is the thing it exists not to be");
+  assert(/openPanel = "deeper"/.test(app),
+    "nothing opens the deeper panel, so it can never be reached");
+});
+
+check("every deeper entry has all four parts, in full", () => {
+  const broken = [];
+  for (const id of Object.keys(DEEPER.DEEPER)) {
+    for (const part of DEEPER.PARTS) {
+      const v = DEEPER.DEEPER[id][part.key];
+      if (typeof v !== "string" || v.trim().length < 60) broken.push(id + "." + part.key);
+    }
+  }
+  assert(broken.length === 0, "missing or stub deeper parts: " + broken.join(", "));
+});
+
+check("the part that says what we cannot tell you is never dropped", () => {
+  // The first thing to rot under deadline pressure is the honest paragraph,
+  // so it gets its own test rather than riding along with the other three.
+  const missing = Object.keys(DEEPER.DEEPER).filter((id) => !DEEPER.DEEPER[id].limit);
+  assert(missing.length === 0, "no limit stated on: " + missing.join(", "));
+  const weak = Object.keys(DEEPER.DEEPER).filter((id) => {
+    const t = DEEPER.DEEPER[id].limit.toLowerCase();
+    return !/cannot|does not|nobody|no way|not|never/.test(t);
+  });
+  assert(weak.length === 0,
+    "these limits do not actually name a limit: " + weak.join(", "));
+});
+
+check("every deeper entry belongs to a screen that exists and can be asked about", () => {
+  const orphans = Object.keys(DEEPER.DEEPER).filter((id) => {
+    const screen = SCREENS.SCREENS.find((s) => s.id === id);
+    return !screen || !screen.why;
+  });
+  assert(orphans.length === 0,
+    "deeper entries with no screen, or on a screen with no why panel to open " +
+    "them from: " + orphans.join(", "));
+});
+
+check("the hardest screens in the build all carry a longer version", () => {
+  // Not every screen needs one. These do: they are the ones where somebody is
+  // being asked for something true and costly.
+  const mustHave = ["readiness", "unpaid_prompt", "job_title", "job_when", "job_end",
+    "mine_verb", "mine_object", "bullet_done", "credentials", "resume", "print_ask"];
+  const missing = mustHave.filter((id) => !DEEPER.forScreen(id));
+  assert(missing.length === 0, "no longer version on: " + missing.join(", "));
+});
+
+check("the depth layer never promises an outcome either", () => {
+  const bad = [];
+  for (const id of Object.keys(DEEPER.DEEPER)) {
+    for (const part of DEEPER.PARTS) {
+      const text = String(DEEPER.DEEPER[id][part.key] || "");
+      if (/\bwill get you (a|an) (job|interview)\b/i.test(text)) bad.push(id + "." + part.key);
+      if (/\bguarantee/i.test(text)) bad.push(id + "." + part.key);
+      if (/—/.test(text)) bad.push(id + "." + part.key + " (em dash)");
+    }
+  }
+  assert(bad.length === 0, "promises or em dashes in the depth layer: " + bad.join(", "));
+});
+
+console.log("\nWHAT A CAPABLE RESUME HAS\n");
+
+const CAPABLE = {
+  jobs: [
+    {
+      kind: "warehouse", title: "Forklift Operator",
+      employer: "Miller Brothers", city: "Libby, MT",
+      year_started: 2018, year_approx: true, year_ended: 2021, end_approx: true,
+      bullets: [{
+        verb: "Loaded", object: "pallets of dry goods off the night truck",
+        tools: ["a forklift", "an RF scanner"], frequency: "every shift",
+        scale: "two or three truckloads a day", result: "stopped losing product on the night shift"
+      }]
+    },
+    {
+      kind: "kitchen", title: "Line Cook", employer: "The diner on Third", city: "",
+      year_started: 2015, year_approx: false, year_ended: 2017, end_approx: false,
+      bullets: [{ verb: "Fired", object: "the grill through the dinner rush", tools: [],
+        frequency: "most days", scale: "", result: "" }]
+    }
+  ],
+  skills: ["driving"],
+  credentials: ["ged", "osha10", "forklift"],
+  credentials_freetext: "",
+  thisYear: 2026
+};
+
+check("every job entry carries a title, an employer, a place and a date range", () => {
+  const built = Resume.build(CAPABLE);
+  const history = built.sections.find((s) => s.kind === "history");
+  const first = history.jobs[0];
+  assert(first.title === "Forklift Operator", "title: " + first.title);
+  assert(first.employer === "Miller Brothers", "employer: " + first.employer);
+  assert(first.city === "Libby, MT", "city: " + first.city);
+  assert(first.dates === "About 2018 - 2021", "dates: " + first.dates);
+});
+
+check("a job title is a job title, not the kind of work", () => {
+  // This printed "Warehouse or shipping" as the job title until 2026-09-13.
+  // That is how the person describes their work to us and it is not a title
+  // any posting or any parser uses.
+  const built = Resume.build(CAPABLE);
+  const history = built.sections.find((s) => s.kind === "history");
+  const titles = history.jobs.map((j) => j.title).join(" | ");
+  assert(!/Warehouse or shipping|Kitchen or food service/.test(titles),
+    "the kind of work is being printed as the job title: " + titles);
+});
+
+check("a job still on the go prints as Present, and an unplaceable end does not", () => {
+  assert(Resume.dateRange({ year_started: 2022, year_ended: 0 }, 2026) === "2022 - Present",
+    Resume.dateRange({ year_started: 2022, year_ended: 0 }, 2026));
+  assert(Resume.dateRange({ year_started: 2022, year_ended: null }, 2026) === "2022",
+    "an end nobody could place is being printed as something");
+  // A single calendar year reads as a typo written as a range.
+  assert(Resume.dateRange({ year_started: 2019, year_ended: 2019 }, 2026) === "2019",
+    Resume.dateRange({ year_started: 2019, year_ended: 2019 }, 2026));
+});
+
+check("the page opens with a headline and a summary, both sourced", () => {
+  const built = Resume.build(CAPABLE);
+  assert(built.headline === "Forklift Operator", "headline: " + built.headline);
+  const summary = built.sections.find((s) => s.kind === "summary");
+  assert(summary, "there is no summary section");
+  assert(summary.text.indexOf("Forklift Operator") === 0, summary.text);
+  assert(/years of experience/.test(summary.text), summary.text);
+  assert(summary.parts.length >= 2, "the summary cannot say where its facts came from");
+  summary.parts.forEach((part) => {
+    assert(part.from && part.from.length > 10, "a summary fragment with no source: " + part.text);
+  });
+});
+
+check("the summary never appears on one fact alone", () => {
+  // A one-fact summary is weaker than no summary: it draws the eye straight to
+  // the thinnest thing on the page.
+  const thin = Resume.build({
+    jobs: [{ kind: "warehouse", title: "", year_started: 2020,
+      bullets: [{ verb: "Loaded", object: "trucks", tools: [] }] }],
+    skills: [], credentials: [], thisYear: 2026
+  });
+  assert(!thin.sections.find((s) => s.kind === "summary"),
+    "a summary was built out of almost nothing");
+});
+
+check("the summary does not turn a certification into a job title", () => {
+  // "Certified in Forklift Operator" shipped for about an hour on 2026-09-13.
+  const built = Resume.build(CAPABLE);
+  const summary = built.sections.find((s) => s.kind === "summary");
+  assert(!/Certified in[^.]*Forklift Operator\b/.test(summary.text), summary.text);
+  assert(/forklift operation/i.test(summary.text), summary.text);
+});
+
+check("every section a parser needs is headed the way a parser expects", () => {
+  const built = Resume.build(CAPABLE);
+  const ats = built.sections.map((s) => s.atsHeading).filter(Boolean);
+  ["PROFESSIONAL SUMMARY", "SKILLS", "EXPERIENCE", "EDUCATION AND CERTIFICATIONS"]
+    .forEach((want) => {
+      assert(ats.indexOf(want) >= 0, "no section headed " + want + ". Got: " + ats.join(", "));
+    });
+  // And the human heading is still there underneath, because the person
+  // reading it on screen wrote it.
+  built.sections.forEach((section) => {
+    if (!section.atsHeading) return;
+    assert(section.heading && section.heading !== section.atsHeading,
+      section.kind + " lost its human heading");
+  });
+});
+
+check("what they earned reaches the page, split the way a resume splits it", () => {
+  const built = Resume.build(CAPABLE);
+  const creds = built.sections.find((s) => s.kind === "credentials");
+  assert(creds, "the credentials never made it onto the page");
+  assert(creds.education.indexOf("GED") >= 0, creds.education.join(", "));
+  assert(creds.certifications.indexOf("OSHA 10-Hour Certification") >= 0,
+    creds.certifications.join(", "));
+});
+
+check("a person with nothing to tick loses the section, not the page", () => {
+  const built = Resume.build(Object.assign({}, CAPABLE, { credentials: [], credentials_freetext: "" }));
+  assert(!built.sections.find((s) => s.kind === "credentials"),
+    "an empty education section is printing, which reads as a person with nothing");
+  assert(built.sections.find((s) => s.kind === "history"), "the rest of the page went with it");
+});
+
+check("the paper gate still sees every printable string, including the new ones", () => {
+  const built = Resume.build(CAPABLE);
+  const fields = Resume.printableFields(built);
+  const joined = fields.join(" | ");
+  assert(/Forklift Operator/.test(joined), "titles are not being gated");
+  assert(/Libby, MT/.test(joined), "places are not being gated");
+  assert(/OSHA 10-Hour Certification/.test(joined), "credentials are not being gated");
+  assert(/years of experience/.test(joined), "the summary is not being gated");
+});
+
+check("overlapping jobs are counted once", () => {
+  const years = Resume.yearsOfExperience([
+    { kind: "a", year_started: 2010, year_ended: 2020, bullets: [{ verb: "v", object: "o" }] },
+    { kind: "b", year_started: 2012, year_ended: 2016, bullets: [{ verb: "v", object: "o" }] }
+  ], 2026);
+  assert(years === 10, "counted " + years + " years for one overlapping decade");
+});
+
+console.log("\nTHE CODE, VERSION 3\n");
+
+check("version 3 carries the credentials, the titles and the end of every range", () => {
+  const jobs = [{
+    kind: "warehouse", title: "Forklift Operator",
+    year_started: 2018, year_approx: true, year_ended: 2021, end_approx: true
+  }];
+  const code = CarryCode.encodeV3({
+    readiness_stage: "preparation", goals: ["stability"], challenges: ["criminal_record"],
+    work_type: "physical", skills: ["forklift"], state: "MT",
+    credentials: ["ged", "osha10", "forklift"]
+  }, jobs);
+
+  const out = CarryCode.decode(code);
+  assert(out.ok, "decode failed: " + out.message);
+  assert(out.intake.carry_code_version === 3, "version " + out.intake.carry_code_version);
+  assert(out.credentials.join(",") === "ged,osha10,forklift", out.credentials.join(","));
+  assert(out.jobs[0].title === "Forklift Operator", "title: " + out.jobs[0].title);
+  assert(out.jobs[0].year_ended === 2021, "end: " + out.jobs[0].year_ended);
+  assert(out.jobs[0].end_approx === true, "the end lost its approximate marking");
+});
+
+check("a title index is decoded against its own trade, never against another", () => {
+  // Index 3 is Forklift Operator in a warehouse and Dishwasher in a kitchen.
+  // Reading one against the other would not error. It would print a different
+  // job on somebody's resume.
+  const intake = { readiness_stage: "preparation", goals: [], challenges: [],
+    work_type: "physical", skills: [], state: "MT", credentials: [] };
+  const warehouse = CarryCode.decode(CarryCode.encodeV3(intake,
+    [{ kind: "warehouse", title: "Forklift Operator", year_started: 2018 }]));
+  const kitchen = CarryCode.decode(CarryCode.encodeV3(intake,
+    [{ kind: "kitchen", title: "Dishwasher", year_started: 2018 }]));
+  assert(warehouse.jobs[0].title === "Forklift Operator", warehouse.jobs[0].title);
+  assert(kitchen.jobs[0].title === "Dishwasher", kitchen.jobs[0].title);
+  assert(warehouse.jobs[0].title_index === kitchen.jobs[0].title_index,
+    "this test proves nothing unless both titles sit at the same index");
+});
+
+check("still there and never settled are different answers in the code", () => {
+  const intake = { readiness_stage: "preparation", goals: [], challenges: [],
+    work_type: "physical", skills: [], state: "MT", credentials: [] };
+  const current = CarryCode.decode(CarryCode.encodeV3(intake,
+    [{ kind: "warehouse", title: "", year_started: 2022, year_ended: 0 }]));
+  const unknown = CarryCode.decode(CarryCode.encodeV3(intake,
+    [{ kind: "warehouse", title: "", year_started: 2022, year_ended: null }]));
+  assert(current.jobs[0].year_ended === 0, "still there came back as " + current.jobs[0].year_ended);
+  assert(unknown.jobs[0].year_ended === null, "unknown came back as " + unknown.jobs[0].year_ended);
+});
+
+check("a title they typed themselves does not come back as somebody else's", () => {
+  // A typed title cannot ride in four bits. It must come back empty, never as
+  // whatever happens to sit at index 0.
+  const intake = { readiness_stage: "preparation", goals: [], challenges: [],
+    work_type: "physical", skills: [], state: "MT", credentials: [] };
+  const out = CarryCode.decode(CarryCode.encodeV3(intake,
+    [{ kind: "warehouse", title: "Night shift lead", year_started: 2018 }]));
+  assert(out.jobs[0].title === "", "a typed title came back as: " + out.jobs[0].title);
+});
+
+check("versions 1 and 2 still decode, forever", () => {
+  const v1 = CarryCode.encode({ readiness_stage: "preparation", goals: ["stability"],
+    challenges: [], work_type: "physical", skills: ["forklift"], state: "MT" });
+  const v2 = CarryCode.encodeFull({ readiness_stage: "preparation", goals: ["stability"],
+    challenges: [], work_type: "physical", skills: ["forklift"], state: "MT" },
+    [{ kind: "warehouse", year_started: 2018, year_approx: true }]);
+  const a = CarryCode.decode(v1);
+  const b = CarryCode.decode(v2);
+  assert(a.ok && a.intake.carry_code_version === 1, "version 1 stopped decoding");
+  assert(b.ok && b.intake.carry_code_version === 2, "version 2 stopped decoding");
+  assert(b.jobs[0].year_started === 2018, "version 2 lost its year");
+});
+
+check("version 3 still fits on the back of a release paper", () => {
+  const intake = { readiness_stage: "preparation", goals: ["stability", "growth"],
+    challenges: ["criminal_record"], work_type: "physical",
+    skills: ["driving", "forklift"], state: "MT",
+    credentials: ["ged", "osha10", "forklift", "first_aid"] };
+  const job = { kind: "warehouse", title: "Forklift Operator", year_started: 2018,
+    year_approx: true, year_ended: 2021, end_approx: true };
+  const two = CarryCode.encodeV3(intake, [job, job]);
+  const seven = CarryCode.encodeV3(intake, [job, job, job, job, job, job, job]);
+  console.log("        2 jobs " + two.length + " chars, 7 jobs " + seven.length);
+  assert(two.length <= 25, "a two-job code is " + two.length + " characters to copy by hand");
+  assert(seven.length <= 48, "a seven-job code is " + seven.length + " characters");
 });
 
 console.log("\nON PAPER\n");

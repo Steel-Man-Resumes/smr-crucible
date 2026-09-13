@@ -45,7 +45,12 @@ import { useForgeSession } from "@/lib/forge-context";
 import CarryCode from "@/lib/carry-code.js";
 
 type DecodeResult =
-  | { ok: true; intake: Record<string, unknown>; jobs: Array<Record<string, unknown>> }
+  | {
+      ok: true;
+      intake: Record<string, unknown>;
+      jobs: Array<Record<string, unknown>>;
+      credentials?: string[];
+    }
   | { ok: false; error: string; message: string };
 
 export default function CarryPage() {
@@ -77,9 +82,17 @@ export default function CarryPage() {
     };
     const jobs = (result.jobs || []) as Array<{
       kind?: string;
+      title?: string;
       year_started?: number | null;
       year_approx?: boolean;
+      year_ended?: number | null;
+      end_approx?: boolean;
     }>;
+
+    // Version 3 codes carry the credentials as well. Version 1 and 2 codes do
+    // not, and come back with an empty list rather than an absent field, so
+    // nothing downstream has to know which version it is looking at.
+    const credentials = (result.credentials || []) as string[];
 
     updateSession({
       readinessStage: intake.readiness_stage as
@@ -100,10 +113,16 @@ export default function CarryPage() {
       carriedIn: {
         code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""),
         skills: intake.skills || [],
+        credentials,
         jobs: jobs.map((j) => ({
           kind: String(j.kind || ""),
+          title: String(j.title || ""),
           yearStarted: typeof j.year_started === "number" ? j.year_started : null,
           yearApprox: j.year_approx === true,
+          // 0 is not a year. It is the flag for "still there", and it prints
+          // as Present rather than as 1960.
+          yearEnded: typeof j.year_ended === "number" ? j.year_ended : null,
+          endApprox: j.end_approx === true,
         })),
       },
       lastPageVisited: "carry",

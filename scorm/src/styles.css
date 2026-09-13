@@ -599,6 +599,74 @@ html, body {
 }
 .page-empty { margin: 0; font-size: 16px; color: var(--muted); }
 
+/* RUNG 2 of the depth ladder. Set apart from the why panel it opens out of,
+   so it reads as going further in rather than as more of the same. */
+.panel-deeper {
+  border-left-width: 6px;
+}
+.link-deeper {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+/* A note under an optional field, so leaving it blank does not read as
+   skipping something. */
+.field-note {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* Credentials, in two short lists rather than one long one: somebody
+   scanning for "the one I have" finds it faster. */
+.credgroup { margin-bottom: 22px; }
+.credgroup:last-of-type { margin-bottom: 0; }
+.credgroup-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The line under the name. Their most recent job title, nothing invented. */
+.page-headline {
+  margin: 10px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The summary. The only assembled sentence in the document, so it is set
+   apart rather than dropped in as another paragraph. */
+.page-summary-text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+/* Both headings are in the markup. The screen shows the human one; the print
+   stylesheet swaps them, because a parser drops a section whose heading it
+   does not recognise and the person should never have to read EXPERIENCE
+   where they meant "where I have worked". */
+.page-heading-ats { display: none; }
+
+.page-credgroup { margin-bottom: 12px; }
+.page-credgroup:last-child { margin-bottom: 0; }
+.page-credlabel {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.page-creds { margin: 0; padding-left: 20px; }
+.page-cred { margin-bottom: 4px; font-size: 17px; line-height: 1.5; }
+.page-cred:last-child { margin-bottom: 0; }
+
 /* The contact hole in its paper form. Rules to write on, print only. */
 .print-lines { display: none; }
 
@@ -1073,11 +1141,48 @@ html, body {
   }
   .print-line-name .print-line-rule { height: 22pt; }
 
+  /* The swap. Human heading off, ATS heading on. Both selectors are (0,2,0)
+     on purpose: at different weights the hide rule wins and the page prints
+     with no section headings at all. */
+  .page-headings .page-heading { display: none; }
+  .page-headings .page-heading-ats { display: block; }
+  .page-headings { margin-bottom: 8pt; }
+
   .page-heading {
     font-size: 9pt;
+    letter-spacing: 0.12em;
     color: var(--print-ink);
     border-bottom: 1pt solid var(--print-ink);
-    margin-bottom: 8pt;
+    margin: 0 0 6pt;
+    padding-bottom: 3pt;
+  }
+
+  /* The headline sits directly under the name rules, where a reader looks
+     for it before anything else on the page. */
+  .page-headline {
+    margin: 2pt 0 0;
+    font-size: 11pt;
+    letter-spacing: 0.1em;
+    color: var(--print-ink);
+  }
+
+  .page-summary-text {
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .page-credgroup { margin-bottom: 6pt; }
+  .page-credlabel {
+    font-size: 9pt;
+    color: var(--print-ink);
+    margin: 0 0 2pt;
+  }
+  .page-creds { padding-left: 14pt; }
+  .page-cred {
+    font-size: 10.5pt;
+    margin-bottom: 2pt;
+    color: var(--print-ink);
   }
 
   /* A job split across a page break turns one employer into two. */
@@ -1086,11 +1191,17 @@ html, body {
     break-inside: avoid;
     margin-bottom: 12pt;
   }
-  .page-job-title { font-size: 11pt; }
-  .page-job-year,
-  .page-job-employer {
+  .page-job-title { font-size: 11pt; font-weight: 700; }
+  .page-job-year {
     font-size: 10pt;
     color: var(--print-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .page-job-employer {
+    font-size: 10pt;
+    font-style: italic;
+    color: var(--print-ink);
+    margin: 0 0 4pt;
   }
   .page-bullet {
     font-size: 10.5pt;

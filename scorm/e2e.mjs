@@ -143,6 +143,33 @@ async function main() {
       whyText.slice(0, 160));
     check("the why panel actually says something, not just headings",
       whyText.length > 400, "only " + whyText.length + " characters of reasoning");
+
+    // THE DEPTH LADDER. Rung 0 is the screen, rung 1 is the why panel, rung 2
+    // is the longer version. Nobody reaches rung 2 who did not ask twice,
+    // which is what "never overwhelm" has to mean in a build rather than in a
+    // sentence.
+    check("the longer version is not on the screen until it is asked for",
+      await sco.locator(".panel-deeper").count() === 0,
+      "the deeper panel is open before anybody asked for it");
+
+    const deeperLink = sco.locator("button.link-deeper");
+    check("the why panel offers a way further in", await deeperLink.count() === 1,
+      "no link to the longer version on the first question");
+    await deeperLink.click();
+
+    const deeperText = (await sco.locator(".panel-deeper").innerText()).toLowerCase();
+    check("the longer version explains the mechanics rather than restating the why",
+      deeperText.includes("how this actually works"), deeperText.slice(0, 200));
+    check("it names what usually goes wrong before somebody does it",
+      deeperText.includes("what usually goes wrong"), deeperText.slice(0, 300));
+    check("it states a limit rather than asking to be trusted",
+      deeperText.includes("what we cannot tell you"), deeperText.slice(0, 400));
+
+    await sco.locator("button.link-button", { hasText: "That is enough detail" }).click();
+    check("closing the longer version returns to the why panel, not to nothing",
+      await sco.locator(".panel-why").count() === 1 &&
+      await sco.locator(".panel-deeper").count() === 0,
+      "the ladder does not come back down one rung at a time");
     await whyButton.click();
 
     // THE ROUTER. "Ready to go" must not walk the same road as everyone else.
@@ -182,7 +209,9 @@ async function main() {
     const recallBody = await sco.locator(".card").innerText();
     check("recall opens by telling them not to start at the beginning",
       recallBody.toLowerCase().includes("best at"), recallBody.slice(0, 200));
+
     await sco.locator("button.btn-primary").click();
+
 
     const unpaidBody = await sco.locator(".card").innerText();
     check("the pay-stub question is asked, and normalised",
@@ -194,7 +223,22 @@ async function main() {
     // Job one.
     await sco.locator("#job-kind-warehouse").check();
     await sco.locator("button.btn-primary").click();
+
+    // The title. Until this existed the page printed the KIND of work as the
+    // job title, which is what the person calls it and is not what a resume
+    // or a parser calls anything.
+    const titleBody = await sco.locator(".card").innerText();
+    check("the title offered is a real job title, not the kind of work",
+      /Forklift Operator/i.test(titleBody) && /Warehouse Associate/i.test(titleBody),
+      titleBody.slice(0, 220));
+    check("they can type a title of their own instead",
+      await sco.locator("#own-title").count() === 1, "no way to write your own title");
+    await sco.locator("button.option-tap", { hasText: "Forklift Operator" }).click();
+
     await sco.locator("#employer").fill("Miller Brothers");
+    check("employer and place are asked on one screen, not two",
+      await sco.locator("#city").count() === 1, "no place field beside the employer");
+    await sco.locator("#city").fill("Libby, MT");
     await sco.locator("button.btn-primary").click();
 
     console.log("\nTHE NARROWING\n");
@@ -213,6 +257,22 @@ async function main() {
       rung2.includes("About how long ago"), rung2.slice(0, 160));
     await sco.locator("button.option-tap", { hasText: "Six to ten years back" }).click();
 
+    // The end of the job. A resume without ranges is not a modern resume, and
+    // the easiest way in is how long they were there rather than the year they
+    // left, which almost nobody can name.
+    const endBody = await sco.locator(".card").innerText();
+    check("the end date leads with the question people can answer",
+      /how long I was there/i.test(endBody), endBody.slice(0, 240));
+    check("still being there is an answer, and so is not knowing",
+      /still work there/i.test(endBody) && /cannot place it/i.test(endBody),
+      endBody.slice(0, 240));
+    await sco.locator("button.option-tap", { hasText: "how long I was there" }).click();
+    const durationBody = await sco.locator(".card").innerText();
+    check("duration is offered as ranges, like every other hard question",
+      /About a year/i.test(durationBody) && /Two or three years/i.test(durationBody),
+      durationBody.slice(0, 240));
+    await sco.locator("button.option-tap", { hasText: "Two or three years" }).click();
+
     const moreBody = await sco.locator(".card").innerText();
     check("resolving the year advances to the next job prompt",
       moreBody.includes("another one"), moreBody.slice(0, 160));
@@ -221,6 +281,7 @@ async function main() {
     await sco.locator("button.option-tap", { hasText: "Yes, there was another" }).click();
     await sco.locator("#job-kind-kitchen").check();
     await sco.locator("button.btn-primary").click();
+    await sco.locator("button.option-tap", { hasText: "Line Cook" }).click();
     await sco.locator("#employer").fill("The diner on Third");
     await sco.locator("button.btn-primary").click();
     await sco.locator("button.option-tap", { hasText: "I remember other things" }).click();
@@ -233,18 +294,23 @@ async function main() {
     await sco.locator("#age-then").fill("11");
     await sco.locator("button.btn-primary", { hasText: "Work it out" }).click();
 
+    // This one they cannot place, which must not cost them the job entry.
+    await sco.locator("button.option-tap", { hasText: "cannot place it" }).click();
+
     await sco.locator("button.option-tap", { hasText: "that is all of them" }).click();
 
     console.log("\nTHE SKELETON\n");
 
     const skeleton = await sco.locator(".card").innerText();
-    check("both jobs came through with their kind and employer",
-      skeleton.includes("Warehouse or shipping") && skeleton.includes("Miller Brothers") &&
-      skeleton.includes("Kitchen or food service") && skeleton.includes("The diner on Third"),
-      skeleton.slice(0, 300));
+    check("both jobs came through with their title, employer and place",
+      skeleton.includes("Forklift Operator") && skeleton.includes("Miller Brothers, Libby, MT") &&
+      skeleton.includes("Line Cook") && skeleton.includes("The diner on Third"),
+      skeleton.slice(0, 400));
     check("years recovered from memory are shown as approximate, not as facts",
       skeleton.includes("About 2018") && skeleton.includes("About 2017"),
-      skeleton.slice(0, 300));
+      skeleton.slice(0, 400));
+    check("a job with a duration shows a range, not a single year",
+      /About 2018 - 2020/.test(skeleton), skeleton.slice(0, 400));
     check("the approximation is explained rather than left to be noticed",
       skeleton.toLowerCase().includes("close, not exact"),
       skeleton.slice(0, 300));
@@ -389,6 +455,22 @@ async function main() {
 
     await sco.locator("button.btn-primary").click();
 
+    console.log("\nWHAT THEY HAVE EARNED\n");
+
+    const credTitle = await sco.locator("#screen-title").textContent();
+    check("the credentials question comes after the identity beat, not at the start",
+      credTitle.includes("earned"), "saw: " + credTitle);
+    const credBody = await sco.locator(".card").innerText();
+    check("the things actually available inside are on the list",
+      /OSHA 10/i.test(credBody) && /ServSafe/i.test(credBody) && /GED/i.test(credBody),
+      credBody.slice(0, 300));
+    check("having nothing to tick is named as a real answer rather than a blank",
+      /does not print/i.test(credBody), credBody.slice(0, 500));
+    await sco.locator("#credentials-ged").check();
+    await sco.locator("#credentials-osha10").check();
+    await sco.locator("#credentials-forklift").check();
+    await sco.locator("button.btn-primary").click();
+
     console.log("\nTHE RESUME\n");
 
     const resumeIntro = await sco.locator("#screen-title").textContent();
@@ -427,13 +509,21 @@ async function main() {
     check("the equipment they named became a skill",
       /forklift/i.test(doc) && /RF scanner/i.test(doc), doc.slice(0, 500));
 
-    const beforeSwap = await sco.locator(".page-section").nth(1).innerText();
+    // Compared by section ORDER rather than by a fixed position, because the
+    // document grew a summary and a credentials section and a hard-coded
+    // index quietly stops testing what it was written to test.
+    const headingOrder = async () =>
+      (await sco.locator(".page-heading:not(.page-heading-ats)").allInnerTexts()).join(" | ");
+    const beforeSwap = await headingOrder();
     await sco.locator(".layout-note button.link-button").click();
     await sleep(200);
-    const afterSwap = await sco.locator(".page-section").nth(1).innerText();
+    const afterSwap = await headingOrder();
     check("the person can override the layout and the page actually reorders",
       beforeSwap !== afterSwap,
-      "section two was identical before and after the swap");
+      "the sections came back in the same order: " + beforeSwap);
+    check("the summary and the contact block stay at the top through the swap",
+      afterSwap.split(" | ")[0].toLowerCase().includes("short version"),
+      afterSwap);
 
     console.log("        " + (await sco.locator(".punch").innerText()).trim());
 

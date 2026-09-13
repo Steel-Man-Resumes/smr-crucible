@@ -39,6 +39,9 @@
   var PaperGate = root.PaperGate;
   var GATE = root.PAPER_GATE_V1;
   var Resume = root.Resume;
+  var TITLES = root.TITLES_V1;
+  var CREDS = root.CREDENTIALS_V1;
+  var DEEPER = root.DEEPER_V1;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -79,12 +82,19 @@
       skills_freetext: "",
       location_city: "",
       hook_narrative: "",
-      unpaid_work: ""
+      unpaid_work: "",
+      credentials: [],
+      credentials_freetext: ""
     }
   };
 
   var mount, statusBar;
-  // Only one panel is ever open. "why" | "help" | null.
+  // Only one panel is ever open. "why" | "deeper" | "help" | null.
+  //
+  // "deeper" is deliberately NOT in the button row. It is reached from inside
+  // the why panel, which makes the depth a ladder rather than a wall: rung 0
+  // is the screen, rung 1 is why you are being asked, rung 2 is how it works
+  // and what we cannot tell you. Nobody sees rung 2 who did not ask twice.
   var openPanel = null;
 
   // ------------------------------------------------------------ suspend io
@@ -108,7 +118,9 @@
       s: a.state,
       sf: a.skills_freetext,
       lc: a.location_city,
-      hn: a.hook_narrative
+      hn: a.hook_narrative,
+      cr: a.credentials,
+      crf: a.credentials_freetext
     });
   }
 
@@ -131,6 +143,8 @@
     a.skills_freetext = str(d.sf);
     a.location_city = str(d.lc);
     a.hook_narrative = str(d.hn);
+    a.credentials = arr(d.cr);
+    a.credentials_freetext = str(d.crf);
     a.unpaid_work = str(d.u);
     state.route = ["exploring", "preparing", "acting"].indexOf(str(d.rt)) >= 0 ? d.rt : "preparing";
     state.jobs = sanitizeJobs(d.j);
@@ -156,9 +170,14 @@
       if (!j || typeof j !== "object") continue;
       out.push({
         kind: str(j.kind),
+        title: str(j.title).slice(0, 60),
         employer: str(j.employer).slice(0, 60),
+        city: str(j.city).slice(0, 40),
         year_started: typeof j.year_started === "number" ? j.year_started : null,
         year_approx: j.year_approx === true,
+        // 0 is STILL_THERE, which prints as Present and is not a year.
+        year_ended: typeof j.year_ended === "number" ? j.year_ended : null,
+        end_approx: j.end_approx === true,
         bullets: sanitizeBullets(j.bullets)
       });
     }
@@ -278,7 +297,12 @@
   function currentScreen() { return byId(state.at) || S.SCREENS[0]; }
   function currentJob() {
     if (!state.jobs[state.jobIndex]) {
-      state.jobs[state.jobIndex] = { kind: "", employer: "", year_started: null, year_approx: false, bullets: [] };
+      state.jobs[state.jobIndex] = {
+        kind: "", title: "", employer: "", city: "",
+        year_started: null, year_approx: false,
+        year_ended: null, end_approx: false,
+        bullets: []
+      };
     }
     return state.jobs[state.jobIndex];
   }
@@ -359,7 +383,8 @@
     }
 
     if (openPanel === "help") wrap.appendChild(buildHelpPanel());
-    if (openPanel === "why" && screen.why) wrap.appendChild(buildWhyPanel(screen.why));
+    if (openPanel === "why" && screen.why) wrap.appendChild(buildWhyPanel(screen.why, screen));
+    if (openPanel === "deeper") wrap.appendChild(buildDeeperPanel(screen));
 
     return wrap;
   }
@@ -367,9 +392,16 @@
   function panelButton(which, label) {
     var b = el("button", "link-button" + (which === "why" ? " link-why" : ""), label);
     b.type = "button";
-    b.setAttribute("aria-expanded", openPanel === which ? "true" : "false");
+    b.setAttribute("aria-expanded",
+      openPanel === which || (which === "why" && openPanel === "deeper") ? "true" : "false");
     b.onclick = function () {
-      openPanel = openPanel === which ? null : which;
+      // Tapping Why while the longer version is open closes the whole stack,
+      // which is what the button looks like it should do. Without this the
+      // panel is open, the button reads as not-open, and the tap appears to
+      // do nothing.
+      openPanel = openPanel === which || (which === "why" && openPanel === "deeper")
+        ? null
+        : which;
       render();
     };
     return b;
@@ -397,7 +429,7 @@
     { key: "evidence", label: "Why we think so" }
   ];
 
-  function buildWhyPanel(why) {
+  function buildWhyPanel(why, screen) {
     var panel = el("div", "panel panel-why");
     panel.setAttribute("role", "note");
     for (var i = 0; i < WHY_PARTS.length; i++) {
@@ -406,6 +438,48 @@
       panel.appendChild(el("p", "why-label", part.label));
       panel.appendChild(el("p", "why-text", why[part.key]));
     }
+
+    // The next rung, offered only where one was actually written. A button
+    // that opens an empty panel teaches somebody that the offers on this
+    // screen are decoration.
+    if (screen && DEEPER.forScreen(screen.id)) {
+      var more = el("button", "link-button link-deeper", DEEPER.OPEN_LABEL);
+      more.type = "button";
+      more.setAttribute("aria-expanded", "false");
+      more.onclick = function () { openPanel = "deeper"; render(); };
+      panel.appendChild(more);
+    }
+
+    return panel;
+  }
+
+  /**
+   * RUNG 2. The longer version.
+   *
+   * Four parts, and the last two are the point: what usually goes wrong here,
+   * and what we cannot tell you. A product that explains itself only in the
+   * places where the explanation flatters it is asking to be trusted, and this
+   * population has been asked that before by people who had not earned it.
+   */
+  function buildDeeperPanel(screen) {
+    var entry = DEEPER.forScreen(screen.id);
+    if (!entry) return el("div", "panel panel-deeper");
+
+    var panel = el("div", "panel panel-deeper");
+    panel.setAttribute("role", "note");
+
+    for (var i = 0; i < DEEPER.PARTS.length; i++) {
+      var part = DEEPER.PARTS[i];
+      if (!entry[part.key]) continue;
+      panel.appendChild(el("p", "why-label", part.label));
+      panel.appendChild(el("p", "why-text", entry[part.key]));
+    }
+
+    var back = el("button", "link-button", DEEPER.CLOSE_LABEL);
+    back.type = "button";
+    back.onclick = function () { openPanel = "why"; render(); };
+    panel.appendChild(back);
+
     return panel;
   }
 
@@ -431,7 +505,10 @@
     mine_more: true,
     // Print or do not print. A Next button here would walk somebody past a
     // decision about who gets to see their page.
-    print_ask: true
+    print_ask: true,
+    // Picking a title advances. A Next button beside it would let somebody
+    // walk past the one field every entry on the page is headed with.
+    job_title: true
   };
 
   function buildNav(screen) {
@@ -586,6 +663,76 @@
       input.oninput = function () { job[screen.field] = input.value; };
       wrap.appendChild(input);
       card.appendChild(wrap);
+
+      if (screen.text2) card.appendChild(jobTextField(job, screen.text2));
+    },
+
+    /**
+     * THE TITLE.
+     *
+     * Recognition, not recall: the title is on the list or it is not. So this
+     * screen breaks the four-option rule the narrowing screens follow, on
+     * purpose -- a short list here does not help anybody remember, it just
+     * pushes people into a title that is not theirs.
+     */
+    job_title: function (card, screen) {
+      var job = currentJob();
+      var list = TITLES.forKind(job.kind);
+      var group = el("div", "options");
+      group.setAttribute("role", "radiogroup");
+      group.setAttribute("aria-labelledby", "screen-title");
+      for (var i = 0; i < list.length; i++) {
+        group.appendChild(pickOne(list[i], job.title === list[i], function (picked) {
+          job.title = picked;
+          goNext(screen);
+        }));
+      }
+      card.appendChild(group);
+
+      var own = el("div", "field");
+      var label = el("label", "field-label", "Or write the title you actually had");
+      label.htmlFor = "own-title";
+      own.appendChild(label);
+      var input = doc.createElement("input");
+      input.id = "own-title";
+      input.className = "input";
+      input.maxLength = 60;
+      input.placeholder = "Night shift lead";
+      input.value = TITLES.indexOf(job.kind, job.title) === 0 ? (job.title || "") : "";
+      input.oninput = function () { job.title = input.value; };
+      own.appendChild(input);
+      card.appendChild(own);
+
+      card.appendChild(el("p", "footnote",
+        "A title you typed rides on the page exactly as you wrote it. One from the list is the wording an employer search is looking for."));
+    },
+
+    /**
+     * WHAT THEY HAVE EARNED.
+     *
+     * Grouped into schooling and cards, because a person scanning for "the one
+     * I have" finds it faster in two short lists than in one long one.
+     */
+    credentials: function (card, screen) {
+      var a = state.answers;
+      card.appendChild(credentialGroup("School and training", CREDS.inGroup("education")));
+      card.appendChild(credentialGroup("Cards and certifications", CREDS.inGroup("cert")));
+
+      var own = el("div", "field");
+      var label = el("label", "field-label", CREDS.COPY.otherLabel);
+      label.htmlFor = "own-cred";
+      own.appendChild(label);
+      var input = doc.createElement("input");
+      input.id = "own-cred";
+      input.className = "input";
+      input.maxLength = 90;
+      input.placeholder = CREDS.COPY.otherPlaceholder;
+      input.value = a.credentials_freetext || "";
+      input.oninput = function () { a.credentials_freetext = input.value; };
+      own.appendChild(input);
+      card.appendChild(own);
+
+      card.appendChild(el("p", "footnote", CREDS.COPY.noneNote));
     },
 
     /**
@@ -1175,16 +1322,7 @@
      * Neither one alone is the plan.
      */
     done: function (card) {
-      var code = CarryCode.encodeFull({
-        readiness_stage: state.answers.readiness_stage,
-        goals: state.answers.goals,
-        challenges: state.answers.challenges,
-        work_type: state.answers.work_type,
-        skills: state.answers.skills,
-        state: state.answers.state
-      }, Resume.minedJobs(state.jobs).map(function (j) {
-        return { kind: j.kind, year_started: j.year_started, year_approx: j.year_approx };
-      }));
+      var code = carryCode();
 
       var box = el("div", "code-box");
       box.appendChild(el("p", "code-label", "Your code"));
@@ -1338,10 +1476,30 @@
     return button;
   }
 
+  /**
+   * Land a resolved ladder answer on the job.
+   *
+   * Two shapes come back. A ladder rung that carries a year resolves to that
+   * year. The end-date ladder can also resolve to a DURATION -- "about two
+   * years" -- which only means something added to the start year the person
+   * already worked out, and only the caller knows what it is counting from.
+   * That addition is arithmetic on two of their own answers, and it inherits
+   * the same approximate flag, so nothing on the page claims more certainty
+   * than the person did.
+   */
   function applyNarrowResult(screen, result) {
     var job = currentJob();
-    job[screen.field] = result.value;
-    job.year_approx = result.approx === true;
+    var approxField = screen.field === "year_ended" ? "end_approx" : "year_approx";
+
+    if (result.relative) {
+      job[screen.field] = typeof job.year_started === "number"
+        ? job.year_started + result.years
+        : null;
+    } else {
+      job[screen.field] = result.value;
+    }
+
+    job[approxField] = result.approx === true;
     goNext(screen);
   }
 
@@ -1401,16 +1559,90 @@
     return button;
   }
 
+  /** A labelled text field that writes onto the job being worked on. */
+  function jobTextField(job, spec) {
+    var wrap = el("div", "field");
+    var label = el("label", "field-label", spec.label);
+    label.htmlFor = spec.field;
+    wrap.appendChild(label);
+    var input = doc.createElement("input");
+    input.id = spec.field;
+    input.className = "input";
+    input.maxLength = spec.maxLength;
+    input.placeholder = spec.placeholder || "";
+    input.value = job[spec.field] || "";
+    input.oninput = function () { job[spec.field] = input.value; };
+    wrap.appendChild(input);
+    if (spec.optional) {
+      wrap.appendChild(el("p", "field-note", "You can leave this blank. A job with no town on it still reads fine."));
+    }
+    return wrap;
+  }
+
+  /** One titled block of credential checkboxes. */
+  function credentialGroup(heading, entries) {
+    var wrap = el("div", "credgroup");
+    wrap.appendChild(el("p", "credgroup-title", heading));
+    var list = el("fieldset", "options");
+    list.appendChild(el("legend", "visually-hidden", heading));
+    var chosen = state.answers.credentials;
+    for (var i = 0; i < entries.length; i++) {
+      list.appendChild(optionRow("checkbox", "credentials", entries[i],
+        chosen.indexOf(entries[i].id) >= 0, null));
+    }
+    wrap.appendChild(list);
+    return wrap;
+  }
+
   function jobCard(job, index) {
     var box = el("div", "jobcard");
     box.appendChild(el("p", "jobcard-index", "Job " + (index + 1)));
-    box.appendChild(el("p", "jobcard-kind", labelFor("WORK_KINDS", job.kind) || "Work"));
-    if (job.employer) box.appendChild(el("p", "jobcard-employer", job.employer));
-    var when = job.year_started
-      ? (job.year_approx ? "About " + job.year_started : String(job.year_started))
-      : "Year not settled yet";
+    box.appendChild(el("p", "jobcard-kind", job.title || labelFor("WORK_KINDS", job.kind) || "Work"));
+    if (job.employer) {
+      box.appendChild(el("p", "jobcard-employer",
+        job.city ? job.employer + ", " + job.city : job.employer));
+    }
+    var when = Resume.dateRange(job, THIS_YEAR) || "Year not settled yet";
     box.appendChild(el("p", "jobcard-when", when));
     return box;
+  }
+
+  /**
+   * THE CODE, VERSION 3.
+   *
+   * Everything the person chose rather than typed. Version 2 carried the
+   * intake and a kind of work and a start year per job. Version 3 adds every
+   * credential they ticked, the real job title on every entry, and the end of
+   * every date range -- roughly twice the answers for about ten more
+   * characters.
+   *
+   * What it still does not carry is the words, and that is arithmetic rather
+   * than a choice: base32 holds five bits a character, so one resume bullet is
+   * around two hundred characters of code on its own. A code nobody can copy
+   * down is not a code.
+   *
+   * So: THE CODE CARRIES EVERY CHOICE, THE PAPER CARRIES EVERY WORD. Both
+   * exits are offered, and the screen says which is which.
+   */
+  function carryCode() {
+    return CarryCode.encodeV3({
+      readiness_stage: state.answers.readiness_stage,
+      goals: state.answers.goals,
+      challenges: state.answers.challenges,
+      work_type: state.answers.work_type,
+      skills: state.answers.skills,
+      state: state.answers.state,
+      credentials: state.answers.credentials
+    }, Resume.minedJobs(state.jobs).map(function (j) {
+      return {
+        kind: j.kind,
+        title: j.title,
+        year_started: j.year_started,
+        year_approx: j.year_approx,
+        year_ended: j.year_ended,
+        end_approx: j.end_approx
+      };
+    }));
   }
 
   /** The shape resume.js and the paper gate both read from. */
@@ -1419,6 +1651,10 @@
       jobs: state.jobs,
       skills: state.answers.skills,
       skills_freetext: state.answers.skills_freetext,
+      credentials: state.answers.credentials,
+      credentials_freetext: state.answers.credentials_freetext,
+      work_type: state.answers.work_type,
+      hook_narrative: state.answers.hook_narrative,
       thisYear: THIS_YEAR,
       layoutOverride: state.layoutOverride || null
     };
@@ -1651,8 +1887,56 @@
 
   function sectionNode(section) {
     if (section.kind === "contact") return contactSection(section);
+    if (section.kind === "summary") return summarySection(section);
     if (section.kind === "skills") return skillsSection(section);
+    if (section.kind === "credentials") return credentialsSection(section);
     return historySection(section);
+  }
+
+  /**
+   * Both headings, always. The screen shows the human one; the print
+   * stylesheet swaps to the ATS one, which is why the ATS wording is rendered
+   * into the page rather than substituted at print time. A stylesheet cannot
+   * invent markup, and an applicant tracking system that cannot find a heading
+   * it recognises drops the whole section.
+   */
+  function sectionHeading(section) {
+    var wrap = el("div", "page-headings");
+    wrap.appendChild(el("h2", "page-heading", section.heading));
+    if (section.atsHeading) {
+      wrap.appendChild(el("h2", "page-heading page-heading-ats", section.atsHeading));
+    }
+    return wrap;
+  }
+
+  function summarySection(section) {
+    var node = el("section", "page-section page-summary");
+    node.appendChild(sectionHeading(section));
+    node.appendChild(el("p", "page-summary-text", section.text));
+    return node;
+  }
+
+  function credentialsSection(section) {
+    var node = el("section", "page-section");
+    node.appendChild(sectionHeading(section));
+    if (section.education.length) {
+      node.appendChild(credentialList("Education", section.education));
+    }
+    if (section.certifications.length) {
+      node.appendChild(credentialList("Certifications", section.certifications));
+    }
+    return node;
+  }
+
+  function credentialList(label, items) {
+    var wrap = el("div", "page-credgroup");
+    wrap.appendChild(el("p", "page-credlabel", label));
+    var list = el("ul", "page-creds");
+    for (var i = 0; i < items.length; i++) {
+      list.appendChild(el("li", "page-cred", items[i]));
+    }
+    wrap.appendChild(list);
+    return wrap;
   }
 
   /**
@@ -1678,12 +1962,19 @@
     }
     node.appendChild(lines);
 
+    // The line that says what this person is. Their most recent job title,
+    // nothing invented, absent entirely when there is none. It goes AFTER the
+    // name rules so that on paper it sits under the name rather than above it.
+    if (section.headline) {
+      node.appendChild(el("p", "page-headline", section.headline));
+    }
+
     return node;
   }
 
   function skillsSection(section) {
     var node = el("section", "page-section");
-    node.appendChild(el("h2", "page-heading", section.heading));
+    node.appendChild(sectionHeading(section));
     if (section.items.length === 0) {
       node.appendChild(el("p", "page-empty", "Nothing here yet."));
       return node;
@@ -1698,19 +1989,21 @@
 
   function historySection(section) {
     var node = el("section", "page-section");
-    node.appendChild(el("h2", "page-heading", section.heading));
+    node.appendChild(sectionHeading(section));
     for (var i = 0; i < section.jobs.length; i++) {
       var job = section.jobs[i];
       var entry = el("div", "page-job");
 
       var head = el("div", "page-job-head");
       head.appendChild(el("p", "page-job-title", job.title));
-      if (job.year) {
-        head.appendChild(el("p", "page-job-year", (job.approx ? "About " : "") + job.year));
-      }
+      if (job.dates) head.appendChild(el("p", "page-job-year", job.dates));
       entry.appendChild(head);
 
-      if (job.employer) entry.appendChild(el("p", "page-job-employer", job.employer));
+      // Employer and place on one line, the way every resume writes it.
+      var where = job.employer;
+      if (where && job.city) where += ", " + job.city;
+      if (!where && job.city) where = job.city;
+      if (where) entry.appendChild(el("p", "page-job-employer", where));
 
       var list = el("ul", "page-bullets");
       for (var b = 0; b < job.bullets.length; b++) {
@@ -1838,7 +2131,7 @@
     // Required checks read from the right place: some screens answer into the
     // shared answer set, some into the job being worked on.
     if (screen.required) {
-      var missing = screen.kind === "job_single"
+      var missing = screen.kind === "job_single" || screen.kind === "job_title"
         ? !currentJob()[screen.field]
         : !state.answers[screen.field];
       if (missing) {

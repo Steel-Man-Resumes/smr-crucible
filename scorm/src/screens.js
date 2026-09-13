@@ -392,7 +392,7 @@
       required: true,
       title: "What kind of work was it?",
       help: "Closest one is fine. This is just so we know what to ask you about.",
-      goTo: "job_where",
+      goTo: "job_title",
       why: {
         forWhat: "Picking the right questions to ask you about this job.",
         hard: "Nothing fits exactly. Pick the nearest one and move.",
@@ -402,10 +402,26 @@
     },
 
     {
+      id: "job_title",
+      kind: "job_title",
+      field: "title",
+      required: true,
+      title: "What would you call that job on paper?",
+      help: "Pick the closest one. These are the words job postings use, which is what matters here.",
+      goTo: "job_where",
+      why: {
+        forWhat: "The title line for this job. It is the first thing read on every entry and the first thing a computer looks for.",
+        hard: "The title you had and the title the job is advertised under are often different words, and the one on your name badge is usually not the one worth printing.",
+        buys: "Getting found. Employers and their software search by title, so a job listed as what it actually was gets seen and the same job described in your own words does not.",
+        evidence: "What you called it and what it is called are two different questions. Until now this page printed the kind of work, which is neither."
+      }
+    },
+
+    {
       id: "job_where",
       kind: "job_text",
       field: "employer",
-      title: "Who was it for?",
+      title: "Who was it for, and where?",
       help: "A company, a person, a place. Whatever you called it is fine.",
       text: {
         field: "employer",
@@ -414,12 +430,22 @@
         maxLength: 60,
         rows: 1
       },
+      // A second field on the same screen rather than a second screen. Every
+      // extra screen costs attention, and city is the one thing here nobody
+      // has to work to remember.
+      text2: {
+        field: "city",
+        label: "Town or city, and state",
+        placeholder: "Libby, MT",
+        maxLength: 40,
+        optional: true
+      },
       footnote: "If it had no name, or it was under the table, put what people called it. We sort out how it reads on paper later.",
       goTo: "job_when",
       why: {
         forWhat: "Something to put in the employer line.",
         hard: "This is one of the few things here you have to actually type, and some jobs never had a real name.",
-        buys: "A resume with a name on every job reads as real. One with blanks reads as unfinished.",
+        buys: "A resume with a name and a place on every job reads as real. One with blanks reads as unfinished.",
         evidence: "What it is called on the page is a separate decision, made later, by you."
       }
     },
@@ -430,12 +456,27 @@
       ladder: "year_started",
       field: "year_started",
       title: "When did you start there?",
-      goTo: "job_more",
+      goTo: "job_end",
       why: {
         forWhat: "Putting a year on it, without asking you to pull one out of the air.",
         hard: "This is the hardest thing to remember and the easiest thing to get wrong. Guessing badly is worse than saying you are not sure.",
         buys: "Dates that line up. Dates that do not line up are the thing an employer notices first.",
         evidence: "Nobody recalls a year on demand. Almost everybody can pick between two ranges."
+      }
+    },
+
+    {
+      id: "job_end",
+      kind: "narrowing",
+      ladder: "time_there",
+      field: "year_ended",
+      title: "When did that job end?",
+      goTo: "job_more",
+      why: {
+        forWhat: "The second half of the date. A job with a start and no end is half an entry.",
+        hard: "Nobody remembers the month they left. That is why the first thing offered is how long you were there, which is a question people can actually answer.",
+        buys: "A date range. An employer reading one year cannot tell three months from eight years, and a long run at one place is one of the strongest things on any resume.",
+        evidence: "How long you were somewhere is added to the year you already worked out. It is arithmetic on your own two answers, and it is marked about, the same as the start."
       }
     },
 
@@ -650,7 +691,7 @@
       kind: "proved",
       title: "Look what you just proved",
       help: "This is not encouragement. Every line below is something you can point at.",
-      goTo: "resume_intro",
+      goTo: "credentials",
       why: {
         forWhat: "Reading back what your own answers say about you, with the proof next to each one.",
         hard: "Most people skim this part, or decide it is being nice to them. It is not being nice. It is reporting.",
@@ -660,6 +701,37 @@
     },
 
     // ---- THE RESUME -----------------------------------------------------
+
+    /**
+     * WHAT THEY HAVE EARNED.
+     *
+     * Doctrine says what a person earned inside is often their strongest
+     * material, and until now there was nowhere in this build to put it. A
+     * resume with no education or certifications section does not read as a
+     * person with none; it reads as an unfinished document, and a parser that
+     * cannot find the section scores the whole page lower.
+     *
+     * It sits AFTER the identity beat on purpose. Asked at the start it is a
+     * form field. Asked here, right after somebody has been shown what their
+     * own work proves, it lands as "and there is this too."
+     */
+    {
+      id: "credentials",
+      kind: "credentials",
+      title: "What have you earned?",
+      help: "Anything you finished, passed, or were certified in. It counts the same whether you got it out there or in here.",
+      body: [
+        "This is the part of a resume most people in your position leave completely blank, and it is usually the part they have the most to put in.",
+        "Tick everything that is true. If you are not sure whether a card is still current, tick it anyway. A lapsed certificate is still training you did, and how it reads on the page gets handled later."
+      ],
+      goTo: "resume_intro",
+      why: {
+        forWhat: "The education and certifications section. On a resume it sits near the top or the bottom, and either way an employer looks for it.",
+        hard: "Most people in your position tick nothing here, because a GED or a card earned inside does not feel like it belongs in the same section as a degree. It does, and it is read the same way.",
+        buys: "A section that would otherwise be blank. An OSHA 10 card is worth real money to a hiring manager, and a page that does not mention it is a page that threw that away.",
+        evidence: "Where a certificate was earned is never asked here and never printed. A ServSafe from inside and a ServSafe from outside are the same ServSafe."
+      }
+    },
 
     {
       id: "resume_intro",
@@ -731,6 +803,12 @@
       id: "print_ask",
       kind: "print_ask",
       title: "Printing means somebody handles it",
+      why: {
+        forWhat: "Deciding whether this page goes on paper, which is the one thing in this program that other people can hold.",
+        hard: "Everywhere else in here the promise is that nobody reads your answers. Paper cannot keep that promise, because somebody runs the printer, and that is a real cost rather than a technicality.",
+        buys: "Somebody on the outside who can act on it. A case manager or a release planner holding a printed page can do things you cannot do from in here.",
+        evidence: "The words on that page already went through a check that swaps anything that would give away where you have been. That check ran before you ever saw it."
+      },
       // Where "not now" leads is decided at runtime from where they came in,
       // because this screen is reachable from the resume and from the final
       // screen. goTo names the common case so the route map is not empty.

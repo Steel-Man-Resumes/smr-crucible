@@ -44,6 +44,105 @@
    * the year itself, a rough distance in time, a life anchor, or nothing --
    * and "nothing" is a legitimate answer that still lets the job be used.
    */
+  /**
+   * WHEN DID IT END?
+   *
+   * A resume without date RANGES is not a modern resume. An employer reading
+   * "2018" and nothing else cannot tell three months from eight years, and a
+   * parser gives the entry almost no weight.
+   *
+   * But asking somebody to name the year they left is the hardest version of
+   * the question. So the first rung offers the easy way in that most people
+   * can actually answer -- how long were you there -- and the duration is
+   * added to the start year they already worked out. That is arithmetic on two
+   * of their own answers, not a fact anybody invented, and it carries the same
+   * `approx` flag the start year does.
+   *
+   * "I am still there" resolves to STILL_THERE (0), which is not a year and
+   * cannot be mistaken for one. It prints as Present.
+   */
+  var STILL_THERE = 0;
+
+  var TIME_THERE = {
+    id: "time_there",
+    start: "how_ended",
+    rungs: {
+
+      how_ended: {
+        question: "When did that job end?",
+        help: "Whichever of these you can answer. Any of them gets us there.",
+        options: [
+          { id: "duration", label: "I know about how long I was there", goto: "how_long_there" },
+          { id: "year", label: "I know about what year it ended", goto: "end_decade" },
+          { id: "current", label: "It has not ended, I still work there", value: STILL_THERE },
+          { id: "none", label: "I really cannot place it", value: null, escape: true }
+        ]
+      },
+
+      how_long_there: {
+        question: "About how long were you there?",
+        help: "Closest one. This is the question most people can answer, which is why it is here.",
+        options: [
+          { id: "short", label: "A few months", plusYears: 0 },
+          { id: "year1", label: "About a year", plusYears: 1 },
+          { id: "years2", label: "Two or three years", plusYears: 2 },
+          { id: "long", label: "Longer than that", goto: "how_much_longer" }
+        ],
+        terminal: true
+      },
+
+      how_much_longer: {
+        question: "How much longer?",
+        options: [
+          { id: "y4", label: "Four or five years", plusYears: 4 },
+          { id: "y6", label: "Six to nine years", plusYears: 7 },
+          { id: "y10", label: "Ten years or more", plusYears: 11 },
+          { id: "back", label: "I am not sure", value: null, escape: true }
+        ]
+      },
+
+      end_decade: {
+        question: "Roughly what stretch did it end in?",
+        options: [
+          { id: "d2020", label: "The 2020s", goto: "e2020s" },
+          { id: "d2010", label: "The 2010s", goto: "e2010s" },
+          { id: "d2000", label: "The 2000s or earlier", goto: "e2000s" },
+          { id: "back", label: "Actually, I am not sure", goto: "how_long_there", escape: true }
+        ]
+      },
+
+      e2020s: {
+        question: "Closer to which?",
+        options: [
+          { id: "a", label: "2020 or 2021", value: 2020, approx: true },
+          { id: "b", label: "2022 or 2023", value: 2022, approx: true },
+          { id: "c", label: "2024 or later", value: 2024, approx: true },
+          { id: "back", label: "Not sure", goto: "how_long_there", escape: true }
+        ]
+      },
+
+      e2010s: {
+        question: "Closer to which?",
+        options: [
+          { id: "a", label: "2010 to 2013", value: 2011, approx: true },
+          { id: "b", label: "2014 to 2016", value: 2015, approx: true },
+          { id: "c", label: "2017 to 2019", value: 2018, approx: true },
+          { id: "back", label: "Not sure", goto: "how_long_there", escape: true }
+        ]
+      },
+
+      e2000s: {
+        question: "Closer to which?",
+        options: [
+          { id: "a", label: "2005 to 2009", value: 2007, approx: true },
+          { id: "b", label: "2000 to 2004", value: 2002, approx: true },
+          { id: "c", label: "Before 2000", value: 1999, approx: true },
+          { id: "back", label: "Not sure", goto: "how_long_there", escape: true }
+        ]
+      }
+    }
+  };
+
   var YEAR_STARTED = {
     id: "year_started",
     start: "know_it",
@@ -157,7 +256,9 @@
 
   return {
     VERSION: 1,
+    STILL_THERE: STILL_THERE,
+    TIME_THERE: TIME_THERE,
     YEAR_STARTED: YEAR_STARTED,
-    ALL: { year_started: YEAR_STARTED }
+    ALL: { year_started: YEAR_STARTED, time_there: TIME_THERE }
   };
 });

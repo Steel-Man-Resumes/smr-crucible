@@ -40,6 +40,48 @@
  * So the two exits are complementary by design rather than redundant. Neither
  * one alone is the plan.
  *
+ * ---------------------------------------------------------------------------
+ * VERSION 3, AND WHY THE ANSWER TO "IT LOSES A LOT" IS NOT AN INFINITE CODE
+ * ---------------------------------------------------------------------------
+ * Troy, on version 2: "the code i think loses a lot of data a user enters."
+ * He was right, and version 3 roughly doubles what crosses the wall: every
+ * credential they ticked, the real job title on every entry, and the end of
+ * every date range as well as the start.
+ *
+ * It does not carry the words, and that is arithmetic rather than a decision
+ * anybody is free to make differently. One typical resume bullet is about 140
+ * characters of prose. Base32 carries five bits a character, so that bullet is
+ * roughly 224 characters of code on its own, before the second bullet. A code
+ * nobody can copy down is not a code; it is a file, and there is no way to
+ * move a file across this wall.
+ *
+ * So the rule holds, stated plainly rather than buried: THE CODE CARRIES
+ * EVERY CHOICE. THE PAPER CARRIES EVERY WORD. What changed in version 3 is
+ * that far more of this product is now a choice -- a title picked from a list,
+ * a credential ticked, an end date narrowed down -- and every one of those
+ * rides for four bits instead of being retyped outside.
+ *
+ * BIT LAYOUT, VERSION 3 (MSB first, 62 + 24n bits for n jobs)
+ *
+ *   bits  0-3   version         4 bits   value 3
+ *   bits  4-42  the same 39 bits of intake as versions 1 and 2
+ *   bits 43-45  job count       3 bits   0 to 7
+ *   bits 46-61  credentials    16 bits   bitmask over CREDENTIALS_V1
+ *   then, per job, 24 bits:
+ *                 kind          4 bits   index into TABLES.WORK_KINDS
+ *                 title         4 bits   0 = typed or none, else index + 1
+ *                 start year    7 bits   0 = not known, else 1959 + value
+ *                 start approx  1 bit
+ *                 end year      7 bits   0 = not known, 1 = still there
+ *                 end approx    1 bit
+ *   last 7 bits  checksum       7 bits   CRC-7 over everything before it
+ *
+ * A title index is meaningless without the kind of work it belongs to, which
+ * is why the two sit next to each other and are decoded as a pair.
+ *
+ * VERSIONS 1 AND 2 STILL DECODE, FOREVER. Somebody may have written one on a
+ * piece of paper.
+ *
  * BIT LAYOUT, VERSION 1 (MSB first, total 50 bits)
  *
  *   bits  0-3   version         4 bits   value 1
@@ -83,11 +125,15 @@
 /* eslint-disable */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory(require("./tables.v1.js"));
+    module.exports = factory(
+      require("./tables.v1.js"),
+      require("./titles.v1.js"),
+      require("./credentials.v1.js")
+    );
   } else {
-    root.CarryCode = factory(root.TABLES_V1);
+    root.CarryCode = factory(root.TABLES_V1, root.TITLES_V1, root.CREDENTIALS_V1);
   }
-})(typeof self !== "undefined" ? self : this, function (TABLES) {
+})(typeof self !== "undefined" ? self : this, function (TABLES, TITLES, CREDS) {
   "use strict";
 
   var ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -95,11 +141,18 @@
   var PAYLOAD_BITS = 43;         // version 1 payload
   var CHECK_BITS = 7;
 
-  var VERSION = 2;
+  var VERSION = 3;
   var INTAKE_BITS = 43;          // version, readiness, goals, challenges, work, skills, state
   var COUNT_BITS = 3;            // up to 7 jobs
-  var JOB_BITS = 12;             // kind 4, year 7, approx 1
+  var JOB_BITS = 12;             // version 2: kind 4, year 7, approx 1
+  var CRED_BITS = 16;            // version 3: bitmask over CREDENTIALS_V1
+  var JOB_BITS_V3 = 24;          // kind 4, title 4, start 7+1, end 7+1
   var MAX_JOBS = 7;
+
+  // An end year of 1 is not a year. It is the flag for "they are still there",
+  // which prints as Present and must never be mistaken for 1960.
+  var STILL_THERE_FIELD = 1;
+  var STILL_THERE = 0;
   var YEAR_BASE = 1959;          // year field 1..127 maps to 1960..2086
   var YEAR_MAX_OFFSET = 127;
 
@@ -223,13 +276,18 @@
   function encodeFull(intake, jobs) {
     intake = intake || {};
     jobs = (jobs || []).slice(0, MAX_JOBS);
+    // The version nibble is written as a literal rather than from VERSION.
+    // A frozen format that reads its own version number from a variable stops
+    // being frozen the moment that variable moves, and it does not error --
+    // it writes a version 3 header over a version 2 body.
+    var V2 = 2;
 
     var readiness = indexOfId(TABLES.READINESS, intake.readiness_stage);
     var workType = indexOfId(TABLES.WORK_TYPE, intake.work_type);
     var state = indexOfId(TABLES.STATES, intake.state || "");
 
     var w = new BitWriter();
-    w.write(VERSION, 4);
+    w.write(V2, 4);
     w.write(readiness < 0 ? 0 : readiness, 2);
     w.write(maskFromIds(TABLES.GOALS, intake.goals), 6);
     w.write(maskFromIds(TABLES.CHALLENGES, intake.challenges), 9);
@@ -263,6 +321,105 @@
       code += ALPHABET.charAt(readBits(w.bits, b, 5));
     }
     return code;
+  }
+
+  /**
+   * Version 3. Everything version 2 carried, plus the credentials, the titles
+   * and the end of every date range.
+   *
+   * @param {object} intake       the same fields encode() takes, plus
+   *                              `credentials` (an array of ids)
+   * @param {Array}  jobs         [{ kind, title, year_started, year_approx,
+   *                                 year_ended, end_approx }]
+   * @param {object} titleTable   TITLES_V1, injected rather than required so
+   *                              this file keeps its single dependency
+   * @param {Array}  credTable    CREDENTIALS_V1.CREDENTIALS
+   */
+  function encodeV3(intake, jobs) {
+    intake = intake || {};
+    jobs = (jobs || []).slice(0, MAX_JOBS);
+
+    var readiness = indexOfId(TABLES.READINESS, intake.readiness_stage);
+    var workType = indexOfId(TABLES.WORK_TYPE, intake.work_type);
+    var state = indexOfId(TABLES.STATES, intake.state || "");
+
+    var w = new BitWriter();
+    w.write(VERSION, 4);
+    w.write(readiness < 0 ? 0 : readiness, 2);
+    w.write(maskFromIds(TABLES.GOALS, intake.goals), 6);
+    w.write(maskFromIds(TABLES.CHALLENGES, intake.challenges), 9);
+    w.write(workType < 0 ? 0 : workType, 2);
+    w.write(maskFromIds(TABLES.SKILLS, intake.skills), 14);
+    w.write(state < 0 ? 0 : state, 6);
+    w.write(jobs.length, COUNT_BITS);
+    w.write(maskFromIds(CREDS.CREDENTIALS, intake.credentials), CRED_BITS);
+
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i] || {};
+      var kind = indexOfId(TABLES.WORK_KINDS, job.kind);
+      w.write(kind < 0 ? 0 : kind, 4);
+      w.write(titleField(job.kind, job.title), 4);
+      w.write(yearToField(job.year_started), 7);
+      w.write(job.year_approx ? 1 : 0, 1);
+      w.write(endYearToField(job.year_ended), 7);
+      w.write(job.end_approx ? 1 : 0, 1);
+    }
+
+    var expected = INTAKE_BITS + COUNT_BITS + CRED_BITS + JOB_BITS_V3 * jobs.length;
+    if (w.bits.length !== expected) {
+      throw new Error("carry-code: payload is " + w.bits.length + " bits, expected " + expected);
+    }
+
+    var check = crc7(w.bits);
+    for (var c = CHECK_BITS - 1; c >= 0; c--) w.bits.push((check >> c) & 1);
+    while (w.bits.length % 5 !== 0) w.bits.push(0);
+
+    var code = "";
+    for (var b = 0; b < w.bits.length; b += 5) {
+      code += ALPHABET.charAt(readBits(w.bits, b, 5));
+    }
+    return code;
+  }
+
+  /** 0 when they typed their own title or picked none, else index + 1. */
+  function titleField(kindId, title) {
+    if (!title) return 0;
+    var list = TITLES.TITLES[kindId] || TITLES.TITLES.other_work || [];
+    for (var i = 0; i < list.length && i < 15; i++) {
+      if (list[i] === title) return i + 1;
+    }
+    return 0;
+  }
+
+  function titleFromField(kindId, value) {
+    if (!value) return "";
+    var list = TITLES.TITLES[kindId] || TITLES.TITLES.other_work || [];
+    return list[value - 1] || "";
+  }
+
+  /**
+   * The end of a date range. Three states rather than two: a year, "still
+   * there", and never settled. Collapsing the last two would print Present on
+   * a job somebody simply could not date, which is a claim they did not make.
+   */
+  function endYearToField(year) {
+    if (year === STILL_THERE) return STILL_THERE_FIELD;
+    if (typeof year !== "number" || !isFinite(year)) return 0;
+    var offset = year - YEAR_BASE;
+    if (offset < 2 || offset > YEAR_MAX_OFFSET) return 0;
+    return offset;
+  }
+
+  function fieldToEndYear(field) {
+    if (field === 0) return null;
+    if (field === STILL_THERE_FIELD) return STILL_THERE;
+    return YEAR_BASE + field;
+  }
+
+  /** How many characters a version 3 code with n jobs must be. */
+  function lengthForJobsV3(n) {
+    var bits = INTAKE_BITS + COUNT_BITS + CRED_BITS + JOB_BITS_V3 * n + CHECK_BITS;
+    return Math.ceil(bits / 5);
   }
 
   /** A year to its 7 bit field. 0 means the person could not place it. */
@@ -338,7 +495,8 @@
     // Version 1 codes may be sitting on somebody's paperwork. They decode
     // forever, unchanged.
     if (version === 1) return decodeV1(raw, bits);
-    if (version === VERSION) return decodeV2(raw, bits);
+    if (version === 2) return decodeV2(raw, bits);
+    if (version === 3) return decodeV3(raw, bits);
     return fail("version", "That code was made by a different version of this tool.");
   }
 
@@ -375,6 +533,81 @@
         work_type: TABLES.WORK_TYPE[readBits(payload, 21, 2)].id,
         skills: idsFromMask(TABLES.SKILLS, readBits(payload, 23, 14)),
         state: stateEntry.id
+      }
+    };
+  }
+
+  /**
+   * Version 3. Same shape as version 2, with the credential mask sitting
+   * between the job count and the jobs, and twice as much per job.
+   *
+   * The title is decoded WITH its kind, because a title index means nothing on
+   * its own: index 3 is Forklift Operator in a warehouse and Dishwasher in a
+   * kitchen. Getting that pairing wrong would not error. It would print a
+   * different job on somebody's resume, which is the one failure in this
+   * system that cannot be apologised for.
+   */
+  function decodeV3(raw, bits) {
+    if (bits.length < INTAKE_BITS + COUNT_BITS + CRED_BITS + CHECK_BITS) {
+      return fail("bad_length", "That code is missing characters. Check you copied all of it.");
+    }
+
+    var jobCount = readBits(bits, INTAKE_BITS, COUNT_BITS);
+    var expected = lengthForJobsV3(jobCount);
+    if (raw.length !== expected) {
+      return fail(
+        "bad_length",
+        "That code should be " + expected + " characters and you entered " + raw.length + ". " +
+        "Check for a missing character rather than a wrong one."
+      );
+    }
+
+    var payloadBits = INTAKE_BITS + COUNT_BITS + CRED_BITS + JOB_BITS_V3 * jobCount;
+    var payload = bits.slice(0, payloadBits);
+    var given = readBits(bits, payloadBits, CHECK_BITS);
+    if (crc7(payload) !== given) {
+      return fail("checksum", "That code did not check out. Look for a character that is easy to mix up and try again.");
+    }
+
+    var stateEntry = TABLES.STATES[readBits(payload, 37, 6)];
+    if (!stateEntry) {
+      return fail("checksum", "That code did not check out. Check each character and try again.");
+    }
+
+    var credMask = readBits(payload, INTAKE_BITS + COUNT_BITS, CRED_BITS);
+
+    var jobs = [];
+    for (var i = 0; i < jobCount; i++) {
+      var at = INTAKE_BITS + COUNT_BITS + CRED_BITS + JOB_BITS_V3 * i;
+      var kindEntry = TABLES.WORK_KINDS[readBits(payload, at, 4)];
+      if (!kindEntry) {
+        return fail("checksum", "That code did not check out. Check each character and try again.");
+      }
+      jobs.push({
+        kind: kindEntry.id,
+        title: titleFromField(kindEntry.id, readBits(payload, at + 4, 4)),
+        title_index: readBits(payload, at + 4, 4),
+        year_started: fieldToYear(readBits(payload, at + 8, 7)),
+        year_approx: readBits(payload, at + 15, 1) === 1,
+        year_ended: fieldToEndYear(readBits(payload, at + 16, 7)),
+        end_approx: readBits(payload, at + 23, 1) === 1
+      });
+    }
+
+    return {
+      ok: true,
+      jobs: jobs,
+      credential_mask: credMask,
+      credentials: idsFromMask(CREDS.CREDENTIALS, credMask),
+      intake: {
+        carry_code_version: 3,
+        readiness_stage: TABLES.READINESS[readBits(payload, 4, 2)].id,
+        goals: idsFromMask(TABLES.GOALS, readBits(payload, 6, 6)),
+        challenges: idsFromMask(TABLES.CHALLENGES, readBits(payload, 12, 9)),
+        work_type: TABLES.WORK_TYPE[readBits(payload, 21, 2)].id,
+        skills: idsFromMask(TABLES.SKILLS, readBits(payload, 23, 14)),
+        state: stateEntry.id,
+        credentials: idsFromMask(CREDS.CREDENTIALS, credMask)
       }
     };
   }
@@ -451,10 +684,13 @@
     VERSION: VERSION,
     MAX_JOBS: MAX_JOBS,
     LAYOUT: LAYOUT,
+    STILL_THERE: STILL_THERE,
     encode: encode,
     encodeFull: encodeFull,
+    encodeV3: encodeV3,
     decode: decode,
     format: format,
-    lengthForJobs: lengthForJobs
+    lengthForJobs: lengthForJobs,
+    lengthForJobsV3: lengthForJobsV3
   };
 });

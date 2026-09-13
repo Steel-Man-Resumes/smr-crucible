@@ -59,6 +59,15 @@
       };
     }
 
+    // "About two years" is a DURATION, not a date. People recall how long they
+    // were somewhere far better than they recall the year they left, so the
+    // end-date ladder asks the easier question and the caller adds it to the
+    // start year it already has. Resolved by the caller because only the
+    // caller knows what it is counting from.
+    if (option.plusYears !== undefined) {
+      return { done: true, relative: true, years: Number(option.plusYears), approx: true, unknown: false };
+    }
+
     return {
       done: true,
       value: option.value,
@@ -121,7 +130,8 @@
         }
         // An option is valid if it climbs, carries a value, or resolves against
         // the clock. Anything else leaves the person tapping a dead button.
-        var resolves = opt.value !== undefined || opt.yearsAgo !== undefined;
+        var resolves = opt.value !== undefined || opt.yearsAgo !== undefined ||
+          opt.plusYears !== undefined;
         if (!opt.goto && !resolves) {
           problems.push(name + "." + (opt.id || "?") + " neither resolves nor climbs");
         }

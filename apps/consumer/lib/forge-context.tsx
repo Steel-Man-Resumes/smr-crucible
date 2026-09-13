@@ -70,7 +70,15 @@ export interface ForgeSessionData {
   carriedIn?: {
     code: string;
     skills: string[];
-    jobs: Array<{ kind: string; yearStarted: number | null; yearApprox: boolean }>;
+    credentials?: string[];
+    jobs: Array<{
+      kind: string;
+      title?: string;
+      yearStarted: number | null;
+      yearApprox: boolean;
+      yearEnded?: number | null;
+      endApprox?: boolean;
+    }>;
   };
 
   // Meta
