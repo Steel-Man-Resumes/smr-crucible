@@ -71,6 +71,11 @@ export interface ForgeSessionData {
     code: string;
     skills: string[];
     credentials?: string[];
+    transport?: string;
+    distance?: string;
+    shifts?: string[];
+    obligations?: string[];
+    disclosureTiming?: string;
     jobs: Array<{
       kind: string;
       title?: string;

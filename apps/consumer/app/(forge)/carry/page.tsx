@@ -50,6 +50,13 @@ type DecodeResult =
       intake: Record<string, unknown>;
       jobs: Array<Record<string, unknown>>;
       credentials?: string[];
+      plan?: {
+        transport?: string;
+        distance?: string;
+        shifts?: string[];
+        obligations?: string[];
+        disclosure_timing?: string;
+      };
     }
   | { ok: false; error: string; message: string };
 
@@ -94,6 +101,13 @@ export default function CarryPage() {
     // nothing downstream has to know which version it is looking at.
     const credentials = (result.credentials || []) as string[];
 
+    // Version 4 also carries the constraints that decide whether any of this
+    // is usable. job-search-doctrine: transport, distance and shift
+    // availability decide feasibility before skill does, and the board cannot
+    // honour a constraint it was never told about. Older codes carry no plan
+    // and come back with an empty object rather than an absent field.
+    const plan = result.plan || {};
+
     updateSession({
       readinessStage: intake.readiness_stage as
         | "precontemplation"
@@ -114,6 +128,14 @@ export default function CarryPage() {
         code: code.toUpperCase().replace(/[^A-Z0-9]/g, ""),
         skills: intake.skills || [],
         credentials,
+        transport: plan.transport || "",
+        distance: plan.distance || "",
+        shifts: plan.shifts || [],
+        obligations: plan.obligations || [],
+        // The TIMING of the disclosure conversation, never a word of the
+        // statement itself. That is spoken, it is theirs, and it does not
+        // travel on a piece of paper somebody else might read.
+        disclosureTiming: plan.disclosure_timing || "",
         jobs: jobs.map((j) => ({
           kind: String(j.kind || ""),
           title: String(j.title || ""),

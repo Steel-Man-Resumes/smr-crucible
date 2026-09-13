@@ -48,6 +48,9 @@ const Safety = require("./src/safety.js");
 const SAFETY = require("./src/safety.v1.js");
 const DEEPER = require("./src/deeper.v1.js");
 const OUTSIDE = require("./src/outside.v1.js");
+const PREFS = require("./src/preferences.v1.js");
+const DISC = require("./src/disclosure.v1.js");
+const INTERVIEW = require("./src/interview.v1.js");
 const TITLES = require("./src/titles.v1.js");
 const CREDS = require("./src/credentials.v1.js");
 
@@ -365,7 +368,8 @@ check("the consumer app's copy of the codec is byte-identical", () => {
   // answers. Not an error, not a failure they would notice -- a wrong resume.
   // That is the one failure in this system that cannot be apologised for, so
   // the two copies are compared byte for byte rather than behaviourally.
-  for (const file of ["carry-code.js", "tables.v1.js", "titles.v1.js", "credentials.v1.js"]) {
+  for (const file of ["carry-code.js", "tables.v1.js", "titles.v1.js", "credentials.v1.js",
+                      "preferences.v1.js", "disclosure.v1.js"]) {
     const inside = readFileSync(join(HERE, "src", file), "utf8");
     const outside = readFileSync(join(HERE, "..", "apps", "consumer", "lib", file), "utf8");
     assert(inside === outside,
@@ -1458,7 +1462,8 @@ check("index.html loads every shipped script, in an order that works", () => {
 
   // Data before the engines that read it.
   const pairs = [
-    ["tables.v1.js", "titles.v1.js", "credentials.v1.js", "carry-code.js"],
+    ["tables.v1.js", "titles.v1.js", "credentials.v1.js", "preferences.v1.js",
+     "disclosure.v1.js", "carry-code.js"],
     ["narrowings.v1.js", "narrowing.js"],
     ["mining.v1.js", "bullet.js"],
     ["identity.v1.js", "identity.js"],
@@ -1708,6 +1713,247 @@ check("the finish button tells them to copy the code down first", () => {
   assert(/written it down/i.test(block), "the button does not confirm they copied it");
   assert(/do it again/i.test(block) || /copy the code/i.test(block),
     "nothing warns them that closing costs them the code");
+});
+
+console.log("\nCONSTRAINT REALITY\n");
+
+// job-search-doctrine: "Transportation is a hiring barrier as real as the
+// record: bus access, license status, distance, and shift times decide
+// feasibility before skill does."
+check("the four things that decide feasibility are all asked", () => {
+  assert(PREFS.TRANSPORT.length >= 6, "transport options: " + PREFS.TRANSPORT.length);
+  assert(PREFS.DISTANCE.length >= 5, "distance options: " + PREFS.DISTANCE.length);
+  assert(PREFS.SHIFTS.length >= 5, "shift options: " + PREFS.SHIFTS.length);
+  assert(PREFS.OBLIGATIONS.length >= 6, "obligation options: " + PREFS.OBLIGATIONS.length);
+
+  const transport = PREFS.TRANSPORT.map((t) => t.label.toLowerCase()).join(" | ");
+  ["license", "bus", "walking"].forEach((want) => {
+    assert(transport.indexOf(want) >= 0, "transport never mentions " + want);
+  });
+});
+
+check("nothing about a person's constraints can reach the printed page", () => {
+  // This is the one that matters. Reporting, treatment, classes and a curfew
+  // are facts about supervision, and the paper gate exists to keep facts like
+  // those off a document an employer reads. Here they must never get as far as
+  // the gate, because they are never printable in the first place.
+  const built = Resume.build({
+    jobs: [{ kind: "warehouse", title: "Forklift Operator", employer: "Miller Brothers",
+      year_started: 2018, bullets: [{ verb: "Loaded", object: "pallets", tools: [] }] }],
+    skills: [], credentials: [], thisYear: 2026,
+    transport: "transit", distance: "medium", shifts: ["nights"],
+    obligations: ["reporting", "curfew", "treatment"],
+    disclosure_timing: "after_offer",
+    disclosure_ack: "I want to be straightforward with you. I have a record.",
+    disclosure_context: "It happened during a stretch when I was using.",
+    disclosure_pivot: "I am here because this is the work I am good at."
+  });
+  const printable = Resume.printableFields(built).join(" | ").toLowerCase();
+
+  ["curfew", "reporting", "treatment", "check-in", "transit", "record",
+   "straightforward", "using"].forEach((word) => {
+    assert(printable.indexOf(word) === -1,
+      'the word "' + word + '" reached a printable field: ' + printable.slice(0, 300));
+  });
+});
+
+check("the constraints screen says where the answers go before it asks", () => {
+  const body = PREFS.COPY.body.join(" ").toLowerCase();
+  assert(/none of this goes on your resume/.test(body),
+    "the screen asks about a curfew without first saying where the answer goes");
+  assert(/never print/.test(PREFS.COPY.obligationsNote.toLowerCase()),
+    "the obligations note does not say these never print");
+});
+
+console.log("\nDISCLOSURE\n");
+
+// disclosure-coaching: "The resume gets you in the room. The interview gets
+// you the job." Everything this module makes is spoken, never written.
+check("the four beats are all there, in order", () => {
+  assert(DISC.ACKNOWLEDGE.length >= 5, "acknowledgments: " + DISC.ACKNOWLEDGE.length);
+  assert(DISC.CONTEXT.length >= 5, "context options: " + DISC.CONTEXT.length);
+  assert(DISC.PIVOT.length >= 4, "pivots: " + DISC.PIVOT.length);
+  assert(DISC.FOLLOW_UPS.length === 3, "the doctrine names three follow-ups, found " + DISC.FOLLOW_UPS.length);
+});
+
+check("saying nothing is the FIRST context option, not the last", () => {
+  // Doctrine: "If there is no meaningful context, skip this beat entirely.
+  // Silence is better than over-explanation." A skip buried under five options
+  // reads as the fallback rather than the recommendation it often is.
+  assert(/say nothing/i.test(DISC.CONTEXT[0]),
+    "the first context option is: " + DISC.CONTEXT[0]);
+});
+
+check("no acknowledgment minimises, apologises or leads with defeat", () => {
+  // The doctrine's anti-pattern table, enforced on our own copy.
+  const bad = [/little situation/i, /some issues/i, /i'?m sorry/i, /made some mistakes/i,
+    /might be a problem/i, /i know it'?s bad/i];
+  DISC.ACKNOWLEDGE.forEach((line) => {
+    bad.forEach((re) => {
+      assert(!re.test(line), "an acknowledgment uses an anti-pattern: " + line);
+    });
+  });
+});
+
+check("nothing anywhere asks what the offence was", () => {
+  // A program that collected the long version would be building the exact
+  // record the consent screen promised nobody was keeping.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(!/disclosure_offence|disclosure_charge|what_happened/i.test(app),
+    "there is a field for the offence itself");
+  const all = JSON.stringify(DISC).toLowerCase();
+  assert(!/what were you (convicted|charged)/.test(all), "a screen asks for the charge");
+  assert(/nothing in here asks what you did/.test(all),
+    "nothing tells the person that this is deliberate");
+});
+
+check("the module refuses to give legal advice and says where to get it", () => {
+  // Ban-the-box, EEOC guidance and expungement are all jurisdiction-specific
+  // and change faster than a package can be rebuilt. A tablet with no network
+  // cannot know what state somebody is released into.
+  const legal = DISC.COPY.legalNote.toLowerCase();
+  assert(/depends on your state/.test(legal) || /your state/.test(legal), legal);
+  assert(/case manager/.test(legal), "it does not say who to ask instead");
+  assert(/does not guess/.test(legal), "it does not say that it is refusing to guess");
+});
+
+check("the disclosure statement never becomes a printable field", () => {
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  const resume = readFileSync(join(HERE, "src", "resume.js"), "utf8");
+  assert(!/disclosure/i.test(resume),
+    "resume.js knows about the disclosure module, which is how it ends up on the page");
+  assert(!/printableFields[\s\S]{0,400}disclosure/i.test(app),
+    "the disclosure text is being routed through the printable fields");
+});
+
+check("the draft is never called finished", () => {
+  // "A disclosure script that hasn't been said out loud at least five times is
+  // not ready."
+  const copy = JSON.stringify(DISC.COPY).toLowerCase();
+  assert(/out loud/.test(copy), "nothing tells them to say it out loud");
+  assert(/not ready/.test(copy), "nothing says a written statement is not ready yet");
+  assert(!/you'?re all set|well done|great job/.test(copy),
+    "the hardest screen in the product congratulates somebody");
+});
+
+check("the three follow-ups each say what sinks it and what works", () => {
+  DISC.FOLLOW_UPS.forEach((f) => {
+    assert(f.question && f.question.length > 15, "a follow-up with no question");
+    ["wrong", "right", "example", "after"].forEach((part) => {
+      assert(f[part] && f[part].length > 30, f.question + " is missing " + part);
+    });
+  });
+  const first = DISC.FOLLOW_UPS[0];
+  assert(/silence/i.test(first.after),
+    "the silence instruction is missing, and it is the whole trick of the first follow-up");
+});
+
+console.log("\nINTERVIEW PREPARATION\n");
+
+check("the questions asked in this kind of work are the ones covered", () => {
+  const qs = INTERVIEW.QUESTIONS.map((q) => q.question.toLowerCase()).join(" | ");
+  ["tell me about yourself", "gap", "why did you leave"].forEach((want) => {
+    assert(qs.indexOf(want) >= 0, "no question covering: " + want);
+  });
+  assert(!/five years/.test(qs),
+    "a management-track question is taking up a screen that warehouse and kitchen questions need");
+});
+
+check("every question says what it is really asking and what sinks it", () => {
+  INTERVIEW.QUESTIONS.forEach((q) => {
+    ["asking", "sinks", "use"].forEach((part) => {
+      assert(q[part] && q[part].length > 40, q.id + " is missing " + part);
+    });
+  });
+});
+
+check("no question hands over a sentence to memorise", () => {
+  // "A generator fails the moment the interviewer asks a follow-up question
+  // that wasn't in the script."
+  INTERVIEW.QUESTIONS.forEach((q) => {
+    assert(!/^"/.test(q.use.trim()), q.id + " opens with a quoted script to recite");
+  });
+  const all = JSON.stringify(INTERVIEW).toLowerCase();
+  assert(/not a script to memorise/.test(all) || /memorised answer/.test(all),
+    "nothing says these are not scripts");
+});
+
+check("interview prep stores nothing, which is why it costs nothing", () => {
+  // suspend_data is the tightest resource in the SCORM 1.2 build. Every word
+  // on these screens is derived from state that already exists.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(!/interview_[a-z_]*:\s*(\[\]|"")/.test(app),
+    "the interview module has its own state, so it is spending suspend_data");
+  assert(/function interviewMaterial/.test(app),
+    "there is no function deriving their material, so it must be storing it");
+});
+
+check("the practice protocol survives, including the part that stings", () => {
+  const p = JSON.stringify(INTERVIEW.PRACTICE).toLowerCase();
+  assert(/out loud/.test(p), "the practice steps never say out loud");
+  assert(/interrupt/.test(p), "nobody is asked to interrupt them, which is the point of step two");
+  assert(/is not an answer yet/.test(p) || /not ready/.test(p),
+    "the honest line about an unpractised answer was softened out");
+});
+
+console.log("\nTHE CODE, VERSION 4\n");
+
+check("version 4 carries the constraints the job board has to honour", () => {
+  const code = CarryCode.encodeV4(
+    { readiness_stage: "preparation", goals: [], challenges: [], work_type: "physical",
+      skills: [], state: "MT", credentials: ["ged"] },
+    [{ kind: "warehouse", title: "Forklift Operator", year_started: 2018 }],
+    { transport: "transit", distance: "medium", shifts: ["days", "nights"],
+      obligations: ["reporting", "childcare"], disclosure_timing: "after_offer" });
+
+  const out = CarryCode.decode(code);
+  assert(out.ok, "decode failed: " + out.message);
+  assert(out.intake.carry_code_version === 4, "version " + out.intake.carry_code_version);
+  assert(out.plan.transport === "transit", "transport: " + out.plan.transport);
+  assert(out.plan.distance === "medium", "distance: " + out.plan.distance);
+  assert(out.plan.shifts.join(",") === "days,nights", out.plan.shifts.join(","));
+  assert(out.plan.obligations.join(",") === "reporting,childcare", out.plan.obligations.join(","));
+  assert(out.plan.disclosure_timing === "after_offer", out.plan.disclosure_timing);
+  assert(out.jobs[0].title === "Forklift Operator", "the jobs survived the new block");
+});
+
+check("the disclosure WORDS never ride in the code, only the timing", () => {
+  // The statement is spoken, it is theirs, and this package has no business
+  // carrying somebody's words about their own record through a wall on a piece
+  // of paper somebody else might read.
+  const codec = readFileSync(join(HERE, "src", "carry-code.js"), "utf8");
+  assert(!/disclosure_ack|disclosure_context|disclosure_pivot/.test(codec),
+    "a disclosure beat is being encoded into the carry code");
+  assert(/disclosure_timing/.test(codec), "the timing is not carried at all");
+});
+
+check("versions 1 through 3 still decode, forever", () => {
+  const base = { readiness_stage: "preparation", goals: ["stability"], challenges: [],
+    work_type: "physical", skills: ["forklift"], state: "MT", credentials: ["ged"] };
+  const one = CarryCode.decode(CarryCode.encode(base));
+  const two = CarryCode.decode(CarryCode.encodeFull(base,
+    [{ kind: "warehouse", year_started: 2018, year_approx: true }]));
+  const three = CarryCode.decode(CarryCode.encodeV3(base,
+    [{ kind: "warehouse", title: "Forklift Operator", year_started: 2018 }]));
+  assert(one.ok && one.intake.carry_code_version === 1, "version 1 stopped decoding");
+  assert(two.ok && two.intake.carry_code_version === 2, "version 2 stopped decoding");
+  assert(three.ok && three.intake.carry_code_version === 3, "version 3 stopped decoding");
+  assert(three.jobs[0].title === "Forklift Operator", "version 3 lost its title");
+});
+
+check("version 4 still fits on the back of a release paper", () => {
+  const intake = { readiness_stage: "preparation", goals: ["stability", "growth"],
+    challenges: ["criminal_record"], work_type: "physical", skills: ["driving", "forklift"],
+    state: "MT", credentials: ["ged", "osha10", "forklift", "first_aid"] };
+  const plan = { transport: "transit", distance: "medium", shifts: ["days"],
+    obligations: ["reporting"], disclosure_timing: "final_stage" };
+  const job = { kind: "warehouse", title: "Forklift Operator", year_started: 2018,
+    year_approx: true, year_ended: 2021, end_approx: true };
+  const two = CarryCode.encodeV4(intake, [job, job], plan);
+  const seven = CarryCode.encodeV4(intake, [job, job, job, job, job, job, job], plan);
+  console.log("        2 jobs " + two.length + " chars, 7 jobs " + seven.length);
+  assert(two.length <= 30, "a two-job code is " + two.length + " characters to copy by hand");
+  assert(seven.length <= 52, "a seven-job code is " + seven.length + " characters");
 });
 
 console.log("\nWHAT IS WAITING OUTSIDE\n");
@@ -2162,6 +2408,35 @@ check("every CSS variable used is actually defined", () => {
   const defined = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gim)].map((m) => m[1]));
   const undef = [...used].filter((v) => !defined.has(v));
   assert(undef.length === 0, "used but never defined: " + undef.join(", "));
+});
+
+check("every class the runtime renders actually has a rule", () => {
+  // Found by hand on 2026-09-13: two new screens rendered .ground-text, the
+  // stylesheet defines .ground-hint, and the practice steps came out as
+  // unstyled text. An undefined class does not error. It renders, badly, on a
+  // tablet nobody can patch quickly, which is the same failure mode as the
+  // undefined CSS variable that produced invisible text in review.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  const css = readFileSync(join(HERE, "src", "styles.css"), "utf8");
+
+  // Class strings as the runtime writes them: el("tag", "a b c", ...).
+  const used = new Set();
+  for (const m of app.matchAll(/\bel\(\s*"[a-z0-9]+"\s*,\s*"([^"]+)"/g)) {
+    m[1].split(/\s+/).filter(Boolean).forEach((c) => used.add(c));
+  }
+
+  const defined = new Set(
+    [...css.matchAll(/\.([a-z][a-z0-9-]*)/gi)].map((m) => m[1])
+  );
+
+  // Utility classes that are deliberately structural and carry no rule of
+  // their own are listed here rather than given an empty rule, so the list
+  // itself is the record of what is intentional.
+  const structural = new Set([]);
+
+  const orphans = [...used].filter((c) => !defined.has(c) && !structural.has(c));
+  assert(orphans.length === 0,
+    orphans.length + " class(es) rendered with no rule anywhere: " + orphans.join(", "));
 });
 
 check("no color is written as a bare hex outside the token block", () => {

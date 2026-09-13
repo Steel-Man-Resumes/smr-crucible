@@ -599,6 +599,124 @@ html, body {
 }
 .page-empty { margin: 0; font-size: 16px; color: var(--muted); }
 
+/* Found by the orphan-class test on 2026-09-13: both of these were being
+   rendered with no rule anywhere. .sheet-job had been shipping unstyled since
+   the carry-out kit was built, which is why the test exists now rather than a
+   note asking somebody to be careful. */
+
+/* One job's worth of lines on the write-down sheet. Grouped so that somebody
+   copying by hand, possibly across more than one sitting, can see where one
+   job ends and the next begins. */
+.sheet-job {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sheet-job:last-child { border-bottom: 0; padding-bottom: 0; }
+
+/* The summary block on the resume. The only assembled sentence in the
+   document, so it gets a little more air than the sections around it. */
+.page-summary { margin-bottom: 22px; }
+
+/* ---------------------------------------------- disclosure and interview */
+
+/* A selected option that is also the navigation. The disclosure beats use
+   tappable options rather than radios, so the chosen one needs to read as
+   chosen when somebody comes back to the screen. */
+.option-on {
+  border-color: var(--accent);
+  background: var(--surface-elevated);
+}
+
+/* A labelled paragraph. Used wherever a screen has to say what something is
+   really asking, or what sinks it, without turning into a wall of prose. */
+.labelled { margin: 0 0 12px; }
+.labelled:last-child { margin-bottom: 0; }
+.labelled-label {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.labelled-text { margin: 0; font-size: 16px; line-height: 1.55; }
+
+/* The assembled disclosure statement. Set apart as a thing to be SAID, which
+   is why it is wider-spaced than anything else in the product: somebody is
+   going to read it off a screen out loud. */
+.statement {
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--line-strong);
+  border-left: 5px solid var(--accent);
+  border-radius: 6px;
+}
+.statement-line {
+  margin: 0 0 12px;
+  font-size: 19px;
+  line-height: 1.7;
+}
+.statement-line:last-child { margin-bottom: 0; }
+
+/* One question and its coaching. Used by the disclosure follow-ups and by
+   interview prep, because they are the same shape of thing. */
+.qa {
+  margin: 0 0 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+.qa:last-of-type { margin-bottom: 22px; }
+.qa-question {
+  margin: 0 0 12px;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* The example answer. Quoted visually rather than with quote marks, because
+   quote marks invite reciting and this is a starting point, not a script. */
+.qa-example {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--line-hover);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.qa-after { margin: 0; font-size: 16px; color: var(--muted); line-height: 1.55; }
+
+/* Their own material, shown under the question it answers. The point of the
+   whole interview module: you already built this. */
+.qa-mine {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+}
+.qa-mine-label {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.qa-mine-text { margin: 0 0 6px; font-size: 17px; line-height: 1.55; }
+.qa-mine-text:last-child { margin-bottom: 0; }
+
+/* A second heading inside a screen. Rare on purpose: a screen that needs two
+   headings is usually two screens. */
+.section-heading {
+  margin: 26px 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
 /* The coach mark. Shown once, on the first screen with reasoning behind it,
    and then never again. Pointed upward at the button rather than floating,
    because a hint that does not say what it is about is decoration. */

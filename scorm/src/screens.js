@@ -316,7 +316,30 @@
         buys: "Real local next steps instead of general advice you could have read anywhere.",
         evidence: "Practical things break job placements far more often than ambition does. Where you will be is the first practical thing."
       },
-      goTo: "hook"
+      goTo: "preferences"
+    },
+
+    /**
+     * CONSTRAINT REALITY.
+     *
+     * job-search-doctrine: "Transportation is a hiring barrier as real as the
+     * record: bus access, license status, distance, and shift times decide
+     * feasibility before skill does."
+     *
+     * Before skill does. This was in the web Forge, it was dropped from the
+     * tablet build by mistake, and this puts it back. None of it prints.
+     */
+    {
+      id: "preferences",
+      kind: "preferences",
+      title: "What has to be true for you to show up",
+      goTo: "hook",
+      why: {
+        forWhat: "The practical shape of your week. How you get there, how far you can go, when you can work, and what already has a claim on your time.",
+        hard: "Answering it honestly can feel like admitting you are limited. It is the opposite. Nobody can work around a constraint they were never told about.",
+        buys: "Work you can actually take. A job you cannot reach at five in the morning is not an opportunity, it is a disappointment with a date on it.",
+        evidence: "Transport and shift availability rule out more jobs for people coming out than any skills gap does. None of this goes on your resume."
+      }
     },
 
     {
@@ -775,7 +798,7 @@
       id: "resume",
       kind: "resume",
       title: "Your resume",
-      goTo: "outside",
+      goTo: "disclosure_intro",
       // Printing is a side door off the document, not a step in the flow.
       // Declared so it shows up in the route map like everything else.
       alsoReaches: ["print_ask"],
@@ -878,6 +901,175 @@
       kind: "pause",
       title: "Put it down",
       goTo: "review"
+    },
+
+    // ---- DISCLOSURE ------------------------------------------------------
+    // disclosure-coaching/SKILL.md: "The resume gets you in the room. The
+    // interview gets you the job." Nothing this module produces reaches the
+    // resume, and a test fails the build if it ever does.
+
+    {
+      id: "disclosure_intro",
+      kind: "disclosure_intro",
+      title: "The conversation you have been dreading",
+      goTo: "disclosure_timing",
+      why: {
+        forWhat: "Building what you say about your record, out loud, in about forty seconds. Not what you write. There is nowhere to write it.",
+        hard: "This is the part people avoid until they are sitting in the chair. Avoiding it is what turns it into the thing that costs the job.",
+        buys: "A conversation that happens on your timing, in your words, instead of one that happens to you when a report lands on somebody's desk.",
+        evidence: "Almost nobody prepares for this, which is why preparing for it is worth more here than anywhere else in the process."
+      }
+    },
+
+    {
+      id: "disclosure_timing",
+      kind: "disclosure_timing",
+      title: "When do you want to say it?",
+      // Each answer leads somewhere genuinely different, because each timing
+      // is a different move with a different cost.
+      goTo: {
+        field: "disclosure_timing",
+        map: {
+          after_offer: "disclosure_after_offer",
+          final_stage: "disclosure_final_stage",
+          when_asked: "disclosure_when_asked",
+          not_sure: "disclosure_undecided"
+        },
+        fallback: "disclosure_when_asked"
+      },
+      why: {
+        forWhat: "Choosing the moment, instead of letting the moment choose you.",
+        hard: "The best timing and the timing you can actually see yourself doing are often not the same one. Pick the real one.",
+        buys: "Control. Everything about how this lands changes depending on when in the process it happens.",
+        evidence: "Disclosing after an offer gives you the most leverage, because they have already decided they want you. That is not always available, and the screen says so."
+      }
+    },
+
+    { id: "disclosure_after_offer",  kind: "disclosure_timing_note", title: "After the offer, before the check", goTo: "disclosure_beat1" },
+    { id: "disclosure_final_stage",  kind: "disclosure_timing_note", title: "In the last interview",                goTo: "disclosure_beat1" },
+    { id: "disclosure_when_asked",   kind: "disclosure_timing_note", title: "When somebody asks you",               goTo: "disclosure_beat1" },
+    { id: "disclosure_undecided",    kind: "disclosure_timing_note", title: "Decide it later, build it now",        goTo: "disclosure_beat1" },
+
+    {
+      id: "disclosure_beat1",
+      kind: "disclosure_beat1",
+      title: "Beat one: name it",
+      goTo: "disclosure_beat2",
+      why: {
+        forWhat: "The opening sentence. Direct, no softening, no apology.",
+        hard: "Every instinct says to cushion it. Cushioning is what reads as evasive, and evasive is what actually loses the room.",
+        buys: "The first five seconds. Somebody who names it straight has already told them something good about how they handle hard things.",
+        evidence: "I had a little situation reads as hiding. I know this might be a problem leads with defeat. Both are the wrong opening and both are common."
+      }
+    },
+
+    {
+      id: "disclosure_beat2",
+      kind: "disclosure_beat2",
+      title: "Beat two: one sentence, or none",
+      goTo: "disclosure_beat3",
+      why: {
+        forWhat: "Context, if there is any worth giving. One sentence is the whole budget.",
+        hard: "This is where people talk themselves out of the job. The urge to explain properly is enormous and every extra sentence costs you.",
+        buys: "Credibility. Context explains a circumstance. An excuse asks to be forgiven, and asking to be forgiven in an interview changes what the conversation is about.",
+        evidence: "If there is no context that fits in one sentence, saying nothing here is the stronger move. That option is first on the list for a reason."
+      }
+    },
+
+    {
+      id: "disclosure_beat3",
+      kind: "disclosure_beat3",
+      title: "Beat three: what you have done since",
+      goTo: "disclosure_beat4",
+      why: {
+        forWhat: "Evidence of change, in concrete terms. This is the beat that does the work.",
+        hard: "People reach for I learned my lesson, because it is what you are supposed to say. It proves nothing and everybody says it.",
+        buys: "The turn. This is where the conversation stops being about the record and starts being about the person sitting there.",
+        evidence: "Everything offered on this screen came out of what you already told this program. It is your evidence, not a claim somebody made for you."
+      }
+    },
+
+    {
+      id: "disclosure_beat4",
+      kind: "disclosure_beat4",
+      title: "Beat four: get back to the work",
+      goTo: "disclosure_draft",
+      why: {
+        forWhat: "The last thing they hear before the conversation moves on.",
+        hard: "It is tempting to end on the apology or on hope. Both leave the room thinking about the record.",
+        buys: "Ending on the job. Whatever you say last is what the next question comes out of.",
+        evidence: "Landing on the work is what moves the conversation forward. Landing on the record keeps everybody there."
+      }
+    },
+
+    {
+      id: "disclosure_draft",
+      kind: "disclosure_draft",
+      title: "Say this out loud",
+      goTo: "disclosure_followups",
+      why: {
+        forWhat: "Hearing it. A statement that has only ever been read is not finished.",
+        hard: "Reading it and thinking it sounds fine is not the same as saying it and hearing yourself. The first time is always worse than expected.",
+        buys: "Ownership. A script somebody else wrote falls apart at the first follow-up question. One you have said ten times does not.",
+        evidence: "The test is whether it comes out as speech rather than recitation. If you are reciting, it is not ready yet."
+      }
+    },
+
+    {
+      id: "disclosure_followups",
+      kind: "disclosure_followups",
+      title: "The three questions that come next",
+      goTo: "interview_intro",
+      why: {
+        forWhat: "The follow-ups. Anybody who does not end the conversation right there will ask at least one of these three.",
+        hard: "They arrive when you have just done the hardest part and your guard is down. That is exactly when people over-explain.",
+        buys: "Not being surprised. All three are predictable, which means none of them have to be a surprise.",
+        evidence: "The right answer to what exactly happened is one sentence, and then silence. Filling the silence is what does the damage."
+      }
+    },
+
+    // ---- INTERVIEW PREPARATION -------------------------------------------
+    // Every answer on these screens is built from material the person already
+    // produced. Nothing here is stored, which is also why it costs nothing in
+    // suspend_data.
+
+    {
+      id: "interview_intro",
+      kind: "interview_intro",
+      title: "Now the part that gets you hired",
+      goTo: "interview_questions",
+      why: {
+        forWhat: "The questions you are actually going to be asked, and which of your own material answers each one.",
+        hard: "Interviews get treated as something you either are or are not good at. They are a skill, and skills are practised.",
+        buys: "Walking in having already said your answers out loud instead of hearing them for the first time in the room.",
+        evidence: "You built most of these answers in this program without knowing it. This screen just says which question each one belongs to."
+      }
+    },
+
+    {
+      id: "interview_questions",
+      kind: "interview_questions",
+      title: "The questions you are going to get",
+      goTo: "interview_practice",
+      why: {
+        forWhat: "Seven questions, what each one is really asking, and what sinks it.",
+        hard: "Two of these are the ones people lose the job on. They are in here for that reason rather than left out to keep this comfortable.",
+        buys: "Knowing what is behind the question. Tell me about yourself is not asking for your life story, and answering as if it were is the most common mistake there is.",
+        evidence: "These are the questions asked in the work this program is built for, not the ones on a management interview list."
+      }
+    },
+
+    {
+      id: "interview_practice",
+      kind: "interview_practice",
+      title: "The part nobody does",
+      goTo: "outside",
+      why: {
+        forWhat: "Turning written answers into spoken ones, which is the only form that counts in the room.",
+        hard: "Saying it out loud to yourself feels ridiculous. It is also the single highest-value thing on this list, and it is free.",
+        buys: "The difference between an answer and a recital. They hear the delivery before they hear the words.",
+        evidence: "An answer you have only ever thought is not an answer yet. You can do the first round of this today, in here, under your breath."
+      }
     },
 
     /**

@@ -79,8 +79,39 @@
  * A title index is meaningless without the kind of work it belongs to, which
  * is why the two sit next to each other and are decoded as a pair.
  *
- * VERSIONS 1 AND 2 STILL DECODE, FOREVER. Somebody may have written one on a
- * piece of paper.
+ * ---------------------------------------------------------------------------
+ * VERSION 4: THE PART THAT DECIDES WHETHER ANY OF IT IS USABLE
+ * ---------------------------------------------------------------------------
+ * job-search-doctrine: "Transportation is a hiring barrier as real as the
+ * record: bus access, license status, distance, and shift times decide
+ * feasibility before skill does." And: "Honor stated constraints in ranking
+ * and say so out loud."
+ *
+ * A job board on the outside cannot honour a constraint it was never told
+ * about, and a person who has just walked out is not going to re-enter it. So
+ * version 4 carries how they get there, how far they can go, when they can
+ * work, and what already holds their week in place -- twenty bits, four
+ * characters.
+ *
+ * It also carries the disclosure TIMING, and nothing else from that module.
+ * The statement itself is spoken, it is theirs, and this package has no
+ * business carrying somebody's words about their own record through a wall on
+ * a piece of paper somebody else might read. The timing is a plan; the words
+ * are not data.
+ *
+ * BIT LAYOUT, VERSION 4 (MSB first, 84 + 24n bits for n jobs)
+ *
+ *   bits  0-61  exactly the version 3 header, version nibble reading 4
+ *   bits 62-64  transport        3 bits   index into PREFERENCES_V1.TRANSPORT
+ *   bits 65-67  distance         3 bits   index into PREFERENCES_V1.DISTANCE
+ *   bits 68-73  shifts           6 bits   bitmask over PREFERENCES_V1.SHIFTS
+ *   bits 74-81  obligations      8 bits   bitmask over PREFERENCES_V1.OBLIGATIONS
+ *   bits 82-83  disclosure       2 bits   index into DISCLOSURE_V1.TIMING
+ *   then the jobs, 24 bits each, exactly as version 3
+ *   last 7 bits checksum
+ *
+ * VERSIONS 1, 2 AND 3 STILL DECODE, FOREVER. Somebody may have written one on
+ * a piece of paper.
  *
  * BIT LAYOUT, VERSION 1 (MSB first, total 50 bits)
  *
@@ -128,12 +159,15 @@
     module.exports = factory(
       require("./tables.v1.js"),
       require("./titles.v1.js"),
-      require("./credentials.v1.js")
+      require("./credentials.v1.js"),
+      require("./preferences.v1.js"),
+      require("./disclosure.v1.js")
     );
   } else {
-    root.CarryCode = factory(root.TABLES_V1, root.TITLES_V1, root.CREDENTIALS_V1);
+    root.CarryCode = factory(root.TABLES_V1, root.TITLES_V1, root.CREDENTIALS_V1,
+      root.PREFERENCES_V1, root.DISCLOSURE_V1);
   }
-})(typeof self !== "undefined" ? self : this, function (TABLES, TITLES, CREDS) {
+})(typeof self !== "undefined" ? self : this, function (TABLES, TITLES, CREDS, PREFS, DISC) {
   "use strict";
 
   var ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -141,12 +175,15 @@
   var PAYLOAD_BITS = 43;         // version 1 payload
   var CHECK_BITS = 7;
 
-  var VERSION = 3;
+  var VERSION = 4;
   var INTAKE_BITS = 43;          // version, readiness, goals, challenges, work, skills, state
   var COUNT_BITS = 3;            // up to 7 jobs
   var JOB_BITS = 12;             // version 2: kind 4, year 7, approx 1
   var CRED_BITS = 16;            // version 3: bitmask over CREDENTIALS_V1
   var JOB_BITS_V3 = 24;          // kind 4, title 4, start 7+1, end 7+1
+  // Version 4: constraint reality and the disclosure timing.
+  //   transport 3, distance 3, shifts 6, obligations 8, disclosure timing 2
+  var PLAN_BITS = 22;
   var MAX_JOBS = 7;
 
   // An end year of 1 is not a year. It is the flag for "they are still there",
@@ -338,13 +375,17 @@
   function encodeV3(intake, jobs) {
     intake = intake || {};
     jobs = (jobs || []).slice(0, MAX_JOBS);
+    // Written as a literal for the same reason encodeFull writes 2: a frozen
+    // format that reads its own version number from a variable stops being
+    // frozen the moment that variable moves.
+    var V3 = 3;
 
     var readiness = indexOfId(TABLES.READINESS, intake.readiness_stage);
     var workType = indexOfId(TABLES.WORK_TYPE, intake.work_type);
     var state = indexOfId(TABLES.STATES, intake.state || "");
 
     var w = new BitWriter();
-    w.write(VERSION, 4);
+    w.write(V3, 4);
     w.write(readiness < 0 ? 0 : readiness, 2);
     w.write(maskFromIds(TABLES.GOALS, intake.goals), 6);
     w.write(maskFromIds(TABLES.CHALLENGES, intake.challenges), 9);
@@ -379,6 +420,81 @@
       code += ALPHABET.charAt(readBits(w.bits, b, 5));
     }
     return code;
+  }
+
+  /**
+   * Version 4. Version 3 plus the constraints that decide whether any of this
+   * is usable, and the disclosure timing.
+   */
+  function encodeV4(intake, jobs, plan) {
+    intake = intake || {};
+    plan = plan || {};
+    jobs = (jobs || []).slice(0, MAX_JOBS);
+
+    var readiness = indexOfId(TABLES.READINESS, intake.readiness_stage);
+    var workType = indexOfId(TABLES.WORK_TYPE, intake.work_type);
+    var state = indexOfId(TABLES.STATES, intake.state || "");
+
+    var w = new BitWriter();
+    w.write(VERSION, 4);
+    w.write(readiness < 0 ? 0 : readiness, 2);
+    w.write(maskFromIds(TABLES.GOALS, intake.goals), 6);
+    w.write(maskFromIds(TABLES.CHALLENGES, intake.challenges), 9);
+    w.write(workType < 0 ? 0 : workType, 2);
+    w.write(maskFromIds(TABLES.SKILLS, intake.skills), 14);
+    w.write(state < 0 ? 0 : state, 6);
+    w.write(jobs.length, COUNT_BITS);
+    w.write(maskFromIds(CREDS.CREDENTIALS, intake.credentials), CRED_BITS);
+
+    w.write(plainIndex(PREFS.TRANSPORT, plan.transport), 3);
+    w.write(plainIndex(PREFS.DISTANCE, plan.distance), 3);
+    w.write(maskFromIds(PREFS.SHIFTS, plan.shifts), 6);
+    w.write(maskFromIds(PREFS.OBLIGATIONS, plan.obligations), 8);
+    w.write(plainIndex(DISC.TIMING, plan.disclosure_timing), 2);
+
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i] || {};
+      var kind = indexOfId(TABLES.WORK_KINDS, job.kind);
+      w.write(kind < 0 ? 0 : kind, 4);
+      w.write(titleField(job.kind, job.title), 4);
+      w.write(yearToField(job.year_started), 7);
+      w.write(job.year_approx ? 1 : 0, 1);
+      w.write(endYearToField(job.year_ended), 7);
+      w.write(job.end_approx ? 1 : 0, 1);
+    }
+
+    var expected = INTAKE_BITS + COUNT_BITS + CRED_BITS + PLAN_BITS + JOB_BITS_V3 * jobs.length;
+    if (w.bits.length !== expected) {
+      throw new Error("carry-code: payload is " + w.bits.length + " bits, expected " + expected);
+    }
+
+    var check = crc7(w.bits);
+    for (var c = CHECK_BITS - 1; c >= 0; c--) w.bits.push((check >> c) & 1);
+    while (w.bits.length % 5 !== 0) w.bits.push(0);
+
+    var code = "";
+    for (var b = 0; b < w.bits.length; b += 5) {
+      code += ALPHABET.charAt(readBits(w.bits, b, 5));
+    }
+    return code;
+  }
+
+  /** An index that is never negative, so it always fits its field. */
+  function plainIndex(table, id) {
+    var at = indexOfId(table, id || "");
+    return at < 0 ? 0 : at;
+  }
+
+  function idAt(table, value) {
+    var entry = table[value];
+    return entry ? entry.id : "";
+  }
+
+  /** How many characters a version 4 code with n jobs must be. */
+  function lengthForJobsV4(n) {
+    var bits = INTAKE_BITS + COUNT_BITS + CRED_BITS + PLAN_BITS +
+      JOB_BITS_V3 * n + CHECK_BITS;
+    return Math.ceil(bits / 5);
   }
 
   /** 0 when they typed their own title or picked none, else index + 1. */
@@ -497,6 +613,7 @@
     if (version === 1) return decodeV1(raw, bits);
     if (version === 2) return decodeV2(raw, bits);
     if (version === 3) return decodeV3(raw, bits);
+    if (version === 4) return decodeV4(raw, bits);
     return fail("version", "That code was made by a different version of this tool.");
   }
 
@@ -533,6 +650,88 @@
         work_type: TABLES.WORK_TYPE[readBits(payload, 21, 2)].id,
         skills: idsFromMask(TABLES.SKILLS, readBits(payload, 23, 14)),
         state: stateEntry.id
+      }
+    };
+  }
+
+  /**
+   * Version 4. Version 3 with a plan block between the credentials and the
+   * jobs. Everything else is byte-for-byte the same layout, which is why the
+   * job reader below is the same arithmetic with a different offset rather
+   * than a second copy of it.
+   */
+  function decodeV4(raw, bits) {
+    var headBits = INTAKE_BITS + COUNT_BITS + CRED_BITS + PLAN_BITS;
+    if (bits.length < headBits + CHECK_BITS) {
+      return fail("bad_length", "That code is missing characters. Check you copied all of it.");
+    }
+
+    var jobCount = readBits(bits, INTAKE_BITS, COUNT_BITS);
+    var expected = lengthForJobsV4(jobCount);
+    if (raw.length !== expected) {
+      return fail(
+        "bad_length",
+        "That code should be " + expected + " characters and you entered " + raw.length + ". " +
+        "Check for a missing character rather than a wrong one."
+      );
+    }
+
+    var payloadBits = headBits + JOB_BITS_V3 * jobCount;
+    var payload = bits.slice(0, payloadBits);
+    var given = readBits(bits, payloadBits, CHECK_BITS);
+    if (crc7(payload) !== given) {
+      return fail("checksum", "That code did not check out. Look for a character that is easy to mix up and try again.");
+    }
+
+    var stateEntry = TABLES.STATES[readBits(payload, 37, 6)];
+    if (!stateEntry) {
+      return fail("checksum", "That code did not check out. Check each character and try again.");
+    }
+
+    var credMask = readBits(payload, INTAKE_BITS + COUNT_BITS, CRED_BITS);
+    var planAt = INTAKE_BITS + COUNT_BITS + CRED_BITS;
+
+    var plan = {
+      transport: idAt(PREFS.TRANSPORT, readBits(payload, planAt, 3)),
+      distance: idAt(PREFS.DISTANCE, readBits(payload, planAt + 3, 3)),
+      shifts: idsFromMask(PREFS.SHIFTS, readBits(payload, planAt + 6, 6)),
+      obligations: idsFromMask(PREFS.OBLIGATIONS, readBits(payload, planAt + 12, 8)),
+      disclosure_timing: idAt(DISC.TIMING, readBits(payload, planAt + 20, 2))
+    };
+
+    var jobs = [];
+    for (var i = 0; i < jobCount; i++) {
+      var at = headBits + JOB_BITS_V3 * i;
+      var kindEntry = TABLES.WORK_KINDS[readBits(payload, at, 4)];
+      if (!kindEntry) {
+        return fail("checksum", "That code did not check out. Check each character and try again.");
+      }
+      jobs.push({
+        kind: kindEntry.id,
+        title: titleFromField(kindEntry.id, readBits(payload, at + 4, 4)),
+        title_index: readBits(payload, at + 4, 4),
+        year_started: fieldToYear(readBits(payload, at + 8, 7)),
+        year_approx: readBits(payload, at + 15, 1) === 1,
+        year_ended: fieldToEndYear(readBits(payload, at + 16, 7)),
+        end_approx: readBits(payload, at + 23, 1) === 1
+      });
+    }
+
+    return {
+      ok: true,
+      jobs: jobs,
+      credential_mask: credMask,
+      credentials: idsFromMask(CREDS.CREDENTIALS, credMask),
+      plan: plan,
+      intake: {
+        carry_code_version: 4,
+        readiness_stage: TABLES.READINESS[readBits(payload, 4, 2)].id,
+        goals: idsFromMask(TABLES.GOALS, readBits(payload, 6, 6)),
+        challenges: idsFromMask(TABLES.CHALLENGES, readBits(payload, 12, 9)),
+        work_type: TABLES.WORK_TYPE[readBits(payload, 21, 2)].id,
+        skills: idsFromMask(TABLES.SKILLS, readBits(payload, 23, 14)),
+        state: stateEntry.id,
+        credentials: idsFromMask(CREDS.CREDENTIALS, credMask)
       }
     };
   }
@@ -688,9 +887,11 @@
     encode: encode,
     encodeFull: encodeFull,
     encodeV3: encodeV3,
+    encodeV4: encodeV4,
     decode: decode,
     format: format,
     lengthForJobs: lengthForJobs,
-    lengthForJobsV3: lengthForJobsV3
+    lengthForJobsV3: lengthForJobsV3,
+    lengthForJobsV4: lengthForJobsV4
   };
 });

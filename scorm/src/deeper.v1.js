@@ -144,6 +144,34 @@
       limit: "We cannot tell you whether a particular card is still current, and nothing here checks. A lapsed certificate is still training you did and it belongs on the page; if an employer asks whether it is current, the answer is whatever the truth is."
     },
 
+    preferences: {
+      how: "Four answers, and none of them print. They ride out in your code so that when you use the job search on the outside, it can rule out work you cannot physically take before it ever puts it in front of you.",
+      example: "Somebody with no vehicle and a bus route gets shown jobs on that route. Without this screen the same person gets shown a warehouse eleven miles out with a five in the morning start, which looks like an opportunity right up until the first Monday.",
+      mistake: "Saying you can do anything because you do not want to look limited. It is the most understandable answer on this screen and it costs the most. A job you take and lose in week three is worse for you than a job you never got sent.",
+      limit: "Nothing here checks whether a bus actually runs where you are going, because this tablet has no way to look anything up. It records what you told it. Checking the route is a job for the outside, and it is worth doing before you accept anything."
+    },
+
+    disclosure_intro: {
+      how: "Four beats, one per screen, the same rhythm you used to build your resume lines. At the end you get the whole thing on one screen to say out loud. None of it is stored on your resume and none of it is printed with your page.",
+      example: "Beat one names it. Beat two is one sentence of context or nothing at all. Beat three is what you have done since, built out of the cards you ticked and the lines you wrote in here. Beat four gets the conversation back to the job.",
+      mistake: "Waiting until you are in the chair to think about it. Nearly everybody does, and it is why this conversation goes badly far more often than it has to. The people it goes well for are the ones who had already said it out loud somewhere safe.",
+      limit: "What you are legally required to disclose, and when, depends on your state, the job and the year, and it changes faster than this tablet can be updated. Nothing in here guesses at that. Ask your case manager, and check it again outside."
+    },
+
+    disclosure_beat3: {
+      how: "Everything on this screen came out of what you already told this program. A card you ticked, the years your own dates cover, a result you named while building a line. Nothing was added and nothing was assumed.",
+      example: "You tick OSHA 10 earlier, and this screen offers you: since then I earned my OSHA 10-Hour Certification. That is not a claim somebody made on your behalf. It is a thing you did, said in the place where it does the most work.",
+      mistake: "Reaching for I learned my lesson. It is what everybody says, it proves nothing, and the person across the desk has heard it from every candidate who ever sat where you are sitting. A certificate with a name on it is not a feeling. It is a fact.",
+      limit: "If this screen is empty it is because nothing you put into this program fits here yet, not because you have nothing. Go back and add what you have earned, or write this beat in your own words."
+    },
+
+    interview_questions: {
+      how: "Seven questions, what each one is really asking underneath, and which of your own material answers it. Your answers are pulled from the lines you built, so the page is showing you something you already have rather than something new to learn.",
+      example: "Tell me about yourself is not asking for your life story. It is asking what kind of worker walks through the door, in thirty seconds. Your headline and your strongest line ARE that answer, and both are already written.",
+      mistake: "Preparing the easy questions and avoiding the two hard ones. The gap and the reason you left are the questions people lose the job on, and they are the two that reward preparation the most, because almost nobody does it.",
+      limit: "Nobody can tell you which questions a particular employer will ask, and some interviewers will ask none of these. What is predictable is what is underneath them, which is the part worth practising."
+    },
+
     resume: {
       how: "The order of the sections was chosen from your own dates rather than from a template, and the reason is printed above the page so you can disagree with it. A long gap moves your skills to the top, so the first inch of the page is what you can do instead of a date somebody has to ask about.",
       example: "Two jobs with a six-year hole between them leads with skills. A steady run leads with the work history, because that is what an employer expects to see first and anything else makes them wonder why.",

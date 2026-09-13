@@ -213,6 +213,28 @@ async function main() {
     await sco.locator("#location_city").fill("Libby");
     await sco.locator("button.btn-primary").click();
 
+    console.log("\nCONSTRAINT REALITY\n");
+
+    const prefTitle = await sco.locator("#screen-title").textContent();
+    check("the practical constraints are asked, not assumed",
+      prefTitle.includes("show up"), "saw: " + prefTitle);
+    const prefBody = await sco.locator(".card").innerText();
+    check("it asks the four things that decide feasibility before skill does",
+      /how will you get to work/i.test(prefBody) && /how far/i.test(prefBody) &&
+      /when can you work/i.test(prefBody) && /holds your week/i.test(prefBody),
+      prefBody.slice(0, 400));
+    check("it says none of it reaches the page, before it asks",
+      /none of this goes on your resume/i.test(prefBody), prefBody.slice(0, 400));
+    check("obligations are framed as things that hold a week in place",
+      /never print/i.test(prefBody), prefBody.slice(0, 900));
+    if (process.env.SHOTS) await sco.locator(".card").screenshot({ path: process.env.SHOTS + "/1-constraints.png" });
+    await sco.locator("#transport-transit").check();
+    await sco.locator("#distance-medium").check();
+    await sco.locator("#shifts-days").check();
+    await sco.locator("#shifts-nights").check();
+    await sco.locator("#obligations-reporting").check();
+    await sco.locator("button.btn-primary").click();
+
     await sco.locator("#hook_narrative").fill(
       "A day where I finish something and it stays finished. Where somebody newer asks me how to do it and I know the answer."
     );
@@ -637,6 +659,114 @@ async function main() {
 
     await sco.locator("button.btn-primary").click();
 
+    console.log("\nDISCLOSURE\n");
+
+    const discTitle = await sco.locator("#screen-title").textContent();
+    check("the disclosure module comes after the resume, not before",
+      discTitle.includes("dreading"), "saw: " + discTitle);
+    const discIntro = await sco.locator(".card").innerText();
+    check("it says out loud that none of this reaches the resume",
+      /none of it goes on your resume/i.test(discIntro), discIntro.slice(0, 400));
+    check("it refuses to give legal advice and says where to get it",
+      /case manager/i.test(discIntro) && /changes faster/i.test(discIntro),
+      discIntro.slice(0, 700));
+    check("it never asks what happened, and says so",
+      /nothing in here asks what you did/i.test(discIntro), discIntro.slice(0, 700));
+    await sco.locator("button.btn-primary").click();
+
+    const timingBody = await sco.locator(".card").innerText();
+    check("the timing hierarchy is offered, best case first",
+      /after they offer me the job/i.test(timingBody) && /when somebody asks me directly/i.test(timingBody),
+      timingBody.slice(0, 400));
+    check("the never-on-paper rule holds whichever they pick",
+      /never volunteer it on a written application/i.test(timingBody), timingBody.slice(0, 600));
+    await sco.locator("button.option-tap", { hasText: "After they offer me the job" }).click();
+
+    const noteTitle = await sco.locator("#screen-title").textContent();
+    check("each timing answer leads to a screen of its own",
+      noteTitle.includes("After the offer"), "saw: " + noteTitle);
+    const noteBody = await sco.locator(".card").innerText();
+    check("it names what that timing costs as well as what it buys",
+      /what it costs you/i.test(noteBody) && /maximum leverage/i.test(noteBody),
+      noteBody.slice(0, 400));
+    await sco.locator("button.btn-primary").click();
+
+    const beat1 = await sco.locator(".card").innerText();
+    check("beat one offers direct acknowledgments with no euphemism",
+      /straightforward with you/i.test(beat1), beat1.slice(0, 300));
+    check("they can say it their own way",
+      await sco.locator("#own-ack").count() === 1, "no way to write your own beat one");
+    await sco.locator("button.option-tap", { hasText: "I have a record." }).first().click();
+
+    const beat2 = await sco.locator(".card").innerText();
+    check("beat two puts saying nothing first, not last",
+      /Say nothing here/i.test(beat2), beat2.slice(0, 300));
+    check("it names the difference between context and excuse",
+      /excuse/i.test(beat2), beat2.slice(0, 500));
+    await sco.locator("button.option-tap", { hasText: "Say nothing here" }).click();
+
+    const beat3 = await sco.locator(".card").innerText();
+    check("beat three is built from what they already earned in this program",
+      /OSHA 10/i.test(beat3) && /GED/i.test(beat3), beat3.slice(0, 600));
+    check("every piece of evidence says where it came from",
+      /you ticked this/i.test(beat3), beat3.slice(0, 600));
+    check("their own mined result is offered as evidence",
+      /stopped losing product/i.test(beat3), beat3.slice(0, 900));
+    await sco.locator("#disclosure_growth-cred_osha10").check();
+    await sco.locator("#disclosure_growth-years").check();
+    await sco.locator("button.btn-primary").click();
+
+    await sco.locator("button.option-tap", { hasText: "ready to show you" }).first().click();
+
+    const draft = await sco.locator(".statement").innerText();
+    check("the four beats assemble into something they can say",
+      /I have a record/i.test(draft) && /OSHA 10/i.test(draft) && /ready to show you/i.test(draft),
+      draft.slice(0, 400));
+    check("a skipped beat produces no words rather than a gap",
+      !/Say nothing here/i.test(draft), draft.slice(0, 400));
+    const draftCard = await sco.locator(".card").innerText();
+    check("it is not called finished, it is called unfinished until said aloud",
+      /not ready/i.test(draftCard) && /out loud/i.test(draftCard), draftCard.slice(0, 900));
+    await sco.locator("button.btn-primary").click();
+
+    if (process.env.SHOTS) await sco.locator(".card").screenshot({ path: process.env.SHOTS + "/2-disclosure-draft.png" });
+    const follow = await sco.locator(".card").innerText();
+    check("the three predictable follow-ups are coached explicitly",
+      /What exactly happened/i.test(follow) && /will not be a problem here/i.test(follow) &&
+      /do not hire people with records/i.test(follow),
+      follow.slice(0, 500));
+    check("the silence instruction survives, because it is the whole trick",
+      /Do not fill the silence/i.test(follow), follow.slice(0, 900));
+    check("the anti-patterns are named in their own voice, not scolded",
+      /I just want to be honest/i.test(follow), follow.slice(0, 1400));
+    await sco.locator("button.btn-primary").click();
+
+    console.log("\nINTERVIEW PREPARATION\n");
+
+    const ivTitle = await sco.locator("#screen-title").textContent();
+    check("interview prep follows disclosure", ivTitle.includes("gets you hired"), "saw: " + ivTitle);
+    await sco.locator("button.btn-primary").click();
+
+    const questions = await sco.locator(".card").innerText();
+    check("the questions asked in this kind of work are the ones covered",
+      /Tell me about yourself/i.test(questions) && /Why did you leave/i.test(questions) &&
+      /There is a gap here/i.test(questions),
+      questions.slice(0, 500));
+    check("each question says what it is really asking and what sinks it",
+      /really asking/i.test(questions) && /sinks it/i.test(questions), questions.slice(0, 700));
+    check("their own material is shown as the answer they already built",
+      /Forklift Operator/i.test(questions) && /Loaded pallets/i.test(questions),
+      questions.slice(0, 1200));
+    await sco.locator("button.btn-primary").click();
+
+    if (process.env.SHOTS) await sco.locator(".card").screenshot({ path: process.env.SHOTS + "/3-interview.png" });
+    const practice = await sco.locator(".card").innerText();
+    check("the practice protocol is the closing instruction, not a footnote",
+      /out loud/i.test(practice) && /interrupt/i.test(practice), practice.slice(0, 500));
+    check("it says they can start the practice in here today",
+      /in here/i.test(practice), practice.slice(0, 700));
+    await sco.locator("button.btn-primary").click();
+
     console.log("\nWHAT IS WAITING OUTSIDE\n");
 
     const outsideTitle = await sco.locator("#screen-title").textContent();
@@ -751,6 +881,25 @@ async function main() {
       (logText.split("\n").find((l) => l.includes("[error")) || ""));
     check("suspend_data was never rejected as too long", !logText.includes("REJECTED"), "");
 
+    // Where the budget actually goes. Printed rather than guessed at, because
+    // the first instinct on a tight budget is to trim the wrong field.
+    const raw = await page.evaluate(() => {
+      const api = window.API || window.API_1484_11;
+      if (!api) return "";
+      return api.LMSGetValue ? api.LMSGetValue("cmi.suspend_data")
+                             : api.GetValue("cmi.suspend_data");
+    });
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        const sizes = Object.keys(parsed)
+          .map((k) => [k, JSON.stringify(parsed[k]).length])
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8);
+        console.log("        budget: " + sizes.map((x) => x[0] + "=" + x[1]).join("  "));
+      } catch (e) { /* the log may have wrapped the value */ }
+    }
+
     const meter = await page.locator("#suspend-label").innerText();
     const used = Number((meter.match(/(\d+) of/) || [])[1] || 0);
     check("real suspend_data usage is well inside the SCORM 1.2 ceiling",
@@ -816,6 +965,7 @@ async function main() {
     await sp.locator("button.btn-primary").click();   // skills
     await sp.locator("#state-select").selectOption("MT");
     await sp.locator("button.btn-primary").click();
+    await sp.locator("button.btn-primary").click();   // constraint reality
 
     const hookTitle = await sp.locator("#screen-title").textContent();
     check("reached the deepest free-text question", hookTitle.includes("feel like yours"), "saw: " + hookTitle);

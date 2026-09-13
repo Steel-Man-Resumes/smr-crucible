@@ -43,6 +43,9 @@
   var CREDS = root.CREDENTIALS_V1;
   var DEEPER = root.DEEPER_V1;
   var OUTSIDE = root.OUTSIDE_V1;
+  var PREFS = root.PREFERENCES_V1;
+  var DISC = root.DISCLOSURE_V1;
+  var INTERVIEW = root.INTERVIEW_V1;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -88,7 +91,20 @@
       hook_narrative: "",
       unpaid_work: "",
       credentials: [],
-      credentials_freetext: ""
+      credentials_freetext: "",
+      // Constraint reality. Planning data, never printable. See the test that
+      // fails the build if any of it reaches a resume field.
+      transport: "",
+      distance: "",
+      shifts: [],
+      obligations: [],
+      // The disclosure statement. Spoken, never printed, and the only free
+      // text here is one optional sentence of context.
+      disclosure_timing: "",
+      disclosure_ack: "",
+      disclosure_context: "",
+      disclosure_growth: [],
+      disclosure_pivot: ""
     }
   };
 
@@ -110,6 +126,7 @@
       v: 2,
       at: reportableLocation(),
       h: reportableHistory(),
+      hn2: S.SCREENS.length,
       rt: state.route,
       j: state.jobs,
       ji: state.jobIndex,
@@ -125,7 +142,16 @@
       hn: a.hook_narrative,
       cr: a.credentials,
       crf: a.credentials_freetext,
-      tg: state.taught ? 1 : 0
+      tg: state.taught ? 1 : 0,
+      tp: a.transport,
+      ds: a.distance,
+      sh: a.shifts,
+      ob: a.obligations,
+      dt: a.disclosure_timing,
+      da: beatWire(a.disclosure_ack, DISC.ACKNOWLEDGE),
+      dc: beatWire(a.disclosure_context, DISC.CONTEXT),
+      dg: a.disclosure_growth,
+      dp: beatWire(a.disclosure_pivot, DISC.PIVOT)
     });
   }
 
@@ -151,13 +177,42 @@
     a.credentials = arr(d.cr);
     a.credentials_freetext = str(d.crf);
     state.taught = d.tg === 1;
+    a.transport = str(d.tp);
+    a.distance = str(d.ds);
+    a.shifts = arr(d.sh);
+    a.obligations = arr(d.ob);
+    a.disclosure_timing = str(d.dt);
+    a.disclosure_ack = beatFromWire(d.da, DISC.ACKNOWLEDGE);
+    a.disclosure_context = beatFromWire(d.dc, DISC.CONTEXT);
+    a.disclosure_growth = arr(d.dg);
+    a.disclosure_pivot = beatFromWire(d.dp, DISC.PIVOT);
     a.unpaid_work = str(d.u);
     state.route = ["exploring", "preparing", "acting"].indexOf(str(d.rt)) >= 0 ? d.rt : "preparing";
     state.jobs = sanitizeJobs(d.j);
     state.jobIndex = typeof d.ji === "number" && d.ji >= 0 ? Math.min(d.ji, Math.max(0, state.jobs.length - 1)) : 0;
-    state.history = arr(d.h).filter(byId);
+    state.history = historyFromWire(arr(d.h), d.hn2);
     state.at = byId(str(d.at)) ? d.at : "welcome";
     return true;
+  }
+
+  /**
+   * A beat on the wire. An offered line becomes its index; a line the person
+   * typed stays as text, because there is no other way to carry it.
+   *
+   * The saving is not cosmetic: three of the four beats are sentences from a
+   * fixed list that already ships inside the package, and storing the sentence
+   * spends about 400 characters of a 4,096 character budget re-saying what the
+   * package already knows.
+   */
+  function beatWire(value, offered) {
+    if (!value) return "";
+    for (var i = 0; i < offered.length; i++) if (offered[i] === value) return i;
+    return value;
+  }
+
+  function beatFromWire(value, offered) {
+    if (typeof value === "number") return offered[value] || "";
+    return str(value);
   }
 
   function emptyDraft() {
@@ -254,13 +309,61 @@
    * be checked against everything that gets written, not against the one
    * field you thought of first.
    */
+  /**
+   * THE BACK-TRAIL, AS INDICES.
+   *
+   * Two jobs at once, and the first one is the one that matters.
+   *
+   * SAFETY. Any screen the safety layer routed somebody through is stripped
+   * before this is saved, because the learner record must not be able to show
+   * that a person visited a crisis screen. That is the promise the consent
+   * screen makes and this is one of the two places it is kept.
+   *
+   * BUDGET. The trail used to be saved as screen ids, which cost 817 of the
+   * 4,096 characters SCORM 1.2 allows -- the single largest item in the
+   * payload, and one that grows every time a screen is added anywhere in the
+   * product. Adding disclosure and interview prep made that the binding
+   * constraint. As positions it is a tenth of the size.
+   *
+   * The position of a screen is only meaningful against the screen list that
+   * produced it, so the list length is saved alongside. If a package update
+   * changes the list, the trail is dropped on load rather than replayed
+   * against the wrong screens: losing the Back button for one session is a
+   * small cost, and landing somebody on a screen they were never on is not.
+   */
   function reportableHistory() {
     var out = [];
     for (var i = 0; i < state.history.length; i++) {
       var id = state.history[i];
       var screen = byId(id);
       var isSafety = (screen && screen.kind && screen.kind.indexOf("safety_") === 0) || id === "pause";
-      if (!isSafety) out.push(id);
+      if (isSafety) continue;
+      var at = indexOfScreen(id);
+      if (at >= 0) out.push(at);
+    }
+    return out;
+  }
+
+  function indexOfScreen(id) {
+    for (var i = 0; i < S.SCREENS.length; i++) {
+      if (S.SCREENS[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  /** Positions back to ids, refusing the lot if the screen list has moved. */
+  function historyFromWire(list, savedLength) {
+    var out = [];
+    if (savedLength !== S.SCREENS.length) return out;
+    for (var i = 0; i < list.length; i++) {
+      var at = list[i];
+      // Older saves carried ids. They still load; they just cost more.
+      if (typeof at === "string") {
+        if (byId(at)) out.push(at);
+        continue;
+      }
+      var screen = S.SCREENS[at];
+      if (screen) out.push(screen.id);
     }
     return out;
   }
@@ -545,7 +648,14 @@
     print_ask: true,
     // Picking a title advances. A Next button beside it would let somebody
     // walk past the one field every entry on the page is headed with.
-    job_title: true
+    job_title: true,
+    // Every disclosure beat is a choice, and a Next button beside a choice
+    // that has not been made walks somebody past the hardest screen in the
+    // product with nothing recorded.
+    disclosure_timing: true,
+    disclosure_beat1: true,
+    disclosure_beat2: true,
+    disclosure_beat4: true
   };
 
   function buildNav(screen) {
@@ -1240,6 +1350,243 @@
       card.appendChild(el("p", "footnote", C.honest));
     },
 
+    // ---- CONSTRAINT REALITY ---------------------------------------------
+
+    /**
+     * job-search-doctrine: transport, distance and shift availability decide
+     * feasibility BEFORE skill does. None of it prints, and the screen says so
+     * before the questions rather than after them -- being asked about a
+     * curfew by a program on a corrections tablet is a reasonable thing to be
+     * wary of, and the answer to that wariness is to say where the answer goes
+     * before asking for it.
+     */
+    preferences: function (card) {
+      var C = PREFS.COPY;
+      var a = state.answers;
+      for (var i = 0; i < C.body.length; i++) {
+        card.appendChild(el("p", "screen-body", C.body[i]));
+      }
+
+      card.appendChild(pickGroup(C.transportLabel, PREFS.TRANSPORT, "transport", "radio"));
+      card.appendChild(pickGroup(C.distanceLabel, PREFS.DISTANCE, "distance", "radio"));
+      card.appendChild(pickGroup(C.shiftsLabel, PREFS.SHIFTS, "shifts", "checkbox"));
+
+      var ob = pickGroup(C.obligationsLabel, PREFS.OBLIGATIONS, "obligations", "checkbox");
+      ob.insertBefore(el("p", "field-note", C.obligationsNote), ob.firstChild.nextSibling);
+      card.appendChild(ob);
+
+      card.appendChild(el("p", "punch", C.punch));
+    },
+
+    // ---- DISCLOSURE ------------------------------------------------------
+
+    disclosure_intro: function (card) {
+      var C = DISC.COPY;
+      for (var i = 0; i < C.intro.length; i++) {
+        card.appendChild(el("p", "screen-body", C.intro[i]));
+      }
+      card.appendChild(el("p", "footnote", C.noDetails));
+      card.appendChild(el("p", "footnote", C.legalNote));
+    },
+
+    disclosure_timing: function (card, screen) {
+      var a = state.answers;
+      card.appendChild(el("p", "screen-help", DISC.COPY.timingHelp));
+      var group = el("div", "options");
+      for (var i = 0; i < DISC.TIMING.length; i++) {
+        group.appendChild(choiceRow(DISC.TIMING[i].label, a.disclosure_timing === DISC.TIMING[i].id,
+          makeTimingPick(DISC.TIMING[i].id, screen)));
+      }
+      card.appendChild(group);
+      card.appendChild(el("p", "footnote", DISC.COPY.neverOnPaper));
+    },
+
+    /** What that choice costs and buys. One screen per answer, by design. */
+    disclosure_timing_note: function (card) {
+      var pick = timingPick();
+      if (!pick) return;
+      card.appendChild(labelled("Why this is a good move", pick.why));
+      card.appendChild(labelled("What it costs you", pick.cost));
+      card.appendChild(labelled("How it actually goes", pick.how));
+      card.appendChild(el("p", "footnote", DISC.COPY.neverOnPaper));
+    },
+
+    disclosure_beat1: function (card, screen) {
+      var a = state.answers;
+      card.appendChild(el("p", "screen-help", DISC.COPY.beat1Help));
+      var group = el("div", "options");
+      for (var i = 0; i < DISC.ACKNOWLEDGE.length; i++) {
+        group.appendChild(choiceRow(DISC.ACKNOWLEDGE[i], a.disclosure_ack === DISC.ACKNOWLEDGE[i],
+          makeBeatPick("disclosure_ack", DISC.ACKNOWLEDGE[i], screen)));
+      }
+      card.appendChild(group);
+      card.appendChild(ownWords("own-ack", "Or say it your way", a, "disclosure_ack", DISC.ACKNOWLEDGE, 160));
+      card.appendChild(el("p", "footnote", DISC.COPY.beat1Note));
+    },
+
+    disclosure_beat2: function (card, screen) {
+      var a = state.answers;
+      card.appendChild(el("p", "screen-help", DISC.COPY.beat2Help));
+      var group = el("div", "options");
+      for (var i = 0; i < DISC.CONTEXT.length; i++) {
+        // Index 0 is the skip, and it is first on purpose. A skip buried under
+        // five options reads as the fallback rather than the recommendation it
+        // often is.
+        var value = i === 0 ? "" : DISC.CONTEXT[i];
+        group.appendChild(choiceRow(DISC.CONTEXT[i],
+          i === 0 ? a.disclosure_context === "" && a.disclosure_context !== null : a.disclosure_context === DISC.CONTEXT[i],
+          makeBeatPick("disclosure_context", value, screen)));
+      }
+      card.appendChild(group);
+      card.appendChild(ownWords("own-context", "Or one sentence of your own", a, "disclosure_context", DISC.CONTEXT, 160));
+      card.appendChild(el("p", "footnote", DISC.COPY.beat2Note));
+    },
+
+    /**
+     * Beat three is the one the doctrine says the Forge output feeds directly.
+     * On this tablet there is no Forge output to feed it, so it is fed from
+     * what the person has already put into THIS program: the cards they
+     * ticked, the years they placed, the lines they mined. Nothing here is
+     * invented and nothing is offered that they did not earn.
+     */
+    disclosure_beat3: function (card) {
+      var a = state.answers;
+      card.appendChild(el("p", "screen-help", DISC.COPY.beat3Help));
+
+      var evidence = growthEvidence();
+      if (!evidence.length) {
+        card.appendChild(el("p", "page-empty", DISC.COPY.beat3Empty));
+      } else {
+        var group = el("fieldset", "options");
+        group.appendChild(el("legend", "visually-hidden", "What you have done since"));
+        for (var i = 0; i < evidence.length; i++) {
+          group.appendChild(optionRow("checkbox", "disclosure_growth",
+            { id: evidence[i].id, label: evidence[i].text, description: evidence[i].from },
+            a.disclosure_growth.indexOf(evidence[i].id) >= 0, null));
+        }
+        card.appendChild(group);
+      }
+    },
+
+    disclosure_beat4: function (card, screen) {
+      var a = state.answers;
+      card.appendChild(el("p", "screen-help", DISC.COPY.beat4Help));
+      var group = el("div", "options");
+      for (var i = 0; i < DISC.PIVOT.length; i++) {
+        group.appendChild(choiceRow(DISC.PIVOT[i], a.disclosure_pivot === DISC.PIVOT[i],
+          makeBeatPick("disclosure_pivot", DISC.PIVOT[i], screen)));
+      }
+      card.appendChild(group);
+      card.appendChild(ownWords("own-pivot", "Or your own", a, "disclosure_pivot", DISC.PIVOT, 160));
+    },
+
+    disclosure_draft: function (card) {
+      card.appendChild(el("p", "screen-help", DISC.COPY.draftHelp));
+
+      var box = el("div", "statement");
+      var beats = disclosureBeats();
+      for (var i = 0; i < beats.length; i++) {
+        box.appendChild(el("p", "statement-line", beats[i]));
+      }
+      if (!beats.length) {
+        box.appendChild(el("p", "page-empty", "Nothing picked yet. Go back a few screens and build it."));
+      }
+      card.appendChild(box);
+
+      var list = el("div", "grounding");
+      for (var j = 0; j < DISC.COPY.practice.length; j++) {
+        var row = el("div", "ground-step");
+        row.appendChild(el("p", "ground-count", String(j + 1)));
+        var body = el("div", "ground-body");
+        body.appendChild(el("p", "ground-hint", DISC.COPY.practice[j]));
+        row.appendChild(body);
+        list.appendChild(row);
+      }
+      card.appendChild(list);
+      card.appendChild(el("p", "punch", DISC.COPY.practicePunch));
+    },
+
+    disclosure_followups: function (card) {
+      card.appendChild(el("p", "screen-help", DISC.COPY.followHelp));
+      for (var i = 0; i < DISC.FOLLOW_UPS.length; i++) {
+        var f = DISC.FOLLOW_UPS[i];
+        var box = el("div", "qa");
+        box.appendChild(el("p", "qa-question", f.question));
+        box.appendChild(labelled("What sinks it", f.wrong));
+        box.appendChild(labelled("What works", f.right));
+        box.appendChild(el("p", "qa-example", f.example));
+        box.appendChild(el("p", "qa-after", f.after));
+        card.appendChild(box);
+      }
+
+      card.appendChild(el("h2", "section-heading", DISC.COPY.antiTitle));
+      card.appendChild(el("p", "screen-help", DISC.COPY.antiHelp));
+      var anti = el("div", "paths");
+      for (var k = 0; k < DISC.ANTI_PATTERNS.length; k++) {
+        var row = el("div", "path");
+        row.appendChild(el("p", "path-name", DISC.ANTI_PATTERNS[k].phrase));
+        row.appendChild(el("p", "path-detail", DISC.ANTI_PATTERNS[k].signals));
+        anti.appendChild(row);
+      }
+      card.appendChild(anti);
+    },
+
+    // ---- INTERVIEW PREPARATION -------------------------------------------
+
+    interview_intro: function (card) {
+      var C = INTERVIEW.COPY;
+      for (var i = 0; i < C.intro.length; i++) {
+        card.appendChild(el("p", "screen-body", C.intro[i]));
+      }
+    },
+
+    /**
+     * Every answer here is derived from what the person already built. The
+     * screen does not write an answer; it points at the one they have and says
+     * which question it belongs to. That is also why this module stores
+     * nothing, which matters on SCORM 1.2 where suspend_data is the tightest
+     * resource in the build.
+     */
+    interview_questions: function (card) {
+      card.appendChild(el("p", "screen-help", INTERVIEW.COPY.listHelp));
+      for (var i = 0; i < INTERVIEW.QUESTIONS.length; i++) {
+        var q = INTERVIEW.QUESTIONS[i];
+        var box = el("div", "qa");
+        box.appendChild(el("p", "qa-question", q.question));
+        box.appendChild(labelled("What they are really asking", q.asking));
+        box.appendChild(labelled("What sinks it", q.sinks));
+        box.appendChild(labelled("What to use", q.use));
+
+        var mine = interviewMaterial(q.source);
+        if (mine.length) {
+          var own = el("div", "qa-mine");
+          own.appendChild(el("p", "qa-mine-label", INTERVIEW.COPY.yourMaterial));
+          for (var m = 0; m < mine.length; m++) {
+            own.appendChild(el("p", "qa-mine-text", mine[m]));
+          }
+          box.appendChild(own);
+        }
+        card.appendChild(box);
+      }
+      card.appendChild(el("p", "punch", INTERVIEW.COPY.closing));
+    },
+
+    interview_practice: function (card) {
+      var P = INTERVIEW.PRACTICE;
+      var list = el("div", "grounding");
+      for (var i = 0; i < P.steps.length; i++) {
+        var row = el("div", "ground-step");
+        row.appendChild(el("p", "ground-count", String(i + 1)));
+        var body = el("div", "ground-body");
+        body.appendChild(el("p", "ground-hint", P.steps[i]));
+        row.appendChild(body);
+        list.appendChild(row);
+      }
+      card.appendChild(list);
+      card.appendChild(el("p", "punch", P.punch));
+      card.appendChild(el("p", "footnote", P.inHere));
+    },
+
     // ---- THE SAFETY LAYER ----------------------------------------------
     // Nothing on these screens is saved, counted, or reported. The person is
     // told that, in the first breath, because being noticed by software is
@@ -1689,7 +2036,8 @@
    * exits are offered, and the screen says which is which.
    */
   function carryCode() {
-    return CarryCode.encodeV3({
+    var a = state.answers;
+    return CarryCode.encodeV4({
       readiness_stage: state.answers.readiness_stage,
       goals: state.answers.goals,
       challenges: state.answers.challenges,
@@ -1706,7 +2054,16 @@
         year_ended: j.year_ended,
         end_approx: j.end_approx
       };
-    }));
+    }), {
+      // The plan block. Constraints the job board outside cannot honour
+      // unless it is told them, and the disclosure TIMING only -- the
+      // statement itself is spoken and stays theirs.
+      transport: a.transport,
+      distance: a.distance,
+      shifts: a.shifts,
+      obligations: a.obligations,
+      disclosure_timing: a.disclosure_timing
+    });
   }
 
   /** The shape resume.js and the paper gate both read from. */
@@ -1910,6 +2267,234 @@
   function goPrint() {
     state.printReturn = state.at;
     go("print_ask");
+  }
+
+  // ---- helpers for constraint reality, disclosure and interview prep ----
+
+  /** A titled block of radios or checkboxes writing into state.answers. */
+  function pickGroup(label, table, field, type) {
+    var wrap = el("div", "credgroup");
+    wrap.appendChild(el("p", "credgroup-title", label));
+    var list = el("fieldset", "options");
+    list.appendChild(el("legend", "visually-hidden", label));
+    var current = state.answers[field];
+    for (var i = 0; i < table.length; i++) {
+      var on = type === "radio"
+        ? current === table[i].id
+        : current.indexOf(table[i].id) >= 0;
+      list.appendChild(optionRow(type, field, table[i], on, null));
+    }
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  /** A tappable option that is the navigation, used by the disclosure beats. */
+  function choiceRow(label, selected, onPick) {
+    var b = el("button", "option option-tap" + (selected ? " option-on" : ""), null);
+    b.type = "button";
+    b.appendChild(el("span", "option-label", label));
+    b.onclick = onPick;
+    return b;
+  }
+
+  // Built in named factories rather than inline, because a closure created
+  // inside a loop captures the loop variable and every option would write the
+  // last value in the list.
+  function makeTimingPick(id, screen) {
+    return function () { state.answers.disclosure_timing = id; goNext(screen); };
+  }
+
+  function makeBeatPick(field, value, screen) {
+    return function () { state.answers[field] = value; goNext(screen); };
+  }
+
+  /**
+   * The write-your-own field beside every disclosure beat.
+   *
+   * Doctrine: "A perfect script given to someone who doesn't own it will fail
+   * in the room every time." So the field is present on every beat, and it
+   * shows text only when what is stored is NOT one of the offered lines --
+   * otherwise picking an option would silently fill the box with it and the
+   * person would be editing a script instead of writing one.
+   */
+  function ownWords(id, label, answers, field, offered, max) {
+    var wrap = el("div", "field");
+    var lab = el("label", "field-label", label);
+    lab.htmlFor = id;
+    wrap.appendChild(lab);
+    var input = doc.createElement("input");
+    input.id = id;
+    input.className = "input";
+    input.maxLength = max;
+    var current = answers[field] || "";
+    var isOffered = false;
+    for (var i = 0; i < offered.length; i++) if (offered[i] === current) isOffered = true;
+    input.value = isOffered ? "" : current;
+    input.oninput = function () { answers[field] = input.value; };
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function labelled(label, text) {
+    var wrap = el("div", "labelled");
+    wrap.appendChild(el("p", "labelled-label", label));
+    wrap.appendChild(el("p", "labelled-text", text));
+    return wrap;
+  }
+
+  function timingPick() {
+    for (var i = 0; i < DISC.TIMING.length; i++) {
+      if (DISC.TIMING[i].id === state.answers.disclosure_timing) return DISC.TIMING[i];
+    }
+    return null;
+  }
+
+  /**
+   * BEAT THREE, BUILT OUT OF WHAT THEY ALREADY DID.
+   *
+   * Doctrine says the Forge output feeds this beat directly. There is no Forge
+   * in here, so it is fed from this program: cards they ticked, the run of
+   * years their own dates cover, and the lines they mined. Nothing is offered
+   * that they did not earn, and every entry says where it came from, so the
+   * evidence can be checked rather than believed.
+   */
+  function growthEvidence() {
+    var out = [];
+    var a = state.answers;
+
+    for (var i = 0; i < a.credentials.length; i++) {
+      var entry = CREDS.byId(a.credentials[i]);
+      if (!entry) continue;
+      var line = entry.resume || entry.label;
+      if (!line) continue;
+      out.push({
+        id: "cred_" + entry.id,
+        text: "Since then I earned my " + line + ".",
+        from: "you ticked this"
+      });
+    }
+    if (a.credentials_freetext) {
+      out.push({
+        id: "cred_own",
+        text: "Since then I earned " + a.credentials_freetext.trim() + ".",
+        from: "you wrote this"
+      });
+    }
+
+    var years = Resume.yearsOfExperience(state.jobs, THIS_YEAR);
+    if (years >= 2) {
+      out.push({
+        id: "years",
+        text: "I have " + years + " years in this work behind me.",
+        from: "the years you placed on your own jobs"
+      });
+    }
+
+    var mined = Resume.minedJobs(state.jobs);
+    for (var j = 0; j < mined.length && j < 3; j++) {
+      var job = mined[j];
+      var bullets = job.bullets || [];
+      for (var b = 0; b < bullets.length; b++) {
+        if (!bullets[b].result) continue;
+        out.push({
+          id: "result_" + j + "_" + b,
+          text: "At " + (job.employer || "my last job") + " I " +
+            String(bullets[b].result).replace(/[.]+$/, "") + ".",
+          from: "a line you built"
+        });
+        break;
+      }
+    }
+
+    return out.slice(0, 8);
+  }
+
+  /**
+   * The four beats as they would be spoken, in order, skipping any the person
+   * left out. Beat two skipped is a legitimate and often stronger statement,
+   * so an absent beat produces no words rather than a gap to fill.
+   */
+  function disclosureBeats() {
+    var a = state.answers;
+    var out = [];
+    if (a.disclosure_ack) out.push(a.disclosure_ack);
+    if (a.disclosure_context) out.push(a.disclosure_context);
+
+    var evidence = growthEvidence();
+    for (var i = 0; i < evidence.length; i++) {
+      if (a.disclosure_growth.indexOf(evidence[i].id) >= 0) out.push(evidence[i].text);
+    }
+
+    if (a.disclosure_pivot) out.push(a.disclosure_pivot);
+    return out;
+  }
+
+  /**
+   * Which of their own material answers a given interview question. Derived,
+   * never stored: the whole interview module costs zero characters of
+   * suspend_data, which matters because suspend_data is the tightest resource
+   * in the SCORM 1.2 build.
+   */
+  function interviewMaterial(source) {
+    var built = Resume.build(resumeData());
+    var history = null;
+    for (var i = 0; i < built.sections.length; i++) {
+      if (built.sections[i].kind === "history") history = built.sections[i];
+    }
+    var jobs = history ? history.jobs : [];
+
+    if (source === "headline_and_best_bullet") {
+      var out = [];
+      if (built.headline) out.push(built.headline + ".");
+      var summary = null;
+      for (var s2 = 0; s2 < built.sections.length; s2++) {
+        if (built.sections[s2].kind === "summary") summary = built.sections[s2];
+      }
+      if (summary) out.push(summary.text);
+      return out;
+    }
+
+    if (source === "best_result_bullet") {
+      var mined = Resume.minedJobs(state.jobs);
+      for (var m = 0; m < mined.length; m++) {
+        var bullets = mined[m].bullets || [];
+        for (var b = 0; b < bullets.length; b++) {
+          if (bullets[b].result) return [Bullet.assemble(bullets[b])];
+        }
+      }
+      // No result anywhere, so fall back to any line rather than showing
+      // nothing on the question that most needs an answer.
+      for (var m2 = 0; m2 < mined.length; m2++) {
+        var line = (mined[m2].bullets || [])[0];
+        if (line) return [Bullet.assemble(line)];
+      }
+      return [];
+    }
+
+    if (source === "all_jobs") {
+      return jobs.map(function (job) {
+        var head = job.title;
+        if (job.employer) head += " at " + job.employer;
+        if (job.dates) head += ", " + job.dates;
+        return head + ". " + (job.bullets[0] || "");
+      });
+    }
+
+    if (source === "credentials_and_dates") {
+      var lines = [];
+      var creds = state.answers.credentials || [];
+      for (var c = 0; c < creds.length; c++) {
+        var line2 = CREDS.resumeLine(creds[c]);
+        if (line2) lines.push(line2);
+      }
+      if (state.answers.credentials_freetext) lines.push(state.answers.credentials_freetext.trim());
+      if (lines.length) {
+        return ["What I did with the time: " + lines.join(", ") + "."];
+      }
+      return [];
+    }
+
+    return [];
   }
 
   function resumePage(built) {
