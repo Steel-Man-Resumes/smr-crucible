@@ -351,6 +351,62 @@ check("the job list never exceeds what the code can carry", () => {
     "expected the list to cap at " + CarryCode.MAX_JOBS + ", got " + out.jobs.length);
 });
 
+console.log("\nTHE OUTSIDE END OF THE WALL\n");
+
+check("the consumer app's copy of the codec is byte-identical", () => {
+  // A drifted decoder silently turns somebody's answers into DIFFERENT
+  // answers. Not an error, not a failure they would notice -- a wrong resume.
+  // That is the one failure in this system that cannot be apologised for, so
+  // the two copies are compared byte for byte rather than behaviourally.
+  for (const file of ["carry-code.js", "tables.v1.js"]) {
+    const inside = readFileSync(join(HERE, "src", file), "utf8");
+    const outside = readFileSync(join(HERE, "..", "apps", "consumer", "lib", file), "utf8");
+    assert(inside === outside,
+      "apps/consumer/lib/" + file + " has drifted from scorm/src/" + file +
+      ". Copy it across rather than editing either one in place.");
+  }
+});
+
+check("a code made inside decodes to the same thing outside", () => {
+  // Belt and braces on top of byte-identity: load the consumer copy as its own
+  // module instance and round trip a real code through it.
+  const Outside = require(join(HERE, "..", "apps", "consumer", "lib", "carry-code.js"));
+  const intake = {
+    readiness_stage: "preparation",
+    goals: ["stability", "growth"],
+    challenges: ["criminal_record", "transportation"],
+    work_type: "physical",
+    skills: ["driving", "forklift", "leadership"],
+    state: "MT"
+  };
+  const jobs = [
+    { kind: "warehouse", year_started: 2018, year_approx: true },
+    { kind: "kitchen", year_started: 2022, year_approx: false }
+  ];
+  const code = CarryCode.encodeFull(intake, jobs);
+  const out = Outside.decode(code);
+  assert(out.ok, "the outside decoder rejected an inside code: " + out.message);
+  equal(out.intake.goals, intake.goals);
+  equal(out.intake.skills, intake.skills);
+  equal(out.jobs, jobs, "the work history did not survive the crossing");
+
+  // A mistyped code must fail VISIBLY on the outside rather than decoding to
+  // something plausible but wrong.
+  const swapped = code[3] === "A" ? "B" : "A";
+  const wrong = code.slice(0, 3) + swapped + code.slice(4);
+  const bad = Outside.decode(wrong);
+  assert(!bad.ok, "a mistyped code decoded cleanly on the outside");
+  assert(bad.message && bad.message.length > 10, "the failure gives the person nothing to act on");
+});
+
+check("version 1 codes still redeem on the outside", () => {
+  const Outside = require(join(HERE, "..", "apps", "consumer", "lib", "carry-code.js"));
+  const old = CarryCode.encode({ readiness_stage: "action", state: "MT", skills: ["cooking"] });
+  const out = Outside.decode(old);
+  assert(out.ok, "a version 1 code was rejected outside: " + out.message);
+  assert(out.intake.state === "MT", "version 1 decoded wrong outside");
+});
+
 console.log("\nTABLE INTEGRITY\n");
 
 check("every table fits the bit width the codec allocates it", () => {

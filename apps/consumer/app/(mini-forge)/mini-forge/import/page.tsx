@@ -150,6 +150,16 @@ export default async function ImportPage({
         Do not have a code yet? Complete The Mini Forge on a facility tablet first.
         Your code is shown at the end.
       </p>
+
+      <div className="mt-10 border-t border-border pt-6">
+        <p className="text-sm text-muted">
+          Got a longer code with dashes in it, from a tablet inside a facility?
+          That is a different kind of code and it does not need a PIN.
+        </p>
+        <a href="/carry" className="text-sm text-foreground underline">
+          Enter a Forge Tablet code instead
+        </a>
+      </div>
     </div>
   );
 }

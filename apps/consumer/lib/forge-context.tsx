@@ -58,6 +58,21 @@ export interface ForgeSessionData {
   // Demo mode (partner/observer walkthrough with sample data)
   isDemo?: boolean;
 
+  /**
+   * Everything a Forge Tablet carry code brought across the wall that has no
+   * other home in this shape. Set only by /carry; nothing else reads or writes
+   * it, so adding it cannot affect any existing flow.
+   *
+   * The jobs skeleton matters most: those years were recovered a rung at a
+   * time on a narrowing ladder inside a facility, and they are the single
+   * hardest thing in that whole session to reproduce.
+   */
+  carriedIn?: {
+    code: string;
+    skills: string[];
+    jobs: Array<{ kind: string; yearStarted: number | null; yearApprox: boolean }>;
+  };
+
   // Meta
   startedAt?: string;
   lastPageVisited?: string;

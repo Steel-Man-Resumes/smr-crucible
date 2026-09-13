@@ -10,6 +10,7 @@
     "build:12": "node build.mjs --scorm 1.2",
     "build:2004": "node build.mjs --scorm 2004",
     "test": "node test.mjs",
+    "redeem": "node redeem.mjs",
     "harness": "node harness/serve.mjs"
   },
   "dependencies": {},
