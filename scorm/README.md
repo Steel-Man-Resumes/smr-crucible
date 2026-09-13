@@ -253,3 +253,21 @@ any document.
 - No emojis.
 - Nothing generated at runtime. If a future change makes the set of things this
   package can say depend on what someone types, the security argument is gone.
+
+## Printing
+
+The resume prints as a document. `@media print` in `src/styles.css` hides the
+whole app and brings back `.page` alone, so a printer produces a one-page
+resume rather than a screenshot of a course.
+
+Printing goes through `print_ask`, which states plainly that somebody runs the
+printer, what is on the page and what is not, before either button is offered.
+`window.print()` is a declared WARN in the containment report rather than a
+silent capability.
+
+To see exactly what comes out:
+
+```bash
+PAPER_PNG=/tmp/resume.png node e2e.mjs   # the printed page, as an image
+PAPER_PDF=/tmp/resume.pdf node e2e.mjs   # the printed page, as paper
+```

@@ -94,6 +94,16 @@ export const RULES = [
   { id: "base-tag", severity: "block", re: /<base\b/gi,
     why: "Rewrites every relative path in the document at once." },
 
+  // --- declared capabilities ---
+  // Not findings. These are the two places this package touches the device
+  // outside its own document, surfaced by name so a reviewer is handed them
+  // rather than discovering them. Both are warn, both are deliberate, and
+  // both are explained here rather than in a cover letter.
+  { id: "print-dialog", severity: "warn", re: /\bprint\s*\(\s*\)/g,
+    why: "Opens the device print dialog so a resume can reach paper. Sends nothing anywhere: no network call, no file write, no destination this code chooses. The print stylesheet prints the resume only." },
+  { id: "window-close", severity: "warn", re: /\bclose\s*\(\s*\)/g,
+    why: "Closes the window the LMS opened, which is how a learner gets back to where they came from. It navigates nowhere and opens nothing." },
+
   // --- packaging hygiene ---
   { id: "file-uri", severity: "warn", re: /\bfile:\/\//gi,
     why: "A file:// path will not resolve the same way inside every LMS frame." },

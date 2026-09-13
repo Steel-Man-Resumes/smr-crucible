@@ -428,7 +428,10 @@
     // there is now a test for it rather than a note.
     bullet_done: true,
     minimizer_nudge: true,
-    mine_more: true
+    mine_more: true,
+    // Print or do not print. A Next button here would walk somebody past a
+    // decision about who gets to see their page.
+    print_ask: true
   };
 
   function buildNav(screen) {
@@ -964,16 +967,66 @@
       choice.appendChild(swap);
       card.appendChild(choice);
 
-      var page = el("div", "page");
-      for (var i = 0; i < built.sections.length; i++) {
-        page.appendChild(sectionNode(built.sections[i]));
-      }
-      card.appendChild(page);
+      card.appendChild(resumePage(built));
 
       card.appendChild(el("p", "punch",
         built.lineCount === 1
           ? "One line, and it is yours."
           : built.lineCount + " lines, and every one of them is yours."));
+
+      // Paper is a real exit for this population: a case manager, a release
+      // planner or a family member can carry a printed page somewhere the
+      // person cannot go yet. It is offered, never assumed, and the screen it
+      // leads to explains the cost before anything prints.
+      card.appendChild(secondaryButton("Print this page", function () { goPrint(); }));
+    },
+
+    /**
+     * THE PAPER EXIT.
+     *
+     * The resume is rendered again underneath the explanation, for two
+     * reasons. A person deciding whether to let somebody handle this should be
+     * looking at the thing they are deciding about. And the print stylesheet
+     * prints whatever .page is on screen, so the page has to be here.
+     */
+    print_ask: function (card) {
+      var built = Resume.build(resumeData());
+
+      card.appendChild(el("p", "screen-body",
+        "This page can go to a printer. That is a different thing from a screen, so here it is straight."));
+
+      var facts = el("div", "paths");
+      var items = [
+        ["Somebody sees it.",
+         "Whoever runs the printer handles the page. In here that is usually staff. There is no version of printing where that is not true."],
+        ["What is on it.",
+         "Your jobs, your years, the lines you wrote, and what you can do. Your name is a blank line for you to fill in by hand."],
+        ["What is not on it.",
+         "Nothing you said about your record. Nothing from any pause you took. None of that was ever written onto this page."],
+        ["The words were already checked.",
+         "Anything that would give away where you have been was swapped for the outside word for the same work, before you ever saw the page."]
+      ];
+      for (var i = 0; i < items.length; i++) {
+        var row = el("div", "path");
+        row.appendChild(el("p", "path-name", items[i][0]));
+        row.appendChild(el("p", "path-detail", items[i][1]));
+        facts.appendChild(row);
+      }
+      card.appendChild(facts);
+
+      card.appendChild(el("p", "screen-body",
+        "If that sounds fine, print it. If it does not, your code and your sheet carry the same work out without anybody reading a word of it."));
+
+      var status = el("p", "footnote");
+      card.appendChild(bigButton("Print it now", function () {
+        printPage(status);
+      }));
+      card.appendChild(secondaryButton(
+        state.printReturn === "done" ? "Not now, take me back" : "Not now, take me back to my resume",
+        function () { go(state.printReturn || "resume"); }));
+      card.appendChild(status);
+
+      card.appendChild(resumePage(built));
     },
 
     // ---- THE SAFETY LAYER ----------------------------------------------
@@ -1173,6 +1226,10 @@
       card.appendChild(el("p", "punch",
         n === 1 ? "One line and a code. That is the whole thing."
                 : n + " lines and a code. That is the whole thing."));
+
+      // Offered before the finish button, not after: pressing finish closes
+      // the window, and an offer below it would be an offer nobody reaches.
+      card.appendChild(secondaryButton("Print my resume on paper", function () { goPrint(); }));
 
       card.appendChild(finishBlock());
     },
@@ -1544,6 +1601,54 @@
     return b;
   }
 
+  /**
+   * Print is reachable from the document and from the final screen, and the
+   * way back has to be the way they came. Held on state rather than inferred
+   * from history, because the safety layer already taught us that walking the
+   * trail backwards is not the same as remembering one thing.
+   */
+  function goPrint() {
+    state.printReturn = state.at;
+    go("print_ask");
+  }
+
+  function resumePage(built) {
+    var page = el("div", "page");
+    for (var i = 0; i < built.sections.length; i++) {
+      page.appendChild(sectionNode(built.sections[i]));
+    }
+    return page;
+  }
+
+  /**
+   * PRINT.
+   *
+   * window.print() hands the page to the device's own print dialog. Nothing
+   * leaves this document: there is no network call, no file written, no
+   * handler that could be pointed somewhere else. The print stylesheet hides
+   * every part of the app except the resume, so what comes out is a document
+   * rather than a screenshot of a course.
+   *
+   * It is listed by name in the containment report rather than left for a
+   * reviewer to find, the same way window.close() is. A capability a vetting
+   * team discovers on its own costs more trust than one they were handed.
+   *
+   * A tablet with no printer configured will do nothing visible when this is
+   * pressed, so the note below says so rather than leaving somebody waiting
+   * on a page that is never coming.
+   */
+  function printPage(status) {
+    clear(status);
+    try {
+      root.print();
+      status.appendChild(doc.createTextNode(
+        "The print box should have opened. If nothing happened, this tablet has no printer set up, and your code and your sheet still carry everything."));
+    } catch (e) {
+      status.appendChild(doc.createTextNode(
+        "This tablet would not open a print box. Your code and your sheet still carry everything."));
+    }
+  }
+
   function sectionNode(section) {
     if (section.kind === "contact") return contactSection(section);
     if (section.kind === "skills") return skillsSection(section);
@@ -1559,6 +1664,20 @@
     node.appendChild(el("p", "page-nameline", section.heading));
     node.appendChild(el("p", "page-placeholder", section.placeholder));
     node.appendChild(el("p", "page-note", section.note));
+
+    // The same hole in the form paper asks for: labelled rules to write on.
+    // Hidden on screen, shown only when printing. Built here rather than at
+    // print time because a stylesheet cannot invent markup.
+    var lines = el("div", "print-lines");
+    var fields = section.fields || [];
+    for (var i = 0; i < fields.length; i++) {
+      var line = el("div", "print-line" + (i === 0 ? " print-line-name" : ""));
+      line.appendChild(el("span", "print-line-label", fields[i]));
+      line.appendChild(el("span", "print-line-rule"));
+      lines.appendChild(line);
+    }
+    node.appendChild(lines);
+
     return node;
   }
 

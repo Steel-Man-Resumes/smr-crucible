@@ -437,6 +437,98 @@ async function main() {
 
     console.log("        " + (await sco.locator(".punch").innerText()).trim());
 
+    console.log("\nON PAPER\n");
+
+    // The resume is the one artifact in this build meant to be seen by other
+    // people. Everything else in the product promises that nobody here reads
+    // your answers, so the print path has to say out loud that paper is
+    // different rather than let the promise quietly bend.
+    await sco.locator("button.btn-secondary", { hasText: "Print this page" }).click();
+    const printTitle = await sco.locator("#screen-title").textContent();
+    check("printing goes through a screen that explains it first",
+      printTitle.toLowerCase().includes("somebody handles it"), "saw: " + printTitle);
+
+    const printText = (await sco.locator(".card").innerText()).toLowerCase();
+    check("the print screen names who sees the page",
+      printText.includes("whoever runs the printer"), printText.slice(0, 200));
+    check("the print screen says what stays off the page",
+      printText.includes("nothing you said about your record"), printText.slice(0, 400));
+    check("the private way out is still offered as the alternative",
+      printText.includes("code and your sheet"), printText.slice(0, 400));
+
+    check("the document itself is on the print screen, not just a description of it",
+      await sco.locator(".page").count() === 1, "no resume rendered on the print screen");
+
+    // window.print() blocks in headless Chromium, so it is replaced with a
+    // recorder. This asserts the button is wired to the device dialog and to
+    // nothing else.
+    const scoFrame = page.frames().find((f) => f.url().includes("/dist/") || f.url().includes("index.html"));
+    check("found the SCO frame to instrument", !!scoFrame, page.frames().map((f) => f.url()).join(" | "));
+    await scoFrame.evaluate(() => {
+      window.__printed = 0;
+      window.print = function () { window.__printed++; };
+    });
+    await sco.locator("button.btn-primary", { hasText: "Print it now" }).click();
+    await sleep(150);
+    check("the print button opens the device print dialog",
+      (await scoFrame.evaluate(() => window.__printed)) === 1,
+      "print was called " + (await scoFrame.evaluate(() => window.__printed)) + " times");
+    check("pressing print says what should have happened",
+      /print box/i.test(await sco.locator(".footnote").last().innerText()),
+      await sco.locator(".footnote").last().innerText());
+
+    // What actually comes out of the printer. Computed styles under print
+    // emulation, because reading the stylesheet only proves the rules were
+    // written, not that they win.
+    await page.emulateMedia({ media: "print" });
+    const paper = await scoFrame.evaluate(() => {
+      const vis = (sel) => {
+        const node = document.querySelector(sel);
+        return node ? getComputedStyle(node).visibility : "absent";
+      };
+      const lines = document.querySelector(".print-lines");
+      return {
+        page: vis(".page"),
+        bullet: vis(".page-bullet"),
+        progress: vis(".progress-wrap"),
+        buttons: vis(".btn"),
+        title: vis("#screen-title"),
+        lines: lines ? getComputedStyle(lines).display : "absent",
+        dashed: getComputedStyle(document.querySelector(".page-contact")).borderTopWidth,
+        placeholder: getComputedStyle(document.querySelector(".page-placeholder")).display,
+        ruleCount: document.querySelectorAll(".print-line-rule").length
+      };
+    });
+    check("the resume prints", paper.page === "visible" && paper.bullet === "visible", JSON.stringify(paper));
+    check("the app chrome does not print",
+      paper.progress === "hidden" && paper.buttons === "hidden" && paper.title === "hidden",
+      JSON.stringify(paper));
+    check("the contact hole prints as lines to write on, not as a dashed box",
+      paper.lines === "block" && paper.dashed === "0px" && paper.placeholder === "none" && paper.ruleCount >= 3,
+      JSON.stringify(paper));
+    // PAPER_PDF=path writes what the printer would actually produce, so the
+    // finished page can be looked at rather than only asserted about.
+    if (process.env.PAPER_PNG) {
+      await sco.locator(".page").screenshot({ path: process.env.PAPER_PNG });
+      console.log("        wrote " + process.env.PAPER_PNG);
+    }
+
+    if (process.env.PAPER_PDF) {
+      await page.pdf({ path: process.env.PAPER_PDF, format: "Letter", printBackground: false });
+      console.log("        wrote " + process.env.PAPER_PDF);
+    }
+
+    await page.emulateMedia({ media: "screen" });
+
+    const onScreen = await scoFrame.evaluate(() =>
+      getComputedStyle(document.querySelector(".print-lines")).display);
+    check("the paper-only lines stay off the screen", onScreen === "none", "saw: " + onScreen);
+
+    await sco.locator("button.btn-secondary", { hasText: "take me back" }).click();
+    const backTitle = await sco.locator("#screen-title").textContent();
+    check("declining to print returns to the resume with the work intact",
+      backTitle.includes("Your resume"), "saw: " + backTitle);
+
     await sco.locator("button.btn-primary").click();
 
     const reviewTitle = await sco.locator("#screen-title").textContent();
@@ -481,6 +573,19 @@ async function main() {
     }
 
     console.log("\nTHE WRITE-DOWN SHEET\n");
+
+    // Somebody who only decides on the last screen that they want a page to
+    // hand to a case manager should not have to run the whole thing again.
+    const paperOnLast = sco.locator("button.btn-secondary", { hasText: "Print my resume" });
+    check("paper is still reachable from the final screen", await paperOnLast.count() === 1,
+      "no print offer on the carry-out screen");
+    await paperOnLast.click();
+    check("it is the same print screen, with the document on it",
+      await sco.locator(".page").count() === 1, "no resume on the print screen from the end");
+    await sco.locator("button.btn-secondary", { hasText: "take me back" }).click();
+    const backFromEnd = await sco.locator("#screen-title").textContent();
+    check("declining returns to the carry-out screen, not back into the flow",
+      backFromEnd.includes("Write this down"), "saw: " + backFromEnd);
 
     const sheetLines = await sco.locator(".sheet-line").count();
     check("the bullets are laid out to be copied", sheetLines >= 1, sheetLines + " lines on the sheet");

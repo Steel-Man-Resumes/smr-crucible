@@ -68,6 +68,13 @@
   --term-placeholder: #6d7a68;
   --term-note: #8a9685;
 
+  /* Paper. Deliberately not the screen palette: a printer given #eaede9
+     lays down grey ink on white stock, and the resume is the one artifact
+     that has to look like a document rather than like a product. */
+  --print-paper: #ffffff;
+  --print-ink: #000000;
+  --print-rule: #999999;
+
   --sans: "IBM Plex Sans Var", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
   --mono: "IBM Plex Mono Bundled", "IBM Plex Mono", Consolas, monospace;
 }
@@ -592,6 +599,9 @@ html, body {
 }
 .page-empty { margin: 0; font-size: 16px; color: var(--muted); }
 
+/* The contact hole in its paper form. Rules to write on, print only. */
+.print-lines { display: none; }
+
 /* ------------------------------------------------------ write-down sheet */
 
 /* Laid out for one job: being copied onto paper, by hand, possibly across
@@ -988,4 +998,122 @@ html, body {
    without it, selection still reads from the control and the bold label. */
 @media (prefers-reduced-motion: reduce) {
   .progress-fill { transition: none; }
+}
+
+/* ========================================================================= *
+ * ON PAPER
+ *
+ * A social worker, a release planner or a family member can carry a printed
+ * page somewhere the person cannot go yet, so the resume has to survive
+ * leaving the screen.
+ *
+ * Everything is hidden and the resume alone is made visible, rather than
+ * hiding the chrome by name. Naming the chrome means every screen added later
+ * has to remember to opt out of printing, and the one that forgets prints a
+ * progress bar across somebody's work history.
+ * ========================================================================= */
+@media print {
+  @page { margin: 0.6in; }
+
+  html, body {
+    background: var(--print-paper);
+    color: var(--print-ink);
+  }
+
+  body * { visibility: hidden; }
+  .page, .page * { visibility: visible; }
+
+  .page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--print-paper);
+    color: var(--print-ink);
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  .page-section { margin-bottom: 18pt; }
+
+  /* The dashed box reads as a printing fault on paper. Lines read as
+     somewhere to write, which is what this space has always been. */
+  .page-contact {
+    border: 0;
+    padding: 0;
+    text-align: left;
+    margin-bottom: 22pt;
+  }
+  .page-nameline,
+  .page-placeholder,
+  .page-note { display: none; }
+
+  .print-lines { display: block; }
+  .print-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8pt;
+    margin-bottom: 10pt;
+  }
+  .print-line-label {
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--print-rule);
+    white-space: nowrap;
+  }
+  .print-line-rule {
+    flex: 1;
+    border-bottom: 0.5pt solid var(--print-ink);
+    height: 14pt;
+  }
+  .print-line-name .print-line-rule { height: 22pt; }
+
+  .page-heading {
+    font-size: 9pt;
+    color: var(--print-ink);
+    border-bottom: 1pt solid var(--print-ink);
+    margin-bottom: 8pt;
+  }
+
+  /* A job split across a page break turns one employer into two. */
+  .page-job {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin-bottom: 12pt;
+  }
+  .page-job-title { font-size: 11pt; }
+  .page-job-year,
+  .page-job-employer {
+    font-size: 10pt;
+    color: var(--print-ink);
+  }
+  .page-bullet {
+    font-size: 10.5pt;
+    margin-bottom: 4pt;
+    color: var(--print-ink);
+  }
+
+  /* Pills are a screen idiom. On paper they cost ink and gain nothing, so
+     the skills set as a plain run separated by dots. */
+  .page-skills { display: block; }
+  .page-skill {
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    font-size: 10.5pt;
+    color: var(--print-ink);
+  }
+  /* Whitespace inside generated content collapses against the next inline
+     box, so the gap is padding rather than spaces around the dot. */
+  .page-skill:not(:last-child)::after {
+    content: "\00b7";
+    padding: 0 0.45em;
+  }
 }

@@ -125,7 +125,11 @@
       heading: "Your name goes here",
       // Deliberately empty. See the note at the top of this file.
       placeholder: "Name, phone, email, city",
-      note: "Fill this in on the day you get out. It is the only part of this page you cannot write from in here."
+      note: "Fill this in on the day you get out. It is the only part of this page you cannot write from in here.",
+      // On paper the hole becomes ruled lines with labels, because a dashed
+      // box on a printout reads as a printing fault and a blank line reads as
+      // somewhere to write. Same hole, the form the medium calls for.
+      fields: ["Name", "Phone", "Email", "City and state"]
     };
 
     var skills = {

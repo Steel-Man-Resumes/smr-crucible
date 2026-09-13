@@ -701,12 +701,40 @@
       kind: "resume",
       title: "Your resume",
       goTo: "review",
+      // Printing is a side door off the document, not a step in the flow.
+      // Declared so it shows up in the route map like everything else.
+      alsoReaches: ["print_ask"],
       why: {
         forWhat: "The document. This is the thing this whole program was building.",
         hard: "It will look short compared to what you imagined. Short and true beats long and padded, every time.",
         buys: "Something to copy down, and something to pick back up outside with your code.",
         evidence: "The layout was chosen from your own dates. Tap the reason under the heading to see why this order and not the other one."
       }
+    },
+
+    /**
+     * THE PAPER EXIT.
+     *
+     * Everywhere else in this product the promise is that nobody here reads
+     * your answers. Paper is the one place that promise cannot hold, because
+     * somebody has to run the printer.
+     *
+     * So the answer is not to hide the tension. It is to say it plainly, list
+     * what is on the page and what is not, and let the person decide. The
+     * resume is the one artifact in this build that was always meant to be
+     * seen by other people, and it has already been through the paper gate,
+     * so nothing on it can give away where they have been. That is what makes
+     * this offerable at all -- and it is exactly why it gets said out loud
+     * rather than assumed.
+     */
+    {
+      id: "print_ask",
+      kind: "print_ask",
+      title: "Printing means somebody handles it",
+      // Where "not now" leads is decided at runtime from where they came in,
+      // because this screen is reachable from the resume and from the final
+      // screen. goTo names the common case so the route map is not empty.
+      goTo: "resume"
     },
 
     // ---- THE SAFETY LAYER ------------------------------------------------
@@ -799,7 +827,10 @@
       id: "done",
       kind: "done",
       terminal: true,
-      alsoReaches: ["closed"],
+      // Paper stays reachable at the end. Somebody who decides on the last
+      // screen that they want a page to hand to a case manager should not
+      // have to run the whole thing again to get one.
+      alsoReaches: ["closed", "print_ask"],
       title: "Write this down",
       body: [
         "Two things leave this room with you. The code carries everything you picked, including the years you worked out. The lines below carry the words, because words do not fit in a code.",

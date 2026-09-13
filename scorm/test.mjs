@@ -47,6 +47,9 @@ const Resume = require("./src/resume.js");
 const Safety = require("./src/safety.js");
 const SAFETY = require("./src/safety.v1.js");
 
+// The containment scanner is an ES module, not a CommonJS one.
+import { RULES as PREFLIGHT_RULES } from "./preflight.mjs";
+
 let passed = 0;
 let failed = 0;
 
@@ -1701,6 +1704,83 @@ check("the finish button tells them to copy the code down first", () => {
   assert(/written it down/i.test(block), "the button does not confirm they copied it");
   assert(/do it again/i.test(block) || /copy the code/i.test(block),
     "nothing warns them that closing costs them the code");
+});
+
+console.log("\nON PAPER\n");
+
+check("printing is offered, and it is a screen rather than a button that just fires", () => {
+  // A print button that prints immediately hands somebody's work to whoever
+  // runs the printer before they have been told that is what happens.
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(/go\("print_ask"\)/.test(app), "nothing leads to the print screen");
+  const screen = SCREENS.SCREENS.find((s) => s.id === "print_ask");
+  assert(screen, "there is no print screen");
+  const resume = SCREENS.SCREENS.find((s) => s.id === "resume");
+  assert((resume.alsoReaches || []).includes("print_ask"),
+    "the route to the print screen is not declared, so it is invisible in the route map");
+});
+
+check("the print screen says who sees the page before anything prints", () => {
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  const block = app.slice(app.indexOf("print_ask: function"), app.indexOf("// ---- THE SAFETY LAYER"));
+  assert(block.length > 200, "could not read the print screen builder");
+  assert(/whoever runs the printer/i.test(block),
+    "the screen does not say that somebody handles the page");
+  assert(/nothing you said about your record/i.test(block),
+    "the screen does not say what stays off the page");
+  assert(/code and your sheet/i.test(block),
+    "the screen does not offer the private way out as an alternative");
+});
+
+check("printing cannot become a way out of the package", () => {
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(/root\.print\(\)/.test(app), "print is not called on the app window");
+  assert(!/print\([^)]/.test(app.replace(/printPage\(/g, "")),
+    "print() is being passed something, which is not the no-argument device dialog");
+});
+
+check("the print stylesheet hides everything and then shows the resume", () => {
+  // Hiding the chrome by name means every screen added later has to remember
+  // to opt out, and the one that forgets prints a progress bar across
+  // somebody's work history.
+  const css = readFileSync(join(HERE, "src", "styles.css"), "utf8");
+  const at = css.indexOf("@media print");
+  assert(at > 0, "there is no print stylesheet");
+  const block = css.slice(at);
+  assert(/body\s*\*\s*\{\s*visibility:\s*hidden/.test(block),
+    "the print block does not hide the app chrome");
+  assert(/\.page,\s*\.page \*\s*\{\s*visibility:\s*visible/.test(block),
+    "the print block does not bring the resume back");
+  assert(/page-break-inside:\s*avoid/.test(block),
+    "a job can be split across a page break, which turns one employer into two");
+});
+
+check("the contact hole becomes writable lines on paper", () => {
+  const built = Resume.build({ jobs: [], skills: [], thisYear: 2026 });
+  const contact = built.sections.find((s) => s.kind === "contact");
+  assert(Array.isArray(contact.fields) && contact.fields.length >= 3,
+    "the contact section has no fields to rule off on paper");
+  assert(contact.fields.some((f) => /name/i.test(f)), "no line to write a name on");
+
+  const css = readFileSync(join(HERE, "src", "styles.css"), "utf8");
+  assert(/\.print-lines\s*\{\s*display:\s*none/.test(css),
+    "the paper-only lines show up on screen as well");
+  const block = css.slice(css.indexOf("@media print"));
+  assert(/\.print-lines\s*\{\s*display:\s*block/.test(block),
+    "the paper-only lines never appear on paper either");
+  assert(/\.page-contact\s*\{[^}]*border:\s*0/.test(block),
+    "the dashed box prints, which reads as a printing fault");
+});
+
+check("the containment report lists print by name rather than staying silent", () => {
+  // A capability a vetting team discovers on its own costs more trust than
+  // one they were handed.
+  const declared = PREFLIGHT_RULES.filter((r) => r.id === "print-dialog");
+  assert(declared.length === 1, "print is not a declared rule in the containment report");
+  assert(/sends nothing anywhere/i.test(declared[0].why),
+    "the rule does not say what print does and does not do");
+  assert(declared[0].severity === "warn",
+    "a declared capability should be reported, not treated as a finding");
 });
 
 console.log("\nSTYLESHEET\n");
