@@ -133,6 +133,18 @@ async function main() {
 
     // The Why panel is the structural answer to "this must not be a form
     // builder", so it gets asserted in the browser, not just in the unit tests.
+    // THE COACH MARK. Troy, after running the finished build: the reasoning
+    // button needs pointing at, and people should be taught to check every
+    // page. Taught once and then never again -- a hint somebody has already
+    // acted on that keeps reappearing becomes furniture they ignore.
+    const coach = sco.locator(".coach");
+    check("the reasoning layer is pointed at, not left to be discovered",
+      await coach.count() === 1, "no coach mark on the first question");
+    const coachText = (await coach.innerText()).toLowerCase();
+    check("the coach mark teaches the habit rather than just naming a button",
+      coachText.includes("every screen") && coachText.includes("longer version"),
+      coachText.slice(0, 240));
+
     const whyButton = sco.locator("button.link-why");
     check("a question screen offers its reasoning", await whyButton.count() === 1, "no why button on q1");
     await whyButton.click();
@@ -171,6 +183,10 @@ async function main() {
       await sco.locator(".panel-deeper").count() === 0,
       "the ladder does not come back down one rung at a time");
     await whyButton.click();
+
+    check("opening the reasoning counts as having learned it",
+      await sco.locator(".coach").count() === 0,
+      "the coach mark is still showing after they did the thing it asked for");
 
     // THE ROUTER. "Ready to go" must not walk the same road as everyone else.
     await sco.locator("#readiness_stage-" + intent.readiness_stage).check();
@@ -619,6 +635,24 @@ async function main() {
     check("declining to print returns to the resume with the work intact",
       backTitle.includes("Your resume"), "saw: " + backTitle);
 
+    await sco.locator("button.btn-primary").click();
+
+    console.log("\nWHAT IS WAITING OUTSIDE\n");
+
+    const outsideTitle = await sco.locator("#screen-title").textContent();
+    check("what is outside is shown after the page exists, not before",
+      outsideTitle.includes("bigger building"), "saw: " + outsideTitle);
+    const outsideBody = await sco.locator(".card").innerText();
+    check("the real surfaces are named, by name",
+      /The Forge/.test(outsideBody) && /The Refinery/.test(outsideBody) &&
+      /Interview preparation/i.test(outsideBody) && /tracking/i.test(outsideBody),
+      outsideBody.slice(0, 400));
+    check("it names what this tablet deliberately does not do",
+      /not in here on purpose/i.test(outsideBody), outsideBody.slice(0, 600));
+    check("it still refuses to promise a job",
+      /nobody can promise you one/i.test(outsideBody), outsideBody.slice(0, 800));
+    check("the code is tied to it, and does not expire",
+      /does not expire/i.test(outsideBody), outsideBody.slice(0, 800));
     await sco.locator("button.btn-primary").click();
 
     const reviewTitle = await sco.locator("#screen-title").textContent();

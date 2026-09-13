@@ -42,6 +42,7 @@
   var TITLES = root.TITLES_V1;
   var CREDS = root.CREDENTIALS_V1;
   var DEEPER = root.DEEPER_V1;
+  var OUTSIDE = root.OUTSIDE_V1;
   var THIS_YEAR = new Date().getFullYear();
 
   var state = {
@@ -72,6 +73,9 @@
     // "just" a second time stops being a good question and starts being an
     // argument.
     nudged: false,
+    // Whether the reasoning layer has been pointed out yet. Persisted so a
+    // person who comes back tomorrow is not taught the same thing twice.
+    taught: false,
     answers: {
       readiness_stage: "",
       goals: [],
@@ -120,7 +124,8 @@
       lc: a.location_city,
       hn: a.hook_narrative,
       cr: a.credentials,
-      crf: a.credentials_freetext
+      crf: a.credentials_freetext,
+      tg: state.taught ? 1 : 0
     });
   }
 
@@ -145,6 +150,7 @@
     a.hook_narrative = str(d.hn);
     a.credentials = arr(d.cr);
     a.credentials_freetext = str(d.crf);
+    state.taught = d.tg === 1;
     a.unpaid_work = str(d.u);
     state.route = ["exploring", "preparing", "acting"].indexOf(str(d.rt)) >= 0 ? d.rt : "preparing";
     state.jobs = sanitizeJobs(d.j);
@@ -382,6 +388,11 @@
       wrap.appendChild(bar);
     }
 
+    // Taught once, on the first screen that has something to teach, and then
+     // never again. Troy, after running the finished build: the reasoning
+     // button needs pointing at, and people should learn to check every page.
+    if (screen.why && !state.taught) wrap.appendChild(buildCoachMark());
+
     if (openPanel === "help") wrap.appendChild(buildHelpPanel());
     if (openPanel === "why" && screen.why) wrap.appendChild(buildWhyPanel(screen.why, screen));
     if (openPanel === "deeper") wrap.appendChild(buildDeeperPanel(screen));
@@ -402,9 +413,35 @@
       openPanel = openPanel === which || (which === "why" && openPanel === "deeper")
         ? null
         : which;
+      // Opening it is better proof of having learned it than pressing Got it.
+      if (openPanel === "why") { state.taught = true; save(); }
       render();
     };
     return b;
+  }
+
+  /**
+   * THE COACH MARK.
+   *
+   * One screen, one time, dismissed by opening the thing it points at or by
+   * saying got it. It is not a tour and it does not reappear: a hint somebody
+   * has already acted on that keeps showing up stops being a hint and starts
+   * being furniture they learn to ignore.
+   *
+   * `taught` rides in suspend_data so that somebody who comes back tomorrow is
+   * not taught the same thing twice.
+   */
+  function buildCoachMark() {
+    var box = el("div", "coach");
+    box.appendChild(el("p", "coach-point", "Look up there"));
+    box.appendChild(el("p", "coach-text",
+      "Every screen in here can tell you why it is asking, and behind that there is a longer version with a worked example and what usually goes wrong. Check it on the questions that matter to you. It is the difference between this and a form."));
+
+    var got = el("button", "btn btn-secondary", "Got it");
+    got.type = "button";
+    got.onclick = function () { state.taught = true; save(); render(); };
+    box.appendChild(got);
+    return box;
   }
 
   function buildHelpPanel() {
@@ -1174,6 +1211,33 @@
       card.appendChild(status);
 
       card.appendChild(resumePage(built));
+    },
+
+    /**
+     * WHAT IS WAITING OUTSIDE.
+     *
+     * Every item named here is a surface that is built and running today.
+     * Nothing on this screen is a roadmap. A person in a facility has been
+     * told about programs that did not exist by people who meant well, and
+     * being one more of those costs this package everything else it said.
+     */
+    outside: function (card) {
+      var C = OUTSIDE.COPY;
+      for (var i = 0; i < C.body.length; i++) {
+        card.appendChild(el("p", "screen-body", C.body[i]));
+      }
+
+      var list = el("div", "paths");
+      for (var j = 0; j < C.items.length; j++) {
+        var row = el("div", "path");
+        row.appendChild(el("p", "path-name", C.items[j].name));
+        row.appendChild(el("p", "path-detail", C.items[j].detail));
+        list.appendChild(row);
+      }
+      card.appendChild(list);
+
+      card.appendChild(el("p", "punch", C.access));
+      card.appendChild(el("p", "footnote", C.honest));
     },
 
     // ---- THE SAFETY LAYER ----------------------------------------------

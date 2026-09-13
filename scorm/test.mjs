@@ -47,6 +47,7 @@ const Resume = require("./src/resume.js");
 const Safety = require("./src/safety.js");
 const SAFETY = require("./src/safety.v1.js");
 const DEEPER = require("./src/deeper.v1.js");
+const OUTSIDE = require("./src/outside.v1.js");
 const TITLES = require("./src/titles.v1.js");
 const CREDS = require("./src/credentials.v1.js");
 
@@ -1707,6 +1708,71 @@ check("the finish button tells them to copy the code down first", () => {
   assert(/written it down/i.test(block), "the button does not confirm they copied it");
   assert(/do it again/i.test(block) || /copy the code/i.test(block),
     "nothing warns them that closing costs them the code");
+});
+
+console.log("\nWHAT IS WAITING OUTSIDE\n");
+
+check("every surface named is one that exists, and each one says what it is", () => {
+  // A person in a facility has been told about programs that did not exist by
+  // people who meant well. Being one more of those costs this package every
+  // other thing it said.
+  const items = OUTSIDE.COPY.items;
+  assert(items.length >= 5, "only " + items.length + " things named");
+  items.forEach((item) => {
+    assert(item.name && item.name.length > 2, "an item with no name");
+    assert(item.detail && item.detail.length > 60,
+      item.name + " is named but never explained, which is a list of words");
+  });
+  const named = items.map((i) => i.name).join(" | ");
+  ["The Forge", "The Refinery"].forEach((want) => {
+    assert(named.indexOf(want) >= 0, "the outside screen never names " + want);
+  });
+});
+
+check("it names the two things this tablet deliberately does not do", () => {
+  // Disclosure and interview prep are the hardest parts of this work and they
+  // are not in the package. Saying so is more useful than pretending the
+  // tablet is the whole product.
+  const all = JSON.stringify(OUTSIDE.COPY).toLowerCase();
+  assert(all.indexOf("disclosure") >= 0, "the disclosure work is never mentioned");
+  assert(all.indexOf("interview") >= 0, "interview preparation is never mentioned");
+  assert(/not in here on purpose/.test(all),
+    "nothing says that a missing piece is missing deliberately");
+});
+
+check("the outside screen promises no more than any other screen does", () => {
+  const all = JSON.stringify(OUTSIDE.COPY);
+  assert(/nobody can promise you one/i.test(all),
+    "the one screen most likely to oversell does not carry the honest line");
+  assert(!/guarantee/i.test(all), "a guarantee appears on the outside screen");
+  assert(!/—/.test(all), "em dash in the outside copy");
+});
+
+check("the access line says only what it can stand behind", () => {
+  // What it costs and how somebody gets in is a real decision with real
+  // consequences for a person with no money on release day. It is not a detail
+  // to invent in a content file.
+  const access = OUTSIDE.COPY.access;
+  assert(/does not expire/i.test(access), "the access line: " + access);
+  assert(!/\bfree\b/i.test(access) && !/\$/.test(access),
+    "the access line makes a claim about cost that nobody has decided: " + access);
+});
+
+check("the reasoning layer is taught rather than left to be found", () => {
+  // Troy, after running the finished build: the button needs pointing at, and
+  // people should be taught to check every page.
+  const welcome = SCREENS.SCREENS.find((s) => s.id === "welcome");
+  const body = welcome.body.join(" ").toLowerCase();
+  assert(/why it is being asked/.test(body) || /tell you why/.test(body),
+    "the welcome never mentions that screens can explain themselves");
+  assert(/each screen|every screen/.test(body),
+    "the welcome does not teach it as a habit to repeat");
+
+  const app = readFileSync(join(HERE, "src", "app.js"), "utf8");
+  assert(/buildCoachMark/.test(app), "there is no coach mark");
+  assert(/state\.taught/.test(app), "the coach mark has no memory, so it will nag");
+  assert(/tg: state\.taught/.test(app),
+    "whether they were taught is not saved, so a returning person is taught twice");
 });
 
 console.log("\nTHE DEPTH LADDER\n");

@@ -116,6 +116,9 @@
       body: [
         "Answer questions about what you are good at and what you want next.",
         "There are no right answers and nothing is graded. You can stop any time and pick it back up. Nothing you do here is lost.",
+        // Taught here rather than discovered by luck. A person who never finds
+        // the reasoning is using a form, which is the one thing this is not.
+        "Every question in here can tell you why it is being asked, and most of them can tell you a lot more than that. Look for it on each screen. It is the part that makes this worth your time instead of paperwork.",
         "At the end you get a code. Write it down. When you get out, that code picks this back up where you left it."
       ],
       next: "Show me",
@@ -772,7 +775,7 @@
       id: "resume",
       kind: "resume",
       title: "Your resume",
-      goTo: "review",
+      goTo: "outside",
       // Printing is a side door off the document, not a step in the flow.
       // Declared so it shows up in the route map like everything else.
       alsoReaches: ["print_ask"],
@@ -875,6 +878,28 @@
       kind: "pause",
       title: "Put it down",
       goTo: "review"
+    },
+
+    /**
+     * WHAT IS WAITING OUTSIDE.
+     *
+     * Placed here, immediately after the page exists, and not at the start.
+     * Somebody who has just watched their own work turn into a document is in
+     * a position to believe the next part is worth showing up for. The same
+     * words at the beginning are a sales pitch from a program that has not
+     * done anything for them yet.
+     */
+    {
+      id: "outside",
+      kind: "outside",
+      title: "This is one room of a much bigger building",
+      goTo: "review",
+      why: {
+        forWhat: "Telling you what the code is actually for, which is more than picking this back up.",
+        hard: "People have been told about programs that turned out not to exist. There is a fair reason to read a screen like this and assume it is a pitch.",
+        buys: "Knowing what to walk towards. Two of the hardest parts of this work, the conversation about your record and interview practice, are not on this tablet at all.",
+        evidence: "Every single thing named on this screen is built and running right now. Nothing on it is a plan."
+      }
     },
 
     {

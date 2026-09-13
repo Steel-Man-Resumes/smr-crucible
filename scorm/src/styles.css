@@ -599,6 +599,30 @@ html, body {
 }
 .page-empty { margin: 0; font-size: 16px; color: var(--muted); }
 
+/* The coach mark. Shown once, on the first screen with reasoning behind it,
+   and then never again. Pointed upward at the button rather than floating,
+   because a hint that does not say what it is about is decoration. */
+.coach {
+  margin: 10px 0 4px;
+  padding: 14px 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.coach-point {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.coach-text {
+  margin: 0 0 12px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
 /* RUNG 2 of the depth ladder. Set apart from the why panel it opens out of,
    so it reads as going further in rather than as more of the same. */
 .panel-deeper {
