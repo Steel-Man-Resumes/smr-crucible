@@ -1,5 +1,39 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-15 -- Jackson, MI fair-chance employer data: 3 verified employers imported to prod, 7 tracked as unverified. No code changed, data-only.
+
+Verified Employers (`/dashboard/employers`, gated to client+full_access) was thin --
+70 rows / 39 published before today, almost entirely Milwaukee/Waukesha/SE Wisconsin,
+despite the `~/todash/smr/FAIR-CHANCE-EMPLOYER-DATA-LANE.md` charter (2026-08-04) naming
+a Michigan statewide sweep as a pre-Aug-14-conference target that never really happened.
+Live Michigan MDOC relationship (Mariam Deland, Oct 29 demo for statewide reentry
+contractors + Vocational Village job developers) triggered running that sweep for real,
+scoped to Jackson County first (where Parnall Correctional Facility and the VV programming
+sit).
+- Two research passes verified 3 real employers against primary-source evidence (Eaton
+  Corporation, The Home Depot, Kelly Services), rejecting several real candidates for lack
+  of an employer-stated policy (Edwards Machining -- a job-board tag is not the employer's
+  own policy, the exact Ford-lesson trap the charter warns about).
+- Staged all writes in the SMR Employers Airtable base first, then ran
+  `packages/core/scripts/import-employers.ts` -- verified directly against Neon afterward
+  (not just trusted from the import log) that all 3 are `published=true`. Import also
+  synced other previously-unimported Airtable rows in the same run (published count
+  39->49 total, not just +3 -- includes unrelated Montana coverage from a separate thread).
+- Per Troy's explicit instruction, also added 7 investigated-but-unverified Jackson
+  candidates to Airtable with `Board Fit: Not Yet` so they stay internal-only, each with a
+  plain note on why it's unresolved -- Meijer, Consumers Energy, Danfoss, Gerdau,
+  CertainTeed/Saint-Gobain, Cascade Die Casting Group, plus the rejected Edwards Machining.
+- Full write-up: `~/todash/smr/MI-JACKSON-EMPLOYER-SWEEP-2026-09-15.md` (+ addendum) and
+  the follow-on `~/todash/smr/MI-JACKSON-EMPLOYER-OUTREACH-PLAN-2026-09-15.md`.
+- New standing practice this session established in memory
+  (`feedback_geo_access_triggers_research_sweep`): a relationship opening a new geography
+  should trigger an active research sweep there, not just passive retention. First fired
+  here; extends the charter's own product-side geo-ticket trigger to relationship-side.
+- STILL OPEN: Lansing and Detroit corridors fully unaddressed. JAMA directory (~220
+  members) only partially mined -- 7 candidates pulled, worth a dedicated second pass.
+  Track 1 outreach (confirm Eaton/Home Depot/Kelly Services will actually take referrals)
+  not yet started -- see the outreach plan for sequencing.
+
 ## 2026-08-18 -- Session close. Headshots live + hardened; refund + slop cleanup done. NEXT: Codex review-only pass of the whole codebase (Troy).
 
 Post-merge follow-ups after the Phase 6/2.3/7.7/2.5 deploy, all live on prod (main
