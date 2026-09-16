@@ -1,5 +1,32 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-16 -- Refinery login: fixed confusing OAuthAccountNotLinked error surfaced live during a demo
+
+Troy hit "OAuth error" trying to sign into Refinery live on a screen-share with a
+prospective partner (Richard Bronson). Diagnosed via Vercel runtime error logs
+(`[auth][error] OAuthAccountNotLinked`, route `/api/auth/[...nextauth]`, 2026-09-16
+19:14 UTC) plus a direct read-only Neon query against `users`/`accounts`.
+
+- **Not data corruption.** Troy's own account (`troyrichardcarr@gmail.com`,
+  tier=admin) has exactly one clean Google account link, no duplicates. The error
+  fires when the *active browser session* belongs to a different existing user than
+  whichever account the Google identity in the OAuth callback is already linked to
+  (Auth.js's `handle-login.js` correctly refuses to silently merge two real
+  accounts) -- almost certainly Troy was signed into a demo/test account in that
+  browser session and then clicked "Continue with Google" with his own personal
+  Google identity, which is already tied to his separate main account.
+- **Real bug, though:** `apps/consumer/app/(auth)/login/page.tsx` had a `msgs` map
+  for known NextAuth error codes but no entry for `OAuthAccountNotLinked`, so it
+  fell through to a raw, non-actionable `Login error: OAuthAccountNotLinked` string.
+  Fixed (`7dc13ff`): added a plain-language message plus a one-click "Sign out"
+  button (reuses the existing `signOut({ callbackUrl: "/login" })` pattern already
+  used in RefineryShell) so the fix is self-service the next time this happens
+  during a demo.
+- Deployed via `git push origin main` (git-connected), deployment
+  `dpl_6zNpD6Ra8jXb5APvAA6wa8ohT6xa` -- confirm READY state before treating this as
+  live (push success alone isn't proof; check Vercel deployment status/build logs).
+- Diagnostic script was scratch-only, never committed.
+
 ## 2026-09-15 -- Jackson, MI fair-chance employer data: 3 verified employers imported to prod, 7 tracked as unverified. No code changed, data-only.
 
 Verified Employers (`/dashboard/employers`, gated to client+full_access) was thin --
