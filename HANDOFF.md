@@ -23,8 +23,9 @@ prospective partner (Richard Bronson). Diagnosed via Vercel runtime error logs
   used in RefineryShell) so the fix is self-service the next time this happens
   during a demo.
 - Deployed via `git push origin main` (git-connected), deployment
-  `dpl_6zNpD6Ra8jXb5APvAA6wa8ohT6xa` -- confirm READY state before treating this as
-  live (push success alone isn't proof; check Vercel deployment status/build logs).
+  `dpl_6zNpD6Ra8jXb5APvAA6wa8ohT6xa` -- confirmed READY and verified live by fetching
+  the production login page's own JS chunk and finding the new copy in it, not just
+  trusting build success.
 - Diagnostic script was scratch-only, never committed.
 
 ## 2026-09-15 -- Jackson, MI fair-chance employer data: 3 verified employers imported to prod, 7 tracked as unverified. No code changed, data-only.
