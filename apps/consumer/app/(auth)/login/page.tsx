@@ -11,7 +11,7 @@
  */
 
 import { Suspense, useState, useEffect } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -69,6 +69,8 @@ function LoginForm() {
         AccessDenied: "Access denied. Check your email and try again.",
         Verification: "That link has expired. Request a new one below.",
         CredentialsSignin: "Invalid email or password.",
+        OAuthAccountNotLinked:
+          "You're signed in as a different account already. Sign out below, then try Google again.",
       };
       setError(msgs[urlError] || `Login error: ${urlError}`);
     }
@@ -552,7 +554,23 @@ function LoginForm() {
             </label>
           )}
 
-          {error && <p className="text-sm text-t-red">{error}</p>}
+          {error && (
+            <p className="text-sm text-t-red">
+              {error}
+              {searchParams.get("error") === "OAuthAccountNotLinked" && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                    className="underline hover:no-underline"
+                  >
+                    Sign out
+                  </button>
+                </>
+              )}
+            </p>
+          )}
 
           {/* Submit */}
           <TBtn type="submit" disabled={submitDisabled} className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]">
