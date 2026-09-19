@@ -21,6 +21,7 @@ import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
 import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
+import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
 
 interface Strength {
   title: string;
@@ -666,6 +667,11 @@ export default function OutputPage() {
                   <DiscrepancyPanel
                     resumeText={resumeText}
                     sourceText={session.resumeText}
+                  />
+                  <AtsScorePanel
+                    resumeText={resumeText}
+                    sourceText={session.resumeText}
+                    onApply={setResumeText}
                   />
                   <PageFitCheck getContent={() => resumeText} autoCheck />
                 </div>
