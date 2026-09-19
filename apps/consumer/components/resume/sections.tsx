@@ -213,9 +213,12 @@ export function SummarySection({
 export function ExperienceSection({
   doc,
   update,
+  readinessStage,
 }: {
   doc: ResumeDocument;
   update: Updater;
+  /** From intake -- lets the bullet workshop meet the person where they are. */
+  readinessStage?: string;
 }) {
   function addEntry() {
     update((d) => ({
@@ -248,6 +251,7 @@ export function ExperienceSection({
           entry={entry}
           index={idx}
           targetJob={doc.meta.targetJob}
+          readinessStage={readinessStage}
           onChange={(changes) => updateEntry(entry.id, changes)}
           onRemove={() => removeEntry(entry.id)}
         />
@@ -266,12 +270,14 @@ function WorkEntryEditor({
   entry,
   index,
   targetJob,
+  readinessStage,
   onChange,
   onRemove,
 }: {
   entry: WorkEntry;
   index: number;
   targetJob?: string;
+  readinessStage?: string;
   onChange: (changes: Partial<WorkEntry>) => void;
   onRemove: () => void;
 }) {
@@ -424,6 +430,7 @@ function WorkEntryEditor({
                 company={entry.company}
                 targetJob={targetJob}
                 storageKey={`${entry.id}:${workshopBi}`}
+                readinessStage={readinessStage}
                 initialBullet={entry.bullets[workshopBi] || ""}
                 onAccept={(bullet, evidence) =>
                   acceptWorkshop(workshopBi, bullet, evidence)

@@ -24,6 +24,8 @@ import {
   groupDiscrepancies,
   type Discrepancy,
 } from "@/lib/resume-discrepancies";
+import { BulletWorkshop } from "./BulletWorkshop";
+import { replaceResumeLine } from "@/lib/ats/apply-fix";
 
 const KIND_HEADINGS: Record<string, string> = {
   open_end_date: "Dates",
@@ -34,16 +36,26 @@ const KIND_HEADINGS: Record<string, string> = {
   unquantified_role: "Lines that could say more",
 };
 
+/** Findings the bullet workshop can actually act on: a weak line to rewrite. */
+const WORKSHOPPABLE = new Set(["vague_bullet", "first_person", "unquantified_role"]);
+
 export function DiscrepancyPanel({
   resumeText,
   sourceText,
+  readinessStage,
+  onApply,
 }: {
   /** The resume as the person will send it. */
   resumeText: string;
   /** Their original intake, when available. Dangling dates and real gaps live here. */
   sourceText?: string;
+  /** From intake, so the workshop's framing matches where the person said they are. */
+  readinessStage?: string;
+  /** Omit to render read-only, with no route into the workshop. */
+  onApply?: (nextText: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [workshopFor, setWorkshopFor] = useState<Discrepancy | null>(null);
 
   const items = useMemo(
     () => (resumeText.trim() ? findDiscrepancies(resumeText, { sourceText }) : []),
@@ -104,6 +116,17 @@ export function DiscrepancyPanel({
                     &ldquo;{d.evidence}&rdquo;
                   </p>
                   <p className="mt-1 text-sm text-t-phos">{d.question}</p>
+                  {onApply && WORKSHOPPABLE.has(d.kind) && (
+                    // Naming a weak line and leaving the person to fix it alone
+                    // is only half the job. One tap goes straight into the
+                    // questions that turn it into something true and specific.
+                    <button
+                      onClick={() => setWorkshopFor(d)}
+                      className="t-focus mt-1.5 border border-t-amber px-2 py-1 text-[11px] font-bold text-t-amber-bright hover:bg-t-amber/10"
+                    >
+                      Make this line stronger
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -114,6 +137,20 @@ export function DiscrepancyPanel({
             whether a job is still going, which is exactly why it is asking.
           </p>
         </div>
+      )}
+
+      {workshopFor && onApply && (
+        <BulletWorkshop
+          jobTitle=""
+          initialBullet={workshopFor.evidence}
+          readinessStage={readinessStage}
+          onAccept={(bullet) => {
+            const next = replaceResumeLine(resumeText, workshopFor.evidence, bullet);
+            if (next !== resumeText) onApply(next);
+            setWorkshopFor(null);
+          }}
+          onClose={() => setWorkshopFor(null)}
+        />
       )}
     </div>
   );

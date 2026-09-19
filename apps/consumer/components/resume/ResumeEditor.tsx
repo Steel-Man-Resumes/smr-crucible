@@ -39,6 +39,9 @@ interface ResumeEditorProps {
   summaryGenerating?: boolean;
   summarySuggestion?: string | null;
   onUseSummarySuggestion?: () => void;
+  /** From intake. Passed to the bullet workshop so its framing matches where
+   *  the person said they are, rather than assuming everyone is job-hunting. */
+  readinessStage?: string;
 }
 
 export function ResumeEditor({
@@ -50,6 +53,7 @@ export function ResumeEditor({
   summaryGenerating = false,
   summarySuggestion = null,
   onUseSummarySuggestion,
+  readinessStage,
 }: ResumeEditorProps) {
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const { overall, sections } = scoreResume(doc);
@@ -123,7 +127,7 @@ export function ResumeEditor({
             score={sections.find((s) => s.section === "experience")!}
             defaultOpen
           >
-            <ExperienceSection doc={doc} update={onChange} />
+            <ExperienceSection doc={doc} update={onChange} readinessStage={readinessStage} />
           </SectionWrapper>
 
           <SectionWrapper

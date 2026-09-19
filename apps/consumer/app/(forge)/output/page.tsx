@@ -667,6 +667,8 @@ export default function OutputPage() {
                   <DiscrepancyPanel
                     resumeText={resumeText}
                     sourceText={session.resumeText}
+                    readinessStage={readiness}
+                    onApply={setResumeText}
                   />
                   <AtsScorePanel
                     resumeText={resumeText}

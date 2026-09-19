@@ -17,8 +17,14 @@ import type { LensFix } from "./lenses";
 
 const SKILLS_HEADING_RE = /^(skills|core competencies|competencies|technical skills)\b/i;
 
-/** Replace one exact line, leaving its bullet glyph and indentation intact. */
-function replaceLine(text: string, find: string, replaceWith: string): string {
+/**
+ * Replace one exact line, leaving its bullet glyph and indentation intact.
+ *
+ * Exported because the discrepancy panel replaces a weak bullet with the one
+ * the workshop produced, and that has to behave identically to a lens fix --
+ * including declining silently when the line has already moved.
+ */
+export function replaceResumeLine(text: string, find: string, replaceWith: string): string {
   const target = find.trim();
   if (!target) return text;
 
@@ -101,7 +107,7 @@ function addSection(text: string, section: string): string {
 export function applyFix(text: string, fix: LensFix): string {
   switch (fix.kind) {
     case "replace":
-      return replaceLine(text, fix.find, fix.replaceWith);
+      return replaceResumeLine(text, fix.find, fix.replaceWith);
     case "add_section":
       return addSection(text, fix.section);
     case "confirm_then_add":
