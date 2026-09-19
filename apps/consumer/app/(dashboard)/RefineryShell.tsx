@@ -142,15 +142,46 @@ const PERSONAL_LS_KEYS = [
   "hidden_jobs",
   "refinery_last_job_search",
   "pending_access_code",
+  // Points at an approved resume artifact and is sent to the generator as the
+  // tailoring base. Nothing used to clear it, so a previous person's approved
+  // resume text could seed the next person's document.
+  "active_baseline_id",
+  "view_as",
 ];
-function clearPersonalLocalStorage() {
-  for (const k of PERSONAL_LS_KEYS) {
+
+/**
+ * Keys that belong to ONE Forge run and must not survive into the next.
+ *
+ * `forge_session` is deliberately absent: when a new run arrives, that key IS
+ * the new run. Everything here is derived from a run and goes stale the moment
+ * a different person's intake lands in the same browser.
+ */
+const RUN_SCOPED_LS_KEYS = [
+  "forge_preload",
+  "consumer_progress",
+  "saved_jobs",
+  "hidden_jobs",
+  "refinery_last_job_search",
+  "active_baseline_id",
+];
+
+function removeKeys(keys: readonly string[]) {
+  for (const k of keys) {
     try {
       localStorage.removeItem(k);
     } catch {
       // ignore
     }
   }
+}
+
+function clearPersonalLocalStorage() {
+  removeKeys(PERSONAL_LS_KEYS);
+}
+
+/** Called when a NEW Forge run arrives in a browser that already synced one. */
+function clearRunScopedLocalStorage() {
+  removeKeys(RUN_SCOPED_LS_KEYS);
 }
 
 function isNavUnlocked(
@@ -338,6 +369,19 @@ export function RefineryShell({
 
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
 
+      // RUN BOUNDARY. `startedAt` identifies one Forge run; `_syncedAt` records
+      // the run this browser last synced. When a DIFFERENT run arrives, every
+      // key derived from the previous one is stale -- the prior persona's
+      // approved baseline, saved and hidden jobs, progress counters, and the
+      // last job search with its full result list. They used to survive, which
+      // is how one browser ended up showing several personas' demos stacked on
+      // one screen. Clear before rebuilding the preload below, not after.
+      const priorSyncedAt = forgeData._syncedAt;
+      const runId = forgeData.startedAt || "unknown";
+      if (priorSyncedAt && priorSyncedAt !== runId) {
+        clearRunScopedLocalStorage();
+      }
+
       try {
         import("@/lib/forge-preload").then(({ buildForgePreload, saveForgePreload }) => {
           const preload = buildForgePreload(forgeData);
@@ -347,9 +391,8 @@ export function RefineryShell({
         // Preload build failed — not critical
       }
 
-      const syncedAt = forgeData._syncedAt;
-      const currentStartedAt = forgeData.startedAt || "unknown";
-      if (syncedAt === currentStartedAt && forgeData._ownerUserId === uid) return;
+      const currentStartedAt = runId;
+      if (priorSyncedAt === currentStartedAt && forgeData._ownerUserId === uid) return;
 
       fetch("/api/forge/save", {
         method: "POST",

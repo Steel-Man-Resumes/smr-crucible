@@ -278,7 +278,11 @@ export default function SettingsPage() {
       return;
     }
 
-    // Then clear all localStorage
+    // Then clear all localStorage. This list is the difference between "delete
+    // my data" actually returning the app to a clean slate and leaving two keys
+    // behind that quietly repopulate the next session: the last job search with
+    // its full result list, and the pointer to an approved resume that the
+    // generator uses as its tailoring base.
     const keys = [
       "forge_session",
       "consumer_progress",
@@ -286,6 +290,10 @@ export default function SettingsPage() {
       "hidden_jobs",
       "saved_jobs",
       "forge_preload",
+      "refinery_last_job_search",
+      "active_baseline_id",
+      "forge_audience",
+      "view_as",
     ];
     for (const key of keys) {
       localStorage.removeItem(key);

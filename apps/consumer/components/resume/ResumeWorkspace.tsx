@@ -32,6 +32,36 @@ interface SavedResume {
   updated_at: string;
 }
 
+/**
+ * Are these two names plausibly the same human?
+ *
+ * Deliberately generous, because the cost of the two answers is not symmetric.
+ * A false "same" pastes the account holder's contact details onto someone
+ * else's resume. A false "different" leaves a field blank on a form the user is
+ * already editing. So middle names, initials and suffixes must not split a
+ * match ("Troy Carr" and "Troy Richard Carr" are one person), while genuinely
+ * different names must not merge.
+ *
+ * An absent name on either side returns false: with nothing to compare, we do
+ * not get to assume.
+ */
+function isSamePerson(a: string | undefined, b: string | undefined): boolean {
+  const tokens = (s: string | undefined) =>
+    (s ?? "")
+      .toLowerCase()
+      .replace(/[.,]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 1 && !["jr", "sr", "ii", "iii", "iv"].includes(t));
+
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (!ta.length || !tb.length) return false;
+
+  // Every token of the shorter name must appear in the longer one.
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return short.every((t) => long.includes(t));
+}
+
 export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -432,7 +462,20 @@ export function ResumeWorkspace() {
         // nickname or persona; the resume's own name is what employers see).
         let baseDocContact: any = null;
 
-        // Try localStorage first
+        // Try localStorage first.
+        //
+        // Cross-ACCOUNT isolation is enforced upstream: RefineryShell stamps
+        // `_ownerUserId` on sync and purges any blob belonging to a different
+        // account before this screen renders.
+        //
+        // KNOWN LIMITATION, same account: if a newer Forge run was completed in
+        // a different browser or origin, the database holds that run while this
+        // browser still holds the older blob, and the blob wins below. Fixing it
+        // properly means exposing a run timestamp from loadForgeProfile and
+        // preferring the newer source; `consumer_profile` does not return one
+        // today. Until then the reliable reset is a fresh account per persona
+        // (the login page clears prior-account state) or Settings -> delete my
+        // data.
         try {
           const stored = localStorage.getItem("forge_session");
           if (stored) {
@@ -491,13 +534,25 @@ export function ResumeWorkspace() {
         // Document identity: base resume contact wins field-by-field; profile
         // is the fallback. (Identity-desync fix, Fable analysis 2026-06-10.
         // The generated doc's Contact section stays fully editable as always.)
+        //
+        // BUT the profile may only fill gaps when it is the SAME PERSON. One
+        // account can carry a resume for someone else -- a staff member helping
+        // a participant, or a demo persona -- and in that case the account's own
+        // phone, email, city and state are a different human's contact details.
+        // Silently pasting them onto the document is the worst failure this
+        // screen can produce, so a name mismatch drops the profile entirely and
+        // leaves the field blank. A blank phone is visible and fixable in one
+        // click; the wrong person's phone ships.
         if (baseDocContact) {
+          const fill: any = isSamePerson(baseDocContact.name, contactInfo.name)
+            ? contactInfo
+            : {};
           contactInfo = {
-            name: baseDocContact.name || contactInfo.name || "",
-            phone: baseDocContact.phone || contactInfo.phone || "",
-            email: baseDocContact.email || contactInfo.email || "",
-            city: baseDocContact.city || contactInfo.city || "",
-            state: baseDocContact.state || contactInfo.state || "",
+            name: baseDocContact.name || fill.name || "",
+            phone: baseDocContact.phone || fill.phone || "",
+            email: baseDocContact.email || fill.email || "",
+            city: baseDocContact.city || fill.city || "",
+            state: baseDocContact.state || fill.state || "",
           };
         }
 

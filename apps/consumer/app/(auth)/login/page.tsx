@@ -93,8 +93,40 @@ function LoginForm() {
       "admin_test_mode",
       "forge_audience",
       "pending_access_code",
+      // Were missing, so they survived every reset: the last job search with
+      // its full result list, and the approved-resume pointer that seeds the
+      // generator's tailoring base.
+      "refinery_last_job_search",
+      "active_baseline_id",
+      "view_as",
     ];
     for (const key of keys) localStorage.removeItem(key);
+  }
+
+  /**
+   * Clear the PREVIOUS account's derived state when creating a new account in
+   * a browser that already has one, WITHOUT touching `forge_session` -- that
+   * blob is deliberately carried onto the new account below.
+   *
+   * This is the path used to give each demo persona its own clean account.
+   */
+  function clearPriorAccountState() {
+    const keys = [
+      "forge_preload",
+      "consumer_progress",
+      "hidden_jobs",
+      "saved_jobs",
+      "refinery_last_job_search",
+      "active_baseline_id",
+      "view_as",
+    ];
+    for (const key of keys) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   async function handleDevLogin(tier: "client" | "partner" | "admin", fresh = false) {
@@ -188,6 +220,12 @@ function LoginForm() {
       const s = localStorage.getItem("forge_session");
       forge = s ? JSON.parse(s) : null;
     } catch { forge = null; }
+
+    // The Forge work above carries forward on purpose. Everything else in this
+    // browser belongs to whoever was signed in before and must not follow a
+    // brand-new account -- otherwise the previous person's saved jobs, progress
+    // counters and approved-resume pointer become this account's opening state.
+    clearPriorAccountState();
 
     try {
       // Turnstile token (present only when the env-gated widget is rendered)
