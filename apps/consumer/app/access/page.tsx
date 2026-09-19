@@ -137,7 +137,7 @@ function AccessPageInner() {
               <h3 className="mt-4 text-base font-semibold">Sign in</h3>
               <p className="mt-2 text-sm text-t-bone-dim">
                 {isBaker
-                  ? "Use latonyabakergoe@gmail.com at The Refinery. This email is pre-authorized for partner access."
+                  ? "Sign in at The Refinery with the email address your invitation was sent to. It is already pre-authorized for partner access, so there is no code to enter."
                   : "Create an account or sign in, then redeem the partner code shown here in Settings."}
               </p>
             </div>

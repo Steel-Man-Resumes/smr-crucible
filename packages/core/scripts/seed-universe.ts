@@ -21,7 +21,9 @@ import { getNextStep, invalidateNextStep } from "../src/computeNextStep";
 
 const SENTINEL_ORG = "00000000-0000-0000-0000-000000000000";
 const ADMIN_EMAIL = "troyrichardcarr@gmail.com"; // Troy -- primary admin
-const BAKER_EMAIL = "latonyabakergoe@gmail.com"; // partner pre-auth (auth.ts)
+// Supplied at run time -- a real person's address is not committed to a public
+// repo. Pair with PARTNER_PRE_AUTH in the app's env (see auth.ts).
+const BAKER_EMAIL = process.env.SEED_PARTNER_EMAIL ?? "partner@example.invalid";
 const MARIANNE_EMAIL = "marianne@expowisconsin.org"; // Marianne Oleson, Co-ED EXPO of Wisconsin
 const DEMO_CLIENT_EMAIL = "demo-client@steelmanresumes.demo";
 

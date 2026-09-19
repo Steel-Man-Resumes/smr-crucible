@@ -2162,7 +2162,7 @@ All 8 consumer AI routes now use OpenAI gpt-4o via single shim at `apps/consumer
 Worker generators (genResume, genSalary, etc. in services/worker) still use Anthropic directly -- not in the live Forge/Refinery web flow, deferred.
 
 ### Dr. Baker Pre-Authorization
-- `apps/consumer/auth.ts` -- `PARTNER_PRE_AUTH` array contains `latonyabakergoe@gmail.com`. On sign-in, auto-elevates to `partner` tier + updates DB.
+- `apps/consumer/auth.ts` -- `PARTNER_PRE_AUTH` array contains `[partner email, see PARTNER_PRE_AUTH env]`. On sign-in, auto-elevates to `partner` tier + updates DB.
 - `apps/consumer/app/(dashboard)/layout.tsx` -- `isNavUnlocked()` updated: `partner` tier bypasses onboarding state requirements (same as admin but without admin tool access). All Refinery tools visible immediately.
 - `BAKER2026` code in Neon DB: partner tier, no expiry, no redemption limit -- for her staff/team.
 

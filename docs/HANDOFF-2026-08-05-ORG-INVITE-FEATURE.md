@@ -11,7 +11,7 @@ this session and will do the build in a NEW session. This is that handoff.
 
 1. **Dr. Baker onboarding email fixed** — Gmail draft `r2480427624251027758`
    (subject "Your GOE Trendsetters access to the Forge and the Refinery",
-   to latonyabakergoe@gmail.com). Draft only, NOT sent (standing rule).
+   to [partner email, see PARTNER_PRE_AUTH env]). Draft only, NOT sent (standing rule).
    - Removed the `/access?code=BAKERCREW` link entirely.
    - "How your participants join" now describes the truthful current flow: share code
      BAKERCREW; participant self-signs-up at forge.steelmanresumes.com and enters the
@@ -49,7 +49,7 @@ reassigning an already-joined participant to a staff member.
   `packages/core/src/partnerTracking.ts` `ensureUserAttribution`.
 - Staff seeding pattern (the model for pre-provisioning): `scripts/seed-goe-org.mjs`
   — creates accounts with "no password, no invite sent," signs in via magic link.
-  GOE = org "GOE Trendsetters", admin latonyabakergoe@gmail.com, code BAKERCREW,
+  GOE = org "GOE Trendsetters", admin [partner email, see PARTNER_PRE_AUTH env], code BAKERCREW,
   Baker is in `PARTNER_PRE_AUTH` in `apps/consumer/auth.ts`.
 
 ---

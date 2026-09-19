@@ -36,11 +36,19 @@ const url = env
 const ANCHOR = "BAKERCREW";
 const ORG_NAME = "GOE Trendsetters";
 const ORG_LOGO = "/images/orgs/goe-trendsetters.png";
+// Real people's email addresses do not belong in a public repo. Supply it at
+// run time: SEED_PARTNER_EMAIL=someone@example.com node scripts/seed-goe-org.mjs
+const PARTNER_EMAIL = process.env.SEED_PARTNER_EMAIL;
+if (!PARTNER_EMAIL) {
+  console.error("Set SEED_PARTNER_EMAIL to the partner's email address before running this seed.");
+  process.exit(1);
+}
+
 const STALE = "BAKER2026";
 
 const ROSTER = [
   {
-    email: "latonyabakergoe@gmail.com",
+    email: PARTNER_EMAIL,
     name: "Dr. LaTonya Baker",
     role: "org_admin",
     title: "Founder & Executive Director",
@@ -105,7 +113,7 @@ for (const p of ROSTER) {
 // 3. Owner: set Baker only if the anchor is unowned
 if (!currentOwner) {
   await c.query(`UPDATE access_code SET partner_user_id = $1 WHERE id = $2`, [
-    ids["latonyabakergoe@gmail.com"],
+    ids[PARTNER_EMAIL],
     codeId,
   ]);
   console.log("Anchor owner set to Dr. Baker.");
@@ -138,7 +146,7 @@ console.log("=== active codes Baker owns (getOrgContext picks the FIRST) ===");
 const owned = await c.query(
   `SELECT code, partner_name, tier, is_active, created_at FROM access_code
     WHERE partner_user_id = $1 AND is_active = true ORDER BY created_at ASC`,
-  [ids["latonyabakergoe@gmail.com"]]
+  [ids[PARTNER_EMAIL]]
 );
 console.table(owned.rows);
 

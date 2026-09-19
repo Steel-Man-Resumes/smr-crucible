@@ -23,13 +23,33 @@ async function isSessionRevoked(jti: string): Promise<boolean> {
 
 const isDev = process.env.NODE_ENV === "development";
 
-// Emails that receive partner tier automatically on sign-in (no code required)
-const PARTNER_PRE_AUTH = ["latonyabakergoe@gmail.com"];
-// Pre-authorized partners sign in directly (no /access cookie), so bind them to
-// their org's code on sign-in for funder/compliance attribution (first code wins).
-const PARTNER_PRE_AUTH_CODE: Record<string, string> = {
-  "latonyabakergoe@gmail.com": "BAKER2026",
-};
+/**
+ * Emails that receive partner tier automatically on sign-in (no code required),
+ * and the org code each is bound to for funder/compliance attribution.
+ *
+ * CONFIGURED, NOT HARDCODED. This list used to be a literal in this file, which
+ * meant a real person's email address was published in a public repo, next to
+ * the fact that signing in with it grants elevated access. Both halves of that
+ * are wrong: the address is personal data, and an authorization grant that
+ * anyone can read is an invitation.
+ *
+ * Format: PARTNER_PRE_AUTH="email:CODE,email2:CODE2". A bare email with no code
+ * still elevates, it just records no attribution. Unset means nobody is
+ * pre-authorized, which is the correct default -- pre-authorization is an
+ * exception granted per engagement, not a standing state of the software.
+ */
+const { PARTNER_PRE_AUTH, PARTNER_PRE_AUTH_CODE } = (() => {
+  const emails: string[] = [];
+  const codes: Record<string, string> = {};
+  for (const entry of (process.env.PARTNER_PRE_AUTH ?? "").split(",")) {
+    const [rawEmail, rawCode] = entry.split(":");
+    const email = rawEmail?.trim().toLowerCase();
+    if (!email) continue;
+    emails.push(email);
+    if (rawCode?.trim()) codes[email] = rawCode.trim();
+  }
+  return { PARTNER_PRE_AUTH: emails, PARTNER_PRE_AUTH_CODE: codes };
+})();
 
 const providers: any[] = [
   // Google OAuth -- env-gated, dark until AUTH_GOOGLE_ID/SECRET exist.
