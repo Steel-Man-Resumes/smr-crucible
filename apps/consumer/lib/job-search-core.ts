@@ -6,12 +6,20 @@
  *
  * Flow:
  *   1. Check cache (query_hash match within 6 hours)
- *   2. If miss: call JSearch API for real listings
- *   3. AI enrichment: fair-chance flags + 6th-grade descriptions
+ *   2. If miss: call every configured provider CONCURRENTLY --
+ *      JSearch (with a retry ladder), Adzuna, and USAJOBS -- then merge and
+ *      dedupe. Providers fail independently; one stalling costs nothing.
+ *   3. AI enrichment: plain-language descriptions only
  *   4. Cache results for next query
  *   5. Return native job cards (no outbound URLs)
  *
- * Geo-bounded to tenant config (default: Milwaukee + Waukesha, 25mi radius).
+ * Fair-chance flags come from ONE source of truth regardless of provider:
+ * exact-name matches against the verified employer table. A new job source is
+ * never a new way to earn a badge.
+ *
+ * Geo comes from tenant config (default: Milwaukee + Waukesha, 25mi), which is
+ * now overridable by TENANT_CONFIG_PATH or the TENANT_GEO_* env vars rather
+ * than requiring a source edit.
  */
 
 import { sanitizeForPrompt } from "@/lib/sanitize";
