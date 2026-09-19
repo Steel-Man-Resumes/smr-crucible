@@ -11,6 +11,12 @@ dist/
 .env
 .env.local
 .env*.local
+# Backups/copies of env files. `.env*.local` only matches names ENDING in
+# .local, so `.env.local.bak-2026-09-19` slipped past it and was caught by
+# GitHub push protection on a public repo (2026-09-19). Never again.
+.env.local.*
+.env*.bak*
+*.env.bak
 
 # IDE
 .vscode/

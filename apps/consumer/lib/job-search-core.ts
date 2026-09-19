@@ -512,7 +512,15 @@ async function enrichJobsWithAI(
       id: j.job_id,
       title,
       company,
-      location: [j.job_city, j.job_state].filter(Boolean).join(", "),
+      // JSearch returns null city AND state on some listings (verified
+      // 2026-09-19: a real USPS opening in Libby, MT came back [null, null]),
+      // which joined to an empty string and rendered a job card with no
+      // location at all. Fall back to what the person actually searched --
+      // the listing did match that search -- rather than showing a blank.
+      location:
+        [j.job_city, j.job_state].filter(Boolean).join(", ") ||
+        context.location ||
+        "",
       salary,
       description: truncateDescription(j.job_description, 200),
       full_description: truncateDescription(j.job_description, 2000),
