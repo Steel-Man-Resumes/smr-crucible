@@ -8,24 +8,14 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export const maxDuration = 10;
 
 export async function GET() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  const { getOne, query } = await import("@crucible/core");
-  const me = await getOne<{ tier: string }>(
-    `SELECT tier FROM users WHERE id = $1`,
-    [userId]
-  );
-  if (me?.tier !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
+  const { query } = await import("@crucible/core");
 
   // Only orgs that are actually live. The previous query took the first 8 rows
   // ordered by partner name across EVERY seeded org, active or not, which put

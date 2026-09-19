@@ -10,27 +10,17 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export const maxDuration = 10;
 
-async function requireAdmin() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return null;
-  const { getOne } = await import("@crucible/core");
-  const row = await getOne<{ tier: string }>(
-    `SELECT tier FROM users WHERE id = $1`,
-    [userId]
-  );
-  return row?.tier === "admin" ? userId : null;
-}
+// Local requireAdmin deleted: it was a second, separately-maintained copy
+// of the same check. One shared guard is the point.
 
 export async function GET(request: Request) {
-  const adminId = await requireAdmin();
-  if (!adminId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
+  const adminId = guard.userId;
 
   const url = new URL(request.url);
   const {
@@ -50,10 +40,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const adminId = await requireAdmin();
-  if (!adminId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
+  const adminId = guard.userId;
   const body = await request.json().catch(() => ({}));
   const id = String(body.id || "");
   if (!id) {

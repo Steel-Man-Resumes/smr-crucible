@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { createAccessCode, getUserTier } from "@crucible/core";
+import { createAccessCode } from "@crucible/core";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const tier = await getUserTier(session.user.id);
-  if (tier !== "admin") {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
-  }
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
 
   const body = await req.json();
   const { code, partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
@@ -43,7 +36,7 @@ export async function POST(req: Request) {
       dailyLimit: dailyLimit ?? 200,
       maxRedemptions: maxRedemptions ?? null,
       expiresAt: expiresAt ?? null,
-      createdBy: session.user.id,
+      createdBy: guard.userId,
     });
 
     return NextResponse.json({ accessCode });

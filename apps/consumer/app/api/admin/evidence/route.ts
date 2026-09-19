@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { getUserTier, getAggregateReport, getConsentedCaseStudies } from "@crucible/core";
+import { getAggregateReport, getConsentedCaseStudies } from "@crucible/core";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const tier = await getUserTier(session.user.id);
-  if (tier !== "admin") {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
-  }
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
 
   const [report, cases] = await Promise.all([
     getAggregateReport(),

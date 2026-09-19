@@ -4,14 +4,14 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { query } from "@crucible/core";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id || (session.user as any).tier !== "admin") {
-    return NextResponse.json({ error: "Admins only" }, { status: 403 });
-  }
+  // Was reading tier off the SESSION TOKEN, which a stale session can
+  // still assert after a demotion. The guard reads it from the database.
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
 
   const orgs = await query(
     `SELECT ac.id, ac.code, ac.partner_name, ac.tier, ac.is_active, ac.org_logo_url,

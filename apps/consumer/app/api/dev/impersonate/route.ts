@@ -19,12 +19,21 @@ import {
   mintImpersonationToken,
   readImpersonation,
 } from "@/lib/impersonation";
+import { requirePlatformAdmin } from "@/lib/org-guard";
 
+/**
+ * Impersonation is the highest-privilege action in the app -- it lets one
+ * account see another person's data. It was gated on the tier claim carried in
+ * the SESSION TOKEN, which a stale session keeps asserting after a demotion.
+ * Now verified against the database on every call.
+ */
 async function requireAdmin() {
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return null;
   const session = await auth();
-  if (!session?.user?.id) return null;
-  if ((session.user as any).tier !== "admin") return null;
-  return session.user as { id: string; name?: string | null };
+  return session?.user
+    ? (session.user as { id: string; name?: string | null })
+    : null;
 }
 
 export async function POST(request: Request) {
