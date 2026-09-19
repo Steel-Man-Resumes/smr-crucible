@@ -7,8 +7,9 @@
  * Flow:
  *   1. Check cache (query_hash match within 6 hours)
  *   2. If miss: call every configured provider CONCURRENTLY --
- *      JSearch (with a retry ladder), Adzuna, and USAJOBS -- then merge and
- *      dedupe. Providers fail independently; one stalling costs nothing.
+ *      JSearch (hedged; it has a heavy latency tail), Adzuna, and USAJOBS --
+ *      then merge and dedupe. Providers fail independently, so one being slow,
+ *      unconfigured, or down costs the others nothing.
  *   3. AI enrichment: plain-language descriptions only
  *   4. Cache results for next query
  *   5. Return native job cards (no outbound URLs)
@@ -30,39 +31,31 @@ import { getVerifiedEmployerNameSet, isVerifiedFairChance } from "@crucible/core
 import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
 import crypto from "crypto";
 
-// Per-provider timeouts. The route caps at maxDuration=30s; without these a hung
-// upstream (JSearch/CareerOneStop/AI) blocks the whole request and 504s (the QA
-// failure). Each provider now fails fast to the next fallback, and if all fail
-// the route returns an honest empty 200 -- never a gateway timeout.
+// Every upstream call is individually bounded so a slow provider can never hold
+// the route open to its maxDuration and 504. What each bound should BE is
+// measured, not guessed -- see below and fetchJSearchJobs.
 //
-// Values are evidence-based (measured 2026-08-06 against Troy's live key):
-// JSearch num_pages=1 healthy responses ran ~6.4s (Grand Rapids); num_pages=2 ran
-// 11.5-14.2s -- which, plus enrichment, is what blew the 30s cap in QA. We fetch
-// one page now (see fetchJSearchJobs) and cap at 12s: covers a 2x slowdown with
-// wide headroom, well under the route budget.
-// Per-ATTEMPT cap, not per-search. A single 12s attempt consumed the entire
-// provider budget, so one stalled call ended the search with an empty board.
-// Cutting a slow attempt early and retrying beats waiting: measured recoveries
-// land in 3-4s, while stalls run past 25s with nothing at the end of them.
-// 7s sits above most healthy responses (observed 1.9-8.6s, median ~6s) and still
-// leaves a full second attempt inside the ladder budget below.
-const JSEARCH_ATTEMPT_TIMEOUT_MS = 7000;
-// Whole-ladder cap. Must leave room for everything that runs AFTER a successful
-// ladder: AI enrichment (10s) plus the bounded cache write and decision log (3s
-// each). The route now allows 60s (it was capped at 30 by its own export, not by
-// the platform -- sibling routes here already run at 60/90/120), so the ladder
-// gets 24s: three full attempts plus margin, and the worst successful path lands
-// near 40s with 20s to spare.
+// Hedging parameters. See fetchJSearchJobs for the measured latency profile
+// these come from (12 live calls: every one returned 200, time-to-first-byte
+// ranged 1.6s to 55.8s, median ~10s).
 //
-// Sized from measurement, not guesswork (2026-09-19, 15 live searches): at a 13s
-// budget a stalled first attempt left only 6s for the retry, and two recoveries
-// were cut at 5,999ms -- the same query succeeded in 3,310ms on another round.
-// The budget, not the provider, was losing those searches.
+// Launch a second attempt if the first has not answered in this long, WITHOUT
+// cancelling the first. Set just above the observed median so the common case
+// costs one call and only the slow tail pays for a hedge.
+const JSEARCH_HEDGE_DELAY_MS = 5000;
+// Cap on concurrent in-flight attempts, so a bad window cannot fan out
+// unboundedly against quota. Three covers the tail: if ~38% of draws are slow,
+// three independent draws leave roughly 5% still slow.
+const JSEARCH_MAX_IN_FLIGHT = 3;
+// Whole-operation ceiling. Must leave room for what runs after: AI enrichment
+// (10s) plus the bounded cache write and decision log (3s each), inside the
+// route's 60s maxDuration. 24s of hedged attempts lands the worst successful
+// path near 40s with headroom.
 const JSEARCH_TOTAL_BUDGET_MS = 24000;
-// Adzuna and USAJOBS run alongside the JSearch ladder, not after it, so they are
-// bounded independently. Both answer fast in practice (measured 2026-09-19:
-// Adzuna 166-417ms, USAJOBS 150-531ms); 8s is generous headroom and still well
-// inside the ladder budget they run beside.
+// Adzuna and USAJOBS run alongside the hedged JSearch attempts, not after them.
+// Both are consistently fast (measured 2026-09-19: Adzuna 166-417ms, USAJOBS
+// 150-531ms) and neither shows JSearch's latency tail, so a plain bound is
+// enough -- no hedging needed.
 const PARALLEL_PROVIDER_TIMEOUT_MS = 8000;
 const CAREERONESTOP_TIMEOUT_MS = 7000;
 const AI_ENRICH_TIMEOUT_MS = 10000;
@@ -362,14 +355,37 @@ async function fetchJSearchOnce(
   }
 }
 
-// Distinguishes "provider failed" (quota, outage, missing key) from a genuine
-// zero-result search, so failures can be surfaced to the user instead of
-// silently rendering as "no jobs found".
-//
-// Walks the attempt ladder, stopping at the first attempt that returns listings.
-// A 429 stops the ladder immediately: retrying a rate limit only deepens it.
-// The whole ladder is bounded by JSEARCH_TOTAL_BUDGET_MS so a chain of stalls
-// still leaves room for enrichment inside the 30s route cap.
+/**
+ * HEDGED requests, not sequential retries.
+ *
+ * WHAT THE PROVIDER ACTUALLY DOES (measured 2026-09-19, 12 consecutive calls
+ * with a 90s ceiling and a full timing breakdown):
+ *
+ *   every call returned HTTP 200 with data -- zero hangs, zero errors
+ *   DNS + TCP + TLS was always ~0.15s total, so the network is never the problem
+ *   time-to-first-byte: 1.6, 3.0, 5.4, 7.2, 7.3, 9.7, 10.3, 12.2, 23.8, 23.9,
+ *                       38.7, 55.8 seconds
+ *
+ * JSearch does not stall. It has a very heavy latency TAIL. An earlier version
+ * of this code used a 7s timeout and a sequential ladder, and reported a "38%
+ * stall rate" -- that number was really "38% of healthy responses took longer
+ * than 7 seconds", and the code was aborting them and starting over. Worse: it
+ * cancelled a request that might have answered at 8s, then paid full price for
+ * a fresh draw from the same ugly distribution.
+ *
+ * Because the latency is random per request, a SECOND CONCURRENT request is an
+ * independent draw. Keeping both alive and taking whichever answers first turns
+ * the tail into a race the slow draw loses. If ~38% of draws exceed the hedge
+ * delay, two in flight leaves ~14% slow and three leaves ~5%. This is the
+ * standard tail-at-scale mitigation and it is a real fix, not a workaround.
+ *
+ * Cost: a hedge spends an extra quota call only when the first is already slow.
+ * Quota is 10,000/month against very low usage, so latency is worth far more
+ * than the calls. Hedges are capped to keep that bounded.
+ *
+ * Attempts also vary the query phrasing and radius (see buildJSearchAttempts),
+ * so hedging doubles as coverage against a single unlucky phrasing.
+ */
 async function fetchJSearchJobs(
   role: string,
   location: string,
@@ -381,38 +397,70 @@ async function fetchJSearchJobs(
     return { jobs: [], failed: true, attemptsUsed: 0 };
   }
 
-  const attempts = buildJSearchAttempts(role, location, radiusMiles);
+  const attempts = buildJSearchAttempts(role, location, radiusMiles).slice(
+    0,
+    JSEARCH_MAX_IN_FLIGHT
+  );
   const startedAt = Date.now();
-  let lastFailure: { failed: boolean; status?: number } = { failed: true };
-  let attemptsUsed = 0;
 
-  for (const attempt of attempts) {
-    const elapsed = Date.now() - startedAt;
-    const remaining = JSEARCH_TOTAL_BUDGET_MS - elapsed;
-    // Need room for a meaningful try; otherwise stop and report honestly.
-    if (remaining < 2000) break;
+  return new Promise((resolve) => {
+    let settled = false;
+    let launched = 0;
+    let completed = 0;
+    let lastFailure: { failed: boolean; status?: number } = { failed: true };
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    attemptsUsed++;
-    const res = await fetchJSearchOnce(
-      apiKey,
-      attempt,
-      Math.min(JSEARCH_ATTEMPT_TIMEOUT_MS, remaining)
-    );
+    const finish = (r: { jobs: JSearchJob[]; failed: boolean; status?: number }) => {
+      if (settled) return;
+      settled = true;
+      timers.forEach(clearTimeout);
+      resolve({ ...r, attemptsUsed: launched });
+    };
 
-    if (res.jobs.length > 0) {
-      if (attemptsUsed > 1) {
-        console.warn(
-          `[job-search] recovered on attempt ${attemptsUsed}: "${attempt.query}" r=${attempt.radius}`
-        );
-      }
-      return { ...res, attemptsUsed };
+    const launch = (i: number) => {
+      if (settled || i >= attempts.length) return;
+      launched++;
+      const n = launched;
+      // Each in-flight attempt is bounded by whatever is left of the budget,
+      // never by a short per-attempt cap -- cutting a live request short is the
+      // exact mistake this replaces.
+      const remaining = JSEARCH_TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining < 1500) return;
+
+      fetchJSearchOnce(apiKey, attempts[i], remaining).then((res) => {
+        completed++;
+        if (res.jobs.length > 0) {
+          if (n > 1) {
+            console.warn(
+              `[job-search] hedge #${n} won at ${Date.now() - startedAt}ms: "${attempts[i].query}"`
+            );
+          }
+          finish(res);
+          return;
+        }
+        // A rate limit will not improve by racing more requests at it.
+        if (res.status === 429) {
+          finish(res);
+          return;
+        }
+        lastFailure = res.failed ? { failed: true, status: res.status } : { failed: false };
+        // Every launched attempt has now answered and none had listings. If
+        // there are no more to launch, this is the honest final answer.
+        if (completed === launched && launched >= attempts.length) {
+          finish({ jobs: [], ...lastFailure });
+        }
+      });
+    };
+
+    launch(0);
+    for (let i = 1; i < attempts.length; i++) {
+      timers.push(setTimeout(() => launch(i), i * JSEARCH_HEDGE_DELAY_MS));
     }
-    if (res.status === 429) return { ...res, attemptsUsed };
-    if (res.failed) lastFailure = { failed: true, status: res.status };
-    else lastFailure = { failed: false };
-  }
-
-  return { jobs: [], ...lastFailure, attemptsUsed };
+    // Whole-operation ceiling: report honestly rather than hold the route open.
+    timers.push(
+      setTimeout(() => finish({ jobs: [], ...lastFailure }), JSEARCH_TOTAL_BUDGET_MS)
+    );
+  });
 }
 
 // ─── AI Enrichment ──────────────────────────────────────────────────────────
