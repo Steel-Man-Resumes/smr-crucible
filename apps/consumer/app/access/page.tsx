@@ -48,11 +48,19 @@ const TOOLS = [
   ["Application Tracker", "A measurable record from intake through placement."],
 ] as const;
 
+/**
+ * Display names for live partner codes.
+ *
+ * ONLY LIVE CODES BELONG HERE. This file is in a PUBLIC repository and the page
+ * renders what it holds, so every entry is a working access code published to
+ * anyone who reads either one. A retired code left in this map is an open seat
+ * and a corrupted cohort attribution waiting to happen.
+ *
+ * Removed 2026-09-19 as retired (Troy): BAKER2026, BAKERCREW, JFW2026, JFWCREW.
+ * They are also deactivated in the database -- taking a code out of this map
+ * stops advertising it, it does not stop it being redeemed.
+ */
 const PARTNER_NAMES: Record<string, string> = {
-  BAKER2026: "Dr. Baker",
-  BAKERCREW: "Dr. Baker",
-  JFW2026: "Justice Forward WI",
-  JFWCREW: "Justice Forward WI",
   EXPO2026: "EXPO of Wisconsin",
   EXPOCREW: "EXPO of Wisconsin",
   GUESTHOUSE2026: "Guest House of Milwaukee",
@@ -71,11 +79,17 @@ export default function AccessPage() {
 
 function AccessPageInner() {
   const searchParams = useSearchParams();
-  const partnerCode = (searchParams.get("code") || "BAKER2026").toUpperCase();
-  const isBaker = partnerCode === "BAKER2026";
+  // No default code. It used to fall back to a specific partner's code, which
+  // meant anyone landing on /access with no link was silently handed that
+  // organization's code and counted against their seats.
+  const partnerCode = (searchParams.get("code") || "").toUpperCase();
+  const hasCode = partnerCode.length > 0;
   const orgName = (searchParams.get("name") || "").trim();
   const contactName = (searchParams.get("contact") || "").trim();
   const displayName = orgName || PARTNER_NAMES[partnerCode] || "Your Organization";
+  // Pre-authorized sign-in is configured per engagement (PARTNER_PRE_AUTH), not
+  // hardcoded to one partner. Without a code there is nothing to pre-authorize.
+  const preAuthorized = false;
   const closingLead = contactName || displayName;
   const [copied, setCopied] = useState(false);
 
@@ -136,7 +150,7 @@ function AccessPageInner() {
               <Mail size={20} className="text-[#4f6b57]" aria-hidden="true" />
               <h3 className="mt-4 text-base font-semibold">Sign in</h3>
               <p className="mt-2 text-sm text-t-bone-dim">
-                {isBaker
+                {preAuthorized
                   ? "Sign in at The Refinery with the email address your invitation was sent to. It is already pre-authorized for partner access, so there is no code to enter."
                   : "Create an account or sign in, then redeem the partner code shown here in Settings."}
               </p>
@@ -144,8 +158,23 @@ function AccessPageInner() {
             <div className="app-panel p-5">
               <KeyRound size={20} className="text-[#4f6b57]" aria-hidden="true" />
               <h3 className="mt-4 text-base font-semibold">Partner code</h3>
-              <code className="mt-2 block font-term text-xl font-semibold text-[#4f6b57]">{partnerCode}</code>
-              <p className="mt-2 text-sm text-t-bone-dim">Share it with staff or participants who should receive partner-tier access.</p>
+              {hasCode ? (
+                <>
+                  <code className="mt-2 block font-term text-xl font-semibold text-[#4f6b57]">
+                    {partnerCode}
+                  </code>
+                  <p className="mt-2 text-sm text-t-bone-dim">
+                    Share it with staff or participants who should receive
+                    partner-tier access.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-t-bone-dim">
+                  Your code comes from your organization, and your invitation
+                  link carries it. If you reached this page without one, ask
+                  whoever invited you for the link rather than guessing a code.
+                </p>
+              )}
             </div>
             <div className="app-panel p-5">
               <ShieldCheck size={20} className="text-[#4f6b57]" aria-hidden="true" />
