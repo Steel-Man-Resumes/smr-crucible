@@ -19,6 +19,7 @@ import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { getVerifiedEmployerNameSet, isVerifiedFairChance } from "@crucible/core";
+import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
 import crypto from "crypto";
 
 // Per-provider timeouts. The route caps at maxDuration=30s; without these a hung
@@ -50,6 +51,11 @@ const JSEARCH_ATTEMPT_TIMEOUT_MS = 7000;
 // were cut at 5,999ms -- the same query succeeded in 3,310ms on another round.
 // The budget, not the provider, was losing those searches.
 const JSEARCH_TOTAL_BUDGET_MS = 24000;
+// Adzuna and USAJOBS run alongside the JSearch ladder, not after it, so they are
+// bounded independently. Both answer fast in practice (measured 2026-09-19:
+// Adzuna 166-417ms, USAJOBS 150-531ms); 8s is generous headroom and still well
+// inside the ladder budget they run beside.
+const PARALLEL_PROVIDER_TIMEOUT_MS = 8000;
 const CAREERONESTOP_TIMEOUT_MS = 7000;
 const AI_ENRICH_TIMEOUT_MS = 10000;
 
@@ -97,7 +103,7 @@ const DB_DEADLINE_MS = 3000;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface JSearchJob {
+export interface JSearchJob {
   job_id: string;
   job_title: string;
   employer_name: string;
@@ -730,18 +736,53 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     "verified employers"
   );
 
-  // 2. Fetch from JSearch
-  const jsearch = await fetchJSearchJobs(
-    sanitizeForPrompt(role) || "jobs",
-    searchLocation,
-    tenantGeo.searchRadiusMiles
+  // 2. Fetch listings from every configured provider CONCURRENTLY.
+  //
+  // This used to be a chain: JSearch had to fully fail before anything else ran,
+  // which spent the whole budget serially and meant one stalled provider could
+  // end the search on its own. Running them together means a stall in one costs
+  // nothing -- the others have already answered.
+  //
+  // Providers are independent by construction: each is separately configured,
+  // separately bounded, and returns `failed` rather than throwing, so one being
+  // unconfigured, rate-limited, or down never removes the others.
+  const searchRole = sanitizeForPrompt(role) || "jobs";
+  const providerNames: string[] = [];
+  const settled = await Promise.all([
+    fetchJSearchJobs(searchRole, searchLocation, tenantGeo.searchRadiusMiles).then((r) => {
+      if (r.jobs.length) providerNames.push("jsearch");
+      return r;
+    }),
+    fetchAdzunaJobs(
+      searchRole,
+      searchLocation,
+      Math.max(tenantGeo.searchRadiusMiles, 50),
+      PARALLEL_PROVIDER_TIMEOUT_MS
+    ).then((r) => {
+      if (r.jobs.length) providerNames.push("adzuna");
+      return r;
+    }),
+    fetchUsaJobs(searchRole, tenantGeo.stateFullName, PARALLEL_PROVIDER_TIMEOUT_MS).then((r) => {
+      if (r.jobs.length) providerNames.push("usajobs");
+      return r;
+    }),
+  ]);
+  const [jsearch, adzuna, usajobs] = settled;
+
+  // JSearch first: it is the only source with structured qualifications and
+  // benefits, so its records enrich best. The others fill in behind it, deduped.
+  const rawJobs = mergeJobs(
+    [jsearch.jobs, adzuna.jobs, usajobs.jobs],
+    tenantGeo.stateFullName
   );
-  const rawJobs = jsearch.jobs;
+  const allFailed = settled.every((r) => r.failed || r.jobs.length === 0);
 
   if (rawJobs.length === 0) {
     // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
+    // NOTE: currently returns nothing; the account is not entitled to the
+    // jobsearch endpoint (see the block above fetchCareerOneStopJobs).
     const cosJobs = await fetchCareerOneStopJobs(
-      sanitizeForPrompt(role) || "jobs",
+      searchRole,
       searchLocation,
       verified,
       tenantGeo.searchRadiusMiles
@@ -758,20 +799,23 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       };
     }
     // Provider failed (quota/outage/key) vs. genuinely zero matches --
-    // never let a failure render as "no jobs found".
-    if (jsearch.failed) {
+    // never let a failure render as "no jobs found". With several providers the
+    // distinction is: did ANY of them actually answer with a clean empty result?
+    const anyCleanEmpty = settled.some((r) => !r.failed);
+    if (!anyCleanEmpty && allFailed) {
       return {
         jobs: [],
         fair_chance_info: "",
-        source: "jsearch",
-        error:
-          jsearch.status === 429 ? "provider_rate_limited" : "provider_unavailable",
+        source: "none",
+        error: settled.some((r) => r.status === 429)
+          ? "provider_rate_limited"
+          : "provider_unavailable",
       };
     }
     return {
       jobs: [],
       fair_chance_info: "",
-      source: "jsearch",
+      source: "none",
     };
   }
 
@@ -831,6 +875,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   return {
     jobs: enrichedJobs,
     fair_chance_info: fairChanceInfo,
-    source: "jsearch",
+    // Which providers actually contributed, so a degraded search is visible
+    // rather than silently looking like a healthy one.
+    source: providerNames.length ? providerNames.join("+") : "none",
   };
 }
