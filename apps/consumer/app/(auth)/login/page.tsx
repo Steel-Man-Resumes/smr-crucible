@@ -17,6 +17,12 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
+import {
+  AccountTypeChooser,
+  AccountRouteNote,
+  ACCOUNT_ROUTES,
+  type AccountRoute,
+} from "@/components/auth/AccountTypeChooser";
 
 export default function LoginPage() {
   return (
@@ -37,6 +43,16 @@ function LoginForm() {
   );
 
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
+  // Seeded from ?as= so an invitation email or a partner page can send someone
+  // straight to their own door instead of making them find it.
+  const [accountRoute, setAccountRoute] = useState<AccountRoute>(() => {
+    const asked = searchParams.get("as");
+    return ACCOUNT_ROUTES.some((r) => r.id === asked)
+      ? (asked as AccountRoute)
+      : forPartner
+        ? "org"
+        : "seeker";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   // Create-account only: explicit Terms/Privacy/AI-processing acceptance,
@@ -340,7 +356,10 @@ function LoginForm() {
         <div className="mb-6">
           <p className="app-eyebrow mb-2 text-[#4f6b57]">Private career workspace</p>
           <h1 className="text-2xl font-semibold text-t-white">
-            {mode === "create" ? "Create your Refinery account" : "Sign in to The Refinery"}
+            {mode === "create"
+              ? "Create your Refinery account"
+              : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
+                 "Sign in to The Refinery")}
           </h1>
           <p className="mt-2 text-sm text-t-bone-dim">
             {mode === "create"
@@ -351,52 +370,41 @@ function LoginForm() {
           </p>
         </div>
 
-        <section
-          aria-labelledby="signin-help-title"
-          className="mb-6 border-l-[3px] border-[#4f6b57] bg-[#f5f6f4] py-3 pl-4 pr-3"
-        >
-          <h2 id="signin-help-title" className="text-sm font-semibold text-t-white">
-            Who signs in here?
-          </h2>
-          <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
-            The Forge works without an account. Sign in when you want to save
-            your work and use The Refinery.
-          </p>
-          <ul className="mt-3 space-y-2 text-xs leading-relaxed text-t-bone-dim">
-            <li>
-              <strong className="text-t-white">New job seeker:</strong> try The
-              Forge first, or create a free account below.
-            </li>
-            <li>
-              <strong className="text-t-white">Returning user:</strong> sign in
-              to continue where you stopped.
-            </li>
-            <li>
-              <strong className="text-t-white">Partner participant:</strong> use
-              the invitation or partner code your organization gave you. Each
-              participant creates their own account.
-            </li>
-          </ul>
-          {forPartner && (
-            <div className="mt-3 border-t border-t-line pt-3">
-              <p className="text-xs leading-relaxed text-t-bone-dim">
-                <strong className="text-t-white">
-                  Setting up a partner organization?
-                </strong>{" "}
-                If your organization is not on the platform yet, email{" "}
-                <a
-                  href="mailto:troyrichardcarr@gmail.com?subject=Partner%20access%20request"
-                  className="font-medium text-t-amber-bright underline underline-offset-2"
-                >
-                  troyrichardcarr@gmail.com
-                </a>{" "}
-                with your organization name and program type. Free for
-                nonprofits and community organizations -- typically set up
-                within 24 hours.
-              </p>
-            </div>
+        <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />
+
+        <AccountRouteNote route={accountRoute}>
+          {accountRoute === "agency" && (
+            <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
+              <a
+                href="https://forge.steelmanresumes.com"
+                className="font-medium text-t-amber-bright underline underline-offset-2"
+              >
+                Open The Forge
+              </a>{" "}
+              to run one end to end, or email{" "}
+              <a
+                href="mailto:hmu@themidnightgarden.club?subject=Agency%20evaluation"
+                className="font-medium text-t-amber-bright underline underline-offset-2"
+              >
+                hmu@themidnightgarden.club
+              </a>{" "}
+              to talk about what running it would involve.
+            </p>
           )}
-        </section>
+          {accountRoute === "org" && (
+            <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
+              Organization not set up yet? Email{" "}
+              <a
+                href="mailto:hmu@themidnightgarden.club?subject=Organization%20access"
+                className="font-medium text-t-amber-bright underline underline-offset-2"
+              >
+                hmu@themidnightgarden.club
+              </a>{" "}
+              with your organization name and program type. Free for nonprofits
+              and community organizations.
+            </p>
+          )}
+        </AccountRouteNote>
 
         {/* Google sign-in -- env-gated dark build; shows once
             NEXT_PUBLIC_GOOGLE_AUTH=1 (and AUTH_GOOGLE_ID/SECRET server-side) */}
