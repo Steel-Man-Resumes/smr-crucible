@@ -55,3 +55,4 @@ export * from './pageFit';
 // the rows. Replaces inline tier-string comparisons in routes.
 export * from './authz/capabilities';
 export * from './authz/resolveOrgActor';
+export * from './orgStaffPerformance';

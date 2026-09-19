@@ -28,6 +28,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
+// Direct module import, NOT the "@crucible/core" barrel: this is a client
+// component, and the barrel re-exports server-only modules that pull in
+// node:crypto, which webpack cannot bundle for the browser. Same pattern the
+// ATS lenses use for pageFit.
+import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformance";
 // Deep import: canonical stage vocabulary without dragging the core barrel
 // (db/pg) into the client bundle.
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
@@ -283,6 +288,16 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
   // Per-staff health rollups, computed client-side from the roster the admin
   // already receives. Health reflects only sharing clients; clientCount (from
   // the API) is total assigned incl. those not sharing.
+  // Who needs the admin TODAY, ordered by urgency. The per-staff cards below
+  // answer "how is everyone doing"; this answers "where do I start", which is
+  // the question an org leader with twenty minutes actually has. Derived from
+  // the same consent-gated cohort, so it cannot describe anyone who did not
+  // agree to be described. Tested in packages/core.
+  const attention = useMemo(
+    () => summarizeStaffPerformance(clients).filter((p) => p.stalled > 0),
+    [clients]
+  );
+
   const rollups = useMemo(() => {
     const m = new Map<string, { active: number; behind: number; hired: number; sharing: number }>();
     for (const c of clients) {
@@ -521,6 +536,43 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
       ) : (
         <>
           {/* ── Team org-chart (admin/owner only) ─────────────────────── */}
+          {showTeam && attention.length > 0 && (
+            <div className="mb-6 border border-t-amber/40 bg-t-panel">
+              <div className="border-b border-t-line px-4 py-3">
+                <h2 className="text-sm font-bold text-t-amber-bright">
+                  Where to start today
+                </h2>
+                <p className="mt-0.5 text-[11px] text-t-phos-dim">
+                  Caseloads with someone who has not moved in two weeks. Not a
+                  judgement of anyone on your team -- a stalled caseload can mean
+                  a hard caseload. It is just where a nudge goes furthest.
+                </p>
+              </div>
+              <div className="divide-y divide-t-line">
+                {attention.map((p) => (
+                  <button
+                    key={p.staffUserId ?? "unassigned"}
+                    onClick={() => p.staffUserId && setDrillStaffId(p.staffUserId)}
+                    disabled={!p.staffUserId}
+                    className="t-focus flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-t-panel-2 disabled:hover:bg-transparent"
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-t-white">
+                        {p.staffName ?? "Nobody assigned"}
+                      </span>
+                      <span className="block text-xs text-t-phos">{p.headline}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-t-phos-dim">
+                      {p.caseload} assigned
+                      {p.staffUserId ? " \u203a" : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Team org-chart (admin/owner only) ─────────────────── */}
           {showTeam && (
             <div id="team" className="mb-8 scroll-mt-24">
               <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
