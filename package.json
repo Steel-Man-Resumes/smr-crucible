@@ -13,6 +13,6 @@
   "scripts": {
     "verify:isolation": "node scripts/verify-org-isolation.mjs",
     "test:core": "npm test -w packages/core",
-    "persona": "node --import tsx --tsconfig apps/consumer/tsconfig.json scripts/run-persona.mjs"
+    "persona": "TSX_TSCONFIG_PATH=apps/consumer/tsconfig.json node --import tsx scripts/run-persona.mjs"
   }
 }
