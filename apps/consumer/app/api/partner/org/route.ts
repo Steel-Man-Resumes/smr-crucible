@@ -23,6 +23,7 @@ import { NextResponse } from "next/server";
 // effectiveAuth: impersonation-aware, so viewing Marianne shows HER org, not
 // the admin's. Blue-view writes are still blocked at the middleware edge.
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { requireOrgCapability } from "@/lib/org-guard";
 import {
   getUserTier,
   getOrgContext,
@@ -132,18 +133,31 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     if (body.action === "assign") {
-      if (!isOrgAdmin) {
-        return NextResponse.json({ error: "Org admins only" }, { status: 403 });
-      }
+      // First route on the capability guard. The inline `isOrgAdmin` boolean it
+      // replaces was correct, but it was one of a dozen hand-rolled checks with
+      // no single place to audit; this one asks the resolver, which reads
+      // membership from the database on every request.
+      const guard = await requireOrgCapability("org.client.assign");
+      if (!guard.ok) return guard.response;
       if (!body.clientUserId) {
         return NextResponse.json({ error: "clientUserId required" }, { status: 400 });
       }
-      await assignClientStaff(
-        org.accessCodeId,
-        body.clientUserId,
-        body.staffUserId || null,
-        userId
-      );
+      try {
+        await assignClientStaff(
+          guard.actor.orgId,
+          body.clientUserId,
+          body.staffUserId || null,
+          userId
+        );
+      } catch (err) {
+        // assignClientStaff refuses a participant or staff member who does not
+        // belong to this org. That is a 403, not a 500 -- it is an
+        // authorization outcome, and the message is safe to show.
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "Could not assign." },
+          { status: 403 }
+        );
+      }
       return NextResponse.json({ ok: true });
     }
 

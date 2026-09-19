@@ -50,3 +50,8 @@ export * from './avatarAssetShared';
 export * from './avatarAsset';
 export * from './pageFitShared';
 export * from './pageFit';
+
+// Org authorization (2026-09-19): capabilities answer the verb, reach answers
+// the rows. Replaces inline tier-string comparisons in routes.
+export * from './authz/capabilities';
+export * from './authz/resolveOrgActor';
