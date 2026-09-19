@@ -1,5 +1,155 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 (session 3) -- Wave 1: a fabricated resume run end to end, and the seven defects it exposed
+
+Troy fabricated a Montana equipment operator (Travis Kloepfer, Kalispell) with
+deliberate stressors -- a dangling end date, a 15-month gap, duty-language
+bullets, a jargon title, a stale MSHA cert, no summary section -- and ran him
+through the Forge. Files: `C:\Users\marcu\Dev\SMR Master Folder\02-smr-clients\Montana\Forge Samples`.
+
+**His read was "very promising," and that is correct.** The career coaching in
+the analysis is genuinely strong: Montana-specific, wage-banded, action-dated,
+legally careful, with real disclaimers. The defects were all in the layer
+around it.
+
+Troy LIFTED the production freeze for this ("negative, no production freeze, we
+are fixing this before tuesday") and confirmed he selected the criminal-record
+and recovery hurdles in intake -- so the barriers section was the tool working,
+not a fabrication. That correction mattered: my first read called it the most
+serious defect in the product, and it was not a defect at all.
+
+### What actually shipped (6 commits, b827564..c64c2a3, all pushed, build clean)
+
+**1. Emphasis bolded every digit run.** Finished resumes read "MSHA Part **46**",
+"Flagger Certification (**2019**)", "Libby High School **2000**". New
+`lib/metric-emphasis.ts` is shared by the React preview and the print export so
+they cannot drift; identifier leads (Part, Class, OSHA, Title) and calendar years
+are skipped. Deciding emphasis BEFORE escaping also removed the old hazard of
+scanning for digits across HTML entities the escape had just produced.
+
+**2. The analysis PDF printed its title in washed-out gray.** The resume HTML set
+`print-color-adjust`; the analysis HTML never did, so the navy header block did
+not print. One CSS line. It was the first thing anyone saw on that document.
+
+**3. PROMPT RESIDUE REACHED A USER.** The document contained, verbatim:
+"Montana is the jurisdiction here, not WI or MI, so those state-specific rules
+do not apply to you." The Wisconsin and Michigan legal paragraphs sat
+UNCONDITIONALLY in the barrier prompt, each prefixed with a natural-language
+hedge ("only if the jurisdiction is WI"). **A prompt is not a conditional.** The
+model read both states' law every run and then explained its own reasoning in
+the output. Now `STATE_LEGAL_CONTEXT`, keyed by state code, selected in code.
+Same class of bug as the Wisconsin ban-the-box hardcode found 9/19 session 2 --
+second occurrence, different route.
+
+**4. Three fabrications, one root cause.** "2008 -" became "2008 - Present" and a
+strength was built on the invented duration; "flagger certification (2019)"
+became "OSHA Flagger Certification" (does not exist) while the resume artifact
+from the SAME run kept it correct; "ranch hand" was promoted to "you have run a
+ranch". Root cause: **`verifyGrounding` ran on summary and reflection but never
+on `strengths`**, which is exactly where all three landed. Added
+credential-fidelity, date-honesty and scope-fidelity rules plus strengths
+grounding.
+
+**5. Persona isolation -- there was no leak because there was no boundary.**
+Every scope key in the schema is `user_id`. Three consequences: (a) the account
+holder's contact details could fill any field a persona's resume lacked, so a
+fabricated persona's resume could print **Troy's real phone number**; (b)
+`active_baseline_id` fed a prior persona's APPROVED RESUME TEXT into the next
+persona's generation and **no code path anywhere cleared it** -- not sign-out,
+not login, not delete-my-data; (c) `refinery_last_job_search` restored a query
+and its full result list for 6 hours with no ownership check, which is the
+"several job searches stacked on one screen" Troy saw. `RefineryShell` was
+already computing the run boundary (`startedAt` vs `_syncedAt`) and discarding
+it. Now used. `isSamePerson` is deliberately generous (middle names, initials,
+suffixes) because a false "same" pastes the wrong human's phone number while a
+false "different" leaves a blank field on a form already being edited.
+
+**6. Dev switcher showed retired orgs and omitted live ones.** Not a design
+problem: the query took the first 8 `org_staff` rows ordered by partner name
+across every seeded org regardless of status, so names starting with a digit
+sorted to the top and real partners fell off the LIMIT. `access_code.is_active`
+and `expires_at` already carried the signal. Grouped by org, one open at a time.
+
+**7. The one-or-two-page rule already existed and nothing called it.**
+`computeFitPlan` caps at 2 pages, requires the final page >= 70% full, and emits
+a ledger including an explicit "never invent content to fill space." It shipped
+behind an OPT-IN button in the Refinery only; the Forge output page -- where the
+resume is generated, previewed, printed and downloaded -- never invoked it. Ran
+it on Travis: band "under", 2 pages, final page **24.8% full**. Matched the
+printed PDF exactly. Wired to auto-check on the output surface.
+
+**8. NEW: the truth gate is now visible.** `lib/resume-discrepancies.ts` +
+`DiscrepancyPanel`. Deterministic, no model call, and every item is a QUESTION
+FOR THE PERSON rather than an assumption or an edit. Found all 7 hand-identified
+defects on Travis. **Equally important: a clean resume with quantified bullets
+and complete dates returns ZERO** -- a check that cries wolf trains people to
+close it. Gaps are read from the INTAKE, not the finished resume, because
+reducing dates to years is normal practice and is exactly what hides a gap
+(Mar-Aug 2019 then Nov 2020 is 15 months that prints as one).
+
+### Decisions Troy made this session
+
+- Freeze lifted; fix before Tuesday rather than rehearse first. Raised once,
+  reaffirmed, proceeded.
+- DLI presence, budget authority, and tablet/LMS ownership for the 9/22 meeting
+  are all **unknown and must not be assumed** -- they become in-room questions.
+  The run sheet still asserts some of these and needs rewriting as questions.
+- Meeting posture shifts from guided tour to anticipating the room's needs and
+  concerns.
+- ATS scoring: he wants MULTIPLE scorers emulating competitors, scored against
+  different criteria, with a chart, easy-insert fixes, and an explicit "we think
+  ATS is BS but it is the game the world plays" framing. **Note this reverses a
+  documented decision**: `components/resume/ParserPreview.tsx:6` calls itself
+  "the honest alternative to a fake ATS score." He is the decision-maker and was
+  told he is reversing something, not filling a gap.
+- Bullet Forge to be incorporated and made prominent, with buttons and multiple
+  choice over long journeys, knowledge ladders, and meeting the user at the
+  readiness stage they self-reported.
+- t.ROY animation: start with the three hardest screens only, short, draws
+  attention then leaves. Add or delete later based on feel.
+- Admin caseload visibility to be built on CaseKeeper experience and sold as an
+  admin feature. **OPEN QUESTION: what is CaseKeeper? Not in memory or repo.**
+
+### Research verdict: do NOT build the conviction-based job filter yet
+
+Troy asked about an open-source national tool that normalizes charge names. It
+is real but I had the owner wrong -- it is the **Uniform Crime Classification
+Standard from CJARS at the University of Michigan** with Measures for Justice
+(*Science Advances*, 2023), **not Recidiviz**. Trained on 24 states, not 50.
+
+It **stops at classification and has no link to employment or licensing
+consequences.** NICCC is the closest national collateral-consequences source,
+has no API, and its currency is contested between sources (CCRC says "current
+through 2015"; a live NICCC record reads "current through 2023").
+
+**The killer: MCA 37-1-203 says a conviction "shall not operate as an automatic
+bar" to any occupational license in Montana.** Montana uses individualized
+review. So "hide jobs this conviction bars you from" is not a lookup-able fact
+there, and a categorical filter would state Montana law incorrectly -- to
+Montana officials. Plus real unauthorized-practice-of-law exposure. Recommended
+the soft version: surface that an occupation has conviction-related licensing
+rules, say who can answer for certain, hide nothing.
+
+### OPEN -- next session
+
+1. **Tuesday 9/22 3:00 PM Mountain rehearsal has STILL not started.** Stage
+   browser profile, demo account, load a persona, unlock chain, twin account,
+   timed click-to-download, local failover drill, full Teams rehearsal. Carried
+   from session 2 untouched. This is now the highest-value remaining work.
+2. **Nothing is deployed.** Six commits are on main and the build is clean, but
+   production has not been updated and Troy has not re-run a persona. He said he
+   will not run another persona until all fixes are made.
+3. Wave 2, specced but not built: multi-scorer ATS chart with easy-insert,
+   Bullet Forge incorporation, t.ROY animation on three screens, SMR site
+   sign-in with account-type menu, admin caseload console.
+4. Same-account stale-blob case is DOCUMENTED IN PLACE, not fixed: a newer Forge
+   run completed in a different browser loses to the older local blob. Needs a
+   run timestamp out of `loadForgeProfile`, which `consumer_profile` does not
+   return today.
+5. Troy intends to review every nav-bar page and give feedback per page. This
+   session covered only the Forge output and the Refinery entry.
+
+
 ## 2026-09-19 (session 2) -- Job search repaired to completion: 3 providers, and JSearch fixed rather than routed around
 
 Troy: "give exact steps to fix the job search apis. we do this first, and to
