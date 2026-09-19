@@ -18,6 +18,7 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
+import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
 
 interface Strength {
   title: string;
@@ -890,13 +891,13 @@ function ResumePreview({ text }: { text: string }) {
     // Bullet
     if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
       const bullet = trimmed.replace(/^[-*•]\s*/, "");
-      const parts = bullet.split(/(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi);
+      const parts = splitForMetricEmphasis(bullet);
       bodyNodes.push(
         <div key={i} className="flex gap-1.5 pl-3 mb-0.5 leading-snug">
           <span className="flex-shrink-0 text-xs font-bold" style={{ color: "#1B2A4A" }}>&bull;</span>
           <span className="text-xs" style={{ color: "#1a1a1a" }}>
             {parts.map((p, j) =>
-              /\d/.test(p) ? <strong key={j}>{p}</strong> : p
+              p.bold ? <strong key={j}>{p.text}</strong> : <React.Fragment key={j}>{p.text}</React.Fragment>
             )}
           </span>
         </div>
@@ -1017,12 +1018,13 @@ function resumeTextToStandaloneHtml(text: string): string {
     }
     if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
       const bullet = trimmed.replace(/^[-*•]\s*/, "");
-      // Bold metrics AFTER escaping, but never inside an HTML entity the
-      // escape just produced (e.g. the 39 in &#39;).
-      const bHtml = escHtml(bullet).replace(
-        /(&#\d+;)|(\d+[%$,.\d]*[KMB]?|\$[\d,.]+\s?[KMB]?)/gi,
-        (m, entity) => (entity ? m : `<strong>${m}</strong>`)
-      );
+      // Decide emphasis on the RAW text, then escape each segment. Escaping
+      // first meant scanning for digits across HTML entities the escape had
+      // just produced (the 39 in &#39;); splitting first removes that hazard
+      // instead of working around it.
+      const bHtml = splitForMetricEmphasis(bullet)
+        .map((p) => (p.bold ? `<strong>${escHtml(p.text)}</strong>` : escHtml(p.text)))
+        .join("");
       bodyHtml += `<div style="display:flex;gap:6px;padding-left:12px;margin-bottom:2px;line-height:1.4;"><span style="color:#1B2A4A;font-weight:bold;font-size:10pt;flex-shrink:0;">&bull;</span><span style="font-size:10pt;color:#1a1a1a;">${bHtml}</span></div>`;
       continue;
     }
@@ -1092,7 +1094,7 @@ function analysisToStandaloneHtml(
     body += `<h2>Career Paths</h2>`;
     for (const cp of output.career_paths) {
       body += `<div class="career-path">`;
-      body += `<h3>${escHtml(cp.title)}${cp.salary_range ? ` <span style="font-weight:normal;color:#666;">(${escHtml(cp.salary_range)})</span>` : ""}</h3>`;
+      body += `<h3>${escHtml(cp.title)}${cp.salary_range ? ` <span style="font-weight:normal;color:#666;">${escHtml(formatSalaryRange(cp.salary_range))}</span>` : ""}</h3>`;
       body += `<p>${escHtml(cp.match_reason)}</p>`;
       if (cp.next_steps.length) {
         body += `<ul>${cp.next_steps.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
@@ -1118,8 +1120,8 @@ function analysisToStandaloneHtml(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis -- Steel Man Resumes</title>
 <style>
-body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a}
-.header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px}
+body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .header h1{margin:0 0 4px;font-size:18pt;text-transform:uppercase;letter-spacing:2px}
 .header p{margin:0;color:#B8C9E0;font-size:11pt}
 .date{color:#B8C9E0;font-size:9pt;margin-top:6px}
@@ -1133,7 +1135,7 @@ h2{font-size:14pt;color:#1B2A4A;border-bottom:2px solid #1B2A4A;padding-bottom:4
 .career-path p{margin:0 0 4px;font-size:10pt;color:#444}
 ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
 .footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:9pt;color:#888;text-align:center}
-@media print{@page{margin:.5in}.no-print{display:none!important}}
+@media print{@page{margin:.5in;size:letter}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}
 </style></head><body>
 <div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
 <div class="private-banner"><strong>Private -- for your planning.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself -- your resume and cover letter are the documents to share with employers.</div>
