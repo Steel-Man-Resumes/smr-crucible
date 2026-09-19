@@ -20,6 +20,7 @@ import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
 import { PageFitCheck } from "@/components/resume/PageFitCheck";
+import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
 
 interface Strength {
   title: string;
@@ -657,7 +658,15 @@ export default function OutputPage() {
                     least 70% full) already existed and shipped behind an opt-in
                     button in the Refinery only, so a Forge resume could print
                     as a page and a third with nothing ever noticing. */}
-                <div className="px-5 pb-5">
+                <div className="space-y-3 px-5 pb-5">
+                  {/* The visible truth gate: every ambiguity the generator met
+                      and deliberately did not resolve. Above page fit, because
+                      "is this certification current" outranks "is this two
+                      pages" when someone is about to hit send. */}
+                  <DiscrepancyPanel
+                    resumeText={resumeText}
+                    sourceText={session.resumeText}
+                  />
                   <PageFitCheck getContent={() => resumeText} autoCheck />
                 </div>
               </div>
