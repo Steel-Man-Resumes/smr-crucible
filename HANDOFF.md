@@ -1,5 +1,167 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 (session 2) -- Job search repaired to completion: 3 providers, and JSearch fixed rather than routed around
+
+Troy: "give exact steps to fix the job search apis. we do this first, and to
+completion, no exceptions." Later, correctly pushing back on my framing: "can we
+fix the jsearch so it works as designed? just using a diff api is not the
+solution, thats a work around." He was right, and the pushback produced the real
+finding.
+
+### The important correction: JSearch never stalled
+
+I reported a "38% stall rate" and called it unfixable random server-side hangs.
+Wrong. A timing breakdown over 12 consecutive calls with a 90s ceiling:
+
+```
+every call returned HTTP 200 with data -- zero hangs
+DNS + TCP + TLS ~0.15s every time, so the network was never involved
+time-to-first-byte: 1.6, 3.0, 5.4, 7.2, 7.3, 9.7, 10.3, 12.2, 23.8, 23.9,
+                    38.7, 55.8 seconds
+```
+
+JSearch has a heavy LATENCY TAIL. The "stalls" were healthy responses arriving
+later than my own 7s timeout, which aborted them and counted them as failures.
+**The instrument manufactured the failure it was measuring**, and the retry
+ladder built on that misreading was cancelling requests that were about to
+succeed, then paying for a fresh draw from the same distribution.
+
+Fixed with HEDGED requests (`fetchJSearchJobs`): launch a second attempt at 5s
+WITHOUT cancelling the first, max 3 in flight, first success wins, 429 stops the
+fan-out, 24s whole-operation bound inside the route's 60s cap. Query phrasing and
+radius still vary across hedges, so a hedge also covers an unlucky phrasing.
+
+20 paired trials run concurrently so both paths saw identical conditions:
+
+```
+                 success   median    p90       max      quota
+  sequential      20/20    3606ms   12612ms   20534ms    28
+  hedged          20/20    3731ms    7929ms   12277ms    29
+```
+
+**Stated honestly: the median does not improve and both paths succeeded 20/20 --
+the window was benign and the 55s tail never appeared, so this does NOT
+demonstrate a reliability win.** It demonstrates a tighter tail. Shipped anyway
+on an independent ground: aborting a live request that is about to succeed is
+wrong regardless of benchmark conditions.
+
+### Three wrong conclusions today, all from the same failure mode
+
+1. "One query string reliably hangs" -- from a 3-for-3 sample. Reversed entirely.
+2. "radius=25 causes it" -- from 4-of-5. A 25-round interleaved test put every
+   variant within noise (44%, 44%, 40%, 24% over ceiling).
+3. "It stalls 38% of the time" -- it never stalled once.
+
+Common shape: small sample, plausible story, and a measurement apparatus that
+was itself part of the phenomenon. Recorded as a standing caution in
+`~/todash/smr/JSEARCH-TROUBLESHOOTING-2026-09-19.md`.
+
+### Three independent providers, concurrent
+
+`apps/consumer/lib/job-providers.ts` (new) adds Adzuna and USAJOBS, normalized
+into the JSearch record shape so AI enrichment, verified fair-chance matching,
+sorting, caching and decision logging all light up unchanged -- smallest blast
+radius. Providers now run CONCURRENTLY; previously JSearch had to fully fail
+before anything else ran.
+
+**Redundancy proven, not assumed: with JSearch contributing nothing, 6/6 Montana
+searches returned listings.** Also verified: dedupe holds, an unconfigured
+provider reports failed=false (so it never corrupts "provider down" vs "no jobs
+here"), a broken key reports failed=true status=401.
+
+Measured: Adzuna 7/7 at 166-417ms; USAJOBS 150-531ms. Both dramatically faster
+and steadier than JSearch on the same Montana queries.
+
+Two normalization bugs found and fixed:
+- USAJOBS postings carry many locations (one had **432**, six in Montana).
+  PositionLocation[0] showed a Helena-eligible job as "Saint Croix, Virgin
+  Islands". Now picks the location in the searched state and drops postings with
+  no presence there (a work-anywhere remote listing is not a local opening).
+  Recorded: `LocationName` with the FULL STATE NAME is the parameter that
+  constrains geography; `PositionLocationCountrySubdivision` and
+  `PositionLocationState` are NOT real parameters and silently return the
+  unfiltered 10,000-result ceiling.
+- Adzuna reports "City, County" ("Rocker, Silver Bow County") -- a Montana job
+  with the word Montana nowhere on it. Its `area` array runs broad-to-narrow, so
+  state is `area[1]`.
+
+In-state results sort ahead of out-of-state. Rural searches legitimately cross
+state lines (50mi around Libby reaches Idaho) and those jobs are real, so nothing
+is discarded -- a Libby search just no longer OPENS with two Ponderay, Idaho
+listings.
+
+### CareerOneStop: dead, diagnosed, and the request is SENT
+
+Not a key problem. Same userId+token returns **200 OK on `/v1/occupation`** while
+`/v1/jobsearch` returns 401 for every auth-header and location variant; a bogus
+userId returns the identical 401. The account is not entitled to that endpoint,
+which serves National Labor Exchange data behind a separate access grant. **No
+code change fixes this.**
+
+Access request **SENT** 2026-09-19 to webservices@careeronestop.org (verified via
+the SENT label, not assumed -- Troy sends drafts himself). Until it is granted,
+**no packet, claim, run sheet line, or demo may describe a working DOL
+fallback.** Run sheet section 5 and market-lead plan item 5 both need that.
+
+### Other fixes shipped
+
+- **A hardcoded instruction to cite Wisconsin ban-the-box law** lived in the AI
+  enrichment prompt and followed the search into every other state. A live
+  Montana demo would have narrated Wisconsin law to Montana DOC and DLI.
+  `fair_chance_info` is now practical guidance only and explicitly barred from
+  naming or characterizing any statute.
+- Listings rendered with a **blank location** when JSearch returns null city AND
+  state (verified against a real USPS opening in Libby). Falls back to the
+  searched location.
+- **`TENANT_CONFIG_PATH` never worked.** The file header told deployers to set it
+  since it was written; `getTenantConfig()` ignored it. Now loads, plus
+  `TENANT_GEO_*` env overrides, so another region needs configuration not a
+  source edit.
+- Route `maxDuration` 30 -> 60. The 30 was self-imposed, not a platform limit --
+  sibling routes here already run 60/90/120.
+
+### Near-miss worth remembering
+
+`git add -A` swept an `.env.local.bak-<date>` backup I had just created into a
+commit. **This repo is public.** GitHub push protection rejected it; nothing
+reached the remote (verified: the commit exists on no branch, the file appears
+nowhere in history). Root cause was a real pre-existing gitignore gap --
+`.env*.local` only matches names ENDING in `.local`. Added `.env.local.*`,
+`.env*.bak*`, `*.env.bak` and verified with `git check-ignore`. **Lesson: scope
+`git add` to explicit paths.**
+
+### Keys
+
+Troy added three alternate RapidAPI keys. **All four share ONE quota pool** --
+burning 5 calls on one dropped all four by 10-15, and reading them in sequence
+returned 9765/9764/9763/9762 (each read decrementing the counter the next
+reported). Four distinct key strings, one subscription, so zero redundancy. The
+three alternates were deleted at Troy's instruction. Quota is 10,000/month with
+~98% unused, so quota has never been the problem.
+
+### Commits
+
+`618414c` retry ladder + Wisconsin fix + tenant config; `6b8dcba` merge;
+`1752e0f` blank-location fix + gitignore; `f05b226` three concurrent providers;
+`586babe` header refresh; `753a6d2` hedging. All pushed, production Ready.
+
+### OPEN -- pick this up next
+
+1. **The only unchecked box: authenticated client-tier verification in
+   PRODUCTION.** Everything above is proven at module and API level, and the
+   route is live and correctly auth-gated (401), but nobody has run a real
+   search through a signed-in client-tier session. Needs Troy's login. Script
+   proof is not product proof.
+2. **Tuesday 9/22 3:00 PM Mountain demo prep has NOT started.** Stage browser
+   profile, demo account, load Ray, walk the unlock chain, twin rehearsal
+   account, timed click-to-download runs, local failover drill. All of the run
+   sheet's Saturday/Sunday work is untouched -- this session went entirely into
+   making the thing work rather than rehearsing it.
+3. Per-provider health status on a health surface (deferred, not demo-blocking).
+4. Troy is about to take a fabricated resume through Forge and Refinery end to
+   end and take notes. Expect a batch of revisions from that -- that is the next
+   session's likely main event.
+
 ## 2026-09-19 -- Job search hardened for a live Montana demo. Provider stalls are intermittent and were rendering as "no jobs found".
 
 Context: Troy ruled that the 9/22 Montana DOC/DLI review will pull **live Montana
