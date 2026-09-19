@@ -12,7 +12,7 @@
  * never edits the resume; the ledger is advice a human acts on.
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface LedgerEntry {
   kind: "omit" | "tighten" | "add";
@@ -28,12 +28,19 @@ interface FitResponse {
   cannotReachBandByLevers: boolean;
 }
 
-export function PageFitCheck({ getContent }: { getContent: () => string }) {
+export function PageFitCheck({
+  getContent,
+  autoCheck = false,
+}: {
+  /** Run the check on mount instead of waiting for a click. */
+  autoCheck?: boolean;
+  getContent: () => string;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FitResponse | null>(null);
 
-  async function check() {
+  const check = useCallback(async () => {
     setPending(true);
     setError(null);
     try {
@@ -55,7 +62,18 @@ export function PageFitCheck({ getContent }: { getContent: () => string }) {
     } finally {
       setPending(false);
     }
-  }
+  }, [getContent]);
+
+  // Auto-check once, when there is content to check. The page-length rule is
+  // not advice the user should have to go looking for; it is a property of the
+  // document they are about to send to an employer.
+  const auto = useRef(false);
+  useEffect(() => {
+    if (!autoCheck || auto.current) return;
+    if (!getContent().trim()) return;
+    auto.current = true;
+    void check();
+  }, [autoCheck, check, getContent]);
 
   const pct = result ? Math.round(result.finalPageFullness * 100) : 0;
 

@@ -19,6 +19,7 @@ import { GhostGuide, TBtn } from "@crucible/consumer-ui";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
+import { PageFitCheck } from "@/components/resume/PageFitCheck";
 
 interface Strength {
   title: string;
@@ -650,6 +651,14 @@ export default function OutputPage() {
                       {resumeText}
                     </pre>
                   )}
+                </div>
+                {/* The one-or-two-page rule, checked where the resume is
+                    actually printed. The engine (max 2 pages, final page at
+                    least 70% full) already existed and shipped behind an opt-in
+                    button in the Refinery only, so a Forge resume could print
+                    as a page and a third with nothing ever noticing. */}
+                <div className="px-5 pb-5">
+                  <PageFitCheck getContent={() => resumeText} autoCheck />
                 </div>
               </div>
             )}
