@@ -127,10 +127,15 @@ describe("fail closed", () => {
     assert.equal(cohortReach(caps), "none");
   });
 
-  it("gives an unknown role nothing even with grants attached", () => {
-    // A grant is an addition to a role, never a substitute for having one.
+  it("gives an unknown role NO BUNDLE, and honours only explicit grants", () => {
+    // The name of this test used to say "nothing even with grants attached"
+    // while asserting the grant WAS honoured -- a contradiction caught in
+    // review. The behaviour is intentional and the old name was wrong: a grant
+    // is a deliberate per-user row, so it stands on its own, but it brings no
+    // bundle with it. An unrecognised role contributes exactly zero.
     const caps = computeOrgCapabilities("superuser" as OrgStaffRole, ["org.client.view_all"]);
-    assert.equal(caps.has("org.client.view_all"), true);
+    assert.equal(caps.size, 1, "an unknown role must contribute no bundle");
+    assert.equal(caps.has("org.client.view_all"), true, "an explicit grant still stands");
     assert.equal(caps.has("org.costs.view"), false);
   });
 

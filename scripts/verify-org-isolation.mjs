@@ -43,8 +43,30 @@ if (!url) {
   process.exit(2); // 2 = could not run, distinct from 1 = isolation failed
 }
 
+// BIND THE CODE UNDER TEST TO THIS DATABASE, not just the fixtures.
+//
+// packages/core/src/db.ts reads DATABASE_URL. Seeding through one connection
+// while the application helpers read another means the test proves nothing --
+// and if both are set, fixtures and assertions hit DIFFERENT DATABASES while
+// appearing to pass. Set it before anything imports core.
+if (process.env.DATABASE_URL && process.env.DATABASE_URL !== url) {
+  console.error(
+    "\nDATABASE_URL is set and differs from " + URL_VAR + ".\n" +
+      "The application helpers under test read DATABASE_URL, so this would\n" +
+      "seed one database and assert against another. Unset DATABASE_URL, or\n" +
+      "set both to the same disposable database.\n"
+  );
+  process.exit(2);
+}
+process.env.DATABASE_URL = url;
+
 const sql = neon(url);
-const P = "__isotest";
+
+// Fixture prefix. Note it contains NO underscore: in SQL LIKE, `_` matches any
+// single character, so a "__isotest%" pattern also matches "XYisotest-real" and
+// a cleanup DELETE would remove rows that were never fixtures. Cleanup below
+// uses exact ids anyway, and this prefix is only a readability aid.
+const P = "isotestfixture";
 
 let pass = 0;
 let fail = 0;
@@ -59,18 +81,29 @@ function check(name, ok, detail = "") {
   }
 }
 
+// Exact ids of everything this run created. A DELETE driven by a pattern can
+// always match something it did not create; a DELETE driven by ids we minted
+// cannot. Nothing here deletes a row this process did not insert.
+const created = { users: [], codes: [] };
+
 async function cleanup() {
+  if (!created.codes.length && !created.users.length) return;
+  const codes = created.codes;
+  const users = created.users;
   // Order matters: children before parents.
-  await sql`DELETE FROM client_staff_assignment WHERE access_code_id IN
-              (SELECT id FROM access_code WHERE code LIKE ${P + "%"})`;
-  await sql`DELETE FROM access_code_redemption WHERE access_code_id IN
-              (SELECT id FROM access_code WHERE code LIKE ${P + "%"})`;
-  await sql`DELETE FROM org_staff WHERE access_code_id IN
-              (SELECT id FROM access_code WHERE code LIKE ${P + "%"})`;
-  await sql`DELETE FROM consumer_consent WHERE user_id IN
-              (SELECT id FROM users WHERE email LIKE ${P + "%"})`;
-  await sql`DELETE FROM access_code WHERE code LIKE ${P + "%"}`;
-  await sql`DELETE FROM users WHERE email LIKE ${P + "%"}`;
+  if (codes.length) {
+    await sql`DELETE FROM client_staff_assignment WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM access_code_redemption WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_staff WHERE access_code_id = ANY(${codes}::uuid[])`;
+  }
+  if (users.length) {
+    await sql`DELETE FROM consumer_consent WHERE user_id = ANY(${users}::uuid[])`;
+    await sql`DELETE FROM client_staff_assignment WHERE staff_user_id = ANY(${users}::uuid[])`;
+  }
+  if (codes.length) await sql`DELETE FROM access_code WHERE id = ANY(${codes}::uuid[])`;
+  if (users.length) await sql`DELETE FROM users WHERE id = ANY(${users}::uuid[])`;
+  created.users = [];
+  created.codes = [];
 }
 
 async function mkUser(label) {
@@ -78,6 +111,7 @@ async function mkUser(label) {
     INSERT INTO users (name, email, tier)
     VALUES (${P + " " + label}, ${`${P}-${label}@example.invalid`}, 'client')
     RETURNING id`;
+  created.users.push(row.id);
   return row.id;
 }
 
@@ -86,6 +120,7 @@ async function mkOrg(label, ownerId) {
     INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
     VALUES (${`${P}-${label}`}, ${`${P} ${label}`}, 'partner', ${ownerId}, true)
     RETURNING id`;
+  created.codes.push(row.id);
   return row.id;
 }
 
@@ -100,7 +135,10 @@ async function joinCohort(orgId, userId) {
 
 async function main() {
   console.log("\nCross-org isolation\n");
-  await cleanup(); // a crashed previous run must not poison this one
+  // No pre-run cleanup: with id-based deletion there is nothing to clean before
+  // we create anything. A crashed previous run leaves rows behind under the
+  // fixture prefix -- that is the honest trade for never deleting a row we did
+  // not insert. Drop and recreate the disposable database if that happens.
 
   // --- Two organizations that must never see each other ------------------
   const ownerA = await mkUser("ownerA");

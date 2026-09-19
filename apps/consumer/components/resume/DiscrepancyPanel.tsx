@@ -70,17 +70,23 @@ export function DiscrepancyPanel({
     return (
       <div className="border border-t-line bg-t-panel px-5 py-4">
         <p className="text-sm font-semibold text-t-white">
-          Nothing here needs a second look.
+          Our checks did not find anything to flag.
         </p>
         <p className="mt-1 text-xs text-t-phos-dim">
-          Every date has an end, every certification looks current, and every
-          line describes something you actually did. Read it once more anyway --
-          you know your own history better than any tool does.
+          Dates have ends, certifications are not obviously stale, and no line
+          matched a pattern we know how to catch. That is not the same as
+          &ldquo;everything here is true&rdquo; -- these checks look for specific
+          problems, and a resume can be wrong in ways no checker knows to look
+          for. Read it once yourself. You are the only one who can.
         </p>
       </div>
     );
   }
 
+  // Generated-but-unsupported wording is a different animal from "we could not
+  // know this", and saying "ready to send" over the top of it was the review's
+  // fairest hit. Lead with the harder truth when there is one.
+  const hasUnsupported = items.some((d) => d.kind === "unsupported_claim");
   const groups = groupDiscrepancies(items);
 
   return (
@@ -92,11 +98,13 @@ export function DiscrepancyPanel({
       >
         <span>
           <span className="block text-sm font-bold text-t-amber-bright">
-            {items.length} {items.length === 1 ? "thing" : "things"} only you can answer
+            {items.length} {items.length === 1 ? "thing" : "things"} to settle
+            before you send this
           </span>
           <span className="block text-[11px] text-t-phos-dim">
-            Your resume is ready to send. These were left exactly as you wrote
-            them, because guessing would have put words in your mouth.
+            {hasUnsupported
+              ? "Some of this includes wording we generated that your own answers do not support. Check those first -- they are the ones an interview will test."
+              : "Nothing was guessed for you. These are the places the tool could not know the answer."}
           </span>
         </span>
         <span aria-hidden="true" className="ml-3 text-[10px] text-t-phos-dim">
@@ -133,9 +141,11 @@ export function DiscrepancyPanel({
             </div>
           ))}
           <p className="mt-4 border-t border-t-line pt-3 text-[11px] text-t-phos-dim">
-            None of this was changed for you. This check reads the document, not
-            your record -- it cannot know whether a certification is current or
-            whether a job is still going, which is exactly why it is asking.
+            None of this was changed for you. These checks read the document,
+            not your record -- they cannot know whether a certification is
+            current or whether a job is still going, which is why they ask. They
+            also only catch problems they were built to look for, so a clean
+            result is a smaller promise than it sounds.
           </p>
         </div>
       )}

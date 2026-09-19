@@ -18,12 +18,12 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { computeFitPlan } from "@crucible/core/src/pageFit";
 import {
   isChromiumRenderEnabled,
   renderCanonicalPageCount,
 } from "@/lib/pagefit-renderer";
+import { withRateLimit } from "@/lib/withRateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -37,13 +37,20 @@ interface FitCheckBody {
   type?: unknown;
 }
 
-export async function POST(request: Request) {
+/**
+ * ANONYMOUS-SAFE (fixed 2026-09-19). This route required a session, and the
+ * Forge output page -- which is deliberately pre-auth -- was made to call it
+ * automatically. Every anonymous person finishing the Forge got a silent 401
+ * and an error card where the page-length advice should have been.
+ *
+ * Auth was never protecting DATA here: the content arrives in the body and the
+ * computation is pure, so there is no per-artifact ownership to enforce. The
+ * header said as much -- auth existed to stop anonymous abuse of a compute
+ * endpoint. IP rate limiting is the right tool for that, and it is what every
+ * other pre-auth Forge route already uses.
+ */
+async function handlePost(request: Request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
     const contentLength = request.headers.get("content-length");
     if (contentLength && parseInt(contentLength, 10) > 500_000) {
       return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -95,3 +102,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const POST = withRateLimit(handlePost, {
+  mode: "ip",
+  endpoint: "resume-fit-check",
+});

@@ -9,11 +9,16 @@
  * It is also the highest-risk write in the application, because a row here
  * grants a person access to other people's case data. So the rules are strict:
  *
- *   AUTHORIZATION LIVES IN THE STATEMENT. Every write sources its values from a
- *   SELECT whose WHERE clause IS the authorization check, so there is no window
- *   between deciding and doing, and a write that is not permitted affects zero
- *   rows rather than being prevented by a prior `if`. A separate check-then-act
- *   is a race; this is not.
+ *   MEMBERSHIP CHECKS LIVE IN THE STATEMENT. Each write sources its values from
+ *   a SELECT whose WHERE clause carries the membership predicate, so a write
+ *   that is not permitted affects zero rows rather than relying on a prior `if`.
+ *
+ *   TO BE PRECISE ABOUT WHAT THAT IS AND IS NOT: the CALLER's authority is
+ *   checked earlier, at the route, by requireOrgCapability. The "already serves
+ *   another org" check is a separate query, and removal plus caseload release
+ *   are separate writes. So this is not one atomic authorization -- an earlier
+ *   commit message said it was, and that was overstated. What it is: the
+ *   membership predicate cannot be skipped or raced past.
  *
  *   NOBODY CAN ESCALATE THEMSELVES. A staff member cannot make themselves an
  *   org admin, and nobody can change or remove the owner, because ownership
@@ -74,11 +79,31 @@ export async function addOrgStaff(params: {
     };
   }
 
+  // KNOWING A USER ID IS NOT AUTHORIZATION TO RECRUIT SOMEONE.
+  //
+  // This originally admitted any existing account. Since the roster then
+  // returns each staff member's NAME and EMAIL, an org admin who guessed or
+  // obtained another org's participant id could add them and read their
+  // identity back -- the same disclosure the assignment fix closed, through a
+  // different door. (Found in review, 2026-09-19.)
+  //
+  // So the person must already have a relationship with THIS organization:
+  // they redeemed its access code, or they hold a pending invite to it.
+  // Anything else is a stranger, and a stranger joins by invitation.
   const written = await query<{ id: string }>(
     `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by)
      SELECT $1, $2, $3, $4, $5
-      WHERE EXISTS (SELECT 1 FROM users WHERE id = $2)
-        AND EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
+      WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
+        AND (
+          EXISTS (
+            SELECT 1 FROM access_code_redemption acr
+             WHERE acr.access_code_id = $1 AND acr.user_id = $2
+          )
+          OR EXISTS (
+            SELECT 1 FROM org_staff os
+             WHERE os.access_code_id = $1 AND os.user_id = $2
+          )
+        )
      ON CONFLICT (access_code_id, user_id)
      DO UPDATE SET role = EXCLUDED.role, title = EXCLUDED.title
      RETURNING id`,
@@ -87,7 +112,11 @@ export async function addOrgStaff(params: {
 
   return written.length > 0
     ? { ok: true }
-    : { ok: false, reason: "That account does not exist, or the organization is inactive." };
+    : {
+        ok: false,
+        reason:
+          "That person has no connection to this organization yet. Invite them with your organization's code first -- an account can only be added to a team it already belongs to.",
+      };
 }
 
 /**
