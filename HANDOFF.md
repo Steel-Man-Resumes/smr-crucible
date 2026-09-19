@@ -1,5 +1,84 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 -- Job search hardened for a live Montana demo. Provider stalls are intermittent and were rendering as "no jobs found".
+
+Context: Troy ruled that the 9/22 Montana DOC/DLI review will pull **live Montana
+job postings on camera**, in front of six state officials who run the system being
+demoed. That moved job search from a post-demo cleanup item (plan item 5) to the
+demo-critical path, so it got measured instead of assumed.
+
+**Near-miss found by measuring, not reading.** First probe: `"welder in Deer Lodge,
+MT"` stalled past 25s on 3 of 3 attempts while `"welder in Deer Lodge, Montana"`
+returned in 4.1s. That looked like one poisoned query string, and Deer Lodge is the
+worst possible place for it -- Montana State Prison / MCE, Ray's own persona
+employer, the likeliest search that room would name.
+
+**That first read was wrong, and the correction mattered more than the finding.**
+Across 15 more live searches the same query often succeeded in ~3s, and the
+Milwaukee control stalled instead. The real fault: **JSearch stalls intermittently
+on arbitrary queries** -- not Montana-specific, not query-specific. Roughly a third
+of first attempts hung. With a single 12s attempt and no working fallback, every one
+of those rendered as an empty board after a 12-second wait.
+
+- Retry ladder (original phrasing -> state spelled out -> wider radius), first
+  attempt with listings wins, 429 stops the ladder. Per-attempt 7s, ladder budget 24s.
+- Measured at the shipped constants: **10/15 first-try, 4/15 rescued by the ladder,
+  1/15 honest empty.** Without the ladder those 4 were empty boards. The 1 failure
+  burned all 4 attempts over 24.8s -- a sustained provider outage window that only a
+  second provider can cover.
+- Budget sizing was itself measured: at a 13s budget two recoveries were cut at
+  5,999ms on a retry that succeeded in 3,310ms another round. The budget, not the
+  provider, was losing those searches. Route `maxDuration` 30 -> 60; the 30 was
+  self-imposed, sibling routes here already run 60/90/120.
+
+**CareerOneStop is not a fallback and has not been since at least June.** Diagnosed
+rather than assumed: the same userId + token return **200 OK on `/v1/occupation`**
+while `/v1/jobsearch` returns 401 for every auth-header and location variant, and a
+bogus userId returns the identical 401. Credentials are valid; the account is not
+entitled to that endpoint (National Labor Exchange data, separate access grant). **No
+code change fixes it.** Until it lands, JSearch is a single point of failure and no
+packet, claim, or demo may describe a working DOL fallback. Run sheet section 5 and
+plan item 5 both need this wording.
+
+**A Wisconsin claim was riding along into every state.** The AI enrichment prompt
+hardcoded "Mention Wisconsin's ban-the-box law if applicable" -- so a live Montana
+search would have narrated Wisconsin law to Montana DOC and DLI. `fair_chance_info`
+is now practical guidance only and is explicitly barred from naming or
+characterizing any statute. The platform does not give legal advice, and a wrong or
+out-of-jurisdiction legal claim is worse than no claim.
+
+**`TENANT_CONFIG_PATH` never existed.** The file header has told deployers to set it
+since it was written; `getTenantConfig()` ignored it and returned the hardcoded
+Milwaukee/Waukesha default, so there was no way to run this app for another region
+without editing source. Now loads, plus smaller `TENANT_GEO_*` env overrides. A
+broken tenant file logs loudly and falls back rather than taking the app down.
+
+Rural radius: the 25-mile ring is a metro default (Libby, MT: 1 listing at 25mi, 10
+at 150mi). It now escalates across attempts. Widening can cross a state line;
+listings carry their own city/state so an Idaho result stays visibly labeled.
+CareerOneStop's radius was separately hardcoded to 25 in its URL path; now follows.
+
+Shipped: `618414c`, merged `6b8dcba`, pushed to main, Vercel production Ready (1m
+build). **Verification honesty:** typecheck and production build green, 15 live API
+searches at the shipped constants, and the live route confirmed present and
+auth-gated (401, not 404) on both forge and refinery domains. The ladder has NOT
+been exercised end-to-end through an authenticated client-tier session in
+production -- that is exactly what the Saturday/Sunday rehearsal and the T-60 timed
+run are for.
+
+**Troy decided:** live-pulled Montana postings on camera (over the safer pre-fetched
+set); animations/stage host for Tuesday; ship these fixes straight to production
+once verified, overriding the freeze he had set in the run sheet; and on redundancy,
+"I need to make sure these are working. period. all redundancies. Ill add more if
+needed. This MUST work."
+
+**Open, needs Troy:** free signups for a genuine second job provider -- Adzuna
+(developer.adzuna.com) and/or USAJOBS (developer.usajobs.gov). USAJOBS matters more
+than it sounds for Montana: Forest Service, BLM, and USPS are major rural employers.
+One provider cannot satisfy "all redundancies", and the 1/15 sustained-outage case
+is the one only a second source covers. Also open: a CareerOneStop jobsearch access
+request.
+
 ## 2026-09-16 -- Refinery login: fixed confusing OAuthAccountNotLinked error surfaced live during a demo
 
 Troy hit "OAuth error" trying to sign into Refinery live on a screen-share with a
