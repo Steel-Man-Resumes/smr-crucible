@@ -1,5 +1,115 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 (session 4) -- Wave 2 shipped: ATS lenses, Bullet Forge, t.ROY presence, org authz, persona harness
+
+Troy lifted the production freeze and ruled Tuesday is "the goal, not the
+blocker." Everything below is on `main` and auto-deployed (push = production).
+
+### The through-line: the tool was inventing, and losing, things quietly
+
+Three separate defects, all the same shape -- the truth gate was enforced
+silently, so a person never learned there had been a choice.
+
+1. **The Forge DELETED numbers the person supplied.** Intake said "40 to 50
+   loads a week during the season"; the resume said only "Hauls material for a
+   6-mile MDT overlay project." Cause: generator rule 2 read "numbers ONLY where
+   the source states them" -- a ONE-DIRECTIONAL rule. It forbids inventing and
+   says nothing about losing, so the model complied while dropping the strongest
+   detail in the document. Rule 2 now runs both ways, plus a lens that flags any
+   measured phrase in the intake missing from the resume.
+2. **Placeholder contact shipped.** `(XXX) XXX-XXXX | email@email.com` on a
+   finished resume, because the prompt's output-format block DEMONSTRATED that
+   placeholder and the model copied the example. Fixed in the prompt AND with a
+   deterministic sweep, because a prompt rule is an instruction not a guarantee.
+3. **Invented character claims.** Two sentences about washing dishes produced
+   "Reliability and consistent attendance across every shift, on time and ready
+   to work." The grounding verifier PASSED it and was right to by its own rule:
+   it flags "facts a background check could disprove" and spares "general
+   professional framing." A character claim reads as framing. **The hole was in
+   the rule, not the model.** New deterministic `unsupported_claim` check pairs
+   each claim with the words in the person's own source that would license it.
+
+**Standing lesson recorded:** these are the MOST dangerous inventions for this
+population, not the least. Nothing on paper disproves "consistent attendance" --
+that is what makes it tempting to write and brutal to be asked about.
+
+### MEASURE BEFORE NAMING A FAILURE MODE -- fired again, twice
+
+Building the ATS scorer, my first run said the Forge output scored WORSE than
+the raw input. I did not believe it and was right not to. The ruler was broken
+twice: (a) counting only lines with a bullet glyph read the two documents
+differently -- the intake has 54 lines and 8 glyphs, the output 26 -- so the
+input was graded on its best 8 lines; (b) after fixing that, date lines and
+certification lines still counted as "lines carrying a number", scoring a street
+address as a measured achievement. Only after both fixes was the comparison
+fair. Same shape as the JSearch timeout the day before.
+
+### What shipped
+
+- **ATS lenses** (`lib/ats/lenses.ts`): five deterministic lenses, not one
+  invented score. Integrity boundary: keyword coverage NEVER inserts a term --
+  it asks, and the person answers. Chart is single-hue after the palette
+  validator failed three status hues on adjacent-pair separation.
+- **Bullet Forge**: the workshop already existed and was right about the hard
+  part. Added one-tap chips, a collapsed "why this?" knowledge ladder per
+  question, readiness-aware framing, and a route in from every weak line the
+  checker flags.
+- **t.ROY attention** (TROY.4): drifts from his corner with particles, says one
+  line, leaves. Gated hard -- fires only on a warranted condition, dismisses the
+  moment the person starts working, once per surface per session. Three screens.
+- **Org authorization**: capability vocabulary + pure deny-wins resolver (15
+  tests, all fail-closed), `requireOrgCapability` / `requirePlatformAdmin`, 10
+  routes converted. THREE were reading tier off the SESSION TOKEN, including
+  `/api/dev/impersonate`. Staff CRUD built (it did not exist -- only seed
+  scripts ever wrote `org_staff`). Console gained "Where to start today".
+- **Persona harness** (`npm run persona`): the Forge is pre-auth, so it drives
+  the real routes with no login, no forked repo, no database copy. Found defects
+  2 and 3 above on its first two runs.
+- **Sign-in account-type chooser**: four routes, deep-linkable via `?as=`.
+  Agency route offers NO signup on purpose.
+
+### SECURITY / PRIVACY (found by an agent reading the repo as an outsider)
+
+- **Two live cross-org defects fixed.** The cohort query joined staff
+  assignments with no org predicate (a foreign org's staff NAME rendered in
+  another org's dashboard), and `assignClientStaff` validated NEITHER party --
+  an org admin could pair their code with any user id in the system, making it a
+  name-and-existence oracle over the whole users table.
+- **A real person's email was published in the PUBLIC repo in five places**, one
+  of them rendered on a live page saying that address was pre-authorized for
+  partner access. Moved to `PARTNER_PRE_AUTH` env. **Troy ruled: keep the
+  feature.** It is UNSET in Vercel, so pre-auth is dormant until set. Format:
+  `"email:CODE,email2:CODE2"`. The address remains in git history, which is
+  public -- scrubbing is a separate destructive decision, NOT taken.
+- **Cross-org reads were an ambient default**: `/api/partner/cohort` returned
+  EVERY org's participants for any platform-admin call. Now requires
+  `?scope=all`.
+
+### Research verdict: do NOT build the conviction-based job filter
+
+The charge normalizer is real but is **CJARS at U Michigan + Measures for
+Justice, NOT Recidiviz** (I had that wrong). It stops at classification and has
+no link to employment bars. **MCA 37-1-203: a conviction "shall not operate as
+an automatic bar" to any occupational license in Montana** -- individualized
+review, so there is no categorical fact to encode, and a filter would state
+Montana law incorrectly to Montana officials. Plus UPL exposure.
+
+### OPEN
+
+1. **`npm run verify:isolation` has never run** -- needs
+   `ISOLATION_TEST_DATABASE_URL` pointed at a NON-production database. It
+   refuses to fall back to `DATABASE_URL` by design.
+2. **RLS not started and would be SILENTLY INERT if added today** -- the app
+   connects as `neondb_owner`, a table owner that bypasses row-level security.
+   Needs a new NOBYPASSRLS role and a connection cutover. Troy must be in the
+   loop (Neon + Vercel config).
+3. Three tier-RANK tables still disagree (`TierGate.tsx`, `userTier.ts`,
+   `auth.ts`). `/api/user/role` now serves real capabilities to replace them.
+4. **t.ROY animation has never been watched in a browser.** Logic and gating are
+   proven; the feel is Troy's call. Knobs at the top of `TroyAttention.tsx`.
+5. Tuesday 9/22 3:00 PM Mountain rehearsal still untouched across four sessions.
+
+
 ## 2026-09-19 (session 3) -- Wave 1: a fabricated resume run end to end, and the seven defects it exposed
 
 Troy fabricated a Montana equipment operator (Travis Kloepfer, Kalispell) with
