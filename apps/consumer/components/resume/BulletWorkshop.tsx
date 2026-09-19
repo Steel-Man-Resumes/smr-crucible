@@ -15,6 +15,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
 
 const FOCUSABLE_SELECTOR =
@@ -361,6 +362,16 @@ export function BulletWorkshop({
             placeholder="e.g., 3 new hires, 200 orders a day"
             chips={QUANTITY_CHIPS}
             why={WHY.quantity}
+          />
+          {/* Hardest screen #2: the question that carries the most weight and
+              gets skipped the most. He only speaks if it is still empty after
+              the person has had a moment with the others. */}
+          <TroyAttention
+            targetSelector="#bw-how-many"
+            surfaceId="bullet-quantity"
+            enabled={!quantity.trim()}
+            delayMs={9000}
+            message="This one is worth the most. Even a rough number you are sure of beats leaving it blank."
           />
           <Field
             label="What got better because of you?"

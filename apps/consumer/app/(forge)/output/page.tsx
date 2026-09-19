@@ -15,7 +15,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { GhostGuide, TBtn } from "@crucible/consumer-ui";
+import { GhostGuide, TBtn, TroyAttention } from "@crucible/consumer-ui";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
@@ -659,7 +659,7 @@ export default function OutputPage() {
                     least 70% full) already existed and shipped behind an opt-in
                     button in the Refinery only, so a Forge resume could print
                     as a page and a third with nothing ever noticing. */}
-                <div className="space-y-3 px-5 pb-5">
+                <div id="truth-gate" className="space-y-3 px-5 pb-5">
                   {/* The visible truth gate: every ambiguity the generator met
                       and deliberately did not resolve. Above page fit, because
                       "is this certification current" outranks "is this two
@@ -676,6 +676,15 @@ export default function OutputPage() {
                     onApply={setResumeText}
                   />
                   <PageFitCheck getContent={() => resumeText} autoCheck />
+                  {/* Hardest screen #3: not hard to DO, hard to not drift past.
+                      The documents look finished, so the natural move is to
+                      download and leave -- with the open questions unanswered. */}
+                  <TroyAttention
+                    targetSelector="#truth-gate"
+                    surfaceId="forge-output-truth-gate"
+                    delayMs={6000}
+                    message="Before you send this anywhere: a few things here only you can answer."
+                  />
                 </div>
               </div>
             )}

@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
+import { FlowPage, GhostGuide, TroyAttention } from "@crucible/consumer-ui";
 import { parseTextToResume, profileToResume } from "@/components/resume/resumeParsers";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
@@ -1057,12 +1057,22 @@ function GuidedBuilder({
         }
       >
         <textarea
+          id="forge-duties"
           value={curJob.duties}
           onChange={(e) => setJobField("duties", e.target.value)}
           placeholder={"e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season."}
           rows={5}
           className={textareaClass}
           autoFocus
+        />
+        {/* Hardest screen #1: a blank box asking someone to describe years of
+            their own work. This is where people write "responsible for" and
+            move on, and where the whole resume is won or lost. */}
+        <TroyAttention
+          targetSelector="#forge-duties"
+          surfaceId="forge-duties"
+          enabled={!curJob.duties.trim()}
+          message="One number beats a paragraph here. How many, how often, how big -- whatever you actually remember."
         />
       </FlowPage>
     );
