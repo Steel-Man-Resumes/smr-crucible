@@ -177,6 +177,8 @@ Scrutinize section headers and the employer/date/location lines too, not only th
 
 Do NOT flag: strong action verbs, general professional framing, or a reasonable summary of a duty the source states. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts -- never let the OUTPUT claim something just because a posting asked for it.
 
+ONE EXCEPTION to "general professional framing", and it is not a small one. A claim about the PERSON'S CHARACTER OR CONDUCT -- attendance, punctuality, reliability, work ethic, safety record, honesty, initiative, how well they get along with people -- IS flaggable whenever the source does not support it, even though it sounds like framing. A real run turned two sentences about washing dishes into "reliability and consistent attendance across every shift, on time and ready to work", which the person never said about themselves. These claims feel harmless because nothing on paper disproves them; that is exactly what makes them dangerous. A hiring manager asks "tell me about your attendance at that job" and the person is left defending a sentence they did not write. Flag it unless their own words support it.
+
 Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Thin source means a shorter, sparser document -- that is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim.
 
 Return ONLY a JSON object:

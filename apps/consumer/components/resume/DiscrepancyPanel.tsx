@@ -28,6 +28,7 @@ import { BulletWorkshop } from "./BulletWorkshop";
 import { replaceResumeLine } from "@/lib/ats/apply-fix";
 
 const KIND_HEADINGS: Record<string, string> = {
+  unsupported_claim: "Things you did not tell us",
   open_end_date: "Dates",
   employment_gap: "Dates",
   aging_credential: "Certifications",

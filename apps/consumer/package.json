@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:adversarial": "npx tsx test/adversarial.mts",
-    "test:claims": "npx tsx test/banned-claims.mts"
+    "test:claims": "npx tsx test/banned-claims.mts",
+    "test": "node --import tsx --test lib/__tests__/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.0",
