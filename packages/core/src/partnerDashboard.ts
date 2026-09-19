@@ -77,11 +77,13 @@ export async function getPartnerCohort(
   const members = await query<{
     user_id: string;
     joined_at: string;
+    code_ids: string[];
     sharing: boolean;
     outcome_named: boolean;
   }>(
     `SELECT acr.user_id,
             MIN(acr.redeemed_at) AS joined_at,
+            array_agg(DISTINCT ac.id) AS code_ids,
             bool_or(cs.consent_layer = 'sharing'       AND cs.status = 'granted') AS sharing,
             bool_or(cs.consent_layer = 'outcome_named' AND cs.status = 'granted') AS outcome_named
        FROM access_code_redemption acr
@@ -111,6 +113,14 @@ export async function getPartnerCohort(
 
   // 2. Progress for consented clients only (progress signals, never content).
   const ids = consentedMembers.map((m) => m.user_id);
+  // The access codes that DEFINED this cohort. The staff-assignment join below
+  // must be restricted to them: a participant can hold codes from more than one
+  // organization, and an unscoped join surfaced the OTHER org's staff name
+  // inside this dashboard. Cohort membership was already scoped correctly; the
+  // assigned-staff columns were not.
+  const scopeCodeIds = Array.from(
+    new Set(consentedMembers.flatMap((m) => m.code_ids ?? []))
+  );
   const rows = await query<{
     id: string;
     name: string | null;
@@ -145,10 +155,12 @@ export async function getPartnerCohort(
               COALESCE((SELECT MAX(updated_at) FROM refinery_artifact ra WHERE ra.user_id = u.id), to_timestamp(0))
             ) AS last_active_at
        FROM users u
-       LEFT JOIN client_staff_assignment csa ON csa.client_user_id = u.id
+       LEFT JOIN client_staff_assignment csa
+         ON csa.client_user_id = u.id
+        AND csa.access_code_id = ANY($2::uuid[])
        LEFT JOIN users su ON su.id = csa.staff_user_id
       WHERE u.id = ANY($1::uuid[])`,
-    [ids]
+    [ids, scopeCodeIds]
   );
 
   const byId = new Map(consentedMembers.map((m) => [m.user_id, m]));
@@ -351,13 +363,49 @@ export async function assignClientStaff(
     );
     return;
   }
-  await query(
+  // BOTH PARTIES MUST BELONG TO THIS ORG.
+  //
+  // Neither was checked. The route passes clientUserId and staffUserId straight
+  // from the request body, so an org admin could pair their own access code
+  // with ANY user id in the system -- and because the dashboard then renders
+  // the assigned staff member's name, that made this an existence-and-name
+  // oracle over the whole users table.
+  //
+  // Enforced in SQL rather than by a prior SELECT so there is no window between
+  // the check and the write: the INSERT sources its values from a SELECT whose
+  // WHERE clause is the authorization, and writes nothing when either side
+  // fails. Membership = redeemed this code; staff = listed for this code.
+  const written = await query<{ client_user_id: string }>(
     `INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by)
-     VALUES ($1, $2, $3, $4)
+     SELECT $1, $2, $3, $4
+      WHERE EXISTS (
+              SELECT 1 FROM access_code_redemption acr
+               WHERE acr.access_code_id = $1 AND acr.user_id = $2
+            )
+        AND (
+              EXISTS (
+                SELECT 1 FROM org_staff os
+                 WHERE os.access_code_id = $1 AND os.user_id = $3
+              )
+              -- The org OWNER is not necessarily listed in org_staff, and
+              -- assigning a participant to themselves is a legitimate thing for
+              -- a one-person organization to do.
+              OR EXISTS (
+                SELECT 1 FROM access_code ac
+                 WHERE ac.id = $1 AND ac.partner_user_id = $3
+              )
+            )
      ON CONFLICT (access_code_id, client_user_id)
-     DO UPDATE SET staff_user_id = $3, assigned_by = $4, created_at = NOW()`,
+     DO UPDATE SET staff_user_id = $3, assigned_by = $4, created_at = NOW()
+     RETURNING client_user_id`,
     [accessCodeId, clientUserId, staffUserId, assignedBy]
   );
+
+  if (written.length === 0) {
+    throw new Error(
+      "Cannot assign: the participant is not in this organization's cohort, or that staff member does not belong to this organization."
+    );
+  }
 }
 
 /** CSV export of the consent-shared cohort (progress signals only, no content). */
