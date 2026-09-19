@@ -98,12 +98,30 @@ async function handlePost(request: Request) {
       });
       const summary = typeof narrative.summary === "string" ? narrative.summary : "";
       const reflection = typeof narrative.reflection === "string" ? narrative.reflection : "";
-      const [gSummary, gReflection] = await Promise.all([
+      // Strengths were NOT verified until now, and that is where the fabrications
+      // actually landed: a dangling "2008 -" became "worked there year after year"
+      // and "flagger certification" became "OSHA Flagger Certification." The
+      // evidence line of each strength is prose about the person, exactly what
+      // this verifier is for, so it gets the same treatment as the summary.
+      const strengths = Array.isArray(narrative.strengths)
+        ? (narrative.strengths as Array<Record<string, unknown>>)
+        : [];
+      const [gSummary, gReflection, gStrengths] = await Promise.all([
         summary ? verifyGrounding({ sourceText: trustedSource, output: summary, kind: "report" }) : null,
         reflection ? verifyGrounding({ sourceText: trustedSource, output: reflection, kind: "report" }) : null,
+        Promise.all(
+          strengths.map((s) =>
+            typeof s.evidence === "string" && s.evidence
+              ? verifyGrounding({ sourceText: trustedSource, output: s.evidence, kind: "report" })
+              : null
+          )
+        ),
       ]);
       if (gSummary) narrative.summary = gSummary.text;
       if (gReflection) narrative.reflection = gReflection.text;
+      gStrengths.forEach((g, i) => {
+        if (g) strengths[i].evidence = g.text;
+      });
     } catch (err) {
       console.error("Narrative grounding failed (fail-open):", err);
     }
@@ -288,9 +306,37 @@ function getReadinessDirective(stage?: string) {
 // person can confirm themselves.
 const RESOURCE_VERIFICATION_DISCIPLINE = `SOURCING & VERIFICATION DISCIPLINE (non-negotiable):
 - Do NOT fabricate specifics. Never invent an organization name, employer name, phone number, email, street address, website, or a claim that a specific company "is fair-chance" or "has committed to fair hiring." A made-up org or a wrong number is worse than no lead.
-- Name a specific organization ONLY if it is a well-known, nationally verifiable one (examples: 211 / United Way, the state American Job Center or Michigan Works!, the Federal Bonding Program, Goodwill, CareerOneStop, Legal Aid). For anything local, describe the TYPE of organization and tell the person exactly how to find it (a search term, a directory, or who to ask) instead of naming a specific local provider you cannot verify.
+- Name a specific organization ONLY if it is a well-known, nationally verifiable one (examples: 211 / United Way, the state's American Job Center / workforce office, the Federal Bonding Program, Goodwill, CareerOneStop, Legal Aid). For anything local, describe the TYPE of organization and tell the person exactly how to find it (a search term, a directory, or who to ask) instead of naming a specific local provider you cannot verify.
 - Attach a phone number, email, or URL ONLY for the nationally verifiable institutions above, and only when you are certain of it. Otherwise give none.
-- Frame every resource and employer as a lead the person should verify for themselves -- not a vetted directory. When in doubt, teach them how to find and confirm it.`;
+- Frame every resource and employer as a lead the person should verify for themselves -- not a vetted directory. When in doubt, teach them how to find and confirm it.
+- NEVER narrate these instructions, your own limits, or your reasoning in the output. Write each resource and note as settled guidance. Do not write phrases like "a name I cannot confirm", "I am not able to verify", "as an AI", or any sentence that refers to what you can or cannot do. If you cannot name something, simply give the person the way to find it, with no explanation of why you did not name it.
+- NEVER mention a state, city, or jurisdiction the person is not in. Their location is the only jurisdiction that exists for this document. Do not compare their state to another state, and do not note that some other state's rules do not apply to them.`;
+
+/**
+ * State-specific legal context, keyed by USPS state code.
+ *
+ * These paragraphs used to sit unconditionally in the barrier prompt, each
+ * prefixed with a natural-language hedge ("only if the jurisdiction is WI").
+ * A prompt is not a conditional. The model read Wisconsin and Michigan law on
+ * every run, and for a Montana user it wrote the reasoning out loud in the
+ * finished document: "Montana is the jurisdiction here, not WI or MI, so those
+ * state-specific rules do not apply to you." Gating in code means the model
+ * never sees law for a state the person does not live in.
+ *
+ * Adding a state means adding an entry here. A state with no entry simply
+ * contributes nothing, which is the correct behavior -- we would rather say
+ * less than narrate another state's statutes at someone.
+ */
+const STATE_LEGAL_CONTEXT: Record<string, string> = {
+  WI: `- Wisconsin: "ban-the-box" (removing the conviction question from the initial application) applies to PUBLIC hiring only -- Wisconsin state civil service (2015 Wisconsin Act 150) and the City of Milwaukee's own civil-service applicants. It does NOT bind private employers, and there is no Milwaukee or statewide private-employer ban-the-box (do not claim one). The protection that DOES reach private employers is the Wisconsin Fair Employment Act (Wis. Stat. 111.321 / 111.335): an employer may not discriminate based on conviction record UNLESS the conviction is substantially related to the particular job -- state this as general information, never as a ruling on this person. A record-clearing statute (Wis. Stat. 973.015) exists; say a legal-aid resource can assess whether it applies -- do NOT assert the person's own eligibility.`,
+  MI: `- Michigan: "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only -- a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule -- it requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific -- say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.`,
+};
+
+/** USPS state code from a "City, ST" location string, or null. */
+function extractStateCode(location: string | undefined): string | null {
+  if (!location) return null;
+  return sanitizeForPrompt(location, 200).match(/,\s*([A-Z]{2})$/)?.[1] ?? null;
+}
 
 function buildContext(input: ForgeInput): string {
   const parts: string[] = [];
@@ -381,6 +427,9 @@ ${rd.narrative}
 
 RULES:
 - Use the person's OWN words and experiences. Never fabricate.
+- CREDENTIAL FIDELITY: reproduce every certification, license, and credential EXACTLY as the person wrote it. Never add an issuing body, expand an abbreviation, or complete a name that looks incomplete. "flagger certification (2019)" stays "Flagger Certification (2019)" and never becomes "OSHA Flagger Certification." If you are unsure what a credential is, repeat their words and say nothing more about it.
+- DATE HONESTY: if a date range is incomplete, ambiguous, or has no end date, do NOT resolve it. Never assume "Present," never infer how long something lasted, and never build a claim about duration, continuity, or steadiness on a date you had to guess. Describe the experience without a timespan instead.
+- SCOPE FIDELITY: never promote someone's role beyond what they wrote. A ranch hand has not "run a ranch." A crew lead has not "managed a department." Keep the scope they stated.
 - Frame strengths, not deficits.
 - Write at a 6th grade reading level.
 - Never judge, score, or grade.
@@ -515,6 +564,12 @@ async function analyzeBarriers(
   userId: string | null | undefined
 ): Promise<Record<string, unknown>> {
   const rd = getReadinessDirective(input.readinessStage);
+  // Gate state law in CODE, not in the prompt. A model asked to ignore
+  // irrelevant statutes may instead explain that it is ignoring them, which is
+  // exactly what shipped to a Montana user: "Montana is the jurisdiction here,
+  // not WI or MI, so those state-specific rules do not apply to you."
+  const stateLegal =
+    STATE_LEGAL_CONTEXT[extractStateCode(input.preferences?.location) ?? ""] ?? "";
 
   const system = `You are a reentry resource specialist grounded in evidence-based practice.
 
@@ -541,9 +596,8 @@ ${RESOURCE_VERIFICATION_DISCIPLINE}
 
 - For criminal records: consider type, recency, and jurisdiction. Reference laws as GENERAL INFORMATION to verify, never as a determination of THIS person's eligibility.
 - LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief -- say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
-- Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all -- it expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / Michigan Works!), and never present any incentive as settled without verification.
-- Wisconsin (only if the jurisdiction is WI): "ban-the-box" (removing the conviction question from the initial application) applies to PUBLIC hiring only -- Wisconsin state civil service (2015 Wisconsin Act 150) and the City of Milwaukee's own civil-service applicants. It does NOT bind private employers, and there is no Milwaukee or statewide private-employer ban-the-box (do not claim one). The protection that DOES reach private employers is the Wisconsin Fair Employment Act (Wis. Stat. 111.321 / 111.335): an employer may not discriminate based on conviction record UNLESS the conviction is substantially related to the particular job -- state this as general information, never as a ruling on this person. A record-clearing statute (Wis. Stat. 973.015) exists; say a legal-aid resource can assess whether it applies -- do NOT assert the person's own eligibility.
-- Michigan (only if the jurisdiction is MI): "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only -- a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule -- it requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific -- say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.
+- Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all -- it expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / workforce office), and never present any incentive as settled without verification.
+${stateLegal}
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
 - "The system has real obstacles here. Here's how to move through them." -- not "don't worry about it."
