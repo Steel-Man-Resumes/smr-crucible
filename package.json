@@ -10,5 +10,8 @@
   "engines": {
     "node": ">=20 <23"
   },
-  "scripts": {}
+  "scripts": {
+    "verify:isolation": "node scripts/verify-org-isolation.mjs",
+    "test:core": "npm test -w packages/core"
+  }
 }

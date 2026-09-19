@@ -30,6 +30,9 @@ import {
   getOrgStaff,
   getPartnerCohort,
   assignClientStaff,
+  addOrgStaff,
+  setOrgStaffRole,
+  removeOrgStaff,
   getOrgPendingInvites,
   createOrgInvite,
   touchOrgInviteResend,
@@ -131,6 +134,52 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+
+    // ── Staff management (org admins and the owner) ─────────────────────
+    // org_staff previously had no write path in the product at all: three
+    // one-off seed scripts were the only things that ever inserted into it.
+    if (
+      body.action === "add_staff" ||
+      body.action === "set_staff_role" ||
+      body.action === "remove_staff"
+    ) {
+      const guard = await requireOrgCapability("org.staff.manage");
+      if (!guard.ok) return guard.response;
+
+      const targetUserId = String(body.userId || "");
+      if (!targetUserId) {
+        return NextResponse.json({ error: "userId required" }, { status: 400 });
+      }
+
+      const result =
+        body.action === "add_staff"
+          ? await addOrgStaff({
+              orgId: guard.actor.orgId,
+              userId: targetUserId,
+              role: body.role === "org_admin" ? "org_admin" : "staff",
+              title: typeof body.title === "string" ? body.title : null,
+              addedBy: guard.actor.userId,
+            })
+          : body.action === "set_staff_role"
+            ? await setOrgStaffRole({
+                orgId: guard.actor.orgId,
+                userId: targetUserId,
+                role: body.role === "org_admin" ? "org_admin" : "staff",
+                actorUserId: guard.actor.userId,
+              })
+            : await removeOrgStaff({
+                orgId: guard.actor.orgId,
+                userId: targetUserId,
+                actorUserId: guard.actor.userId,
+              });
+
+      if (!result.ok) {
+        // A refusal here is an authorization or state outcome with a message
+        // written to be shown, not an internal error.
+        return NextResponse.json({ error: result.reason }, { status: 403 });
+      }
+      return NextResponse.json({ ...result, ok: true });
+    }
 
     if (body.action === "assign") {
       // First route on the capability guard. The inline `isOrgAdmin` boolean it

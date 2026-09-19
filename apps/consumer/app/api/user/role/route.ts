@@ -20,7 +20,9 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { getUserTier, getOrgContext } = await import("@crucible/core");
+  const { getUserTier, getOrgContext, resolveOrgActor } = await import(
+    "@crucible/core"
+  );
   const tier = await getUserTier(userId);
 
   // Org context only matters for partner/admin tiers; skip the lookups otherwise.
@@ -28,6 +30,11 @@ export async function GET() {
     tier === "partner" || tier === "admin"
       ? await getOrgContext(userId).catch(() => null)
       : null;
+
+  // The real capability set, so the UI can mirror the authorization model
+  // instead of inferring permissions from a tier rank. Three separate rank
+  // tables currently disagree with each other; this is what replaces them.
+  const actor = org ? await resolveOrgActor(userId).catch(() => null) : null;
 
   const impersonation = (session as { impersonation?: { mode: "view" | "assist" } })
     .impersonation;
@@ -37,6 +44,8 @@ export async function GET() {
       tier,
       orgRole: org?.role ?? null,
       orgName: org?.orgName ?? null,
+      capabilities: actor ? Array.from(actor.capabilities) : [],
+      cohortReach: actor?.reach ?? "none",
       impersonating: impersonation ? { mode: impersonation.mode } : null,
     },
   });

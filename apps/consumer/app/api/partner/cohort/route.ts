@@ -34,7 +34,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Not a partner" }, { status: 403 });
   }
 
-  const cohort = await getPartnerCohort(session.user.id, { isAdmin: tier === "admin" });
+  // CROSS-ORG VIEW IS NOW AN EXPLICIT ASK, NOT AN AMBIENT DEFAULT.
+  //
+  // This previously passed `isAdmin: tier === "admin"`, which made every call
+  // by a platform admin return EVERY organization's participants merged into
+  // one list. That is a real capability Troy needs, but as a default it meant
+  // any incidental page load rendered every org's people, and an admin looking
+  // at their own org saw a list that silently was not their own org.
+  //
+  // Now it takes ?scope=all. Same power, deliberately reached for.
+  const wantsAllOrgs =
+    tier === "admin" && new URL(request.url).searchParams.get("scope") === "all";
+  const cohort = await getPartnerCohort(session.user.id, { isAdmin: wantsAllOrgs });
 
   const { searchParams } = new URL(request.url);
   if (searchParams.get("format") === "csv") {

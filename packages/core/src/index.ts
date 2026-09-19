@@ -56,3 +56,4 @@ export * from './pageFit';
 export * from './authz/capabilities';
 export * from './authz/resolveOrgActor';
 export * from './orgStaffPerformance';
+export * from './orgStaffAdmin';
