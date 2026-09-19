@@ -76,6 +76,29 @@ function selfDisclosureDirective(input: GenerateDocsInput): string {
   return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
 }
 
+/**
+ * Remove placeholder contact details, and the separator left orphaned with them.
+ *
+ * A name and a city is a complete, correct contact line. A fake phone number is
+ * not -- it reads as carelessness to the one reader who matters.
+ */
+function stripContactPlaceholders(text: string): string {
+  const PLACEHOLDER =
+    /\(?X{3}\)?[\s.-]*X{3}[\s.-]*X{4}|email@email\.com|your\.?email@|\[\s*(?:phone|email|your [^\]]+)\s*\]|\bXXX-XXX-XXXX\b/gi;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (!PLACEHOLDER.test(line)) return line;
+      PLACEHOLDER.lastIndex = 0;
+      const kept = line
+        .split("|")
+        .map((p) => p.trim())
+        .filter((p) => p && !new RegExp(PLACEHOLDER.source, "i").test(p));
+      return kept.join(" | ");
+    })
+    .join("\n");
+}
+
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
@@ -122,8 +145,13 @@ async function handlePost(request: Request) {
       verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
     ]);
 
-    const resume = resumeCheck.text;
-    const coverLetter = coverCheck.text;
+    // A prompt rule is an instruction, not a guarantee. The output format
+    // itself used to DEMONSTRATE "(XXX) XXX-XXXX | email@email.com", and when a
+    // person supplied no phone or email the model copied the example onto the
+    // finished resume. That document gets sent to an employer without being
+    // re-read. Deterministic sweep, belt-and-braces like stripEmDashes.
+    const resume = stripContactPlaceholders(resumeCheck.text);
+    const coverLetter = stripContactPlaceholders(coverCheck.text);
     // Per-document accounting (Codex 8): a flag is "removed" only if THAT document's
     // rewrite was applied. A document that found fabrication but couldn't apply the
     // rewrite (window/floor/drop guard) has RESIDUAL fabrication the user must
@@ -246,7 +274,7 @@ ${isExploring ? `This person is exploring, not actively job searching. Frame the
 ${selfDisclosureDirective(input)}
 SECTION ORDER (exact):
 1. FULL NAME (all caps)
-2. Contact line: City, State | Phone | Email (one line, pipe-separated)
+2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides -- omit anything missing rather than inventing a placeholder for it.
 3. Branded Headline (one powerful line — NOT an objective. An identity statement.)
 4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
 5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, never drop real ones -- typically 9 to 15.)
@@ -310,7 +338,13 @@ ${parts.join("\n\n")}
 EXACT OUTPUT FORMAT (plain text, follow precisely):
 
 FULL NAME
-City, State | (XXX) XXX-XXXX | email@email.com
+City, State | Phone | Email
+  -- Use ONLY contact details the source actually provides. OMIT any you do not
+     have, along with its separator. A name and a city alone is a correct and
+     complete contact line. NEVER write a placeholder: no (XXX) XXX-XXXX, no
+     email@email.com, no [Phone], no "Your Email Here". A placeholder on a
+     finished resume goes to an employer looking like carelessness, and this is
+     a document someone sends without re-reading it.
 
 Branded headline — one powerful line. Not an objective. An identity.
 

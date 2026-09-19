@@ -1,0 +1,19 @@
+{
+  "_note": "EDGE CASE: the posting does not fit the person at all. A nurse's posting against a warehouse history. The tool must NOT bridge the gap with invented qualifications -- the correct result is a low keyword score and an honest 'this is a stretch', not a fabricated healthcare background.",
+  "resumeText": "DANA OKONKWO\nGary IN\n\nEXPERIENCE\nWarehouse Associate | Midwest Distribution | 2018 - 2025\n- Picked and packed 300 orders a shift\n- Operated pallet jack and RF scanner\n- Trained 6 new hires on dock safety\n\nEDUCATION\nGED, 2017\n",
+  "readinessStage": "action",
+  "goals": [
+    "career_change"
+  ],
+  "goalNarrative": "I want to get into healthcare.",
+  "challenges": [
+    "education"
+  ],
+  "preferences": {
+    "location": "Gary, IN",
+    "schedule": "full time",
+    "environment": "indoors",
+    "commute": "20 miles"
+  },
+  "jobPosting": "Registered Nurse -- Medical Surgical Unit. Active RN license required. BSN preferred. Minimum two years acute care experience. ACLS and BLS certification required. Administer medications, monitor patient status, collaborate with physicians on care plans. EPIC charting experience preferred."
+}

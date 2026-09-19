@@ -1,0 +1,26 @@
+{
+  "_note": "EDGE CASE: almost nothing to work with. Short history, one short job, no numbers anywhere, no education section, no certifications. The honest outcome is a THIN resume -- watch what the tool refuses to invent. If this one comes back impressive, something is fabricating.",
+  "resumeText": "MARCUS DELANEY\nMilwaukee WI\n\nWork\nDishwasher, Sunrise Diner, 2025 - present\nWashed dishes, cleaned the kitchen, took out trash\n\nStocker, corner store, a few months in 2024\nStocked shelves\n",
+  "readinessStage": "contemplation",
+  "goals": [
+    "any_job"
+  ],
+  "goalNarrative": "Just need something steady. Open to anything.",
+  "challenges": [
+    "record",
+    "transportation"
+  ],
+  "criminalRecord": {
+    "type": "felony",
+    "charge_count": "2",
+    "most_recent": "1 year ago",
+    "supervision": "on supervision",
+    "context": "Recently released."
+  },
+  "preferences": {
+    "location": "Milwaukee, WI",
+    "schedule": "any",
+    "environment": "any",
+    "commute": "bus only"
+  }
+}

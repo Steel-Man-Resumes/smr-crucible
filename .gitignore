@@ -37,3 +37,6 @@ npm-debug.log*
 # editor swap files
 *.swp
 *.swo
+
+# Persona harness output -- real generated documents, kept out of the repo
+persona-runs/
