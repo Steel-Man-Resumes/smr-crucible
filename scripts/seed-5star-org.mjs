@@ -13,6 +13,13 @@
  * Run: node scripts/seed-5star-org.mjs   (reads DATABASE_URL from consumer env)
  */
 
+// A client organization's email address does not belong in a public repo.
+const PARTNER_EMAIL = process.env.SEED_PARTNER_EMAIL;
+if (!PARTNER_EMAIL) {
+  console.error("Set SEED_PARTNER_EMAIL before running this seed.");
+  process.exit(1);
+}
+
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -28,7 +35,7 @@ const url = env
 
 const ROSTER = [
   {
-    email: "fivestartrainingmke@gmail.com",
+    email: PARTNER_EMAIL,
     name: "Akyaa Smith",
     role: "org_admin",
     title: "Founder & Executive Director",
@@ -78,7 +85,7 @@ for (const p of ROSTER) {
 // 3. Owner: set Akyaa only if unowned
 if (!currentOwner) {
   await c.query(`UPDATE access_code SET partner_user_id = $1 WHERE id = $2`, [
-    ids["fivestartrainingmke@gmail.com"],
+    ids[PARTNER_EMAIL],
     codeId,
   ]);
   console.log("Code owner set to Akyaa.");
