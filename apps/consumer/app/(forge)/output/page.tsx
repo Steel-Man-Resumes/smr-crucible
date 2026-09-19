@@ -157,6 +157,10 @@ export default function OutputPage() {
   // Grounding gate result (F2): claims removed vs. residual (found but not
   // auto-removed -- the user must review those). Codex 8: never conflate them.
   const [groundingNote, setGroundingNote] = useState<{ removed: number; residual: number } | null>(null);
+  // False when the automated check could not run (no key, timeout, bad reply).
+  // It fails open so a person still gets their documents -- but they should be
+  // told the machine check was skipped rather than shown a silent clean pass.
+  const [verifierRan, setVerifierRan] = useState(true);
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
   const [copied, setCopied] = useState<string>("");
@@ -209,6 +213,10 @@ export default function OutputPage() {
           residual: data.grounding.residual || 0,
         });
       }
+      // Absent means an older response shape, which we treat as "ran" rather
+      // than alarming everyone during a rollout. An explicit false is the
+      // signal that matters.
+      setVerifierRan(data.grounding?.verifierRan !== false);
       setDocState("done");
     } catch (err: any) {
       console.error("Doc generation error:", err);
@@ -583,6 +591,25 @@ export default function OutputPage() {
             {/* Grounding note (F2): honest disclosure of the truth gate. Removed
                 and residual are reported separately so we never claim a document
                 is fully clean when a fabrication couldn't be auto-removed (Codex 8). */}
+            {/* The automated check could not run. It fails open on purpose so a
+                person still gets their documents -- but silence here would let
+                an outage look exactly like a clean pass, which is the one thing
+                this panel must never do. */}
+            {!verifierRan && (
+              <div className="border border-t-amber bg-t-panel px-4 py-3">
+                <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">
+                  Automatic check did not run
+                </p>
+                <p className="text-xs leading-relaxed text-t-phos">
+                  Your documents are here and nothing was changed. The
+                  second-pass check that traces every line back to what you told
+                  us could not run this time, so read these over before you send
+                  them -- especially anything specific, like a number, a date or
+                  a certification.
+                </p>
+              </div>
+            )}
+
             {groundingNote && (
               <div className="bg-t-panel border border-t-amber px-4 py-3">
                 <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">

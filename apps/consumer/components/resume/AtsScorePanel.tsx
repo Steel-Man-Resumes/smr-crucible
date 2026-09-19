@@ -102,10 +102,11 @@ export function AtsScorePanel({
               it. Each row is one thing the industry actually grades.
             </p>
           </div>
-          <div className="shrink-0 text-right">
-            <p className="text-2xl font-bold leading-none text-t-white">{report.composite}</p>
-            <p className="text-[10px] uppercase tracking-wide text-t-phos-dim">our read</p>
-          </div>
+          {/* NO COMPOSITE NUMBER. There was one here, and a reviewer was right
+              that printing a single score directly contradicts the paragraph
+              beside it arguing that no single score exists. Whatever the label
+              said, a big number at the top is the thing people read and quote.
+              The five rows below are the honest answer. */}
         </div>
       </div>
 

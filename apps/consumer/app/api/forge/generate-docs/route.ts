@@ -207,6 +207,13 @@ async function handlePost(request: Request) {
         removed: removedCount,
         residual: residualCount,
         flags: groundingFlags,
+        // Whether the check actually RAN. It fails open by design -- a missing
+        // key, a timeout or an unparseable reply returns the document
+        // untouched -- but that used to be invisible from here, so an outage
+        // and a clean pass looked identical to every caller and to the user.
+        // An unverified document is not a verified one, and the page has to be
+        // able to tell the difference to say so honestly.
+        verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
       },
       generated_at: new Date().toISOString(),
     });

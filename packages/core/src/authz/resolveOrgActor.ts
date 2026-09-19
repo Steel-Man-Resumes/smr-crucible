@@ -108,11 +108,23 @@ export async function resolveOrgActor(
   // Per-user exceptions are read from the database and filtered against the
   // code vocabulary inside computeOrgCapabilities, so a stale or tampered row
   // cannot grant a power this build does not define.
+  //
+  // FAIL CLOSED, and the distinction matters. Swallowing every error here meant
+  // a failed query silently RESTORED capabilities that a deny override had
+  // removed -- the one direction an authorization error must never go. An
+  // absent table is different: the feature is simply not migrated yet, so there
+  // are genuinely no overrides and an empty list is the truth.
   const overrides = await query<{ capability: string; effect: string }>(
     `SELECT capability, effect FROM org_capability_override
       WHERE org_id = $1 AND user_id = $2`,
     [resolved.orgId, userId]
-  ).catch(() => []); // table not migrated yet: no overrides, not an outage
+  ).catch((err: unknown) => {
+    const code = (err as { code?: string })?.code;
+    const message = String((err as { message?: string })?.message ?? "");
+    const tableMissing = code === "42P01" || /org_capability_override/.test(message);
+    if (tableMissing) return [];
+    throw err; // unknown state: refuse rather than guess generously
+  });
 
   const capabilities = computeOrgCapabilities(
     resolved.role,

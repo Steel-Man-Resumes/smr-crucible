@@ -9,6 +9,18 @@
  *
  * Read-only enforcement for "view" mode happens in middleware (writes to
  * /api/* are rejected at the edge before any route runs).
+ *
+ * PRIVILEGE IS RE-VERIFIED ON EVERY USE, NOT JUST AT ISSUE (fixed 2026-09-19).
+ * This used to read `tier` off the session token. The token is minted at
+ * sign-in and carries whatever was true then, so revoking someone's admin
+ * access did NOT end an impersonation session they already held -- they kept
+ * reading another person's data until the cookie expired, up to an hour later.
+ * Issuing the cookie was already checked against the database; consuming it was
+ * not, and consuming it is the part that reads somebody's file.
+ *
+ * It also fails CLOSED. If the privilege check cannot run, impersonation does
+ * not happen and the admin sees their own account. A verification outage must
+ * degrade toward less access, never toward more.
  */
 
 import { auth } from "@/auth";
@@ -21,11 +33,14 @@ export async function effectiveAuth(): Promise<any> {
   const imp = await readImpersonation();
   if (!imp || imp.adminId !== real.user.id) return real;
 
-  // Only admins can impersonate, ever.
-  if ((real.user as any).tier !== "admin") return real;
-
   try {
-    const { getOne } = await import("@crucible/core");
+    const { getOne, getUserTier } = await import("@crucible/core");
+
+    // Only admins can impersonate, ever -- checked against the database, for
+    // the REAL user, on every single request that carries the cookie.
+    const liveTier = await getUserTier(real.user.id);
+    if (liveTier !== "admin") return real;
+
     const target = await getOne<{
       id: string;
       name: string | null;

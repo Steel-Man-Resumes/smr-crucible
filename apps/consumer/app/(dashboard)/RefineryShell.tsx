@@ -147,6 +147,7 @@ const PERSONAL_LS_KEYS = [
   // resume text could seed the next person's document.
   "active_baseline_id",
   "view_as",
+  "forge_last_synced_run",
 ];
 
 /**
@@ -164,6 +165,13 @@ const RUN_SCOPED_LS_KEYS = [
   "refinery_last_job_search",
   "active_baseline_id",
 ];
+
+/**
+ * The last Forge run this browser synced. Deliberately NOT inside
+ * `forge_session`: that blob is replaced on every fresh start, so a boundary
+ * stored inside it disappears exactly when a new run begins.
+ */
+const LAST_SYNCED_RUN_KEY = "forge_last_synced_run";
 
 function removeKeys(keys: readonly string[]) {
   for (const k of keys) {
@@ -376,8 +384,20 @@ export function RefineryShell({
       // last job search with its full result list. They used to survive, which
       // is how one browser ended up showing several personas' demos stacked on
       // one screen. Clear before rebuilding the preload below, not after.
-      const priorSyncedAt = forgeData._syncedAt;
+      // The last run we synced is remembered OUTSIDE the intake blob, because
+      // the blob is exactly what a fresh start replaces: the welcome page
+      // clears forge_session before building a new run, which takes _syncedAt
+      // with it. Reading the boundary from the thing being replaced meant the
+      // NORMAL fresh-start path skipped this cleanup entirely, which is the
+      // path that matters most. (Found in review, 2026-09-19.)
       const runId = forgeData.startedAt || "unknown";
+      let priorSyncedAt: string | null = null;
+      try {
+        priorSyncedAt =
+          localStorage.getItem(LAST_SYNCED_RUN_KEY) || forgeData._syncedAt || null;
+      } catch {
+        priorSyncedAt = forgeData._syncedAt || null;
+      }
       if (priorSyncedAt && priorSyncedAt !== runId) {
         clearRunScopedLocalStorage();
       }
@@ -405,6 +425,11 @@ export function RefineryShell({
             forgeData._syncedAt = currentStartedAt;
             forgeData._ownerUserId = uid; // claim this blob for the current account
             localStorage.setItem("forge_session", JSON.stringify(forgeData));
+            try {
+              localStorage.setItem(LAST_SYNCED_RUN_KEY, currentStartedAt);
+            } catch {
+              // Storage unavailable: we fall back to the in-blob marker.
+            }
             window.dispatchEvent(new Event("forge-synced"));
           }
         })

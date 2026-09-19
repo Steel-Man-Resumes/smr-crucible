@@ -76,3 +76,55 @@ describe("no source, no accusation", () => {
     assert.equal(found.filter((d) => d.kind === "unsupported_claim").length, 0);
   });
 });
+
+describe("vocabulary is not evidence (reviewer counterexamples)", () => {
+  // Every one of these previously returned ZERO findings: a related WORD in the
+  // source licensed a much stronger claim in the output.
+  const mustFlag: Array<[string, string, string]> = [
+    ["training is not a record", "- Clean safety record.", "Completed safety training"],
+    ["being on a crew is not running one", "- Supervised a crew of six.", "Worked on a crew"],
+    ["one credential does not license another", "- Licensed electrician.", "CPR certification"],
+  ];
+  for (const [name, output, source] of mustFlag) {
+    it(name, () => {
+      assert.ok(claims(output, source).length > 0, `${output} vs ${source}`);
+    });
+  }
+
+  it("catches a claim that CONTRADICTS the source, and says so", () => {
+    // The worst case in the report: the source said the opposite and the
+    // checker called the claim supported.
+    const found = claims(
+      "- Perfect attendance every shift.",
+      "I was often late and had poor attendance"
+    );
+    assert.equal(found.length, 1);
+    assert.match(found[0].label, /contradicts/i);
+  });
+
+  it("still allows a credential the source actually names", () => {
+    assert.deepEqual(claims("- CPR certified.", "CPR certification, 2024"), []);
+    assert.deepEqual(claims("- Forklift certified.", "forklift certification"), []);
+  });
+
+  it("still allows a safety record the source actually states", () => {
+    assert.deepEqual(
+      claims("- Clean safety record.", "no lost time accidents on my shift for two years"),
+      []
+    );
+  });
+
+  it("still allows supervision the source actually states", () => {
+    assert.deepEqual(
+      claims("- Supervised a crew of six.", "Ran a three man crew when the foreman was off"),
+      []
+    );
+  });
+
+  it("is honest about its own limits", () => {
+    // "Won employee of the year" is in no enumerated pattern. This check
+    // narrows a known-dangerous class; it is not a proof of truth, and the
+    // panel copy no longer claims otherwise.
+    assert.deepEqual(claims("- Won employee of the year.", "Washed dishes"), []);
+  });
+});

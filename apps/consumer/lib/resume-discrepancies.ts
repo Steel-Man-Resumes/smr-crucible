@@ -137,38 +137,132 @@ const RECURRING_CREDENTIALS: Array<{ match: RegExp; years: number; why: string }
  * reproducible. Each entry: the claim as it appears in output, and the words in
  * the person's OWN source that would make it theirs to make.
  */
-const CHARACTER_CLAIMS: Array<{ claim: RegExp; licensedBy: RegExp; label: string }> = [
+/**
+ * Claims about WHO SOMEONE IS, and what would actually license them.
+ *
+ * WHY THIS IS SEPARATE FROM THE AI VERIFIER. The grounding verifier is told to
+ * flag "assertions of specific fact a background check could disprove" and to
+ * leave "general professional framing" alone. A character claim reads as
+ * framing, so it sails through. On a real run, two sentences about washing
+ * dishes produced "Reliability and consistent attendance across every shift".
+ *
+ * These are the MOST dangerous inventions for this product's users, not the
+ * least: nothing on paper disproves them, which is what makes them tempting to
+ * write and brutal to be asked about in an interview.
+ *
+ * VOCABULARY IS NOT EVIDENCE -- the correction that shaped this version.
+ * The first cut licensed a claim whenever a related WORD appeared anywhere in
+ * the source. A review broke it in one line each: "Completed safety training"
+ * licensed "Clean safety record"; "Worked on a crew" licensed "Supervised a
+ * crew of six"; "CPR certification" licensed "Licensed electrician"; and, worst
+ * of all, "I was often late and had poor attendance" licensed "Perfect
+ * attendance" -- the source said the OPPOSITE and the checker called it
+ * supported.
+ *
+ * Three rules now, and each one closes one of those:
+ *   1. NEGATION. If the source says the opposite nearby, nothing licenses the
+ *      claim. Checked first, because a negated source is worse than a silent
+ *      one -- the resume is contradicting the person.
+ *   2. SPECIFICITY. The licence must be as strong as the claim. Training is not
+ *      a record; being on a crew is not running one. Each claim names the
+ *      phrases that actually establish it, not the topic it belongs to.
+ *   3. SUBJECT MATCH for credentials. Holding a CPR card does not license
+ *      "licensed electrician" -- the licence must name the same thing.
+ *
+ * This is still a deterministic check with an enumerated vocabulary, so it
+ * cannot catch a claim nobody listed ("Won employee of the year" is not in
+ * here). It narrows a known-dangerous class; it is not a proof of truth, and
+ * the panel no longer says otherwise.
+ */
+const CHARACTER_CLAIMS: Array<{
+  claim: RegExp;
+  /** Phrases that genuinely establish the claim, not merely its topic. */
+  licensedBy: RegExp;
+  /** Source wording that contradicts the claim outright. */
+  contradictedBy?: RegExp;
+  label: string;
+}> = [
   {
     label: "attendance or punctuality",
     claim: /\b(?:consistent |perfect |strong |excellent |reliable )?attendance\b|\bpunctual(?:ity)?\b|\bon time,? (?:every|ready|and)\b|\bnever (?:late|missed)\b|\bshows? up on time\b/i,
-    licensedBy: /\battendance\b|\bpunctual\b|\bon time\b|\bnever late\b|\bnever missed\b|\breliable\b|\bshows up\b/i,
+    // Being present is not a record of attendance. The source has to make the
+    // claim about reliability itself.
+    licensedBy: /\b(?:perfect|great|good|strong|excellent|consistent|reliable)\s+attendance\b|\bnever (?:late|missed)\b|\balways on time\b|\bshows? up (?:on time|every day)\b|\bnot missed a (?:day|shift)\b|\bpunctual\b/i,
+    contradictedBy: /\b(?:poor|bad|spotty|inconsistent)\s+attendance\b|\boften late\b|\bwas late\b|\bmissed (?:a lot|many|several|shifts|days)\b|\bshowed up late\b|\battendance (?:was |problem|issue)/i,
   },
   {
     label: "a safety record",
     claim: /\b(?:clean|strong|spotless|excellent|proven)\s+safety\s+record\b|\bzero\s+(?:accidents|injuries|incidents)\b|\bno\s+(?:lost[- ]time\s+)?(?:accidents|injuries|incidents)\b/i,
-    licensedBy: /\bsafety\b|\baccident\b|\binjur\w*\b|\bincident\b|\bosha\b|\bmsha\b|\blost[- ]time\b/i,
+    // Safety TRAINING is not a safety RECORD. The source must speak to
+    // outcomes over time, which is what a record is.
+    licensedBy: /\bno\s+(?:lost[- ]time\s+)?(?:accidents|injuries|incidents)\b|\bzero\s+(?:accidents|injuries|incidents)\b|\bsafety record\b|\baccident[- ]free\b|\bwithout (?:an )?(?:accident|injury|incident)\b/i,
+    contradictedBy: /\b(?:had|an|one)\s+(?:accident|injury|incident)\b|\bosha violation\b|\bsafety violation\b|\bgot hurt\b|\bwas injured\b/i,
   },
   {
     label: "leading or supervising people",
     claim: /\b(?:led|managed|supervised|oversaw|directed)\s+(?:a\s+)?(?:team|crew|staff|shift|department)\b|\bteam lead(?:er)?\b|\bsupervis(?:or|ory)\b/i,
-    licensedBy: /\blead\b|\bled\b|\bsupervis\w*\b|\bmanag\w*\b|\bforeman\b|\bcrew\b|\btrain\w*\b|\bin charge\b|\boversaw\b/i,
+    // Being ON a crew is not running one. The source must show authority over
+    // other people, not membership alongside them.
+    licensedBy: /\b(?:led|ran|supervis\w*|managed|oversaw|in charge of|responsible for)\s+(?:a\s+)?(?:\w+\s+){0,3}(?:team|crew|staff|shift|department|people|guys|men|workers|hires)\b|\bforeman\b|\blead(?:er)?\b(?!\s*(?:to|into))|\btrained\s+(?:new\s+)?(?:hires|staff|people|employees|workers)\b|\bcrew (?:lead|chief)\b/i,
+    contradictedBy: /\bnever (?:led|supervised|managed)\b|\bno (?:supervisory|leadership) (?:experience|role)\b/i,
   },
   {
     label: "a work ethic or attitude",
     claim: /\bstrong work ethic\b|\bgoes? above and beyond\b|\bself[- ]motivated\b|\bhighly (?:motivated|dedicated)\b|\btakes? initiative\b/i,
-    licensedBy: /\bwork ethic\b|\bhard work\w*\b|\bmotivat\w*\b|\bdedicat\w*\b|\binitiative\b/i,
+    licensedBy: /\bwork ethic\b|\bhard work(?:er|ing)\b|\bgo(?:es)? above and beyond\b|\bself[- ]motivated\b|\btook initiative\b|\bvolunteered for\b/i,
   },
   {
     label: "customer service",
     claim: /\bcustomer service\b|\bclient[- ]facing\b|\bcustomer satisfaction\b/i,
-    licensedBy: /\bcustomer\w*\b|\bclient\w*\b|\bguest\w*\b|\bfront desk\b|\bcashier\b|\bserv\w*\b|\bretail\b|\bpublic\b/i,
-  },
-  {
-    label: "certification or licensing",
-    claim: /\bcertified\b|\blicensed\b|\bcredentialed\b/i,
-    licensedBy: /\bcertif\w*\b|\blicens\w*\b|\bcard\b|\bendorsement\b|\bcredential\w*\b/i,
+    licensedBy: /\bcustomer\w*\b|\bclient\w*\b|\bguest\w*\b|\bfront desk\b|\bcashier\b|\bserved\b|\bretail\b|\bwaited on\b|\bthe public\b/i,
   },
 ];
+
+/**
+ * Credentials get SUBJECT matching, not topic matching.
+ *
+ * "CPR certification" in the source used to license "Licensed electrician" in
+ * the output, because both contain a certification word. A credential claim is
+ * only supported when the source names the SAME credential, so this compares
+ * the words around the claim against the words around every licence in the
+ * source.
+ */
+// Looks BOTH WAYS around the credential word. "OSHA certified" puts the
+// subject BEFORE it, and a forward-only pattern captured just "certified" --
+// an empty subject, which then matched anything and silently passed. Found by
+// the test that was supposed to prove the opposite.
+const CREDENTIAL_CLAIM =
+  /(?:[\w-]+\s+){0,3}\b(?:certified|licensed|credentialed)\b(?:\s+(?:in|as|for))?(?:\s+[\w-]+){0,3}|\b[A-Za-z][\w/ -]{2,40}?\s+(?:certifications?|certificates?|licen[sc]es?)\b/gi;
+
+const STOP = new Set([
+  "certified", "licensed", "credentialed", "certification", "certificate",
+  "license", "licence", "and", "the", "with", "for", "in", "of", "a", "an",
+]);
+
+/** The meaningful words in a credential phrase: "OSHA 10 certified" -> {osha,10}. */
+function credentialSubject(phrase: string): Set<string> {
+  return new Set(
+    phrase
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 1 && !STOP.has(w))
+  );
+}
+
+/** Does the source name a credential sharing a subject word with this claim? */
+function credentialSupported(claimPhrase: string, source: string): boolean {
+  const want = credentialSubject(claimPhrase);
+  // A bare "certified" with no subject names nothing checkable. Treat it as
+  // supported rather than flagging every stray word -- the specific-subject
+  // cases are the ones that matter and the ones that were getting through.
+  if (want.size === 0) return true;
+  for (const found of source.match(CREDENTIAL_CLAIM) ?? []) {
+    const have = credentialSubject(found);
+    for (const w of Array.from(want)) if (have.has(w)) return true;
+  }
+  return false;
+}
 
 /* ------------------------------------------------------------- bullets -- */
 
@@ -308,17 +402,41 @@ export function findDiscrepancies(
   // nothing to check a claim against, silence is the honest answer.
   if (options.sourceText?.trim()) {
     const source = options.sourceText;
+    const ask =
+      "This says something about you that you did not tell us, so we cannot stand behind it and neither should you. If it is true, say it in your own words and it stays. If it is not, take it out -- an employer who asks about it in an interview is the worst place to find out.";
+
     for (const rule of CHARACTER_CLAIMS) {
       const hit = lines.find((l) => rule.claim.test(l));
       if (!hit) continue;
-      if (rule.licensedBy.test(source)) continue; // their own words support it
+      // Contradiction first: a source that says the opposite is worse than one
+      // that says nothing, because the resume is now arguing with the person.
+      const contradicted = rule.contradictedBy?.test(source) ?? false;
+      if (!contradicted && rule.licensedBy.test(source)) continue;
       found.push({
         kind: "unsupported_claim",
-        label: `A claim about ${rule.label}`,
+        label: contradicted
+          ? `This contradicts what you told us about ${rule.label}`
+          : `A claim about ${rule.label}`,
         evidence: hit,
-        question:
-          "This says something about you that you did not tell us, so we cannot stand behind it and neither should you. If it is true, say it in your own words and it stays. If it is not, take it out -- an employer who asks about it in an interview is the worst place to find out.",
+        question: contradicted
+          ? "This says the opposite of what you told us. Whatever the truth is, it has to be yours -- take this out or rewrite it in your own words."
+          : ask,
       });
+    }
+
+    // Credentials, matched by SUBJECT: holding one certification does not
+    // license claiming a different one.
+    for (const line of lines) {
+      for (const phrase of line.match(CREDENTIAL_CLAIM) ?? []) {
+        if (credentialSupported(phrase, source)) continue;
+        found.push({
+          kind: "unsupported_claim",
+          label: "A credential we cannot find in what you told us",
+          evidence: line,
+          question: ask,
+        });
+        break;
+      }
     }
   }
 

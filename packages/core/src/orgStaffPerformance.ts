@@ -33,8 +33,10 @@ export interface StaffPerformance {
   staffName: string | null;
   caseload: number;
   activeThisWeek: number;
-  /** No tracked activity for STALLED_AFTER_DAYS. The "help out" signal. */
+  /** No tracked activity for STALLED_AFTER_DAYS, or never active at all. */
   stalled: number;
+  /** Of those, the ones who have never been active. Never started, not stopped. */
+  neverStarted: number;
   hired: number;
   /** Mean journey stage across the caseload, or null when there is no one. */
   avgStage: number | null;
@@ -62,9 +64,23 @@ function daysSince(iso: string | null, now: number): number | null {
 function headlineFor(p: Omit<StaffPerformance, "headline">): string {
   if (p.caseload === 0) return "No one assigned yet.";
   if (p.stalled > 0) {
+    // Someone who has NEVER been active has not "stopped moving" -- they never
+    // started, which is a different conversation and a different intervention.
+    // Saying "has not moved in two weeks" about somebody who joined yesterday
+    // is simply untrue. (Found in review, 2026-09-19.)
+    const onlyNeverStarted = p.stalled === p.neverStarted;
+    const noun = p.stalled === 1 ? "1 person" : `${p.stalled} people`;
+    if (onlyNeverStarted) {
+      return p.stalled === 1
+        ? "1 person has not started yet."
+        : `${noun} have not started yet.`;
+    }
+    if (p.neverStarted > 0) {
+      return `${noun} need a nudge, including ${p.neverStarted} who have not started.`;
+    }
     return p.stalled === 1
       ? "1 person has not moved in two weeks."
-      : `${p.stalled} people have not moved in two weeks.`;
+      : `${noun} have not moved in two weeks.`;
   }
   if (p.hired > 0) {
     return p.hired === 1 ? "1 person started work." : `${p.hired} people started work.`;
@@ -119,6 +135,7 @@ export function summarizeStaffPerformance(
         // since joining is the clearest case of needing a nudge.
         return d === null || d >= STALLED_AFTER_DAYS;
       }).length,
+      neverStarted: list.filter((c) => daysSince(c.lastActiveAt, now) === null).length,
       hired: list.filter((c) => c.hired).length,
       avgStage: stages.length
         ? Math.round((stages.reduce((a, b) => a + b, 0) / stages.length) * 10) / 10
