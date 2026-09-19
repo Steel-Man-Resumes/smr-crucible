@@ -11,7 +11,13 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { runJobSearch } from "@/lib/job-search-core";
 import { getHiddenEmployerSet, isHiddenEmployer } from "@crucible/core";
 
-export const maxDuration = 30;
+// 60s, not 30. JSearch stalls intermittently on arbitrary queries (verified
+// 2026-09-19), so the core walks a retry ladder before giving up. At 30s the
+// ladder had to be cut so short that it abandoned retries which succeed in ~3s.
+// Sibling routes in this app already run at 60/90/120, so this is not a new
+// platform ceiling. Everything inside the route is individually bounded; this
+// raises the outer limit only so honest work can finish.
+export const maxDuration = 60;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
