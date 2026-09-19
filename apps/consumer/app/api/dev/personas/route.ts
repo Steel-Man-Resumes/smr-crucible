@@ -27,16 +27,23 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Only orgs that are actually live. The previous query took the first 8 rows
+  // ordered by partner name across EVERY seeded org, active or not, which put
+  // retired and demo partners at the top (anything starting with a digit sorts
+  // first) and truncated the real ones off the bottom. `is_active` and
+  // `expires_at` already carry the signal, so no schema change is needed.
   const rows = await query(
     `SELECT os.user_id AS "userId", u.name, u.email, os.role, os.title,
             ac.partner_name AS "orgName"
        FROM org_staff os
        JOIN users u ON u.id = os.user_id
        JOIN access_code ac ON ac.id = os.access_code_id
+      WHERE ac.is_active = true
+        AND (ac.expires_at IS NULL OR ac.expires_at > now())
       ORDER BY ac.partner_name,
                CASE os.role WHEN 'org_admin' THEN 0 ELSE 1 END,
                u.name
-      LIMIT 8`
+      LIMIT 60`
   );
 
   return NextResponse.json({ data: rows });

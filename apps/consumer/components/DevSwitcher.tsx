@@ -31,11 +31,24 @@ interface Persona {
   orgName: string;
 }
 
+/** Personas bucketed by org, orgs in the order the API returned them. */
+function groupByOrg(personas: Persona[]): Array<[string, Persona[]]> {
+  const groups = new Map<string, Persona[]>();
+  for (const p of personas) {
+    const key = p.orgName || "Unassigned";
+    const existing = groups.get(key);
+    if (existing) existing.push(p);
+    else groups.set(key, [p]);
+  }
+  return Array.from(groups.entries());
+}
+
 export function DevSwitcher() {
   const realTier = useRealTier();
   const [open, setOpen] = useState(false);
   const [viewAs, setViewAsState] = useState<ViewAs | null>(null);
   const [personas, setPersonas] = useState<Persona[] | null>(null);
+  const [openOrg, setOpenOrg] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -134,22 +147,51 @@ export function DevSwitcher() {
               <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1">
                 Personas (blue view, read-only)
               </p>
-              {personas.map((p) => (
-                <button
-                  key={p.userId}
-                  className={item}
-                  disabled={starting !== null}
-                  onClick={() => startViewImpersonation(p.userId)}
-                >
-                  {p.name || p.email}
-                  {starting === p.userId && (
-                    <span className="ml-2 text-[10px] text-t-phos-dim">starting...</span>
-                  )}
-                  <span className="block text-[11px] text-[#7da4c4]">
-                    {p.role === "org_admin" ? "Org leader" : "Staff"} -- {p.orgName}
-                  </span>
-                </button>
-              ))}
+              {/* Grouped by org, one org open at a time. A flat list of every
+                  staff member across every partner is unreadable on a screen
+                  someone else is watching -- pick the org, then the person. */}
+              {groupByOrg(personas).map(([orgName, people]) => {
+                const isOpen = openOrg === orgName;
+                return (
+                  <div key={orgName}>
+                    <button
+                      className={item}
+                      onClick={() => setOpenOrg(isOpen ? null : orgName)}
+                      aria-expanded={isOpen}
+                    >
+                      <span className="flex items-center justify-between">
+                        <span className="truncate">{orgName}</span>
+                        <span aria-hidden="true" className="ml-2 text-[9px] text-t-phos-dim">
+                          {isOpen ? "▲" : "▼"}
+                        </span>
+                      </span>
+                      <span className="block text-[11px] text-t-phos-dim">
+                        {people.length} {people.length === 1 ? "person" : "people"}
+                      </span>
+                    </button>
+                    {isOpen &&
+                      people.map((p) => (
+                        <button
+                          key={p.userId}
+                          className={`${item} pl-6`}
+                          disabled={starting !== null}
+                          onClick={() => startViewImpersonation(p.userId)}
+                        >
+                          {p.name || p.email}
+                          {starting === p.userId && (
+                            <span className="ml-2 text-[10px] text-t-phos-dim">
+                              starting...
+                            </span>
+                          )}
+                          <span className="block text-[11px] text-[#7da4c4]">
+                            {p.role === "org_admin" ? "Org leader" : "Staff"}
+                            {p.title ? ` -- ${p.title}` : ""}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                );
+              })}
             </>
           )}
 
