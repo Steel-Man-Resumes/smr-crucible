@@ -31,7 +31,25 @@ import crypto from "crypto";
 // 11.5-14.2s -- which, plus enrichment, is what blew the 30s cap in QA. We fetch
 // one page now (see fetchJSearchJobs) and cap at 12s: covers a 2x slowdown with
 // wide headroom, well under the route budget.
-const JSEARCH_TIMEOUT_MS = 12000;
+// Per-ATTEMPT cap, not per-search. A single 12s attempt consumed the entire
+// provider budget, so one stalled call ended the search with an empty board.
+// Cutting a slow attempt early and retrying beats waiting: measured recoveries
+// land in 3-4s, while stalls run past 25s with nothing at the end of them.
+// 7s sits above most healthy responses (observed 1.9-8.6s, median ~6s) and still
+// leaves a full second attempt inside the ladder budget below.
+const JSEARCH_ATTEMPT_TIMEOUT_MS = 7000;
+// Whole-ladder cap. Must leave room for everything that runs AFTER a successful
+// ladder: AI enrichment (10s) plus the bounded cache write and decision log (3s
+// each). The route now allows 60s (it was capped at 30 by its own export, not by
+// the platform -- sibling routes here already run at 60/90/120), so the ladder
+// gets 24s: three full attempts plus margin, and the worst successful path lands
+// near 40s with 20s to spare.
+//
+// Sized from measurement, not guesswork (2026-09-19, 15 live searches): at a 13s
+// budget a stalled first attempt left only 6s for the retry, and two recoveries
+// were cut at 5,999ms -- the same query succeeded in 3,310ms on another round.
+// The budget, not the provider, was losing those searches.
+const JSEARCH_TOTAL_BUDGET_MS = 24000;
 const CAREERONESTOP_TIMEOUT_MS = 7000;
 const AI_ENRICH_TIMEOUT_MS = 10000;
 
@@ -216,21 +234,79 @@ export async function findCachedJob(jobId: string): Promise<EnrichedJob | null> 
 
 // ─── JSearch API ────────────────────────────────────────────────────────────
 
-// Distinguishes "provider failed" (quota, outage, missing key) from a genuine
-// zero-result search, so failures can be surfaced to the user instead of
-// silently rendering as "no jobs found".
-async function fetchJSearchJobs(
-  role: string,
-  location: string,
-  radiusMiles: number
-): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number }> {
-  const apiKey = process.env.JSEARCH_API_KEY;
-  if (!apiKey) {
-    console.error("JSEARCH_API_KEY not set");
-    return { jobs: [], failed: true };
-  }
+// US state abbreviation -> full name. JSearch's upstream is sensitive to how a
+// location is phrased: some `<city>, <ST>` strings stall indefinitely while the
+// same place spelled out returns in seconds (see ATTEMPT LADDER below).
+const US_STATE_NAMES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
+  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma",
+  OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin",
+  WY: "Wyoming", DC: "District of Columbia",
+};
 
-  const query = `${role} in ${location}`;
+/** "Deer Lodge, MT" -> "Deer Lodge, Montana". Unchanged if no trailing state code. */
+function spellOutState(location: string): string {
+  return location.replace(
+    /,\s*([A-Za-z]{2})\s*$/,
+    (whole, code: string) => {
+      const full = US_STATE_NAMES[code.toUpperCase()];
+      return full ? `, ${full}` : whole;
+    }
+  );
+}
+
+interface JSearchAttempt {
+  query: string;
+  radius: number;
+}
+
+/**
+ * Ordered attempts for one logical search.
+ *
+ * WHY THIS EXISTS (verified against the live API, 2026-09-19):
+ *   "welder in Deer Lodge, MT"      -> stalls past 25s, 3 of 3 attempts
+ *   "welder in Deer Lodge, Montana" -> 4.1s, returns listings
+ *   "welder Deer Lodge MT"          -> 6.2s, returns listings
+ *   "welder in Butte, MT"           -> 8.6s, returns listings
+ * The pathology is specific to a query string, not to the provider being down,
+ * so a single attempt is a coin flip on wording the caller does not control.
+ * Deer Lodge is Montana State Prison / MCE -- the likeliest search a Montana
+ * corrections audience would name -- which is how this surfaced.
+ *
+ * Radius also escalates: a 25-mile ring is a metro default and returns almost
+ * nothing in rural counties (Libby, MT: 1 listing at 25mi, 10 at 150mi).
+ * Widening can cross a state line; results carry their own city/state, so an
+ * out-of-state listing is visibly labeled rather than silently blended in.
+ */
+function buildJSearchAttempts(role: string, location: string, radiusMiles: number): JSearchAttempt[] {
+  const spelled = spellOutState(location);
+  const wide = Math.max(radiusMiles, 100);
+  const attempts: JSearchAttempt[] = [
+    { query: `${role} in ${location}`, radius: radiusMiles },
+  ];
+  if (spelled !== location) {
+    attempts.push({ query: `${role} in ${spelled}`, radius: radiusMiles });
+  }
+  attempts.push({ query: `${role} ${location}`, radius: wide });
+  if (spelled !== location) {
+    attempts.push({ query: `${role} in ${spelled}`, radius: wide });
+  }
+  return attempts;
+}
+
+async function fetchJSearchOnce(
+  apiKey: string,
+  attempt: JSearchAttempt,
+  timeoutMs: number
+): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number }> {
   // JSearch retired /search (404 as of 2026-08); /search-v2 returns the same
   // job objects wrapped in { data: { jobs, cursor } }.
   // num_pages=1 (10 listings, ~6s) instead of 2 (20 listings, ~12-14s): the
@@ -238,11 +314,11 @@ async function fetchJSearchJobs(
   // latency that pushed the request past the route cap. One page keeps the board
   // fast and reliable; fair-chance-first sorting still applies.
   const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
-  url.searchParams.set("query", query);
+  url.searchParams.set("query", attempt.query);
   url.searchParams.set("page", "1");
   url.searchParams.set("num_pages", "1");
   url.searchParams.set("date_posted", "month");
-  url.searchParams.set("radius", String(radiusMiles));
+  url.searchParams.set("radius", String(attempt.radius));
 
   try {
     const res = await fetchJsonWithTimeout(
@@ -253,7 +329,7 @@ async function fetchJSearchJobs(
           "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
         },
       },
-      JSEARCH_TIMEOUT_MS
+      timeoutMs
     );
 
     if (!res.ok) {
@@ -272,6 +348,59 @@ async function fetchJSearchJobs(
   }
 }
 
+// Distinguishes "provider failed" (quota, outage, missing key) from a genuine
+// zero-result search, so failures can be surfaced to the user instead of
+// silently rendering as "no jobs found".
+//
+// Walks the attempt ladder, stopping at the first attempt that returns listings.
+// A 429 stops the ladder immediately: retrying a rate limit only deepens it.
+// The whole ladder is bounded by JSEARCH_TOTAL_BUDGET_MS so a chain of stalls
+// still leaves room for enrichment inside the 30s route cap.
+async function fetchJSearchJobs(
+  role: string,
+  location: string,
+  radiusMiles: number
+): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number; attemptsUsed: number }> {
+  const apiKey = process.env.JSEARCH_API_KEY;
+  if (!apiKey) {
+    console.error("JSEARCH_API_KEY not set");
+    return { jobs: [], failed: true, attemptsUsed: 0 };
+  }
+
+  const attempts = buildJSearchAttempts(role, location, radiusMiles);
+  const startedAt = Date.now();
+  let lastFailure: { failed: boolean; status?: number } = { failed: true };
+  let attemptsUsed = 0;
+
+  for (const attempt of attempts) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = JSEARCH_TOTAL_BUDGET_MS - elapsed;
+    // Need room for a meaningful try; otherwise stop and report honestly.
+    if (remaining < 2000) break;
+
+    attemptsUsed++;
+    const res = await fetchJSearchOnce(
+      apiKey,
+      attempt,
+      Math.min(JSEARCH_ATTEMPT_TIMEOUT_MS, remaining)
+    );
+
+    if (res.jobs.length > 0) {
+      if (attemptsUsed > 1) {
+        console.warn(
+          `[job-search] recovered on attempt ${attemptsUsed}: "${attempt.query}" r=${attempt.radius}`
+        );
+      }
+      return { ...res, attemptsUsed };
+    }
+    if (res.status === 429) return { ...res, attemptsUsed };
+    if (res.failed) lastFailure = { failed: true, status: res.status };
+    else lastFailure = { failed: false };
+  }
+
+  return { jobs: [], ...lastFailure, attemptsUsed };
+}
+
 // ─── AI Enrichment ──────────────────────────────────────────────────────────
 //
 // Fair-chance flags come from ONE source of truth: exact-name matches against the
@@ -284,9 +413,20 @@ async function fetchJSearchJobs(
 // ─── CareerOneStop (DOL) Fallback ───────────────────────────────────────────
 // Free, official job source used when JSearch returns zero. Env-gated and
 // fail-safe (returns [] on any error, so the board degrades to "no results").
-// Mapping follows the documented COS jobsearch response shape (Jobs[]). NOTE:
-// live creds returned 401 at build time (2026-06-07) -- verify the field mapping
-// with a real successful call once the User ID/token are active.
+// Mapping follows the documented COS jobsearch response shape (Jobs[]).
+//
+// STATUS 2026-09-19 -- NOT A WORKING FALLBACK. VERIFIED, NOT ASSUMED.
+// The credentials are valid: the SAME userId + Bearer token returns 200 OK with
+// real data on /v1/occupation. Only /v1/jobsearch returns 401, and it does so for
+// every auth-header and location variant tried (raw token, lowercase bearer, no
+// content-type, city, state code, ZIP). A deliberately bogus userId returns the
+// identical 401, so 401 is this API's generic rejection, not a credential error.
+// Conclusion: the account is not entitled to the jobsearch endpoint, which serves
+// National Labor Exchange data behind a separate access request. No code change
+// fixes this -- it needs an access grant from CareerOneStop.
+// Until that lands: this returns [] and JSearch has no secondary source, so do
+// NOT describe a working DOL fallback in any claim, packet, or demo.
+// The response-shape mapping below is still UNVERIFIED against a real 200.
 
 interface CareerOneStopJob {
   JvId?: string;
@@ -300,7 +440,8 @@ interface CareerOneStopJob {
 async function fetchCareerOneStopJobs(
   keyword: string,
   location: string,
-  verified: Set<string>
+  verified: Set<string>,
+  radiusMiles: number
 ): Promise<EnrichedJob[]> {
   const uid = process.env.CAREERONESTOP_USER_ID;
   const tok = process.env.CAREERONESTOP_TOKEN;
@@ -309,7 +450,9 @@ async function fetchCareerOneStopJobs(
   const kw = encodeURIComponent(keyword || "jobs");
   const loc = encodeURIComponent(location || "United States");
   // v1/jobsearch/{userId}/{keyword}/{location}/{radius}/{sort}/{order}/{start}/{pageSize}/{days}
-  const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/25/0/0/0/15/30`;
+  // Radius was hardcoded to 25 -- a metro default that returns almost nothing in
+  // rural counties. It now follows the same ring the primary provider used.
+  const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/${radiusMiles}/0/0/0/15/30`;
 
   try {
     const res = await fetchJsonWithTimeout(
@@ -414,13 +557,19 @@ Return JSON:
       "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level."
     }
   ],
-  "fair_chance_info": "1-2 sentences about fair-chance hiring laws in ${sanitizeForPrompt(context.location)}. Mention Wisconsin's ban-the-box law if applicable."
+  "fair_chance_info": "1-2 sentences of practical encouragement for applying with a record in ${sanitizeForPrompt(context.location)}."
 }
 
 RULES:
 - Only rewrite the description into plain language. Do NOT judge which employers are fair-chance -- that is decided elsewhere.
 - Keep descriptions simple and actionable
 - 6th grade reading level
+- fair_chance_info is PRACTICAL guidance only. Do NOT name, cite, paraphrase, or
+  characterize any statute, ordinance, ban-the-box law, or legal protection, and
+  do NOT state what any jurisdiction requires of employers. The platform does not
+  give legal advice, and a wrong or out-of-jurisdiction legal claim is worse than
+  no claim. (This previously hardcoded a prompt to mention Wisconsin's law, which
+  followed the search into every other state.)
 - JSON only, no markdown`;
 
     let text: string;
@@ -586,7 +735,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     const cosJobs = await fetchCareerOneStopJobs(
       sanitizeForPrompt(role) || "jobs",
       searchLocation,
-      verified
+      verified,
+      tenantGeo.searchRadiusMiles
     );
     if (cosJobs.length > 0) {
       cosJobs.sort((a, b) =>
