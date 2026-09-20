@@ -124,10 +124,14 @@ const ORG_ADMIN_NAV: OrgNavItem[] = [
   { href: "/dashboard", label: "Organization overview" },
   { href: "/dashboard#team", label: "Team & seats" },
   { href: "/dashboard#add", label: "Add participants" },
+  // The person who has to answer for this internally should not have to ask
+  // us for it, or find it in a PDF attached to an email six months ago.
+  { href: "/dashboard/org-security", label: "Security & privacy" },
 ];
 const ORG_STAFF_NAV: OrgNavItem[] = [
   { href: "/dashboard", label: "My clients" },
   { href: "/dashboard#add", label: "Add participants" },
+  { href: "/dashboard/org-security", label: "Security & privacy" },
 ];
 
 // Personal, account-scoped data cached in localStorage. Cleared on sign-out so

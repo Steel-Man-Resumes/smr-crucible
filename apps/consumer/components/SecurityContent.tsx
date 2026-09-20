@@ -271,7 +271,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Two-factor: TOTP with an encrypted secret and bcrypt-hashed one-time backup codes</p>
           <p>Sessions: tracked per device with self-service revocation; new-device sign-ins alert the account owner</p>
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
-          <p>AI: Anthropic Claude (SOC 2 compliant) — no training on user data</p>
+          <p>AI -- writing and coaching: Anthropic Claude. No training on user data.</p>
+          <p>AI -- fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume text and our draft both pass through OpenAI on that check. No training on user data.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
