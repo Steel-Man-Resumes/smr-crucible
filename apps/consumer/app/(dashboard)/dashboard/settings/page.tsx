@@ -23,6 +23,7 @@ import { AvatarSettingsSection } from "@/components/AvatarSettingsSection";
 import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
+import { useEffectiveRole } from "@/components/RoleProvider";
 
 interface UsageData {
   used: number;
@@ -39,6 +40,7 @@ interface RedeemedCode {
 
 export default function SettingsPage() {
   const realTier = useRealTier();
+  const effectiveRole = useEffectiveRole();
   const isAdmin = realTier === "admin";
   const [testMode, setTestMode] = useState(false);
   // Phase 7.4: delete is now two distinct actions -- "data" keeps the login,
@@ -304,6 +306,11 @@ export default function SettingsPage() {
     window.location.href = "/login";
   }
 
+  // Org staff are not job seekers. Their settings should not describe resumes
+  // they do not have, or offer to erase "your plans and history" when what the
+  // account actually holds is other people's caseload assignments.
+  const isOrgStaff = !!effectiveRole?.orgRole;
+
   const SECTIONS: { id: string; label: string }[] = [
     { id: "account", label: "Account" },
     { id: "coach", label: "Coach & AI" },
@@ -531,9 +538,9 @@ export default function SettingsPage() {
               Steel Man Resumes
             </h3>
             <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
-              Built by people who believe your past doesn&apos;t define your
-              paycheck. The Forge and Refinery are tools designed to help you take
-              the next step on your own terms.
+              {isOrgStaff
+                ? "Built by people who believe a past doesn't define a paycheck. You use it to support the people you work with; they use it to take the next step on their own terms."
+                : "Built by people who believe your past doesn't define your paycheck. The Forge and Refinery are tools designed to help you take the next step on your own terms."}
             </p>
             <p className="text-xs text-t-phos-dim">
               All AI-powered features are designed with transparency, consent, and
@@ -589,6 +596,9 @@ function DataSection({
   deleteAllData: (mode: "data" | "account") => void;
   deleting: boolean;
 }) {
+  // Read the role here rather than threading a prop through several layers.
+  const dataSectionRole = useEffectiveRole();
+  const isOrgStaff = !!dataSectionRole?.orgRole;
   const EXPORT_CATS: { key: keyof ExportCats; label: string }[] = [
     { key: "resumes", label: "Resumes and Forge results" },
     { key: "applications", label: "Job applications" },
@@ -702,8 +712,9 @@ function DataSection({
                 Delete my data
               </h3>
               <p className="text-sm text-t-phos-dim mt-1">
-                Erase your resumes, plans, and history. Your login stays, so you
-                can sign back in to a fresh, empty account. This cannot be undone.
+                {isOrgStaff
+                  ? "Erase anything stored on YOUR account. This does not touch your organization, your team, or any participant's records -- only what belongs to you. Your login stays. This cannot be undone."
+                  : "Erase your resumes, plans, and history. Your login stays, so you can sign back in to a fresh, empty account. This cannot be undone."}
               </p>
             </div>
             {deleteMode !== "data" ? (

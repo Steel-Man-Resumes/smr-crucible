@@ -116,6 +116,51 @@ export async function POST(request: Request) {
     userId && !isDisclosureRehearsal && enhancedConsent
       ? await buildMemorySection(userId)
       : "";
+  // ORG STAFF GET A DIFFERENT ASSISTANT, and we resolve that here rather than
+  // trusting whatever the client sent. A case manager asking t.ROY for help is
+  // asking about their caseload, not their career -- and the reach we attach
+  // is the same one the console enforces, so he cannot describe somebody this
+  // person is not allowed to see.
+  if (userId) {
+    try {
+      const { resolveOrgActor, getPartnerCohort, summarizeStaffPerformance } =
+        await import("@crucible/core");
+      const actor = await resolveOrgActor(userId);
+      if (actor && actor.reach !== "none") {
+        const cohort = await getPartnerCohort(userId, {
+          accessCodeId: actor.orgId,
+          assignedToStaffId: actor.reach === "assigned" ? userId : undefined,
+        });
+        const rollup = summarizeStaffPerformance(cohort.clients);
+        const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
+        context.audience = "org_staff";
+        context.org = {
+          orgName: actor.orgName,
+          role: actor.role,
+          reach: actor.reach,
+          caseload: cohort.clients.length,
+          stalled: rollup.reduce((n, r) => n + r.stalled, 0),
+          neverStarted: rollup.reduce((n, r) => n + r.neverStarted, 0),
+          hired: cohort.summary.hired,
+          unassigned: cohort.clients.filter((c) => !c.assignedStaffId).length,
+          // First names only. Enough to be specific, never a data dump into a
+          // model context that then gets summarized back out.
+          needsAttention: cohort.clients
+            .filter((c) => {
+              const last = c.lastActiveAt ? new Date(c.lastActiveAt).getTime() : 0;
+              return !last || Date.now() - last > 14 * 86_400_000;
+            })
+            .slice(0, 5)
+            .map((c) => firstName(c.name)),
+        };
+      }
+    } catch (err) {
+      // Never block a conversation on this. Without it t.ROY is merely less
+      // useful; a thrown error would make him unavailable.
+      console.error("org assistant context failed (non-fatal):", err);
+    }
+  }
+
   const baseSystemPrompt =
     buildSystemPrompt(context) +
     skillsContext +

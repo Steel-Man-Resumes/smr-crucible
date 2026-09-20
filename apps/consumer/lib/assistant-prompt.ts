@@ -28,6 +28,28 @@ import {
   buildWhatsNewSection,
 } from "@crucible/core";
 
+/**
+ * What t.ROY needs to be useful to somebody running a caseload.
+ *
+ * Without this he is a career coach talking to a case manager -- offering to
+ * help with a resume header to a person whose job is other people's resumes.
+ * A staff member's questions are operational: who needs me today, write this
+ * up, draft that email, pull me the numbers for a board report.
+ */
+export interface OrgAssistantContext {
+  orgName: string;
+  role: "owner" | "org_admin" | "staff";
+  /** How much of the cohort they can see. Never show them more than this. */
+  reach: "all" | "assigned" | "none";
+  caseload: number;
+  stalled: number;
+  neverStarted: number;
+  hired: number;
+  unassigned: number;
+  /** First names only -- enough to be specific, never a data dump. */
+  needsAttention?: string[];
+}
+
 export interface AssistantContext {
   /** Current page the user is on */
   currentPage: string;
@@ -40,7 +62,9 @@ export interface AssistantContext {
   /** Barriers disclosed (if any) */
   barriers?: string[];
   /** User audience type */
-  audience?: "client" | "partner" | "observer";
+  audience?: "client" | "partner" | "observer" | "org_staff";
+  /** For org_staff: their role and live caseload, so t.ROY can do the job. */
+  org?: OrgAssistantContext;
   /** Interaction mode */
   mode?: "intro" | "guide" | "chat";
   /** Whether the user is in demo mode (partner/observer walkthrough) */
@@ -65,6 +89,38 @@ export interface AssistantContext {
   forgeComplete?: boolean;
   /** Full user journey context from /api/user/context */
   userFullContext?: UserFullContext | null;
+}
+
+/**
+ * The org-staff directive.
+ *
+ * SCOPE DISCIPLINE FIRST. This person can see other people's case files, so
+ * the prompt states the boundary before it states the capability: never name
+ * somebody outside their reach, never invent a participant, never guess at a
+ * number. A case manager who is handed a confident wrong figure will put it in
+ * a report that goes to a funder.
+ */
+function buildOrgDirective(org: OrgAssistantContext): string {
+  const attention = org.needsAttention?.length
+    ? `\nNEEDS ATTENTION RIGHT NOW: ${org.needsAttention.join(", ")}.`
+    : "";
+  return `
+AUDIENCE: ORGANIZATION STAFF. This is ${org.role === "staff" ? "a case manager" : "an organization leader"} at ${org.orgName}, at work. They are NOT a job seeker and they do not have a resume with you. Never offer to build, tailor or review THEIR resume, never ask about THEIR career goals, and never route them into the participant journey. If they need the participant tools, they switch to client view deliberately -- that is their choice to make, not yours to suggest.
+
+THEIR CASELOAD, as of this moment: ${org.caseload} ${org.caseload === 1 ? "person" : "people"}${org.reach === "assigned" ? " assigned to them" : " across the organization"}. ${org.stalled} not active in two weeks, ${org.neverStarted} never started, ${org.hired} started work${org.unassigned ? `, ${org.unassigned} assigned to nobody` : ""}.${attention}
+
+WHAT THEY ACTUALLY NEED FROM YOU. Their questions are operational, not
+motivational:
+- "Who needs me today?" -- triage the caseload and say who and why, shortest path first.
+- "Write up my contact with someone" -- a case note in plain professional language, from what they tell you. Their words, tightened.
+- "Draft an email" -- to a participant, an employer, a referral partner, a funder. Short, specific, sends as written.
+- "Pull me the numbers" -- counts, outcomes, activity, for a board packet, a grant report, or a supervisor.
+- "What should I say to this person" -- concrete coaching language THEY can use with a participant, not coaching aimed at them.
+- Program questions: fair-chance employers, disclosure timing, what a tool in the product actually does.
+
+SCOPE, and it is not negotiable. They can see ${org.reach === "all" ? "everyone in their organization" : "only the participants assigned to them"}. NEVER name, describe or count a person outside that. NEVER invent a participant, a number, an outcome or a date -- if you were not given it, say you do not have it and tell them where in the product it lives. A case manager who repeats a confident wrong figure to a funder is a problem you caused.
+
+Write like a capable colleague, not a chatbot. Reports and emails come back ready to use. No preamble, no "here's a draft you might consider", no asking whether they would like you to proceed -- do the thing.`;
 }
 
 function buildAudienceDirective(audience?: string): string {
@@ -443,7 +499,7 @@ You speak from understanding, not theory. Your tone:
 - "Here's what I'd look at." not "I would recommend considering the following options."
 - You can be funny when it fits. Not forced. Not performative.
 
-${buildAudienceDirective(context.audience)}
+${context.org ? buildOrgDirective(context.org) : buildAudienceDirective(context.audience)}
 
 ${buildModeDirective(context.mode)}
 
