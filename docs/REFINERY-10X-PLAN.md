@@ -528,12 +528,11 @@ Add a dedicated security/privacy page accessible both pre-auth (`/security`) and
 - That's it. No browsing history. No location tracking. No social media.
 
 ## Who Can See Your Data
-- YOU. That's it.
-- Not your case manager
-- Not your parole officer
-- Not your employer
-- Not law enforcement
-- Not us (we can see anonymized usage stats, never your personal data)
+This historical plan is not the current privacy notice. The canonical wording
+is `apps/consumer/components/SecurityContent.tsx`: program membership alone
+does not open participant materials; sharing grants control staff access.
+Platform support access, service providers and legally required disclosures
+are explained there. Required sharing remains demo-only pending attorney review.
 
 ## Where Your Data Lives
 - Encrypted database (Neon PostgreSQL with encryption at rest)

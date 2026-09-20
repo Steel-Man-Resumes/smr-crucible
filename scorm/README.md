@@ -55,6 +55,10 @@ in `cmi.suspend_data`, but that copy only reaches Steel Man Resumes if an
 institutional export pipeline exists, and no such pipeline can be promised to
 anyone today.
 
+The institution controls access to its LMS copy under its own policies. The
+web app's sharing controls do not govern that copy or erase it. Explain this
+to participants before intake; do not promise the institution cannot see it.
+
 So the person carries it.
 
 Every fixed-choice answer in the intake is an index or a bitmask. Packed

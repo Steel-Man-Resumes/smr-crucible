@@ -1,6 +1,9 @@
 /**
  * Sanitize user input before interpolating into AI prompts.
- * Prevents prompt injection by escaping control sequences.
+ * NORMALIZES text before it is placed in a prompt: collapses whitespace and
+ * caps length. It does NOT prevent prompt injection -- an instruction needs no
+ * newline to influence a model -- and nothing should rely on it as a security
+ * boundary. Authority comes from what the server lets a tool do, not from this.
  */
 export function sanitizeForPrompt(
   input: string | undefined | null,
@@ -12,7 +15,7 @@ export function sanitizeForPrompt(
 ): string {
   if (!input) return "not specified";
   const collapsed = input
-    .replace(/\n/g, " ")           // Remove newlines (primary injection vector)
+    .replace(/\n/g, " ")           // Collapse newlines (tidiness, not a defense)
     .replace(/\r/g, " ")           // Remove carriage returns
     .replace(/\t/g, " ")           // Remove tabs
     .replace(/\s+/g, " ")          // Collapse whitespace

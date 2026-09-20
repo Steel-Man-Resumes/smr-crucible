@@ -196,7 +196,11 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
               profile.savedJobs.find((s) => s.id === j.id)?.resumeTailored ?? false,
           })),
           counts: {
-            savedJobs: jobs.length,
+            // The list above is the ten most recently touched, of EVERY status.
+            // Its length was being reported as "saved jobs": wrong twice over
+            // (capped at ten, and counting applied and interviewing rows).
+            savedJobs: profile.savedJobs.filter((j) => j.status === "saved").length,
+            recentlyTouchedShown: jobs.length,
             applicationsSubmitted: profile.applicationCount,
             interviewPracticeSessions: profile.interviewSessionCount,
           },
