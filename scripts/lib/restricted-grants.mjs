@@ -19,6 +19,9 @@ export const APP_ROLE = "smr_app";
 export const RESTRICTED_GRANTS = {
   org_audit: ["SELECT"],
   platform_admin: ["SELECT"],
+  // Membership is created by smr_redeem_code and never edited. DELETE stays:
+  // an org releasing its own pending invite's seat, under an org-scoped policy.
+  access_code_redemption: ["SELECT", "DELETE"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

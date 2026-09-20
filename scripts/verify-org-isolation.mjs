@@ -543,6 +543,10 @@ async function membershipChecks() {
     asA[1].length === 1 && asA[1][0].user_id === a, `saw ${asA[1].length}`);
   check("a person cannot delete their own membership with a bare DELETE (leaving goes through the function)", asA[2].length === 0);
 
+  const health = await core.getRlsHealth();
+  check("the runtime health check agrees: enforced, forced, unscoped reads empty, role cannot bypass",
+    health.ok && health.roleCanBypass === false && health.role === "smr_app", JSON.stringify(health.problems));
+
   const noScope = await raised(() => app`SELECT smr_invite_binding(${a}::uuid)`);
   check("the cross-org binding question refuses to answer outside an organization scope", !!noScope && /organization scope/.test(noScope), noScope ?? "answered");
 }
@@ -556,7 +560,7 @@ async function membershipChecks() {
 async function platformAdminChecks() {
   console.log("\n  -- platform admin --");
   const problems = await checkRestrictedGrants((q) => sql(q));
-  check("app role holds only SELECT on org_audit and platform_admin", problems.length === 0, problems.join("; "));
+  check("app role holds exactly the withheld grants on every restricted table", problems.length === 0, problems.join("; "));
 
   if (!appUrl) {
     console.log("  skip  app-role admin checks (no app credential; they would prove nothing)");
