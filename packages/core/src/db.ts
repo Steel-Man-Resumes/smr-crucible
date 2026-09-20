@@ -1,9 +1,32 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-function getClient() {
+/**
+ * EVERY DATABASE READ MUST REACH THE DATABASE.
+ *
+ * The Neon HTTP driver is `fetch` underneath, and Next.js patches `fetch` to
+ * cache responses -- POSTs with an identical body included -- in a data cache
+ * that on Vercel SURVIVES DEPLOYS. So an identical SQL statement with identical
+ * parameters, in a route Next did not consider dynamic, was answered from that
+ * cache rather than from Postgres.
+ *
+ * Found 2026-09-20: /api/health/rls reported a table's row-level security as
+ * OFF minutes after it was turned on, returned the database's `now()` frozen
+ * to the microsecond across calls, and kept doing so across a new deployment.
+ * `export const dynamic = "force-dynamic"` on the route did not prevent it.
+ * Routes that call auth() were opted out as a side effect of reading cookies;
+ * a route that does not was free to serve a stale answer indefinitely. For a
+ * security check, a stale "fine" is the worst possible failure.
+ */
+const NEON_OPTIONS = { fetchOptions: { cache: "no-store" as const } };
+
+function connect() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  return neon(url);
+  return neon(url, NEON_OPTIONS);
+}
+
+function getClient() {
+  return connect();
 }
 
 export async function query<T = Record<string, unknown>>(
@@ -78,9 +101,7 @@ export async function runAsUser<T = unknown[]>(
   userId: string,
   build: (sql: NeonQueryFunction<false, false>) => unknown[]
 ): Promise<T> {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  const client = neon(url);
+  const client = connect();
   const setup = [client`SELECT set_config('app.user_id', ${userId}, true)`];
   const results = await client.transaction([...setup, ...build(client)] as never);
   return (results as unknown[]).slice(setup.length) as T;
@@ -120,9 +141,7 @@ export async function runScoped<T = unknown[]>(
   scope: OrgScope,
   build: (sql: NeonQueryFunction<false, false>) => unknown[]
 ): Promise<T> {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  const client = neon(url);
+  const client = connect();
 
   const setup = [
     client`SELECT set_config('app.org_id', ${scope.orgId}, true)`,
@@ -159,9 +178,7 @@ export async function runPerOrg<T = Record<string, unknown>>(
 ): Promise<Map<string, T[]>> {
   const out = new Map<string, T[]>();
   if (orgIds.length === 0) return out;
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  const client = neon(url);
+  const client = connect();
   const run = client as unknown as (s: string, p?: unknown[]) => unknown;
 
   const statements: unknown[] = [

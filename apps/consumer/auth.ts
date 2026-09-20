@@ -11,7 +11,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // Edge-safe HTTP query (works in the middleware `authorized` callback) for the
 // per-request session-revocation check. Fail-open on any error so a DB blip can
 // never lock everyone out.
-const sqlEdge = neon(process.env.DATABASE_URL!);
+// no-store: this is the session-revocation check. Next patches fetch and can
+// cache an identical query; a cached "session is valid" would outlive a revoke.
+const sqlEdge = neon(process.env.DATABASE_URL!, { fetchOptions: { cache: "no-store" } });
 async function isSessionRevoked(jti: string): Promise<boolean> {
   try {
     const rows = await sqlEdge`SELECT 1 FROM user_session WHERE jti = ${jti} AND revoked_at IS NOT NULL LIMIT 1`;
