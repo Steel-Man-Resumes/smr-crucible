@@ -74,8 +74,37 @@ function excused(src, idx, table) {
   return new RegExp(`rls-lint-ok\\(${table}\\):\\s*\\S.{10,}`).test(above);
 }
 
+/**
+ * `import { query as dbQuery, getOne as one } from "@crucible/core"` -- an
+ * alias is still the unscoped helper. The applications route did exactly this
+ * and the first version of this linter walked straight past it.
+ */
+function aliasPattern(src) {
+  const names = [];
+  for (const imp of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/g)) {
+    for (const part of imp[1].split(",")) {
+      const a = part.trim().match(/^(query|getOne|insert)\s+as\s+(\w+)$/);
+      if (a) names.push(a[2]);
+    }
+  }
+  // ...and the destructured form: const { query: dbQuery } = await import("@crucible/core")
+  for (const d of src.matchAll(/\{([^{}]*)\}\s*=\s*await\s+import\(/g)) {
+    for (const part of d[1].split(",")) {
+      const a = part.trim().match(/^(query|getOne|insert)\s*:\s*(\w+)$/);
+      if (a) names.push(a[2]);
+    }
+  }
+  return names.length ? new RegExp(`(?<![\\w.])(${names.join("|")})\\s*(<[^>(]*>)?\\s*\\(`, "g") : null;
+}
+
 export function lintSource(file, src) {
   const problems = [];
+  const alias = aliasPattern(src);
+  for (const re of alias ? [UNSCOPED, alias] : [UNSCOPED]) lintWith(re, file, src, problems);
+  return problems;
+}
+
+function lintWith(UNSCOPED, file, src, problems) {
   let m;
   UNSCOPED.lastIndex = 0;
   while ((m = UNSCOPED.exec(src))) {
@@ -85,10 +114,9 @@ export function lintSource(file, src) {
       if (!new RegExp(`\\b${table}\\b`).test(text)) continue;
       if (excused(src, m.index, table)) continue;
       const line = src.slice(0, m.index).split("\n").length;
-      problems.push({ file, line, table, helper: m[0].replace(/\s*[(`]$/, "") });
+      problems.push({ file, line, table, helper: m[0].replace(/\s+/g, " ").replace(/\s*[(`]$/, "") });
     }
   }
-  return problems;
 }
 
 function selfTest() {
@@ -104,6 +132,8 @@ function selfTest() {
     ["excused with a reason", "async function a(){\n  // rls-lint-ok(org_staff): runs as the owner inside a migration helper\n  await query(`SELECT 1 FROM org_staff`) }", 0],
     ["excuse without a reason does not count", "async function a(){\n  // rls-lint-ok(org_staff):\n  await query(`SELECT 1 FROM org_staff`) }", 1],
     ["excuse for the wrong table does not count", "async function a(){\n  // rls-lint-ok(org_audit): some long enough reason here\n  await query(`SELECT 1 FROM org_staff`) }", 1],
+    ["aliased import", "import { query as dbQuery } from '@crucible/core';\nasync function a(){ await dbQuery(`SELECT 1 FROM org_staff`) }", 1],
+    ["destructured alias from a dynamic import", "async function a(){ const { query: dbQuery } = await import('@crucible/core');\n await dbQuery(`UPDATE org_staff SET x=1`) }", 1],
     ["comment nearby is fine", "// org_staff is protected\nasync function a(){ await query(`SELECT 1 FROM users`) }", 0],
   ];
   let bad = 0;

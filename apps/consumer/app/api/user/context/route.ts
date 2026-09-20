@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { getUserProfile, getOne, query } from "@crucible/core";
+import { getUserProfile, queryAsUser, getOneAsUser } from "@crucible/core";
 
 export const revalidate = 0; // always fresh -- context freshness matters
 
@@ -28,22 +28,22 @@ export async function GET() {
   }
 
   // Full forge output for rich narrative, strengths, career paths
-  const cp = await getOne<{
+  const cp = await getOneAsUser<{
     forge_output: Record<string, any> | null;
     profile_data: Record<string, any> | null;
-  }>(
+  }>(userId, 
     `SELECT forge_output, profile_data FROM consumer_profile WHERE user_id = $1`,
     [userId]
   );
   const fo = cp?.forge_output ?? null;
 
   // Last 5 resumes
-  const resumeRows = await query<{
+  const resumeRows = await queryAsUser<{
     id: string;
     target_context: Record<string, any>;
     content: Record<string, any>;
     created_at: string;
-  }>(
+  }>(userId, 
     `SELECT id, target_context, content, created_at
      FROM refinery_artifact
      WHERE user_id = $1 AND artifact_type = 'resume'
@@ -52,11 +52,11 @@ export async function GET() {
   );
 
   // Most recent disclosure plan
-  const disclosureRow = await getOne<{
+  const disclosureRow = await getOneAsUser<{
     target_context: Record<string, any>;
     content: Record<string, any>;
     created_at: string;
-  }>(
+  }>(userId, 
     `SELECT target_context, content, created_at
      FROM refinery_artifact
      WHERE user_id = $1 AND artifact_type = 'disclosure_plan'

@@ -156,7 +156,7 @@ export async function buildJourneySnapshot(userId: string): Promise<JourneySnaps
     // job-targeted resume artifact unlocks even without a surviving saved-job
     // link (source === "job", or a targetJob on a non-forge artifact). Without
     // this OR, users who unlocked under the old client rule would relock.
-    query<{ id: string }>(
+    queryAsUser<{ id: string }>(userId, 
       `SELECT id FROM refinery_artifact
        WHERE user_id = $1 AND artifact_type = 'resume'
          AND (

@@ -67,7 +67,7 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
               COUNT(DISTINCT ja.user_id) FILTER (WHERE ja.status IN ('interviewing','heard_back'))::int AS interviewing,
               COUNT(DISTINCT ja.user_id) FILTER (WHERE ja.status = 'offered')::int AS offered,
               COUNT(DISTINCT ja.user_id) FILTER (WHERE ja.status IN ('hired','started_work'))::int AS hired
-         FROM sharers s LEFT JOIN job_application ja ON ja.user_id = s.user_id`, [actor.orgId]),
+         FROM sharers s LEFT JOIN staff_shared_application ja ON ja.user_id = s.user_id`, [actor.orgId]),
     run(sql)(`SELECT to_char(date_trunc('week', redeemed_at), 'YYYY-MM-DD') AS week_of, COUNT(*)::int AS joined
                 FROM access_code_redemption WHERE access_code_id = $1::uuid AND redeemed_at > now() - interval '12 weeks'
                GROUP BY 1 ORDER BY 1`, [actor.orgId]),

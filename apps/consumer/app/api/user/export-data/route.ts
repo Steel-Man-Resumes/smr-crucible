@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       aiUsageTotals,
       aiUsageByEndpoint,
     ] = await Promise.all([
-      query(
+      queryAsUser(userId, 
         `SELECT readiness_stage, profile_data, narrative_data, preferences,
                 skills, career_paths, forge_output, created_at, updated_at
            FROM consumer_profile
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
           ORDER BY started_at DESC`,
         [userId]
       ),
-      query(
+      queryAsUser(userId, 
         `SELECT id, artifact_type, target_context, content, iteration_number,
                 scaffold_level, created_at, updated_at
            FROM refinery_artifact
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
           ORDER BY created_at DESC`,
         [userId]
       ),
-      query(
+      queryAsUser(userId, 
         `SELECT id, job_title, company, location, salary, description,
                 employment_type, source, status, status_updated_at, notes,
                 applied_at, follow_up_at, created_at, updated_at
@@ -271,7 +271,11 @@ export async function POST(req: Request) {
     // and their org membership. SELECT * (their own rows) avoids column drift.
     if (want("decisions")) {
       payload.decisions = await query(
-        `SELECT * FROM decision_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 2000`,
+        // decision_log's time column is `ts`. This said `created_at`, which does not
+        // exist, so the WHOLE export failed for everyone ("Failed to export data"):
+        // a data-rights route that had quietly stopped working. Found 2026-09-20 by
+        // running the export end to end while testing row-level security.
+        `SELECT * FROM decision_log WHERE user_id = $1 ORDER BY ts DESC LIMIT 2000`,
         [userId]
       );
     }

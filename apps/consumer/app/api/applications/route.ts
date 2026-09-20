@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { query } = await import("@crucible/core");
+    const { queryAsUser } = await import("@crucible/core");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -44,7 +44,10 @@ export async function GET(request: Request) {
 
     sql += ` ORDER BY status_updated_at DESC`;
 
-    const rows = await query(sql, params);
+    // job_application is row-level protected (owner only). This SQL is built in
+    // a variable, which the protected-table lint cannot see into, so it is
+    // marked here by hand: read AS the person or the list comes back empty.
+    const rows = await queryAsUser(session.user.id, sql, params);
     return NextResponse.json({ applications: rows });
   } catch (error) {
     console.error("Applications GET error:", error);
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { query: dbQuery, insert, getOne, invalidateNextStep, recordStatusEvent, buildJdSnapshot } = await import("@crucible/core");
+    const { queryAsUser, insertAsUser, getOneAsUser, invalidateNextStep, recordStatusEvent, buildJdSnapshot } = await import("@crucible/core");
 
     // Update existing application
     if (body.id && body.status) {
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const existing = await getOne<{ id: string; status: string }>(
+      const existing = await getOneAsUser<{ id: string; status: string }>(session.user.id, 
         `SELECT id, status FROM job_application WHERE id = $1 AND user_id = $2`,
         [body.id, session.user.id]
       );
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
       params.push(body.id);
       params.push(session.user.id);
 
-      const rows = await dbQuery(
+      const rows = await queryAsUser(session.user.id, 
         `UPDATE job_application SET ${sets.join(", ")} WHERE id = $${paramIdx} AND user_id = $${paramIdx + 1} RETURNING *`,
         params
       );
@@ -169,7 +172,7 @@ export async function POST(request: Request) {
         typeof jdSnapshot.jd_full_text === "string" ? jdSnapshot.jd_full_text.length : 0;
       if (newLen === 0) return;
       try {
-        await dbQuery(
+        await queryAsUser(session.user.id, 
           `UPDATE job_application
              SET jd_full_text = $2, jd_excerpt = $3, jd_source_url = COALESCE($4, jd_source_url),
                  jd_source_provider = COALESCE($5, jd_source_provider), jd_fetched_at = COALESCE($6, jd_fetched_at),
@@ -190,7 +193,7 @@ export async function POST(request: Request) {
 
     // Dedup: same source_id already saved (board jobs carry a stable source_id)...
     if (body.source_id) {
-      const existing = await getOne<{ id: string; status: string }>(
+      const existing = await getOneAsUser<{ id: string; status: string }>(session.user.id, 
         `SELECT id, status FROM job_application WHERE user_id = $1 AND source_id = $2`,
         [session.user.id, body.source_id]
       );
@@ -202,7 +205,7 @@ export async function POST(request: Request) {
       // ...and dedup MANUAL re-runs (no source_id) on normalized title+company, so
       // tailoring the same typed job twice reuses the application instead of
       // spawning a duplicate + a second cover-letter artifact (Codex 11).
-      const existing = await getOne<{ id: string; status: string }>(
+      const existing = await getOneAsUser<{ id: string; status: string }>(session.user.id, 
         `SELECT id, status FROM job_application
            WHERE user_id = $1
              AND LOWER(TRIM(job_title)) = LOWER(TRIM($2))
@@ -217,7 +220,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const row = await insert("job_application", {
+    const row = await insertAsUser(session.user.id, "job_application", {
       user_id: session.user.id,
       job_title: body.job_title,
       company: body.company,

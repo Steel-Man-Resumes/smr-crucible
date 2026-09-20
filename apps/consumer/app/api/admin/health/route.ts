@@ -15,7 +15,7 @@ export async function GET() {
   if (!guard.ok) return guard.response;
 
   try {
-    const report = await getSystemHealth();
+    const report = await getSystemHealth(guard.userId);
     return NextResponse.json(report);
   } catch (err: any) {
     console.error("Health check error:", err?.message || err);

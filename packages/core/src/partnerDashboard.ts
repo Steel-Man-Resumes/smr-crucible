@@ -215,18 +215,23 @@ export async function getPartnerCohort(
             su.name AS assigned_staff_name,
             COALESCE((SELECT SUM(atu.cost_usd) FROM ai_token_usage atu WHERE atu.user_id = u.id), 0)::text AS ai_cost_usd,
             u.next_step_cache->>'action' AS next_step_action,
-            (SELECT COUNT(*) FROM job_application ja WHERE ja.user_id = u.id AND ja.status <> 'saved')::text AS applications,
-            (SELECT COUNT(*) FROM job_application ja WHERE ja.user_id = u.id AND ja.status = 'saved')::text AS saved_jobs,
-            (SELECT COUNT(*) FROM refinery_artifact ra WHERE ra.user_id = u.id AND ra.artifact_type = 'interview_prep')::text AS practice_sessions,
-            EXISTS(SELECT 1 FROM job_application ja WHERE ja.user_id = u.id AND ja.resume_artifact_id IS NOT NULL) AS has_resume_tailored,
-            EXISTS(SELECT 1 FROM refinery_artifact ra WHERE ra.user_id = u.id AND ra.artifact_type = 'disclosure_plan') AS has_disclosure_plan,
-            EXISTS(SELECT 1 FROM job_application ja WHERE ja.user_id = u.id AND (ja.status IN ('hired','started_work') OR ja.hired_at IS NOT NULL)) AS hired,
+            -- Counts and dates come from staff_progress_counts, a view. The
+            -- participant's own tables are owner-only under row-level security
+            -- (migration 060); the view serves exactly these signals, for members
+            -- of the scoped org who have progress sharing on, and nothing else.
+            COALESCE(pc.applications, 0)::text AS applications,
+            COALESCE(pc.saved_jobs, 0)::text AS saved_jobs,
+            COALESCE(pc.practice_sessions, 0)::text AS practice_sessions,
+            COALESCE(pc.has_resume_tailored, false) AS has_resume_tailored,
+            COALESCE(pc.has_disclosure_plan, false) AS has_disclosure_plan,
+            COALESCE(pc.hired, false) AS hired,
             GREATEST(
               COALESCE(u.next_step_cached_at, to_timestamp(0)),
-              COALESCE((SELECT MAX(updated_at) FROM job_application ja WHERE ja.user_id = u.id), to_timestamp(0)),
-              COALESCE((SELECT MAX(updated_at) FROM refinery_artifact ra WHERE ra.user_id = u.id), to_timestamp(0))
+              COALESCE(pc.last_application_at, to_timestamp(0)),
+              COALESCE(pc.last_artifact_at, to_timestamp(0))
             ) AS last_active_at
        FROM users u
+       LEFT JOIN staff_progress_counts pc ON pc.user_id = u.id
        LEFT JOIN client_staff_assignment csa
          ON csa.client_user_id = u.id
         AND csa.access_code_id = ANY($2::uuid[])

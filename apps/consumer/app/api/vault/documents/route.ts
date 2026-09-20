@@ -29,6 +29,7 @@ import {
   decideVaultMime,
   MAX_VAULT_FILE_BYTES,
   incrementUserUsage,
+  getOneAsUser,
 } from "@crucible/core";
 
 export const runtime = "nodejs";
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
   let linkedJobId: string | null = null;
   if (typeof linkedJobRaw === "string" && linkedJobRaw.trim()) {
     // Only accept a job the user actually owns -- otherwise silently unlink.
-    const owned = await getOne<{ id: string }>(
+    const owned = await getOneAsUser<{ id: string }>(userId, 
       "SELECT id FROM job_application WHERE id = $1 AND user_id = $2",
       [linkedJobRaw.trim(), userId]
     );

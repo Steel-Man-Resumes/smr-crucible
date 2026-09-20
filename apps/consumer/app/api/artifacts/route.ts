@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { listArtifacts, listArtifactsPaged, createArtifact, query, invalidateNextStep, snapshotApplicationDocument, recordProgressEvent, isResumeGroup } from "@crucible/core";
+import {
+  listArtifacts,
+  listArtifactsPaged,
+  createArtifact,
+  invalidateNextStep,
+  snapshotApplicationDocument,
+  recordProgressEvent,
+  isResumeGroup,
+  queryAsUser,
+} from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 
@@ -162,7 +171,7 @@ export async function POST(request: Request) {
     const applicationId = targetContext.applicationId;
     if (linkColumn && typeof applicationId === "string" && applicationId) {
       try {
-        const linked = await query(
+        const linked = await queryAsUser(userId, 
           `UPDATE job_application SET ${linkColumn} = $1, updated_at = now()
            WHERE id = $2 AND user_id = $3
            RETURNING id`,
