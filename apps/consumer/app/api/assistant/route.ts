@@ -280,6 +280,46 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
         "\n\n_Second-pass check did not run this time. The numbers above match your dashboard; anything else here is worth a look before it goes into a report._";
     }
 
+    // This path returns before streamText's onFinish, so it has to do its own
+    // accounting. It shipped without it: staff answers were the one class of AI
+    // output with no decision record and no token cost, while the security
+    // statement promised organizations that every answer is logged.
+    {
+      const usage = generated.usage as { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
+      const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+      recordTokenUsage(
+        "anthropic",
+        MODEL_CHAT,
+        { inputTokens: usage?.promptTokens || 0, outputTokens: usage?.completionTokens || 0 },
+        { userId: userId ?? null, endpoint: "assistant" }
+      );
+      try {
+        const { logDecision } = await import("@crucible/core");
+        await logDecision({
+          userId: userId ?? null,
+          sessionId: sessionId ?? null,
+          contextPage: context.currentPage,
+          modelProvider: "anthropic",
+          modelId: MODEL_CHAT,
+          input: lastUserText(messages),
+          explanation: `Org staff assistant (${context.org.role}, reach ${context.org.reach}) on ${context.currentPage}. Verified before send: ${
+            verdict.ok ? "clean" : `${verdict.problems.length} unsupported claim(s) flagged to the reader`
+          }; second pass ${verdict.modelChecked ? "ran" : "did NOT run"}.`,
+          outputSummary: {
+            response_length: generated.text.length,
+            word_count: generated.text.split(/\s+/).length,
+            verify_ok: verdict.ok,
+            verify_problem_count: verdict.problems.length,
+            verify_model_checked: verdict.modelChecked,
+          },
+          tokenCount: usage?.totalTokens ?? null,
+          latencyMs: Date.now() - startTime,
+        });
+      } catch (err) {
+        console.error("Decision log failed:", err);
+      }
+    }
+
     // Re-emit as the data-stream protocol the chat client expects.
     const encoder = new TextEncoder();
     const stream = new ReadableStream({

@@ -37,9 +37,9 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Can another organization see our participants?",
-        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session -- so removing someone takes effect on their next click, not whenever their session happens to expire.",
+        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session -- so removing someone takes effect on their next click, not whenever their session happens to expire. Beneath that, the database itself refuses: your staff list and your caseload assignments are protected by row-level security, and the application connects as a database role that has no ability to bypass it. The last section says exactly which tables that covers and which it does not yet.",
         proof:
-          "A 13-assertion suite runs against a real database and tries to break it: reading another org's cohort, writing to another org's staff, claiming another org's participant. It has to pass before this ships.",
+          "A test suite runs against a real database and tries to break it: reading another org's cohort, writing to another org's staff, claiming another org's participant. It connects the code under test as the same restricted database role production uses, because a test that runs with administrator rights proves nothing. We run it before changes to this layer ship; it is not yet an automatic gate on every release, and we would rather say that than imply otherwise.",
       },
       {
         q: "Can one of our case managers see another case manager's caseload?",
@@ -47,7 +47,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Can Steel Man staff see our data?",
-        a: "Yes, and you should assume so of any hosted product -- someone has to be able to fix a broken account. What matters is the constraints. Support access is read-only, expires in under an hour, and both entering and leaving it are written to an audit log. Permission is re-checked against the database on every single request, so revoking it ends an active session immediately.",
+        a: "Yes, and you should assume so of any hosted product -- someone has to be able to fix a broken account. What matters is the constraints. There are two modes. The default is view-only: writes are rejected, and it expires after 60 minutes. The second lets a platform administrator act as the account to repair something; it requires a written reason before it starts and expires after 30 minutes. Entering and leaving either mode is recorded with who, whose account, which mode, the reason, and when. Permission is re-checked against the database on every single request, so revoking it ends an active session immediately.",
       },
     ],
   },
@@ -95,8 +95,12 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
         a: "Both, without asking anyone. Full export of everything held about them, and a delete that either clears their data or removes the account entirely. Both require re-authentication.",
       },
       {
+        q: "Is there a record of who changed our team or our assignments?",
+        a: "Yes, and it is written by the database rather than by the application, so it records changes made through any path -- including by us, from outside the product. Adding or removing a staff member, changing a role, assigning or unassigning a participant: each writes a row with what changed, when, and who did it. A change made outside the product has no signed-in person to name, and is recorded as exactly that, with the database role that made it. The application can read that record for your organization only, and cannot edit or delete it. There is not yet a screen for it in your console; today we produce it on request.",
+      },
+      {
         q: "Is there a record of what the AI did?",
-        a: "Every AI call is logged with the model, the input hash, and how long it took. If someone needs to reconstruct why a document said what it said, that record exists.",
+        a: "Every answer the AI writes -- for a participant or for your staff -- is logged with the model, a hash of the input rather than the input itself, and how long it took. For staff answers the record also holds whether the answer passed its checks. If someone needs to reconstruct why a document said what it said, that record exists.",
       },
     ],
   },
@@ -113,7 +117,11 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Is isolation enforced by the database itself?",
-        a: "Not yet, and this is the honest one. Today one organization cannot see another because every query is scoped in application code, and a test suite verifies that against a real database. Database-level row security is being added as a second layer beneath it. Until that lands, the guarantee rests on code plus tests rather than code plus tests plus the database refusing.",
+        a: "Partly, and the boundary is worth knowing. Row-level security is enforced today on the tables that define your organization: who is on your staff, which participant is assigned to which staff member, and the audit record of changes to both. A query for those rows without your organization's scope returns nothing, whatever the application code says. It does NOT yet cover the table recording which participants joined under your code, or the participant-owned tables -- applications, documents, profile. Those are isolated by application code and tests, the same as before. Extending the database layer to them is in progress.",
+      },
+      {
+        q: "Is the isolation test an automatic gate on every release?",
+        a: "Not yet. It is run deliberately before changes to the organization layer ship, not automatically on every change. Until it is wired into the release pipeline, that depends on discipline rather than machinery.",
       },
     ],
   },
