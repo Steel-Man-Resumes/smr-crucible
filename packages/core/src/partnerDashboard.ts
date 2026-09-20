@@ -390,10 +390,11 @@ export async function assignClientStaff(
   assignedBy: string
 ): Promise<void> {
   if (!staffUserId) {
-    await query(
+    await runScopedRows(
       `DELETE FROM client_staff_assignment
         WHERE access_code_id = $1 AND client_user_id = $2`,
-      [accessCodeId, clientUserId]
+      [accessCodeId, clientUserId],
+      accessCodeId
     );
     return;
   }
@@ -409,7 +410,10 @@ export async function assignClientStaff(
   // the check and the write: the INSERT sources its values from a SELECT whose
   // WHERE clause is the authorization, and writes nothing when either side
   // fails. Membership = redeemed this code; staff = listed for this code.
-  const written = await query<{ client_user_id: string }>(
+  // client_staff_assignment is RLS-protected: without the scope this write
+  // affects zero rows and the guard below would report a refusal that was
+  // actually a missing scope. Silent no-ops are their own bug class.
+  const written = await runScopedRows<{ client_user_id: string }>(
     `INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by)
      SELECT $1, $2, $3, $4
       WHERE EXISTS (
@@ -432,7 +436,8 @@ export async function assignClientStaff(
      ON CONFLICT (access_code_id, client_user_id)
      DO UPDATE SET staff_user_id = $3, assigned_by = $4, created_at = NOW()
      RETURNING client_user_id`,
-    [accessCodeId, clientUserId, staffUserId, assignedBy]
+    [accessCodeId, clientUserId, staffUserId, assignedBy],
+    accessCodeId
   );
 
   if (written.length === 0) {

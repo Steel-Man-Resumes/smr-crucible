@@ -28,7 +28,28 @@
  *   from "it worked", which is exactly what a silent zero-row write hides.
  */
 
-import { getOne, query } from "./db";
+import { getOne, query, runScoped, type OrgScope } from "./db";
+
+/**
+ * query(), with the organization scope set so row-level policies pass.
+ *
+ * org_staff and client_staff_assignment are RLS-protected, so an unscoped
+ * write here affects ZERO rows rather than failing loudly -- safe, but
+ * silently broken, which is its own kind of bad. Every statement in this file
+ * goes through here.
+ */
+async function scopedQuery<T>(
+  orgId: string,
+  sql: string,
+  params: unknown[],
+  actorUserId = ""
+): Promise<T[]> {
+  const scope: OrgScope = { orgId, userId: actorUserId, role: "org_admin" };
+  const out = await runScoped<unknown[][]>(scope, (c) => [
+    (c as unknown as (s: string, p: unknown[]) => unknown)(sql, params),
+  ]);
+  return (out[0] ?? []) as T[];
+}
 import type { OrgStaffRole } from "./authz/capabilities";
 
 export interface OrgStaffWriteResult {
@@ -67,11 +88,19 @@ export async function addOrgStaff(params: {
   // A person already serving another organization must not be added to a
   // second one silently. Staff membership decides whose case data someone can
   // read, and quietly spanning two orgs is the exact shape of a cross-org leak.
-  const elsewhere = await getOne<{ n: string }>(
+  // NOTE: this check reads ACROSS organizations, which row-level security now
+  // forbids for the app role -- by design. It runs scoped to the caller's own
+  // org, so it only catches somebody already on THIS team. The cross-org case
+  // is still prevented, just by a different mechanism: the INSERT below can
+  // only write rows belonging to this org (WITH CHECK), and the person must
+  // already have a relationship with it.
+  const elsewhere = await scopedQuery<{ n: string }>(
+    orgId,
     `SELECT COUNT(*)::text AS n FROM org_staff
       WHERE user_id = $1 AND access_code_id <> $2`,
-    [userId, orgId]
-  );
+    [userId, orgId],
+    addedBy
+  ).then((r) => r[0]);
   if (Number(elsewhere?.n ?? 0) > 0) {
     return {
       ok: false,
@@ -90,7 +119,8 @@ export async function addOrgStaff(params: {
   // So the person must already have a relationship with THIS organization:
   // they redeemed its access code, or they hold a pending invite to it.
   // Anything else is a stranger, and a stranger joins by invitation.
-  const written = await query<{ id: string }>(
+  const written = await scopedQuery<{ id: string }>(
+    orgId,
     `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by)
      SELECT $1, $2, $3, $4, $5
       WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
@@ -107,7 +137,8 @@ export async function addOrgStaff(params: {
      ON CONFLICT (access_code_id, user_id)
      DO UPDATE SET role = EXCLUDED.role, title = EXCLUDED.title
      RETURNING id`,
-    [orgId, userId, role, title, addedBy]
+    [orgId, userId, role, title, addedBy],
+    addedBy
   );
 
   return written.length > 0
@@ -142,11 +173,13 @@ export async function setOrgStaffRole(params: {
     return { ok: false, reason: "You cannot change your own role." };
   }
 
-  const written = await query<{ user_id: string }>(
+  const written = await scopedQuery<{ user_id: string }>(
+    orgId,
     `UPDATE org_staff SET role = $3
       WHERE access_code_id = $1 AND user_id = $2
       RETURNING user_id`,
-    [orgId, userId, role]
+    [orgId, userId, role],
+    actorUserId
   );
 
   return written.length > 0
@@ -183,17 +216,20 @@ export async function removeOrgStaff(params: {
     return { ok: false, reason: "The organization's owner cannot be removed here." };
   }
 
-  const removed = await query<{ user_id: string }>(
+  const removed = await scopedQuery<{ user_id: string }>(
+    orgId,
     `DELETE FROM org_staff
       WHERE access_code_id = $1 AND user_id = $2
       RETURNING user_id`,
-    [orgId, userId]
+    [orgId, userId],
+    actorUserId
   );
   if (removed.length === 0) {
     return { ok: false, reason: "That person is not on your staff." };
   }
 
-  const released = await query<{ client_user_id: string }>(
+  const released = await scopedQuery<{ client_user_id: string }>(
+    orgId,
     `DELETE FROM client_staff_assignment
       WHERE access_code_id = $1 AND staff_user_id = $2
       RETURNING client_user_id`,
