@@ -108,7 +108,73 @@ indefinitely. If something "would not update" in the past, this may be why.
 - Vercel PREVIEW `DATABASE_URL` is invalid, so preview builds fail and no PR
   gets a real `next build` before merge. tsc + CI are the only pre-merge checks.
 
-NEXT: Part C (sharing model), per plan v2 section 4, behind `crm_v2` per org.
+### PART C DEMO SLICE SHIPPED THE SAME DAY -- production `4645be9`, migration 051
+
+Flag: `access_code.crm_v2`. ON for the three `(Demo)` orgs, OFF for every real
+org. With it off, nothing a real user sees has changed.
+
+**DO NOT TURN `crm_v2` ON FOR A REAL ORGANIZATION until Troy rewrites the public
+promise at `/security` (`components/SecurityContent.tsx`: "You, and nobody in
+your life. Not your case manager."). It is true today. It stops being true the
+moment a real participant can share a resume with a case manager. It is HIS
+promise and his wording (decision D7); I did not touch it. Also still to check
+in the same pass: the partner page step 4, `docs/REFINERY-10X-PLAN.md`, and
+`scorm/README.md` (intake answers live in the institution's LMS).
+
+- **The model** (051): `sharing_grant`, `sharing_request`, `case_note` (+
+  versions), all row-level protected from their first migration. The grant
+  INSERT policy has NO organization clause: an org can ask, only the person
+  answers. Grants are write-once, revoke-once, never reopened. Leaving an org
+  revokes everything in the same transaction; rejoining brings nothing back.
+- **Old `sharing` consent was NOT migrated**, on purpose. Given under words that
+  promised staff never see a resume, and per person rather than per org.
+- **`packages/core/src/orgClientView.ts` is the ONLY door** for staff to read
+  participant content: capability (deny wins), not a platform admin looking in,
+  current membership, assigned-or-sees-all, active grant for that scope -- and
+  the access-log row in the same transaction by the same predicate. Column
+  allowlists. The artifact type is a literal, so a resume grant cannot fetch a
+  disclosure plan. HONEST STATUS: job_application / refinery_artifact have no
+  RLS yet (Part B), so that is enforced by this module's SQL, not by policy.
+- **Wording lives in `sharingScopes.ts`** and is served to the page; the version
+  is stamped on every grant. Change a sentence, change `SHARING_TEXT_VERSION`.
+  TROY SHOULD READ THOSE SENTENCES. They are promises in his product's voice.
+- Scopes that exist: applications, resume, documents. NOT built, so NOT offered:
+  practice, disclosure, single vault documents. Required-sharing mode: NOT
+  built (plan v2 4.2), and stays off the demo path.
+- UI: `/dashboard/clients/[id]` (staff), Settings -> "Who can see what"
+  (participant, renders nothing unless their org has the flag).
+- `org_capability_override` finally exists. `resolveOrgActor` had read it since
+  it was written; no migration ever created it, so deny-wins had nowhere to be
+  recorded. App role can read it, not write it.
+- Suite: 93 assertions as smr_app on a production-copy branch.
+- **Run end to end on PRODUCTION as the demo accounts** (16 steps): Russ sees
+  nothing until Wes approves; Yvonne (other org) gets 404; Wes's private job
+  notes and pay appear nowhere in any response; Wes's log names Russ. Production
+  was on the OWNER role for that run, so it proves the application logic, not
+  the policies. The policies are proven by the suite. Re-run after the swap.
+- Demo tooling (owner credential, demo orgs only):
+  `node scripts/seed-demo-materials.mjs` (Wes: resume, letter, 4 applications;
+  done) and `node scripts/reset-demo-sharing.mjs` (back to nothing-shared; run
+  before every rehearsal and before the real thing).
+
+**Deliberately NOT touched: the staff assistant.** Plan v2 has t.ROY prep a
+meeting from shared content and "Save as note". Session 6 took four production
+batches to get staff answers from 7/20 flagged to 0/30. Changing that prompt
+and its verifier two days before Montana, without time for another batch, is
+how a wrong number reaches a DOC reviewer. `case_note.drafted_by_assistant`
+and the `add_note` API already accept it; the wiring waits for after 9/22.
+
+**A mistake of mine worth recording:** I wrote the resume projection as
+`WHERE is_current`, assuming it meant "latest version of each". It means "the
+ONE resume the person pinned" (unique per user), and a tailored resume is its
+own artifact. The suite caught it as a unique-index violation in my own fixture,
+not as a wrong answer. PATTERNS.md already says: inspect the schema before
+writing against it. I guessed column names twice more this session.
+
+NEXT, in order: (1) Troy's Vercel swap, then re-verify everything as smr_app;
+(2) after 9/22: t.ROY per-client + Save as note with a production batch, Today
+queue, tasks, outcomes; (3) required-sharing mode behind legal review; (4) Part B,
+RLS on participant-owned tables, smallest first, behind projection functions.
 
 ## 2026-09-19 (session 6) -- staff t.ROY was never reachable from the browser; fixed, and the checker rebuilt
 
