@@ -134,3 +134,46 @@ export async function runScoped<T = unknown[]>(
   // Drop the three setup row-sets; hand back only what the caller asked for.
   return (results as unknown[]).slice(setup.length) as T;
 }
+
+/**
+ * The same statement, run once per organization, each time scoped to THAT
+ * organization -- in a single transaction, so it is one round trip however
+ * many orgs there are.
+ *
+ * FOR WHOM. Two callers legitimately span organizations: an owner who holds
+ * several access codes, and a platform admin's cross-org reports. Neither gets
+ * a policy that says "sees everything". They get each org's rows by being
+ * scoped to each org in turn, which is the same thing the console already does
+ * when a platform admin opens one org. The CALLER must have established that
+ * the actor may act for every id in `orgIds`; this function does not check,
+ * exactly as runScoped does not.
+ *
+ * `set_config(..., true)` is honoured per statement inside the transaction:
+ * tested as smr_app (2026-09-19, /api/dev/personas) -- zero foreign rows.
+ */
+export async function runPerOrg<T = Record<string, unknown>>(
+  orgIds: string[],
+  actorUserId: string,
+  sqlText: string,
+  paramsFor: (orgId: string) => unknown[]
+): Promise<Map<string, T[]>> {
+  const out = new Map<string, T[]>();
+  if (orgIds.length === 0) return out;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  const client = neon(url);
+  const run = client as unknown as (s: string, p?: unknown[]) => unknown;
+
+  const statements: unknown[] = [
+    client`SELECT set_config('app.user_id', ${actorUserId}, true)`,
+    client`SELECT set_config('app.org_role', ${"org_admin"}, true)`,
+  ];
+  for (const orgId of orgIds) {
+    statements.push(client`SELECT set_config('app.org_id', ${orgId}, true)`);
+    statements.push(run(sqlText, paramsFor(orgId)));
+  }
+  const results = (await client.transaction(statements as never)) as unknown[];
+  // Layout: 2 setup rows, then (set_config, result) pairs.
+  orgIds.forEach((orgId, i) => out.set(orgId, (results[2 + i * 2 + 1] ?? []) as T[]));
+  return out;
+}

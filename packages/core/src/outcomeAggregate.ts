@@ -4,7 +4,21 @@
  * All reads log to data_access_log per governance requirement.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, runPerOrg } from "./db";
+
+/**
+ * Run a query that joins access_code_redemption, scoped to the ONE
+ * organization named by `code`. Membership is row-level protected, so a plain
+ * query() here returns zeros -- which on an evidence report is not an error,
+ * it is a false statement about a partner. Callers are platform-admin routes;
+ * they are scoped to each org in turn rather than given a see-everything rule.
+ */
+async function queryForCode<T>(code: string, sqlText: string, params: unknown[]): Promise<T[]> {
+  const org = await getOne<{ id: string }>(`SELECT id FROM access_code WHERE code = $1`, [code]);
+  if (!org) return [];
+  const out = await runPerOrg<T>([org.id], "", sqlText, () => params);
+  return out.get(org.id) ?? [];
+}
 
 export interface FunnelCounts {
   forge_sessions_started: number;
@@ -52,7 +66,8 @@ export async function getFunnelAggregate(opts?: {
 
   if (opts?.partnerCode) {
     // Scoped to users who redeemed this partner's code
-    const rows = await query<FunnelCounts>(
+    const rows = await queryForCode<FunnelCounts>(
+      opts.partnerCode,
       `SELECT
         COUNT(DISTINCT fs.id) FILTER (WHERE fs.status IN ('in_progress', 'completed', 'abandoned'))
           AS forge_sessions_started,
@@ -155,7 +170,8 @@ export async function getConsentedCaseStudies(opts?: {
     : `AND cc.consent_layer IN ('outcome_anonymous', 'outcome_named')`;
 
   if (opts?.partnerCode) {
-    return query<ConsentedCaseStudy>(
+    return queryForCode<ConsentedCaseStudy>(
+      opts.partnerCode,
       `SELECT
         ja.id,
         CASE WHEN cc.consent_layer = 'outcome_named'
@@ -179,7 +195,7 @@ export async function getConsentedCaseStudies(opts?: {
     );
   }
 
-  return query<ConsentedCaseStudy>(
+  const studies = await query<ConsentedCaseStudy & { owner_user_id?: string }>(
     `SELECT
       ja.id,
       CASE WHEN cc.consent_layer = 'outcome_named'
@@ -189,9 +205,8 @@ export async function getConsentedCaseStudies(opts?: {
       ja.job_title || ' at ' || ja.company AS outcome_summary,
       'job_application' AS tool_path,
       cc.consent_layer AS consent_scope,
-      (SELECT ac2.partner_name FROM access_code_redemption acr2
-       JOIN access_code ac2 ON ac2.id = acr2.access_code_id
-       WHERE acr2.user_id = ja.user_id LIMIT 1) AS partner_name,
+      NULL::text AS partner_name,
+      ja.user_id AS owner_user_id,
       ja.created_at
     FROM job_application ja
     JOIN consumer_consent cc ON cc.user_id = ja.user_id ${scopeFilter} AND cc.status = 'granted'
@@ -201,6 +216,33 @@ export async function getConsentedCaseStudies(opts?: {
     LIMIT $1`,
     [limit]
   );
+
+  // Which partner each person came through. That was a correlated subquery on
+  // access_code_redemption; under row-level security it quietly yields NULL
+  // for everyone. Ask each organization, scoped to it, which of these people
+  // are its members.
+  const owners = Array.from(new Set(studies.map((st) => st.owner_user_id).filter(Boolean))) as string[];
+  if (owners.length > 0) {
+    const orgs = await query<{ id: string; partner_name: string }>(
+      `SELECT id, partner_name FROM access_code ORDER BY created_at`
+    );
+    const members = await runPerOrg<{ user_id: string }>(
+      orgs.map((o) => o.id),
+      "",
+      `SELECT user_id FROM access_code_redemption WHERE access_code_id = $1 AND user_id = ANY($2::uuid[])`,
+      (orgId) => [orgId, owners]
+    );
+    const partnerOf = new Map<string, string>();
+    for (const o of orgs) {
+      for (const m of members.get(o.id) ?? []) {
+        if (!partnerOf.has(m.user_id)) partnerOf.set(m.user_id, o.partner_name);
+      }
+    }
+    for (const st of studies) {
+      st.partner_name = (st.owner_user_id && partnerOf.get(st.owner_user_id)) || null;
+    }
+  }
+  return studies.map(({ owner_user_id: _owner, ...rest }) => rest as ConsentedCaseStudy);
 }
 
 async function getConsentedCaseStudyCount(): Promise<number> {

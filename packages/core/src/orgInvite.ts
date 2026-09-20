@@ -13,7 +13,7 @@
  * bookkeeping here.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, runScoped } from "./db";
 import { redeemAccessCode, validateAccessCode } from "./accessCode";
 
 /** SQL fragment: the users row aliased `u` has never signed in by any door. */
@@ -99,22 +99,31 @@ export async function createOrgInvite(opts: {
   let kind: "invited" | "attached";
 
   if (existing) {
-    // First-code-wins isolation: if they carry ANY redemption they are bound.
-    const bound = await getOne<{ access_code_id: string }>(
-      `SELECT access_code_id FROM access_code_redemption WHERE user_id = $1 LIMIT 1`,
-      [existing.id]
+    // Is this person already attached somewhere? That is a question about
+    // OTHER organizations' membership rows, which row-level security will not
+    // show this org -- correctly. Asked as a plain read it would come back
+    // empty and this org would attach somebody who belongs to another one.
+    // smr_invite_binding answers with one word and never says which org.
+    const [bindingRows] = await runScoped<[{ binding: string }[]]>(
+      { orgId: opts.accessCodeId, userId: opts.invitedBy, role: "org_admin" },
+      (sql) => [sql`SELECT smr_invite_binding(${existing.id}::uuid) AS binding`]
     );
-    if (bound?.access_code_id === opts.accessCodeId) {
+    const binding = bindingRows?.[0]?.binding;
+    if (binding !== "none" && binding !== "this_org" && binding !== "other_org") {
+      // Unknown is not "none". Refuse rather than attach on a guess.
+      return { ok: false, error: "Could not check that person's membership. Try again." };
+    }
+    if (binding === "this_org") {
       return { ok: false, error: "That person is already part of your organization." };
     }
-    if (bound) {
+    if (binding === "other_org") {
       return {
         ok: false,
         error:
           "That email already belongs to another organization on Steel Man Resumes. Contact Steel Man Resumes if they should move to yours.",
       };
     }
-    const res = await redeemAccessCode(existing.id, opts.code);
+    const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
     if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
     userId = existing.id;
     const pending = await getOne<{ id: string }>(
@@ -132,7 +141,7 @@ export async function createOrgInvite(opts: {
     );
     if (!ins) return { ok: false, error: "Could not create the account." };
     userId = ins.id;
-    const res = await redeemAccessCode(userId, opts.code);
+    const res = await redeemAccessCode(userId, opts.code, { actorUserId: opts.invitedBy });
     if (!res.success) {
       // Roll back the just-created shell so a full code leaves no orphan.
       await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
@@ -183,15 +192,16 @@ export async function touchOrgInviteResend(
 }
 
 /**
- * Revoke a PENDING invite: free the seat, kill outstanding magic links, and
- * remove the shell account. Only never-signed-in invitees are revocable --
+ * Revoke a PENDING invite: free the seat and kill outstanding magic links.
+ * Only never-signed-in invitees are revocable --
  * once someone has joined, the durable-seat rule (Troy 2026-06-10) applies
  * and they cannot be removed here. Refunding a never-activated invite's seat
  * is the exception Troy ratified with this feature (2026-08-05).
  */
 export async function revokeOrgInvite(
   accessCodeId: string,
-  userId: string
+  userId: string,
+  actorUserId = ""
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = await getOne<{ email: string; pending: boolean }>(
     `SELECT u.email, ${PENDING_SQL} AS pending
@@ -204,32 +214,45 @@ export async function revokeOrgInvite(
     return { ok: false, error: "They have already joined, so this invite can't be removed." };
   }
 
-  await query(
-    `DELETE FROM org_invite WHERE access_code_id = $1 AND user_id = $2`,
-    [accessCodeId, userId]
+  // ONE STATEMENT, scoped to this organization. It used to be four separate
+  // writes -- delete the invite, delete the membership, refund the seat,
+  // delete the account -- so a failure between any two left the seat counter
+  // or the invite list telling a different story from the membership table.
+  // The pending check is repeated INSIDE the delete: the read above is only
+  // for a friendly message, and somebody can sign in between the two.
+  const pendingUser = `EXISTS (SELECT 1 FROM users u WHERE u.id = $1 AND ${PENDING_SQL})`;
+  await runScoped(
+    { orgId: accessCodeId, userId: actorUserId, role: "org_admin" },
+    (sql) => [
+      (sql as unknown as (s: string, p: unknown[]) => unknown)(
+        `WITH freed AS (
+           DELETE FROM access_code_redemption
+            WHERE user_id = $1 AND access_code_id = $2 AND ${pendingUser}
+           RETURNING id
+         ), gone AS (
+           DELETE FROM org_invite
+            WHERE user_id = $1 AND access_code_id = $2 AND ${pendingUser}
+           RETURNING id
+         )
+         UPDATE access_code
+            SET times_redeemed = GREATEST(times_redeemed - (SELECT COUNT(*) FROM freed)::int, 0),
+                updated_at = NOW()
+          WHERE id = $2 AND EXISTS (SELECT 1 FROM freed)`,
+        [userId, accessCodeId]
+      ),
+    ]
   );
-  const freed = await query<{ id: string }>(
-    `DELETE FROM access_code_redemption WHERE user_id = $1 AND access_code_id = $2 RETURNING id`,
-    [userId, accessCodeId]
-  );
-  if (freed.length > 0) {
-    await query(
-      `UPDATE access_code SET times_redeemed = GREATEST(times_redeemed - 1, 0), updated_at = NOW()
-        WHERE id = $1`,
-      [accessCodeId]
-    );
-  }
-  // Outstanding magic links die with the tokens.
+  // Outstanding magic links die with the invite.
   await query(`DELETE FROM verification_token WHERE identifier = $1`, [row.email]).catch(
     () => {}
   );
-  // The shell account: only if it still belongs to nothing else. If some FK
-  // grew under it anyway, leave the row -- an unattributed account is inert.
-  await query(
-    `DELETE FROM users u WHERE u.id = $1 AND ${PENDING_SQL}
-       AND NOT EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = u.id)`,
-    [userId]
-  ).catch(() => {});
+  // THE SHELL ACCOUNT IS LEFT IN PLACE, deliberately. This used to delete it
+  // "if it belongs to nothing else" -- and whether it belongs to something
+  // else is exactly what one organization cannot see about another. Under
+  // row-level security that check would read as "nothing" and delete a person
+  // another org had invited, cascading their membership away with them. A
+  // never-activated account with no membership is inert; a wrongly deleted one
+  // is not recoverable. (Codex review, finding 4.)
 
   return { ok: true };
 }

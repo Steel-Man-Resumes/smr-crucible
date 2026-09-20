@@ -3,7 +3,7 @@
  * Partners distribute codes to clients for higher rate limits.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, queryAsUser, runAsUser } from "./db";
 import { emitEvent } from "./events";
 import { syncUserTierFromCodes } from "./userTier";
 
@@ -110,62 +110,51 @@ export async function validateAccessCode(
   return { valid: true, accessCode: ac };
 }
 
+/** What the database said about a redemption attempt. Only "ok" wrote anything. */
+export type RedeemOutcome =
+  | "ok"
+  | "already_member"
+  | "full"
+  | "expired"
+  | "inactive"
+  | "not_found";
+
+const REDEEM_ERRORS: Record<Exclude<RedeemOutcome, "ok">, string> = {
+  already_member: "You've already used this code",
+  full: "This code's seats are all taken -- ask your organization for another code",
+  expired: "Code has expired",
+  inactive: "Code is no longer active",
+  not_found: "Code not found",
+};
+
 /**
- * Redeem an access code for a user.
+ * Redeem an access code for a user. THE ONLY WAY a membership row is created.
+ *
+ * The rules -- code exists, is active, has not expired, has a seat left, and
+ * this person does not already hold it -- are enforced by `smr_redeem_code` in
+ * the database, under a row lock on the code, in one transaction. The
+ * application role has no INSERT on access_code_redemption at all, so there is
+ * no second path that could skip one of them. (Migration 048 says why.)
+ *
+ * `actorUserId` is who is DOING this when it is not the person themselves (an
+ * org admin inviting someone). It is recorded by the audit trigger and changes
+ * nothing about what is allowed.
  */
 export async function redeemAccessCode(
   userId: string,
-  code: string
-): Promise<{ success: boolean; error?: string }> {
-  const validation = await validateAccessCode(code);
-  if (!validation.valid) {
-    return { success: false, error: validation.reason };
-  }
-
-  const ac = validation.accessCode!;
-
-  // Check if already redeemed by this user
-  const existing = await getOne(
-    `SELECT id FROM access_code_redemption WHERE user_id = $1 AND access_code_id = $2`,
-    [userId, ac.id]
+  code: string,
+  opts: { actorUserId?: string } = {}
+): Promise<{ success: boolean; error?: string; outcome: RedeemOutcome }> {
+  const out = await runAsUser<[{ outcome: RedeemOutcome }[]]>(
+    opts.actorUserId || userId,
+    (sql) => [sql`SELECT smr_redeem_code(${userId}::uuid, ${code}) AS outcome`]
   );
-  if (existing) {
-    return { success: false, error: "You've already used this code" };
+  const outcome = out[0]?.[0]?.outcome ?? "not_found";
+  if (outcome !== "ok") {
+    return { success: false, error: REDEEM_ERRORS[outcome] ?? "Could not redeem that code", outcome };
   }
 
-  // Atomically CLAIM a seat first -- the conditional UPDATE is the gate, so two
-  // simultaneous redemptions can never exceed max_redemptions (no TOCTOU race).
-  // A redemption is a durable seat (Troy 2026-06-10): claimed once, kept.
-  const claimed = await query<{ id: string }>(
-    `UPDATE access_code
-     SET times_redeemed = times_redeemed + 1, updated_at = now()
-     WHERE id = $1
-       AND is_active = true
-       AND (max_redemptions IS NULL OR times_redeemed < max_redemptions)
-     RETURNING id`,
-    [ac.id]
-  );
-  if (claimed.length === 0) {
-    return {
-      success: false,
-      error: "This code's seats are all taken -- ask your organization for another code",
-    };
-  }
-
-  try {
-    await query(
-      `INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)`,
-      [userId, ac.id]
-    );
-  } catch {
-    // Refund the seat if the redemption row failed (e.g., double-click race on
-    // the same user) so the counter never drifts from reality.
-    await query(
-      `UPDATE access_code SET times_redeemed = GREATEST(times_redeemed - 1, 0), updated_at = now() WHERE id = $1`,
-      [ac.id]
-    ).catch(() => {});
-    return { success: false, error: "You've already used this code" };
-  }
+  const ac = (await getOne<AccessCode>(`SELECT * FROM access_code WHERE code = $1`, [code]))!;
 
   emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000",
@@ -188,7 +177,26 @@ export async function redeemAccessCode(
   // Sync tier to user record (highest code tier wins)
   await syncUserTierFromCodes(userId);
 
-  return { success: true };
+  return { success: true, outcome };
+}
+
+/**
+ * Remove a person from every organization they belong to (delete-my-data).
+ *
+ * Goes through the database function rather than a DELETE because leaving is
+ * more than one row: the person's staff assignments go too. Before this, the
+ * membership was deleted and the assignment stayed, so a case manager's
+ * caseload kept counting somebody who had left. Seats are NOT refunded: a
+ * redemption is a durable seat (Troy, 2026-06-10).
+ *
+ * Returns how many memberships ended, so a caller can tell "left two orgs"
+ * from "was in none" instead of reporting success either way.
+ */
+export async function leaveAllOrgs(userId: string): Promise<number> {
+  const out = await runAsUser<[{ n: number }[]]>(userId, (sql) => [
+    sql`SELECT smr_leave_all_orgs(${userId}::uuid) AS n`,
+  ]);
+  return Number(out[0]?.[0]?.n ?? 0);
 }
 
 /**
@@ -197,7 +205,9 @@ export async function redeemAccessCode(
 export async function getUserAccessCodes(
   userId: string
 ): Promise<(AccessCode & { redeemed_at: string })[]> {
-  return query<AccessCode & { redeemed_at: string }>(
+  // Your own memberships: read AS you, or row-level security returns nothing.
+  return queryAsUser<AccessCode & { redeemed_at: string }>(
+    userId,
     `SELECT ac.*, acr.redeemed_at
      FROM access_code_redemption acr
      JOIN access_code ac ON ac.id = acr.access_code_id

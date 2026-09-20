@@ -4,7 +4,7 @@
  * Stored in ai_usage table with atomic upsert.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, getOneAsUser } from "./db";
 import { HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_DAILY_CAP } from "./avatarAssetShared";
 
 export const DEFAULT_DAILY_LIMIT = 30;
@@ -207,7 +207,11 @@ export async function incrementIpUsage(
  * Highest tier wins: unlimited > partner > default. (Codes cannot be admin.)
  */
 export async function getUserDailyLimit(userId: string): Promise<number> {
-  const row = await getOne<{ tier: string; daily_limit: number | null }>(
+  // Read AS the person: this runs before every AI call, and an unscoped read
+  // under row-level security finds no codes, which does not fail -- it hands a
+  // paying cohort the anonymous allowance and then asks them for a code.
+  const row = await getOneAsUser<{ tier: string; daily_limit: number | null }>(
+    userId,
     `SELECT ac.tier, ac.daily_limit
      FROM access_code_redemption acr
      JOIN access_code ac ON ac.id = acr.access_code_id

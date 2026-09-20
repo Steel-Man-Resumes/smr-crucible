@@ -327,7 +327,7 @@ export async function POST(request: Request) {
       if (!body.userId) {
         return NextResponse.json({ error: "userId required" }, { status: 400 });
       }
-      const revoked = await revokeOrgInvite(org.accessCodeId, body.userId);
+      const revoked = await revokeOrgInvite(org.accessCodeId, body.userId, userId);
       if (!revoked.ok) {
         return NextResponse.json({ error: revoked.error }, { status: 400 });
       }

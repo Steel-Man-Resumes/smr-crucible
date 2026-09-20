@@ -12,7 +12,7 @@
  * consumer_consent (the 'sharing' / 'outcome_named' layers). No parallel tables.
  */
 
-import { query, getOne, getOneAsUser, runScoped, type OrgScope } from "./db";
+import { query, getOne, getOneAsUser, runScoped, runPerOrg, type OrgScope } from "./db";
 
 /**
  * query(), but with the organization scope set so row-level policies pass.
@@ -114,30 +114,61 @@ export async function getPartnerCohort(
   } = {}
 ): Promise<PartnerCohort> {
   // 1. Cohort membership + consent flags (one row per distinct client).
-  const scopeByCode = !!opts.accessCodeId;
-  const members = await query<{
+  //
+  // Membership is row-level protected, one organization at a time. So first
+  // decide WHICH codes this cohort is made of -- from access_code, which says
+  // who owns what -- then read each code's members scoped to that code. This
+  // used to be one unscoped join with the scope in a WHERE clause; under RLS
+  // that returns nothing and the console shows an empty organization.
+  let codeIds: string[];
+  if (opts.accessCodeId) {
+    codeIds = [opts.accessCodeId];
+  } else {
+    const codes = opts.isAdmin
+      ? await query<{ id: string }>(`SELECT id FROM access_code`)
+      : await query<{ id: string }>(`SELECT id FROM access_code WHERE partner_user_id = $1`, [userId]);
+    codeIds = codes.map((c) => c.id);
+  }
+
+  type MemberRow = {
     user_id: string;
     joined_at: string;
     code_ids: string[];
     sharing: boolean;
     outcome_named: boolean;
-  }>(
+  };
+  const perCode = await runPerOrg<MemberRow>(
+    codeIds,
+    userId,
     `SELECT acr.user_id,
             MIN(acr.redeemed_at) AS joined_at,
-            array_agg(DISTINCT ac.id) AS code_ids,
-            bool_or(cs.consent_layer = 'sharing'       AND cs.status = 'granted') AS sharing,
-            bool_or(cs.consent_layer = 'outcome_named' AND cs.status = 'granted') AS outcome_named
+            array_agg(DISTINCT acr.access_code_id) AS code_ids,
+            COALESCE(bool_or(cs.consent_layer = 'sharing'       AND cs.status = 'granted'), false) AS sharing,
+            COALESCE(bool_or(cs.consent_layer = 'outcome_named' AND cs.status = 'granted'), false) AS outcome_named
        FROM access_code_redemption acr
-       JOIN access_code ac ON ac.id = acr.access_code_id
        LEFT JOIN consumer_consent cs
          ON cs.user_id = acr.user_id
         AND cs.consent_layer IN ('sharing', 'outcome_named')
-      WHERE ${
-        scopeByCode ? "ac.id = $1" : opts.isAdmin ? "TRUE" : "ac.partner_user_id = $1"
-      }
+      WHERE acr.access_code_id = $1
       GROUP BY acr.user_id`,
-    scopeByCode ? [opts.accessCodeId] : opts.isAdmin ? [] : [userId]
+    (codeId) => [codeId]
   );
+  // One person can hold several of this cohort's codes: merge to one row.
+  const merged = new Map<string, MemberRow>();
+  for (const rows of Array.from(perCode.values())) {
+    for (const r of rows) {
+      const prior = merged.get(r.user_id);
+      if (!prior) {
+        merged.set(r.user_id, { ...r, code_ids: [...(r.code_ids ?? [])] });
+        continue;
+      }
+      if (new Date(r.joined_at) < new Date(prior.joined_at)) prior.joined_at = r.joined_at;
+      prior.code_ids = Array.from(new Set([...prior.code_ids, ...(r.code_ids ?? [])]));
+      prior.sharing = prior.sharing || r.sharing;
+      prior.outcome_named = prior.outcome_named || r.outcome_named;
+    }
+  }
+  const members = Array.from(merged.values());
 
   const totalJoined = members.length;
   const consentedMembers = members.filter((m) => m.sharing);
