@@ -48,6 +48,10 @@ export interface OrgAssistantContext {
   unassigned: number;
   /** First names only -- enough to be specific, never a data dump. */
   needsAttention?: string[];
+  /** Colleagues this person may legitimately mention. */
+  staffNames?: string[];
+  /** Every participant in reach, for the output verifier's allow-list. */
+  visibleNames?: string[];
 }
 
 export interface AssistantContext {

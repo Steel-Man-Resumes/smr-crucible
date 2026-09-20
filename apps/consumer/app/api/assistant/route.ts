@@ -133,6 +133,7 @@ export async function POST(request: Request) {
         });
         const rollup = summarizeStaffPerformance(cohort.clients);
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
+        const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
@@ -152,6 +153,10 @@ export async function POST(request: Request) {
             })
             .slice(0, 5)
             .map((c) => firstName(c.name)),
+          // Everyone in reach, for the output check -- the verifier needs the
+          // full allowed set, not just whoever needs attention today.
+          visibleNames: cohort.clients.map((c) => firstName(c.name)),
+          staffNames: staff.map((m) => firstName(m.name)),
         };
       }
     } catch (err) {
@@ -227,6 +232,70 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // exact-token accounting in ai_token_usage watches the cost.
   const responseMaxTokens =
     context.audience === "observer" || context.audience === "partner" ? 1200 : 700;
+
+  // ORG STAFF ANSWERS ARE VERIFIED BEFORE THEY ARE SENT, NOT AFTER.
+  //
+  // Streaming means the first token is on screen before the last one exists,
+  // so nothing can be checked in time. For a participant that trade is right:
+  // responsiveness matters and the worst case is clumsy advice. For somebody
+  // who may paste the answer into a funder report, it is wrong. So a staff
+  // answer is generated whole, checked against the facts we actually computed,
+  // and only then streamed -- slower by a second, and never confidently wrong.
+  if (context.org) {
+    const { generateText } = await import("ai");
+    const { verifyOrgOutput } = await import("@/lib/org-output-verify");
+
+    const generated = await generateText({
+      model: anthropic(MODEL_CHAT),
+      system: localizedSystemPrompt,
+      messages: messages as never,
+      maxTokens: responseMaxTokens,
+      temperature: 0.7,
+    });
+
+    const facts = {
+      caseload: context.org.caseload,
+      stalled: context.org.stalled,
+      neverStarted: context.org.neverStarted,
+      hired: context.org.hired,
+      unassigned: context.org.unassigned,
+      visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],
+      staffNames: context.org.staffNames ?? [],
+    };
+    const verdict = await verifyOrgOutput(generated.text, facts);
+
+    let out = generated.text;
+    if (!verdict.ok) {
+      // Do not silently rewrite a claim into something else true -- that hides
+      // the failure and teaches nobody. Flag it where the reader will see it,
+      // name what could not be supported, and say where the real number lives.
+      console.error("[org-output] unsupported claims:", verdict.problems);
+      out +=
+        "\n\n---\n**Check these before you use them.** I could not support " +
+        verdict.problems.map((p) => p).join("; ") +
+        ". Your dashboard is the system of record -- take the figure from there, not from me.";
+    } else if (!verdict.modelChecked) {
+      out +=
+        "\n\n_Second-pass check did not run this time. The numbers above match your dashboard; anything else here is worth a look before it goes into a report._";
+    }
+
+    // Re-emit as the data-stream protocol the chat client expects.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`0:${JSON.stringify(out)}\n`));
+        controller.enqueue(
+          encoder.encode(
+            `d:${JSON.stringify({ finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } })}\n`
+          )
+        );
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8", "x-vercel-ai-data-stream": "v1" },
+    });
+  }
 
   const result = streamText({
     model: anthropic(MODEL_CHAT),
