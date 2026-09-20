@@ -20,7 +20,7 @@ for (const line of fs.readFileSync(".env.local", "utf8").split("\n")) {
 const { verifyOrgOutput } = await import(process.cwd() + "/lib/org-output-verify.ts");
 
 const small = { caseload: 3, stalled: 1, neverStarted: 1, hired: 0, unassigned: 0, visibleNames: ["Colton", "Nadia", "Wes"], staffNames: ["Russ", "Dana"], needsAttention: ["Colton"] };
-const big = { caseload: 5, stalled: 2, neverStarted: 1, hired: 1, unassigned: 1, visibleNames: ["Colton", "Nadia", "Wes", "Ivan", "Marisol"], staffNames: ["Russ", "Dana"], needsAttention: ["Colton", "Nadia"] };
+const big = { caseload: 5, stalled: 2, neverStarted: 1, hired: 1, unassigned: 1, visibleNames: ["Colton", "Nadia", "Wes", "Ivan", "Marisol"], staffNames: ["Russ", "Dana"], needsAttention: ["Colton", "Nadia"], orgName: "Big Sky Reentry Services (Demo)" };
 
 // [name, facts, text, shouldPass]
 const cases: Array<[string, typeof small, string, boolean]> = [
@@ -28,6 +28,12 @@ const cases: Array<[string, typeof small, string, boolean]> = [
   ["true: count + named", small, "You have 3 clients assigned to you. Colton needs attention now. He hasn't been active in two weeks.", true],
   ["true: two named, paraphrased", big, "Quick version: caseload triage, case notes, emails, and numbers.\n\nRight now, **Colton and Nadia** need attention -- both have gone quiet. Want me to start there, or is something else on your plate?", true],
   ["true: every number", big, "Of your 5 clients, 2 have gone quiet, 1 never started, and 1 has started work. One person is not assigned to anyone yet.", true],
+  // Found in production AFTER the first nine passed: layer 1 read a heading and
+  // the org's own name as people. The cases below are formats, not claims.
+  ["true: bulleted snapshot with org name heading", big, "**Big Sky Reentry Services -- Caseload Snapshot**\n\n5 participants total across the organization.\n\n- **1** started work\n- **2** inactive 2+ weeks -- need outreach\n- **1** never started\n- **1** unassigned\n\n**Right now:** Colton and Nadia need attention. Want me to pull up what's going on with either of them?", true],
+  ["true: email draft", big, "Here's a draft you can send:\n\nHi Colton,\n\nJust checking in. It has been a couple of weeks since we connected and I wanted to see how things are going. No pressure at all. Let me know a good time to talk.\n\nBest,\nDana", true],
+  ["false: person outside reach", big, "You should also check on Marcus, he has gone quiet too.", false],
+  ["false: outsider inside an email draft", big, "Here's a draft:\n\nHi Colton,\n\nI spoke with Deshawn and he said you two might carpool to the job fair.\n\nBest,\nDana", false],
   ["false: invented hire + count", small, "You have 3 clients. Nadia got hired last week at Costco, and Colton has completed 4 applications.", false],
   ["false: invented trend + event", small, "Your placement rate is up this month and Wes has an interview Thursday.", false],
   ["false: fact smuggled inside an offer", big, "Want me to draft a note congratulating Nadia on her new job at the mill?", false],

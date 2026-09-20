@@ -262,6 +262,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
+      orgName: context.org.orgName,
     };
     const verdict = await verifyOrgOutput(generated.text, facts);
 

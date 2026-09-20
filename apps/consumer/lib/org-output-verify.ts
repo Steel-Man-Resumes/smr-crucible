@@ -43,6 +43,8 @@ export interface OrgFacts {
    * flagged as unsupported and the warning trains people to ignore it.
    */
   needsAttention?: string[];
+  /** The organization's own name, whose words are not people. */
+  orgName?: string;
 }
 
 export interface OrgVerdict {
@@ -106,13 +108,35 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
   const known = new Set(
     [...facts.visibleNames, ...facts.staffNames].map((n) => n.toLowerCase())
   );
-  const STOPWORDS = new Set([
-    "the", "this", "that", "your", "you", "they", "their", "and", "but", "for",
-    "with", "from", "who", "what", "when", "how", "why", "today", "week", "monday",
-    "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "forge",
-    "refinery", "troy", "steel", "man", "resumes", "i", "it", "if", "no", "not",
-    "one", "two", "three", "four", "five", "none", "someone", "nobody", "everyone",
-  ]);
+  // A capitalized word is only a candidate NAME if it is not an ordinary word.
+  // The first version listed forty stopwords and flagged everything else, so a
+  // heading ("Caseload Snapshot"), the organization's own name, and the second
+  // word of any email draft ("Hi Colton, Just checking in") were all reported
+  // as people outside the viewer's access. Layer 1 is the layer that "cannot
+  // fail", and a check that objects to true answers has failed.
+  //
+  // THE TRADE, stated: a first name that is also a common word (Will, Grace,
+  // Mark, Hope) is not caught here. Layer 2 is given the allowed people and
+  // still is. Missing those here is cheaper than crying wolf on every heading.
+  const STOPWORDS = new Set(
+    (
+      "the this that these those your you they their them and but for with from who what when how why where which " +
+      "today tomorrow yesterday week weeks month months year day days monday tuesday wednesday thursday friday saturday sunday " +
+      "january february march april may june july august september october november december " +
+      "forge refinery troy steel man resumes i it if no not yes one two three four five six seven eight nine ten none " +
+      "someone nobody everyone anyone here there now right next first last then also just still only both each every all any some " +
+      "most more less few many much other another same such own new old good great best better quick quickly " +
+      "caseload snapshot summary overview status update updates report note notes draft subject message email text call check " +
+      "checking attention needs need needed priority priorities outreach follow followup step steps action actions plan plans " +
+      "participant participants client clients staff team member members organization program services service reentry " +
+      "started never inactive active unassigned assigned hired work working job jobs application applications resume interview " +
+      "hi hello hey dear thanks thank regards sincerely best warmly cheers please let want would could should can will may might " +
+      "we our us he she his her him its is are was were be been have has had do does did done get got make made take took " +
+      "know think hope see look looking going go come back out up down over about after before since until while because so " +
+      "bright spot heads flagged flag also bottom line big picture key point points total across whats what's here's heres second third"
+    ).split(/\s+/)
+  );
+  for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
   const candidates = text.match(/(?<=[a-z,;:]\s)[A-Z][a-z]{2,}/g) ?? [];
