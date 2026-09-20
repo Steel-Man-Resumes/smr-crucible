@@ -128,6 +128,33 @@ const ORG_ADMIN_NAV: OrgNavItem[] = [
   // us for it, or find it in a PDF attached to an email six months ago.
   { href: "/dashboard/org-security", label: "Security & privacy" },
 ];
+// The staff workspace (crm_v2 orgs). Grouped by the job, and every item is a
+// real page: the earlier list was three entries, two of them jump-links into
+// one long screen, which is why it read as thin. `admin` items need the
+// organization-wide view.
+interface OrgNavGroup {
+  label: string;
+  items: (OrgNavItem & { admin?: boolean })[];
+}
+const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
+  {
+    label: "Work",
+    items: [
+      { href: "/dashboard", label: "Caseload" },
+      { href: "/dashboard/requests", label: "Sharing requests" },
+    ],
+  },
+  { label: "Records", items: [{ href: "/dashboard/notes", label: "Case notes" }] },
+  {
+    label: "Organization",
+    items: [
+      { href: "/dashboard/participants", label: "Add participants" },
+      { href: "/dashboard/team", label: "Team & seats", admin: true },
+      { href: "/dashboard/org-security", label: "Security & privacy" },
+    ],
+  },
+];
+
 const ORG_STAFF_NAV: OrgNavItem[] = [
   { href: "/dashboard", label: "My clients" },
   { href: "/dashboard#add", label: "Add participants" },
@@ -238,32 +265,20 @@ function ViewAsToggle() {
 
   // Admins get the full DevSwitcher instead.
   if (realTier !== "partner") return null;
+  // STAFF HAVE NO RESUME WORKSPACE (Troy, 2026-09-20): "they are employed
+  // already." This used to offer org members "My job search", a private
+  // job-seeker space under the same login. It made a casework tool look like it
+  // had confused its user for a client. Partners with no organization keep the
+  // preview, which is how they see what their clients see.
+  if (effectiveRole?.orgRole) return null;
 
   function toggle() {
     setViewAs(asClient ? null : "client");
     window.location.href = "/dashboard";
   }
 
-  // Model A workspace switch: an org leader has two real spaces under one login
-  // -- running the org, and their OWN private job search. A non-org partner just
-  // gets the client-experience preview.
-  const orgRole = effectiveRole?.orgRole ?? null;
-  const orgName = effectiveRole?.orgName || "your organization";
-  const isOrg = !!orgRole;
-  const label = isOrg
-    ? asClient
-      ? `${orgName} admin`
-      : "My job search"
-    : asClient
-      ? "Partner view"
-      : "Client view";
-  const title = isOrg
-    ? asClient
-      ? `Switch back to running ${orgName}`
-      : "Switch to your own private job search -- your team can't see it"
-    : asClient
-      ? "Return to your partner view"
-      : "Experience the platform exactly as a client";
+  const label = asClient ? "Partner view" : "Client view";
+  const title = asClient ? "Return to your partner view" : "Experience the platform exactly as a client";
 
   return (
     <button
@@ -490,10 +505,15 @@ export function RefineryShell({
 
   // Org leaders drop into the client experience through this one control
   // (mirrors the top-bar ViewAsToggle, but reachable from the nav on mobile).
-  function enterClientView() {
-    setViewAs("client");
-    window.location.href = "/dashboard";
-  }
+  // Somebody on staff who used the old "My job search" switch still has that
+  // choice saved in their browser, and the switch that would undo it is gone.
+  // Without this they would be stranded in the client experience.
+  useEffect(() => {
+    if (orgRole && getViewAs()) {
+      setViewAs(null);
+      window.location.href = "/dashboard";
+    }
+  }, [orgRole]);
 
   function navItemLabel(item: NavItem): string {
     if (item.href !== "/dashboard") return item.label;
@@ -595,45 +615,47 @@ export function RefineryShell({
   }
 
   function renderOrgNav(onItemClick?: () => void) {
-    const items = isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV;
+    const linkClass = (active: boolean) =>
+      `t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
+        active
+          ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
+          : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
+      }`;
+    // A participant's page belongs to Caseload, so Caseload stays lit there.
+    const isActive = (href: string) =>
+      href === pathname || (href === "/dashboard" && pathname.startsWith("/dashboard/clients/"));
+
+    const workspace = !!effectiveRole?.crmV2;
+    const flat = isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV;
     return (
       <>
-        <div>
-          {items.map((item) => {
-            const isActive = item.href === pathname;
+        {workspace ? (
+          ORG_WORKSPACE_NAV.map((group, gi) => {
+            const items = group.items.filter((i) => !i.admin || isOrgAdmin);
+            if (items.length === 0) return null;
             return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={onItemClick}
-                className={`t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
-                    : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
-                }`}
-              >
+              <div key={group.label} className={gi > 0 ? "mt-3" : ""}>
+                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-t-bone-dim">
+                  {group.label}
+                </p>
+                {items.map((item) => (
+                  <Link key={item.href} href={item.href} onClick={onItemClick}
+                    aria-current={isActive(item.href) ? "page" : undefined} className={linkClass(isActive(item.href))}>
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            );
+          })
+        ) : (
+          <div>
+            {flat.map((item) => (
+              <Link key={item.label} href={item.href} onClick={onItemClick} className={linkClass(item.href === pathname)}>
                 {item.label}
               </Link>
-            );
-          })}
-        </div>
-
-        {/* Model A second workspace: the org leader's OWN private job search,
-            same login, separate space -- not their org-admin home. */}
-        <div className="mt-2 border-t border-t-line pt-3">
-          <button
-            onClick={() => {
-              onItemClick?.();
-              enterClientView();
-            }}
-            className="t-focus flex min-h-[40px] w-full items-center rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-left text-sm font-medium text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
-          >
-            My job search
-          </button>
-          <p className="mt-1 px-3 text-[10px] text-t-bone-dim">
-            Your own private resume space -- your team can&apos;t see it.
-          </p>
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-2 border-t border-t-line pt-3">
           <Link

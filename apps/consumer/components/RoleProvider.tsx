@@ -21,6 +21,9 @@ export interface EffectiveRole {
   tier: UserTier;
   orgRole: OrgRole;
   orgName: string | null;
+  /** The per-participant staff workspace is on for this person's organization. */
+  crmV2?: boolean;
+  capabilities?: string[];
   impersonating: { mode: "view" | "assist" } | null;
 }
 

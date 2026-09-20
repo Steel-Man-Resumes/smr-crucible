@@ -15,6 +15,7 @@ import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { SharingControls } from "@/components/SharingControls";
+import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
 import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { DecisionLogViewer } from "@/components/DecisionLogViewer";
@@ -312,22 +313,39 @@ export default function SettingsPage() {
   // account actually holds is other people's caseload assignments.
   const isOrgStaff = !!effectiveRole?.orgRole;
 
-  const SECTIONS: { id: string; label: string }[] = [
-    { id: "account", label: "Account" },
-    { id: "coach", label: "Coach & AI" },
-    { id: "accessibility", label: "Accessibility" },
-    { id: "privacy", label: "Privacy & Consent" },
-    { id: "security", label: "Security" },
-    { id: "data", label: "Data" },
-    { id: "usage", label: "Usage" },
-    { id: "help", label: "Help & About" },
-  ];
+  // STAFF GET THEIR OWN SETTINGS, not a job seeker's. A case manager was being
+  // asked whether to "share your progress with your support partner", offered
+  // a coach personality, a partner-code box and a list of employers to hide.
+  // None of that is theirs. What IS theirs is how their caseload is arranged.
+  const SECTIONS: { id: string; label: string }[] = isOrgStaff
+    ? [
+        { id: "workflow", label: "My workflow" },
+        { id: "account", label: "Account" },
+        { id: "accessibility", label: "Accessibility" },
+        { id: "privacy", label: "AI transparency" },
+        { id: "security", label: "Security" },
+        { id: "data", label: "Data" },
+        { id: "usage", label: "Usage" },
+        { id: "help", label: "Help & About" },
+      ]
+    : [
+        { id: "account", label: "Account" },
+        { id: "coach", label: "Coach & AI" },
+        { id: "accessibility", label: "Accessibility" },
+        { id: "privacy", label: "Privacy & Consent" },
+        { id: "security", label: "Security" },
+        { id: "data", label: "Data" },
+        { id: "usage", label: "Usage" },
+        { id: "help", label: "Help & About" },
+      ];
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">Settings</h1>
       <p className="text-base text-t-phos-dim mb-4">
-        Your data, your control. Manage your information and privacy.
+        {isOrgStaff
+          ? "How you work here, and your account."
+          : "Your data, your control. Manage your information and privacy."}
       </p>
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
@@ -381,12 +399,19 @@ export default function SettingsPage() {
         </section>
       )}
 
+      {isOrgStaff && (
+        <div id="workflow" className="scroll-mt-32 mb-10">
+          <GroupHeading>My workflow</GroupHeading>
+          <StaffWorkflowSettings workspace={!!effectiveRole?.crmV2} />
+        </div>
+      )}
+
       {/* ── 1. Account ─────────────────────────────────────────────── */}
       <div id="account" className="scroll-mt-32 mb-10">
         <GroupHeading>Account</GroupHeading>
         <AccountSection />
         <AvatarSettingsSection />
-        <AccountExtras
+        {!isOrgStaff && <AccountExtras
           codeInput={codeInput}
           setCodeInput={setCodeInput}
           redeemCode={redeemCode}
@@ -401,14 +426,16 @@ export default function SettingsPage() {
           setHideReasonInput={setHideReasonInput}
           hideBusy={hideBusy}
           unhideEmployer={unhideEmployer}
-        />
+        />}
       </div>
 
       {/* ── 2. Coach & AI ──────────────────────────────────────────── */}
+      {!isOrgStaff && (
       <div id="coach" className="scroll-mt-32 mb-10">
         <GroupHeading>Coach &amp; AI</GroupHeading>
         <CoachSettingsSection />
       </div>
+      )}
 
       {/* ── 3. Accessibility ───────────────────────────────────────── */}
       <div id="accessibility" className="scroll-mt-32 mb-10">
@@ -422,10 +449,10 @@ export default function SettingsPage() {
 
       {/* ── 4. Privacy & Consent ───────────────────────────────────── */}
       <div id="privacy" className="scroll-mt-32 mb-10">
-        <GroupHeading>Privacy &amp; Consent</GroupHeading>
-        <SharingConsentSection />
-        <SharingControls />
-        <ConsentPanel />
+        <GroupHeading>{isOrgStaff ? "AI transparency" : "Privacy & Consent"}</GroupHeading>
+        {!isOrgStaff && <SharingConsentSection />}
+        {!isOrgStaff && <SharingControls />}
+        {!isOrgStaff && <ConsentPanel />}
         {/* AI transparency: t.ROY's recorded reasoning */}
         <DecisionLogViewer />
       </div>

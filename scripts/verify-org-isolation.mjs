@@ -498,6 +498,35 @@ async function sharingChecks() {
     check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
   }
 
+  // -- across the caseload: the Requests and Case notes pages
+  const lee2 = await mkUser("s-lee2"); // same org, on nobody's caseload but the owner's view
+  await core.redeemAccessCode(lee2, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${lee2}, ${nora}, ${owner})`;
+  await core.requestSharing(aNora, lee2, "resume", "To get you ready for the job fair.");
+  await core.addClientNote(aNora, lee2, { body: "NORA-ONLY-NOTE" });
+  const reqRuss = await core.listSharingRequests(aRuss), reqOwner = await core.listSharingRequests(aOwner), reqSpy = await core.listSharingRequests(aSpy);
+  check("a case manager's request list holds their own caseload and not a colleague's",
+    reqRuss.ok && reqRuss.rows.every((r) => r.client_user_id === wes) && reqRuss.rows.length >= 1, JSON.stringify(reqRuss.rows?.map((r) => r.client_name)));
+  check("the owner's list holds the whole organization's", reqOwner.ok && reqOwner.rows.some((r) => r.client_user_id === lee2) && reqOwner.rows.some((r) => r.client_user_id === wes));
+  check("another organization's list holds none of it", reqSpy.ok && reqSpy.rows.length === 0);
+  const noraReq = reqOwner.rows.find((r) => r.client_user_id === lee2);
+  check("a case manager cannot withdraw a colleague's request", (await core.withdrawSharingRequest(aRuss, noraReq.id)).ok === false);
+  check("withdrawing a request that does not exist does nothing", (await core.withdrawSharingRequest(aRuss, "00000000-0000-0000-0000-000000000000")).ok === false);
+  check("the person who asked can withdraw it", (await core.withdrawSharingRequest(aNora, noraReq.id)).ok === true);
+  const notesRuss = await core.listRecentNotes(aRuss), notesOwner = await core.listRecentNotes(aOwner);
+  check("a case manager's notes page never shows a colleague's caseload", notesRuss.ok && !JSON.stringify(notesRuss.rows).includes("NORA-ONLY-NOTE") && notesRuss.rows.length >= 1);
+  check("the owner's notes page shows both", notesOwner.ok && JSON.stringify(notesOwner.rows).includes("NORA-ONLY-NOTE"));
+
+  // -- workflow preferences arrange a screen; they are not a way in
+  await core.setOwnStaffPrefs(aRuss, { caseloadSort: "name", caseloadHidden: ["stage", "NOT_A_COLUMN"], clientTab: "resume", viewAll: true, capabilities: ["org.client.view_all"] });
+  const pr = await core.getStaffPrefs(aRuss);
+  check("preferences keep known choices and drop everything else",
+    pr.effective.caseloadSort === "name" && pr.effective.caseloadHidden.join() === "stage" && pr.effective.clientTab === "resume" && Object.keys(pr.own).sort().join() === "caseloadHidden,caseloadSort,clientTab",
+    JSON.stringify(pr.own));
+  check("staff cannot set the organization's defaults", (await core.setOrgStaffPrefDefaults(aRuss, { caseloadSort: "stage" })) === false);
+  check("the owner can, and it reaches a colleague who has not chosen", (await core.setOrgStaffPrefDefaults(aOwner, { caseloadSort: "stage" })) === true
+    && (await core.getStaffPrefs(aNora)).effective.caseloadSort === "stage" && (await core.getStaffPrefs(aRuss)).effective.caseloadSort === "name");
+
   // -- taking it back
   check("the participant can turn the resume off", (await core.revokeSharing(wes, org.id, "resume")).ok === true);
   check("and it stops immediately", (await core.getClientResumes(aRuss, wes)).reason === "not_shared");
