@@ -1,12 +1,12 @@
 # Capabilities truth sheet -- what may be said about the organization side of Steel Man Resumes
 
-Date: 2026-09-20. Production `be2e7a7`. For whoever writes website, SEO/AEO, sales or grant copy.
+Date: 2026-09-20, revised the same night. Production `ce10bba`. For whoever writes website, SEO/AEO, sales or grant copy.
 
 **How to use this.** A claim may be published only if its row says LIVE and you keep the
 qualifier in the "Say it like this" column. "DEMO ORGS ONLY" means it works in production
 today but no real organization can use it yet; describe it as available, not as something
 customers are using. "NOT BUILT" means do not mention it as a feature. Every LIVE row names
-the evidence: a test in `scripts/verify-org-isolation.mjs` (229 assertions, run as the
+the evidence: a test in `scripts/verify-org-isolation.mjs` (250 assertions, run as the
 restricted database role on every pull request) or a production check recorded in `HANDOFF.md`.
 
 **Scope.** This sheet covers what was built or verified on 2026-09-19/20: the organization
@@ -47,9 +47,10 @@ it needs its own sourced research pass first.
 
 | Claim | Status | Say it like this | Evidence |
 |---|---|---|---|
-| One organization cannot see another's people, staff, notes, tasks, outcomes or sharing records | LIVE | "Organization boundaries are enforced by the database itself, not only by application code." | `GET /api/health/rls` returns 200: 16 tables enabled and forced, app role cannot bypass, unscoped reads return nothing |
+| One organization cannot see another's people, staff, notes, tasks, outcomes or sharing records | LIVE | "Organization boundaries are enforced by the database itself, not only by application code." | `GET /api/health/rls` returns 200: 19 tables enabled and forced, app role cannot bypass, unscoped reads return nothing |
 | The application's database account cannot bypass those rules | LIVE | as above | health check `roleCanBypass: false`. **Re-check this before any publication: it silently reverted once on 2026-09-20.** |
-| Participant resumes and applications are protected at the database level | **NOT YET** | Do NOT say this. Say: "Staff access to shared resumes and applications goes through one audited code path." | `orgClientView.ts` enforces it; `job_application`, `refinery_artifact`, `consumer_profile` have no row-level policies yet |
+| A participant's resumes, applications and profile are protected at the database level | LIVE | "A participant's applications, resumes and profile can be read only by that participant. Staff see a shared item through a restricted view that does not contain private notes, pay, or disclosure plans at all." | `060_participant_tables_rls.sql`; suite: "their own case manager, scoped to their org, reads NOTHING from the base table", "asking the view for the private notes column is an error", "the artifact view ... can never return a disclosure plan" |
+| Which colleague inside an organization may open a person is enforced by the database | **NO** | Do not claim it. It is enforced in application code (`orgClientView.ts`): assignment, "sees everyone", and capability denies. | tests cover it; it is not a database rule |
 | Platform administrators cannot be created by the application | LIVE | rarely worth saying publicly | suite: "the app cannot insert a platform_admin row" |
 | Every access and membership change is audited | LIVE for org membership, staff, assignments, access changes, sharing policy | "Changes to who can see what are recorded." Do not say "everything is audited". | `org_audit`, written only by triggers and functions the app cannot forge |
 
@@ -92,5 +93,5 @@ Two sentences worth using, because they are true and unusual:
 1. Troy rewrites the public `/security` promise ("You, and nobody in your life. Not your case
    manager."). It is true today and stops being true the first time a real participant shares a resume.
 2. A lawyer reads the required-sharing wording before any real program may require anything.
-3. Row-level policies on resumes, applications and profiles (section 3, third row).
+3. ~~Row-level policies on resumes, applications and profiles.~~ DONE 2026-09-20 (migration 060).
 4. The assistant stops showing unsupported sentences (section 5, last row).

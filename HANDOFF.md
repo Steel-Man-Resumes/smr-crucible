@@ -305,6 +305,63 @@ t.ROY per participant (waits on the t.ROY plan, waves T1-T3), bulk assign, saved
 filters, "quiet after N days" as a preference (must move the screen AND t.ROY's
 numbers together), Part B (RLS on participant-owned tables).
 
+### "FINISH THIS PORTION" -- production `ce10bba`, migrations 057-060, 19 protected tables
+
+Troy: keep going in this session; he will pressure test when the portion is done,
+then fix the SMR website for SEO/AEO and wants capability claims to be accurate.
+
+- **057 suggestions + comments.** A suggested job is not a saved job until the
+  participant saves it with their own session. A comment is allowed only on a
+  document they shared, never on a disclosure plan.
+- **058 quiet-after-N-days = ONE org setting**, read by the caseload badge,
+  Insights, Today and the staff assistant (it was hardcoded 14 in five places,
+  once as ">" and once as ">="). The staff prompt and checker are BYTE-IDENTICAL
+  at 14 (proven by rendering at undefined/14/21). Checked live at 21 days on the
+  Michigan demo org: numbers right; the checker flagged one made-up generalization
+  ("the threshold where people tend to drop off for good"), which is the checker
+  working, and a t.ROY quality item (plan wave T1), not a threshold bug.
+- **Caseload**: status/staff filters, saved views (allowlist-normalized, max 8),
+  bulk assign through the same guarded single-assign action.
+- **059 + 060 PART B DONE.** vault_document, user_progress_event, job_application,
+  refinery_artifact, consumer_profile are OWNER-ONLY. Staff/admin read through
+  security_barrier views: `staff_shared_application`, `staff_shared_artifact`,
+  `staff_progress_counts`, `admin_job_application`, `admin_refinery_artifact`.
+  Funnel reports and the nightly tracking cron use `smr_funnel_counts` (seven
+  integers). What stays in the app, and the truth sheet says so: which colleague
+  inside an org may open a person.
+- **Data export**: gains `progress` and `sharing`; "delete my data" now removes
+  progress events.
+- `docs/CAPABILITIES-TRUTH-SHEET-2026-09-20.md` for website/SEO copy. Pointer in
+  `~/todash/smr/`. It makes no claims about competitors, on purpose.
+- Suite: 250 as smr_app.
+
+**FOUND BY REHEARSING ROUTES, NOT BY TESTS: "Download my data" was failing for
+EVERY user in production** (`ORDER BY created_at` on decision_log; the column is
+`ts`). Fixed. No test covered it. The isolation suite exercises core functions;
+almost nothing exercises the participant's ROUTES. That is the biggest gap left.
+
+**HOW PART B WAS MADE SAFE (repeat this method):** convert call sites first (no
+behaviour change); use the lint as a checklist by adding the tables to
+`RLS_PROTECTED_TABLES`; then REHEARSE: `neon-branch create`, migrate, stage1, build,
+`next start` locally with DATABASE_URL = the branch's smr_app URL, and walk real
+routes as the demo users. NextAuth sets a Secure cookie that curl will not store
+over http: take the token from the Set-Cookie header and send it by hand. The
+in-memory auth rate limiter trips after a few logins; restart the server.
+
+**MISTAKES THIS ROUND (for the miner):**
+- **~90 seconds of staff-console errors in production.** New code read views that
+  060 had not created yet. "Code first, then policies" is right for POLICIES and
+  wrong for VIEWS: anything the new code needs to exist goes in its own EARLIER
+  migration. I knew the order mattered and only thought about one direction of it.
+- The lint missed two alias forms (`import { query as x }`, `const { query: x } =
+  await import()`) and cannot see SQL built in a variable. The participant's main
+  applications list was built in a variable and would have come back EMPTY under
+  RLS. Found by reading the file. The lint is a net, not a proof.
+- `pkill -f "next start -p 3199"` killed my own shell, because the pattern matched
+  the command line running it. Kill by port.
+- A comment with backticks placed INSIDE a call broke the lint's string parsing in
+  CI after passing locally (I had linted before adding the comment).
+
 ### t.ROY ASSESSMENT (Codex) -- production `e186b15`
 
 `docs/TROY-AGENT-ASSESSMENT-AND-DEFENSE-ARCHITECTURE-2026-09-20.md` (Codex) and my
