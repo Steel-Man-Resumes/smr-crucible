@@ -45,8 +45,70 @@ Troy as step-by-step instructions.
 - Local `apps/consumer/.env.local` DATABASE_URL is the PRODUCTION OWNER. The
   dev-login provider writes tiers with it. Be careful what runs locally.
 
-NEXT: A1a (behavior-neutral scoped-helper conversion of redemption reads),
-then A1b (membership functions, migration 048, RLS still off), then enable.
+### PART A SHIPPED THE SAME DAY -- production `353aaad`, migrations 047-050 applied
+
+**READ THIS FIRST: PRODUCTION IS CONNECTED AS `neondb_owner`. EVERY POLICY IS INERT.**
+`curl https://forge.steelmanresumes.com/api/health/rls` -> 503, role neondb_owner,
+roleCanBypass true. The 9/19 cutover to smr_app was real (defect 1 that day was a
+live breakage only RLS could cause) and has since been undone; cause unknown.
+Suspect: the Neon integration in Vercel re-syncing `DATABASE_URL`. If it flips
+back after Troy re-sets it, read the credential from a differently named variable.
+- Fresh smr_app credential minted and PROVEN read-only against production data
+  AS smr_app, 8/8: `node scripts/rls-prepare-app-credential.mjs --production`
+  (refuses if smr_app has live sessions). Credential in `.env.smr-app-prod`.
+- DO NOT use `rls-stage4-prod-prep.mjs` any more. It re-grants audit writes.
+- WAITING ON TROY: paste it into Vercel Production `DATABASE_URL`, redeploy.
+  THEN: health must be 200 + role smr_app; rerun the 30-prompt staff batch and a
+  participant persona; register-with-code and invite flows on a demo org.
+- Until then the security statement's "the database enforces it" is NOT TRUE in
+  production. It was true on 9/19. Do not let it near Montana unswapped.
+
+**What Part A is**
+- 048 `smr_redeem_code` (the ONLY way a membership row is created; app role has
+  no INSERT), `smr_leave_all_orgs`, `smr_invite_binding`, audit trigger on
+  membership, assignment released when membership ends.
+- 049 RLS enabled+forced on access_code_redemption. Rollback is one statement,
+  at the top of the file.
+- All 22 call sites converted. Owner-of-several-codes and platform-admin reports
+  use `runPerOrg` (scoped org by org in one transaction). THIS REPLACES D1: no
+  admin role or GUC was needed, because access_code itself is not protected and
+  an authorized admin is already scoped per org elsewhere. Codex should
+  challenge this; it means D1 is no longer blocking anything.
+- `scripts/lint-protected-tables.mjs` in CI on every push. Exceptions are a
+  marker comment beside the call: `// rls-lint-ok(<table>): <reason>`.
+- `packages/core/src/rlsHealth.ts` owns the ONE list of protected tables.
+- Suite: 51 assertions as smr_app on a production-copy branch. Mutation-checked:
+  un-converting the rate limiter fails with "limit is 30".
+
+**THE FINDING THAT MATTERS BEYOND RLS: Next.js was caching database reads.**
+The Neon HTTP driver is fetch. Next patches fetch and cached identical SQL POSTs
+in a data cache that SURVIVES DEPLOYS. The health check returned `now()` frozen
+to the microsecond across calls and across a new deployment, and said RLS was
+off on a table after it was on. `force-dynamic` did not prevent it. Fixed at the
+driver: `cache: "no-store"` on every Neon client (db.ts, and the session
+revocation check in auth.ts). Routes that call auth() were already opted out by
+reading cookies; any public DB-backed GET route was free to serve stale data
+indefinitely. If something "would not update" in the past, this may be why.
+
+**Also found**
+- `hub_preauthorizations` never existed in production: /api/hub-unlock SELECTed
+  it before creating it with runtime DDL. Now migration 050. STILL OPEN: nothing
+  consumes those rows at sign-up, so a hub user who registers later gets nothing.
+- Invite revoke no longer deletes the shell account (Codex finding 4). Inert
+  shells with an email accumulate; needs a retention sweep, not built.
+- Invites still refuse someone bound to another org even though D8 = yes,
+  because `sharing` consent is per PERSON: attaching an existing account would
+  show the new org what they agreed to show the first. Relax it when sharing is
+  per org (Part C).
+- DEMO HAZARD, pre-existing, NOT changed: MTDEMO/MIDEMO/MODEMO are tier
+  'partner' codes. Real orgs use a 'client' CREW code for participants. Anyone
+  who registers live with MTDEMO becomes tier partner and gets the staff view.
+  Seeds also left `times_redeemed` at 0, so "Seats used" reads 0 of 50 with 5
+  members. One UPDATE fixes both; Troy's call, it is his demo.
+- Vercel PREVIEW `DATABASE_URL` is invalid, so preview builds fail and no PR
+  gets a real `next build` before merge. tsc + CI are the only pre-merge checks.
+
+NEXT: Part C (sharing model), per plan v2 section 4, behind `crm_v2` per org.
 
 ## 2026-09-19 (session 6) -- staff t.ROY was never reachable from the browser; fixed, and the checker rebuilt
 
