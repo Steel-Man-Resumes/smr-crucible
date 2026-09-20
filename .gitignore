@@ -40,3 +40,6 @@ npm-debug.log*
 
 # Persona harness output -- real generated documents, kept out of the repo
 persona-runs/
+
+# Throwaway test-database credential for verify:isolation. Never committed.
+.env.isolation

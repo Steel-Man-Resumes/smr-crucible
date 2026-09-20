@@ -29,16 +29,44 @@
  */
 
 import { neon } from "@neondatabase/serverless";
+import { readFileSync } from "node:fs";
 
 const URL_VAR = "ISOLATION_TEST_DATABASE_URL";
-const url = process.env[URL_VAR];
+const CRED_FILE = ".env.isolation";
+
+/**
+ * Read the connection string from a gitignored file, or the environment.
+ *
+ * The file is preferred and exists so a database credential never has to be
+ * typed into a shell, a chat transcript, or a command history. Put it in with
+ * an editor, run the test, delete the file.
+ */
+function readTestUrl() {
+  try {
+    const line = readFileSync(CRED_FILE, "utf8")
+      .split("\n")
+      .find((l) => l.trim().startsWith(URL_VAR + "="));
+    if (line) {
+      const v = line.slice(line.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "");
+      if (v) return v;
+    }
+  } catch {
+    /* fall through to the environment */
+  }
+  return process.env[URL_VAR];
+}
+
+const url = readTestUrl();
 
 if (!url) {
   console.error(
-    `\n${URL_VAR} is not set.\n\n` +
-      `This script seeds and deletes rows, so it will not guess a database.\n` +
-      `Point it at a NON-PRODUCTION database:\n\n` +
-      `  ${URL_VAR}='postgres://...' node scripts/verify-org-isolation.mjs\n`
+    `\nNo test database configured.\n\n` +
+      `This script seeds and deletes rows, so it will not guess a database.\n\n` +
+      `Preferred -- put the connection string in a gitignored file so it never\n` +
+      `goes through a shell or a command history:\n\n` +
+      `  echo '${URL_VAR}=' > ${CRED_FILE}   # then open it and paste the value\n\n` +
+      `Or pass it in the environment:\n\n` +
+      `  ${URL_VAR}='postgres://...' npm run verify:isolation\n`
   );
   process.exit(2); // 2 = could not run, distinct from 1 = isolation failed
 }
@@ -128,9 +156,14 @@ async function mkOrg(label, ownerId) {
 async function joinCohort(orgId, userId) {
   await sql`INSERT INTO access_code_redemption (user_id, access_code_id)
             VALUES (${userId}, ${orgId})`;
-  await sql`INSERT INTO consumer_consent (user_id, consent_layer, status)
-            VALUES (${userId}, 'sharing', 'granted')
-            ON CONFLICT DO NOTHING`;
+  // consent_text_version is NOT NULL -- the schema records WHICH wording a
+  // person agreed to, which is the point of a consent record. Fixtures must
+  // supply it like the app does (see packages/core/src/consent.ts).
+  await sql`INSERT INTO consumer_consent
+              (user_id, consent_layer, status, consent_text_version, collection_context)
+            VALUES (${userId}, 'sharing', 'granted', ${'isolation-test'},
+                    ${JSON.stringify({ source: 'isolation-test' })}::jsonb)
+            ON CONFLICT (user_id, consent_layer) DO UPDATE SET status = 'granted'`;
 }
 
 async function main() {
