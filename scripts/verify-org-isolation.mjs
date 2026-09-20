@@ -370,6 +370,74 @@ async function main() {
   await sharingChecks();
   await accessChecks();
   await requiredSharingChecks();
+  await todayAndTaskChecks();
+}
+
+/** Tasks (055) and the Today queue: a reason on a work list is information about a person. */
+async function todayAndTaskChecks() {
+  console.log("\n  -- tasks and today --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("t-owner"), cm = await mkUser("t-cm"), other = await mkUser("t-other"), spy = await mkUser("t-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOT" + uniq}, ${P + " today"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOT2" + uniq}, ${P + " today2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("t-pat"), quietOne = await mkUser("t-quiet"), hers = await mkUser("t-hers");
+  for (const u of [pat, quietOne, hers]) { await core.redeemAccessCode(u, org.code); await joinCohortConsent(u); }
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES
+            (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${quietOne}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner})`;
+  await sql`UPDATE users SET next_step_cached_at = now() - interval '40 days' WHERE id = ${quietOne}`;
+  await sql`UPDATE users SET next_step_cached_at = now() WHERE id IN (${pat}, ${hers})`;
+  await sql`INSERT INTO job_application (user_id, job_title, company, status, follow_up_at) VALUES (${pat}, 'Line Cook', 'INTERVIEW-SECRET-CO', 'interviewing', now() + interval '2 days')`;
+  await sql`INSERT INTO job_application (user_id, job_title, company, status, follow_up_at) VALUES (${hers}, 'Cashier', 'COLLEAGUE-ONLY-CO', 'interviewing', now() + interval '1 day')`;
+  await core.grantSharing(hers, org.id, "applications");
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+
+  // -- tasks
+  const t1 = await core.addStaffTask(aCm, { title: "Bring ID Thursday", dueOn: "2030-01-10", clientId: pat, shared: true });
+  const t2 = await core.addStaffTask(aCm, { title: "Call Job Service back" });
+  check("a case manager can create a task about their participant and a plain to-do", t1.ok && t2.ok);
+  check("not about a colleague's participant", (await core.addStaffTask(aCm, { title: "x task", clientId: hers })).ok === false);
+  check("a shared task has to be about someone", (await core.addStaffTask(aCm, { title: "shared with nobody", shared: true })).ok === false);
+  check("a colleague does not see them; the owner sees the one about a participant and not the private to-do... and also the to-do, since owners see all",
+    (await core.listStaffTasks(aOther)).length === 0 && (await core.listStaffTasks(aOwner)).length === 2);
+  check("another organization sees none", (await core.listStaffTasks(aSpy)).length === 0);
+  const mine = await core.getMySharedTasks(pat);
+  check("the participant sees the task shared with them, with who set it, and not the private one", mine.length === 1 && mine[0].title === "Bring ID Thursday" && mine[0].from_name?.includes("t-cm"));
+  check("someone else cannot tick it", (await core.tickMyTask(quietOne, t1.id, true)) === false);
+  check("the participant can tick it", (await core.tickMyTask(pat, t1.id, true)) === true);
+  const seen = (await core.listStaffTasks(aCm)).find((t) => t.id === t1.id);
+  check("and staff see that THEY did", !!seen?.done_at && seen.done_by_participant === true);
+  const raw = await (async () => { try { await app.transaction([app`SELECT set_config('app.user_id', ${pat}, true)`, app`UPDATE staff_task SET title = 'rewritten by participant' WHERE id = ${t1.id} RETURNING id`]); return "ok"; } catch (e) { return String(e.message); } })();
+  const [{ title }] = await sql`SELECT title FROM staff_task WHERE id = ${t1.id}`;
+  check("ticking is ALL the participant can do to it", title === "Bring ID Thursday", `title is now '${title}' (${raw})`);
+  const del = await (async () => { try { await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM staff_task WHERE id = ${t1.id}`]); return null; } catch (e) { return String(e.message); } })();
+  check("a task cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "deleted");
+
+  // -- today
+  const q0 = await core.getTodayQueue(aCm);
+  check("an unshared interview does NOT appear on the queue, however useful it would be", !JSON.stringify(q0).includes("INTERVIEW-SECRET-CO"));
+  check("quiet people and open tasks do", q0.some((i) => i.section === "quiet" && i.clientId === quietOne) && q0.some((i) => i.section === "tasks" && i.taskId === t2.id));
+  check("a colleague's participant never appears, shared or not", !JSON.stringify(q0).includes("COLLEAGUE-ONLY-CO"));
+  const [{ n: l0 }] = await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${pat} AND access_reason = 'org_work_queue'`;
+  check("and nothing was logged against someone who shared nothing", l0 === 0);
+  await sql`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES (${pat}, ${org.id}, 'applications', '2026-09-20.1')`;
+  check("shared under OLDER words, which never mentioned a work list: still not on the queue", !JSON.stringify(await core.getTodayQueue(aCm)).includes("INTERVIEW-SECRET-CO"));
+  await core.revokeSharing(pat, org.id, "applications");
+  await core.grantSharing(pat, org.id, "applications");
+  const q1 = await core.getTodayQueue(aCm); await core.getTodayQueue(aCm);
+  check("once they share applications, the interview appears", q1.some((i) => i.section === "interviews" && i.clientId === pat && /INTERVIEW-SECRET-CO/.test(i.reason)));
+  const [{ n: l1 }] = await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${pat} AND access_reason = 'org_work_queue'`;
+  const log = await core.getMyAccessLog(pat);
+  check("and that is in THEIR log, once for the day however many times the page loads", l1 === 1 && log.some((e) => e.kind === "queue"), `rows=${l1}`);
+  check("the owner's queue includes the colleague's participant", JSON.stringify(await core.getTodayQueue(aOwner)).includes("COLLEAGUE-ONLY-CO"));
+  check("another organization's queue is empty of all of it", !/SECRET-CO|ONLY-CO/.test(JSON.stringify(await core.getTodayQueue(aSpy))));
+  await sql`DELETE FROM job_application WHERE user_id IN (${pat}, ${hers})`;
+  await sql`DELETE FROM data_access_log WHERE target_user_id IN (${pat}, ${hers})`;
 }
 
 /**

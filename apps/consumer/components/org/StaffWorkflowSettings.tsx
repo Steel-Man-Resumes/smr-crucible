@@ -13,9 +13,14 @@
 import { useEffect, useState } from "react";
 import {
   CASELOAD_COLUMNS, CASELOAD_COLUMN_LABELS, CASELOAD_SORTS, CASELOAD_SORT_LABELS,
-  NOTE_KINDS, NOTE_KIND_LABELS, CLIENT_TABS, CLIENT_TAB_LABELS,
+  NOTE_KINDS, NOTE_KIND_LABELS, CLIENT_TABS, CLIENT_TAB_LABELS, LANDINGS, LANDING_LABELS, TODAY_SECTION_KEYS,
   type StaffPrefs, type CaseloadColumn,
 } from "@crucible/core/src/staffPrefsShared";
+
+const TODAY_LABELS: Record<string, string> = {
+  tasks: "My tasks", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered me",
+  acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
+};
 
 interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: Partial<StaffPrefs>; canSetOrgDefaults: boolean }
 
@@ -68,6 +73,25 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
         </fieldset>
 
         {workspace && (<>
+        <div>
+          <label htmlFor="wf-landing" className="block font-medium text-t-white mb-1">When I sign in, take me to</label>
+          <select id="wf-landing" className={select} value={p.landing} onChange={(e) => change({ landing: e.target.value as StaffPrefs["landing"] })}>
+            {LANDINGS.map((k) => <option key={k} value={k}>{LANDING_LABELS[k]}</option>)}
+          </select>
+        </div>
+
+        <fieldset>
+          <legend className="font-medium text-t-white mb-2">Sections on my Today page</legend>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {TODAY_SECTION_KEYS.map((k) => (
+              <label key={k} className="text-sm text-t-phos flex items-center gap-2">
+                <input type="checkbox" className="t-focus" checked={!p.todayHidden.includes(k)}
+                  onChange={() => change({ todayHidden: p.todayHidden.includes(k) ? p.todayHidden.filter((x) => x !== k) : [...p.todayHidden, k] })} />
+                {TODAY_LABELS[k]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div>
           <label htmlFor="wf-tab" className="block font-medium text-t-white mb-1">When I open a participant, start on</label>
           <select id="wf-tab" className={select} value={p.clientTab} onChange={(e) => change({ clientTab: e.target.value as StaffPrefs["clientTab"] })}>

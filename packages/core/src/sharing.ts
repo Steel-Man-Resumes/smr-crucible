@@ -139,6 +139,8 @@ export async function answerSharingRequest(userId: string, requestId: string, ap
 
 export interface AccessLogEntry {
   at: string;
+  /** 'opened' = they opened it. 'queue' = your dates appeared on their daily work list. */
+  kind: 'opened' | 'queue';
   who: string | null;
   orgName: string | null;
   scope: string;
@@ -149,14 +151,14 @@ export interface AccessLogEntry {
  * was fetched for that person, which is all software can honestly know.
  */
 export async function getMyAccessLog(userId: string, limit = 50): Promise<AccessLogEntry[]> {
-  const rows = await query<{ accessed_at: string; who: string | null; org_name: string | null; resource_type: string }>(
-    `SELECT l.accessed_at, u.name AS who, ac.partner_name AS org_name, l.resource_type
+  const rows = await query<{ accessed_at: string; who: string | null; org_name: string | null; resource_type: string; access_reason: string }>(
+    `SELECT l.access_reason, l.accessed_at, u.name AS who, ac.partner_name AS org_name, l.resource_type
        FROM data_access_log l
        LEFT JOIN users u ON u.id::text = l.accessor_id
        LEFT JOIN access_code ac ON ac.id::text = l.fields_accessed->>'orgId'
-      WHERE l.target_user_id = $1 AND l.accessor_type = 'staff' AND l.access_reason = 'org_client_view'
+      WHERE l.target_user_id = $1 AND l.accessor_type = 'staff' AND l.access_reason IN ('org_client_view', 'org_work_queue')
       ORDER BY l.accessed_at DESC LIMIT $2`,
     [userId, limit]
   );
-  return rows.map((r) => ({ at: r.accessed_at, who: r.who, orgName: r.org_name, scope: r.resource_type.replace(/^shared:/, "") }));
+  return rows.map((r) => ({ kind: r.access_reason === 'org_work_queue' ? 'queue' as const : 'opened' as const, at: r.accessed_at, who: r.who, orgName: r.org_name, scope: r.resource_type.replace(/^shared:/, "") }));
 }

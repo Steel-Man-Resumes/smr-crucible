@@ -180,6 +180,16 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   useEffect(() => {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
+  // "Where signing in lands" (Settings -> My workflow). Only the FIRST arrival of
+  // a browser session is redirected; after that, clicking Caseload means Caseload.
+  useEffect(() => {
+    if (requestedView !== "all" || !data?.crmV2 || prefs.landing !== "today") return;
+    try {
+      if (sessionStorage.getItem("smr.staff.landed")) return;
+      sessionStorage.setItem("smr.staff.landed", "1");
+    } catch { return; }
+    window.location.replace("/dashboard/today");
+  }, [requestedView, data?.crmV2, prefs.landing]);
   const activeSort = sort ?? prefs.caseloadSort;
   const hidden = (c: CaseloadColumn) => prefs.caseloadHidden.includes(c);
   const sortRows = (rows: CohortClient[]) => {
