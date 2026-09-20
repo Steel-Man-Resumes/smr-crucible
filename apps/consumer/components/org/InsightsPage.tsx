@@ -56,10 +56,11 @@ export function InsightsPage() {
   const [d, setD] = useState<Insights | null>(null);
   const [orgName, setOrgName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [canExport, setCanExport] = useState(false);
   useEffect(() => {
     fetch("/api/org/insights").then(async (r) => {
       if (!r.ok) { setError("This page is for people who have been given the organization's numbers."); return; }
-      const j = await r.json(); setD(j.insights); setOrgName(j.orgName);
+      const j = await r.json(); setD(j.insights); setOrgName(j.orgName); setCanExport(!!j.canExport);
     }).catch(() => setError("Could not load."));
   }, []);
   if (error) return <div className="max-w-5xl mx-auto px-4 py-10"><p role="alert" className="text-sm text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3">{error}</p></div>;
@@ -71,7 +72,13 @@ export function InsightsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white mb-1">Insights</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h1 className="text-2xl font-bold text-t-white">Insights</h1>
+        <div className="flex gap-4 print:hidden">
+          {canExport && <a href="/api/org/insights?format=csv" className="t-focus text-xs font-semibold text-t-amber-bright underline underline-offset-4 hover:text-t-amber">Download for a funder (CSV)</a>}
+          <button onClick={() => window.print()} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Print or save as PDF</button>
+        </div>
+      </div>
       <p className="text-sm text-t-phos-dim mb-6 max-w-2xl">
         {orgName}, as of {new Date(d.asOf).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.
         Counted only over what participants agreed your organization can see.
