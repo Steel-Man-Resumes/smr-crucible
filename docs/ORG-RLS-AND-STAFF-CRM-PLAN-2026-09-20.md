@@ -1,6 +1,8 @@
 # Org RLS Completion + Staff CRM With Participant Sharing -- Plan
 
 Date: 2026-09-20 (Sunday). Author: CC. Status: DRAFT FOR CODEX REVIEW, not yet built.
+
+> **SUPERSEDED IN PART by `ORG-RLS-AND-STAFF-CRM-PLAN-v2-2026-09-20.md`** after Codex review. Known wrong here: 2.3 ("grants no staff power"), 2.6 fallback, 2.7 seat invariant, 3.2 staff row policy, 4.3 "leave at any time", 5.5 staff bundle, D5.
 Production at time of writing: `9611457`. Demo: Tuesday 2026-09-22, 3:00 PM Mountain.
 
 Troy's instruction: finish the RLS work now, make the staff CRM really good,
