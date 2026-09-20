@@ -32,25 +32,29 @@ export async function GET() {
   }>(
     `SELECT ac.id, ac.code, ac.partner_name, ac.tier, ac.is_active, ac.org_logo_url,
             u.email AS owner_email,
-            (SELECT COUNT(DISTINCT acr.user_id) FROM access_code_redemption acr
-              WHERE acr.access_code_id = ac.id)::int AS joined
+            0 AS joined
        FROM access_code ac
        LEFT JOIN users u ON u.id = ac.partner_user_id
       ORDER BY ac.partner_name, ac.code`
   );
 
-  // One scoped count per org. A policy scopes to a single organization, so a
-  // cross-org directory has to ask once per row rather than sweep the table.
-  const { runScoped } = await import("@crucible/core");
-  const withStaff = [];
-  for (const o of orgs) {
-    const r = await runScoped<unknown[][]>(
-      { orgId: o.id, userId: guard.userId, role: "org_admin" },
-      (sql) => [sql`SELECT COUNT(*)::int AS n FROM org_staff WHERE access_code_id = ${o.id}`]
-    );
-    const n = (r[0]?.[0] as { n?: number } | undefined)?.n ?? 0;
-    withStaff.push({ ...o, staff_count: n });
-  }
+  // Staff AND members, counted per org while scoped to that org, in one
+  // transaction. Both tables are row-level protected; a policy scopes to one
+  // organization, so a cross-org directory asks once per row rather than
+  // sweeping the table -- and the member count had the same defect the staff
+  // count once did: an unscoped subquery that reads zero for everybody.
+  const { runPerOrg } = await import("@crucible/core");
+  const counts = await runPerOrg<{ staff: number; joined: number }>(
+    orgs.map((o) => o.id),
+    guard.userId,
+    `SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = $1) AS staff,
+            (SELECT COUNT(DISTINCT user_id)::int FROM access_code_redemption WHERE access_code_id = $1) AS joined`,
+    (orgId) => [orgId]
+  );
+  const withStaff = orgs.map((o) => {
+    const c = counts.get(o.id)?.[0];
+    return { ...o, joined: c?.joined ?? 0, staff_count: c?.staff ?? 0 };
+  });
 
   return NextResponse.json({ orgs: withStaff });
 }

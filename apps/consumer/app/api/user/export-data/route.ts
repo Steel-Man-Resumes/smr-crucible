@@ -54,7 +54,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getOne, getUserConsents, exportUserConversations } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -272,7 +272,11 @@ export async function POST(req: Request) {
       );
     }
     if (want("org")) {
-      payload.orgMembership = await query(
+      // Read AS the person. Unscoped, row-level security returns nothing and
+      // the export would silently omit org membership -- a data-rights defect
+      // that looks exactly like "you are not in an organization".
+      payload.orgMembership = await queryAsUser(
+        userId,
         `SELECT * FROM access_code_redemption WHERE user_id = $1`,
         [userId]
       );

@@ -57,7 +57,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations } from "@crucible/core";
+import { query, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations, leaveAllOrgs } from "@crucible/core";
 
 export async function DELETE(req: Request) {
   const session = await auth();
@@ -123,7 +123,11 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Reset access codes and tier
-    await query("DELETE FROM access_code_redemption WHERE user_id = $1", [userId]);
+    // Through the database function, not a DELETE: membership is row-level
+    // protected (an unscoped delete would remove nothing and this route would
+    // still report success), and leaving also has to release the person from
+    // their case manager's caseload.
+    await leaveAllOrgs(userId);
 
     const deleteAccount = body?.deleteAccount === true;
     if (deleteAccount) {

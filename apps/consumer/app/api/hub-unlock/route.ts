@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query, getOne } from "@crucible/core";
+import { query, getOne, redeemAccessCode } from "@crucible/core";
 
 /**
  * Server-to-server endpoint for the Waukesha Hub to unlock Forge/Refinery access.
@@ -54,26 +54,15 @@ export async function POST(request: Request) {
     );
 
     if (crucibleUser) {
-      // User exists -- check if already redeemed
-      const existing = await getOne<{ id: string }>(
-        "SELECT id FROM access_code_redemption WHERE user_id = $1 AND access_code_id = $2",
-        [crucibleUser.id, accessCode.id]
-      );
-
-      if (!existing) {
-        // Redeem the code
-        await query(
-          "INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)",
-          [crucibleUser.id, accessCode.id]
-        );
-        await query(
-          "UPDATE access_code SET times_redeemed = times_redeemed + 1, updated_at = now() WHERE id = $1",
-          [accessCode.id]
-        );
-        // Update user tier
-        await query(
-          "UPDATE users SET tier = 'partner' WHERE id = $1 AND (tier IS NULL OR tier = 'client')",
-          [crucibleUser.id]
+      // Through the one redemption path. This route used to insert the
+      // membership row itself, with no active, expiry or capacity check, and
+      // bump the counter in a separate statement. "already_member" is success
+      // here: the hub is asking that they HAVE access, not that it be new.
+      const res = await redeemAccessCode(crucibleUser.id, codeValue);
+      if (!res.success && res.outcome !== "already_member") {
+        return NextResponse.json(
+          { success: false, status: "not_redeemed", reason: res.outcome },
+          { status: 409 }
         );
       }
 

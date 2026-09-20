@@ -11,7 +11,7 @@
  * No PII in the aggregate rows -- counts, rates, and timestamps only.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, getOneAsUser } from "./db";
 import { redeemAccessCode } from "./accessCode";
 import { getFunnelAggregate, type FunnelCounts } from "./outcomeAggregate";
 
@@ -54,7 +54,11 @@ export async function ensureUserAttribution(
   if (!userId || !code || !isCodeShape(code.toUpperCase())) return false;
 
   // First code wins: if the user already has ANY redemption, do not rebind.
-  const existing = await getOne<{ id: string }>(
+  // Read AS the person. Unscoped, this finds nothing under row-level security
+  // and the rule it guards inverts: everyone looks unattributed, so everyone
+  // gets bound again to whichever code they arrived with.
+  const existing = await getOneAsUser<{ id: string }>(
+    userId,
     `SELECT id FROM access_code_redemption WHERE user_id = $1 LIMIT 1`,
     [userId]
   );

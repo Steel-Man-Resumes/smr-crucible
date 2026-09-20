@@ -359,23 +359,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     [token.sub]
                   );
                   // Attribute to the org (first code wins) for tracking.
+                  //
+                  // Through smr_redeem_code, the one membership path: this used
+                  // to INSERT the row itself, and the app role no longer can.
+                  // Core is not imported here because this file is also bundled
+                  // for the edge middleware; the function is called directly.
+                  // app.user_id is set so the person can read their OWN
+                  // memberships under row-level security -- without it the
+                  // first-code-wins check sees nothing and always re-binds.
                   if (orgCode) {
-                    await c.query(
-                      `WITH ins AS (
-                         INSERT INTO access_code_redemption (user_id, access_code_id)
-                         SELECT $1, ac.id FROM access_code ac
-                         WHERE ac.code = $2 AND ac.is_active = true
-                           AND NOT EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = $1)
-                         ON CONFLICT DO NOTHING
-                         RETURNING access_code_id
-                       )
-                       UPDATE access_code SET times_redeemed = times_redeemed + 1, updated_at = now()
-                       WHERE id IN (SELECT access_code_id FROM ins)`,
-                      [token.sub, orgCode]
-                    );
+                    await c.query("BEGIN");
+                    try {
+                      await c.query(`SELECT set_config('app.user_id', $1, true)`, [token.sub]);
+                      const has = await c.query(
+                        `SELECT 1 FROM access_code_redemption WHERE user_id = $1 LIMIT 1`,
+                        [token.sub]
+                      );
+                      if (has.rowCount === 0) {
+                        await c.query(`SELECT smr_redeem_code($1::uuid, $2)`, [token.sub, orgCode]);
+                      }
+                      await c.query("COMMIT");
+                    } catch (err) {
+                      await c.query("ROLLBACK").catch(() => {});
+                      throw err;
+                    }
                   }
                 } finally { c.release(); }
-              }).catch(() => {});
+              }).catch((err) => {
+                // Never blocks sign-in, but no longer vanishes either.
+                console.error("[auth] pre-authorized partner attribution failed:", err);
+              });
             }
           }
         }

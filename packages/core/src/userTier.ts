@@ -4,7 +4,7 @@
  * Source of truth for code-based upgrades: access_code_redemption table.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, getOneAsUser } from "./db";
 
 export type UserTier = "client" | "partner" | "observer" | "admin";
 
@@ -62,7 +62,11 @@ export async function setUserTier(
 export async function syncUserTierFromCodes(
   userId: string
 ): Promise<UserTier> {
-  const row = await getOne<{ tier: string }>(
+  // Read AS the person. Unscoped, row-level security returns no rows, and "no
+  // codes" is a legitimate answer here -- so this would not fail, it would
+  // quietly write 'client' over a partner's tier.
+  const row = await getOneAsUser<{ tier: string }>(
+    userId,
     `SELECT ac.tier
      FROM access_code_redemption acr
      JOIN access_code ac ON ac.id = acr.access_code_id

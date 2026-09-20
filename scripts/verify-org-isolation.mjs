@@ -161,6 +161,8 @@ async function cleanup() {
     await sql`DELETE FROM client_staff_assignment WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM access_code_redemption WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_staff WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_invite WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_audit WHERE org_id = ANY(${codes}::uuid[])`;
   }
   if (users.length) {
     await sql`DELETE FROM consumer_consent WHERE user_id = ANY(${users}::uuid[])`;
@@ -357,6 +359,192 @@ async function main() {
   );
 
   await platformAdminChecks();
+  await membershipChecks();
+}
+
+/**
+ * Membership: who belongs to which organization (migrations 048 + 049).
+ *
+ * MOST OF THESE ARE NOT "CAN ORG A SEE ORG B". They are the places where an
+ * unscoped read under row-level security would not fail -- it would come back
+ * empty and the code would ACT on the emptiness: demote a tier, hand out the
+ * anonymous rate limit, bind somebody to a second organization, let one org
+ * attach another org's participant. Each is asserted by its consequence.
+ *
+ * They pass with RLS off too (that is the point of converting callers first);
+ * the block at the end runs only once 049 is applied.
+ */
+async function membershipChecks() {
+  console.log("\n  -- membership --");
+  const core = await import("../packages/core/dist/index.js");
+  const app = appUrl ? neon(appUrl) : null;
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const mkCode = async (label, owner, extra = {}) => {
+    const [row] = await sql`
+      INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, daily_limit, max_redemptions, expires_at)
+      VALUES (${`ISO${label}${uniq}`}, ${`${P} ${label}`}, ${extra.tier ?? "partner"}, ${owner}, ${extra.active ?? true},
+              ${extra.dailyLimit ?? 123}, ${extra.max ?? null}, ${extra.expires ?? null})
+      RETURNING id, code`;
+    created.codes.push(row.id);
+    return row;
+  };
+  const seats = async (id) => (await sql`SELECT times_redeemed FROM access_code WHERE id = ${id}`)[0].times_redeemed;
+  const memberships = async (u) => (await sql`SELECT count(*)::int AS n FROM access_code_redemption WHERE user_id = ${u}`)[0].n;
+
+  const ownerM = await mkUser("m-owner");
+  const ownerN = await mkUser("m-ownerN");
+  const orgM = await mkCode("M", ownerM);
+  const orgN = await mkCode("N", ownerN);
+  const pat = await mkUser("m-pat");
+
+  // -- the one redemption path
+  const first = await core.redeemAccessCode(pat, orgM.code);
+  check("redeeming a valid code creates the membership and claims one seat",
+    first.success && (await memberships(pat)) === 1 && (await seats(orgM.id)) === 1, JSON.stringify(first));
+  const again = await core.redeemAccessCode(pat, orgM.code);
+  check("redeeming it twice is refused and claims no second seat",
+    again.outcome === "already_member" && (await seats(orgM.id)) === 1, JSON.stringify(again));
+
+  const expired = await mkCode("X", ownerM, { expires: new Date(Date.now() - 86400000).toISOString() });
+  const inactive = await mkCode("I", ownerM, { active: false });
+  const lee = await mkUser("m-lee");
+  check("an expired code is refused", (await core.redeemAccessCode(lee, expired.code)).outcome === "expired");
+  check("an inactive code is refused", (await core.redeemAccessCode(lee, inactive.code)).outcome === "inactive");
+  check("an unknown code is refused", (await core.redeemAccessCode(lee, "NOSUCHCODE" + uniq)).outcome === "not_found");
+  check("none of those refusals created a membership", (await memberships(lee)) === 0);
+
+  // -- two people, one seat, at the same moment
+  const oneSeat = await mkCode("S", ownerM, { max: 1 });
+  const r1 = await mkUser("m-race1");
+  const r2 = await mkUser("m-race2");
+  const race = await Promise.all([core.redeemAccessCode(r1, oneSeat.code), core.redeemAccessCode(r2, oneSeat.code)]);
+  const winners = race.filter((r) => r.success).length;
+  const [{ n: seated }] = await sql`SELECT count(*)::int AS n FROM access_code_redemption WHERE access_code_id = ${oneSeat.id}`;
+  check("two people racing for the last seat: exactly one gets it",
+    winners === 1 && seated === 1 && (await seats(oneSeat.id)) === 1 && race.some((r) => r.outcome === "full"),
+    `winners=${winners} rows=${seated} counter=${await seats(oneSeat.id)} outcomes=${race.map((r) => r.outcome)}`);
+
+  // -- site 3: a tier re-sync must not demote
+  await core.syncUserTierFromCodes(pat);
+  const [{ tier: patTier }] = await sql`SELECT tier FROM users WHERE id = ${pat}`;
+  check("a tier re-sync keeps a partner-coded person at partner", patTier === "partner", `tier is ${patTier}`);
+
+  // -- site 4: the rate limiter, on the path of every AI call
+  const limit = await core.getUserDailyLimit(pat);
+  check("the rate limiter finds the person's code allowance, not the anonymous default", limit === 123, `limit is ${limit}`);
+
+  // -- site 11
+  const mine = await core.getUserAccessCodes(pat);
+  check("a person can list their own codes", mine.length === 1 && mine[0].id === orgM.id, `saw ${mine.length}`);
+
+  // -- site 5: first code wins
+  const rebound = await core.ensureUserAttribution(pat, orgN.code);
+  check("someone attributed to org M is NOT re-attributed by arriving with org N's code",
+    rebound === false && (await memberships(pat)) === 1, `returned ${rebound}, memberships=${await memberships(pat)}`);
+
+  // -- D8 (Troy, 2026-09-20): a person MAY deliberately join a second org.
+  const two = await mkUser("m-two");
+  await core.redeemAccessCode(two, orgM.code);
+  const second = await core.redeemAccessCode(two, orgN.code);
+  check("a person can deliberately redeem a second organization's code", second.success && (await memberships(two)) === 2);
+
+  // -- site 6: an org cannot attach another org's participant by inviting their email
+  const [{ email: patEmail }] = await sql`SELECT email FROM users WHERE id = ${pat}`;
+  const poach = await core.createOrgInvite({ accessCodeId: orgN.id, code: orgN.code, name: "x", email: patEmail, invitedBy: ownerN });
+  check("org N inviting the email of org M's participant is refused",
+    poach.ok === false && /another organization/.test(poach.error) && (await memberships(pat)) === 1, JSON.stringify(poach));
+  const dupe = await core.createOrgInvite({ accessCodeId: orgM.id, code: orgM.code, name: "x", email: patEmail, invitedBy: ownerM });
+  check("org M inviting its own participant is told they are already a member",
+    dupe.ok === false && /already part of your organization/.test(dupe.error), JSON.stringify(dupe));
+
+  // -- sites 7 + 8: revoke frees the seat, in one step, and deletes nobody
+  const before = await seats(orgN.id);
+  const invitedEmail = `${P}-m-invited-${uniq.toLowerCase()}@example.invalid`;
+  const inv = await core.createOrgInvite({ accessCodeId: orgN.id, code: orgN.code, name: "Invited", email: invitedEmail, invitedBy: ownerN });
+  if (inv.ok) created.users.push(inv.userId);
+  check("inviting a new person creates a pending member and claims a seat", inv.ok && (await seats(orgN.id)) === before + 1, JSON.stringify(inv));
+  if (inv.ok) {
+    const foreignRevoke = await core.revokeOrgInvite(orgM.id, inv.userId, ownerM);
+    check("org M cannot revoke org N's invite", foreignRevoke.ok === false && (await memberships(inv.userId)) === 1);
+    const rev = await core.revokeOrgInvite(orgN.id, inv.userId, ownerN);
+    const [{ n: stillThere }] = await sql`SELECT count(*)::int AS n FROM users WHERE id = ${inv.userId}`;
+    const [{ n: inviteRows }] = await sql`SELECT count(*)::int AS n FROM org_invite WHERE user_id = ${inv.userId}`;
+    check("revoking a pending invite ends the membership, removes the invite and refunds the seat",
+      rev.ok && (await memberships(inv.userId)) === 0 && inviteRows === 0 && (await seats(orgN.id)) === before,
+      `ok=${rev.ok} memberships=${await memberships(inv.userId)} invites=${inviteRows} seats=${await seats(orgN.id)} (was ${before})`);
+    check("revoking does NOT delete the account", stillThere === 1);
+  }
+
+  // -- site 22 + the assignment that used to be left behind
+  const staffM = await mkUser("m-staff");
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${orgM.id}, ${staffM}, 'staff')`;
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by)
+            VALUES (${orgM.id}, ${pat}, ${staffM}, ${ownerM})`;
+  const seatsBeforeLeave = await seats(orgM.id);
+  const left = await core.leaveAllOrgs(pat);
+  const [{ n: assignLeft }] = await sql`SELECT count(*)::int AS n FROM client_staff_assignment WHERE client_user_id = ${pat}`;
+  check("leaving ends the membership AND releases the person from their case manager's caseload",
+    left === 1 && (await memberships(pat)) === 0 && assignLeft === 0, `left=${left} assignments=${assignLeft}`);
+  check("leaving does not refund the seat (a seat is durable)", (await seats(orgM.id)) === seatsBeforeLeave);
+
+  // -- site 12: an owner of several codes sees all of them, and only them
+  const orgM2 = await mkCode("M2", ownerM);
+  const a = await mkUser("m-a");
+  const b = await mkUser("m-b");
+  await core.redeemAccessCode(a, orgM.code);
+  await core.redeemAccessCode(b, orgM2.code);
+  const cohortM = await core.getPartnerCohort(ownerM, {});
+  const cohortN = await core.getPartnerCohort(ownerN, {});
+  check("an owner of two codes counts members of both, and none of another owner's",
+    // M owns four codes here. Members: `two` and `a` (code M), `b` (code M2),
+    // and whoever won the one-seat race (code S). `pat` has left. N has `two`.
+    cohortM.totalJoined === 4 && cohortN.totalJoined === 1, `M=${cohortM.totalJoined} (want 4)  N=${cohortN.totalJoined} (want 1)`);
+
+  // -- the audit trail
+  const [{ n: audited }] = await sql`SELECT count(*)::int AS n FROM org_audit
+     WHERE table_name = 'access_code_redemption' AND org_id = ${orgM.id} AND subject_user_id = ${a} AND action = 'INSERT' AND actor = ${a}`;
+  check("joining an organization is written to the audit trail with who did it", audited === 1, `rows=${audited}`);
+
+  // ------------------------------------------------- only once 049 is applied
+  const [{ on: rlsOn }] = await sql`SELECT (relrowsecurity AND relforcerowsecurity) AS on FROM pg_class WHERE oid = 'public.access_code_redemption'::regclass`;
+  if (!rlsOn) {
+    console.log("  note  row-level security is NOT enabled on access_code_redemption (049 not applied); boundary checks skipped");
+    return;
+  }
+  if (!app) {
+    console.log("  skip  boundary checks (no app credential; as the owner they would prove nothing)");
+    return;
+  }
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const [{ n: ownerSees }] = await sql`SELECT count(*)::int AS n FROM access_code_redemption`;
+  const [{ n: appSees }] = await app`SELECT count(*)::int AS n FROM access_code_redemption`;
+  check("an unscoped read by the app sees no memberships at all (and there ARE some)", appSees === 0 && ownerSees > 0, `app=${appSees} owner=${ownerSees}`);
+
+  const ins = await raised(() => app`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${lee}, ${orgM.id})`);
+  check("the app cannot insert a membership directly, only through smr_redeem_code", !!ins && /permission denied/i.test(ins), ins ?? "insert succeeded");
+  const upd = await raised(() => app`UPDATE access_code_redemption SET access_code_id = ${orgN.id} WHERE user_id = ${a}`);
+  check("the app cannot move a membership to another organization", !!upd && /permission denied/i.test(upd), upd ?? "update succeeded");
+
+  const asM = await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgM.id}, true)`,
+    app`SELECT count(*)::int AS n FROM access_code_redemption WHERE access_code_id = ${orgN.id}`,
+    app`DELETE FROM access_code_redemption WHERE access_code_id = ${orgN.id} RETURNING id`,
+    app`SELECT count(*)::int AS n FROM access_code_redemption WHERE access_code_id = ${orgM.id}`,
+  ]);
+  check("scoped to org M, the app sees none of org N's members and can delete none of them",
+    asM[1][0].n === 0 && asM[2].length === 0 && asM[3][0].n > 0, `sawN=${asM[1][0].n} deletedN=${asM[2].length} sawM=${asM[3][0].n}`);
+
+  const asA = await app.transaction([
+    app`SELECT set_config('app.user_id', ${a}, true)`,
+    app`SELECT user_id FROM access_code_redemption`,
+    app`DELETE FROM access_code_redemption WHERE user_id = ${a} RETURNING id`,
+  ]);
+  check("as one person, the app sees only that person's memberships",
+    asA[1].length === 1 && asA[1][0].user_id === a, `saw ${asA[1].length}`);
+  check("a person cannot delete their own membership with a bare DELETE (leaving goes through the function)", asA[2].length === 0);
+
+  const noScope = await raised(() => app`SELECT smr_invite_binding(${a}::uuid)`);
+  check("the cross-org binding question refuses to answer outside an organization scope", !!noScope && /organization scope/.test(noScope), noScope ?? "answered");
 }
 
 /**
