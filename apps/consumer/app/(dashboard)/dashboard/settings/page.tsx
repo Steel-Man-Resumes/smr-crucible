@@ -17,6 +17,7 @@ import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { SharingControls } from "@/components/SharingControls";
 import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
 import { OrgSetupGuide } from "@/components/org/OrgSetupGuide";
+import { RequirementCard, type RequirementPolicy, type RequirementText } from "@/components/RequirementCard";
 import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { DecisionLogViewer } from "@/components/DecisionLogViewer";
@@ -148,9 +149,21 @@ export default function SettingsPage() {
     loadHiddenEmployers();
   }, []);
 
-  async function redeemCode(e: React.FormEvent) {
+  // BEFORE JOINING A PROGRAM THAT REQUIRES SHARING, the person is shown what it
+  // requires and why. Joining is still their decision, and acknowledging is a
+  // separate step afterwards -- but nobody should learn a program's conditions
+  // only after they are inside it.
+  const [pendingPolicy, setPendingPolicy] = useState<{ policy: RequirementPolicy & { items: { scope: string; label: string; shows: string; never: string }[] }; text: RequirementText } | null>(null);
+
+  async function redeemCode(e: React.FormEvent, confirmed = false) {
     e.preventDefault();
     if (!codeInput.trim()) return;
+
+    if (!confirmed) {
+      const check = await fetch(`/api/access-code/policy?code=${encodeURIComponent(codeInput.trim())}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (check?.policy) { setPendingPolicy(check); return; }
+    }
+    setPendingPolicy(null);
 
     setCodeStatus("redeeming");
     setCodeError("");
@@ -418,6 +431,18 @@ export default function SettingsPage() {
         <GroupHeading>Account</GroupHeading>
         <AccountSection />
         <AvatarSettingsSection />
+        {pendingPolicy && (
+          <div role="dialog" aria-label="What this program requires" className="mb-4">
+            <RequirementCard policy={pendingPolicy.policy} text={pendingPolicy.text} items={pendingPolicy.policy.items} compact />
+            <p className="text-sm text-t-phos-dim mb-3">
+              Joining does not open anything by itself. After you join you will be asked to acknowledge this, and you can read it again first.
+            </p>
+            <div className="flex gap-3 mb-6">
+              <button onClick={(e) => redeemCode(e, true)} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2">Join {pendingPolicy.policy.orgName}</button>
+              <button onClick={() => setPendingPolicy(null)} className="t-focus border border-t-line text-sm text-t-phos px-4 py-2">Not now</button>
+            </div>
+          </div>
+        )}
         {!isOrgStaff && <AccountExtras
           codeInput={codeInput}
           setCodeInput={setCodeInput}

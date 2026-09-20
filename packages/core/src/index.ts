@@ -15,6 +15,7 @@ export * from './userTier';
 export * from './rlsHealth';
 export * from './sharingScopes';
 export * from './sharing';
+export * from './sharingPolicy';
 export * from './orgClientView';
 export * from './staffPrefs';
 export * from './orgAccess';

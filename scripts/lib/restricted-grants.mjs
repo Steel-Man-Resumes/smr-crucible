@@ -29,6 +29,9 @@ export const RESTRICTED_GRANTS = {
   case_note: ["SELECT", "INSERT", "UPDATE"],
   case_note_version: ["SELECT"],
   org_capability_override: ["SELECT"],
+  // Written only by smr_set_sharing_policy / smr_acknowledge_policy.
+  org_sharing_policy_version: ["SELECT"],
+  sharing_ack: ["SELECT"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

@@ -12,14 +12,17 @@
  * component can drift from the record of what was promised.
  */
 import { useCallback, useEffect, useState } from "react";
+import { RequirementCard, type RequirementPolicy, type RequirementText } from "@/components/RequirementCard";
 
 interface ScopeText { scope: string; label: string; shows: string; never: string; firstTime: string }
 interface OrgState {
   orgId: string; orgName: string; caseManagerName: string | null;
-  granted: { scope: string; grantedAt: string }[];
+  granted: { scope: string; grantedAt: string; basis: string }[];
   requests: { id: string; scope: string; reason: string; requestedByName: string | null }[];
 }
 interface Payload {
+  policies: (RequirementPolicy & { orgId: string; acknowledged: boolean })[];
+  requiredText: RequirementText;
   orgs: OrgState[];
   log: { at: string; who: string | null; orgName: string | null; scope: string }[];
   text: { scopes: ScopeText[]; always: { control: string; log: string; staffNotes: string; leaving: string } };
@@ -45,7 +48,7 @@ export function SharingControls() {
     await load(); setBusy(null);
   }
 
-  if (!data || data.orgs.length === 0) return null;
+  if (!data || (data.orgs.length === 0 && data.policies.length === 0)) return null;
   const label = (scope: string) => data.text.scopes.find((s) => s.scope === scope)?.label ?? scope;
 
   return (
@@ -53,6 +56,11 @@ export function SharingControls() {
       <h2 id="sharing-heading" className="text-lg font-bold text-t-white mb-2">Who can see what</h2>
       <p className="text-sm text-t-phos-dim leading-relaxed mb-4">{data.text.always.control}</p>
       {error && <p role="alert" className="text-xs text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3 mb-4">{error}</p>}
+
+      {data.policies.filter((p) => !p.acknowledged).map((p) => (
+        <RequirementCard key={p.id} policy={p} text={data.requiredText} items={data.text.scopes}
+          busy={busy === p.id} onAcknowledge={() => act(p.id, { action: "acknowledge", versionId: p.id })} />
+      ))}
 
       {data.orgs.map((org) => (
         <div key={org.orgId} className="bg-t-panel border border-t-line p-5 mb-4">
@@ -81,17 +89,30 @@ export function SharingControls() {
             {data.text.scopes.map((t) => {
               const on = org.granted.some((g) => g.scope === t.scope);
               const key = `${org.orgId}:${t.scope}`;
+              const policy = data.policies.find((p) => p.orgId === org.orgId);
+              const required = !!policy?.scopes.includes(t.scope);
+              // Stopping something the program requires is theirs to do, and never silent.
+              const flip = () => {
+                if (on && required && !window.confirm(`${org.orgName} requires this.\n\n${data.requiredText.stopping}\n\nStop sharing it?`)) return;
+                act(key, { action: on ? "revoke" : "grant", orgId: org.orgId, scope: t.scope });
+              };
               return (
                 <li key={t.scope} className="py-4 flex items-start justify-between gap-4">
                   <div>
-                    <p className="font-medium text-t-white">{t.label}</p>
+                    <p className="font-medium text-t-white">
+                      {t.label}
+                      {required && <span className="ml-2 text-[10px] text-t-amber-bright border border-t-amber px-1 align-middle">Required by {org.orgName}</span>}
+                    </p>
+                    {required && !on && policy?.acknowledged && (
+                      <p className="text-xs text-t-amber-bright mt-1">You stopped sharing this. {org.orgName} can see that you did.</p>
+                    )}
                     <p className="text-sm text-t-phos-dim leading-relaxed mt-1"><span className="text-t-phos">They would see:</span> {t.shows}</p>
                     <p className="text-sm text-t-phos-dim leading-relaxed"><span className="text-t-phos">Stays private:</span> {t.never}</p>
                     {!on && <p className="text-xs text-t-phos-dim mt-1">{t.firstTime}</p>}
                   </div>
                   <button type="button" role="switch" aria-checked={on} aria-label={`Share ${t.label.toLowerCase()} with ${org.orgName}`}
                     disabled={busy === key}
-                    onClick={() => act(key, { action: on ? "revoke" : "grant", orgId: org.orgId, scope: t.scope })}
+                    onClick={flip}
                     className={`t-focus relative inline-flex h-7 w-12 flex-shrink-0 items-center border transition-colors disabled:opacity-50 ${on ? "bg-t-amber border-t-amber" : "bg-t-panel-2 border-t-line"}`}>
                     <span className={`inline-block h-5 w-5 transform transition-transform ${on ? "translate-x-6 bg-[#14100a]" : "translate-x-1 bg-t-phos-dim"}`} />
                   </button>

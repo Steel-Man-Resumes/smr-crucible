@@ -15,7 +15,7 @@
  * behind it; practice, disclosure and single vault documents are deliberately
  * absent until theirs are built.
  */
-export const SHARING_TEXT_VERSION = "2026-09-20.1";
+export const SHARING_TEXT_VERSION = "2026-09-20.2";
 
 export const SHARING_SCOPES = ["applications", "resume", "documents"] as const;
 export type SharingScope = (typeof SHARING_SCOPES)[number];
@@ -66,4 +66,47 @@ export const SHARING_ALWAYS_TEXT = {
     "Your case manager keeps their own notes about working with you. Those notes belong to your organization. You will see a note here only if they choose to show it to you.",
   leaving:
     "Leaving your organization on Steel Man turns all of this off and keeps your account, your resumes and all your work with you. We cannot tell you what your program's own rules are about leaving. Ask them.",
+} as const;
+
+
+/* ------------------------------------------------------ required by a program -- */
+
+/** What a program may require. Disclosure, practice and vault files never appear here. */
+export const REQUIRABLE_SCOPES = ["applications", "resume", "documents"] as const satisfies readonly SharingScope[];
+
+export const POLICY_AUDIENCES = ["assigned_staff", "assigned_staff_and_admins"] as const;
+export type PolicyAudience = (typeof POLICY_AUDIENCES)[number];
+export const POLICY_AUDIENCE_TEXT: Record<PolicyAudience, string> = {
+  assigned_staff: "Only the case manager assigned to you.",
+  assigned_staff_and_admins: "The case manager assigned to you, and the people who run the program.",
+};
+
+/**
+ * Starting points for the organization's OWN stated reason. They are offered
+ * because an owner facing an empty box writes "policy", and a participant
+ * deserves a real sentence. The organization edits the words; what it saves is
+ * shown to participants verbatim, under the organization's name, as THEIR rule.
+ */
+export const POLICY_PURPOSE_PRESETS: { label: string; text: string }[] = [
+  { label: "A contract or grant requires it", text: "Our funding agreement requires us to verify each participant's job-search activity. Your case manager reviews it with you; it is not used to penalize you." },
+  { label: "A condition of the program", text: "Sharing your job-search materials with your case manager is a condition of enrolling in this program, so that they can coach you on real applications rather than in general." },
+  { label: "Court or supervision reporting", text: "Some participants must show documented job-search effort to a court or supervising officer. We review your activity with you so that what is reported is accurate and complete." },
+  { label: "Reporting outcomes to a funder", text: "We report job placements and retention to the funder that pays for this program. Your case manager confirms those outcomes from your applications." },
+];
+
+/** Shown around the organization's words whenever a requirement is presented. Our sentences, not theirs. */
+export const SHARING_REQUIRED_TEXT = {
+  heading: "This program requires some sharing",
+  notConsent:
+    "This is the program's rule, not a choice we are asking you to make freely, and we will not describe it as your consent. What follows is exactly what they require and why, in their words.",
+  acknowledging:
+    "Acknowledging means your case manager can open the items listed. They can read them and cannot change them. You will see every time they open one.",
+  coversExisting: "This covers what you have already made here, not only what you make from now on.",
+  coversFuture: "This covers only what you make from today on. What you made before today stays private unless you choose to share it.",
+  neverRequired: "Your disclosure plan, your interview practice and your stored documents can never be required by any program. Those stay yours to share or not.",
+  notLockedOut:
+    "You can keep using Steel Man Resumes whether or not you acknowledge this. Your account, your resumes and your work are yours either way. Until you acknowledge, your case manager sees only that you have not.",
+  stopping:
+    "You can stop sharing a required item. We will not prevent you. Your program will see that you stopped, and we cannot tell you what their rules say happens then. Ask them first.",
+  changes: "If the program changes what it requires, nothing new opens until you have seen the change and acknowledged it.",
 } as const;

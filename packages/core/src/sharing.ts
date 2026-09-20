@@ -92,7 +92,12 @@ export async function grantSharing(userId: string, orgId: string, scope: string)
 export async function revokeSharing(userId: string, orgId: string, scope: string): Promise<SharingResult> {
   if (!isSharingScope(scope)) return { ok: false, error: "That is not something that can be shared." };
   const [rows] = await runAsUser<[{ id: string }[]]>(userId, (sql) => [
-    sql`UPDATE sharing_grant SET revoked_at = now(), revoked_reason = 'participant'
+    // Stopping something a PROGRAM requires is allowed -- it is the person's
+    // material -- and it is recorded as exactly that, so the program sees an
+    // honest "stopped" rather than a silent gap. The page warns them first.
+    sql`UPDATE sharing_grant
+           SET revoked_at = now(),
+               revoked_reason = CASE WHEN basis = 'program_requirement' THEN 'participant_stopped_required' ELSE 'participant' END
          WHERE user_id = ${userId} AND access_code_id = ${orgId}::uuid AND scope = ${scope} AND revoked_at IS NULL
         RETURNING id`,
   ]);
