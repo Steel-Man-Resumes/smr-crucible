@@ -1,5 +1,53 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-20 (session 7) -- RLS completion + staff CRM: plan, Codex review, and stage P1 shipped
+
+GOVERNING DOCS: `docs/ORG-RLS-AND-STAFF-CRM-PLAN-v2-2026-09-20.md` (v2 governs),
+v1 alongside (keeps the 22-site call table), `docs/CODEX-WORLD-CLASS-REVIEW-2026-09-20.md`.
+Troy decided: D8 YES (a person may belong to two orgs), D9 do it (admin is a
+flag only the owner credential can set), D1 he will add `ADMIN_DATABASE_URL`
+when told. Troy is on the demo; CC is on everything else. Browser checks go to
+Troy as step-by-step instructions.
+
+**P1 SHIPPED, production `d543990`, migration 047 applied.**
+- `platform_admin` table, app role SELECT only. Trigger pins admins to tier
+  'admin' and refuses 'admin' for anyone else. `access_code.tier` can no longer
+  be 'admin'. `requirePlatformAdmin` + impersonation read the table.
+  Make an admin ONLY with `node scripts/platform-admin.mjs grant <email>`.
+- Backfilled the 3 existing admins (none came from a code; prod had no admin
+  codes). TROY: confirm all three belong -- `node scripts/platform-admin.mjs list`.
+- Verified live as Dana and Russ: admin routes 403, staff console 200. NOT
+  verified: that a real admin still gets IN (no admin password here). Troy
+  opens /dashboard/admin once.
+
+**FOUND WHILE DOING IT (each one real):**
+- **CI was testing a database production is not.** Migrations revoke the app
+  role's writes on `org_audit` inside `IF EXISTS (role)`; on a fresh branch the
+  role does not exist yet, so the revoke is skipped, then `rls-stage1` runs a
+  blanket GRANT. In CI the app could forge the audit trail and no test could
+  notice. Fix: `scripts/lib/restricted-grants.mjs`, applied after the blanket
+  grant and ASSERTED by the suite. Proved the assertion fails on a bad grant.
+  ANY new restricted table must be added to that list.
+- **Production's `_migrations` ledger did not contain 044-046.** They were
+  applied by hand on 9/19. The next `npm run migrate` would have re-run 044,
+  briefly re-creating the defective FOR ALL policy before 046 replaced it.
+  Verified the end state (9 hardened policies, 0 legacy) and recorded them.
+- The ledger DOES contain `044_preferred_language.sql`, which exists only on
+  the unmerged branch `feat/multilang-phase1`. A feature-branch migration was
+  run against production. Harmless (one column), but merging that branch needs
+  a renumber.
+- **Vercel PREVIEW builds fail**: Preview `DATABASE_URL` is not a valid URL
+  (`neon()` throws at page-data collection). Production is unaffected. Needs
+  Troy in the Vercel dashboard; not touched (key discipline).
+- Isolation workflow now runs on pull_request with wider paths. Authorization
+  work goes branch -> PR -> green -> merge. Migrations go to prod BEFORE the
+  code that reads them merges.
+- Local `apps/consumer/.env.local` DATABASE_URL is the PRODUCTION OWNER. The
+  dev-login provider writes tiers with it. Be careful what runs locally.
+
+NEXT: A1a (behavior-neutral scoped-helper conversion of redemption reads),
+then A1b (membership functions, migration 048, RLS still off), then enable.
+
 ## 2026-09-19 (session 6) -- staff t.ROY was never reachable from the browser; fixed, and the checker rebuilt
 
 Troy opened the assistant as a demo staff member: it talked about Forge work,
