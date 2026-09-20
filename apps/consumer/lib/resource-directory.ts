@@ -26,7 +26,7 @@ export type ResourceCategory =
   | "employment";
 
 export type ResourceType = "api" | "link" | "phone" | "chat" | "curated";
-export type ResourceGeo = "milwaukee" | "waukesha" | "wisconsin" | "national";
+export type ResourceGeo = "milwaukee" | "waukesha" | "wisconsin" | "montana" | "national";
 
 export interface ResourceEntry {
   id: string;
@@ -115,6 +115,39 @@ export const BARRIER_CATEGORY_MAP: Record<string, ResourceCategory[]> = {
 // ─── Directory ──────────────────────────────────────────────────────────────
 
 export const RESOURCE_DIRECTORY: ResourceEntry[] = [
+  // ════════════════════════════════════════════════════════════════════════
+  // MONTANA -- Lincoln County. Both entries vetted 2026-09-10 against the
+  // providers' own listings (todash LIBBY-OUTREACH-SHEET-2026-09-10.md). More
+  // exist in that sheet and are NOT here because they have not been re-verified.
+  // ════════════════════════════════════════════════════════════════════════
+  {
+    id: "mt-job-service-libby",
+    category: "employment",
+    type: "curated",
+    title: "Job Service Montana -- Libby",
+    provider: "Montana Department of Labor & Industry",
+    description: "One of only four certified one-stop centers in Montana. Resume help, job search, employer connections, training referrals. Free.",
+    phone: "(406) 293-6282",
+    address: "417 Mineral Ave, Suite 4, Libby MT 59923",
+    hours: "Mon-Fri 8-5",
+    geo: "montana",
+    verifiedAt: "2026-09-10",
+    tags: ["employment", "job-search", "training", "one-stop"],
+  },
+  {
+    id: "mt-nw-community-health-libby",
+    category: "mental_health",
+    type: "curated",
+    title: "Northwest Community Health Center -- Libby",
+    provider: "Northwest Community Health Center",
+    description: "Federally qualified health center for Lincoln County. Medical, dental, behavioral health, pharmacy, case management, WIC, sliding scale.",
+    phone: "(406) 283-6900",
+    address: "320 E 2nd St, Libby MT 59923",
+    hours: "Mon-Fri 8-5",
+    geo: "montana",
+    verifiedAt: "2026-09-10",
+    tags: ["health", "behavioral-health", "sliding-scale"],
+  },
   // ════════════════════════════════════════════════════════════════════════
   // HOUSING
   // ════════════════════════════════════════════════════════════════════════
