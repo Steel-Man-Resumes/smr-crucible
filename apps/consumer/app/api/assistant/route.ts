@@ -98,6 +98,19 @@ export async function POST(request: Request) {
   };
   const messages = pluckMessages(body?.messages);
 
+  // THE BROWSER DOES NOT GET TO SAY WHO IT IS TALKING AS. `context` arrives from
+  // the client, and `context.org` both SELECTS the staff assistant and supplies
+  // the "facts" its answers are checked against. The resolver below overwrites
+  // it for a real staff member -- but for anyone else a caller-supplied org
+  // object simply survived, so a participant could be answered by the staff
+  // assistant, "verified" against numbers they wrote themselves. It reached no
+  // real data; it is still a wrong answer wearing a checked answer's clothes.
+  // These two fields are server-owned. (Codex review 2026-09-20, finding 1.)
+  if (context && typeof context === "object") {
+    delete (context as { org?: unknown }).org;
+    if (context.audience === "org_staff") context.audience = undefined;
+  }
+
   if (!messages.length) {
     return new Response("No messages provided", { status: 400 });
   }
@@ -171,9 +184,19 @@ export async function POST(request: Request) {
         };
       }
     } catch (err) {
-      // Never block a conversation on this. Without it t.ROY is merely less
-      // useful; a thrown error would make him unavailable.
-      console.error("org assistant context failed (non-fatal):", err);
+      console.error("org assistant context failed:", err);
+      // A participant loses nothing here, so their conversation carries on. A
+      // STAFF MEMBER must not: falling through would hand a case manager the
+      // job-seeker coach, offering to build the resume of somebody who asked
+      // about their caseload -- and it would look like a working answer. Say
+      // plainly that the caseload could not be reached. (Codex finding 2.)
+      const tier = await (await import("@crucible/core")).getUserTier(userId).catch(() => "client");
+      if (tier === "partner" || tier === "admin") {
+        return NextResponse.json(
+          { error: "I could not reach your caseload just now, so I am not going to guess. Try again in a moment." },
+          { status: 503 }
+        );
+      }
     }
   }
 

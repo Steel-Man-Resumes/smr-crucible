@@ -36,7 +36,7 @@ const CLIENT_WORKFLOW = [
   {
     step: "4",
     title: "They opt in to share progress",
-    detail: "In Settings, each client has a toggle to share their journey with your program. Off by default. You can't see anyone who hasn't explicitly opted in -- that's not a limitation, it's the design.",
+    detail: "Clients manage optional sharing in Settings. Joining your program does not by itself open their resumes, cover letters or application details. Staff may still see membership and permitted program records.",
   },
   {
     step: "5",
@@ -56,7 +56,7 @@ const DASHBOARD_FEATURES = [
   },
   {
     feature: "Consent transparency",
-    detail: "You can only see clients who have opted in. The dashboard shows the opt-in date so your records are clean.",
+    detail: "Participant materials require active sharing grants and staff permissions. Required sharing is limited to demo programs pending legal review.",
   },
   {
     feature: "Access code management",

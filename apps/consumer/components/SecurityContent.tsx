@@ -53,17 +53,38 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       <Section title="Who Can See Your Data">
         <div className="bg-t-panel p-4 border border-t-line mb-4">
           <p className="text-sm font-bold text-t-amber-bright">
-            You, and nobody in your life.
+            Your work is private from program staff unless you open sharing.
           </p>
         </div>
         <ul className="space-y-2">
-          <DenyItem>Not your case manager</DenyItem>
-          <DenyItem>Not your parole officer</DenyItem>
-          <DenyItem>Not your employer</DenyItem>
-          <DenyItem>Not law enforcement</DenyItem>
+          <BulletItem>
+            Joining a program does not by itself give staff access to your
+            resumes, cover letters or application details. Where sharing is
+            available, you see what will be shared and who can see it before
+            you turn it on. Programs can still see membership and permitted
+            program records.
+          </BulletItem>
+          <BulletItem>
+            You can stop sharing in Settings. This stops new viewing through
+            the sharing feature; it cannot erase what someone already read,
+            copied or put in their own records. You can see a log of access
+            through this feature.
+          </BulletItem>
+          <BulletItem>
+            Required sharing is currently limited to demo programs. A program
+            requirement must be shown separately and acknowledged before it
+            opens any items. Stopping sharing here does not decide a
+            program&apos;s rules or any outside obligations.
+          </BulletItem>
+          <BulletItem>
+            An employer, supervising officer or law enforcement agency does
+            not get access just because of that role. Information you share
+            outside Steel Man may be kept by its recipient. We may also have
+            to disclose information when the law requires it.
+          </BulletItem>
         </ul>
         <p className="text-sm text-t-phos leading-relaxed mt-3">
-          One honest exception: our own staff can open an account to help you,
+          Our own staff can open an account to help you,
           for example when you ask for support or something breaks. Every
           staff access is recorded in an audit log with who and when, and
           full-access sessions require a written reason. Day to day we look
@@ -138,7 +159,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           />
           <ControlCard
             title="Consent Preferences"
-            description="Choose what data to share at every step. Change your mind anytime."
+            description="Manage optional sharing in Settings. You can stop access through the sharing feature; copies and program records already made may remain."
             showButton={showUserControls}
             buttonLabel="Manage Consent"
             href="/dashboard/settings"
@@ -214,9 +235,9 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
               interview practice, and your vault.
             </DenyItem>
             <DenyItem>
-              No sharing with third parties beyond the services that run the
-              platform (hosting, database, AI, visit counting). They process
-              your data to serve you, nothing more.
+              We use service providers for hosting, storage, AI and visit
+              counting. Program sharing and legally required disclosures are
+              described above.
             </DenyItem>
             <DenyItem>No data mining</DenyItem>
             <DenyItem>
@@ -233,8 +254,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         </p>
         <ul className="space-y-2">
           <BulletItem>
-            Each user&apos;s data is completely isolated — no cross-user
-            visibility
+            Staff access to participant materials is limited by organization,
+            staff permissions and the participant&apos;s active sharing grants
           </BulletItem>
           <BulletItem>
             All AI decisions are logged for compliance and audit

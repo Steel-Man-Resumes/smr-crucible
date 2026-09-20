@@ -15,7 +15,7 @@
  * behind it; practice, disclosure and single vault documents are deliberately
  * absent until theirs are built.
  */
-export const SHARING_TEXT_VERSION = "2026-09-20.2";
+export const SHARING_TEXT_VERSION = "2026-09-20.3";
 
 export const SHARING_SCOPES = ["applications", "resume", "documents"] as const;
 export type SharingScope = (typeof SHARING_SCOPES)[number];
@@ -63,7 +63,7 @@ export const SHARING_ALWAYS_TEXT = {
     "You decide this, and you can turn any of it off at any time. Turning it off stops new viewing from that moment. It cannot take back something a person already read or wrote down.",
   log: "Every time someone at your organization opens something you shared, it is recorded, and you can see that record here.",
   staffNotes:
-    "Your case manager keeps their own notes about working with you. Those notes belong to your organization. You will see a note here only if they choose to show it to you.",
+    "Your case manager keeps their own notes about working with you. Your organization manages those notes. This screen shows only notes they choose to share with you; it does not determine any right you may have to request their records.",
   leaving:
     "Leaving your organization on Steel Man turns all of this off and keeps your account, your resumes and all your work with you. We cannot tell you what your program's own rules are about leaving. Ask them.",
 } as const;
@@ -88,7 +88,7 @@ export const POLICY_AUDIENCE_TEXT: Record<PolicyAudience, string> = {
  * shown to participants verbatim, under the organization's name, as THEIR rule.
  */
 export const POLICY_PURPOSE_PRESETS: { label: string; text: string }[] = [
-  { label: "A contract or grant requires it", text: "Our funding agreement requires us to verify each participant's job-search activity. Your case manager reviews it with you; it is not used to penalize you." },
+  { label: "A contract or grant requires it", text: "Our funding agreement requires us to verify job-search activity. Before publishing, we must identify the agreement, the information it requires, who receives it, and what happens if you decline or stop sharing." },
   { label: "A condition of the program", text: "Sharing your job-search materials with your case manager is a condition of enrolling in this program, so that they can coach you on real applications rather than in general." },
   { label: "Court or supervision reporting", text: "Some participants must show documented job-search effort to a court or supervising officer. We review your activity with you so that what is reported is accurate and complete." },
   { label: "Reporting outcomes to a funder", text: "We report job placements and retention to the funder that pays for this program. Your case manager confirms those outcomes from your applications." },
@@ -98,15 +98,15 @@ export const POLICY_PURPOSE_PRESETS: { label: string; text: string }[] = [
 export const SHARING_REQUIRED_TEXT = {
   heading: "This program requires some sharing",
   notConsent:
-    "This is the program's rule, not a choice we are asking you to make freely, and we will not describe it as your consent. What follows is exactly what they require and why, in their words.",
+    "This is the program's rule, not a choice we are asking you to make freely, and we will not describe it as your consent. Below are the items the program requires and its stated reason. Steel Man has not verified that a law, court order or funding agreement requires this sharing. This acknowledgement does not replace any separate permission required by law.",
   acknowledging:
-    "Acknowledging means your case manager can open the items listed. They can read them and cannot change them. You will see every time they open one.",
+    "Acknowledging opens the listed items to the staff described below, which may include program administrators. They can read these items here but cannot edit them here. Their access through this sharing feature is logged for you to see. Stopping sharing cannot take back information they already read or copied.",
   coversExisting: "This covers what you have already made here, not only what you make from now on.",
-  coversFuture: "This covers only what you make from today on. What you made before today stays private unless you choose to share it.",
-  neverRequired: "Your disclosure plan, your interview practice and your stored documents can never be required by any program. Those stay yours to share or not.",
+  coversFuture: "This requirement opens only items created after you acknowledge it. Earlier items are not opened by this requirement. Anything you already chose to share stays shared until you turn that sharing off.",
+  neverRequired: "This sharing feature does not let programs require access to your disclosure plan, interview practice or vault files. Resumes and cover letters are separate items and can be listed above. Sensitive information you put into a shared resume, letter or application may still be visible there.",
   notLockedOut:
-    "You can keep using Steel Man Resumes whether or not you acknowledge this. Your account, your resumes and your work are yours either way. Until you acknowledge, your case manager sees only that you have not.",
+    "Declining this acknowledgement does not close your Steel Man account or delete your work. It does not open the listed items under this requirement. Your program can see that you have not acknowledged; information you already shared and program membership records may still be visible. Ask the program what declining means for its services or any court or supervision requirements.",
   stopping:
-    "You can stop sharing a required item. We will not prevent you. Your program will see that you stopped, and we cannot tell you what their rules say happens then. Ask them first.",
+    "You can stop sharing a required item here at any time. That stops new viewing through this sharing feature, but does not erase copies or program records already made. Your program can see which required items you stopped sharing. Steel Man cannot promise that declining or stopping has no effect on services, benefits or court or supervision requirements. Ask the program to explain its rules and any alternatives; you do not need its permission to use this stop control.",
   changes: "If the program changes what it requires, nothing new opens until you have seen the change and acknowledged it.",
 } as const;
