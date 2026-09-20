@@ -20,6 +20,10 @@ export const RLS_PROTECTED_TABLES = [
   "client_staff_assignment",
   "org_audit",
   "access_code_redemption",
+  "sharing_grant",
+  "sharing_request",
+  "case_note",
+  "case_note_version",
 ] as const;
 
 export interface RlsHealth {
