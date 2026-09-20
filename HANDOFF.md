@@ -208,6 +208,64 @@ t.ROY is handed, together, or they will disagree (session 6's defect class).
 Suite: 104 as smr_app. Known rough edge: `/dashboard/team` opened directly by
 non-admin staff renders only the header (the nav does not offer it to them).
 
+### OWNER WORKSPACE, DEMO COHORT, REQUIRED SHARING, "THEIR SCREEN" -- production `7983334`, migrations 053-054
+
+Troy's asks, same evening: Dana/Yvonne need a real org chart, staff at different
+roles with different access, relevant settings, their own metrics; staff need a
+limited view of "their client's screen"; admins need to be able to REQUIRE
+sharing "because some facilities will require it for sure"; and the other
+session's cohort handoff (`~/todash/smr/MT-DOC-DEMO-COHORT-AND-STAFF-HANDOFF-2026-09-20.md`).
+
+- **Team & access** (`/dashboard/team`): chart of owner/admins/staff with load,
+  notes written, last sign-in; per-person plain-language switches; invite staff
+  by email at a role; role change and removal. Only a DIFFERENCE from the role
+  is stored. Writes go through `smr_set_capability_override`, which looks the
+  actor up in the tables. **The console GET now reads capabilities, not the
+  role name** -- before this a switch would have changed nothing on screen.
+  Side effect, intended: an org_admin no longer sees AI cost unless the owner
+  turns it on (that is what the bundles always said).
+- **Insights** (`/dashboard/insights`, `org.insights.view`): counted only over
+  what participants agreed to. Interview/offer counts cover ONLY people sharing
+  applications and say so. Quiet totals are the SUM of the same rollup t.ROY
+  uses. Verified live: Dana's numbers match the caseload.
+- **Settings for owners/admins** lead with `OrgSetupGuide`: what is true for
+  their org right now and what the system can do that they may not have found.
+- **Demo cohort**: `node scripts/seed-demo-cohort.mjs` IS the Montana reset.
+  Six fictional people, real vetted employers, only Flathead County Government
+  treated as fair-chance. Demo orgs carry a "Sample data" line on every staff
+  screen. It replaced `seed-demo-materials`, where I had given Wes applications
+  at four Libby businesses I never checked -- same failure as guessing a column.
+  The cohort is now SIX people (Marisol Vance added): the run sheet and any
+  rehearsed t.ROY numbers that said five need re-checking.
+- **Required sharing** (054): immutable policy versions; nothing opens without
+  the person's own acknowledgement of THAT version; "only my case manager" and
+  "from today on" are enforced in SQL; nobody acknowledges for anyone else; never
+  called consent; shown before joining with a code; the person can stop a
+  required item and the program sees "stopped"; disclosure/practice/vault can
+  never be required (the database refuses even a direct call). Owner only.
+  **`access_code.required_sharing_enabled` is ON FOR DEMO ORGS ONLY. Do not turn
+  it on for a real organization until a lawyer has read the participant-facing
+  wording in `sharingScopes.ts` (SHARING_REQUIRED_TEXT).** Run end to end on
+  production on the Michigan demo org; policy then retired. Marcus Pruitt keeps
+  one leftover grant from that run; harmless, demo data.
+- **Their screen**: a tab on the participant page mapping the person's own
+  workspace so staff can coach them to the right place. A map, not
+  impersonation. Staff never sign in as a participant.
+- **NOT BUILT, deliberately: staff emailing a participant's resume to an
+  employer.** It sends a person's document OUTSIDE the organization, which is
+  wider than anything the sharing words promise. It needs its own scope and its
+  own sentence ("send this for me"), and a log the person can see. After 9/22.
+- Real orgs' data: nothing real was put in front of Montana, and no real org has
+  `crm_v2`. Real rosters need names from Troy; none were invented.
+- Suite: 158 as smr_app. Mutation-checked: audience rule, from-date rule.
+
+ANTICIPATED NEXT (advice given to Troy, none built): a participant-generated
+"proof of job search" log for a PO or court (the participant sends it, not
+staff); per-person "send this for me" document delivery; retention check-ins at
+30/60/90 plus quarter-after-exit fields for WIOA-style reporting; an org-level
+export for funders built from Insights; bulk assignment; a staff-to-participant
+shared task ("bring ID Thursday"); an acknowledgement reminder email.
+
 NEXT, in order: (1) DONE;
 (2) after 9/22: t.ROY per-client + Save as note with a production batch, Today
 queue, tasks, outcomes; (3) required-sharing mode behind legal review; (4) Part B,
