@@ -9,10 +9,12 @@
 import { NextResponse } from "next/server";
 import { getOrgInsights, recordDataAccess, type OrgInsights } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 
 export const dynamic = "force-dynamic";
 
-const STAGE = ["Getting started", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "Stage 6"];
+// The same stage names every screen uses, not a second list to drift.
+const STAGE = JOURNEY_STAGES.map((st, n) => `${n}. ${st.long}`);
 const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
 function toCsv(orgName: string, i: OrgInsights): string {
