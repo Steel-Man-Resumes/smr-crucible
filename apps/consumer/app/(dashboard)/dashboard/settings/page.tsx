@@ -14,6 +14,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
+import { SharingControls } from "@/components/SharingControls";
 import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { DecisionLogViewer } from "@/components/DecisionLogViewer";
@@ -423,6 +424,7 @@ export default function SettingsPage() {
       <div id="privacy" className="scroll-mt-32 mb-10">
         <GroupHeading>Privacy &amp; Consent</GroupHeading>
         <SharingConsentSection />
+        <SharingControls />
         <ConsentPanel />
         {/* AI transparency: t.ROY's recorded reasoning */}
         <DecisionLogViewer />

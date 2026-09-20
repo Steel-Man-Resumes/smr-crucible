@@ -25,6 +25,7 @@ import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { requireOrgCapability } from "@/lib/org-guard";
 import {
+  getOne,
   getUserTier,
   getOrgContext,
   getOrgStaff,
@@ -98,7 +99,14 @@ export async function GET(request: Request) {
       context: { clientCount: clients.length },
     });
 
+    // The per-participant pages and scoped sharing, switched on per org.
+    const flag = await getOne<{ crm_v2: boolean }>(
+      `SELECT crm_v2 FROM access_code WHERE id = $1`,
+      [org.accessCodeId]
+    );
+
     return NextResponse.json({
+      crmV2: !!flag?.crm_v2,
       org: {
         name: org.orgName,
         code: org.code,

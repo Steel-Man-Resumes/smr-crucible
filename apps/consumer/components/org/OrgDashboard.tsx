@@ -92,6 +92,8 @@ interface PendingInvite {
   invitedByName: string | null;
 }
 interface OrgPayload {
+  /** Per-participant pages and scoped sharing are on for this organization. */
+  crmV2?: boolean;
   org: { name: string; code: string; logoUrl: string | null; role: string; seatLimit: number | null };
   staff: StaffMember[];
   cohort: Cohort;
@@ -413,7 +415,13 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
             {rows.map((c) => (
               <tr key={c.userId} className="border-b border-t-line last:border-0">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-t-white">{c.name || "Client"}</div>
+                  {data?.crmV2 ? (
+                    <Link href={`/dashboard/clients/${c.userId}`} className="t-focus font-medium text-t-white underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
+                      {c.name || "Client"}
+                    </Link>
+                  ) : (
+                    <div className="font-medium text-t-white">{c.name || "Client"}</div>
+                  )}
                   {c.email && <div className="text-xs text-t-phos-dim">{c.email}</div>}
                 </td>
                 <td className="px-4 py-3">
@@ -777,8 +785,9 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
 
           {/* Privacy note */}
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
-            You only see clients who chose to share their progress with you. You never see their
-            resume text, disclosure plans, or interview answers -- only where they are in the journey.
+            {data?.crmV2
+              ? "You only see clients who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers."
+              : "You only see clients who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers -- only where they are in the journey."}
           </p>
 
           {assignError && (
