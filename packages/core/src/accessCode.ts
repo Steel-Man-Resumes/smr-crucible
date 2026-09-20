@@ -13,7 +13,7 @@ export interface AccessCode {
   partner_name: string;
   /** 'client' = cohort seat code: grants daily_limit + the code-shared Forge
    *  bucket WITHOUT elevating role (seat-holders keep the client journey). */
-  tier: "client" | "partner" | "unlimited" | "admin";
+  tier: "client" | "partner" | "unlimited";
   daily_limit: number | null;
   max_redemptions: number | null;
   times_redeemed: number;
@@ -34,7 +34,7 @@ export interface AccessCodeRedemption {
 interface CreateAccessCodeOpts {
   code: string;
   partnerName: string;
-  tier?: "client" | "partner" | "unlimited" | "admin";
+  tier?: "client" | "partner" | "unlimited";
   dailyLimit?: number | null;
   maxRedemptions?: number | null;
   expiresAt?: string | null;

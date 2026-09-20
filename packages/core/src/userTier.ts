@@ -28,6 +28,23 @@ export async function getUserTier(userId: string): Promise<UserTier> {
 }
 
 /**
+ * Is this person a platform administrator?
+ *
+ * Reads platform_admin, which the application role can SELECT and nothing
+ * else (migration 047). `users.tier = 'admin'` agrees with this by database
+ * trigger, so the two cannot drift -- but authorization asks the table that
+ * cannot be written from here, not the cached column that can.
+ */
+export async function isPlatformAdmin(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const row = await getOne<{ user_id: string }>(
+    `SELECT user_id FROM platform_admin WHERE user_id = $1`,
+    [userId]
+  );
+  return !!row;
+}
+
+/**
  * Set tier directly on user record.
  * Does NOT validate against access codes — use syncUserTierFromCodes for that.
  */
@@ -54,7 +71,6 @@ export async function syncUserTierFromCodes(
        AND (ac.expires_at IS NULL OR ac.expires_at > now())
      ORDER BY
        CASE ac.tier
-         WHEN 'admin' THEN 0
          WHEN 'unlimited' THEN 1
          WHEN 'partner' THEN 2
          WHEN 'client' THEN 3
@@ -67,10 +83,13 @@ export async function syncUserTierFromCodes(
   // 'client'-tier codes (cohort seats) deliberately do NOT elevate role -- the
   // seat-holder keeps the client journey; only their rate limit changes.
   const codeTier = row?.tier;
+  // A CODE CAN NEVER MAKE AN ADMIN. It once could: an 'admin'-tier code was
+  // copied straight into users.tier here, and users.tier is what the platform
+  // admin gate read. Admin is now a row in platform_admin (migration 047); the
+  // database pins those people to 'admin' whatever this writes, and refuses
+  // 'admin' for anyone else.
   let effectiveTier: UserTier = "client";
-  if (codeTier === "admin") effectiveTier = "admin";
-  else if (codeTier === "unlimited" || codeTier === "partner")
-    effectiveTier = "partner";
+  if (codeTier === "unlimited" || codeTier === "partner") effectiveTier = "partner";
 
   await setUserTier(userId, effectiveTier);
   return effectiveTier;

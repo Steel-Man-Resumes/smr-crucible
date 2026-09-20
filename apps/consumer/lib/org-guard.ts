@@ -27,6 +27,7 @@ import { auth } from "@/auth";
 import {
   resolveOrgActor,
   getUserTier,
+  isPlatformAdmin,
   type OrgActor,
   type OrgCapability,
 } from "@crucible/core";
@@ -90,8 +91,10 @@ export async function requirePlatformAdmin(): Promise<
   const userId = session?.user?.id;
   if (!userId) return fail(401, "Not signed in.") as { ok: false; response: NextResponse };
 
-  const tier = await getUserTier(userId);
-  if (tier !== "admin") {
+  // platform_admin, not users.tier: the application role cannot write that
+  // table, so no code path here -- a tier sync, a redeemed code, a bug -- can
+  // make an administrator. See migration 047.
+  if (!(await isPlatformAdmin(userId))) {
     return fail(403, "You do not have access to that.") as {
       ok: false;
       response: NextResponse;

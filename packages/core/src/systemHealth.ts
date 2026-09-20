@@ -71,7 +71,7 @@ export async function getSystemHealth(): Promise<HealthReport> {
       add("Database", "Sentinel org", "ok", "Present -- audit events can record.");
     }
 
-    const admins = await getOne<{ n: string }>(`SELECT COUNT(*)::text AS n FROM users WHERE tier = 'admin'`);
+    const admins = await getOne<{ n: string }>(`SELECT COUNT(*)::text AS n FROM platform_admin`);
     add("Database", "Admin users", Number(admins?.n ?? 0) > 0 ? "ok" : "info",
       Number(admins?.n ?? 0) > 0 ? `${admins!.n} admin account(s).` : "No admin account yet (seed one at cutover).");
   } catch (e: any) {
