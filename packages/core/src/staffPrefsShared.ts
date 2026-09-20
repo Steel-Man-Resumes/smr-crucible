@@ -47,7 +47,16 @@ export const LANDING_LABELS: Record<Landing, string> = { today: "Today: who need
 export const TODAY_SECTION_KEYS = ["tasks", "retention", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
 export type TodaySectionKey = (typeof TODAY_SECTION_KEYS)[number];
 
+export const CASELOAD_STATUSES = ["", "behind", "active", "steady", "hired"] as const;
+export type CaseloadStatusFilter = (typeof CASELOAD_STATUSES)[number];
+export const CASELOAD_STATUS_LABELS: Record<CaseloadStatusFilter, string> = { "": "Everyone", behind: "Gone quiet", active: "Active this week", steady: "Steady", hired: "Hired" };
+
+/** A named arrangement of the caseload: "My interviews", "Alma's quiet people". */
+export interface SavedView { name: string; sort: CaseloadSort; status: CaseloadStatusFilter; staffId: string }
+export const MAX_SAVED_VIEWS = 8;
+
 export interface StaffPrefs {
+  savedViews: SavedView[];
   /** Where signing in lands. */
   landing: Landing;
   /** Today sections to HIDE (stored as hidden, so a new section shows by default). */
@@ -62,6 +71,7 @@ export interface StaffPrefs {
 }
 
 export const DEFAULT_STAFF_PREFS: StaffPrefs = {
+  savedViews: [],
   landing: "today",
   todayHidden: [],
   caseloadSort: "needs_attention",
@@ -79,6 +89,21 @@ export function normalizeStaffPrefs(raw: unknown): Partial<StaffPrefs> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const r = raw as Record<string, unknown>;
   const out: Partial<StaffPrefs> = {};
+  if (Array.isArray(r.savedViews)) {
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    out.savedViews = r.savedViews
+      .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
+      .map((v) => ({
+        name: String(v.name ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 40),
+        sort: oneOf(CASELOAD_SORTS, v.sort) ?? "needs_attention",
+        status: oneOf(CASELOAD_STATUSES, v.status) ?? "",
+        // A view can NAME a staff member to filter by. It cannot widen reach: the
+        // rows come from the server already limited to what this person may see.
+        staffId: typeof v.staffId === "string" && (UUID.test(v.staffId) || v.staffId === "__unassigned__") ? v.staffId : "",
+      }))
+      .filter((v) => v.name.length > 0)
+      .slice(0, MAX_SAVED_VIEWS);
+  }
   const landing = oneOf(LANDINGS, r.landing);
   if (landing) out.landing = landing;
   if (Array.isArray(r.todayHidden)) out.todayHidden = Array.from(new Set(r.todayHidden.map((c) => oneOf(TODAY_SECTION_KEYS, c)).filter(Boolean))) as TodaySectionKey[];

@@ -41,7 +41,12 @@ import {
   CASELOAD_SORTS,
   CASELOAD_SORT_LABELS,
   type CaseloadColumn,
+  CASELOAD_STATUSES,
+  CASELOAD_STATUS_LABELS,
+  MAX_SAVED_VIEWS,
   type CaseloadSort,
+  type CaseloadStatusFilter,
+  type SavedView,
   type StaffPrefs,
 } from "@crucible/core/src/staffPrefsShared";
 
@@ -179,6 +184,32 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
   const [sort, setSort] = useState<CaseloadSort | null>(null);
   const [find, setFind] = useState("");
+  const [statusFilter, setStatusFilter] = useState<CaseloadStatusFilter>("");
+  const [staffFilter, setStaffFilter] = useState("");
+  // Bulk assignment: tick people, choose who, one action.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkTo, setBulkTo] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  async function saveViews(views: SavedView[]) {
+    const own = await fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.own ?? {}).catch(() => ({}));
+    const res = await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...own, savedViews: views } }) });
+    if (res.ok) { const d = await res.json(); if (d?.effective) setPrefs(d.effective); }
+  }
+  function applyView(v: SavedView) { setSort(v.sort); setStatusFilter(v.status); setStaffFilter(v.staffId); setFind(""); }
+  async function bulkAssign() {
+    if (picked.size === 0) return;
+    setBulkBusy(true); setAssignError(null);
+    let failed = 0;
+    // One at a time through the same guarded action as a single assignment, so
+    // every rule that applies to one applies to all, and each lands in the audit trail.
+    for (const id of Array.from(picked)) {
+      const res = await fetch(orgApiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "assign", clientUserId: id, staffUserId: bulkTo || null }) });
+      if (!res.ok) failed++;
+    }
+    if (failed) setAssignError(`${failed} of ${picked.size} could not be assigned. The rest were.`);
+    setPicked(new Set()); setBulkBusy(false); await load();
+  }
   useEffect(() => {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
@@ -443,6 +474,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
 
   function ClientTable({ rows: unsorted, showAssign }: { rows: CohortClient[]; showAssign: boolean }) {
     const rows = sortRows(unsorted);
+    const pickable = showAssign && canManage && !!data?.crmV2;
     if (rows.length === 0) {
       return (
         <div className="text-t-phos-dim bg-t-panel border border-t-line px-5 py-8 text-center">
@@ -464,6 +496,13 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase text-t-phos-dim border-b border-t-line">
+              {pickable && (
+                <th className="pl-4 py-3 w-8">
+                  <input type="checkbox" className="t-focus" aria-label="Select everyone shown"
+                    checked={rows.length > 0 && rows.every((r) => picked.has(r.userId))}
+                    onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.userId)) : new Set())} />
+                </th>
+              )}
               <th className="px-4 py-3 font-semibold">Client</th>
               {!hidden("stage") && <th className="px-4 py-3 font-semibold">Stage</th>}
               {!hidden("nextStep") && <th className="px-4 py-3 font-semibold">Next step</th>}
@@ -477,6 +516,12 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           <tbody>
             {rows.map((c) => (
               <tr key={c.userId} className="border-b border-t-line last:border-0">
+                {pickable && (
+                  <td className="pl-4 py-3">
+                    <input type="checkbox" className="t-focus" aria-label={`Select ${c.name || "client"}`} checked={picked.has(c.userId)}
+                      onChange={(e) => { const n = new Set(picked); if (e.target.checked) n.add(c.userId); else n.delete(c.userId); setPicked(n); }} />
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   {data?.crmV2 ? (
                     <Link href={`/dashboard/clients/${c.userId}`} className="t-focus font-medium text-t-white underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
@@ -891,8 +936,53 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               </div>
             )}
           </div>
+          {data?.crmV2 && clients.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <label className="sr-only" htmlFor="caseload-status">Show</label>
+              <select id="caseload-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as CaseloadStatusFilter)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
+                {CASELOAD_STATUSES.map((k) => <option key={k || "all"} value={k}>{CASELOAD_STATUS_LABELS[k]}</option>)}
+              </select>
+              {!isStaffView && staff.length > 0 && (
+                <>
+                  <label className="sr-only" htmlFor="caseload-staff">Case manager</label>
+                  <select id="caseload-staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
+                    <option value="">Any case manager</option>
+                    {staff.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+                    <option value={UNASSIGNED}>Not assigned</option>
+                  </select>
+                </>
+              )}
+              {prefs.savedViews.map((v, i) => (
+                <span key={`${v.name}-${i}`} className="inline-flex items-center border border-t-line text-xs">
+                  <button onClick={() => applyView(v)} className="t-focus px-2 py-1.5 text-t-phos hover:text-t-white">{v.name}</button>
+                  <button onClick={() => saveViews(prefs.savedViews.filter((_, j) => j !== i))} aria-label={`Remove the saved view ${v.name}`} className="t-focus px-1.5 py-1.5 text-t-phos-dim hover:text-t-white border-l border-t-line">&times;</button>
+                </span>
+              ))}
+              {prefs.savedViews.length < MAX_SAVED_VIEWS && (statusFilter || staffFilter || sort) && (
+                <button className="t-focus text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-white"
+                  onClick={() => { const name = window.prompt("Name this view (for example: My quiet people)"); if (name?.trim()) saveViews([...prefs.savedViews, { name: name.trim(), sort: activeSort, status: statusFilter, staffId: staffFilter }]); }}>
+                  Save this view
+                </button>
+              )}
+            </div>
+          )}
+          {picked.size > 0 && canManage && (
+            <div role="region" aria-label="Assign selected people" className="flex flex-wrap items-center gap-2 mb-3 border border-t-amber bg-t-panel px-3 py-2">
+              <span className="text-xs text-t-white">{picked.size} selected</span>
+              <label className="sr-only" htmlFor="bulk-to">Assign to</label>
+              <select id="bulk-to" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} className="t-focus bg-t-panel-2 border border-t-line text-xs text-t-phos px-2 py-1.5">
+                <option value="">Nobody (unassign)</option>
+                {staff.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+              </select>
+              <button onClick={bulkAssign} disabled={bulkBusy} className="t-focus bg-t-amber text-[#14100a] text-xs font-semibold px-3 py-1.5 disabled:opacity-50">{bulkBusy ? "Assigning..." : "Assign"}</button>
+              <button onClick={() => setPicked(new Set())} className="t-focus text-xs text-t-phos-dim underline">Clear</button>
+            </div>
+          )}
           <ClientTable
-            rows={find.trim() ? clients.filter((c) => (c.name || "").toLowerCase().includes(find.trim().toLowerCase())) : clients}
+            rows={clients.filter((c) =>
+              (!find.trim() || (c.name || "").toLowerCase().includes(find.trim().toLowerCase()))
+              && (!statusFilter || statusOf(c) === statusFilter)
+              && (!staffFilter || (staffFilter === UNASSIGNED ? !c.assignedStaffId : c.assignedStaffId === staffFilter)))}
             showAssign={!!data}
           />
 

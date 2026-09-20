@@ -878,6 +878,15 @@ async function sharingChecks() {
   check("preferences keep known choices and drop everything else",
     pr.effective.caseloadSort === "name" && pr.effective.caseloadHidden.join() === "stage" && pr.effective.clientTab === "resume" && Object.keys(pr.own).sort().join() === "caseloadHidden,caseloadSort,clientTab",
     JSON.stringify(pr.own));
+  await core.setOwnStaffPrefs(aRuss, { savedViews: [
+    { name: "  My quiet people  ", sort: "last_active", status: "behind", staffId: "not-a-uuid" },
+    { name: "", sort: "name" }, { name: "x".repeat(200), sort: "DROP TABLE", status: "everyone" }, "junk",
+    ...Array.from({ length: 20 }, (_, i) => ({ name: "v" + i })) ] });
+  const sv = (await core.getStaffPrefs(aRuss)).effective.savedViews;
+  check("saved caseload views keep a clean name and known choices, drop junk, and are capped",
+    sv.length === 8 && sv[0].name === "My quiet people" && sv[0].status === "behind" && sv[0].staffId === "" && sv[1].name.length === 40 && sv[1].sort === "needs_attention" && sv[1].status === "",
+    JSON.stringify(sv.slice(0, 2)));
+  await core.setOwnStaffPrefs(aRuss, { caseloadSort: "name", caseloadHidden: ["stage"], clientTab: "resume" });
   check("staff cannot set the organization's defaults", (await core.setOrgStaffPrefDefaults(aRuss, { caseloadSort: "stage" })) === false);
   check("the owner can, and it reaches a colleague who has not chosen", (await core.setOrgStaffPrefDefaults(aOwner, { caseloadSort: "stage" })) === true
     && (await core.getStaffPrefs(aNora)).effective.caseloadSort === "stage" && (await core.getStaffPrefs(aRuss)).effective.caseloadSort === "name");
