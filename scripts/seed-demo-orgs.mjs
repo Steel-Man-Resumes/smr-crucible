@@ -102,7 +102,7 @@ for (const o of ORGS) {
 const url = databaseUrl();
 if (!url) { console.error("\nNo DATABASE_URL found.\n"); process.exit(2); }
 const sql = neon(url);
-await assertBypassRole((q) => sql.query(q), "seed-demo-orgs");
+await assertBypassRole((q) => sql(q), "seed-demo-orgs");
 
 const emailFor = (name, org) =>
   `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@${org.code.toLowerCase()}.${EMAIL_DOMAIN}`;
