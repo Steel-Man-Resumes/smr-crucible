@@ -14,7 +14,7 @@
  * an override and is marked as one.
  */
 
-import { getOne, query } from "../db";
+import { getOne, query, runAsUser } from "../db";
 import {
   computeOrgCapabilities,
   cohortReach,
@@ -59,15 +59,22 @@ async function findMembership(
   );
   if (owned) return { orgId: owned.id, orgName: owned.partner_name, role: "owner" };
 
-  const staff = await getOne<{ access_code_id: string; role: string; partner_name: string }>(
-    `SELECT os.access_code_id, os.role, ac.partner_name
-       FROM org_staff os
-       JOIN access_code ac ON ac.id = os.access_code_id
-      WHERE os.user_id = $1 AND ac.is_active = true
-        AND ($2::uuid IS NULL OR os.access_code_id = $2::uuid)
-      ORDER BY os.created_at ASC LIMIT 1`,
-    [userId, orgId ?? null]
+  // Runs with app.user_id set: org_staff is row-level protected, and the
+  // policy lets somebody read THEIR OWN membership row precisely so this
+  // lookup can work. It cannot be org-scoped -- discovering the org is the
+  // whole job.
+  const staffRows = await runAsUser<[Array<{ access_code_id: string; role: string; partner_name: string }>]>(
+    userId,
+    (sql) => [
+      sql`SELECT os.access_code_id, os.role, ac.partner_name
+            FROM org_staff os
+            JOIN access_code ac ON ac.id = os.access_code_id
+           WHERE os.user_id = ${userId} AND ac.is_active = true
+             AND (${orgId ?? null}::uuid IS NULL OR os.access_code_id = ${orgId ?? null}::uuid)
+           ORDER BY os.created_at ASC LIMIT 1`,
+    ]
   );
+  const staff = staffRows[0]?.[0];
   if (!staff) return null;
 
   // org_staff.role is constrained to 'org_admin' | 'staff' in the schema, but

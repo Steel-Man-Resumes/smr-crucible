@@ -12,7 +12,28 @@
  * consumer_consent (the 'sharing' / 'outcome_named' layers). No parallel tables.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, runScoped, type OrgScope } from "./db";
+
+/**
+ * query(), but with the organization scope set so row-level policies pass.
+ *
+ * Exists so converting a call site is a one-word change rather than a rewrite
+ * into transaction-array style -- the friction is what leaves queries
+ * unconverted, and an unconverted query is now an empty result rather than a
+ * leak, which is safe but silently broken.
+ */
+async function runScopedRows<T>(
+  sql: string,
+  params: unknown[],
+  orgId: string,
+  userId = "",
+  role: OrgScope["role"] = "org_admin"
+): Promise<T[]> {
+  const out = await runScoped<unknown[][]>({ orgId, userId, role }, (c) => [
+    (c as unknown as (s: string, p: unknown[]) => unknown)(sql, params),
+  ]);
+  return (out[0] ?? []) as T[];
+}
 
 export interface CohortClient {
   userId: string;
@@ -121,7 +142,7 @@ export async function getPartnerCohort(
   const scopeCodeIds = Array.from(
     new Set(consentedMembers.flatMap((m) => m.code_ids ?? []))
   );
-  const rows = await query<{
+  const rows = await runScopedRows<{
     id: string;
     name: string | null;
     email: string | null;
@@ -160,7 +181,16 @@ export async function getPartnerCohort(
         AND csa.access_code_id = ANY($2::uuid[])
        LEFT JOIN users su ON su.id = csa.staff_user_id
       WHERE u.id = ANY($1::uuid[])`,
-    [ids, scopeCodeIds]
+    [ids, scopeCodeIds],
+    // client_staff_assignment is row-level protected, so this join needs the
+    // org scope or it returns no assignments at all -- blank staff names
+    // rather than someone else's, which is the right way round to fail.
+    //
+    // KNOWN LIMIT: a policy scopes to ONE org, and a cohort resolved by
+    // ownership can span several codes. When that happens the assignment
+    // columns come back empty rather than wrong. The console always passes an
+    // explicit accessCodeId, so the path people actually use is covered.
+    opts.accessCodeId ?? scopeCodeIds[0] ?? ""
   );
 
   const byId = new Map(consentedMembers.map((m) => [m.user_id, m]));
@@ -320,7 +350,10 @@ export async function getOrgContext(
 }
 
 export async function getOrgStaff(accessCodeId: string): Promise<OrgStaffMember[]> {
-  const rows = await query<{
+  // org_staff is row-level protected. Without the org scope set, this query
+  // returns nothing -- which is the point: a forgotten scope is an empty list,
+  // never another organization's team.
+  const rows = await runScopedRows<{
     user_id: string;
     name: string | null;
     email: string | null;
@@ -336,7 +369,8 @@ export async function getOrgStaff(accessCodeId: string): Promise<OrgStaffMember[
        JOIN users u ON u.id = os.user_id
       WHERE os.access_code_id = $1
       ORDER BY os.role DESC, u.name ASC`,
-    [accessCodeId]
+    [accessCodeId],
+    accessCodeId
   );
   return rows.map((r) => ({
     userId: r.user_id,
