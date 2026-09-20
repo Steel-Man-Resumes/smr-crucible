@@ -37,6 +37,12 @@ export interface OrgFacts {
   visibleNames: string[];
   /** Staff names in this org, which staff may legitimately mention. */
   staffNames: string[];
+  /**
+   * First names with no activity in two weeks. The generator is told these, so
+   * the checker must be too -- otherwise every true "Colton has gone quiet" is
+   * flagged as unsupported and the warning trains people to ignore it.
+   */
+  needsAttention?: string[];
 }
 
 export interface OrgVerdict {
@@ -142,6 +148,7 @@ THE ONLY FACTS THAT EXIST:
 - started work: ${facts.hired}
 - assigned to nobody: ${facts.unassigned}
 - people this viewer may discuss: ${facts.visibleNames.join(", ") || "(none)"}
+- of those, no activity in two weeks or never active (needs attention): ${(facts.needsAttention ?? []).join(", ") || "(none)"}
 - staff in this organization: ${facts.staffNames.join(", ") || "(none)"}
 
 MESSAGE:

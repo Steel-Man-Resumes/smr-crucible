@@ -33,6 +33,8 @@ interface AssistantChatProps {
   sessionId?: string;
   /** Use the profile-aware Refinery coach instead of t.ROY */
   coach?: boolean;
+  /** Org staff: caseload prompts, not job-seeker ones */
+  staff?: boolean;
 }
 
 /** Human-friendly activity lines per tool -- shown instead of raw tool output */
@@ -48,9 +50,17 @@ const TOOL_ACTIVITY: Record<string, string> = {
 };
 
 /** Page-aware quick prompts — buttons users can tap instead of typing */
-function getQuickPrompts(context: AssistantContext, coach?: boolean): string[] {
+function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boolean): string[] {
   const page = context.currentPage;
   const isDemo = context.isDemo;
+
+  if (staff) {
+    return [
+      "Who needs attention this week?",
+      "Draft a check-in message",
+      "Summarize my caseload",
+    ];
+  }
 
   if (isDemo) {
     return [
@@ -160,7 +170,7 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean): string[] {
   }
 }
 
-export function AssistantChat({ context, sessionId, coach }: AssistantChatProps) {
+export function AssistantChat({ context, sessionId, coach, staff }: AssistantChatProps) {
   const router = useRouter();
 
   // Browser-executed tools. The return value becomes the tool result the
@@ -354,7 +364,7 @@ export function AssistantChat({ context, sessionId, coach }: AssistantChatProps)
     [setInput]
   );
 
-  const quickPrompts = getQuickPrompts(context, coach);
+  const quickPrompts = getQuickPrompts(context, coach, staff);
   const showQuickPrompts = messages.length === 0 && !isLoading;
 
   return (

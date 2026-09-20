@@ -811,7 +811,11 @@ export function RefineryShell({
             hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
             userFullContext,
           }}
-          coach
+          // Org staff get t.ROY's caseload assistant (/api/assistant resolves
+          // their org server-side). The Refinery coach is a job-seeker's coach
+          // and answered a case manager as if they needed a resume.
+          coach={!isOrgPartner}
+          staff={isOrgPartner}
         />
       </AssistantDrawer>
 
