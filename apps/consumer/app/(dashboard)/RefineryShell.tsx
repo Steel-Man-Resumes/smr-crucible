@@ -474,7 +474,14 @@ export function RefineryShell({
   // landing the user actually gets, and org leaders see the client toolset
   // labeled as what it is -- the tools their clients use.
   const orgRole = effectiveRole?.orgRole ?? null;
-  const isOrgPartner = userTier === "partner" && !!orgRole;
+  // Tier from the DATABASE, not the session claim. The claim is minted at
+  // sign-in and goes stale, so someone promoted to org staff would keep the
+  // job-seeker nav -- Job Board, Application Tailor, Interview Prep -- until
+  // they happened to sign out and back in. A case manager's nav is their
+  // caseload; the client toolset lives behind the explicit "client view"
+  // toggle and nowhere else.
+  const resolvedTier = effectiveRole?.tier ?? userTier;
+  const isOrgPartner = resolvedTier === "partner" && !!orgRole;
   const isOrgAdmin = orgRole === "owner" || orgRole === "org_admin";
 
   // Org leaders drop into the client experience through this one control

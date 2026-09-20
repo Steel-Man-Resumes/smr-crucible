@@ -157,9 +157,13 @@ function timeAgo(dateStr: string): string {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const tier = useUserTier();
-  const isAdmin = tier === "admin";
+  const sessionTier = useUserTier();
   const effectiveRole = useEffectiveRole();
+  // Prefer the database-resolved tier. The session claim is minted at sign-in
+  // and goes stale; this one is read per request. useUserTier still governs
+  // view-as previews, which is why it is kept rather than replaced.
+  const tier = effectiveRole?.impersonating ? sessionTier : (effectiveRole?.tier ?? sessionTier);
+  const isAdmin = tier === "admin";
   const onboarding = useOnboarding();
 
   // Forge data
@@ -245,6 +249,27 @@ export default function DashboardPage() {
   const totalArtifacts = Object.values(artifactCounts).reduce((a, b) => a + b, 0);
 
   // ─── State: Loading ───────────────────────────────────────────────────
+  //
+  // WAIT FOR WHO THIS PERSON IS, not just for their onboarding state.
+  //
+  // useUserTier falls back to "client" whenever the session has not resolved
+  // yet, which is a lie with consequences: this dispatch would fall straight
+  // past the partner branch and hand an organization's case worker the
+  // job-seeker profile form -- "these details go on your resume header" --
+  // when what they came for is their caseload. A case manager does not have a
+  // resume header.
+  //
+  // effectiveRole comes from /api/user/role, which resolves tier AND org role
+  // from the DATABASE rather than the token, so it is both later and more
+  // trustworthy than the session claim. null means still loading.
+  if (effectiveRole === null) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+      </div>
+    );
+  }
+
   if (onboarding.state === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
