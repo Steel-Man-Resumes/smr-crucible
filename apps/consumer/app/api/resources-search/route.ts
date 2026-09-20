@@ -41,16 +41,19 @@ async function handlePost(request: Request) {
       resources = [...RESOURCE_DIRECTORY];
     }
 
-    // Sort: local Milwaukee/Waukesha first, then Wisconsin, then national
-    const geoOrder: Record<string, number> = {
-      milwaukee: 0,
-      waukesha: 1,
-      wisconsin: 2,
-      national: 3,
-    };
-    resources.sort(
-      (a, b) => (geoOrder[a.geo] ?? 9) - (geoOrder[b.geo] ?? 9)
+    // WHERE THE PERSON IS decides what "local" means. This used to sort
+    // Milwaukee first for everybody, which handed someone in Libby a list of
+    // Wisconsin shelters. A state we can recognise shows that state's entries
+    // and national ones, and nothing from another state. An unrecognised or
+    // missing location keeps the original Wisconsin-first behaviour, minus
+    // other states' local entries.
+    const where = String(location ?? "").toLowerCase();
+    const inMontana = /\bmontana\b|\bmt\b|,\s*mt\b/.test(where);
+    resources = resources.filter((r) =>
+      inMontana ? r.geo === "montana" || r.geo === "national" : r.geo !== "montana"
     );
+    const geoOrder: Record<string, number> = { montana: 0, milwaukee: 0, waukesha: 1, wisconsin: 2, national: 3 };
+    resources.sort((a, b) => (geoOrder[a.geo] ?? 9) - (geoOrder[b.geo] ?? 9));
 
     // If housing category, augment with live HUD data
     if (category === "housing") {

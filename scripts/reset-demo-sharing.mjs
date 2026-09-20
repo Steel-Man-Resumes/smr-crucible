@@ -11,6 +11,10 @@
  * sharing history and notes are not deletable by the app role, on purpose --
  * so this needs the owner credential, and it is only ever right for fiction.
  * Participant materials (resume, applications) are left in place.
+ *
+ * FOR THE MONTANA DEMO ORG USE `seed-demo-cohort.mjs` INSTEAD. That script IS
+ * the reset: it rebuilds all six personas, including the people who are meant
+ * to START with something shared. This one would leave them sharing nothing.
  */
 import { neon } from "@neondatabase/serverless";
 import { readFileSync } from "node:fs";
