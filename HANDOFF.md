@@ -171,7 +171,44 @@ own artifact. The suite caught it as a unique-index violation in my own fixture,
 not as a wrong answer. PATTERNS.md already says: inspect the schema before
 writing against it. I guessed column names twice more this session.
 
-NEXT, in order: (1) Troy's Vercel swap, then re-verify everything as smr_app;
+### THE SWAP HAPPENED, AND THE STAFF WORKSPACE SHIPPED -- production `1e23ee7`, migration 052
+
+**Production is on `smr_app`.** Troy swapped Vercel Production `DATABASE_URL`.
+`/api/health/rls` -> 200, role smr_app, cannot bypass, all 8 protected tables
+enabled + forced, unscoped reads empty, scoped demo read sees rows. The sharing
+story was RE-RUN on production with the policies enforcing: same results, zero
+private fields leaked, other-org 404, revoke stops access at once. "The
+database enforces it" is now TRUE for org membership, staff, assignments, the
+audit trail, sharing grants, requests and case notes. It is NOT yet true for
+job_application / refinery_artifact (Part B); `orgClientView.ts` enforces those.
+WATCH: if the health check ever reports neondb_owner again, the Vercel Neon
+integration is rewriting the variable; move the app to a differently named one.
+
+**TROY DECIDED (2026-09-20): staff get NO resume workspace. "They are employed
+already."** "My job search" is removed for anyone with an org role, sidebar and
+top bar. This reverses the August "Model A" design (one login, two workspaces);
+`components/auth/AccountTypeChooser.tsx` still carries a comment arguing the
+opposite and should be reconciled. The shell clears a saved client-view choice
+for org members, because the control to undo it no longer exists.
+
+**Staff workspace (crm_v2 orgs):** grouped nav of real pages -- Work (Caseload,
+Sharing requests), Records (Case notes), Organization (Add participants, Team &
+seats, Security). `OrgDashboard` takes `view`; without the flag, home is the
+whole console as before. Caseload has find, sort, and "who needs me first".
+**Staff Settings:** "My workflow" first; the job-seeker sections are hidden for
+anyone with an org role (this part is NOT flagged -- it applies to every org's
+staff, and hides things that were never theirs). Preferences live in
+`users.staff_prefs` / `access_code.staff_pref_defaults`, shape owned by
+`staffPrefsShared.ts`, allowlist-normalized. RULE written into that file: a
+preference that changes nothing is a lie; do not add one until a screen honors
+it. That is why "landing page" and "quiet after N days" are NOT there yet: the
+first needs Today to exist, the second must change the screen AND the numbers
+t.ROY is handed, together, or they will disagree (session 6's defect class).
+
+Suite: 104 as smr_app. Known rough edge: `/dashboard/team` opened directly by
+non-admin staff renders only the header (the nav does not offer it to them).
+
+NEXT, in order: (1) DONE;
 (2) after 9/22: t.ROY per-client + Save as note with a production batch, Today
 queue, tasks, outcomes; (3) required-sharing mode behind legal review; (4) Part B,
 RLS on participant-owned tables, smallest first, behind projection functions.
