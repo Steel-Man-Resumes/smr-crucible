@@ -57,7 +57,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations, leaveAllOrgs } from "@crucible/core";
+import { query, queryAsUser, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations, leaveAllOrgs } from "@crucible/core";
 
 export async function DELETE(req: Request) {
   const session = await auth();
@@ -122,6 +122,10 @@ export async function DELETE(req: Request) {
     await deleteUserConversations(userId);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
+    // Progress events are the person's own activity history, and "delete my data"
+    // never removed them unless the whole account went too. Row-level protected,
+    // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.
+    await queryAsUser(userId, "DELETE FROM user_progress_event WHERE user_id = $1", [userId]);
     // Reset access codes and tier
     // Through the database function, not a DELETE: membership is row-level
     // protected (an unscoped delete would remove nothing and this route would

@@ -372,6 +372,54 @@ async function main() {
   await requiredSharingChecks();
   await todayAndTaskChecks();
   await outcomeChecks();
+  await ownerOnlyChecks();
+}
+
+/** Participant-owned tables with owner-only policies (059): nobody but the person, by any route the app has. */
+async function ownerOnlyChecks() {
+  console.log("\n  -- participant-owned, owner only --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const [{ on }] = await sql`SELECT bool_and(relrowsecurity AND relforcerowsecurity) AS on FROM pg_class WHERE relname IN ('vault_document', 'user_progress_event') AND relnamespace = 'public'::regnamespace`;
+  if (!on) { console.log("  note  059 not applied; skipped"); return; }
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const a = await mkUser("w-a"), b = await mkUser("w-b"), owner = await mkUser("w-owner");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOW" + uniq}, ${P + " owneronly"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  created.codes.push(org.id);
+  await core.redeemAccessCode(a, org.code);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+
+  await core.recordProgressEvent(a, "session_start", { verify: "true" });
+  await core.recordProgressEvent(b, "session_start", { verify: "true" });
+  check("a person's own activity is recorded and read back", (await core.getProgressEventDates(a)).length === 1);
+  check("the journey snapshot still counts it", (await core.buildJourneySnapshot(a).catch((e) => ({ error: String(e) }))).error === undefined);
+  const [{ n: appSees }] = await app`SELECT count(*)::int AS n FROM user_progress_event`;
+  check("an unscoped read by the app sees nobody's activity", appSees === 0);
+  const asA = await app.transaction([app`SELECT set_config('app.user_id', ${a}, true)`, app`SELECT user_id FROM user_progress_event`,
+    app`DELETE FROM user_progress_event WHERE user_id = ${b} RETURNING id`]);
+  check("running as one person, the app sees only theirs and cannot delete another's", asA[1].length === 1 && asA[1][0].user_id === a && asA[2].length === 0);
+  const forge = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${a}, true)`,
+    app`INSERT INTO user_progress_event (user_id, event_type, context) VALUES (${b}, 'session_start', '{}')`]));
+  check("and cannot write an event in somebody else's name", !!forge && /row-level security/i.test(forge), forge ?? "inserted");
+  const asOrg = await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
+    app`SELECT count(*)::int AS n FROM user_progress_event WHERE user_id = ${a}`, app`SELECT count(*)::int AS n FROM vault_document`]);
+  check("their organization's owner, scoped to the org, sees none of it", asOrg[2][0].n === 0 && asOrg[3][0].n === 0);
+
+  // vault: needs a secure_object to hang off
+  const [so] = await sql`INSERT INTO secure_object (owner_user_id, object_key, bucket, purpose, mime_type, byte_size, iv, auth_tag, key_version, aad)
+                         VALUES (${a}, ${"iso/" + uniq}, 'iso', 'vault_document', 'application/pdf', 10, 'aa', 'bb', 1, 'cc') RETURNING id`.catch(() => [null]);
+  if (so) {
+    const doc = await core.createVaultDocument({ userId: a, secureObjectId: so.id, category: "id", label: "State ID" }).catch((e) => ({ error: String(e) }));
+    check("a person can store a document", !!doc.id, JSON.stringify(doc).slice(0, 200));
+    check("and list it; somebody else lists nothing", (await core.listVaultDocuments(a)).length === 1 && (await core.listVaultDocuments(b)).length === 0);
+    check("somebody else cannot fetch it by id", (await core.getVaultDocument(b, doc.id)) === null);
+    check("or rename it", (await core.updateVaultDocument(b, doc.id, { label: "stolen" })) === null);
+    check("the owner can", (await core.updateVaultDocument(a, doc.id, { label: "Montana ID" }))?.label === "Montana ID");
+    await sql`DELETE FROM secure_object WHERE id = ${so.id}`;
+    check("deleting the stored file still removes its record (cascades are not blocked)", (await core.listVaultDocuments(a)).length === 0);
+  } else console.log("  note  secure_object fixture shape differs; vault checks skipped");
+  await sql`DELETE FROM user_progress_event WHERE user_id IN (${a}, ${b})`;
 }
 
 /** Placements and retention (056): every figure keeps how it is known, and rates have honest denominators. */

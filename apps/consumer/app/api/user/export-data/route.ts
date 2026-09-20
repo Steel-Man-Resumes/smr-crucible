@@ -34,6 +34,13 @@
  *   "decisions"    -> decision_log rows (the recorded AI decisions about you)
  *   "login_history"-> user_login_event rows (your own sign-in history)
  *   "org"          -> access_code_redemption rows (your org membership)
+ *   "progress"     -> user_progress_event rows (your own activity history)
+ *   "sharing"      -> everything about what you share with an organization and
+ *                     what it holds about you that you are entitled to see:
+ *                     every grant you ever made (and revoked), requests staff
+ *                     sent you, what a program required and whether you
+ *                     acknowledged it, who opened what and when, tasks and
+ *                     suggestions staff sent you, and any placement on file.
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
  *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
@@ -218,7 +225,10 @@ export async function POST(req: Request) {
     // Phase 6.2: vault inventory (metadata only, no bytes). Joined to
     // secure_object for real size/mime/sha and to job_application for the link.
     if (want("vault")) {
-      payload.vaultDocuments = await query(
+      // vault_document is row-level protected (owner only): read AS the person,
+      // or the export silently says they have no documents.
+      payload.vaultDocuments = await queryAsUser(
+        userId,
         `SELECT vd.id, vd.category, vd.label, vd.original_filename, vd.note,
                 so.mime_type, so.byte_size, so.sha256,
                 vd.created_at, vd.updated_at,
@@ -270,6 +280,29 @@ export async function POST(req: Request) {
         `SELECT * FROM user_login_event WHERE user_id = $1 ORDER BY created_at DESC LIMIT 2000`,
         [userId]
       );
+    }
+    if (want("progress")) {
+      payload.progressEvents = await queryAsUser(
+        userId,
+        `SELECT event_type, context, created_at FROM user_progress_event WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5000`,
+        [userId]
+      );
+    }
+    if (want("sharing")) {
+      const core = await import("@crucible/core");
+      const [grants, requests, policies, accessLog, tasks, suggestions, outcomes] = await Promise.all([
+        queryAsUser(userId, `SELECT g.scope, g.basis, g.text_version, g.granted_at, g.revoked_at, g.revoked_reason, g.covers_from, ac.partner_name AS organization
+                               FROM sharing_grant g JOIN access_code ac ON ac.id = g.access_code_id WHERE g.user_id = $1 ORDER BY g.granted_at DESC`, [userId]),
+        queryAsUser(userId, `SELECT sr.scope, sr.reason, sr.status, sr.created_at, sr.answered_at, u.name AS requested_by, ac.partner_name AS organization
+                               FROM sharing_request sr LEFT JOIN users u ON u.id = sr.requested_by JOIN access_code ac ON ac.id = sr.access_code_id
+                              WHERE sr.user_id = $1 ORDER BY sr.created_at DESC`, [userId]),
+        core.getMyPolicies(userId),
+        core.getMyAccessLog(userId, 1000),
+        core.getMySharedTasks(userId),
+        core.getMySuggestions(userId),
+        core.getMyOutcomes(userId),
+      ]);
+      payload.sharing = { grants, requests, programRequirements: policies, whoOpenedWhat: accessLog, tasksFromStaff: tasks, suggestionsFromStaff: suggestions, placementsOnFile: outcomes };
     }
     if (want("org")) {
       // Read AS the person. Unscoped, row-level security returns nothing and

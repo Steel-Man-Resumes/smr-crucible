@@ -15,7 +15,7 @@
  * secure_object row (which CASCADE-drops the vault_document row too).
  */
 
-import { query, getOne, insert } from "./db";
+import { query, queryAsUser, getOneAsUser, insertAsUser } from "./db";
 import { enqueueDeletion } from "./deletionTasks";
 import type { VaultCategory } from "./vaultDocumentShared";
 
@@ -50,7 +50,9 @@ export async function createVaultDocument(params: {
   note?: string | null;
   linkedJobId?: string | null;
 }): Promise<VaultDocumentRow> {
-  return insert<VaultDocumentRow>("vault_document", {
+  // vault_document is row-level protected: the owner, and nobody else. Every
+  // read and write in this file runs AS that person.
+  return insertAsUser<VaultDocumentRow>(params.userId, "vault_document", {
     user_id: params.userId,
     secure_object_id: params.secureObjectId,
     category: params.category,
@@ -73,7 +75,8 @@ export async function listVaultDocuments(
     params.push(opts.category);
     categoryClause = ` AND vd.category = $2`;
   }
-  return query<VaultDocumentWithObject>(
+  return queryAsUser<VaultDocumentWithObject>(
+    userId,
     `SELECT vd.*, so.mime_type, so.byte_size, so.object_key,
             so.created_at AS object_created_at
        FROM vault_document vd
@@ -90,7 +93,8 @@ export async function getVaultDocument(
   userId: string,
   id: string
 ): Promise<VaultDocumentWithObject | null> {
-  return getOne<VaultDocumentWithObject>(
+  return getOneAsUser<VaultDocumentWithObject>(
+    userId,
     `SELECT vd.*, so.mime_type, so.byte_size, so.object_key,
             so.created_at AS object_created_at
        FROM vault_document vd
@@ -139,7 +143,8 @@ export async function updateVaultDocument(
   sets.push(`updated_at = now()`);
   params.push(id);
   params.push(userId);
-  const rows = await query<VaultDocumentRow>(
+  const rows = await queryAsUser<VaultDocumentRow>(
+    userId,
     `UPDATE vault_document SET ${sets.join(", ")}
       WHERE id = $${i++} AND user_id = $${i}
       RETURNING *`,
@@ -165,7 +170,8 @@ export async function deleteVaultDocument(
   userId: string,
   id: string
 ): Promise<{ status: VaultDeleteStatus }> {
-  const target = await getOne<{ secure_object_id: string; bucket: string; object_key: string }>(
+  const target = await getOneAsUser<{ secure_object_id: string; bucket: string; object_key: string }>(
+    userId,
     `SELECT vd.secure_object_id, so.bucket, so.object_key
        FROM vault_document vd
        JOIN secure_object so ON so.id = vd.secure_object_id

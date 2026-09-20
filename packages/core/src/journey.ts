@@ -24,7 +24,7 @@
  *    this via GET /api/user/journey instead of deriving its own state.
  */
 
-import { query, insert } from "./db";
+import { query, queryAsUser, insertAsUser } from "./db";
 import { getUserProfile } from "./getUserProfile";
 import { countApplicationsSent } from "./applicationEvents";
 
@@ -67,7 +67,8 @@ export async function recordProgressEvent(
   if (!isProgressEventType(eventType)) {
     throw new Error(`recordProgressEvent: unknown event type "${eventType}"`);
   }
-  await insert("user_progress_event", {
+  // Row-level protected: the owner only. Written AS them.
+  await insertAsUser(userId, "user_progress_event", {
     user_id: userId,
     event_type: eventType,
     context: JSON.stringify(context),
@@ -80,7 +81,8 @@ export async function recordProgressEvent(
  * route -- this is the DB read; the streak math itself stays pure and testable.
  */
 export async function getProgressEventDates(userId: string): Promise<string[]> {
-  const rows = await query<{ created_at: string }>(
+  const rows = await queryAsUser<{ created_at: string }>(
+    userId,
     `SELECT created_at FROM user_progress_event
      WHERE user_id = $1
      ORDER BY created_at ASC`,
@@ -141,7 +143,8 @@ export interface JourneySnapshot {
 export async function buildJourneySnapshot(userId: string): Promise<JourneySnapshot> {
   const [profile, eventCounts, applicationsSent, jobTargetedRows] = await Promise.all([
     getUserProfile(userId),
-    query<{ event_type: string; count: string }>(
+    queryAsUser<{ event_type: string; count: string }>(
+      userId,
       `SELECT event_type, COUNT(*)::text AS count
        FROM user_progress_event
        WHERE user_id = $1
