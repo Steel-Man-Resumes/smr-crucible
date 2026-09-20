@@ -5,6 +5,7 @@
  */
 import { getOne, query } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
+import { getQuietAfterDays } from "./orgStaffPerformance";
 import { normalizeStaffPrefs, resolveStaffPrefs, type StaffPrefs } from "./staffPrefsShared";
 
 export * from "./staffPrefsShared";
@@ -17,6 +18,8 @@ export interface StaffPrefsState {
   /** Only what their organization set. */
   orgDefaults: Partial<StaffPrefs>;
   canSetOrgDefaults: boolean;
+  /** The organization's "quiet after N days". One number for everyone, on purpose. */
+  quietAfterDays: number;
 }
 
 export async function getStaffPrefs(actor: OrgActor): Promise<StaffPrefsState> {
@@ -29,6 +32,7 @@ export async function getStaffPrefs(actor: OrgActor): Promise<StaffPrefsState> {
     own: normalizeStaffPrefs(u?.staff_prefs),
     orgDefaults: normalizeStaffPrefs(o?.staff_pref_defaults),
     canSetOrgDefaults: !actor.viaPlatformAdmin && actor.capabilities.has("org.settings.manage"),
+    quietAfterDays: await getQuietAfterDays(actor.orgId),
   };
 }
 
@@ -41,5 +45,18 @@ export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise
 export async function setOrgStaffPrefDefaults(actor: OrgActor, prefs: unknown): Promise<boolean> {
   if (actor.viaPlatformAdmin || !actor.capabilities.has("org.settings.manage")) return false;
   await query(`UPDATE access_code SET staff_pref_defaults = $2::jsonb WHERE id = $1`, [actor.orgId, JSON.stringify(normalizeStaffPrefs(prefs))]);
+  return true;
+}
+
+/**
+ * Set the organization's "quiet after N days". Owner only. It is not a personal
+ * preference: the caseload, Insights, Today and the assistant all read this one
+ * number, so they always agree about who has gone quiet.
+ */
+export async function setQuietAfterDays(actor: OrgActor, days: number): Promise<boolean> {
+  if (actor.viaPlatformAdmin || !actor.capabilities.has("org.settings.manage")) return false;
+  const n = Math.round(Number(days));
+  if (!Number.isFinite(n) || n < 3 || n > 90) return false;
+  await query(`UPDATE access_code SET quiet_after_days = $2 WHERE id = $1`, [actor.orgId, n]);
   return true;
 }

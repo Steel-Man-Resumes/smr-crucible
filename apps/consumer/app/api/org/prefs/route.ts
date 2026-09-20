@@ -6,7 +6,7 @@
  * Values are normalized against an allowlist in core; unknown keys are dropped.
  */
 import { NextResponse } from "next/server";
-import { getStaffPrefs, setOwnStaffPrefs, setOrgStaffPrefDefaults } from "@crucible/core";
+import { getStaffPrefs, setOwnStaffPrefs, setOrgStaffPrefDefaults, setQuietAfterDays } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,10 @@ export async function PUT(request: Request) {
   if (body.orgDefaults !== undefined) {
     const ok = await setOrgStaffPrefDefaults(guard.actor, body.orgDefaults);
     if (!ok) return NextResponse.json({ error: "Only the organization's owner can set defaults." }, { status: 403 });
+  }
+  if (body.quietAfterDays !== undefined) {
+    const ok = await setQuietAfterDays(guard.actor, Number(body.quietAfterDays));
+    if (!ok) return NextResponse.json({ error: "Only the owner can change that, and it has to be between 3 and 90 days." }, { status: 400 });
   }
   if (body.own !== undefined) await setOwnStaffPrefs(guard.actor, body.own);
   return NextResponse.json(await getStaffPrefs(guard.actor));

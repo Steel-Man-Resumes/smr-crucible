@@ -102,6 +102,8 @@ interface PendingInvite {
 interface OrgPayload {
   /** Per-participant pages and scoped sharing are on for this organization. */
   crmV2?: boolean;
+  /** The organization's own threshold; 14 unless the owner changed it. */
+  quietAfterDays?: number;
   org: { name: string; code: string; logoUrl: string | null; role: string; seatLimit: number | null };
   staff: StaffMember[];
   cohort: Cohort;
@@ -122,13 +124,13 @@ function usd(v: number): string {
   return `$${v.toFixed(v >= 1 ? 2 : 4)}`;
 }
 
-function clientStatus(c: CohortClient): ClientStatus {
+function clientStatus(c: CohortClient, behindMs: number = BEHIND_MS): ClientStatus {
   if (c.hired) return "hired";
   const last = c.lastActiveAt ? new Date(c.lastActiveAt).getTime() : 0;
   const now = Date.now();
   if (last && now - last < WEEK_MS) return "active";
   const midJourney = c.currentStage >= 1 && c.currentStage < 6;
-  if (midJourney && (!last || now - last > BEHIND_MS)) return "behind";
+  if (midJourney && (!last || now - last >= behindMs)) return "behind";
   return "steady";
 }
 
@@ -190,6 +192,10 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     } catch { return; }
     window.location.replace("/dashboard/today");
   }, [requestedView, data?.crmV2, prefs.landing]);
+  // The organization's own "quiet after N days" (Settings -> My workflow, owner).
+  // The same number Insights, Today and the assistant read.
+  const behindMs = (data?.quietAfterDays ?? BEHIND_DAYS) * 24 * 60 * 60 * 1000;
+  const statusOf = (c: CohortClient) => clientStatus(c, behindMs);
   const activeSort = sort ?? prefs.caseloadSort;
   const hidden = (c: CaseloadColumn) => prefs.caseloadHidden.includes(c);
   const sortRows = (rows: CohortClient[]) => {
@@ -201,7 +207,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     else if (activeSort === "stage") out.sort((a, b) => b.currentStage - a.currentStage || byName(a, b));
     // "Who needs me first": quiet people, then steady, then active, then hired;
     // inside each, whoever has been quiet longest comes first.
-    else out.sort((a, b) => STATUS_RANK[clientStatus(a)] - STATUS_RANK[clientStatus(b)] || t(a.lastActiveAt) - t(b.lastActiveAt) || byName(a, b));
+    else out.sort((a, b) => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] || t(a.lastActiveAt) - t(b.lastActiveAt) || byName(a, b));
     return out;
   };
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
@@ -370,7 +376,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
       const key = c.assignedStaffId ?? UNASSIGNED;
       const r = m.get(key) ?? { active: 0, behind: 0, hired: 0, sharing: 0 };
       r.sharing += 1;
-      const s = clientStatus(c);
+      const s = statusOf(c);
       if (s === "hired") r.hired += 1;
       else if (s === "active") r.active += 1;
       else if (s === "behind") r.behind += 1;
@@ -518,7 +524,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 )}
                 {!hidden("status") && (
                   <td className="px-4 py-3">
-                    <StatusBadge status={clientStatus(c)} />
+                    <StatusBadge status={statusOf(c)} />
                   </td>
                 )}
               </tr>

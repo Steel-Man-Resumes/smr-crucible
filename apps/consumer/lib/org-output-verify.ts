@@ -1,3 +1,4 @@
+import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -47,6 +48,8 @@ export interface OrgFacts {
   needsAttention?: string[];
   /** The organization's own name, whose words are not people. */
   orgName?: string;
+  /** The organization's "quiet after N days". A number the answer may say. */
+  quietDays?: number;
 }
 
 export interface OrgVerdict {
@@ -85,6 +88,8 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
     }
   }
   for (const n of Array.from(ALWAYS_FINE)) allowed.add(n);
+  // The org's own threshold is a number the answer is told, so it may say it.
+  if (facts.quietDays) allowed.add(String(facts.quietDays));
   return allowed;
 }
 
@@ -180,12 +185,12 @@ export async function checkOrgClaimsWithModel(
 
 ESTABLISHED FACTS (each of these is TRUE and may be stated or paraphrased):
 - This viewer's caseload is ${facts.caseload} people: ${facts.visibleNames.join(", ") || "(no names)"}.
-- ${facts.activeRecently ?? facts.caseload - facts.stalled} of them have been active in the last two weeks.
-- ${facts.stalled} of them have had no activity in the last two weeks.
+- ${facts.activeRecently ?? facts.caseload - facts.stalled} of them have been active in the last ${quietSpan(facts.quietDays ?? 14)}.
+- ${facts.stalled} of them have had no activity in the last ${quietSpan(facts.quietDays ?? 14)}.
 - ${facts.neverStarted} of them have never started. These are INCLUDED in the ${facts.stalled} with no activity, not in addition to them. A message that presents the never-started as additional, separate people beyond the ${facts.stalled} is making an UNSUPPORTED claim.
 - ${facts.hired} of them have started work.
 - ${facts.unassigned} of them are assigned to nobody.
-${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for two weeks or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
+${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for ${quietSpan(facts.quietDays ?? 14)} or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
 ${
   (facts.needsAttention ?? []).length > 0 && (facts.needsAttention ?? []).length >= facts.stalled
     ? `- The people named as needing attention ARE the ${facts.stalled} with no activity -- the same ${facts.stalled === 1 ? "person" : "people"}. A message that refers to them AND to some other inactive or quiet person is counting somebody twice, and that is an UNSUPPORTED claim.`

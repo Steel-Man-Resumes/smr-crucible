@@ -18,7 +18,7 @@
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import { getPartnerCohort } from "./partnerDashboard";
-import { summarizeStaffPerformance, STALLED_AFTER_DAYS } from "./orgStaffPerformance";
+import { summarizeStaffPerformance, getQuietAfterDays } from "./orgStaffPerformance";
 import { SHARING_SCOPES } from "./sharingScopes";
 import { listOutcomes, summarizeOutcomes, type OutcomeSummary } from "./orgOutcomes";
 
@@ -84,14 +84,15 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
                WHERE oi.access_code_id = $1::uuid AND u."emailVerified" IS NULL AND u.password_hash IS NULL`, [actor.orgId]),
   ]);
 
-  const perf = summarizeStaffPerformance(clients);
+  const quietDays = await getQuietAfterDays(actor.orgId);
+  const perf = summarizeStaffPerformance(clients, { stalledAfterDays: quietDays });
   // Organization totals are the SUM of the per-staff rollup (which includes the
   // unassigned bucket), never a second calculation of the same idea.
   const sum = (k: "stalled" | "neverStarted" | "activeThisWeek") => perf.reduce((n, p) => n + p[k], 0);
 
   return {
     asOf: new Date().toISOString(),
-    quietAfterDays: STALLED_AFTER_DAYS,
+    quietAfterDays: quietDays,
     people: { joined: cohort.totalJoined, sharingProgress: clients.length, notSharing: cohort.pendingCount, pendingInvites: invites[0]?.n ?? 0 },
     stages: [0, 1, 2, 3, 4, 5, 6].map((stage) => ({ stage, count: clients.filter((c) => c.currentStage === stage).length })),
     activity: { activeThisWeek: sum("activeThisWeek"), quiet: sum("stalled"), neverStarted: sum("neverStarted") },

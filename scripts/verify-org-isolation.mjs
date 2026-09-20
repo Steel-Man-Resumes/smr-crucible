@@ -493,7 +493,19 @@ async function todayAndTaskChecks() {
   check("and that is in THEIR log, once for the day however many times the page loads", l1 === 1 && log.some((e) => e.kind === "queue"), `rows=${l1}`);
   check("the owner's queue includes the colleague's participant", JSON.stringify(await core.getTodayQueue(aOwner)).includes("COLLEAGUE-ONLY-CO"));
   check("another organization's queue is empty of all of it", !/SECRET-CO|ONLY-CO/.test(JSON.stringify(await core.getTodayQueue(aSpy))));
+  // -- one "quiet after N days" per organization, read by everything
+  await sql`UPDATE users SET next_step_cached_at = now() - interval '10 days' WHERE id = ${pat}`;
   await sql`DELETE FROM job_application WHERE user_id IN (${pat}, ${hers})`;
+  check("the default is 14 days", (await core.getQuietAfterDays(org.id)) === 14 && !(await core.getTodayQueue(aCm)).some((i) => i.section === "quiet" && i.clientId === pat));
+  check("a case manager cannot change the organization's threshold", (await core.setQuietAfterDays(aCm, 7)) === false);
+  check("a nonsense value is refused", (await core.setQuietAfterDays(aOwner, 1)) === false && (await core.setQuietAfterDays(aOwner, 400)) === false);
+  check("the owner sets it to a week", (await core.setQuietAfterDays(aOwner, 7)) === true);
+  const qd = await core.getTodayQueue(aCm), ins = await core.getOrgInsights(aOwner);
+  check("and Today, Insights and the staff rollup all move together: someone quiet for 10 days now counts",
+    qd.some((i) => i.section === "quiet" && i.clientId === pat) && ins.quietAfterDays === 7 && ins.activity.quiet === 2
+    && core.summarizeStaffPerformance((await core.getPartnerCohort(owner, { accessCodeId: org.id })).clients, { stalledAfterDays: 7 }).reduce((n, r) => n + r.stalled, 0) === 2,
+    JSON.stringify({ today: qd.filter((i) => i.section === "quiet").length, insights: ins.activity }));
+  check("another organization keeps its own number", (await core.getQuietAfterDays(org2.id)) === 14);
   await sql`DELETE FROM data_access_log WHERE target_user_id IN (${pat}, ${hers})`;
 }
 

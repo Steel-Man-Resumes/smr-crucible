@@ -119,6 +119,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       crmV2: !!flag?.crm_v2,
+      quietAfterDays: await (await import("@crucible/core")).getQuietAfterDays(org.accessCodeId),
       org: {
         name: org.orgName,
         code: org.code,
