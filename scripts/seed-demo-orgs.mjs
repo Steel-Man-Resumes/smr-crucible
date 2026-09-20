@@ -23,6 +23,7 @@
  */
 import { readFileSync } from "node:fs";
 import { neon } from "@neondatabase/serverless";
+import { assertBypassRole } from "./lib/assert-bypass-role.mjs";
 
 const DEMO_SUFFIX = "(Demo)";
 const EMAIL_DOMAIN = "example.invalid";
@@ -101,6 +102,7 @@ for (const o of ORGS) {
 const url = databaseUrl();
 if (!url) { console.error("\nNo DATABASE_URL found.\n"); process.exit(2); }
 const sql = neon(url);
+await assertBypassRole((q) => sql.query(q), "seed-demo-orgs");
 
 const emailFor = (name, org) =>
   `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@${org.code.toLowerCase()}.${EMAIL_DOMAIN}`;

@@ -24,6 +24,7 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import pg from "pg";
+import { assertBypassRole } from "./lib/assert-bypass-role.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = readFileSync(join(root, "apps/consumer/.env.local"), "utf8");
@@ -57,6 +58,7 @@ const ROSTER = [
 
 const c = new pg.Client({ connectionString: url });
 await c.connect();
+await assertBypassRole(async (q) => (await c.query(q)).rows, "seed-goe-org");
 
 // 0. Retire the stale MKE Reentry partner code so it can't win getOrgContext.
 //    Guarded: only touch it if it still looks like the old reentry code.

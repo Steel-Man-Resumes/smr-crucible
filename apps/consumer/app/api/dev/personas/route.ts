@@ -30,29 +30,42 @@ export async function GET() {
   // to see across orgs, and the honest way to express that is to ask for each
   // org explicitly rather than to punch a hole in the policy.
   const { runScoped } = await import("@crucible/core");
+  // NO LIMIT BEFORE WE KNOW WHO HAS STAFF. This used to take the first 20 codes
+  // alphabetically and only then look for staff, so enough staffless partner
+  // codes sorting early would push a real organization off the list -- and
+  // which ones have staff cannot be asked up front, because that is the
+  // protected table. The cap is on rows returned, applied after.
   const orgs = await query<{ id: string; partner_name: string }>(
     `SELECT id, partner_name FROM access_code
       WHERE is_active = true AND (expires_at IS NULL OR expires_at > now())
       ORDER BY partner_name
-      LIMIT 20`
+      LIMIT 500`
   );
 
+  // One transaction, re-scoped per org. set_config(..., true) is
+  // transaction-local and the latest value wins, so each SELECT runs under the
+  // org set immediately before it. One round trip instead of one per org.
   const rows: Array<Record<string, unknown>> = [];
-  for (const org of orgs) {
-    const staff = await runScoped<unknown[][]>(
-      { orgId: org.id, userId: guard.userId, role: "org_admin" },
-      (sql) => [
-        sql`SELECT os.user_id AS "userId", u.name, u.email, os.role, os.title,
-                   ${org.partner_name} AS "orgName"
-              FROM org_staff os
-              JOIN users u ON u.id = os.user_id
-             WHERE os.access_code_id = ${org.id}
-             ORDER BY CASE os.role WHEN 'org_admin' THEN 0 ELSE 1 END, u.name`,
-      ]
+  if (orgs.length) {
+    const first = orgs[0];
+    const results = await runScoped<unknown[][]>(
+      { orgId: first.id, userId: guard.userId, role: "org_admin" },
+      (sql) =>
+        orgs.flatMap((org) => [
+          sql`SELECT set_config('app.org_id', ${org.id}, true)`,
+          sql`SELECT os.user_id AS "userId", u.name, u.email, os.role, os.title,
+                     ${org.partner_name} AS "orgName"
+                FROM org_staff os
+                JOIN users u ON u.id = os.user_id
+               WHERE os.access_code_id = ${org.id}
+               ORDER BY CASE os.role WHEN 'org_admin' THEN 0 ELSE 1 END, u.name`,
+        ])
     );
-    rows.push(...((staff[0] ?? []) as Array<Record<string, unknown>>));
-    if (rows.length >= 60) break;
+    // Odd indexes are the SELECTs; even ones are the set_config acknowledgements.
+    results.forEach((r, i) => {
+      if (i % 2 === 1) rows.push(...(r as Array<Record<string, unknown>>));
+    });
   }
 
-  return NextResponse.json({ data: rows });
+  return NextResponse.json({ data: rows.slice(0, 60) });
 }

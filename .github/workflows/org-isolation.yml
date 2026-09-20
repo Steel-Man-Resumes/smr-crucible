@@ -1,0 +1,71 @@
+name: org-isolation
+
+# The gate the security statement says we did not have. Runs the cross-org
+# isolation suite against a throwaway copy-on-write Neon branch, with the code
+# under test connected as smr_app -- the role that CANNOT bypass row-level
+# security. A suite that runs as the table owner passes whatever the policies
+# say, which is how "13/13" was once weaker evidence than it looked.
+#
+# PATH-FILTERED ON PURPOSE. Every run creates a Neon branch and wakes compute.
+# The org layer lives in a few places; a copy change should not pay for this.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/core/src/**"
+      - "packages/core/migrations/**"
+      - "apps/consumer/app/api/org/**"
+      - "apps/consumer/app/api/partner/**"
+      - "apps/consumer/app/api/dev/**"
+      - "scripts/verify-org-isolation.mjs"
+      - "scripts/rls-stage1-create-role.mjs"
+      - "scripts/neon-branch.mjs"
+      - ".github/workflows/org-isolation.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: org-isolation
+  cancel-in-progress: false
+
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      BRANCH: ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/core
+
+      - name: Create throwaway branch (refuses the production endpoint)
+        run: node scripts/neon-branch.mjs create "$BRANCH"
+
+      # New migrations in this push are applied to the branch first, so a policy
+      # change is tested before it reaches production rather than after. The
+      # connection string is read from the file inside node and never echoed.
+      - name: Apply migrations to the branch
+        run: |
+          node -e '
+            const fs = require("fs"), cp = require("child_process");
+            const line = fs.readFileSync(".env.isolation","utf8").split("\n").find(l => l.startsWith("ISOLATION_TEST_DATABASE_URL="));
+            const url = line.slice(line.indexOf("=")+1).trim().replace(/^["\x27]|["\x27]$/g,"");
+            const r = cp.spawnSync("npm", ["run","migrate","-w","packages/core"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } });
+            process.exit(r.status ?? 1);
+          '
+
+      - name: Create the restricted app role on the branch
+        run: node scripts/rls-stage1-create-role.mjs
+
+      - name: Cross-org isolation suite
+        run: npm run verify:isolation
+
+      - name: Delete the branch
+        if: always()
+        run: node scripts/neon-branch.mjs delete "$BRANCH" || true

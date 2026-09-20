@@ -14,6 +14,7 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import pg from "pg";
+import { assertBypassRole } from "./lib/assert-bypass-role.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = readFileSync(join(root, "apps/consumer/.env.local"), "utf8");
@@ -46,6 +47,7 @@ const ROSTER = [
 
 const c = new pg.Client({ connectionString: url });
 await c.connect();
+await assertBypassRole(async (q) => (await c.query(q)).rows, "seed-expo-org");
 
 // 1. The org anchor code
 const codeRes = await c.query(
