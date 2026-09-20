@@ -1,3 +1,16 @@
+## 2026-09-20 — Security promise and required-sharing wording review
+
+User requested the D7 rewrite and a legal review. Local copy changes are in
+SecurityContent.tsx, the partner page and sharingScopes.ts (text version
+2026-09-20.3). Review and unresolved release blockers:
+`docs/SHARING-LEGAL-RISK-REVIEW-2026-09-20.md`.
+
+This is an AI-assisted risk review, NOT the attorney clearance required by D2.
+Neither real-org flag was changed. D7 rewrite is prepared, not deployed.
+Before rollout, fix the stored-policy/current-display text-version mismatch
+identified in the review. Do not treat old acknowledgements as agreement to
+new words. Historical D7 “not touched” statements below predate this update.
+
 # SMR Crucible -- Handoff
 
 ## 2026-09-20 (session 7) -- RLS completion + staff CRM: plan, Codex review, and stage P1 shipped
@@ -258,6 +271,20 @@ session's cohort handoff (`~/todash/smr/MT-DOC-DEMO-COHORT-AND-STAFF-HANDOFF-202
 - Real orgs' data: nothing real was put in front of Montana, and no real org has
   `crm_v2`. Real rosters need names from Troy; none were invented.
 - Suite: 158 as smr_app. Mutation-checked: audience rule, from-date rule.
+
+### t.ROY ASSESSMENT (Codex) -- production `e186b15`
+
+`docs/TROY-AGENT-ASSESSMENT-AND-DEFENSE-ARCHITECTURE-2026-09-20.md` (Codex) and my
+answer `docs/TROY-AGENT-PLAN-2026-09-20.md`. Five of twelve findings checked by hand,
+all accurate; all twelve accepted. Shipped now, outside the tuned prompt/checker:
+browser `context.org`/`audience` are server-owned (VERIFIED LIVE: Wes sending a forged
+staff context with caseload 999 got the participant assistant; Russ sending the same
+got "3 on your caseload, 1 started work"); staff lookup failure returns a plain 503
+instead of the job-seeker coach; `counts.savedJobs` fixed; `sanitize.ts` no longer
+claims to prevent injection. NOT touched before 9/22: findings 6 and 7 (advisory
+verification; judge equating inactivity with dropout risk) -- both live inside the path
+four production batches tuned. Waves T1-T6 in the plan; T3 is the staff t.ROY Troy wants
+(prep from shared content, Save as note), and it depends on T1-T2.
 
 ANTICIPATED NEXT (advice given to Troy, none built): a participant-generated
 "proof of job search" log for a PO or court (the participant sends it, not
