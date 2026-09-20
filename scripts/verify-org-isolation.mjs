@@ -369,6 +369,104 @@ async function main() {
   await membershipChecks();
   await sharingChecks();
   await accessChecks();
+  await requiredSharingChecks();
+}
+
+/**
+ * Required sharing (migration 054). The claims under test: a requirement opens
+ * NOTHING by itself; only the person's own acknowledgement does; it opens only
+ * what that version said, to whom it said, from when it said; a changed
+ * requirement never widens an old acknowledgement; and nobody can acknowledge
+ * for somebody else.
+ */
+async function requiredSharingChecks() {
+  console.log("\n  -- required sharing --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("q-owner"), admin = await mkUser("q-admin"), cm = await mkUser("q-cm"), other = await mkUser("q-othercm");
+  const mk = async (label, enabled) => {
+    const [o] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2, required_sharing_enabled)
+                          VALUES (${"ISOQ" + label + uniq}, ${P + " req " + label}, 'client', ${owner}, true, true, ${enabled}) RETURNING id, code`;
+    created.codes.push(o.id); return o;
+  };
+  const org = await mk("A", true), orgOff = await mk("B", false);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("q-pat");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  await sql`INSERT INTO job_application (user_id, job_title, company, status, created_at) VALUES (${pat}, 'OLD-APPLICATION', 'Before Co', 'applied', now() - interval '10 days')`;
+  await sql`INSERT INTO refinery_artifact (user_id, artifact_type, content, is_current, created_at) VALUES (${pat}, 'resume', ${JSON.stringify({ marker: "OLD-RESUME" })}::jsonb, true, now() - interval '10 days')`;
+  const A = (u, o) => core.resolveOrgActor(u, o ? { orgId: o } : undefined);
+  const aOwner = await A(owner, org.id), aAdmin = await A(admin), aCm = await A(cm), aOther = await A(other);
+  const reason = "Our funding agreement requires us to verify each participant's job-search activity.";
+  const pol = (scopes, extra = {}) => ({ scopes, audience: "assigned_staff", purpose: reason, coversExisting: false, ...extra });
+
+  check("an admin cannot set what the program requires", (await core.setOrgSharingPolicy(aAdmin, pol(["applications"]))).ok === false);
+  check("a case manager cannot either", (await core.setOrgSharingPolicy(aCm, pol(["applications"]))).ok === false);
+  const aOwnerOff = await A(owner, orgOff.id);
+  check("an organization that has not been enabled for it cannot require anything", (await core.setOrgSharingPolicy(aOwnerOff, pol(["applications"]))).ok === false);
+  check("a disclosure plan can never be required", (await core.setOrgSharingPolicy(aOwner, pol(["applications", "disclosure"]))).ok === false);
+  const direct = await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
+    app`SELECT smr_set_sharing_policy(ARRAY['vault']::text[], 'assigned_staff', ${reason}, true, 'x') AS r`]);
+  check("even called directly, the database refuses a scope that can never be required", direct[2][0].r === "invalid", direct[2][0].r);
+  check("a requirement with no real reason is refused", (await core.setOrgSharingPolicy(aOwner, pol(["applications"], { purpose: "policy" }))).ok === false);
+
+  const set1 = await core.setOrgSharingPolicy(aOwner, pol(["applications"]));
+  check("the owner can require applications, for the assigned case manager only, from today on", set1.ok === true, JSON.stringify(set1));
+  const forCode = await core.getPolicyForCode(org.code);
+  check("someone holding the code can read what the program requires before joining", !!forCode && forCode.scopes.join() === "applications" && forCode.purpose === reason);
+
+  // -- the requirement alone opens nothing
+  check("turning a requirement on exposes nobody: the case manager still gets nothing", (await core.getClientApplications(aCm, pat)).reason === "not_shared");
+  const h0 = await core.getClientHeader(aCm, pat);
+  check("staff see that the person has not acknowledged", h0.ok && h0.rows[0].awaitingAcknowledgement === true && h0.rows[0].scopes.applications.required === true);
+  const mine = await core.getMyPolicies(pat);
+  check("the participant sees the requirement and that they have not acknowledged it", mine.length === 1 && mine[0].acknowledged === false && mine[0].purpose === reason);
+
+  // -- nobody acknowledges for anybody else
+  const staffAck = await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${pat}, true)`,
+    app`SELECT smr_acknowledge_policy(${mine[0].id}::uuid) AS r`]);
+  check("an acknowledgement cannot be made from inside the organization's scope, even naming the participant", staffAck[2][0].r === "refused", staffAck[2][0].r);
+  check("a case manager acknowledging as themselves opens nothing (they are not a member)", (await core.acknowledgePolicy(cm, mine[0].id)).ok === false);
+  const rawAck = await (async () => { try { await app`INSERT INTO sharing_ack (user_id, policy_version_id, access_code_id) VALUES (${pat}, ${mine[0].id}, ${org.id})`; return null; } catch (e) { return String(e.message); } })();
+  check("the app cannot write an acknowledgement row at all", !!rawAck && /permission denied/i.test(rawAck), rawAck ?? "insert succeeded");
+
+  // -- the person acknowledges: exactly that scope, that audience, from that day
+  check("the participant acknowledges", (await core.acknowledgePolicy(pat, mine[0].id)).ok === true);
+  await sql`INSERT INTO job_application (user_id, job_title, company, status) VALUES (${pat}, 'NEW-APPLICATION', 'After Co', 'applied')`;
+  const apps = await core.getClientApplications(aCm, pat);
+  check("the case manager now reads applications made since, and NOT the ones from before",
+    apps.ok && apps.rows.length === 1 && apps.rows[0].job_title === "NEW-APPLICATION", JSON.stringify(apps.rows?.map((r) => r.job_title)));
+  check("the resume was not required, so it is still closed", (await core.getClientResumes(aCm, pat)).reason === "not_shared");
+  check("'only my case manager' keeps the owner out, even though the owner sees the whole cohort", (await core.getClientApplications(aOwner, pat)).ok === false);
+  check("and keeps out a colleague who is not assigned", (await core.getClientApplications(aOther, pat)).ok === false);
+
+  // -- a changed requirement never widens an old acknowledgement
+  await core.setOrgSharingPolicy(aOwner, pol(["applications", "resume"], { audience: "assigned_staff_and_admins", coversExisting: true }));
+  check("after the program widens its rule, the resume stays closed until the person has seen and acknowledged the change", (await core.getClientResumes(aCm, pat)).reason === "not_shared");
+  check("and the owner still cannot read what was acknowledged for the case manager only", (await core.getClientApplications(aOwner, pat)).ok === false);
+  const h1 = await core.getClientHeader(aCm, pat);
+  check("staff see them as awaiting the new version", h1.ok && h1.rows[0].awaitingAcknowledgement === true);
+  check("the old version can no longer be acknowledged", (await core.acknowledgePolicy(pat, mine[0].id)).ok === false);
+  const mine2 = await core.getMyPolicies(pat);
+  await core.acknowledgePolicy(pat, mine2[0].id);
+  const res2 = await core.getClientResumes(aCm, pat);
+  check("acknowledging the new version opens the resume, including what existed before (it said so)", res2.ok && res2.rows.some((r) => r.content?.marker === "OLD-RESUME"));
+
+  // -- stopping, leaving, rejoining
+  check("the participant can stop sharing a required item", (await core.revokeSharing(pat, org.id, "resume")).ok === true);
+  const h2 = await core.getClientHeader(aCm, pat);
+  check("staff lose it at once and are told it was stopped, not left guessing",
+    (await core.getClientResumes(aCm, pat)).reason === "not_shared" && h2.rows[0].scopes.resume.stoppedByParticipant === true);
+  const state = await core.getOrgPolicyState(aOwner);
+  check("the owner's list shows who acknowledged, who is awaiting, who stopped", state.members.find((m) => m.userId === pat)?.status === "stopped", JSON.stringify(state.members));
+  await core.leaveAllOrgs(pat); await core.redeemAccessCode(pat, org.code);
+  const mine3 = await core.getMyPolicies(pat);
+  check("after leaving and rejoining, the person is asked again and nothing is open", mine3[0]?.acknowledged === false && (await core.getClientApplications(aOwner, pat)).ok === false);
+  check("the owner can stop requiring anything", (await core.setOrgSharingPolicy(aOwner, { scopes: [], audience: "", purpose: "", coversExisting: false })).ok === true && (await core.getMyPolicies(pat)).length === 0);
+  await sql`DELETE FROM job_application WHERE user_id = ${pat}`;
 }
 
 /**
@@ -511,6 +609,11 @@ async function sharingChecks() {
   const [{ n: logged0 }] = await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${wes}`;
   check("and a refused read writes no 'opened' entry", logged0 === 0, `rows=${logged0}`);
   const head = await core.getClientHeader(aRuss, wes);
+  check("progress signals are absent until the person turns on progress sharing", head.ok && head.rows[0].progress === null);
+  await joinCohortConsent(wes);
+  const headP = await core.getClientHeader(aRuss, wes);
+  check("with progress sharing on, staff get counts and a next step, and still no content",
+    headP.ok && headP.rows[0].progress?.applications === 1 && !JSON.stringify(headP.rows[0]).includes("PRIVATE-NOTE") && !JSON.stringify(headP.rows[0]).includes("RESUME-BODY"));
   check("they CAN see who the person is and that nothing is shared", head.ok && head.rows[0].scopes.resume.shared === false && head.rows[0].assignedStaffId === russ);
 
   // -- an organization cannot grant itself access, by any route the app role has

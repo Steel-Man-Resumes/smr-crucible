@@ -32,10 +32,10 @@ export const NOTE_KIND_LABELS: Record<NoteKind, string> = {
   note: "Note", meeting: "Meeting", call: "Call", text: "Text", email: "Email", referral: "Referral",
 };
 
-export const CLIENT_TABS = ["notes", "applications", "resume", "documents", "last"] as const;
+export const CLIENT_TABS = ["notes", "screen", "applications", "resume", "documents", "last"] as const;
 export type ClientTabPref = (typeof CLIENT_TABS)[number];
 export const CLIENT_TAB_LABELS: Record<ClientTabPref, string> = {
-  notes: "Your notes", applications: "Applications", resume: "Resumes", documents: "Cover letters",
+  notes: "Your notes", screen: "Their screen (a map of what they see)", applications: "Applications", resume: "Resumes", documents: "Cover letters",
   last: "Whichever I had open last",
 };
 

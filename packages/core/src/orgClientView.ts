@@ -62,10 +62,29 @@ const IN_REACH = `
         SELECT 1 FROM client_staff_assignment a
          WHERE a.access_code_id = $2::uuid AND a.client_user_id = $1::uuid AND a.staff_user_id = $4::uuid))`;
 
-/** Step 5 for one scope ($5). */
+/**
+ * Step 5 for one scope ($5). A grant made under a PROGRAM REQUIREMENT carries
+ * the audience the participant acknowledged: "only my case manager" means an
+ * admin who merely sees the whole cohort does not get it, whatever $3 says.
+ */
 const SHARED = `
   EXISTS (SELECT 1 FROM sharing_grant g
-           WHERE g.user_id = $1::uuid AND g.access_code_id = $2::uuid AND g.scope = $5::text AND g.revoked_at IS NULL)`;
+           LEFT JOIN org_sharing_policy_version pv ON pv.id = g.policy_version_id
+           WHERE g.user_id = $1::uuid AND g.access_code_id = $2::uuid AND g.scope = $5::text AND g.revoked_at IS NULL
+             AND (pv.id IS NULL OR pv.audience = 'assigned_staff_and_admins'
+                  OR EXISTS (SELECT 1 FROM client_staff_assignment a2
+                              WHERE a2.access_code_id = $2::uuid AND a2.client_user_id = $1::uuid AND a2.staff_user_id = $4::uuid)))`;
+
+/**
+ * "From today on": when a requirement was acknowledged as covering only future
+ * material, rows created before that moment stay closed. If the person ALSO
+ * chose to share the scope themselves (covers_from NULL), everything is open.
+ */
+const covered = (createdAt: string) => `
+  ${createdAt} >= COALESCE((SELECT CASE WHEN bool_or(g.covers_from IS NULL) THEN '-infinity'::timestamptz ELSE MIN(g.covers_from) END
+                              FROM sharing_grant g
+                             WHERE g.user_id = $1::uuid AND g.access_code_id = $2::uuid AND g.scope = $5::text AND g.revoked_at IS NULL),
+                           'infinity'::timestamptz)`;
 
 function params(actor: OrgActor, clientId: string, scope?: SharingScope) {
   const base = [clientId, actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId];
@@ -81,7 +100,25 @@ export interface ClientHeader {
   assignedStaffId: string | null;
   assignedStaffName: string | null;
   /** Per scope: is it shared, and is there an open request? */
-  scopes: Record<SharingScope, { shared: boolean; sharedAt: string | null; requestPending: boolean }>;
+  scopes: Record<SharingScope, {
+    shared: boolean; sharedAt: string | null; requestPending: boolean;
+    /** The program requires this scope. */
+    required: boolean;
+    /** Required, acknowledged, and then stopped by the participant. */
+    stoppedByParticipant: boolean;
+    /** Shared only "from today on": earlier material stays closed. */
+    fromDate: string | null;
+  }>;
+  /** The program requires something and this person has not acknowledged it yet. */
+  awaitingAcknowledgement: boolean;
+  /**
+   * Progress signals, ONLY if the person has the long-standing "share my
+   * progress" switch on. Counts and a next step; never content. null = off.
+   */
+  progress: {
+    nextStepAction: string | null; applications: number; savedJobs: number; practiceSessions: number;
+    hasTailoredResume: boolean; lastActiveAt: string | null;
+  } | null;
 }
 
 /**
@@ -93,7 +130,9 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
   if (refused) return { ok: false, reason: refused };
   type Row = { id: string; name: string | null; email: string | null; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
-  const [who, grants, requests] = await runScoped<[Row[], { scope: string; granted_at: string }[], { scope: string }[]]>(
+  type PolicyRow = { scopes: string[]; acked: boolean; stopped: string[] | null };
+  type ProgressRow = { next_step_action: string | null; applications: number; saved_jobs: number; practice_sessions: number; has_tailored: boolean; last_active_at: string | null };
+  const [who, grants, requests, policy, progress] = await runScoped<[Row[], { scope: string; granted_at: string; covers_from: string | null; chose: boolean }[], { scope: string }[], PolicyRow[], ProgressRow[]]>(
     scopeOf(actor),
     (sql) => [
       run(sql)(
@@ -107,13 +146,42 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
         params(actor, clientId)
       ),
       run(sql)(
-        `SELECT g.scope, g.granted_at FROM sharing_grant g
-          WHERE g.user_id = $1::uuid AND g.access_code_id = $2::uuid AND g.revoked_at IS NULL AND ${IN_REACH}`,
+        `SELECT g.scope, MIN(g.granted_at) AS granted_at,
+                CASE WHEN bool_or(g.covers_from IS NULL) THEN NULL ELSE MIN(g.covers_from) END AS covers_from,
+                bool_or(g.basis = 'participant_choice') AS chose
+           FROM sharing_grant g
+          WHERE g.user_id = $1::uuid AND g.access_code_id = $2::uuid AND g.revoked_at IS NULL AND ${IN_REACH}
+          GROUP BY g.scope`,
         params(actor, clientId)
       ),
       run(sql)(
         `SELECT sr.scope FROM sharing_request sr
           WHERE sr.user_id = $1::uuid AND sr.access_code_id = $2::uuid AND sr.status = 'pending' AND ${IN_REACH}`,
+        params(actor, clientId)
+      ),
+      run(sql)(
+        `SELECT v.scopes,
+                EXISTS (SELECT 1 FROM sharing_ack a WHERE a.user_id = $1::uuid AND a.policy_version_id = v.id AND a.ended_at IS NULL) AS acked,
+                (SELECT array_agg(DISTINCT g.scope) FROM sharing_grant g
+                  WHERE g.user_id = $1::uuid AND g.policy_version_id = v.id AND g.revoked_reason = 'participant_stopped_required') AS stopped
+           FROM org_sharing_policy_version v
+          WHERE v.access_code_id = $2::uuid AND v.retired_at IS NULL AND ${IN_REACH}`,
+        params(actor, clientId)
+      ),
+      // The same signals the caseload table already shows, behind the same
+      // consent: the person's own "share my progress" switch.
+      run(sql)(
+        `SELECT u.next_step_cache->>'action' AS next_step_action,
+                (SELECT COUNT(*)::int FROM job_application ja WHERE ja.user_id = u.id AND ja.status <> 'saved') AS applications,
+                (SELECT COUNT(*)::int FROM job_application ja WHERE ja.user_id = u.id AND ja.status = 'saved') AS saved_jobs,
+                (SELECT COUNT(*)::int FROM refinery_artifact ra WHERE ra.user_id = u.id AND ra.artifact_type = 'interview_prep') AS practice_sessions,
+                EXISTS (SELECT 1 FROM job_application ja WHERE ja.user_id = u.id AND ja.resume_artifact_id IS NOT NULL) AS has_tailored,
+                GREATEST(COALESCE(u.next_step_cached_at, to_timestamp(0)),
+                         COALESCE((SELECT MAX(updated_at) FROM job_application ja WHERE ja.user_id = u.id), to_timestamp(0)),
+                         COALESCE((SELECT MAX(updated_at) FROM refinery_artifact ra WHERE ra.user_id = u.id), to_timestamp(0))) AS last_active_at
+           FROM users u
+          WHERE u.id = $1::uuid AND ${IN_REACH}
+            AND EXISTS (SELECT 1 FROM consumer_consent cc WHERE cc.user_id = u.id AND cc.consent_layer = 'sharing' AND cc.status = 'granted')`,
         params(actor, clientId)
       ),
     ]
@@ -123,13 +191,23 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
   const scopes = {} as ClientHeader["scopes"];
   for (const s of SHARING_SCOPES) {
     const g = grants.find((x) => x.scope === s);
-    scopes[s] = { shared: !!g, sharedAt: g?.granted_at ?? null, requestPending: requests.some((x) => x.scope === s) };
+    const required = !!policy[0]?.scopes.includes(s);
+    scopes[s] = {
+      shared: !!g, sharedAt: g?.granted_at ?? null, requestPending: requests.some((x) => x.scope === s),
+      required, stoppedByParticipant: required && !g && !!policy[0]?.stopped?.includes(s), fromDate: g?.covers_from ?? null,
+    };
   }
   return {
     ok: true,
     rows: [{
       userId: row.id, name: row.name, email: row.email, currentStage: row.current_stage ?? 0,
       joinedAt: row.joined_at, assignedStaffId: row.staff_id, assignedStaffName: row.staff_name, scopes,
+      awaitingAcknowledgement: !!policy[0] && !policy[0].acked,
+      progress: progress[0] ? {
+        nextStepAction: progress[0].next_step_action, applications: progress[0].applications, savedJobs: progress[0].saved_jobs,
+        practiceSessions: progress[0].practice_sessions, hasTailoredResume: progress[0].has_tailored,
+        lastActiveAt: progress[0].last_active_at && new Date(progress[0].last_active_at).getTime() > 0 ? progress[0].last_active_at : null,
+      } : null,
     }],
   };
 }
@@ -188,7 +266,7 @@ export function getClientApplications(actor: OrgActor, clientId: string) {
             (ja.cover_letter_artifact_id IS NOT NULL) AS has_cover_letter,
             ja.created_at, ja.updated_at
        FROM job_application ja
-      WHERE ja.user_id = $1::uuid`
+      WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")}`
   );
 }
 
@@ -220,7 +298,7 @@ function artifactLibrary(actor: OrgActor, clientId: string, scope: SharingScope,
     actor, clientId, scope,
     `SELECT ra.id, ra.lane, ra.is_current, ra.is_locked, ra.target_context, ra.content, ra.updated_at, ra.approved_at
        FROM refinery_artifact ra
-      WHERE ra.user_id = $1::uuid AND ra.artifact_type = '${artifactType}'`
+      WHERE ra.user_id = $1::uuid AND ra.artifact_type = '${artifactType}' AND ${covered("ra.created_at")}`
   );
 }
 export const getClientResumes = (actor: OrgActor, clientId: string) => artifactLibrary(actor, clientId, "resume", "resume");

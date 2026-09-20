@@ -33,10 +33,11 @@ const STATUS_LABEL: Record<string, string> = {
 const NOTE_KINDS = KINDS.map((k) => [k, NOTE_KIND_LABELS[k]] as const);
 const LAST_TAB_KEY = "smr.staff.clientTab";
 
-interface ScopeState { shared: boolean; sharedAt: string | null; requestPending: boolean }
+interface ScopeState { shared: boolean; sharedAt: string | null; requestPending: boolean; required: boolean; stoppedByParticipant: boolean; fromDate: string | null }
 interface Client {
   userId: string; name: string | null; email: string | null; currentStage: number; joinedAt: string | null;
-  assignedStaffName: string | null; scopes: Record<Scope, ScopeState>;
+  assignedStaffName: string | null; scopes: Record<Scope, ScopeState>; awaitingAcknowledgement: boolean;
+  progress: { nextStepAction: string | null; applications: number; savedJobs: number; practiceSessions: number; hasTailoredResume: boolean; lastActiveAt: string | null } | null;
 }
 interface Note {
   id: string; kind: string; body: string; occurred_at: string; author_name: string | null;
@@ -60,7 +61,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Scope | "notes">("notes");
+  const [tab, setTab] = useState<Scope | "notes" | "screen">("notes");
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
@@ -77,10 +78,10 @@ export function ClientPage({ clientId }: { clientId: string }) {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
 
-  const openTab = useCallback(async (next: Scope | "notes") => {
+  const openTab = useCallback(async (next: Scope | "notes" | "screen") => {
     setTab(next); setShared(null);
     try { localStorage.setItem(LAST_TAB_KEY, next); } catch {}
-    if (next === "notes" || !client?.scopes[next].shared) return;
+    if (next === "notes" || next === "screen" || !client?.scopes[next].shared) return;
     // Opening a shared tab IS the logged access. Not on hover, not on page
     // load: only when the staff member actually asks to see it.
     setLoadingTab(true);
@@ -98,6 +99,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
     setOpened(true);
     let want: string = prefs.clientTab;
     if (want === "last") { try { want = localStorage.getItem(LAST_TAB_KEY) || "notes"; } catch { want = "notes"; } }
+    if (want === "screen") { openTab("screen"); return; }
     if (want !== "notes" && (want === "applications" || want === "resume" || want === "documents") && client.scopes[want].shared) openTab(want);
   }, [client, opened, prefs.clientTab, openTab]);
 
@@ -116,7 +118,10 @@ export function ClientPage({ clientId }: { clientId: string }) {
         <ul className="flex flex-wrap gap-2 mt-3" aria-label="What this person has shared">
           {SCOPES.map((s) => {
             const st = client.scopes[s.key];
-            const text = st.shared ? "Shared" : st.requestPending ? "Asked" : "Not shared";
+            const text = st.shared ? (st.required ? "Shared (required)" : "Shared")
+              : st.stoppedByParticipant ? "Required, stopped by them"
+              : st.required ? (client.awaitingAcknowledgement ? "Required, not acknowledged yet" : "Required, not shared")
+              : st.requestPending ? "Asked" : "Not shared";
             return (
               <li key={s.key} className={`text-xs px-2 py-1 border ${st.shared ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos-dim"}`}>
                 {s.label}: {text}
@@ -127,7 +132,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </header>
 
       <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
-        {([["notes", "Your notes"], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes", string][]).map(([key, label]) => (
+        {([["notes", "Your notes"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen", string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => openTab(key)}
             className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
             {label}
@@ -135,7 +140,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
         ))}
       </div>
 
-      {tab === "notes" ? (
+      {tab === "screen" ? (
+        <TheirScreen client={client} first={first} onOpen={openTab} />
+      ) : tab === "notes" ? (
         <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load}
           defaultKind={prefs.noteKind} defaultVisible={prefs.noteVisible} />
       ) : client.scopes[tab].shared ? (
@@ -143,16 +150,79 @@ export function ClientPage({ clientId }: { clientId: string }) {
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
             {first} chose to share this with your organization on {day(client.scopes[tab].sharedAt)} and can stop at any time.
             {" "}{first} can see that you opened it, and when. You can read it. You cannot change it.
+            {client.scopes[tab].fromDate ? ` Only what ${first} made on or after ${day(client.scopes[tab].fromDate)} is included; earlier work is still private.` : ""}
           </p>
           {loadingTab || !shared ? <p className="text-sm text-t-phos-dim">Loading...</p>
             : shared.length === 0 ? <p className="text-sm text-t-phos-dim">Shared, and there is nothing here yet.</p>
             : tab === "applications" ? <Applications rows={shared} /> : <Documents rows={shared} />}
+        </section>
+      ) : client.scopes[tab].required ? (
+        <section className="bg-t-panel border border-t-line p-5">
+          <h2 className="font-semibold text-t-white mb-2">
+            {client.scopes[tab].stoppedByParticipant ? `${first} stopped sharing this` : `${first} has not acknowledged the program's requirement yet`}
+          </h2>
+          <p className="text-sm text-t-phos-dim leading-relaxed">
+            Your program requires this, and nothing opens until {first} has read the requirement and said so themselves. Nobody can acknowledge it for them, and {first} can still use everything in the meantime.
+            {client.scopes[tab].stoppedByParticipant ? " They acknowledged it and later chose to stop. That is a conversation to have with them, not something this screen can override." : " It is waiting for them in their Settings, under Who can see what."}
+          </p>
         </section>
       ) : (
         <AskPanel clientId={clientId} first={first} scope={SCOPES.find((s) => s.key === tab)!} pending={client.scopes[tab].requestPending}
           canRequest={!!viewer?.canRequest} onAsked={load} />
       )}
     </Shell>
+  );
+}
+
+/**
+ * What the participant's own workspace looks like, area by area, so a case
+ * manager can coach ("open Build, then Application Tailor") without ever being
+ * signed in AS them. It is a map, not a window: an area shows its contents only
+ * if the person shared that item, and opening one is the same logged access as
+ * the tab. Areas nobody can share are shown as such, so staff stop wondering.
+ */
+function TheirScreen({ client, first, onOpen }: { client: Client; first: string; onOpen: (t: Scope) => void }) {
+  const p = client.progress;
+  const Area = ({ group, name, what, scope, state }: { group: string; name: string; what: string; scope?: Scope; state?: "never" | "progress" }) => {
+    const st = scope ? client.scopes[scope] : null;
+    const open = !!st?.shared;
+    return (
+      <li className={`border p-4 ${open ? "border-t-amber/60 bg-t-panel" : "border-t-line bg-t-panel/60"}`}>
+        <p className="text-[10px] uppercase tracking-wider text-t-phos-dim">{group}</p>
+        <p className="font-medium text-t-white">{name}</p>
+        <p className="text-xs text-t-phos-dim mt-1">{what}</p>
+        {state === "never" ? <p className="text-xs text-t-phos mt-2">Always private. Nobody at your organization can see this, and no program can require it.</p>
+          : state === "progress" ? null
+          : open ? <button onClick={() => onOpen(scope!)} className="t-focus text-xs font-semibold text-t-amber-bright underline underline-offset-4 mt-2">Open what {first} shared</button>
+          : <button onClick={() => onOpen(scope!)} className="t-focus text-xs text-t-phos underline underline-offset-4 mt-2">{st?.required ? "Required by your program. See where it stands" : `Not shared. Ask ${first}`}</button>}
+      </li>
+    );
+  };
+  return (
+    <section>
+      <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
+        This is the layout {first} sees when they sign in, so you can point them to the right place. You are not signed in as {first}, and you see inside an area only if {first} shared it.
+      </p>
+      <div className="bg-t-panel border border-t-line p-4 mb-4">
+        <p className="text-[10px] uppercase tracking-wider text-t-phos-dim">Overview</p>
+        {p ? (
+          <p className="text-sm text-t-white mt-1">
+            Stage {client.currentStage} of 6, {STAGES[client.currentStage] ?? ""}. {p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}.` : "No next step is showing right now."}
+            <span className="block text-xs text-t-phos-dim mt-1">
+              {p.applications} {p.applications === 1 ? "application" : "applications"} · {p.savedJobs} saved · {p.practiceSessions} practice {p.practiceSessions === 1 ? "session" : "sessions"} · {p.hasTailoredResume ? "has tailored a resume" : "has not tailored a resume yet"} · last active {day(p.lastActiveAt)}
+            </span>
+          </p>
+        ) : <p className="text-sm text-t-phos-dim mt-1">{first} has not turned on progress sharing, so their stage and next step are not visible to you.</p>}
+      </div>
+      <ul className="grid sm:grid-cols-2 gap-3">
+        <Area group="Find work" name="Job Board and Applications" what="Where they search, save jobs and track each application." scope="applications" />
+        <Area group="Build" name="Application Tailor and resumes" what="Where they fit a resume to one job. Their resume library lives here." scope="resume" />
+        <Area group="Build" name="Cover letters" what="Letters written for a specific job." scope="documents" />
+        <Area group="Build" name="Disclosure" what="Their plan for if and how to talk about their record with an employer." state="never" />
+        <Area group="Build" name="Interview Prep" what="Practice interviews, including voice practice. You see only how many sessions, above." state="never" />
+        <Area group="My stuff" name="Vault" what="Documents they store, like an ID or a certificate." state="never" />
+      </ul>
+    </section>
   );
 }
 

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { PolicyAckBanner } from "@/components/PolicyAckBanner";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
@@ -153,6 +154,7 @@ const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
       { href: "/dashboard/insights", label: "Insights", needs: "org.insights.view" },
       { href: "/dashboard/team", label: "Team & access", needs: "org.staff.manage" },
       { href: "/dashboard/participants", label: "Add participants", needs: "org.participant.invite" },
+      { href: "/dashboard/sharing-policy", label: "Sharing policy", needs: "org.staff.manage" },
       { href: "/dashboard/org-security", label: "Security & privacy" },
     ],
   },
@@ -775,6 +777,7 @@ export function RefineryShell({
               Sample data. These participants are fictional. The employers and local services named are real; no application or hire shown here took place.
             </p>
           )}
+          {!isOrgPartner && <PolicyAckBanner />}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
           {children}
         </main>
