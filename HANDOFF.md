@@ -272,6 +272,39 @@ session's cohort handoff (`~/todash/smr/MT-DOC-DEMO-COHORT-AND-STAFF-HANDOFF-202
   `crm_v2`. Real rosters need names from Troy; none were invented.
 - Suite: 158 as smr_app. Mutation-checked: audience rule, from-date rule.
 
+### TODAY, TASKS, OUTCOMES, FUNDER EXPORT -- production `5ec898b`, migrations 055-056
+
+Troy: "thats all for now. plz continue building." All behind `crm_v2` (demo orgs).
+Suite 198 as smr_app. 13 row-level-protected tables, all enforced (health 200).
+
+- **Today** (`/dashboard/today`, the default staff landing; landing + visible
+  sections are preferences). Sections: tasks, retention check-ins due, interviews,
+  follow-ups, they answered you, awaiting acknowledgement, quiet, never started,
+  unassigned. **A queue reason is information about a person:** interview and
+  follow-up dates come ONLY from people who shared applications, only to someone
+  the grant reaches, and only under wording that mentions a daily work list
+  (`WORK_QUEUE_TEXT_VERSIONS`; a grant under older words is ignored by the queue).
+  Surfacing is logged for the participant, once per staff member per day, worded
+  as what it is. `SHARING_TEXT_VERSION` is now `2026-09-20.3`.
+- **Tasks** (055): finished or cancelled, never deleted. A shared task shows on
+  the participant's dashboard; ticking is all they can do (function, no user arg).
+- **Outcomes + retention** (056): the ORGANIZATION'S placement record, separate
+  from a participant's own "hired". Carries how it is known; the database refuses
+  "confirmed" without method, person and time. Check-ins at 30/60/90/180; "could
+  not reach" is its own answer by constraint. `summarizeOutcomes` is pure: a rate
+  is "still there" over "old enough to ask". Participant can read what is on file.
+- **Insights export**: CSV (needs `org.export`) and print. No names. Every row
+  carries its denominator. Logged.
+- Delegable capabilities in SQL are now one function (`smr_delegable_capabilities`);
+  adding one is a line in a migration PLUS a line in `capabilities.ts`.
+- Demo: `seed-demo-cohort.mjs` now also seeds Terrell's confirmed placement and a
+  task, and computes "next Thursday" so Marisol's note and date agree.
+
+NOT built yet from the CRM plan: job suggestions, comments on a resume, staff
+t.ROY per participant (waits on the t.ROY plan, waves T1-T3), bulk assign, saved
+filters, "quiet after N days" as a preference (must move the screen AND t.ROY's
+numbers together), Part B (RLS on participant-owned tables).
+
 ### t.ROY ASSESSMENT (Codex) -- production `e186b15`
 
 `docs/TROY-AGENT-ASSESSMENT-AND-DEFENSE-ARCHITECTURE-2026-09-20.md` (Codex) and my
