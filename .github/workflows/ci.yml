@@ -14,6 +14,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # No database needed, so it runs on every push: an unscoped query against a
+      # row-level-protected table returns nothing instead of failing.
+      - run: node scripts/lint-protected-tables.mjs
       - run: npm run build -w packages/core
       - run: npm run test -w packages/core
       - run: npm run typecheck -w apps/consumer

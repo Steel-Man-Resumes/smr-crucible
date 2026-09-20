@@ -371,6 +371,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     await c.query("BEGIN");
                     try {
                       await c.query(`SELECT set_config('app.user_id', $1, true)`, [token.sub]);
+                      // rls-lint-ok(access_code_redemption): same pooled client, inside BEGIN, after set_config('app.user_id') just above
                       const has = await c.query(
                         `SELECT 1 FROM access_code_redemption WHERE user_id = $1 LIMIT 1`,
                         [token.sub]

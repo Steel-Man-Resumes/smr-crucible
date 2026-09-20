@@ -97,7 +97,7 @@ if (grantProblems.length) {
   console.error("\nFAILED: restricted grants are wrong:\n  " + grantProblems.join("\n  ") + "\n");
   process.exit(1);
 }
-console.log("  restricted tables re-locked (org_audit, platform_admin: SELECT only)");
+console.log("  restricted tables re-locked (see scripts/lib/restricted-grants.mjs)");
 
 // THE ASSERTION THIS WHOLE STAGE EXISTS FOR.
 const [role] = await sql`
