@@ -86,6 +86,36 @@ export async function runAsUser<T = unknown[]>(
   return (results as unknown[]).slice(setup.length) as T;
 }
 
+/**
+ * query(), run as a specific user so row-level policies that permit somebody
+ * to read THEIR OWN rows will pass.
+ *
+ * A drop-in for `query()` with the user id in front, deliberately: the friction
+ * of converting a call site is what leaves it unconverted, and an unconverted
+ * read against a protected table now returns an empty result rather than an
+ * error. Silent emptiness is the failure mode to design against.
+ */
+export async function queryAsUser<T = Record<string, unknown>>(
+  userId: string,
+  sql: string,
+  params?: unknown[]
+): Promise<T[]> {
+  const out = await runAsUser<unknown[][]>(userId, (c) => [
+    (c as unknown as (s: string, p?: unknown[]) => unknown)(sql, params),
+  ]);
+  return (out[0] ?? []) as T[];
+}
+
+/** getOne(), as a specific user. */
+export async function getOneAsUser<T = Record<string, unknown>>(
+  userId: string,
+  sql: string,
+  params?: unknown[]
+): Promise<T | null> {
+  const rows = await queryAsUser<T>(userId, sql, params);
+  return rows[0] ?? null;
+}
+
 export async function runScoped<T = unknown[]>(
   scope: OrgScope,
   build: (sql: NeonQueryFunction<false, false>) => unknown[]
