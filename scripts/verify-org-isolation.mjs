@@ -371,6 +371,63 @@ async function main() {
   await accessChecks();
   await requiredSharingChecks();
   await todayAndTaskChecks();
+  await outcomeChecks();
+}
+
+/** Placements and retention (056): every figure keeps how it is known, and rates have honest denominators. */
+async function outcomeChecks() {
+  console.log("\n  -- outcomes and retention --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("o-owner"), cm = await mkUser("o-cm"), other = await mkUser("o-other"), spy = await mkUser("o-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOO" + uniq}, ${P + " outcomes"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOO2" + uniq}, ${P + " outcomes2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("o-pat"), newbie = await mkUser("o-new");
+  for (const u of [pat, newbie]) { await core.redeemAccessCode(u, org.code); await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${u}, ${cm}, ${owner})`; }
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+
+  check("'confirmed' without saying how is refused", (await core.recordOutcome(aCm, { clientId: pat, employer: "Acme Foods", startDate: ago(70), source: "staff_verified" })).ok === false);
+  const rawVerified = await (async () => { try { await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, created_by) VALUES (${org.id}, ${pat}, 'Raw Co', ${ago(5)}, 'staff_verified', ${cm})`]); return null; } catch (e) { return String(e.message); } })();
+  check("and the database refuses it too, even written directly", !!rawVerified && /check constraint/i.test(rawVerified), rawVerified ?? "inserted");
+  const o1 = await core.recordOutcome(aCm, { clientId: pat, employer: "Acme Foods", jobTitle: "Line Cook", startDate: ago(70), hourlyWage: 18.5, source: "staff_verified", verificationMethod: "pay_stub_seen" });
+  const o2 = await core.recordOutcome(aCm, { clientId: newbie, employer: "New Co", startDate: ago(9), source: "participant_reported" });
+  check("a case manager records a confirmed placement and a reported one", o1.ok && o2.ok, JSON.stringify([o1, o2]));
+  check("a colleague cannot record one for somebody else's participant", (await core.recordOutcome(aOther, { clientId: pat, employer: "X Co", startDate: ago(3), source: "staff_reported" })).ok === false);
+  check("another organization sees none of it", (await core.listOutcomes(aSpy)).length === 0 && (await core.listOutcomes(aOther)).length === 0);
+
+  const list = await core.listOutcomes(aCm);
+  const acme = list.find((o) => o.id === o1.id), fresh = list.find((o) => o.id === o2.id);
+  check("a 70-day-old placement is due its 30 and 60 day check-ins; a 9-day-old one is due nothing", acme.due_marks.join() === "30,60" && fresh.due_marks.length === 0, `${acme.due_marks} / ${fresh.due_marks}`);
+  check("a check-in cannot be recorded before its day arrives", (await core.recordRetentionCheck(aCm, { outcomeId: o2.id, dayMark: 30, status: "employed", method: "participant_told_me" })).ok === false);
+  check("'could not reach' cannot be recorded as 'employed'", (await core.recordRetentionCheck(aCm, { outcomeId: o1.id, dayMark: 30, status: "employed", method: "could_not_reach" })).ok === false);
+  check("the 30-day check-in is recorded", (await core.recordRetentionCheck(aCm, { outcomeId: o1.id, dayMark: 30, status: "employed", method: "pay_stub_seen" })).ok === true);
+  check("and cannot be quietly answered a second time", (await core.recordRetentionCheck(aCm, { outcomeId: o1.id, dayMark: 30, status: "not_employed", method: "participant_told_me" })).ok === false);
+  check("'could not reach' is recorded as unknown, its own answer", (await core.recordRetentionCheck(aCm, { outcomeId: o1.id, dayMark: 60, status: "unknown", method: "could_not_reach" })).ok === true);
+
+  const sum = core.summarizeOutcomes(await core.listOutcomes(aOwner));
+  const r30 = sum.retention.find((r) => r.dayMark === 30), r60 = sum.retention.find((r) => r.dayMark === 60), r90 = sum.retention.find((r) => r.dayMark === 90);
+  check("the 30-day rate counts ONLY placements old enough to be asked: 1 eligible, 1 employed (the 9-day-old one is not a failure)",
+    sum.placements === 2 && r30.eligible === 1 && r30.employed === 1, JSON.stringify(r30));
+  check("the 60-day unknown stays unknown, in neither column", r60.eligible === 1 && r60.unknown === 1 && r60.employed === 0 && r60.notEmployed === 0, JSON.stringify(r60));
+  check("nobody is 90 days in, so there is no 90-day rate to report", r90.eligible === 0);
+  check("how each placement is known is kept apart, and the wage median counts only known wages",
+    sum.bySource.staff_verified === 1 && sum.bySource.participant_reported === 1 && sum.medianWage === 18.5 && sum.wageKnownFor === 1);
+
+  const q = await core.getTodayQueue(aCm);
+  check("nothing left to ask yet appears on Today as a check-in", !q.some((i) => i.section === "retention"));
+  check("the participant can read what is on file about them", (await core.getMyOutcomes(pat)).length === 1 && (await core.getMyOutcomes(newbie))[0].employer === "New Co");
+  check("and not what is on file about someone else", !(await core.getMyOutcomes(pat)).some((o) => o.employer === "New Co"));
+  check("ending it records why; 'left for a better job' is its own outcome", (await core.endOutcome(aCm, o1.id, ago(1), "left_for_better_job")).ok === true
+    && core.summarizeOutcomes(await core.listOutcomes(aOwner)).leftForBetter === 1);
+  const del = await (async () => { try { await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM outcome_record WHERE id = ${o1.id}`]); return null; } catch (e) { return String(e.message); } })();
+  check("an outcome cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "deleted");
 }
 
 /** Tasks (055) and the Today queue: a reason on a work list is information about a person. */

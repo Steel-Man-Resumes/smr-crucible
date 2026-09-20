@@ -20,6 +20,7 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { getPartnerCohort } from "./partnerDashboard";
 import { summarizeStaffPerformance, STALLED_AFTER_DAYS } from "./orgStaffPerformance";
 import { SHARING_SCOPES } from "./sharingScopes";
+import { listOutcomes, summarizeOutcomes, type OutcomeSummary } from "./orgOutcomes";
 
 export interface OrgInsights {
   asOf: string;
@@ -37,6 +38,8 @@ export interface OrgInsights {
     hired: number; notes30: number; lastNoteAt: string | null; openRequests: number;
   }[];
   unassigned: number;
+  /** The ORGANIZATION'S placement records (staff-entered), with how each is known. Separate from what participants marked in their own tracker. */
+  placements: OutcomeSummary;
 }
 
 export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | null> {
@@ -111,5 +114,6 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
       };
     }).sort((a, b) => b.caseload - a.caseload),
     unassigned: clients.filter((c) => !c.assignedStaffId).length,
+    placements: summarizeOutcomes((await listOutcomes(actor)) ?? []),
   };
 }

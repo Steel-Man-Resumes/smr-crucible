@@ -22,6 +22,10 @@ interface Insights {
   joinsByWeek: { weekOf: string; joined: number }[];
   staff: { userId: string; name: string | null; caseload: number; sharingProgress: number; quiet: number; neverStarted: number; hired: number; notes30: number; lastNoteAt: string | null; openRequests: number }[];
   unassigned: number;
+  placements: {
+    placements: number; bySource: Record<string, number>; stillEmployed: number; ended: number; leftForBetter: number; medianWage: number | null; wageKnownFor: number;
+    retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; unknown: number; notAskedYet: number }[];
+  };
 }
 const SCOPE: Record<string, string> = { applications: "Applications", resume: "Resumes", documents: "Cover letters" };
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "--");
@@ -109,6 +113,47 @@ export function InsightsPage() {
             ? "Interviews and offers appear here once participants choose to share their applications. Nobody has yet."
             : `Among the ${d.pipeline.sharers} ${d.pipeline.sharers === 1 ? "person" : "people"} sharing their applications: ${d.pipeline.applied} applied, ${d.pipeline.interviewing} hearing back or interviewing, ${d.pipeline.offered} with an offer, ${d.pipeline.hired} hired.`}
         </p>
+      </section>
+
+      <section className="mb-8"><H>Placements your team recorded</H>
+        {d.placements.placements === 0 ? (
+          <p className="text-sm text-t-phos-dim bg-t-panel border border-t-line px-5 py-4">
+            None yet. The &ldquo;Hired&rdquo; number above is what participants marked in their own tracker. A placement your staff record, on a participant&apos;s Outcomes tab, is your organization&apos;s own record and carries how it is known, which is what a funder will ask.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <Tile value={d.placements.placements} label="Placements on record" note={`${d.placements.bySource.staff_verified ?? 0} confirmed · ${d.placements.bySource.staff_reported ?? 0} known, unconfirmed · ${d.placements.bySource.participant_reported ?? 0} as told to staff`} />
+              <Tile value={d.placements.stillEmployed} label="No end recorded" />
+              <Tile value={d.placements.leftForBetter} label="Left for a better job" note="An ending, and a good one" />
+              <Tile value={d.placements.medianWage == null ? "--" : `$${d.placements.medianWage.toFixed(2)}`} label="Median hourly wage" note={`Known for ${d.placements.wageKnownFor} of ${d.placements.placements}`} />
+            </div>
+            <div className="overflow-x-auto bg-t-panel border border-t-line">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs uppercase text-t-phos-dim border-b border-t-line">
+                  <th className="px-4 py-3 font-semibold">Check-in</th><th className="px-4 py-3 font-semibold text-center">Old enough to ask</th>
+                  <th className="px-4 py-3 font-semibold text-center">Still there</th><th className="px-4 py-3 font-semibold text-center">No longer there</th>
+                  <th className="px-4 py-3 font-semibold text-center">Could not reach</th><th className="px-4 py-3 font-semibold text-center">Not asked yet</th>
+                </tr></thead>
+                <tbody>
+                  {d.placements.retention.map((r) => (
+                    <tr key={r.dayMark} className="border-b border-t-line last:border-0">
+                      <td className="px-4 py-3 text-t-white">{r.dayMark} days</td>
+                      <td className="px-4 py-3 text-center text-t-white tabular-nums">{r.eligible}</td>
+                      <td className="px-4 py-3 text-center text-t-phos tabular-nums">{r.employed}</td>
+                      <td className="px-4 py-3 text-center text-t-phos tabular-nums">{r.notEmployed}</td>
+                      <td className="px-4 py-3 text-center text-t-phos tabular-nums">{r.unknown}</td>
+                      <td className={`px-4 py-3 text-center tabular-nums ${r.notAskedYet > 0 ? "text-t-amber-bright" : "text-t-phos"}`}>{r.notAskedYet}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-t-phos-dim mt-2">
+              A retention rate is &ldquo;still there&rdquo; out of &ldquo;old enough to ask&rdquo;, and nothing else belongs under it. Someone placed last week is not a 30-day failure, and someone you could not reach is not counted as either answer.
+            </p>
+          </>
+        )}
       </section>
 
       <section className="mb-8"><H>Your team</H>

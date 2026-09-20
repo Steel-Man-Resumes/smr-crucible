@@ -21,12 +21,13 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { getPartnerCohort } from "./partnerDashboard";
 import { STALLED_AFTER_DAYS } from "./orgStaffPerformance";
 import { listStaffTasks } from "./staffTasks";
+import { listOutcomes } from "./orgOutcomes";
 import { WORK_QUEUE_TEXT_VERSIONS } from "./sharingScopes";
 
-export const TODAY_SECTIONS = ["tasks", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
+export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
 export type TodaySection = (typeof TODAY_SECTIONS)[number];
 export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
-  tasks: "Your tasks", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered you",
+  tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered you",
   acknowledgement: "Waiting on an acknowledgement", quiet: `Quiet ${STALLED_AFTER_DAYS}+ days`, never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
@@ -107,6 +108,13 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
       reason: `${t.title}${t.due_on ? (overdue ? ` (was due ${day(t.due_on)})` : ` (due ${day(t.due_on)})`) : ""}${t.shared_with_participant ? ` · shared with ${first(t.client_name)}` : ""}`,
       action: t.client_user_id ? { label: `Open ${first(t.client_name)}`, href: href(t.client_user_id) } : { label: "Mark done", href: "#" },
     });
+  }
+  for (const o of (await listOutcomes(actor)) ?? []) {
+    if (o.due_marks.length === 0 || o.ended_on) continue;
+    const mark = o.due_marks[0];
+    items.push({ key: `ret:${o.id}:${mark}`, section: "retention", clientId: o.client_user_id, clientName: o.client_name, when: o.start_date,
+      reason: `${first(o.client_name)} started at ${o.employer} ${mark}+ days ago. Time for the ${mark}-day check-in: still there?`,
+      action: { label: "Record the check-in", href: href(o.client_user_id) } });
   }
   for (const a of apps) {
     const job = [a.job_title, a.company].filter(Boolean).join(" at ") || "a job";

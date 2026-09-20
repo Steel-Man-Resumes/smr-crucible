@@ -44,7 +44,7 @@ export type Landing = (typeof LANDINGS)[number];
 export const LANDING_LABELS: Record<Landing, string> = { today: "Today: who needs me and why", caseload: "Caseload: everyone, in a table" };
 
 /** Kept here (not imported from orgToday) so this file stays safe for the browser. */
-export const TODAY_SECTION_KEYS = ["tasks", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
+export const TODAY_SECTION_KEYS = ["tasks", "retention", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
 export type TodaySectionKey = (typeof TODAY_SECTION_KEYS)[number];
 
 export interface StaffPrefs {

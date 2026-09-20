@@ -27,6 +27,8 @@ export const RLS_PROTECTED_TABLES = [
   "org_sharing_policy_version",
   "sharing_ack",
   "staff_task",
+  "outcome_record",
+  "retention_check",
 ] as const;
 
 export interface RlsHealth {
