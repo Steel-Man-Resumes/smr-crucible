@@ -207,6 +207,12 @@ async function joinCohort(orgId, userId) {
             ON CONFLICT (user_id, consent_layer) DO UPDATE SET status = 'granted'`;
 }
 
+async function joinCohortConsent(userId) {
+  await sql`INSERT INTO consumer_consent (user_id, consent_layer, status, consent_text_version, collection_context)
+            VALUES (${userId}, 'sharing', 'granted', ${'isolation-test'}, ${JSON.stringify({ source: 'isolation-test' })}::jsonb)
+            ON CONFLICT (user_id, consent_layer) DO UPDATE SET status = 'granted'`;
+}
+
 async function main() {
   const [{ who: fixtureRole }] = await sql`SELECT current_user AS who`;
   const core0 = await import("../packages/core/dist/index.js");
@@ -362,6 +368,92 @@ async function main() {
   await platformAdminChecks();
   await membershipChecks();
   await sharingChecks();
+  await accessChecks();
+}
+
+/**
+ * Setting an organization up (migration 053, orgAccess.ts, orgInsights.ts).
+ * The claim: an owner can shape what each person may do, nobody can shape
+ * their own, and the database decides who the actor is -- not the application.
+ */
+async function accessChecks() {
+  console.log("\n  -- team, access and insights --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("a-owner"), admin = await mkUser("a-admin"), admin2 = await mkUser("a-admin2"), cm = await mkUser("a-cm"), outsider = await mkUser("a-outsider");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2)
+                          VALUES (${"ISOAC" + uniq}, ${P + " access"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  created.codes.push(org.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${admin2}, 'org_admin'), (${org.id}, ${cm}, 'staff')`;
+  const A = (u) => core.resolveOrgActor(u);
+  let aOwner = await A(owner), aAdmin = await A(admin), aCm = await A(cm);
+
+  check("a case manager starts without the whole-cohort view or the numbers", !aCm.capabilities.has("org.client.view_all") && !aCm.capabilities.has("org.insights.view"));
+  check("staff cannot open the access screen", (await core.getOrgAccessOverview(aCm)) === null);
+  check("staff cannot change anyone's access", (await core.setStaffCapability(aCm, admin, "org.costs.view", true, "org_admin")).ok === false);
+
+  const grant = await core.setStaffCapability(aOwner, cm, "org.client.view_all", true, "staff");
+  aCm = await A(cm);
+  check("the owner can let one case manager see everyone, and it takes effect", grant.ok && aCm.capabilities.has("org.client.view_all") && aCm.reach === "all", JSON.stringify(grant));
+  const back = await core.setStaffCapability(aOwner, cm, "org.client.view_all", false, "staff");
+  const [{ n: stored }] = await sql`SELECT count(*)::int AS n FROM org_capability_override WHERE org_id = ${org.id} AND user_id = ${cm}`;
+  check("switching it back to the role's default stores nothing", back.ok && stored === 0 && !(await A(cm)).capabilities.has("org.client.view_all"), `rows=${stored}`);
+  const deny = await core.setStaffCapability(aOwner, cm, "org.note.write", false, "staff");
+  check("the owner can take something away from one person (deny wins)", deny.ok && !(await A(cm)).capabilities.has("org.note.write"));
+
+  check("an admin can adjust staff", (await core.setStaffCapability(aAdmin, cm, "org.insights.view", true, "staff")).ok === true);
+  check("an admin cannot adjust another admin", (await core.setStaffCapability(aAdmin, admin2, "org.costs.view", true, "org_admin")).ok === false);
+  check("nobody adjusts their own access", (await core.setStaffCapability(aAdmin, admin, "org.costs.view", true, "org_admin")).ok === false);
+  check("the owner's access cannot be changed", (await core.setStaffCapability(aAdmin, owner, "org.costs.view", false, "owner")).ok === false);
+  check("managing staff is not something that can be handed out per person", (await core.setStaffCapability(aOwner, cm, "org.staff.manage", true, "staff")).ok === false);
+
+  // The application claiming to be someone is not enough: the function looks the actor up.
+  const forged = await app.transaction([
+    app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${outsider}, true)`,
+    app`SELECT set_config('app.org_role', 'owner', true)`,
+    app`SELECT smr_set_capability_override(${cm}::uuid, 'org.costs.view', 'grant') AS r`]);
+  check("claiming to be the owner in session settings does not make an outsider the owner", forged[3][0].r === "refused", forged[3][0].r);
+  const asCm = await app.transaction([
+    app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`SELECT smr_set_capability_override(${admin}::uuid, 'org.costs.view', 'grant') AS r`]);
+  check("a case manager calling the function directly is refused", asCm[2][0].r === "refused", asCm[2][0].r);
+  const [{ n: audited }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_capability_override' AND actor = ${owner}`;
+  check("every access change is in the audit trail with who made it", audited >= 3, `rows=${audited}`);
+
+  const email = `${P}-a-newhire-${uniq.toLowerCase()}@example.invalid`;
+  const inv = await core.inviteOrgStaff(aOwner, { name: "New Hire", email, role: "staff", title: "Employment Specialist" });
+  if (inv.ok) created.users.push(inv.userId);
+  const overview = await core.getOrgAccessOverview(aOwner);
+  const hire = overview?.find((m) => m.userId === inv.userId);
+  check("the owner can invite someone to staff by email, and they show as invited", inv.ok && !!hire && hire.pending && hire.role === "staff" && hire.title === "Employment Specialist", JSON.stringify(inv));
+  check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
+  const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
+  check("an address that already has an account elsewhere is not attached to this roster", (await core.inviteOrgStaff(aOwner, { name: "X", email: outsiderEmail, role: "staff" })).ok === false);
+  check("the overview shows the owner once, and marks who may be edited",
+    overview.filter((m) => m.role === "owner").length === 1 && overview.find((m) => m.userId === cm).editable && !overview.find((m) => m.userId === owner).editable);
+
+  await core.removeOrgStaff({ orgId: org.id, userId: cm, actorUserId: owner });
+  const [{ n: leftover }] = await sql`SELECT count(*)::int AS n FROM org_capability_override WHERE org_id = ${org.id} AND user_id = ${cm}`;
+  check("removing someone from staff removes their exceptions with them", leftover === 0, `rows=${leftover}`);
+
+  // -- insights
+  const p1 = await mkUser("a-p1"), p2 = await mkUser("a-p2");
+  await core.redeemAccessCode(p1, org.code); await core.redeemAccessCode(p2, org.code);
+  await joinCohortConsent(p1);
+  aOwner = await A(owner);
+  const ins = await core.getOrgInsights(aOwner);
+  check("insights count everyone who joined but describe only those sharing progress",
+    !!ins && ins.people.joined === 2 && ins.people.sharingProgress === 1 && ins.people.notSharing === 1 && ins.stages.reduce((n, s) => n + s.count, 0) === 1, JSON.stringify(ins?.people));
+  check("interview and offer counts cover nobody until someone shares their applications", ins.pipeline.sharers === 0 && ins.pipeline.interviewing === 0);
+  // p1 shares progress, was never active, and is assigned to nobody: exactly
+  // one quiet person, never-started, in the unassigned bucket.
+  check("someone who never started is counted as quiet once, not as quiet AND never-started",
+    ins.activity.quiet === 1 && ins.activity.neverStarted === 1 && ins.unassigned === 1 && ins.staff.reduce((n, st) => n + st.quiet, 0) === 0,
+    JSON.stringify({ activity: ins.activity, unassigned: ins.unassigned }));
+  const aHire = await core.resolveOrgActor(inv.userId);
+  check("a staff member without the capability gets no numbers", !!aHire && !aHire.capabilities.has("org.insights.view") && (await core.getOrgInsights(aHire)) === null);
 }
 
 /**

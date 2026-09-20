@@ -36,6 +36,11 @@ export const ORG_CAPABILITIES = [
   "org.client.view_content",
   "org.client.request_sharing",
   "org.note.write",
+  // Bringing people in. Inviting a PARTICIPANT is ordinary casework; inviting
+  // STAFF decides who can read case data and stays with admins (org.staff.invite).
+  "org.participant.invite",
+  // The organization's numbers: funnel, outcomes, workload by staff member.
+  "org.insights.view",
   // Running the org
   "org.staff.view",
   "org.staff.invite",
@@ -83,6 +88,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.participant.invite",
   ],
   org_admin: [
     "org.cohort.view",
@@ -92,6 +98,8 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.participant.invite",
+    "org.insights.view",
     "org.staff.view",
     "org.staff.invite",
     "org.staff.manage",
@@ -107,6 +115,8 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.participant.invite",
+    "org.insights.view",
     "org.staff.view",
     "org.staff.invite",
     "org.staff.manage",
@@ -164,3 +174,23 @@ export function cohortReach(capabilities: ReadonlySet<OrgCapability>): CohortRea
   if (capabilities.has("org.client.view_assigned")) return "assigned";
   return "none";
 }
+
+
+/**
+ * What an owner or admin may switch on or off for ONE person, in plain words.
+ * Must match the list inside smr_set_capability_override (migration 053): the
+ * database refuses anything not on its own copy, so a capability added here
+ * without a migration simply cannot be set.
+ */
+export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string; help: string }[] = [
+  { capability: "org.client.view_all", label: "See everyone, not just their own caseload", help: "Off: they see only the participants assigned to them." },
+  { capability: "org.client.view_content", label: "Open what participants have shared", help: "Resumes, applications and letters a participant chose to share. Every open is visible to the participant." },
+  { capability: "org.client.request_sharing", label: "Ask participants to share", help: "The participant sees their name and their reason, and decides." },
+  { capability: "org.note.write", label: "Write case notes", help: "Notes belong to the organization and cannot be deleted." },
+  { capability: "org.client.assign", label: "Assign participants to staff", help: "Move people between caseloads." },
+  { capability: "org.participant.invite", label: "Invite participants", help: "Each invite uses one of your seats." },
+  { capability: "org.insights.view", label: "See the organization's numbers", help: "Funnel, outcomes and workload by staff member." },
+  { capability: "org.export", label: "Export the caseload", help: "Download a spreadsheet of who they can see." },
+  { capability: "org.seats.view", label: "See seats used", help: "" },
+  { capability: "org.costs.view", label: "See AI cost", help: "What each participant's AI use has cost." },
+];

@@ -1,3 +1,3 @@
-import { OrgDashboard } from "@/components/org/OrgDashboard";
-export const metadata = { title: "Team & seats" };
-export default function Page() { return <OrgDashboard view="team" />; }
+import { TeamAccessPage } from "@/components/org/TeamAccessPage";
+export const metadata = { title: "Team & access" };
+export default function Page() { return <TeamAccessPage />; }
