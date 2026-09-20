@@ -204,7 +204,7 @@ MESSAGE:
 ${text.slice(0, 4000)}
 """
 
-Go through the message sentence by sentence. For EACH sentence output one object:
+Go through the message sentence by sentence. A bullet under a lead-in line inherits that line's meaning: under "Here's what I can't tell you:", the bullet "who found work" means "I cannot tell you who found work", which is the assistant describing a limit, not asserting that someone found work. For EACH sentence output one object:
   "text": the sentence, shortened if long
   "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is any blank template line whose content is bracketed placeholders for the staff member to fill in ("[Name] reported [situation]"). So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
   "supported": for a claim, true if it restates or paraphrases an established fact above, false if the established facts do not support it. For "other", true.
@@ -216,7 +216,11 @@ Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":tru
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        // MEASURED, not assumed. Five rounds on two true answers and one
+        // fabricated one: gpt-4o-mini false-flagged a true email 2/5 and a true
+        // list of the assistant's own limits 5/5. gpt-4.1-mini: 0 and 0, no
+        // fabrication missed, and faster. Override to re-measure a candidate.
+        model: process.env.ORG_VERIFY_MODEL || "gpt-4.1-mini",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         max_tokens: 900,

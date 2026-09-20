@@ -8,7 +8,8 @@
  * flagged every true answer -- questions and offers included -- so every staff
  * reply shipped with a "could not support" warning. Nothing told us, because a
  * verifier that always objects looks exactly like a verifier that works. Change
- * the judge prompt, run this. Calls OpenAI (gpt-4o-mini), a few cents.
+ * the judge prompt OR THE JUDGE MODEL, run this (ORG_VERIFY_MODEL=<id> to try a
+ * candidate). Calls OpenAI, a few cents.
  */
 import fs from "node:fs";
 
@@ -44,6 +45,10 @@ const cases: Array<[string, typeof small, string, boolean, string?]> = [
   ["true: template with placeholders", small, "**Phone Check-In -- [Date]**\n\n**Participant:** [Name]\n**Duration:** approx. [X] min\n**Contacted by:** [Your Name]\n\n**Summary:** Spoke with [Name] by phone. [He/She/They] reported [current situation -- employment status, housing, any barriers].\n\n**Next contact:** [Date or TBD]", true, "Write a case note template I can use after a phone check-in"],
   ["true: durations are not headcounts", small, "Here's your Monday opener: spend the first 15 minutes on Colton. He needs attention right now. Call first, text if no answer. A 2-minute check-in is enough.", true, "Give me a plan for Monday morning"],
   ["false: one person counted twice", small, "First, Colton. He needs attention right now. Next, your quiet one: you've got one other person who hasn't been active in two weeks, so after Colton that's your second call.", false, "Give me a plan for Monday morning"],
+  // Third batch: both of these are TRUE and gpt-4o-mini flagged them. The fix was
+  // the judge model, not more prompt.
+  ["true: director email with overlap stated correctly", big, "Here's a draft ready to send:\n\nHi [Name],\n\nQuick update on our current caseload of five participants. Three have been active in the last two weeks and are progressing. One has started employment. Two participants, Colton and Nadia, have not engaged recently and are my priority focus this week. Of those two, one has never begun the program at all.\n\n[Your name]", true, "Draft an email to my director summarizing where our participants stand"],
+  ["true: bulleted list of the assistant's own limits", big, "Here's what I can't tell you:\n\n- Dates of last activity (I know who needs attention, not when they last logged in)\n- Which specific person has never started, or who found work\n- Anything about the 1 unassigned participant -- I don't know who they are\n- Any detail I wasn't given: notes, goals, contact info", true, "What can you not tell me about my participants?"],
   ["false: invented hire + count", small, "You have 3 clients. Nadia got hired last week at Costco, and Colton has completed 4 applications.", false],
   ["false: invented trend + event", small, "Your placement rate is up this month and Wes has an interview Thursday.", false],
   ["false: fact smuggled inside an offer", big, "Want me to draft a note congratulating Nadia on her new job at the mill?", false],
