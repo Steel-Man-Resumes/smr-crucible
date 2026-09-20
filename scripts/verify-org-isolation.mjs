@@ -162,6 +162,7 @@ async function cleanup() {
     await sql`DELETE FROM access_code_redemption WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_staff WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_invite WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_capability_override WHERE org_id = ANY(${codes}::uuid[])`.catch(() => {});
     await sql`DELETE FROM org_audit WHERE org_id = ANY(${codes}::uuid[])`;
   }
   if (users.length) {
@@ -360,6 +361,162 @@ async function main() {
 
   await platformAdminChecks();
   await membershipChecks();
+  await sharingChecks();
+}
+
+/**
+ * Sharing (migration 051, orgClientView.ts).
+ *
+ * The claim: staff read what a participant SHARED, only that, only while it is
+ * shared, only if the participant is theirs -- and an organization can never
+ * create that permission for itself. Each assertion is an attempt to get
+ * content some other way.
+ */
+async function sharingChecks() {
+  console.log("\n  -- sharing --");
+  if (!appUrl) { console.log("  skip  sharing checks need the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+
+  const owner = await mkUser("s-owner");
+  const otherOwner = await mkUser("s-owner2");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2)
+                          VALUES (${"ISOSH" + uniq}, ${P + " share"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2)
+                           VALUES (${"ISOSH2" + uniq}, ${P + " share2"}, 'client', ${otherOwner}, true, true) RETURNING id, code`;
+  const [orgOff] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2)
+                             VALUES (${"ISOSH3" + uniq}, ${P + " share-off"}, 'client', ${owner}, true, false) RETURNING id, code`;
+  created.codes.push(org.id, org2.id, orgOff.id);
+  const russ = await mkUser("s-russ");     // assigned to wes
+  const nora = await mkUser("s-nora");     // same org, NOT assigned to wes
+  const denied = await mkUser("s-denied"); // org_admin with view_content explicitly denied
+  const spy = await mkUser("s-spy");       // staff at the other org
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES
+            (${org.id}, ${russ}, 'staff'), (${org.id}, ${nora}, 'staff'), (${org.id}, ${denied}, 'org_admin'), (${org2.id}, ${spy}, 'staff')`;
+  await sql`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES (${org.id}, ${denied}, 'org.client.view_content', 'deny')`;
+  const wes = await mkUser("s-wes");
+  await core.redeemAccessCode(wes, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${wes}, ${russ}, ${owner})`;
+  const [appRow] = await sql`INSERT INTO job_application (user_id, job_title, company, status, notes, salary)
+                             VALUES (${wes}, 'Line Cook', 'Big Sky Diner', 'applied', 'PRIVATE-NOTE-do-not-leak', '$19/hr SECRET') RETURNING id`;
+  await sql`INSERT INTO refinery_artifact (user_id, artifact_type, content, is_current) VALUES
+            (${wes}, 'resume', ${JSON.stringify({ marker: "RESUME-BODY" })}::jsonb, true),
+            (${wes}, 'resume', ${JSON.stringify({ marker: "TAILORED-RESUME" })}::jsonb, false),
+            (${wes}, 'cover_letter', ${JSON.stringify({ marker: "LETTER-BODY" })}::jsonb, false),
+            (${wes}, 'disclosure_plan', ${JSON.stringify({ marker: "DISCLOSURE-BODY" })}::jsonb, false)`;
+
+  const A = async (u, orgId) => core.resolveOrgActor(u, orgId ? { orgId } : undefined);
+  const aRuss = await A(russ), aNora = await A(nora), aDenied = await A(denied), aSpy = await A(spy), aOwner = await A(owner);
+  check("fixture: actors resolve, and the denied admin really lacks view_content",
+    !!aRuss && !!aNora && !!aSpy && !!aOwner && !!aDenied && !aDenied.capabilities.has("org.client.view_content"),
+    `denied has it: ${aDenied?.capabilities.has("org.client.view_content")}`);
+
+  // -- nothing is shared yet
+  const before = await core.getClientApplications(aRuss, wes);
+  check("before anything is shared, the assigned case manager gets nothing", before.ok === false && before.reason === "not_shared", JSON.stringify(before));
+  const [{ n: logged0 }] = await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${wes}`;
+  check("and a refused read writes no 'opened' entry", logged0 === 0, `rows=${logged0}`);
+  const head = await core.getClientHeader(aRuss, wes);
+  check("they CAN see who the person is and that nothing is shared", head.ok && head.rows[0].scopes.resume.shared === false && head.rows[0].assignedStaffId === russ);
+
+  // -- an organization cannot grant itself access, by any route the app role has
+  const orgGrant = await raised(() => app.transaction([
+    app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${russ}, true)`,
+    app`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES (${wes}, ${org.id}, 'resume', 'x')`]));
+  check("staff cannot insert a grant for their participant", !!orgGrant && /row-level security/i.test(orgGrant), orgGrant ?? "insert succeeded");
+  const forged = await raised(() => app.transaction([
+    app`SELECT set_config('app.user_id', ${russ}, true)`,
+    app`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES (${wes}, ${org.id}, 'resume', 'x')`]));
+  check("nobody can insert a grant in another person's name", !!forged && /row-level security/i.test(forged), forged ?? "insert succeeded");
+  const stranger = await mkUser("s-stranger");
+  const notMember = await core.grantSharing(stranger, org.id, "resume");
+  check("a person cannot share with an organization they do not belong to", notMember.ok === false);
+  await core.redeemAccessCode(stranger, orgOff.code);
+  check("sharing cannot be turned on for an org that does not have the feature", (await core.grantSharing(stranger, orgOff.id, "resume")).ok === false);
+  check("a made-up scope is refused", (await core.grantSharing(wes, org.id, "disclosure")).ok === false);
+
+  // -- ask, then answer
+  const ask = await core.requestSharing(aRuss, wes, "resume", "So I can help before Thursday's interview.");
+  check("the assigned case manager can ask", ask.ok === true, JSON.stringify(ask));
+  check("asking twice does not stack requests", (await core.requestSharing(aRuss, wes, "resume", "Again please.")).ok === false);
+  check("a colleague who is not assigned cannot ask", (await core.requestSharing(aNora, wes, "resume", "Let me see it.")).ok === false);
+  check("staff at another organization cannot ask", (await core.requestSharing(aSpy, wes, "resume", "Let me see it.")).ok === false);
+  const state = await core.getSharingState(wes);
+  const req = state[0]?.requests[0];
+  check("the participant sees the request, the reason, who asked, and their case manager's name",
+    !!req && /Thursday/.test(req.reason) && state[0].caseManagerName?.includes("s-russ"), JSON.stringify(state[0]));
+  const selfApprove = await raised(() => app.transaction([
+    app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${russ}, true)`,
+    app`UPDATE sharing_request SET status = 'approved' WHERE id = ${req.id}`]));
+  check("staff cannot approve their own request", !!selfApprove && /withdraw its request/.test(selfApprove), selfApprove ?? "update succeeded");
+  check("somebody else cannot answer it", (await core.answerSharingRequest(stranger, req.id, true)).ok === false);
+  check("the participant approves, and that alone creates the grant", (await core.answerSharingRequest(wes, req.id, true)).ok === true);
+
+  // -- shared: exactly the scope, exactly the columns, exactly the reach
+  const resumes = await core.getClientResumes(aRuss, wes);
+  check("the assigned case manager now reads the resumes, pinned and tailored", resumes.ok && resumes.rows.length === 2 && resumes.rows.some((r) => r.content?.marker === "RESUME-BODY" && r.is_current), JSON.stringify(resumes).slice(0, 200));
+  check("a resume grant never returns the disclosure plan or a cover letter", resumes.ok && !/DISCLOSURE-BODY|LETTER-BODY/.test(JSON.stringify(resumes.rows)));
+  check("cover letters are their own scope", (await core.getClientDocuments(aRuss, wes)).reason === "not_shared");
+  check("a resume grant does not open applications", (await core.getClientApplications(aRuss, wes)).reason === "not_shared");
+  await core.grantSharing(wes, org.id, "applications");
+  const apps = await core.getClientApplications(aRuss, wes);
+  const flat = JSON.stringify(apps);
+  check("applications are readable once shared", apps.ok && apps.rows.length === 1 && apps.rows[0].company === "Big Sky Diner");
+  check("the person's private notes and pay are NOT in what staff receive", !flat.includes("PRIVATE-NOTE") && !flat.includes("SECRET") && !("notes" in (apps.rows?.[0] ?? {})) && !("salary" in (apps.rows?.[0] ?? {})), flat.slice(0, 300));
+  check("a colleague who is not assigned still gets nothing", (await core.getClientResumes(aNora, wes)).ok === false);
+  check("an admin whose view_content was DENIED gets nothing, whatever their role", (await core.getClientResumes(aDenied, wes)).reason === "no_capability");
+  check("staff at another organization get nothing", (await core.getClientResumes(aSpy, wes)).ok === false);
+  check("the owner (sees all) can read it", (await core.getClientResumes(aOwner, wes)).ok === true);
+  const [{ id: adminId } = {}] = await sql`SELECT user_id AS id FROM platform_admin LIMIT 1`;
+  if (adminId) {
+    const aPlat = await core.resolveOrgActor(adminId, { orgId: org.id, isPlatformAdmin: true });
+    check("a platform admin looking into the org does NOT get participant content",
+      !!aPlat && aPlat.viaPlatformAdmin && (await core.getClientResumes(aPlat, wes)).reason === "platform_admin_view", JSON.stringify(aPlat && { via: aPlat.viaPlatformAdmin }));
+  }
+
+  // -- the log
+  const log = await core.getMyAccessLog(wes);
+  check("every allowed read is in the participant's log, with who and what; refused reads are not",
+    log.length === 3 && log.every((e) => ["resume", "applications"].includes(e.scope)) && log.some((e) => e.who?.includes("s-russ")) && log.some((e) => e.who?.includes("s-owner")),
+    JSON.stringify(log.map((e) => [e.who, e.scope])));
+
+  // -- notes
+  const note = await core.addClientNote(aRuss, wes, { body: "Met Tuesday. Bringing ID Thursday.", kind: "meeting" });
+  check("a case manager can write a note about their participant", note.ok === true);
+  check("not about somebody else's", (await core.addClientNote(aNora, wes, { body: "x" })).ok === false);
+  check("and another organization cannot read it", (await core.getClientNotes(aSpy, wes)).ok === false);
+  const asWes = await app.transaction([app`SELECT set_config('app.user_id', ${wes}, true)`, app`SELECT id FROM case_note`]);
+  check("the participant does not see a note that was not shown to them", asWes[1].length === 0);
+  if (note.ok) {
+    await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${russ}, true)`,
+      app`UPDATE case_note SET body = 'Met Tuesday. Bringing ID and SS card Thursday.' WHERE id = ${note.id}`]);
+    const [{ n: versions }] = await sql`SELECT count(*)::int AS n FROM case_note_version WHERE note_id = ${note.id} AND body LIKE '%Bringing ID Thursday.'`;
+    check("editing a note keeps the earlier wording", versions === 1, `versions=${versions}`);
+    const del = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM case_note WHERE id = ${note.id}`]));
+    check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
+  }
+
+  // -- taking it back
+  check("the participant can turn the resume off", (await core.revokeSharing(wes, org.id, "resume")).ok === true);
+  check("and it stops immediately", (await core.getClientResumes(aRuss, wes)).reason === "not_shared");
+  const reopen = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${wes}, true)`,
+    app`UPDATE sharing_grant SET revoked_at = NULL WHERE user_id = ${wes} AND scope = 'resume'`]));
+  check("a revoked grant can never be reopened, even by the person (a new one is a new agreement)", !!reopen && /cannot be changed/.test(reopen), reopen ?? "update succeeded");
+  await sql`DELETE FROM client_staff_assignment WHERE client_user_id = ${wes}`;
+  check("reassigned away: the former case manager loses access at once", (await core.getClientApplications(aRuss, wes)).ok === false);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${wes}, ${russ}, ${owner})`;
+  await sql`DELETE FROM org_staff WHERE user_id = ${russ}`;
+  const aRussGone = await A(russ);
+  check("removed from staff: no actor, so no access", aRussGone === null);
+  await core.leaveAllOrgs(wes);
+  const [{ n: live }] = await sql`SELECT count(*)::int AS n FROM sharing_grant WHERE user_id = ${wes} AND revoked_at IS NULL`;
+  check("leaving the organization revokes everything shared with it", live === 0 && (await core.getClientApplications(aOwner, wes)).ok === false, `live grants=${live}`);
+  await core.redeemAccessCode(wes, org.code);
+  check("rejoining does NOT bring the old sharing back", (await core.getClientApplications(aOwner, wes)).reason === "not_shared");
+  await sql`DELETE FROM data_access_log WHERE target_user_id = ${wes}`;
+  await sql`DELETE FROM job_application WHERE id = ${appRow.id}`;
 }
 
 /**

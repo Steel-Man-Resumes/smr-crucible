@@ -22,6 +22,13 @@ export const RESTRICTED_GRANTS = {
   // Membership is created by smr_redeem_code and never edited. DELETE stays:
   // an org releasing its own pending invite's seat, under an org-scoped policy.
   access_code_redemption: ["SELECT", "DELETE"],
+  // Sharing history and case notes are never deleted by the app; earlier
+  // wordings of a note are written only by its trigger.
+  sharing_grant: ["SELECT", "INSERT", "UPDATE"],
+  sharing_request: ["SELECT", "INSERT", "UPDATE"],
+  case_note: ["SELECT", "INSERT", "UPDATE"],
+  case_note_version: ["SELECT"],
+  org_capability_override: ["SELECT"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

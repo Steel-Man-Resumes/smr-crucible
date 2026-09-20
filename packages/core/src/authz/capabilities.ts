@@ -30,6 +30,12 @@ export const ORG_CAPABILITIES = [
   "org.client.view_assigned",
   "org.client.view_all",
   "org.client.assign",
+  // Working with one participant. view_content is necessary and NEVER
+  // sufficient: it lets staff read what a participant has SHARED, and the
+  // grant is checked separately on every read (orgClientView.ts).
+  "org.client.view_content",
+  "org.client.request_sharing",
+  "org.note.write",
   // Running the org
   "org.staff.view",
   "org.staff.invite",
@@ -70,12 +76,22 @@ export type OrgStaffRole = (typeof ORG_STAFF_ROLES)[number];
  * grows from three staff to thirty.
  */
 const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
-  staff: ["org.cohort.view", "org.client.view_assigned", "org.staff.view"],
+  staff: [
+    "org.cohort.view",
+    "org.client.view_assigned",
+    "org.staff.view",
+    "org.client.view_content",
+    "org.client.request_sharing",
+    "org.note.write",
+  ],
   org_admin: [
     "org.cohort.view",
     "org.client.view_assigned",
     "org.client.view_all",
     "org.client.assign",
+    "org.client.view_content",
+    "org.client.request_sharing",
+    "org.note.write",
     "org.staff.view",
     "org.staff.invite",
     "org.staff.manage",
@@ -88,6 +104,9 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_assigned",
     "org.client.view_all",
     "org.client.assign",
+    "org.client.view_content",
+    "org.client.request_sharing",
+    "org.note.write",
     "org.staff.view",
     "org.staff.invite",
     "org.staff.manage",
