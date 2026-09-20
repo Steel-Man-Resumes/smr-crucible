@@ -43,3 +43,6 @@ persona-runs/
 
 # Throwaway test-database credential for verify:isolation. Never committed.
 .env.isolation
+
+# Generated app-role credential for the RLS cutover. Never committed.
+.env.smr-app
