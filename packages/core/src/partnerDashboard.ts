@@ -35,6 +35,26 @@ async function runScopedRows<T>(
   return (out[0] ?? []) as T[];
 }
 
+/**
+ * Which assignment to show for a participant who is assigned in more than one
+ * organization. The org this cohort was requested for wins; otherwise the
+ * first by code order, which is at least deterministic.
+ */
+function pickAssignment(
+  all: Map<string, { staffId: string; staffName: string | null; codeId: string }>,
+  clientId: string,
+  preferredCodeId?: string
+) {
+  if (preferredCodeId) {
+    const exact = all.get(`${clientId}:${preferredCodeId}`);
+    if (exact) return exact;
+  }
+  const matches = Array.from(all.entries())
+    .filter(([k]) => k.startsWith(`${clientId}:`))
+    .sort(([a], [b]) => a.localeCompare(b));
+  return matches[0]?.[1];
+}
+
 export interface CohortClient {
   userId: string;
   name: string | null;
@@ -199,7 +219,10 @@ export async function getPartnerCohort(
   // One scoped read per code in the cohort, merged. Costs a round trip per
   // organization, which is the honest price of a boundary the database
   // enforces one org at a time.
-  const assignments = new Map<string, { staffId: string; staffName: string | null }>();
+  const assignments = new Map<
+    string,
+    { staffId: string; staffName: string | null; codeId: string }
+  >();
   for (const codeId of scopeCodeIds) {
     const rows = await runScopedRows<{ client_user_id: string; staff_user_id: string; staff_name: string | null }>(
       `SELECT csa.client_user_id, csa.staff_user_id, su.name AS staff_name
@@ -210,7 +233,15 @@ export async function getPartnerCohort(
       codeId
     );
     for (const r of rows) {
-      assignments.set(r.client_user_id, { staffId: r.staff_user_id, staffName: r.staff_name });
+      // Keyed by client AND code. Keying on the client alone meant a
+      // participant assigned in two organizations kept whichever row happened
+      // to be read last -- an arbitrary winner, with no ordering guarantee
+      // between runs. (Found in review.)
+      assignments.set(`${r.client_user_id}:${codeId}`, {
+        staffId: r.staff_user_id,
+        staffName: r.staff_name,
+        codeId,
+      });
     }
   }
 
@@ -238,8 +269,11 @@ export async function getPartnerCohort(
       outcomeNamed: m.outcome_named,
       lastActiveAt: lastActive,
       joinedAt: m.joined_at,
-      assignedStaffId: assignments.get(r.id)?.staffId ?? r.assigned_staff_id,
-      assignedStaffName: assignments.get(r.id)?.staffName ?? r.assigned_staff_name,
+      // Prefer the assignment from the org this cohort was asked for; fall
+      // back to any other code the participant is assigned under, so a
+      // multi-org participant shows a real staff member rather than "nobody".
+      assignedStaffId: pickAssignment(assignments, r.id, opts.accessCodeId)?.staffId ?? r.assigned_staff_id,
+      assignedStaffName: pickAssignment(assignments, r.id, opts.accessCodeId)?.staffName ?? r.assigned_staff_name,
       aiCostUsd: Number(r.ai_cost_usd || 0),
     };
   });
@@ -420,15 +454,25 @@ export async function assignClientStaff(
   assignedBy: string
 ): Promise<void> {
   if (!staffUserId) {
-    await runScopedRows(
+    const removed = await runScopedRows<{ id: string }>(
       `DELETE FROM client_staff_assignment
-        WHERE access_code_id = $1 AND client_user_id = $2`,
+        WHERE access_code_id = $1 AND client_user_id = $2
+        RETURNING id`,
       [accessCodeId, clientUserId],
       accessCodeId,
       // The actor, so the audit row names a person rather than falling back to
       // a database role. An unattributed write is a gap in the record.
       assignedBy
     );
+    // A DELETE that matched nothing used to return success. Under row-level
+    // security that is exactly what a wrong or missing scope looks like, so
+    // "it worked" and "it silently did nothing" were indistinguishable to the
+    // caller and to the person clicking. (Found in review.)
+    if (removed.length === 0) {
+      throw new Error(
+        "Nothing to unassign -- that participant is not assigned to anyone in this organization."
+      );
+    }
     return;
   }
   // BOTH PARTIES MUST BELONG TO THIS ORG.

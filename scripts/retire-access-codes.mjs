@@ -58,10 +58,30 @@ if (!url) {
 
 const sql = neon(url);
 
+// Fail loudly rather than report zeros. A retirement decision made on a false
+// "nobody is attached" is exactly the mistake this script exists to prevent.
+{
+  const [role] = await sql`SELECT current_user AS who, rolbypassrls
+                             FROM pg_roles WHERE rolname = current_user`;
+  if (!role?.rolbypassrls) {
+    console.error(
+      `\nConnected as ${role?.who}, which cannot bypass row-level security.\n` +
+        `org_staff counts would read 0 for every organization and this tool\n` +
+        `would tell you nobody is attached to codes that have staff.\n` +
+        `Use an owner connection.\n`
+    );
+    process.exit(2);
+  }
+}
+
 const rows = await sql`
   SELECT ac.code, ac.partner_name, ac.is_active, ac.times_redeemed,
          (SELECT COUNT(*) FROM access_code_redemption r
            WHERE r.access_code_id = ac.id)::int AS people,
+         -- NOTE: org_staff is row-level protected. Run this with an
+         -- owner/bypass connection, or this count silently reads 0 and the
+         -- "still has people attached" warning below misses every org that
+         -- has staff but no redemptions. (Found in review.)
          (SELECT COUNT(*) FROM org_staff os
            WHERE os.access_code_id = ac.id)::int AS staff
     FROM access_code ac

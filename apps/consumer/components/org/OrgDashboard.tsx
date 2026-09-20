@@ -134,6 +134,14 @@ function StatusBadge({ status }: { status: ClientStatus }) {
 }
 
 export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
+  // WRITES MUST TARGET THE ORGANIZATION ON SCREEN.
+  //
+  // Reads passed ?codeId= and writes did not, so a platform admin viewing
+  // another org could act and have it land on their OWN org -- silently,
+  // while the screen showed the other one. Every POST goes through this.
+  const orgApiUrl = codeId
+    ? `/api/partner/org?codeId=${encodeURIComponent(codeId)}`
+    : "/api/partner/org";
   const tier = useUserTier();
   const canView = tier === "partner" || tier === "admin";
   const [data, setData] = useState<OrgPayload | null>(null);
@@ -187,7 +195,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
     setSaving(clientUserId);
     setAssignError(null);
     try {
-      const res = await fetch("/api/partner/org", {
+      const res = await fetch(orgApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -217,7 +225,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
     setInviteBusy(true);
     setInviteMsg(null);
     try {
-      const res = await fetch("/api/partner/org", {
+      const res = await fetch(orgApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "invite", name: inviteName, email: inviteEmail }),
@@ -257,7 +265,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
     setInviteRowBusy(inv.userId);
     setInviteMsg(null);
     try {
-      const res = await fetch("/api/partner/org", {
+      const res = await fetch(orgApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, userId: inv.userId }),

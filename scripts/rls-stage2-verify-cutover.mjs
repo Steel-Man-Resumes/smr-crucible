@@ -80,13 +80,27 @@ await check("auth: can create a session row", async () => {
 });
 
 // The tenant surfaces the console and the Forge actually touch.
+// NOTE: these prove the role can QUERY the table, not that it can SEE rows.
+// For the RLS-protected tables an empty result is exactly the failure this
+// whole exercise is about, so they are checked separately below rather than
+// counted as readable. (Found in review.)
 const READS = [
-  "access_code", "access_code_redemption", "org_staff", "client_staff_assignment",
+  "access_code", "access_code_redemption",
   "consumer_consent", "job_application", "refinery_artifact", "ai_token_usage",
   "consumer_profile", "forge_session", "decision_log", "support_request",
 ];
 for (const t of READS) {
   await check(`readable: ${t}`, () => sql(`SELECT 1 FROM ${t} LIMIT 1`));
+}
+
+// The protected tables: permission to query is not the same as visibility.
+// An unscoped read returning zero is CORRECT here, and a scoped read must
+// return what was seeded -- otherwise the app looks fine and shows nothing.
+for (const t of ["org_staff", "client_staff_assignment"]) {
+  await check(`${t}: unscoped read returns nothing (policy is biting)`, async () => {
+    const rows = await sql(`SELECT 1 FROM ${t} LIMIT 1`);
+    if (rows.length !== 0) throw new Error("rows visible without a scope -- policy not enforcing");
+  });
 }
 
 // Sequences: an INSERT into a serial column fails without USAGE.

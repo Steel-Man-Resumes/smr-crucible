@@ -41,6 +41,19 @@ const CRED_FILE = ".env.isolation";
  * typed into a shell, a chat transcript, or a command history. Put it in with
  * an editor, run the test, delete the file.
  */
+/** The app-role connection string, from the same gitignored file if present. */
+function readAppUrl() {
+  try {
+    const line = readFileSync(".env.smr-app", "utf8")
+      .split("\n")
+      .find((l) => l.trim().startsWith("SMR_APP_DATABASE_URL="));
+    if (line) return line.slice(line.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "");
+  } catch {
+    /* none */
+  }
+  return undefined;
+}
+
 function readTestUrl() {
   try {
     const line = readFileSync(CRED_FILE, "utf8")
@@ -71,6 +84,18 @@ if (!url) {
   process.exit(2); // 2 = could not run, distinct from 1 = isolation failed
 }
 
+// TWO ROLES, OR THE RUN PROVES LESS THAN IT LOOKS LIKE.
+//
+// Fixtures are created as the OWNER (which bypasses RLS, so seeding protected
+// tables works) and the application helpers run as the APP role (which cannot
+// bypass, so their scoped reads are actually exercised). Giving both the same
+// credentials -- which this script used to do -- means either the fixtures
+// cannot be created, or the code under test bypasses the very policies the
+// suite exists to verify. A green run then establishes that the application
+// WHERE clauses are right and says nothing about production. (Found in review.)
+const APP_VAR = "ISOLATION_APP_DATABASE_URL";
+const appUrl = process.env[APP_VAR] || readAppUrl();
+
 // BIND THE CODE UNDER TEST TO THIS DATABASE, not just the fixtures.
 //
 // packages/core/src/db.ts reads DATABASE_URL. Seeding through one connection
@@ -86,7 +111,19 @@ if (process.env.DATABASE_URL && process.env.DATABASE_URL !== url) {
   );
   process.exit(2);
 }
-process.env.DATABASE_URL = url;
+// The helpers read DATABASE_URL. Point them at the APP role when we have one.
+process.env.DATABASE_URL = appUrl || url;
+
+if (!appUrl) {
+  console.warn(
+    `\n  WARNING: ${APP_VAR} not set.\n` +
+      `  The application helpers will run as the same role that created the\n` +
+      `  fixtures, which bypasses row-level security. This run verifies the\n` +
+      `  application's own predicates and does NOT verify that production's\n` +
+      `  scoped reads work. Set ${APP_VAR} to the smr_app connection string\n` +
+      `  for the full check.\n`
+  );
+}
 
 const sql = neon(url);
 
@@ -167,7 +204,12 @@ async function joinCohort(orgId, userId) {
 }
 
 async function main() {
-  console.log("\nCross-org isolation\n");
+  const [{ who: fixtureRole }] = await sql`SELECT current_user AS who`;
+  const core0 = await import("../packages/core/dist/index.js");
+  const [{ who: appRole }] = await core0.query("SELECT current_user AS who");
+  console.log(`\nCross-org isolation`);
+  console.log(`  fixtures created as: ${fixtureRole}`);
+  console.log(`  code under test as:  ${appRole}${appRole === fixtureRole ? "   <-- SAME ROLE: RLS not exercised" : ""}\n`);
   // No pre-run cleanup: with id-based deletion there is nothing to clean before
   // we create anything. A crashed previous run leaves rows behind under the
   // fixture prefix -- that is the honest trade for never deleting a row we did

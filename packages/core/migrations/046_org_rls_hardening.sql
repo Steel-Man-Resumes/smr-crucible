@@ -24,11 +24,16 @@
 --    running SQL by hand, which is exactly the distinction the column existed
 --    to make. session_user is the connected role and is the honest fallback.
 
+-- Every CREATE POLICY below is preceded by a DROP IF EXISTS. The first cut of
+-- this file dropped only the OLD policy and failed on a second apply with
+-- "policy already exists" -- a migration that cannot be re-run is a migration
+-- that cannot be trusted mid-incident. (Found while re-testing.)
 -- ---------------------------------------------------------------- policies --
 
 DROP POLICY IF EXISTS org_staff_org_scope ON org_staff;
 
 -- SELECT: your own row, or the org you are scoped to.
+DROP POLICY IF EXISTS org_staff_select ON org_staff;
 CREATE POLICY org_staff_select ON org_staff FOR SELECT
   USING (
     access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -38,13 +43,16 @@ CREATE POLICY org_staff_select ON org_staff FOR SELECT
 -- INSERT / UPDATE / DELETE: org scope only. Note UPDATE needs BOTH sides --
 -- USING picks which rows may be changed, WITH CHECK what they may become, so
 -- a row cannot be read out of one org and written into another.
+DROP POLICY IF EXISTS org_staff_insert ON org_staff;
 CREATE POLICY org_staff_insert ON org_staff FOR INSERT
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 
+DROP POLICY IF EXISTS org_staff_update ON org_staff;
 CREATE POLICY org_staff_update ON org_staff FOR UPDATE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 
+DROP POLICY IF EXISTS org_staff_delete ON org_staff;
 CREATE POLICY org_staff_delete ON org_staff FOR DELETE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 
@@ -52,13 +60,17 @@ CREATE POLICY org_staff_delete ON org_staff FOR DELETE
 -- split for the same reason -- an implicit FOR ALL is a footgun to leave lying.
 DROP POLICY IF EXISTS csa_org_scope ON client_staff_assignment;
 
+DROP POLICY IF EXISTS csa_select ON client_staff_assignment;
 CREATE POLICY csa_select ON client_staff_assignment FOR SELECT
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+DROP POLICY IF EXISTS csa_insert ON client_staff_assignment;
 CREATE POLICY csa_insert ON client_staff_assignment FOR INSERT
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+DROP POLICY IF EXISTS csa_update ON client_staff_assignment;
 CREATE POLICY csa_update ON client_staff_assignment FOR UPDATE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+DROP POLICY IF EXISTS csa_delete ON client_staff_assignment;
 CREATE POLICY csa_delete ON client_staff_assignment FOR DELETE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 
@@ -107,6 +119,7 @@ END $$;
 -- And an org can only read its own history.
 ALTER TABLE org_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_audit FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS org_audit_select ON org_audit;
 DROP POLICY IF EXISTS org_audit_select ON org_audit;
 CREATE POLICY org_audit_select ON org_audit FOR SELECT
   USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);

@@ -121,6 +121,20 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // WHICH ORGANIZATION IS THIS WRITE FOR?
+  //
+  // The console lets a platform admin VIEW another organization by passing
+  // ?codeId=. Reads honoured it and writes did not -- so an admin looking at
+  // org B could unassign a participant and the DELETE executed against their
+  // OWN org A, silently, while the screen showed B. assignClientStaff ignored
+  // the row count, so it reported success either way. If that participant also
+  // had an assignment in A, it deleted the wrong organization's row.
+  //
+  // requireOrgCapability only honours this for a platform admin -- for anyone
+  // else resolveOrgActor falls back to their own membership, so a request
+  // cannot nominate an org it does not belong to. (Found in review.)
+  const selectedOrgId =
+    new URL(request.url).searchParams.get("codeId") || undefined;
   const ctx = await resolveContext(request);
   if ("error" in ctx) {
     return NextResponse.json(
@@ -143,7 +157,7 @@ export async function POST(request: Request) {
       body.action === "set_staff_role" ||
       body.action === "remove_staff"
     ) {
-      const guard = await requireOrgCapability("org.staff.manage");
+      const guard = await requireOrgCapability("org.staff.manage", { orgId: selectedOrgId });
       if (!guard.ok) return guard.response;
 
       const targetUserId = String(body.userId || "");
@@ -186,7 +200,7 @@ export async function POST(request: Request) {
       // replaces was correct, but it was one of a dozen hand-rolled checks with
       // no single place to audit; this one asks the resolver, which reads
       // membership from the database on every request.
-      const guard = await requireOrgCapability("org.client.assign");
+      const guard = await requireOrgCapability("org.client.assign", { orgId: selectedOrgId });
       if (!guard.ok) return guard.response;
       if (!body.clientUserId) {
         return NextResponse.json({ error: "clientUserId required" }, { status: 400 });
