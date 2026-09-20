@@ -34,6 +34,9 @@ export const RESTRICTED_GRANTS = {
   sharing_ack: ["SELECT"],
   // Finished or cancelled, never deleted.
   staff_task: ["SELECT", "INSERT", "UPDATE"],
+  // Ended or corrected on the record; a check, once made, stands.
+  outcome_record: ["SELECT", "INSERT", "UPDATE"],
+  retention_check: ["SELECT", "INSERT"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

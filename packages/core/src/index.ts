@@ -22,6 +22,7 @@ export * from './orgAccess';
 export * from './orgInsights';
 export * from './staffTasks';
 export * from './orgToday';
+export * from './orgOutcomes';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './outcomeAggregate';

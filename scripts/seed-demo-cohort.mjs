@@ -44,6 +44,8 @@ const russ = staff.find((s) => s.name === "Russ Feeney")?.user_id, alma = staff.
 if (!russ || !alma) { console.error("Demo staff not found."); process.exit(1); }
 
 const at = (d) => new Date(Date.now() + d * 86400000).toISOString();
+// Days until the next Thursday (never today), so "Interview Thursday" in a note and the date on screen agree whenever this runs.
+const toThursday = ((4 - new Date().getUTCDay() + 7) % 7) || 7;
 const TEXT_VERSION = "2026-09-20.3"; // current wording, which mentions the daily work list
 const email = (n) => `${n.toLowerCase().replace(/[^a-z]+/g, ".")}@mtdemo.example.invalid`;
 
@@ -59,6 +61,8 @@ async function person(name, stage, lastActiveDays, staffId) {
                          ON CONFLICT (access_code_id, client_user_id) DO UPDATE SET staff_user_id = EXCLUDED.staff_user_id`;
   // clean slate for this fictional person
   await sql`DELETE FROM case_note WHERE client_user_id = ${u.id}`;
+  await sql`DELETE FROM staff_task WHERE client_user_id = ${u.id}`;
+  await sql`DELETE FROM outcome_record WHERE client_user_id = ${u.id}`;
   await sql`DELETE FROM sharing_request WHERE user_id = ${u.id}`;
   await sql`DELETE FROM sharing_grant WHERE user_id = ${u.id}`;
   await sql`DELETE FROM data_access_log WHERE target_user_id = ${u.id} AND access_reason = 'org_client_view'`;
@@ -129,7 +133,7 @@ const marisolResume = await artifact(marisol, "resume", { targetJob: "Production
   ["Hand and power tools", "Reading work orders and drawings", "Quality checks to spec", "Crimping and basic wiring", "5S workstation upkeep"],
   [{ id: "e1", title: "Assembly and Upholstery Worker", company: "Vocational Production Shop", startDate: "2022", endDate: "2025", bullets: ["Built and inspected assemblies to written spec on a daily quota.", "Caught and logged defects before they left the bench."] }],
   [{ id: "ed1", credential: "OSHA 10-Hour General Industry", institution: "OSHA Outreach", year: "2025" }]), 6, true);
-await application(marisol, { title: "Production Assembler", company: "Nomad GCS", location: "Libby, MT", status: "interviewing", applied: 8, followUp: 2, resume: marisolResume, notes: "Interview Thursday 10am. Wear the boots." });
+await application(marisol, { title: "Production Assembler", company: "Nomad GCS", location: "Libby, MT", status: "interviewing", applied: 8, followUp: toThursday, resume: marisolResume, notes: "Interview Thursday 10am. Wear the boots." });
 await share(marisol, "resume", 7); await share(marisol, "applications", 7);
 await note(marisol, alma, "meeting", "Interview at Nomad GCS set for Thursday 10am. Sent her the Job Service Montana interview-prep link and we walked through the availability question.", 1, true);
 
@@ -142,6 +146,11 @@ const terrellResume = await artifact(terrell, "resume", { targetJob: "Facilities
   [{ id: "ed1", credential: "EPA 608 Type I", institution: "ESCO Institute", year: "2025" }]), 30, true);
 await application(terrell, { title: "Facilities Assistant", company: "Northwest Community Health Center", location: "Libby, MT", status: "hired", applied: 34, hired: 9, touched: 5, resume: terrellResume });
 await share(terrell, "applications", 20);
+// The ORGANIZATION'S placement record, with how it is known. Nine days in, so no check-in is due yet.
+await sql`INSERT INTO outcome_record (access_code_id, client_user_id, employer, job_title, start_date, hourly_wage, hours_per_week, source, verification_method, verified_by, verified_at, created_by)
+          VALUES (${org.id}, ${terrell}, 'Northwest Community Health Center', 'Facilities Assistant', ${at(-9).slice(0, 10)}, 18.25, 40, 'staff_verified', 'employer_confirmed', ${russ}, ${at(-8)}, ${russ})`;
+await sql`INSERT INTO staff_task (access_code_id, client_user_id, owner_user_id, created_by, title, due_on, shared_with_participant)
+          VALUES (${org.id}, ${terrell}, ${russ}, ${russ}, '30-day check-in with Terrell', ${at(21).slice(0, 10)}, false)`;
 await note(terrell, russ, "note", "Placed: started at Northwest Community Health Center. First week went well. 30-day check-in on the calendar; no further action needed until then.", 5);
 
 // Retire the one placeholder the first seed wrote for the hired participant.

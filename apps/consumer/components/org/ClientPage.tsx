@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { OutcomesPanel } from "@/components/org/OutcomesPanel";
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
 
@@ -61,7 +62,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks">("notes");
+  const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks" | "outcomes">("notes");
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
@@ -78,10 +79,10 @@ export function ClientPage({ clientId }: { clientId: string }) {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
 
-  const openTab = useCallback(async (next: Scope | "notes" | "screen" | "tasks") => {
+  const openTab = useCallback(async (next: Scope | "notes" | "screen" | "tasks" | "outcomes") => {
     setTab(next); setShared(null);
     try { localStorage.setItem(LAST_TAB_KEY, next); } catch {}
-    if (next === "notes" || next === "screen" || next === "tasks" || !client?.scopes[next].shared) return;
+    if (next === "notes" || next === "screen" || next === "tasks" || next === "outcomes" || !client?.scopes[next].shared) return;
     // Opening a shared tab IS the logged access. Not on hover, not on page
     // load: only when the staff member actually asks to see it.
     setLoadingTab(true);
@@ -132,7 +133,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </header>
 
       <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
-        {([["notes", "Your notes"], ["tasks", "Tasks"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen" | "tasks", string][]).map(([key, label]) => (
+        {([["notes", "Your notes"], ["tasks", "Tasks"], ["outcomes", "Outcomes"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen" | "tasks" | "outcomes", string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => openTab(key)}
             className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
             {label}
@@ -140,7 +141,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
         ))}
       </div>
 
-      {tab === "tasks" ? (
+      {tab === "outcomes" ? (
+        <OutcomesPanel clientId={clientId} first={first} />
+      ) : tab === "tasks" ? (
         <TasksPanel clientId={clientId} first={first} />
       ) : tab === "screen" ? (
         <TheirScreen client={client} first={first} onOpen={openTab} />

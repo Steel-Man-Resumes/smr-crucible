@@ -37,6 +37,7 @@ export const ORG_CAPABILITIES = [
   "org.client.request_sharing",
   "org.note.write",
   "org.task.write",
+  "org.outcome.write",
   // Bringing people in. Inviting a PARTICIPANT is ordinary casework; inviting
   // STAFF decides who can read case data and stays with admins (org.staff.invite).
   "org.participant.invite",
@@ -90,6 +91,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.request_sharing",
     "org.note.write",
     "org.task.write",
+    "org.outcome.write",
     "org.participant.invite",
   ],
   org_admin: [
@@ -101,6 +103,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.request_sharing",
     "org.note.write",
     "org.task.write",
+    "org.outcome.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -119,6 +122,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.request_sharing",
     "org.note.write",
     "org.task.write",
+    "org.outcome.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -192,6 +196,7 @@ export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string;
   { capability: "org.client.request_sharing", label: "Ask participants to share", help: "The participant sees their name and their reason, and decides." },
   { capability: "org.note.write", label: "Write case notes", help: "Notes belong to the organization and cannot be deleted." },
   { capability: "org.task.write", label: "Create tasks", help: "Their own to-dos, and tasks shared with a participant." },
+  { capability: "org.outcome.write", label: "Record placements and retention checks", help: "What happened after hire, and how you know." },
   { capability: "org.client.assign", label: "Assign participants to staff", help: "Move people between caseloads." },
   { capability: "org.participant.invite", label: "Invite participants", help: "Each invite uses one of your seats." },
   { capability: "org.insights.view", label: "See the organization's numbers", help: "Funnel, outcomes and workload by staff member." },
