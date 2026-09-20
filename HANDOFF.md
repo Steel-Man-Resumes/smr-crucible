@@ -1,5 +1,173 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 (session 5) -- RLS shipped to production, then two reviews found 12 defects in it
+
+READ THIS SECTION BEFORE TOUCHING THE ORG LAYER. Production changed
+fundamentally today and several of my own claims from earlier in the day were
+later proven wrong.
+
+### STATE OF PRODUCTION RIGHT NOW
+
+- The app connects to Postgres as **`smr_app`**, a role that **CANNOT bypass
+  RLS**. This was cut over in Vercel by Troy today. Rollback = restore the old
+  `DATABASE_URL` (neondb_owner) in Vercel and redeploy.
+- **Three tables have RLS enabled AND forced**: `org_staff`,
+  `client_staff_assignment`, `org_audit`.
+- Policies read two transaction-local settings: `app.org_id`, `app.user_id`.
+- Migrations live: `044_org_rls.sql`, `045_org_audit.sql`,
+  `046_org_rls_hardening.sql`. All three re-runnable (046 was not, fixed).
+- Deployed commit: `cb9d95a`.
+
+### THE FAILURE MODE THAT DEFINES THIS WORK
+
+An unscoped read of a protected table **returns zero rows and does not throw**.
+An UPDATE/DELETE affects zero rows and the caller reports a polite, WRONG
+message. Nothing logs. Nothing alerts. It looks exactly like normal empty state.
+Two paths shipped to production this way today before review caught them.
+
+**Before writing any query against those three tables, use:**
+- `runScoped(scope, build)` -- sets org_id + user_id + org_role
+- `queryAsUser(userId, sql, params)` / `getOneAsUser(...)` -- sets user_id only
+  (for membership DISCOVERY, which cannot already be org-scoped)
+- `query()` / `getOne()` are UNSCOPED and will silently return nothing.
+
+### TWELVE DEFECTS FOUND BY TWO CODEX REVIEWS. Six were mine from that day.
+
+Review 1 (the cutover):
+1. **getOrgContext was unscoped** -- LIVE BREAKAGE. Staff who do not OWN an
+   access code lost their console entirely. I converted `resolveOrgActor` and
+   missed its sibling, the one feeding the nav and `/api/user/role`.
+2. **The self-read policy was not read-only.** No `FOR` clause = `FOR ALL`;
+   `USING` governs SELECT, UPDATE and DELETE. So "read your own membership"
+   also meant DELETE it unscoped, and an UPDATE could move a row from org B
+   into org A. Now split per command.
+3. **The audit trail was forgeable.** App had INSERT (unnecessary -- SECURITY
+   DEFINER writes as owner), so it could fabricate an event with any actor. No
+   RLS meant cross-org reads. Now SELECT-only, org-scoped.
+4. **Attribution was backwards.** `current_user` inside SECURITY DEFINER is the
+   FUNCTION OWNER. App writes with no actor recorded as `neondb_owner` -- the
+   exact opposite of what my comment claimed. Now `actor` is NULL when unknown
+   and `db_role` records `session_user`.
+5. **addOrgStaff's cross-org check was provably dead** -- asked for rows where
+   `access_code_id <> this org` on a connection RLS restricts to this org.
+6. **Multi-code cohorts were silently WRONG, not empty.** Participants under
+   other codes appeared UNASSIGNED.
+
+Review 2 (repo-wide sweep):
+7. **Writes went to the WRONG ORGANIZATION.** Console passed `?codeId=` on
+   reads only. A platform admin viewing org B could unassign and it executed
+   against their own org A, reporting success. Worst defect of the day.
+8. **Admin org directory reported ZERO STAFF for every org** (unscoped count,
+   HTTP 200, nothing looked broken).
+9. **retire-access-codes lied the same way** -- would have retired a code on a
+   false "nobody attached". Now refuses without a bypass connection.
+10. **The isolation suite could not prove what it claimed.** It gave the app
+    helpers the SAME credentials as the fixtures, so the code under test
+    bypassed the very policies being verified. **Every "13/13 passed" reported
+    before today was weaker evidence than presented.** Now prints both roles.
+11. Multi-code merge still lost assignments (keyed by client id alone).
+12. Migration 046 was not re-runnable.
+
+### THE STANDING LESSON, and it is about me not the code
+
+FOUR of the twelve were WRONG COMMENTS, not wrong code: "empty rather than
+wrong", "WITH CHECK replaces the exclusion", "neondb_owner means a human acted
+outside the app", "auth exists to stop abuse". Each read as reasoning and was a
+guess written down confidently and never tested. **Test the CLAIM, not just the
+code. When you write "this is safe because X", X is a hypothesis.**
+
+### ALSO SHIPPED TODAY (before the RLS work)
+
+- **Persona harness** (`npm run persona -- scripts/personas/<x>.json`). The
+  Forge is pre-auth, so it drives real routes with no login/fork/db copy. Found
+  two production defects on its first two runs.
+- **Placeholder contact shipped on resumes** -- the prompt's format block
+  DEMONSTRATED `(XXX) XXX-XXXX | email@email.com` and the model copied it.
+  Fixed in prompt + a deterministic sweep.
+- **Invented character claims** -- "consistent attendance" from two sentences
+  about dishwashing. The grounding verifier passed it, correctly by its own
+  rule (character claims read as "general framing"). New deterministic
+  `unsupported_claim` check with negation, specificity and subject matching.
+- **Staff were being shown the job-seeker profile flow.** `useUserTier` defaults
+  to "client" while the session loads and the dashboard only waited for
+  onboarding. Same staleness in the nav, where it was PERMANENT for a stale
+  token. Both now read tier from the DATABASE via `effectiveRole`.
+- **t.ROY org_staff mode** -- was treating a working case manager as an
+  evaluator. Now carries live caseload, scope-limited to what that viewer may
+  see, with quick-action buttons.
+- **Two-layer output verification for org-facing AI** -- layer 1 deterministic
+  (numbers must be ours, names must be in reach, no model, cannot fail), layer 2
+  a second model. **Staff answers no longer stream** -- they are generated
+  whole, verified, then sent.
+- **Three demo orgs** (MT/MI/MO), all marked `(Demo)`, emails on
+  `@example.invalid`. Real-vs-demo = `partner_name LIKE '%(Demo)'`.
+- Org security statement at `/dashboard/org-security`, sign-in account-type
+  chooser, four dead partner codes retired (in the DB, not just the page).
+
+### OPEN -- PICK UP HERE
+
+1. **SECURITY STATEMENT IS NOW WRONG IN BOTH DIRECTIONS.** It understates the
+   org boundary (says the database does not enforce it -- it does now) and
+   overstates the audit trail. Rewrite ONCE, deliberately, then have it
+   reviewed before it goes near Montana. Deliberately NOT done tonight.
+2. **access_code_redemption is NOT protected.** Started and REVERTED
+   deliberately -- it needs ~12 self-read call sites converted across 6 files,
+   and doing that by pattern-matching against a live system is how a silent
+   empty result ships. `queryAsUser`/`getOneAsUser` exist and are ready.
+3. **Participant-owned tables not protected**: job_application,
+   refinery_artifact, consumer_profile, vault_document.
+4. **CI gate not wired.** `npm run verify:isolation` runs only when someone
+   remembers.
+5. Seed scripts should ASSERT their database role rather than assume bypass.
+6. `/api/dev/personas` truncates orgs before checking which have staff.
+7. **t.ROY animation has never been watched in a browser.** Logic proven, feel
+   unjudged. Knobs at the top of `TroyAttention.tsx`.
+8. **The non-streaming staff assistant path has never been exercised in a
+   browser.** I hand-rolled the AI SDK data-stream protocol. If the format is
+   wrong, t.ROY is broken for every staff member and nothing would tell us.
+   TEST THIS FIRST NEXT SESSION.
+9. Tuesday 9/22 3:00 PM Mountain Montana DOC/DLI -- rehearsal STILL untouched
+   across five sessions.
+
+### TOOLING BUILT TODAY (use it, do not rebuild it)
+
+- `scripts/neon-branch.mjs create|list|delete <name>` -- throwaway Neon branches,
+  finds "Steel Man" by name, refuses production endpoint, writes the connection
+  string straight into a gitignored file. Uses `NEON_API_KEY` in `.env.local`.
+- `scripts/rls-probe.mjs` -- read-only: who am I connected as, can I bypass.
+- `scripts/rls-stage1-create-role.mjs` -- creates smr_app IN SQL (a
+  console-created Neon role gets BYPASSRLS and would silently defeat everything).
+- `scripts/rls-stage2-verify-cutover.mjs` -- can the app run as that role.
+- `scripts/rls-stage4-prod-prep.mjs` -- **DO NOT RE-RUN unchanged**: it rotates
+  smr_app's password without updating Vercel and re-grants UPDATE/DELETE on
+  org_audit.
+- `scripts/verify-org-isolation.mjs` -- 13 assertions. Needs BOTH
+  `ISOLATION_TEST_DATABASE_URL` (owner, fixtures) and
+  `ISOLATION_APP_DATABASE_URL` (smr_app, code under test).
+- `scripts/run-persona.mjs`, `scripts/seed-demo-orgs.mjs`,
+  `scripts/retire-access-codes.mjs`, `scripts/normalize-isolation-cred.mjs`.
+
+### DEMO CREDENTIALS (production, all `(Demo)` orgs, no real data)
+
+Password for every demo account: `BigSkyDemo!2026`
+  russ.feeney@mtdemo.example.invalid      staff, 3 assigned clients
+  dana.whitcomb@mtdemo.example.invalid    owner, sees all 5
+  yvonne.carrasco@midemo.example.invalid  org_admin (the middle tier)
+  wes.duvall@mtdemo.example.invalid       participant
+
+### THREE POSTGRES TRAPS LEARNED THE HARD WAY
+
+1. `current_setting(x, true)` returns NULL when never set but an EMPTY STRING
+   once set and released -- every pooled connection after any scoped request.
+   Without `NULLIF(...,'')` an unscoped query RAISES instead of returning zero.
+2. `FORCE ROW LEVEL SECURITY` subjects the table OWNER to policies but a role
+   with `BYPASSRLS` still walks through. The role cutover is mandatory.
+3. Membership resolution is chicken-and-egg: reading `org_staff` to discover
+   WHICH org you are in cannot already be org-scoped. The self-read clause
+   exists for exactly that, and its WITH CHECK must still require org scope so
+   self-read never becomes self-grant.
+
+
 ## 2026-09-19 (session 4) -- Wave 2 shipped: ATS lenses, Bullet Forge, t.ROY presence, org authz, persona harness
 
 Troy lifted the production freeze and ruled Tuesday is "the goal, not the
