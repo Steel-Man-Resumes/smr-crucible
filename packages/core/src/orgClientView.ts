@@ -466,3 +466,92 @@ export async function listRecentNotes(actor: OrgActor, limit = 100): Promise<Cli
   ]);
   return { ok: true, rows };
 }
+
+/* -------------------------------------------------------------- suggestions -- */
+
+export interface StaffSuggestion {
+  id: string; kind: "job" | "comment"; job_title: string | null; company: string | null; location: string | null; apply_url: string | null;
+  artifact_id: string | null; quote: string | null; body: string; status: "open" | "saved" | "dismissed" | "withdrawn";
+  author_name: string | null; author_user_id: string | null; created_at: string; responded_at: string | null;
+}
+
+const canSuggest = (a: OrgActor) => !a.viaPlatformAdmin && a.capabilities.has("org.suggest.write");
+
+export async function listSuggestions(actor: OrgActor, clientId: string): Promise<ClientViewResult<StaffSuggestion>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[StaffSuggestion[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `SELECT s.id, s.kind, s.job_title, s.company, s.location, s.apply_url, s.artifact_id, s.quote, s.body, s.status,
+              u.name AS author_name, s.author_user_id, s.created_at, s.responded_at
+         FROM staff_suggestion s LEFT JOIN users u ON u.id = s.author_user_id
+        WHERE s.client_user_id = $1::uuid AND s.access_code_id = $2::uuid AND ${IN_REACH}
+        ORDER BY s.created_at DESC LIMIT 200`,
+      params(actor, clientId)
+    ),
+  ]);
+  return { ok: true, rows };
+}
+
+/** A job worth a look. It becomes THEIR saved job only if they save it themselves. */
+export async function suggestJob(actor: OrgActor, clientId: string, input: { jobTitle: string; company: string; location?: string | null; applyUrl?: string | null; why: string }):
+  Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  if (!canSuggest(actor)) return { ok: false, error: "You do not have access to that." };
+  const title = input.jobTitle?.trim(), company = input.company?.trim(), why = input.why?.trim();
+  if (!title || !company) return { ok: false, error: "A job title and an employer are needed." };
+  if (!why || why.length < 3) return { ok: false, error: "Say why it might suit them. They will read it." };
+  const url = input.applyUrl?.trim() || null;
+  if (url && !/^https:\/\/\S+$/.test(url)) return { ok: false, error: "The link has to start with https://" };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `INSERT INTO staff_suggestion (access_code_id, client_user_id, author_user_id, kind, job_title, company, location, apply_url, body)
+       SELECT $2::uuid, $1::uuid, $4::uuid, 'job', $5, $6, $7, $8, $9 WHERE ${IN_REACH} RETURNING id`,
+      [...params(actor, clientId), title, company, input.location?.trim() || null, url, why]
+    ),
+  ]);
+  return rows[0] ? { ok: true, id: rows[0].id } : { ok: false, error: "That person is not on your caseload." };
+}
+
+/**
+ * A comment beside a resume or letter. Allowed only on a document the person
+ * has SHARED, with the same predicate that lets staff read it: nobody comments
+ * on what they cannot see, and the comment cannot outlive nothing -- it is a
+ * staff record, shown to the participant, that never touches the document.
+ */
+export async function commentOnArtifact(actor: OrgActor, clientId: string, artifactId: string, body: string, quote?: string | null):
+  Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  if (!canSuggest(actor)) return { ok: false, error: "You do not have access to that." };
+  const text = body?.trim();
+  if (!text || text.length < 3) return { ok: false, error: "Write the comment first." };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  // The document's type decides which scope must be shared. Looked up inside
+  // the scoped transaction, never taken from the caller.
+  for (const [type, scope] of [["resume", "resume"], ["cover_letter", "documents"]] as const) {
+    const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(
+        `INSERT INTO staff_suggestion (access_code_id, client_user_id, author_user_id, kind, artifact_id, quote, body)
+         SELECT $2::uuid, $1::uuid, $4::uuid, 'comment', ra.id, $7, $8
+           FROM refinery_artifact ra
+          WHERE ra.id = $6::uuid AND ra.user_id = $1::uuid AND ra.artifact_type = '${type}'
+            AND ${IN_REACH} AND ${SHARED} AND ${covered("ra.created_at")}
+         RETURNING id`,
+        [...params(actor, clientId, scope), artifactId, quote?.trim()?.slice(0, 500) || null, text]
+      ),
+    ]);
+    if (rows[0]) return { ok: true, id: rows[0].id };
+  }
+  return { ok: false, error: "You can only comment on a document they have shared with you." };
+}
+
+export async function withdrawSuggestion(actor: OrgActor, suggestionId: string): Promise<boolean> {
+  if (!canSuggest(actor)) return false;
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(`UPDATE staff_suggestion SET status = 'withdrawn'
+               WHERE id = $2::uuid AND access_code_id = $1::uuid AND status = 'open' AND ($3::boolean OR author_user_id = $4::uuid) RETURNING id`,
+      [actor.orgId, suggestionId, actor.capabilities.has("org.client.view_all"), actor.userId]),
+  ]);
+  return rows.length > 0;
+}

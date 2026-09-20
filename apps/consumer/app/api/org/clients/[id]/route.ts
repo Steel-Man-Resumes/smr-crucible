@@ -22,6 +22,10 @@ import {
   getClientNotes,
   addClientNote,
   requestSharing,
+  listSuggestions,
+  suggestJob,
+  commentOnArtifact,
+  withdrawSuggestion,
   isSharingScope,
   type ClientViewDenied,
 } from "@crucible/core";
@@ -73,11 +77,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const header = await getClientHeader(actor, params.id);
   if (!header.ok) return refusal(header.reason);
-  const notes = await getClientNotes(actor, params.id);
+  const [notes, suggestions] = await Promise.all([getClientNotes(actor, params.id), listSuggestions(actor, params.id)]);
   return NextResponse.json({
     client: header.rows[0],
     notes: notes.ok ? notes.rows : [],
-    viewer: { userId: actor.userId, canWriteNotes: actor.capabilities.has("org.note.write"), canRequest: actor.capabilities.has("org.client.request_sharing") },
+    suggestions: suggestions.ok ? suggestions.rows : [],
+    viewer: { userId: actor.userId, canWriteNotes: actor.capabilities.has("org.note.write"), canRequest: actor.capabilities.has("org.client.request_sharing"), canSuggest: actor.capabilities.has("org.suggest.write") },
   });
 }
 
@@ -102,6 +107,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       draftedByAssistant: body.draftedByAssistant === true,
     });
     return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.error }, { status: 400 });
+  }
+  if (body.action === "suggest_job") {
+    const res = await suggestJob(actor, params.id, { jobTitle: String(body.jobTitle ?? ""), company: String(body.company ?? ""), location: body.location ? String(body.location) : null, applyUrl: body.applyUrl ? String(body.applyUrl) : null, why: String(body.why ?? "") });
+    return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 400 });
+  }
+  if (body.action === "comment") {
+    if (!UUID.test(String(body.artifactId ?? ""))) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    const res = await commentOnArtifact(actor, params.id, String(body.artifactId), String(body.body ?? ""), body.quote ? String(body.quote) : null);
+    return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 400 });
+  }
+  if (body.action === "withdraw_suggestion" && UUID.test(String(body.suggestionId ?? ""))) {
+    return (await withdrawSuggestion(actor, String(body.suggestionId))) ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Already answered, or not yours to withdraw." }, { status: 400 });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }
