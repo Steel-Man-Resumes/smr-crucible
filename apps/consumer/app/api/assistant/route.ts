@@ -146,7 +146,7 @@ export async function POST(request: Request) {
   // person is not allowed to see.
   if (userId) {
     try {
-      const { resolveOrgActor, getPartnerCohort, summarizeStaffPerformance } =
+      const { resolveOrgActor, getPartnerCohort, summarizeStaffPerformance, getQuietAfterDays } =
         await import("@crucible/core");
       const actor = await resolveOrgActor(userId);
       if (actor && actor.reach !== "none") {
@@ -154,12 +154,16 @@ export async function POST(request: Request) {
           accessCodeId: actor.orgId,
           assignedToStaffId: actor.reach === "assigned" ? userId : undefined,
         });
-        const rollup = summarizeStaffPerformance(cohort.clients);
+        // ONE threshold per organization, the same one the caseload, Insights and
+        // Today read. It was 14 here twice, once as ">" and once as ">=".
+        const quietDays = await getQuietAfterDays(actor.orgId);
+        const rollup = summarizeStaffPerformance(cohort.clients, { stalledAfterDays: quietDays });
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
+          quietDays,
           role: actor.role,
           reach: actor.reach,
           caseload: cohort.clients.length,
@@ -173,7 +177,7 @@ export async function POST(request: Request) {
           needsAttention: cohort.clients
             .filter((c) => {
               const last = c.lastActiveAt ? new Date(c.lastActiveAt).getTime() : 0;
-              return !last || Date.now() - last > 14 * 86_400_000;
+              return !last || Date.now() - last >= quietDays * 86_400_000;
             })
             .slice(0, 5)
             .map((c) => firstName(c.name)),
@@ -298,6 +302,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
+      quietDays: context.org.quietDays,
     };
     const verdict = await verifyOrgOutput(generated.text, facts, lastUserText(messages) ?? undefined);
 

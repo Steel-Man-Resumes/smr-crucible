@@ -62,6 +62,7 @@ async function person(name, stage, lastActiveDays, staffId) {
   // clean slate for this fictional person
   await sql`DELETE FROM case_note WHERE client_user_id = ${u.id}`;
   await sql`DELETE FROM staff_task WHERE client_user_id = ${u.id}`;
+  await sql`DELETE FROM staff_suggestion WHERE client_user_id = ${u.id}`;
   await sql`DELETE FROM outcome_record WHERE client_user_id = ${u.id}`;
   await sql`DELETE FROM sharing_request WHERE user_id = ${u.id}`;
   await sql`DELETE FROM sharing_grant WHERE user_id = ${u.id}`;

@@ -24,9 +24,20 @@
  */
 
 import type { CohortClient } from "./partnerDashboard";
+import { getOne } from "./db";
 
 /** Days without any tracked activity before a client is worth a second look. */
+/** The DEFAULT. Each organization sets its own (access_code.quiet_after_days); read it with getQuietAfterDays. */
 export const STALLED_AFTER_DAYS = 14;
+
+/** One number per organization, read by every screen and by the assistant. */
+export async function getQuietAfterDays(orgId: string): Promise<number> {
+  const row = await getOne<{ quiet_after_days: number }>(`SELECT quiet_after_days FROM access_code WHERE id = $1`, [orgId]).catch(() => null);
+  const n = Number(row?.quiet_after_days);
+  return Number.isFinite(n) && n >= 3 && n <= 90 ? n : STALLED_AFTER_DAYS;
+}
+
+export { quietSpan } from "./orgStaffPerformanceShared";
 
 export interface StaffPerformance {
   staffUserId: string | null; // null = the unassigned bucket
@@ -101,9 +112,10 @@ function headlineFor(p: Omit<StaffPerformance, "headline">): string {
  */
 export function summarizeStaffPerformance(
   clients: readonly CohortClient[],
-  opts: { now?: number } = {}
+  opts: { now?: number; stalledAfterDays?: number } = {}
 ): StaffPerformance[] {
   const now = opts.now ?? Date.now();
+  const stalledAfter = opts.stalledAfterDays ?? STALLED_AFTER_DAYS;
   const buckets = new Map<string, { name: string | null; clients: CohortClient[] }>();
 
   for (const c of clients) {
@@ -133,7 +145,7 @@ export function summarizeStaffPerformance(
         const d = daysSince(c.lastActiveAt, now);
         // Never seen active counts as stalled: someone who has done nothing
         // since joining is the clearest case of needing a nudge.
-        return d === null || d >= STALLED_AFTER_DAYS;
+        return d === null || d >= stalledAfter;
       }).length,
       neverStarted: list.filter((c) => daysSince(c.lastActiveAt, now) === null).length,
       hired: list.filter((c) => c.hired).length,

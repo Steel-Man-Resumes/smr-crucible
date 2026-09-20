@@ -19,7 +19,7 @@
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import { getPartnerCohort } from "./partnerDashboard";
-import { STALLED_AFTER_DAYS } from "./orgStaffPerformance";
+import { getQuietAfterDays } from "./orgStaffPerformance";
 import { listStaffTasks } from "./staffTasks";
 import { listOutcomes } from "./orgOutcomes";
 import { WORK_QUEUE_TEXT_VERSIONS } from "./sharingScopes";
@@ -28,7 +28,7 @@ export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "followups", 
 export type TodaySection = (typeof TODAY_SECTIONS)[number];
 export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
   tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered you",
-  acknowledgement: "Waiting on an acknowledgement", quiet: `Quiet ${STALLED_AFTER_DAYS}+ days`, never_started: "Never started", unassigned: "Not assigned to anyone",
+  acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
 export interface TodayItem {
@@ -141,13 +141,17 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
 
   const cohort = await getPartnerCohort(actor.userId, { accessCodeId: actor.orgId, assignedToStaffId: seesAll ? undefined : actor.userId });
   const now = Date.now();
+  const quietDays = await getQuietAfterDays(actor.orgId);
+  // Someone who has STARTED WORK and stopped using a job-search tool is not a
+  // concern, so they are left off this list -- though the rollup the assistant
+  // and Insights share still counts them as not active. Deliberate, and noted.
   for (const c of cohort.clients) {
     if (c.hired) continue;
     const last = c.lastActiveAt ? new Date(c.lastActiveAt).getTime() : 0;
     if (!last) {
       items.push({ key: `ns:${c.userId}`, section: "never_started", clientId: c.userId, clientName: c.name, when: c.joinedAt,
         reason: `${first(c.name)} joined and has not started. A first conversation usually does more than a reminder.`, action: { label: "Reach out", href: href(c.userId) } });
-    } else if (now - last >= STALLED_AFTER_DAYS * 86400000) {
+    } else if (now - last >= quietDays * 86400000) {
       items.push({ key: `q:${c.userId}`, section: "quiet", clientId: c.userId, clientName: c.name, when: c.lastActiveAt,
         reason: `${first(c.name)} was last active ${Math.floor((now - last) / 86400000)} days ago. Worth asking what is in the way.`, action: { label: "Check in", href: href(c.userId) } });
     }

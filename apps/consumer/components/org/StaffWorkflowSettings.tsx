@@ -22,7 +22,7 @@ const TODAY_LABELS: Record<string, string> = {
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
-interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: Partial<StaffPrefs>; canSetOrgDefaults: boolean }
+interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: Partial<StaffPrefs>; canSetOrgDefaults: boolean; quietAfterDays: number }
 
 /** `workspace`: the participant pages exist for this org, so their options mean something. */
 export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
@@ -118,6 +118,18 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
         </label>
 
         </>)}
+
+        {state.canSetOrgDefaults && (
+          <div className="pt-4 border-t border-t-line">
+            <label htmlFor="wf-quiet" className="block font-medium text-t-white mb-1">For everyone here: count someone as quiet after</label>
+            <select id="wf-quiet" className={select} value={state.quietAfterDays} onChange={(e) => put({ quietAfterDays: Number(e.target.value) }, "Saved for your whole organization.")}>
+              {[7, 10, 14, 21, 30, 45, 60].map((n) => <option key={n} value={n}>{n} days{n === 14 ? " (the usual)" : ""}</option>)}
+            </select>
+            <p className="text-xs text-t-phos-dim mt-1">
+              One number for the whole organization, on purpose: your caseload, Insights, everyone&apos;s Today page and t.ROY all read it, so they always agree about who has gone quiet. A program that meets weekly might use 7; one that meets monthly, 30.
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-t-line">
           <button onClick={() => put({ own: {} }, "Back to your organization's defaults.")} className="t-focus text-xs text-t-phos-dim underline hover:text-t-white">
