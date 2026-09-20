@@ -29,6 +29,10 @@ export interface RlsHealth {
   tables: Record<string, { enabled: boolean; forced: boolean; unscopedReadIsEmpty: boolean }>;
   /** Scoped to a demo org, membership and staff ARE visible: proves "empty" above is enforcement, not an empty table. */
   scopedReadSeesRows: boolean | null;
+  /** The database's own clock. If this does not move between two calls, the answer is a cached one. */
+  checkedAt: string;
+  /** Newest applied migration. Says WHICH database this is, without naming a host. */
+  latestMigration: string | null;
   problems: string[];
 }
 
@@ -38,6 +42,10 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     `SELECT current_user AS who, (rolbypassrls OR rolsuper) AS bypass FROM pg_roles WHERE rolname = current_user`
   );
   if (me?.bypass) problems.push(`connected as ${me.who}, which can bypass row-level security: every policy is inert`);
+
+  const [stamp] = await query<{ at: string; latest: string | null }>(
+    `SELECT now()::text AS at, (SELECT max(filename) FROM _migrations) AS latest`
+  );
 
   const flags = await query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
@@ -75,5 +83,14 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     if (!scopedReadSeesRows) problems.push("scoped to a demo org, its members or staff were NOT visible: scoped reads are broken");
   }
 
-  return { ok: problems.length === 0, role: me?.who ?? "unknown", roleCanBypass: !!me?.bypass, tables, scopedReadSeesRows, problems };
+  return {
+    ok: problems.length === 0,
+    role: me?.who ?? "unknown",
+    roleCanBypass: !!me?.bypass,
+    tables,
+    scopedReadSeesRows,
+    checkedAt: stamp?.at ?? "",
+    latestMigration: stamp?.latest ?? null,
+    problems,
+  };
 }
