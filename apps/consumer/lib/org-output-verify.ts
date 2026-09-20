@@ -141,24 +141,27 @@ export async function checkOrgClaimsWithModel(
 
   const prompt = `You are verifying a message that is about to be shown to a case manager at a reentry organization. They may copy it into a report that goes to a funder, so an unsupported claim is expensive.
 
-THE ONLY FACTS THAT EXIST:
-- caseload: ${facts.caseload}
-- not active in two weeks: ${facts.stalled}
-- never started: ${facts.neverStarted}
-- started work: ${facts.hired}
-- assigned to nobody: ${facts.unassigned}
-- people this viewer may discuss: ${facts.visibleNames.join(", ") || "(none)"}
-- of those, no activity in two weeks or never active (needs attention): ${(facts.needsAttention ?? []).join(", ") || "(none)"}
-- staff in this organization: ${facts.staffNames.join(", ") || "(none)"}
+ESTABLISHED FACTS (each of these is TRUE and may be stated or paraphrased):
+- This viewer's caseload is ${facts.caseload} people: ${facts.visibleNames.join(", ") || "(no names)"}.
+- ${facts.stalled} of them have had no activity in the last two weeks.
+- ${facts.neverStarted} of them have never started.
+- ${facts.hired} of them have started work.
+- ${facts.unassigned} of them are assigned to nobody.
+${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for two weeks or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
+- Staff in this organization: ${facts.staffNames.join(", ") || "(none)"}.
+Nothing else is known about any person: no employers, interviews, application counts, dates, reasons, or trends.
 
 MESSAGE:
 """
 ${text.slice(0, 4000)}
 """
 
-List any statement of FACT the message makes that those facts do not support: a count, an outcome, a date, a trend, a claim about a specific person, or a claim about what happened. Ignore advice, suggested wording, questions, and offers to help -- those are not factual claims. Ignore general statements about how the product works.
+Go through the message sentence by sentence. For EACH sentence output one object:
+  "text": the sentence, shortened if long
+  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
+  "supported": for a claim, true if it restates or paraphrases an established fact above, false if the established facts do not support it. For "other", true.
 
-Reply with a JSON array of short strings, one per unsupported claim. Reply with [] if everything checks out. JSON only.`;
+Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":true}]}`;
 
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -168,17 +171,22 @@ Reply with a JSON array of short strings, one per unsupported claim. Reply with 
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
-        max_tokens: 400,
+        max_tokens: 900,
+        response_format: { type: "json_object" },
       }),
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) return null;
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content ?? "";
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : null;
+    // Classified per sentence and filtered HERE rather than asking the model
+    // for a free-form list of problems: asked for a list, it listed questions,
+    // offers and true statements alike, and every answer carried a warning.
+    const parsed = JSON.parse(raw) as { sentences?: unknown };
+    if (!Array.isArray(parsed?.sentences)) return null;
+    return (parsed.sentences as Array<{ text?: unknown; kind?: unknown; supported?: unknown }>)
+      .filter((x) => x?.kind === "claim" && x?.supported === false && typeof x?.text === "string")
+      .map((x) => x.text as string);
   } catch {
     return null;
   }
