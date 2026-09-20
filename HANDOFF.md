@@ -1,5 +1,38 @@
 # SMR Crucible -- Handoff
 
+## 2026-09-19 (session 6) -- staff t.ROY was never reachable from the browser; fixed, and the checker rebuilt
+
+Troy opened the assistant as a demo staff member: it talked about Forge work,
+not casework. Session 5's item 8 feared the hand-rolled data-stream format.
+THE FORMAT WAS FINE. The worry was aimed at the wrong layer.
+
+- **Measured first**: logged into production with curl as Russ (staff), Dana
+  (owner), Yvonne (org_admin) and POSTed `/api/assistant`. All three got the
+  casework assistant with correct, reach-limited numbers. Server path proven.
+  (NextAuth provider id is `password-login`, not `credentials`.)
+- **Actual defect**: `RefineryShell` mounted `<AssistantChat coach>`, so every
+  signed-in user posts to `/api/coach`, the job-seeker coach. The org logic in
+  `/api/assistant` had never once been called by a staff browser. Fix:
+  `coach={!isOrgPartner}` + `staff` quick prompts. Commit `edbe1a2`, confirmed
+  live by finding the new prompt string in the production bundle.
+- **Second defect, found only because I read the real output**: the layer 2
+  judge flagged EVERY answer, true ones included (it listed questions and
+  offers as "unsupported claims"). Every staff reply carried a "could not
+  support" warning. First fix (pass needsAttention) did NOT work -- verified
+  live, still flagging. Rebuilt: facts as true sentences, per-sentence
+  classification, filter in code, presupposed facts inside offers count as
+  claims. Commit `6b5b408`.
+- **New tooling**: `scripts/verify-org-output-judge.mts` -- 9 known-truth cases
+  (4 true, 5 false), all correct. Run from apps/consumer whenever the judge
+  prompt changes. A checker that always objects looks identical to one that
+  works; this is the only thing that tells them apart.
+- **Lesson**: the feature had unit-level proof and zero end-to-end proof. "Is
+  the route correct" and "does the UI call the route" are separate claims.
+
+STILL OPEN from session 5: items 1-7 and 9 below are untouched. A staff member
+in "client view" correctly falls back to the coach. NOT yet watched in a real
+browser by me -- Troy should re-open the drawer as Russ and confirm.
+
 ## 2026-09-19 (session 5) -- RLS shipped to production, then two reviews found 12 defects in it
 
 READ THIS SECTION BEFORE TOUCHING THE ORG LAYER. Production changed
