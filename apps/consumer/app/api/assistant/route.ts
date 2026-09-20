@@ -266,7 +266,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
     };
-    const verdict = await verifyOrgOutput(generated.text, facts);
+    const verdict = await verifyOrgOutput(generated.text, facts, lastUserText(messages) ?? undefined);
 
     let out = generated.text;
     if (!verdict.ok) {

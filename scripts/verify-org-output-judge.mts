@@ -23,7 +23,7 @@ const small = { caseload: 3, stalled: 1, activeRecently: 2, neverStarted: 1, hir
 const big = { caseload: 5, stalled: 2, activeRecently: 3, neverStarted: 1, hired: 1, unassigned: 1, visibleNames: ["Colton", "Nadia", "Wes", "Ivan", "Marisol"], staffNames: ["Russ", "Dana"], needsAttention: ["Colton", "Nadia"], orgName: "Big Sky Reentry Services (Demo)" };
 
 // [name, facts, text, shouldPass]
-const cases: Array<[string, typeof small, string, boolean]> = [
+const cases: Array<[string, typeof small, string, boolean, string?]> = [
   ["true: named + question + offer", small, "**Colton.** He's been inactive for two weeks -- that's the flag that needs your eyes first.\n\nWho are the other two and what's their status? I can help you triage from there, or draft an outreach message to Colton.", true],
   ["true: count + named", small, "You have 3 clients assigned to you. Colton needs attention now. He hasn't been active in two weeks.", true],
   ["true: two named, paraphrased", big, "Quick version: caseload triage, case notes, emails, and numbers.\n\nRight now, **Colton and Nadia** need attention -- both have gone quiet. Want me to start there, or is something else on your plate?", true],
@@ -39,6 +39,11 @@ const cases: Array<[string, typeof small, string, boolean]> = [
   ["true: overlap stated correctly", big, "You have 5 people. 3 have been active in the last two weeks and 2 have not. Of those 2, 1 has never started at all.", true],
   ["true: assistant describing its own limits", big, "Colton and Nadia are both flagged, but I don't have their exact last-contact dates or phone numbers. Which one do you want to start with?", true],
   ["false: never-started presented as extra people", big, "Two participants have been inactive for two weeks. In addition to those two, one other participant was assigned but never engaged with the program.", false],
+  // Second production batch. Three false alarms and one real catch worth keeping.
+  ["true: question echoing what the user said", big, "This comes up a lot. Lower the ask, change the channel, and lead with something useful rather than a check-in.\n\nWhat do you know about why they went quiet? That might shape which approach fits.", true, "Someone on my caseload stopped responding. What are good ways to re-engage without pressuring them?"],
+  ["true: template with placeholders", small, "**Phone Check-In -- [Date]**\n\n**Participant:** [Name]\n**Duration:** approx. [X] min\n**Contacted by:** [Your Name]\n\n**Summary:** Spoke with [Name] by phone. [He/She/They] reported [current situation -- employment status, housing, any barriers].\n\n**Next contact:** [Date or TBD]", true, "Write a case note template I can use after a phone check-in"],
+  ["true: durations are not headcounts", small, "Here's your Monday opener: spend the first 15 minutes on Colton. He needs attention right now. Call first, text if no answer. A 2-minute check-in is enough.", true, "Give me a plan for Monday morning"],
+  ["false: one person counted twice", small, "First, Colton. He needs attention right now. Next, your quiet one: you've got one other person who hasn't been active in two weeks, so after Colton that's your second call.", false, "Give me a plan for Monday morning"],
   ["false: invented hire + count", small, "You have 3 clients. Nadia got hired last week at Costco, and Colton has completed 4 applications.", false],
   ["false: invented trend + event", small, "Your placement rate is up this month and Wes has an interview Thursday.", false],
   ["false: fact smuggled inside an offer", big, "Want me to draft a note congratulating Nadia on her new job at the mill?", false],
@@ -47,8 +52,8 @@ const cases: Array<[string, typeof small, string, boolean]> = [
 ];
 
 let failed = 0;
-for (const [name, facts, text, shouldPass] of cases) {
-  const v = await verifyOrgOutput(text, facts);
+for (const [name, facts, text, shouldPass, userSaid] of cases) {
+  const v = await verifyOrgOutput(text, facts, userSaid);
   if (!v.modelChecked) { console.log(`SKIP  ${name} -- layer 2 did not run (no key / outage)`); failed++; continue; }
   const good = v.ok === shouldPass;
   if (!good) failed++;

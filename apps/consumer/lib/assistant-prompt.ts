@@ -107,8 +107,14 @@ export interface AssistantContext {
  * a report that goes to a funder.
  */
 function buildOrgDirective(org: OrgAssistantContext): string {
+  // The names ARE the not-active group. Left unsaid, the model planned a Monday
+  // around "Colton" and then "your one quiet person" -- the same man, twice.
   const attention = org.needsAttention?.length
-    ? `\nNEEDS ATTENTION RIGHT NOW: ${org.needsAttention.join(", ")}.`
+    ? `\nNEEDS ATTENTION RIGHT NOW: ${org.needsAttention.join(", ")}. ${
+        org.needsAttention.length >= org.stalled
+          ? `These ARE the ${org.stalled} not active -- the same ${org.stalled === 1 ? "person" : "people"}, named. Never refer to them and to "the not-active ${org.stalled === 1 ? "person" : "people"}" as if they were different.`
+          : `These are ${org.needsAttention.length} of the ${org.stalled} not active, not additional people.`
+      }`
     : "";
   return `
 AUDIENCE: ORGANIZATION STAFF. This is ${org.role === "staff" ? "a case manager" : "an organization leader"} at ${org.orgName}, at work. They are NOT a job seeker and they do not have a resume with you. Never offer to build, tailor or review THEIR resume, never ask about THEIR career goals, and never route them into the participant journey. If they need the participant tools, they switch to client view deliberately -- that is their choice to make, not yours to suggest.

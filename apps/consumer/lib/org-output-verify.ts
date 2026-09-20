@@ -94,11 +94,19 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
 export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): string[] {
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
+  // A template's blanks are not claims. "[Your Name]" names nobody and "[X] min"
+  // counts nothing; both were being reported to the reader as unsupported.
+  text = text.replace(/\[[^\]\n]{0,80}\]/g, " ");
 
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
   // class of claim that gets copied into a headcount.
-  const numbers = text.match(/(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/-])/g) ?? [];
+  // Durations, clock times and ordinals are not headcounts: "first 15 minutes",
+  // "a 2-minute check-in", "by 9am", "the 3rd".
+  const numbers =
+    text.match(
+      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
+    ) ?? [];
   for (const n of numbers) {
     if (!allowed.has(n)) {
       problems.push(`the figure "${n}" is not one of this caseload's numbers`);
@@ -161,7 +169,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
  */
 export async function checkOrgClaimsWithModel(
   text: string,
-  facts: OrgFacts
+  facts: OrgFacts,
+  /** What the staff member just said. Things THEY told us are not our claims. */
+  userSaid?: string
 ): Promise<string[] | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
@@ -176,8 +186,18 @@ ESTABLISHED FACTS (each of these is TRUE and may be stated or paraphrased):
 - ${facts.hired} of them have started work.
 - ${facts.unassigned} of them are assigned to nobody.
 ${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for two weeks or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
+${
+  (facts.needsAttention ?? []).length > 0 && (facts.needsAttention ?? []).length >= facts.stalled
+    ? `- The people named as needing attention ARE the ${facts.stalled} with no activity -- the same ${facts.stalled === 1 ? "person" : "people"}. A message that refers to them AND to some other inactive or quiet person is counting somebody twice, and that is an UNSUPPORTED claim.`
+    : "- (The needs-attention names are only some of the inactive people.)"
+}
 - Staff in this organization: ${facts.staffNames.join(", ") || "(none)"}.
 Nothing else is known about any person: no employers, interviews, application counts, dates, reasons, or trends.
+
+THE STAFF MEMBER'S OWN MESSAGE, which this is a reply to. Anything they stated or asked about is THEIR information; a reply that repeats it or asks about it is not making a new claim:
+"""
+${(userSaid ?? "(not provided)").slice(0, 1500)}
+"""
 
 MESSAGE:
 """
@@ -186,7 +206,7 @@ ${text.slice(0, 4000)}
 
 Go through the message sentence by sentence. For EACH sentence output one object:
   "text": the sentence, shortened if long
-  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
+  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is any blank template line whose content is bracketed placeholders for the staff member to fill in ("[Name] reported [situation]"). So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
   "supported": for a claim, true if it restates or paraphrases an established fact above, false if the established facts do not support it. For "other", true.
 
 Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":true}]}`;
@@ -226,9 +246,13 @@ Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":tru
  * `modelChecked: false` means layer 2 did not run, and the caller must say so
  * rather than implying the answer was fully verified.
  */
-export async function verifyOrgOutput(text: string, facts: OrgFacts): Promise<OrgVerdict> {
+export async function verifyOrgOutput(
+  text: string,
+  facts: OrgFacts,
+  userSaid?: string
+): Promise<OrgVerdict> {
   const deterministic = checkOrgClaimsDeterministic(text, facts);
-  const model = await checkOrgClaimsWithModel(text, facts);
+  const model = await checkOrgClaimsWithModel(text, facts, userSaid);
   return {
     ok: deterministic.length === 0 && (model?.length ?? 0) === 0,
     problems: [...deterministic, ...(model ?? [])],
