@@ -57,6 +57,8 @@ export default function SettingsPage() {
     chat: true,
     consent: true,
     usage: true,
+    progress: true,
+    sharing: true,
   });
   // Phase 1C reauth gate: export and delete both require the current
   // password (password accounts) or the literal string "DELETE" typed out
@@ -628,6 +630,8 @@ interface ExportCats {
   chat: boolean;
   consent: boolean;
   usage: boolean;
+  progress: boolean;
+  sharing: boolean;
 }
 
 function DataSection({
@@ -666,6 +670,8 @@ function DataSection({
     { key: "chat", label: "Chat history with t.ROY" },
     { key: "consent", label: "Consent records" },
     { key: "usage", label: "Usage totals" },
+    { key: "progress", label: "Your activity history" },
+    { key: "sharing", label: "What you share, who opened it, and what your organization has on file about you" },
   ];
   const anyChecked = Object.values(exportCats).some(Boolean);
 

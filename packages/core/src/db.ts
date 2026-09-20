@@ -194,3 +194,20 @@ export async function runPerOrg<T = Record<string, unknown>>(
   orgIds.forEach((orgId, i) => out.set(orgId, (results[2 + i * 2 + 1] ?? []) as T[]));
   return out;
 }
+
+/**
+ * insert(), as a specific user: for tables a person OWNS, whose row-level
+ * policy admits only rows where user_id is that person. The owner column is
+ * named, not assumed, because not every owned table calls it `user_id`.
+ */
+export async function insertAsUser<T = Record<string, unknown>>(
+  userId: string,
+  table: string,
+  data: Record<string, unknown>
+): Promise<T> {
+  const keys = Object.keys(data);
+  const cols = keys.map((k) => `"${k}"`).join(", ");
+  const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await queryAsUser<T>(userId, `INSERT INTO "${table}" (${cols}) VALUES (${placeholders}) RETURNING *`, Object.values(data));
+  return rows[0];
+}
