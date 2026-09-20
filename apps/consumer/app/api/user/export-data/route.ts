@@ -270,11 +270,11 @@ export async function POST(req: Request) {
     // 2026-08-21): the recorded AI decisions about them, their own login history,
     // and their org membership. SELECT * (their own rows) avoids column drift.
     if (want("decisions")) {
+      // decision_log's time column is ts. This said created_at, which does not exist,
+      // so the WHOLE export failed for everyone ("Failed to export data"): a data-rights
+      // route that had quietly stopped working. Found 2026-09-20 by running the export
+      // end to end while testing row-level security.
       payload.decisions = await query(
-        // decision_log's time column is `ts`. This said `created_at`, which does not
-        // exist, so the WHOLE export failed for everyone ("Failed to export data"):
-        // a data-rights route that had quietly stopped working. Found 2026-09-20 by
-        // running the export end to end while testing row-level security.
         `SELECT * FROM decision_log WHERE user_id = $1 ORDER BY ts DESC LIMIT 2000`,
         [userId]
       );
