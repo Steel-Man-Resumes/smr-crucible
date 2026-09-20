@@ -58,8 +58,10 @@ export function SharingConsentSection() {
             <p className="text-sm text-t-phos-dim leading-relaxed">
               If a partner organization gave you a code, you can let them see where you
               are in your journey -- your stage, how many jobs you have applied to, and
-              when you were last active. They never see your resume, your disclosure plan,
-              or anything you write while practicing. You can turn this off anytime.
+              when you were last active. This switch never shows them your resume, your
+              disclosure plan, or anything you write while practicing. If your organization
+              offers it, sharing anything more is a separate choice you make one item at a
+              time, under &quot;Who can see what&quot; below. You can turn this off anytime.
             </p>
           </div>
           <button
