@@ -29,9 +29,76 @@ THE FORMAT WAS FINE. The worry was aimed at the wrong layer.
 - **Lesson**: the feature had unit-level proof and zero end-to-end proof. "Is
   the route correct" and "does the UI call the route" are separate claims.
 
-STILL OPEN from session 5: items 1-7 and 9 below are untouched. A staff member
-in "client view" correctly falls back to the coach. NOT yet watched in a real
-browser by me -- Troy should re-open the drawer as Russ and confirm.
+### THEN TROY SAID "CONTINUE TO COMPLETION" -- what the rest of the session did
+
+Production is at `9611457`. Ask it: `curl https://forge.steelmanresumes.com/api/health/version`.
+
+**Method that found everything below**: a 20-30 prompt batch of realistic staff
+questions against production as Dana/Russ/Yvonne, EVERY flagged answer read by
+hand. Four rounds: 7/20 flagged -> 4/20 -> 2/30 -> 0/30. My hand-written harness
+passed each time while production still failed; the batch is what told the truth.
+Prompts are in the session scratchpad, not the repo -- recreate from the
+"production batch" comments in `scripts/verify-org-output-judge.mts`.
+
+REAL DEFECTS IN WHAT STAFF WERE TOLD (not checker noise):
+- **Never-started is a SUBSET of stalled** (by definition in
+  `summarizeStaffPerformance`) and the prompt never said so. A drafted email to
+  a director reported 2 inactive + 1 never-engaged as three people. It is two.
+  Every number was "ours", so layer 1 passed it.
+- **One man counted twice**: "first Colton, then your one quiet person". The
+  prompt never said the needs-attention names ARE the not-active group.
+- No "active" count was given, so the model derived one by subtraction.
+  Now `activeRecently` is computed and handed over.
+
+DEFECTS AROUND IT:
+- **Staff answers were never logged** (org path returns before `onFinish`).
+  The security statement promised they were. Fixed in the route; the row now
+  carries the verification verdict. That log row is what exposed layer 1.
+- **Staff were rate-limited as anonymous job seekers**: 30 calls/day then
+  "enter a partner code". They never redeem a code so `getUserDailyLimit` fell
+  to the default. Found by exhausting it with a test batch. Now
+  `getOrgMemberDailyLimit`: the org code's allowance, floor 200.
+- **Layer 1** read headings, the org's own name, `[Your Name]`, and
+  "15 minutes" as people/headcounts. **Layer 2** on gpt-4o-mini false-flagged a
+  true answer 5/5; measured four models, **gpt-4.1-mini** = 0 false flags, 0
+  misses, faster. `ORG_VERIFY_MODEL` overrides it to measure the next candidate.
+- Harness: `scripts/verify-org-output-judge.mts`, **22 cases, 3 clean runs**.
+
+SESSION 5 OPEN ITEMS, RESOLVED:
+- **#1 Security statement**: REWRITTEN, every claim re-verified against code
+  first. Four were wrong (one understated, three overstated). STILL NEEDS
+  TROY'S READ before Montana -- it is a public-facing promise. Live at
+  `/dashboard/org-security`.
+- **#4 CI gate**: DONE. `.github/workflows/org-isolation.yml` -- throwaway Neon
+  branch, this push's migrations, restricted role, suite as `smr_app`, branch
+  deleted. Path-filtered (each run wakes Neon compute). First run verified in
+  the logs: "code under test as: smr_app", 13 passed. Repo secret
+  `NEON_API_KEY` was added for it (same project's key, piped, never printed).
+  The statement still says "not yet an automatic gate" -- UPDATE IT after the
+  gate has held for a few pushes, not before.
+- **#5 Seeds assert their role**: DONE, `scripts/lib/assert-bypass-role.mjs`.
+- **#6 personas route**: DONE. One transaction re-scoped per org. The claim
+  that `set_config` is honoured per statement was TESTED as smr_app on a
+  branch: 0 foreign rows. My first run was as neondb_owner and proved nothing;
+  printing the role is what caught it.
+
+DELIBERATELY NOT DONE, AND WHY (decision, not an oversight):
+- **#2 access_code_redemption RLS**. Session 5 estimated 12 sites / 6 files. It
+  is **22 SQL sites / 13 files**: registration (auth.ts, via a pg Pool, not the
+  neon driver), rate limiting on every AI call, tier resolution, account
+  deletion, export, hub-unlock, and platform-admin cross-org aggregates that
+  need a policy concept that does not exist yet. NOT going into production
+  three days before Montana. The statement says plainly this table is not
+  covered. Do it after 9/22, on a Neon branch, with the CI gate now in place.
+- **#3 participant-owned tables**: same reasoning, larger.
+- **#7 t.ROY animation, #9 rehearsal**: need Troy's eyes / Troy's time.
+
+MISTAKES I MADE THIS SESSION (for the miner):
+- Chained a failing test and `git commit` with `;` instead of `&&` and pushed a
+  broken seed script. Fixed in the next commit, 2 minutes later.
+- Inferred "new build is live" from a deploy timestamp and verified a fix
+  against the PREVIOUS build. Built `/api/health/version` so that cannot recur.
+- Ran an RLS test as the owner role. It "passed". It proved nothing.
 
 ## 2026-09-19 (session 5) -- RLS shipped to production, then two reviews found 12 defects in it
 
