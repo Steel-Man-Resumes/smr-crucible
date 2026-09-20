@@ -12,7 +12,7 @@
  * consumer_consent (the 'sharing' / 'outcome_named' layers). No parallel tables.
  */
 
-import { query, getOne, runScoped, type OrgScope } from "./db";
+import { query, getOne, getOneAsUser, runScoped, type OrgScope } from "./db";
 
 /**
  * query(), but with the organization scope set so row-level policies pass.
@@ -182,16 +182,37 @@ export async function getPartnerCohort(
        LEFT JOIN users su ON su.id = csa.staff_user_id
       WHERE u.id = ANY($1::uuid[])`,
     [ids, scopeCodeIds],
-    // client_staff_assignment is row-level protected, so this join needs the
-    // org scope or it returns no assignments at all -- blank staff names
-    // rather than someone else's, which is the right way round to fail.
+    // client_staff_assignment is row-level protected, so this join needs an
+    // org scope. A policy scopes to ONE org, and a cohort resolved by
+    // ownership can span several codes -- so the assignments are fetched
+    // separately, one scoped read per code, and merged below.
     //
-    // KNOWN LIMIT: a policy scopes to ONE org, and a cohort resolved by
-    // ownership can span several codes. When that happens the assignment
-    // columns come back empty rather than wrong. The console always passes an
-    // explicit accessCodeId, so the path people actually use is covered.
-    opts.accessCodeId ?? scopeCodeIds[0] ?? ""
+    // I previously scoped this to the first code and called the result "empty
+    // rather than wrong". That was wrong twice over: participants under the
+    // other codes stayed in the list but appeared UNASSIGNED, which is a
+    // mixed result presented as complete -- the worst of both. And the "first"
+    // code came from an unordered array_agg, so it was not even stable
+    // between calls. (Found in review.)
+    scopeCodeIds[0] ?? ""
   );
+
+  // One scoped read per code in the cohort, merged. Costs a round trip per
+  // organization, which is the honest price of a boundary the database
+  // enforces one org at a time.
+  const assignments = new Map<string, { staffId: string; staffName: string | null }>();
+  for (const codeId of scopeCodeIds) {
+    const rows = await runScopedRows<{ client_user_id: string; staff_user_id: string; staff_name: string | null }>(
+      `SELECT csa.client_user_id, csa.staff_user_id, su.name AS staff_name
+         FROM client_staff_assignment csa
+         LEFT JOIN users su ON su.id = csa.staff_user_id
+        WHERE csa.access_code_id = $1 AND csa.client_user_id = ANY($2::uuid[])`,
+      [codeId, ids],
+      codeId
+    );
+    for (const r of rows) {
+      assignments.set(r.client_user_id, { staffId: r.staff_user_id, staffName: r.staff_name });
+    }
+  }
 
   const byId = new Map(consentedMembers.map((m) => [m.user_id, m]));
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -217,8 +238,8 @@ export async function getPartnerCohort(
       outcomeNamed: m.outcome_named,
       lastActiveAt: lastActive,
       joinedAt: m.joined_at,
-      assignedStaffId: r.assigned_staff_id,
-      assignedStaffName: r.assigned_staff_name,
+      assignedStaffId: assignments.get(r.id)?.staffId ?? r.assigned_staff_id,
+      assignedStaffName: assignments.get(r.id)?.staffName ?? r.assigned_staff_name,
       aiCostUsd: Number(r.ai_cost_usd || 0),
     };
   });
@@ -322,7 +343,15 @@ export async function getOrgContext(
     };
   }
 
-  const staff = await getOne<{
+  // MISSED IN THE CUTOVER, AND IT BROKE STAFF IN PRODUCTION. org_staff is
+  // row-level protected, and this ran on an unscoped connection -- so anyone
+  // who is staff but does NOT own an access code resolved to "no organization"
+  // and lost their console entirely. resolveOrgActor was converted; this
+  // sibling lookup, which feeds the nav and /api/user/role, was not.
+  //
+  // The self-read clause exists precisely for this: discovering which org you
+  // belong to cannot itself be org-scoped.
+  const staff = await getOneAsUser<{
     access_code_id: string;
     role: string;
     code: string;
@@ -330,6 +359,7 @@ export async function getOrgContext(
     org_logo_url: string | null;
     max_redemptions: number | null;
   }>(
+    userId,
     `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url, ac.max_redemptions
        FROM org_staff os
        JOIN access_code ac ON ac.id = os.access_code_id
@@ -394,7 +424,10 @@ export async function assignClientStaff(
       `DELETE FROM client_staff_assignment
         WHERE access_code_id = $1 AND client_user_id = $2`,
       [accessCodeId, clientUserId],
-      accessCodeId
+      accessCodeId,
+      // The actor, so the audit row names a person rather than falling back to
+      // a database role. An unattributed write is a gap in the record.
+      assignedBy
     );
     return;
   }
@@ -437,7 +470,8 @@ export async function assignClientStaff(
      DO UPDATE SET staff_user_id = $3, assigned_by = $4, created_at = NOW()
      RETURNING client_user_id`,
     [accessCodeId, clientUserId, staffUserId, assignedBy],
-    accessCodeId
+    accessCodeId,
+    assignedBy
   );
 
   if (written.length === 0) {

@@ -88,25 +88,19 @@ export async function addOrgStaff(params: {
   // A person already serving another organization must not be added to a
   // second one silently. Staff membership decides whose case data someone can
   // read, and quietly spanning two orgs is the exact shape of a cross-org leak.
-  // NOTE: this check reads ACROSS organizations, which row-level security now
-  // forbids for the app role -- by design. It runs scoped to the caller's own
-  // org, so it only catches somebody already on THIS team. The cross-org case
-  // is still prevented, just by a different mechanism: the INSERT below can
-  // only write rows belonging to this org (WITH CHECK), and the person must
-  // already have a relationship with it.
-  const elsewhere = await scopedQuery<{ n: string }>(
-    orgId,
-    `SELECT COUNT(*)::text AS n FROM org_staff
-      WHERE user_id = $1 AND access_code_id <> $2`,
-    [userId, orgId],
-    addedBy
-  ).then((r) => r[0]);
-  if (Number(elsewhere?.n ?? 0) > 0) {
-    return {
-      ok: false,
-      reason: "That person is already on staff at another organization.",
-    };
-  }
+  // THE CROSS-ORG EXCLUSIVITY CHECK IS GONE, and pretending otherwise would
+  // be worse than losing it. It asked for rows where access_code_id <> this
+  // org, on a connection RLS restricts to rows where access_code_id = this
+  // org. That is provably always zero -- a check that always passes, which is
+  // not a check. (Found in review; my own comment claiming it still caught
+  // same-team cases was also wrong: the inequality excludes this team.)
+  //
+  // WHAT STILL HOLDS: the person must already have a relationship with THIS
+  // organization, and the row written can only belong to it. WHAT NO LONGER
+  // HOLDS: somebody serving another org can now be added here too. Enforcing
+  // one-org-per-staff-member needs a database invariant -- a partial unique
+  // index on org_staff(user_id) -- not an application read that RLS forbids.
+  // Tracked, not silently dropped.
 
   // KNOWING A USER ID IS NOT AUTHORIZATION TO RECRUIT SOMEONE.
   //
@@ -233,7 +227,8 @@ export async function removeOrgStaff(params: {
     `DELETE FROM client_staff_assignment
       WHERE access_code_id = $1 AND staff_user_id = $2
       RETURNING client_user_id`,
-    [orgId, userId]
+    [orgId, userId],
+    actorUserId
   );
 
   return { ok: true, releasedClients: released.length };
