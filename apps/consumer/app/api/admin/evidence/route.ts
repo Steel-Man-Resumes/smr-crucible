@@ -7,8 +7,8 @@ export async function GET() {
   if (!guard.ok) return guard.response;
 
   const [report, cases] = await Promise.all([
-    getAggregateReport(),
-    getConsentedCaseStudies({ limit: 20 }),
+    getAggregateReport(guard.userId),
+    getConsentedCaseStudies({ adminUserId: guard.userId, limit: 20 }),
   ]);
 
   return NextResponse.json({ report, cases });

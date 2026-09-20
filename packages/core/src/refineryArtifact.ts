@@ -7,7 +7,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { query, getOne, insert } from "./db";
+import { queryAsUser, getOneAsUser, insertAsUser } from "./db";
 
 export interface RefineryArtifact {
   id: string;
@@ -60,7 +60,7 @@ export async function createArtifact(
   scaffoldLevel: number = 1.0
 ): Promise<RefineryArtifact> {
   // Get next iteration number for this user+type combo
-  const latest = await getOne<{ max_iter: number }>(
+  const latest = await getOneAsUser<{ max_iter: number }>(userId, 
     `SELECT COALESCE(MAX(iteration_number), 0) AS max_iter
      FROM refinery_artifact
      WHERE user_id = $1 AND artifact_type = $2`,
@@ -68,7 +68,7 @@ export async function createArtifact(
   );
   const nextIter = (latest?.max_iter ?? 0) + 1;
 
-  return insert<RefineryArtifact>("refinery_artifact", {
+  return insertAsUser<RefineryArtifact>(userId, "refinery_artifact", {
     user_id: userId,
     artifact_type: type,
     target_context: JSON.stringify(targetContext),
@@ -126,13 +126,13 @@ export async function updateArtifact(
     params.push(scaffoldLevel);
   }
 
-  const rows = await query<RefineryArtifact>(
+  const rows = await queryAsUser<RefineryArtifact>(userId, 
     ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause),
     params
   );
   if (rows[0]) return { status: "updated", artifact: rows[0] };
   // Zero rows: distinguish a locked row from a missing/foreign one.
-  const existing = await getOne<{ is_locked: boolean }>(
+  const existing = await getOneAsUser<{ is_locked: boolean }>(userId, 
     `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
@@ -146,7 +146,7 @@ export async function getArtifact(
   artifactId: string,
   userId: string
 ): Promise<RefineryArtifact | null> {
-  return getOne<RefineryArtifact>(
+  return getOneAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
      WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
@@ -166,7 +166,7 @@ export async function listArtifacts(
   if (opts?.type) params.push(opts.type);
   params.push(limit);
 
-  return query<RefineryArtifact>(
+  return queryAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
      WHERE user_id = $1${typeClause}
      ORDER BY updated_at DESC
@@ -184,9 +184,9 @@ export async function deleteArtifact(
   artifactId: string,
   userId: string
 ): Promise<"deleted" | "locked" | "not_found"> {
-  const rows = await query(ARTIFACT_DELETE_SQL, [artifactId, userId]);
+  const rows = await queryAsUser(userId, ARTIFACT_DELETE_SQL, [artifactId, userId]);
   if (rows.length > 0) return "deleted";
-  const existing = await getOne<{ is_locked: boolean }>(
+  const existing = await getOneAsUser<{ is_locked: boolean }>(userId, 
     `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
@@ -204,18 +204,18 @@ export async function setCurrentResume(
   userId: string,
   artifactId: string
 ): Promise<boolean> {
-  const target = await getOne<{ id: string }>(
+  const target = await getOneAsUser<{ id: string }>(userId, 
     `SELECT id FROM refinery_artifact
      WHERE id = $1 AND user_id = $2 AND artifact_type = 'resume'`,
     [artifactId, userId]
   );
   if (!target) return false;
   // Clear the old pin first (does not touch updated_at -- pinning is not an edit).
-  await query(
+  await queryAsUser(userId, 
     `UPDATE refinery_artifact SET is_current = false WHERE user_id = $1 AND is_current`,
     [userId]
   );
-  await query(
+  await queryAsUser(userId, 
     `UPDATE refinery_artifact SET is_current = true WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
@@ -224,7 +224,7 @@ export async function setCurrentResume(
 
 /** Unpin the user's current resume (if any). */
 export async function clearCurrentResume(userId: string): Promise<void> {
-  await query(
+  await queryAsUser(userId, 
     `UPDATE refinery_artifact SET is_current = false WHERE user_id = $1 AND is_current`,
     [userId]
   );
@@ -244,7 +244,7 @@ export async function lockBaseline(
 ): Promise<boolean> {
   const cleanLane =
     typeof lane === "string" && lane.trim() ? lane.trim().slice(0, 60) : null;
-  const rows = await query(
+  const rows = await queryAsUser(userId, 
     `UPDATE refinery_artifact
        SET is_locked = true, lane = COALESCE($3, lane),
            approved_at = COALESCE(approved_at, now())
@@ -260,7 +260,7 @@ export async function unlockBaseline(
   userId: string,
   artifactId: string
 ): Promise<boolean> {
-  const rows = await query(
+  const rows = await queryAsUser(userId, 
     `UPDATE refinery_artifact
        SET is_locked = false
      WHERE id = $1 AND user_id = $2 AND artifact_type = 'resume'
@@ -331,7 +331,7 @@ export async function listArtifactsPaged(
 
   const whereSql = where.join(" AND ");
 
-  const countRow = await getOne<{ total: string }>(
+  const countRow = await getOneAsUser<{ total: string }>(userId, 
     `SELECT COUNT(*)::text AS total FROM refinery_artifact WHERE ${whereSql}`,
     params
   );
@@ -340,7 +340,7 @@ export async function listArtifactsPaged(
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
   const pageParams = [...params, limit, offset];
-  const items = await query<RefineryArtifact>(
+  const items = await queryAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
       WHERE ${whereSql}
       ORDER BY is_current DESC, updated_at DESC
@@ -357,7 +357,7 @@ export async function listArtifactsPaged(
 export async function getArtifactCounts(
   userId: string
 ): Promise<Record<string, number>> {
-  const rows = await query<{ artifact_type: string; count: string }>(
+  const rows = await queryAsUser<{ artifact_type: string; count: string }>(userId, 
     `SELECT artifact_type, COUNT(*)::text AS count
      FROM refinery_artifact
      WHERE user_id = $1
@@ -460,7 +460,7 @@ export async function forkArtifact(opts: {
   const { userId, sourceArtifactId, reason, targetContext } = opts;
   const operationKey = opts.operationKey ?? null;
 
-  const rows = await query<RefineryArtifact>(ARTIFACT_FORK_SQL, [
+  const rows = await queryAsUser<RefineryArtifact>(userId, ARTIFACT_FORK_SQL, [
     sourceArtifactId,
     userId,
     targetContext ? JSON.stringify(targetContext) : null,
@@ -473,7 +473,7 @@ export async function forkArtifact(opts: {
   // Zero rows: either the source didn't exist/wasn't owned by this user, or
   // an operationKey collided with an existing fork (ON CONFLICT DO NOTHING).
   if (operationKey) {
-    const existing = await getOne<RefineryArtifact>(
+    const existing = await getOneAsUser<RefineryArtifact>(userId, 
       `SELECT * FROM refinery_artifact
        WHERE user_id = $1 AND parent_artifact_id = $2 AND operation_key = $3`,
       [userId, sourceArtifactId, operationKey]

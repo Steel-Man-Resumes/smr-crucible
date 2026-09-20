@@ -67,7 +67,7 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
   const [apps, answered, awaiting] = await runScoped<[AppRow[], AnsRow[], AckRow[], unknown[]]>(scope, (sql) => [
     run(sql)(
       `SELECT ja.user_id, u.name, ja.job_title, ja.company, ja.status, ja.follow_up_at
-         FROM job_application ja JOIN users u ON u.id = ja.user_id
+         FROM staff_shared_application ja JOIN users u ON u.id = ja.user_id
          JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
         WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
           AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
@@ -87,7 +87,7 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
     run(sql)(
       `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
        SELECT DISTINCT ja.user_id, 'staff', ($3::uuid)::text, 'shared:applications', 'org_work_queue', jsonb_build_object('orgId', ($1::uuid)::text)
-         FROM job_application ja JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
+         FROM staff_shared_application ja JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
         WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
           AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
                AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))

@@ -45,15 +45,15 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "applicationId is required" }, { status: 400 });
   }
 
-  const { getOne } = await import("@crucible/core");
+  const { getOneAsUser } = await import("@crucible/core");
 
   // Load the application -- ownership-checked (authoritative source for job facts).
-  const app = await getOne<{
+  const app = await getOneAsUser<{
     id: string;
     job_title: string;
     company: string;
     location: string | null;
-  }>(
+  }>(session.user.id, 
     `SELECT id, job_title, company, location
        FROM job_application WHERE id = $1 AND user_id = $2`,
     [applicationId, session.user.id]

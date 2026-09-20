@@ -150,7 +150,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     }),
     execute: async () => {
       try {
-        const { getUserProfile, getNextStep, query } = await import(
+        const { getUserProfile, getNextStep, queryAsUser } = await import(
           "@crucible/core"
         );
         const profile = await getUserProfile(userId);
@@ -158,7 +158,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           return "No profile yet -- this user has not finished the Forge, so there is no journey data to read.";
         }
         const next = await getNextStep(userId);
-        const jobs = await query<{
+        const jobs = await queryAsUser<{
           id: string;
           job_title: string;
           company: string;
@@ -167,7 +167,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           resume_artifact_id: string | null;
           created_at: string;
           status_updated_at: string;
-        }>(
+        }>(userId, 
           `SELECT id, job_title, company, status, follow_up_at, resume_artifact_id,
                   created_at, status_updated_at
              FROM job_application WHERE user_id = $1
@@ -289,10 +289,10 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     }),
     execute: async ({ jobId }) => {
       try {
-        const { getOne, insert, invalidateNextStep } = await import(
+        const { getOneAsUser, insertAsUser, invalidateNextStep } = await import(
           "@crucible/core"
         );
-        const existing = await getOne<{ id: string; status: string }>(
+        const existing = await getOneAsUser<{ id: string; status: string }>(userId, 
           `SELECT id, status FROM job_application WHERE user_id = $1 AND source_id = $2`,
           [userId, jobId]
         );
@@ -307,7 +307,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         if (!job) {
           return "That job is no longer in the current search results. Run search_jobs again, then save it by the new id.";
         }
-        const row = (await insert("job_application", {
+        const row = (await insertAsUser(userId, "job_application", {
           user_id: userId,
           job_title: job.title,
           company: job.company,
@@ -365,17 +365,17 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         if (!Number.isFinite(when) || when < today || when > yearOut) {
           return "The follow-up date must be between today and one year out. Ask the user for a date in that range.";
         }
-        const { getOne, query, invalidateNextStep } = await import(
+        const { getOneAsUser, queryAsUser, invalidateNextStep } = await import(
           "@crucible/core"
         );
-        const app = await getOne<{ id: string; job_title: string; company: string }>(
+        const app = await getOneAsUser<{ id: string; job_title: string; company: string }>(userId, 
           `SELECT id, job_title, company FROM job_application WHERE id = $1 AND user_id = $2`,
           [applicationId, userId]
         );
         if (!app) {
           return "No application with that id belongs to this user. Read get_my_live_status for the real list.";
         }
-        await query(
+        await queryAsUser(userId, 
           `UPDATE job_application SET follow_up_at = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
           [date, applicationId, userId]
         );

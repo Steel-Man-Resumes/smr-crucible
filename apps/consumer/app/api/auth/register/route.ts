@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { query, getOne, ensureUserAttribution } from "@crucible/core";
+import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
 import {
   checkAuthRateLimit,
@@ -242,18 +242,18 @@ export async function POST(request: Request) {
           city: "",
           state: "",
         };
-        const existingProfile = await getOne<{ profile_data: Record<string, any> }>(
+        const existingProfile = await getOneAsUser<{ profile_data: Record<string, any> }>(newUserId, 
           `SELECT profile_data FROM consumer_profile WHERE user_id = $1`,
           [newUserId]
         );
         if (existingProfile) {
           const profileData = { ...(existingProfile.profile_data || {}), contact };
-          await query(
+          await queryAsUser(newUserId, 
             `UPDATE consumer_profile SET profile_data = $1, updated_at = now() WHERE user_id = $2`,
             [JSON.stringify(profileData), newUserId]
           );
         } else {
-          await query(
+          await queryAsUser(newUserId, 
             `INSERT INTO consumer_profile (user_id, profile_data) VALUES ($1, $2)`,
             [newUserId, JSON.stringify({ contact })]
           );

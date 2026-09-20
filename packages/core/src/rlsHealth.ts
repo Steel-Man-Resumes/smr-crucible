@@ -33,6 +33,9 @@ export const RLS_PROTECTED_TABLES = [
   // participant-owned, owner only
   "vault_document",
   "user_progress_event",
+  "consumer_profile",
+  "refinery_artifact",
+  "job_application",
 ] as const;
 
 export interface RlsHealth {

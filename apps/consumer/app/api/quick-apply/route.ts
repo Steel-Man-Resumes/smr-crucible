@@ -62,10 +62,10 @@ async function handlePost(request: Request) {
     }
     const content = (artifact.content || {}) as Record<string, unknown>;
 
-    const { getOne, query: dbQuery, invalidateNextStep } = await import("@crucible/core");
+    const { getOneAsUser, queryAsUser, invalidateNextStep } = await import("@crucible/core");
 
     // (2) Verify ownership of the application (user-scoped select).
-    const application = await getOne<{ id: string }>(
+    const application = await getOneAsUser<{ id: string }>(userId, 
       `SELECT id FROM job_application WHERE id = $1 AND user_id = $2`,
       [applicationId, userId]
     );
@@ -74,7 +74,10 @@ async function handlePost(request: Request) {
     }
 
     // (3) Attach the resume to the application (ownership-scoped UPDATE).
-    await dbQuery(
+    // Owner-only under row-level security: written AS the person. This one was
+    // an aliased import (`query: dbQuery`), which both the converter and the
+    // first version of the lint walked past.
+    await queryAsUser(userId,
       `UPDATE job_application SET resume_artifact_id = $1, updated_at = NOW()
          WHERE id = $2 AND user_id = $3`,
       [artifactId, applicationId, userId]

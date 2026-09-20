@@ -57,7 +57,15 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { query, queryAsUser, getOne, listSecureObjectsForOwner, enqueueDeletion, deleteUserConversations, leaveAllOrgs } from "@crucible/core";
+import {
+  query,
+  queryAsUser,
+  getOne,
+  listSecureObjectsForOwner,
+  enqueueDeletion,
+  deleteUserConversations,
+  leaveAllOrgs,
+} from "@crucible/core";
 
 export async function DELETE(req: Request) {
   const session = await auth();
@@ -109,8 +117,8 @@ export async function DELETE(req: Request) {
 
     // Delete in dependency order (children first)
     // refinery_artifact has CASCADE on user_id, but be explicit
-    await query("DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
-    await query("DELETE FROM job_application WHERE user_id = $1", [userId]);
+    await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
+    await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     // ai_token_usage is the newer per-call token ledger (migration 022) that the
@@ -121,7 +129,7 @@ export async function DELETE(req: Request) {
     // Chunks cascade off their session rows; this deletes the sessions.
     await deleteUserConversations(userId);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
-    await query("DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
+    await queryAsUser(userId, "DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Progress events are the person's own activity history, and "delete my data"
     // never removed them unless the whole account went too. Row-level protected,
     // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.

@@ -12,7 +12,7 @@
  * Requires migration 016 (coach + onboarding columns) to be applied.
  */
 
-import { query, getOne } from "./db";
+import { getOne, queryAsUser, getOneAsUser } from "./db";
 import type { UserTier } from "./userTier";
 import { TAILORED_PROVENANCES } from "./applicationEvents";
 
@@ -155,14 +155,14 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   if (!user) return null;
 
   // 2. Consumer profile (Forge output)
-  const profile = await getOne<{
+  const profile = await getOneAsUser<{
     readiness_stage: string | null;
     profile_data: Record<string, unknown> | null;
     preferences: Record<string, unknown> | null;
     skills: unknown[] | null;
     career_paths: unknown[] | null;
     forge_output: Record<string, unknown> | null;
-  }>(
+  }>(userId, 
     `SELECT readiness_stage, profile_data, preferences, skills, career_paths, forge_output
      FROM consumer_profile WHERE user_id = $1`,
     [userId]
@@ -181,7 +181,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   // pre-filled Settings form). Without this fallback the gate flips existing
   // full_access users back to needs_profile (review finding, 2026-08-10).
   if (!contactPhone) {
-    const artifactPhone = await getOne<{ phone: string }>(
+    const artifactPhone = await getOneAsUser<{ phone: string }>(userId, 
       `SELECT content->'contact'->>'phone' AS phone
        FROM refinery_artifact
        WHERE user_id = $1 AND artifact_type = 'resume'
@@ -206,7 +206,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     : [];
 
   // 3. Saved jobs + application count
-  const jobs = await query<{
+  const jobs = await queryAsUser<{
     id: string;
     job_title: string;
     company: string;
@@ -215,7 +215,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     resume_artifact_id: string | null;
     has_tailored_doc: boolean;
     has_any_resume_doc: boolean;
-  }>(
+  }>(userId, 
     `SELECT j.id, j.job_title, j.company, j.status, j.follow_up_at, j.resume_artifact_id,
        EXISTS(
          SELECT 1 FROM application_document ad
@@ -252,11 +252,11 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   }));
 
   // 4. Artifact-derived signals (disclosure plan present; interview practice count)
-  const artifactStats = await getOne<{
+  const artifactStats = await getOneAsUser<{
     interview_total: string;
     interview_week: string;
     disclosure_count: string;
-  }>(
+  }>(userId, 
     `SELECT
        COUNT(*) FILTER (WHERE artifact_type = 'interview_prep') AS interview_total,
        COUNT(*) FILTER (WHERE artifact_type = 'interview_prep'

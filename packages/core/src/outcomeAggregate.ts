@@ -4,7 +4,7 @@
  * All reads log to data_access_log per governance requirement.
  */
 
-import { query, getOne, runPerOrg } from "./db";
+import { query, getOne, queryAsUser, getOneAsUser, runPerOrg } from "./db";
 
 /**
  * Run a query that joins access_code_redemption, scoped to the ONE
@@ -13,10 +13,12 @@ import { query, getOne, runPerOrg } from "./db";
  * it is a false statement about a partner. Callers are platform-admin routes;
  * they are scoped to each org in turn rather than given a see-everything rule.
  */
-async function queryForCode<T>(code: string, sqlText: string, params: unknown[]): Promise<T[]> {
+async function queryForCode<T>(adminUserId: string, code: string, sqlText: string, params: unknown[]): Promise<T[]> {
   const org = await getOne<{ id: string }>(`SELECT id FROM access_code WHERE code = $1`, [code]);
   if (!org) return [];
-  const out = await runPerOrg<T>([org.id], "", sqlText, () => params);
+  // The admin is the ACTOR: admin_job_application / admin_refinery_artifact answer
+  // only to someone in platform_admin, a table the application cannot write.
+  const out = await runPerOrg<T>([org.id], adminUserId, sqlText, () => params);
   return out.get(org.id) ?? [];
 }
 
@@ -57,63 +59,25 @@ export interface ConsentedCaseStudy {
  * Build the platform-wide funnel aggregate, optionally scoped to a partner code.
  * No PII -- all counts only.
  */
-export async function getFunnelAggregate(opts?: {
+export async function getFunnelAggregate(opts: {
   partnerCode?: string;
   fromDate?: Date;
   toDate?: Date;
-}): Promise<FunnelCounts> {
-  const dateFilter = buildDateFilter(opts);
-
-  if (opts?.partnerCode) {
-    // Scoped to users who redeemed this partner's code
-    const rows = await queryForCode<FunnelCounts>(
-      opts.partnerCode,
-      `SELECT
-        COUNT(DISTINCT fs.id) FILTER (WHERE fs.status IN ('in_progress', 'completed', 'abandoned'))
-          AS forge_sessions_started,
-        COUNT(DISTINCT fs.id) FILTER (WHERE fs.status = 'completed')
-          AS forge_sessions_completed,
-        COUNT(DISTINCT ra.user_id)
-          AS refinery_users,
-        COUNT(DISTINCT ja.id)
-          AS applications_logged,
-        COUNT(DISTINCT ja.id) FILTER (WHERE ja.status IN ('interviewing', 'heard_back', 'offered', 'hired', 'started_work'))
-          AS interviews,
-        COUNT(DISTINCT ja.id) FILTER (WHERE ja.status IN ('offered', 'hired', 'started_work'))
-          AS offers,
-        COUNT(DISTINCT ja.id) FILTER (WHERE ja.status IN ('hired', 'started_work'))
-          AS hires
-      FROM access_code ac
-      JOIN access_code_redemption acr ON acr.access_code_id = ac.id
-      LEFT JOIN forge_session fs ON fs.user_id = acr.user_id ${dateFilter ? `AND fs.started_at >= $2 AND fs.started_at <= $3` : ""}
-      LEFT JOIN refinery_artifact ra ON ra.user_id = acr.user_id
-      LEFT JOIN job_application ja ON ja.user_id = acr.user_id
-      WHERE ac.code = $1`,
-      opts.partnerCode
-        ? dateFilter
-          ? [opts.partnerCode, opts.fromDate, opts.toDate]
-          : [opts.partnerCode]
-        : []
-    );
-    return rows[0] ?? emptyFunnel();
-  }
-
-  // Platform-wide
-  const rows = await query<FunnelCounts>(
-    `SELECT
-      COUNT(DISTINCT id) FILTER (WHERE status IN ('in_progress', 'completed', 'abandoned'))
-        AS forge_sessions_started,
-      COUNT(DISTINCT id) FILTER (WHERE status = 'completed')
-        AS forge_sessions_completed,
-      (SELECT COUNT(DISTINCT user_id) FROM refinery_artifact) AS refinery_users,
-      (SELECT COUNT(*) FROM job_application) AS applications_logged,
-      (SELECT COUNT(*) FROM job_application WHERE status IN ('interviewing', 'heard_back', 'offered', 'hired', 'started_work')) AS interviews,
-      (SELECT COUNT(*) FROM job_application WHERE status IN ('offered', 'hired', 'started_work')) AS offers,
-      (SELECT COUNT(*) FROM job_application WHERE status IN ('hired', 'started_work')) AS hires
-    FROM forge_session`,
-    []
+} = {}): Promise<FunnelCounts> {
+  // Seven integers from a database function, and nothing about any person. The
+  // participant's tables are owner-only under row-level security, so there is no
+  // row-reading path left for a report to use -- including the nightly tracking
+  // sync, which runs with nobody signed in.
+  const useDates = buildDateFilter(opts);
+  const rows = await query<Record<keyof FunnelCounts, string | number>>(
+    `SELECT * FROM smr_funnel_counts($1, $2, $3)`,
+    [opts.partnerCode ?? null, useDates ? opts.fromDate : null, useDates ? opts.toDate : null]
   );
-  return rows[0] ?? emptyFunnel();
+  const r = rows[0];
+  if (!r) return emptyFunnel();
+  const out = emptyFunnel();
+  for (const k of Object.keys(out) as (keyof FunnelCounts)[]) (out[k] as number) = Number(r[k] ?? 0);
+  return out;
 }
 
 /**
@@ -139,11 +103,11 @@ export async function getPartnerBreakdowns(): Promise<PartnerBreakdown[]> {
 /**
  * Full aggregate report for the admin evidence dashboard.
  */
-export async function getAggregateReport(): Promise<AggregateReport> {
+export async function getAggregateReport(adminUserId: string): Promise<AggregateReport> {
   const [platform_funnel, by_partner, caseCount] = await Promise.all([
     getFunnelAggregate(),
     getPartnerBreakdowns(),
-    getConsentedCaseStudyCount(),
+    getConsentedCaseStudyCount(adminUserId),
   ]);
 
   return {
@@ -159,7 +123,9 @@ export async function getAggregateReport(): Promise<AggregateReport> {
  * Only returns records where the user has an active outcome consent scope.
  * NEVER returns a record without a matching consent row -- this is enforced at the query level.
  */
-export async function getConsentedCaseStudies(opts?: {
+export async function getConsentedCaseStudies(opts: {
+  /** The platform admin asking. */
+  adminUserId: string;
   limit?: number;
   partnerCode?: string;
   scope?: "outcome_anonymous" | "outcome_named";
@@ -171,6 +137,7 @@ export async function getConsentedCaseStudies(opts?: {
 
   if (opts?.partnerCode) {
     return queryForCode<ConsentedCaseStudy>(
+      opts.adminUserId,
       opts.partnerCode,
       `SELECT
         ja.id,
@@ -183,7 +150,7 @@ export async function getConsentedCaseStudies(opts?: {
         cc.consent_layer AS consent_scope,
         ac.partner_name,
         ja.created_at
-      FROM job_application ja
+      FROM admin_job_application ja
       JOIN consumer_consent cc ON cc.user_id = ja.user_id ${scopeFilter} AND cc.status = 'granted'
       JOIN "user" u ON u.id = ja.user_id
       JOIN access_code_redemption acr ON acr.user_id = ja.user_id
@@ -195,7 +162,8 @@ export async function getConsentedCaseStudies(opts?: {
     );
   }
 
-  const studies = await query<ConsentedCaseStudy & { owner_user_id?: string }>(
+  const studies = await queryAsUser<ConsentedCaseStudy & { owner_user_id?: string }>(
+    opts.adminUserId,
     `SELECT
       ja.id,
       CASE WHEN cc.consent_layer = 'outcome_named'
@@ -208,7 +176,7 @@ export async function getConsentedCaseStudies(opts?: {
       NULL::text AS partner_name,
       ja.user_id AS owner_user_id,
       ja.created_at
-    FROM job_application ja
+    FROM admin_job_application ja
     JOIN consumer_consent cc ON cc.user_id = ja.user_id ${scopeFilter} AND cc.status = 'granted'
     JOIN "user" u ON u.id = ja.user_id
     WHERE ja.status IN ('hired', 'started_work')
@@ -228,7 +196,7 @@ export async function getConsentedCaseStudies(opts?: {
     );
     const members = await runPerOrg<{ user_id: string }>(
       orgs.map((o) => o.id),
-      "",
+      opts.adminUserId,
       `SELECT user_id FROM access_code_redemption WHERE access_code_id = $1 AND user_id = ANY($2::uuid[])`,
       (orgId) => [orgId, owners]
     );
@@ -245,10 +213,11 @@ export async function getConsentedCaseStudies(opts?: {
   return studies.map(({ owner_user_id: _owner, ...rest }) => rest as ConsentedCaseStudy);
 }
 
-async function getConsentedCaseStudyCount(): Promise<number> {
-  const row = await getOne<{ count: string }>(
+async function getConsentedCaseStudyCount(adminUserId: string): Promise<number> {
+  const row = await getOneAsUser<{ count: string }>(
+    adminUserId,
     `SELECT COUNT(DISTINCT ja.id) AS count
-     FROM job_application ja
+     FROM admin_job_application ja
      JOIN consumer_consent cc ON cc.user_id = ja.user_id
        AND cc.consent_layer IN ('outcome_anonymous', 'outcome_named')
        AND cc.status = 'granted'

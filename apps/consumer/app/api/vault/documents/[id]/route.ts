@@ -15,7 +15,7 @@ import { auth } from "@/auth";
 import {
   updateVaultDocument,
   deleteVaultDocument,
-  getOne,
+  getOneAsUser,
   isVaultCategory,
 } from "@crucible/core";
 
@@ -68,7 +68,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       patch.linkedJobId = null;
     } else if (typeof body.linkedJobId === "string") {
       // Only accept a job this user owns; anything else unlinks.
-      const owned = await getOne<{ id: string }>(
+      const owned = await getOneAsUser<{ id: string }>(userId, 
         "SELECT id FROM job_application WHERE id = $1 AND user_id = $2",
         [body.linkedJobId.trim(), userId]
       );

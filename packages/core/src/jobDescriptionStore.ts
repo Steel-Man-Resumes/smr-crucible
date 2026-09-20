@@ -8,7 +8,7 @@
  * source to read from.
  */
 
-import { getOne } from "./db";
+import { getOneAsUser } from "./db";
 import type { JdSnapshot } from "./jobDescription";
 
 /**
@@ -21,7 +21,7 @@ export async function getJdSnapshot(
   userId: string,
   applicationId: string
 ): Promise<JdSnapshot | null> {
-  const row = await getOne<JdSnapshot>(
+  const row = await getOneAsUser<JdSnapshot>(userId, 
     `SELECT jd_full_text, jd_excerpt, jd_source_url, jd_source_provider,
             jd_fetched_at, jd_hash, jd_truncated
        FROM job_application

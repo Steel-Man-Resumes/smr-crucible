@@ -6,7 +6,7 @@
  * Post-auth: data synced to consumer_profile + forge_session tables.
  */
 
-import { query, getOne } from "./db";
+import { query, queryAsUser, getOneAsUser } from "./db";
 
 export interface ForgeSessionSaveData {
   readinessStage?: string;
@@ -34,7 +34,7 @@ export async function saveForgeSession(
   data: ForgeSessionSaveData
 ): Promise<void> {
   // Upsert consumer_profile
-  await query(
+  await queryAsUser(userId, 
     `INSERT INTO consumer_profile (user_id, readiness_stage, profile_data, narrative_data, preferences, skills, career_paths, forge_output)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id) DO UPDATE SET
@@ -113,7 +113,7 @@ export async function saveForgeSession(
 export async function loadForgeProfile(
   userId: string
 ): Promise<ForgeSessionSaveData | null> {
-  const profile = await getOne<{
+  const profile = await getOneAsUser<{
     readiness_stage: string | null;
     profile_data: Record<string, unknown>;
     narrative_data: Record<string, unknown>;
@@ -121,7 +121,7 @@ export async function loadForgeProfile(
     skills: Array<{ name: string; category: string }>;
     career_paths: Array<Record<string, unknown>>;
     forge_output: Record<string, unknown> | null;
-  }>(
+  }>(userId, 
     `SELECT readiness_stage, profile_data, narrative_data, preferences, skills, career_paths, forge_output
      FROM consumer_profile WHERE user_id = $1`,
     [userId]

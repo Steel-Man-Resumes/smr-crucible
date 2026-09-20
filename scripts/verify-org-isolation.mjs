@@ -373,6 +373,87 @@ async function main() {
   await todayAndTaskChecks();
   await outcomeChecks();
   await ownerOnlyChecks();
+  await participantTableChecks();
+}
+
+/**
+ * Applications, resumes/letters/plans and profiles (060): owner-only base
+ * tables; staff and platform admins read through views that name their columns.
+ * The claim: however the application is written, an organization cannot read
+ * unshared work, another org's work, or a private column.
+ */
+async function participantTableChecks() {
+  console.log("\n  -- the participant's own work --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const [{ on }] = await sql`SELECT bool_and(relrowsecurity AND relforcerowsecurity) AS on FROM pg_class WHERE relname IN ('job_application', 'refinery_artifact', 'consumer_profile') AND relnamespace = 'public'::regnamespace`;
+  if (!on) { console.log("  note  060 not applied; skipped"); return; }
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const owner = await mkUser("z-owner"), owner2 = await mkUser("z-owner2"), cm = await mkUser("z-cm");
+  const mk = async (l, o) => { const [r] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOZ" + l + uniq}, ${P + " z" + l}, 'client', ${o}, true, true) RETURNING id, code`; created.codes.push(r.id); return r; };
+  const org = await mk("A", owner), org2 = await mk("B", owner2);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff')`;
+  const pat = await mkUser("z-pat"), other = await mkUser("z-other");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+
+  // -- the person's own path still works, end to end, AS them
+  const art = await core.createArtifact(pat, "resume", { targetJob: "Cook" }, { marker: "Z-RESUME" }).catch((e) => ({ error: String(e) }));
+  check("a participant can create a resume", !!art.id, JSON.stringify(art).slice(0, 160));
+  await core.createArtifact(pat, "disclosure_plan", {}, { marker: "Z-DISCLOSURE" });
+  check("and list and open their own", (await core.listArtifacts(pat)).length === 2 && (await core.getArtifact(art.id, pat))?.id === art.id);
+  check("somebody else cannot open it, even knowing its id", (await core.getArtifact(art.id, other)) === null);
+  check("somebody else cannot delete it", (await core.deleteArtifact(art.id, other)) === "not_found");
+  await app.transaction([app`SELECT set_config('app.user_id', ${pat}, true)`,
+    app`INSERT INTO job_application (user_id, job_title, company, status, notes, salary) VALUES (${pat}, 'Cook', 'Z Diner', 'applied', 'Z-PRIVATE-NOTE', 'Z-SALARY')`]);
+  check("their profile snapshot still builds", (await core.buildJourneySnapshot(pat).catch((e) => ({ error: String(e) }))).error === undefined);
+  const forge = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${other}, true)`,
+    app`INSERT INTO job_application (user_id, job_title, company, status) VALUES (${pat}, 'Forged', 'Forged Co', 'saved')`]));
+  check("nobody can write an application into another person's tracker", !!forge && /row-level security/i.test(forge), forge ?? "inserted");
+
+  // -- the base tables are closed to everyone else, by any route the app role has
+  const [u1] = await app`SELECT (SELECT count(*) FROM job_application)::int AS a, (SELECT count(*) FROM refinery_artifact)::int AS b, (SELECT count(*) FROM consumer_profile)::int AS c`;
+  check("an unscoped read by the app sees no applications, no resumes, no profiles", u1.a === 0 && u1.b === 0 && u1.c === 0, JSON.stringify(u1));
+  const asOrg = (orgId, actor, q) => app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${actor}, true)`, q]);
+  const base = await asOrg(org.id, cm, app`SELECT count(*)::int AS n FROM job_application WHERE user_id = ${pat}`);
+  check("their own case manager, scoped to their org, reads NOTHING from the base table", base[2][0].n === 0);
+  const before = await asOrg(org.id, cm, app`SELECT count(*)::int AS n FROM staff_shared_application WHERE user_id = ${pat}`);
+  check("and nothing through the staff view either, until it is shared", before[2][0].n === 0);
+
+  await core.grantSharing(pat, org.id, "applications"); await core.grantSharing(pat, org.id, "resume");
+  const v = await asOrg(org.id, cm, app`SELECT * FROM staff_shared_application WHERE user_id = ${pat}`);
+  check("once shared, the view returns it, and the private columns do not exist there", v[2].length === 1 && !("notes" in v[2][0]) && !("salary" in v[2][0]) && !JSON.stringify(v[2]).includes("Z-PRIVATE"));
+  const noteGrab = await raised(() => asOrg(org.id, cm, app`SELECT notes FROM staff_shared_application WHERE user_id = ${pat}`));
+  check("asking the view for the private notes column is an error, not an empty answer", !!noteGrab && /column .*notes.* does not exist/i.test(noteGrab), noteGrab ?? "returned rows");
+  const stillClosed = await asOrg(org.id, cm, app`SELECT count(*)::int AS n FROM job_application WHERE user_id = ${pat}`);
+  check("the base table stays closed to staff even after sharing", stillClosed[2][0].n === 0);
+  const arts = await asOrg(org.id, cm, app`SELECT artifact_type, content FROM staff_shared_artifact WHERE user_id = ${pat}`);
+  check("the artifact view returns the shared resume and can never return a disclosure plan",
+    arts[2].length === 1 && arts[2][0].artifact_type === "resume" && !JSON.stringify(arts[2]).includes("Z-DISCLOSURE"));
+  const otherOrg = await asOrg(org2.id, owner2, app`SELECT (SELECT count(*) FROM staff_shared_application)::int AS a, (SELECT count(*) FROM staff_shared_artifact)::int AS b, (SELECT count(*) FROM staff_progress_counts)::int AS c`);
+  check("another organization gets nothing from any of the three views", otherOrg[2][0].a === 0 && otherOrg[2][0].b === 0 && otherOrg[2][0].c === 0, JSON.stringify(otherOrg[2][0]));
+  check("progress counts appear only for someone with the progress switch on", (await asOrg(org.id, cm, app`SELECT count(*)::int AS n FROM staff_progress_counts WHERE user_id = ${pat}`))[2][0].n === 0);
+  await joinCohortConsent(pat);
+  const pc = await asOrg(org.id, cm, app`SELECT applications, practice_sessions FROM staff_progress_counts WHERE user_id = ${pat}`);
+  check("with it on: counts, and only counts", pc[2].length === 1 && pc[2][0].applications === 1);
+  const cohort = await core.getPartnerCohort(owner, { accessCodeId: org.id });
+  check("the caseload still shows the right application count through the view", cohort.clients.find((c) => c.userId === pat)?.applications === 1, JSON.stringify(cohort.clients.map((c) => [c.userId === pat, c.applications])));
+
+  // -- platform admin views answer to platform_admin, a table the app cannot write
+  const boss = await mkUser("z-admin");
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+  const asUser = (u, q) => app.transaction([app`SELECT set_config('app.user_id', ${u}, true)`, q]);
+  check("the admin view is empty for someone who is not a platform admin", (await asUser(cm, app`SELECT count(*)::int AS n FROM admin_job_application`))[1][0].n === 0);
+  const adm = await asUser(boss, app`SELECT * FROM admin_job_application WHERE user_id = ${pat}`);
+  check("a platform admin sees that the row exists, and no content column", adm[1].length === 1 && !("notes" in adm[1][0]) && !("salary" in adm[1][0]) && !("description" in adm[1][0]));
+  const health = await core.getSystemHealth(boss).catch((e) => ({ error: String(e) }));
+  check("the admin health report still counts applications and resumes", !health.error, String(health.error ?? ""));
+  const funnel = await core.getFunnelAggregate({ partnerCode: org.code });
+  check("the funnel report gets its seven counts with nobody signed in (the nightly sync)", funnel.applications_logged === 1 && funnel.refinery_users === 1, JSON.stringify(funnel));
+  await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
+  await sql`DELETE FROM job_application WHERE user_id = ${pat}`; await sql`DELETE FROM refinery_artifact WHERE user_id = ${pat}`;
 }
 
 /** Participant-owned tables with owner-only policies (059): nobody but the person, by any route the app has. */

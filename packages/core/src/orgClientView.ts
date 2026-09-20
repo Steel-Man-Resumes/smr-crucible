@@ -172,16 +172,14 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
       // consent: the person's own "share my progress" switch.
       run(sql)(
         `SELECT u.next_step_cache->>'action' AS next_step_action,
-                (SELECT COUNT(*)::int FROM job_application ja WHERE ja.user_id = u.id AND ja.status <> 'saved') AS applications,
-                (SELECT COUNT(*)::int FROM job_application ja WHERE ja.user_id = u.id AND ja.status = 'saved') AS saved_jobs,
-                (SELECT COUNT(*)::int FROM refinery_artifact ra WHERE ra.user_id = u.id AND ra.artifact_type = 'interview_prep') AS practice_sessions,
-                EXISTS (SELECT 1 FROM job_application ja WHERE ja.user_id = u.id AND ja.resume_artifact_id IS NOT NULL) AS has_tailored,
+                pc.applications, pc.saved_jobs, pc.practice_sessions, pc.has_resume_tailored AS has_tailored,
                 GREATEST(COALESCE(u.next_step_cached_at, to_timestamp(0)),
-                         COALESCE((SELECT MAX(updated_at) FROM job_application ja WHERE ja.user_id = u.id), to_timestamp(0)),
-                         COALESCE((SELECT MAX(updated_at) FROM refinery_artifact ra WHERE ra.user_id = u.id), to_timestamp(0))) AS last_active_at
+                         COALESCE(pc.last_application_at, to_timestamp(0)),
+                         COALESCE(pc.last_artifact_at, to_timestamp(0))) AS last_active_at
            FROM users u
-          WHERE u.id = $1::uuid AND ${IN_REACH}
-            AND EXISTS (SELECT 1 FROM consumer_consent cc WHERE cc.user_id = u.id AND cc.consent_layer = 'sharing' AND cc.status = 'granted')`,
+           -- INNER join: the view has a row only for someone with progress sharing on.
+           JOIN staff_progress_counts pc ON pc.user_id = u.id
+          WHERE u.id = $1::uuid AND ${IN_REACH}`,
         params(actor, clientId)
       ),
     ]
@@ -260,12 +258,13 @@ export interface SharedApplication {
 export function getClientApplications(actor: OrgActor, clientId: string) {
   return readShared<SharedApplication>(
     actor, clientId, "applications",
+    // staff_shared_application is a VIEW (migration 060). The base table is
+    // owner-only, and the view has no notes, salary, description or saved
+    // posting in it -- so those are out of reach however this is written.
     `SELECT ja.id, ja.job_title, ja.company, ja.location, ja.employment_type, ja.status,
             ja.status_updated_at, ja.applied_at, ja.follow_up_at, ja.hired_at, ja.apply_url,
-            (ja.resume_artifact_id IS NOT NULL) AS has_tailored_resume,
-            (ja.cover_letter_artifact_id IS NOT NULL) AS has_cover_letter,
-            ja.created_at, ja.updated_at
-       FROM job_application ja
+            ja.has_tailored_resume, ja.has_cover_letter, ja.created_at, ja.updated_at
+       FROM staff_shared_application ja
       WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")}`
   );
 }
@@ -297,7 +296,7 @@ function artifactLibrary(actor: OrgActor, clientId: string, scope: SharingScope,
   return readShared<SharedArtifact>(
     actor, clientId, scope,
     `SELECT ra.id, ra.lane, ra.is_current, ra.is_locked, ra.target_context, ra.content, ra.updated_at, ra.approved_at
-       FROM refinery_artifact ra
+       FROM staff_shared_artifact ra
       WHERE ra.user_id = $1::uuid AND ra.artifact_type = '${artifactType}' AND ${covered("ra.created_at")}`
   );
 }
@@ -533,7 +532,7 @@ export async function commentOnArtifact(actor: OrgActor, clientId: string, artif
       run(sql)(
         `INSERT INTO staff_suggestion (access_code_id, client_user_id, author_user_id, kind, artifact_id, quote, body)
          SELECT $2::uuid, $1::uuid, $4::uuid, 'comment', ra.id, $7, $8
-           FROM refinery_artifact ra
+           FROM staff_shared_artifact ra
           WHERE ra.id = $6::uuid AND ra.user_id = $1::uuid AND ra.artifact_type = '${type}'
             AND ${IN_REACH} AND ${SHARED} AND ${covered("ra.created_at")}
          RETURNING id`,

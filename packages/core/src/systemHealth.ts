@@ -7,7 +7,7 @@
  * AI keys + R2) as well as served by the admin route.
  */
 
-import { query, getOne } from "./db";
+import { query, getOne, getOneAsUser } from "./db";
 
 export type HealthStatus = "ok" | "warn" | "error" | "info";
 
@@ -36,20 +36,30 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 6000): Prom
   }
 }
 
-export async function getSystemHealth(): Promise<HealthReport> {
+/**
+ * `adminUserId`: the platform admin asking. Row counts of participant-owned
+ * tables come from admin views that answer only to someone in platform_admin.
+ * Omitted (a terminal script run as the database owner), the base tables are used.
+ */
+export async function getSystemHealth(adminUserId?: string): Promise<HealthReport> {
   const checks: HealthCheck[] = [];
   const add = (group: string, name: string, status: HealthStatus, detail: string) =>
     checks.push({ group, name, status, detail });
 
   // --- Database ---
   try {
-    const counts = await getOne<{
+    const appsFrom = adminUserId ? "admin_job_application" : "job_application";
+    const artifactsFrom = adminUserId ? "admin_refinery_artifact" : "refinery_artifact";
+    // rls-lint-ok(job_application): only when no admin id is given, i.e. a terminal script connected as the database owner
+    // rls-lint-ok(refinery_artifact): only when no admin id is given, i.e. a terminal script connected as the database owner
+    const run = <T,>(sqlText: string) => (adminUserId ? getOneAsUser<T>(adminUserId, sqlText) : getOne<T>(sqlText));
+    const counts = await run<{
       users: string; apps: string; artifacts: string; codes: string; consents: string;
     }>(
       `SELECT
          (SELECT COUNT(*) FROM users)::text AS users,
-         (SELECT COUNT(*) FROM job_application)::text AS apps,
-         (SELECT COUNT(*) FROM refinery_artifact)::text AS artifacts,
+         (SELECT COUNT(*) FROM ${appsFrom})::text AS apps,
+         (SELECT COUNT(*) FROM ${artifactsFrom})::text AS artifacts,
          (SELECT COUNT(*) FROM access_code)::text AS codes,
          (SELECT COUNT(*) FROM consumer_consent)::text AS consents`
     );

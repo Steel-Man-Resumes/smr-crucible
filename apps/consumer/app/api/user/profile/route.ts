@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { query, getOne } from "@crucible/core";
+import { query, queryAsUser, getOneAsUser } from "@crucible/core";
 import { formatPhoneUS } from "@/lib/phone";
 
 export interface UserContact {
@@ -40,10 +40,10 @@ export async function GET() {
   if (session.user?.email) contact.email = session.user.email;
 
   // Source 2: consumer_profile.profile_data.contact (explicit saves)
-  const profile = await getOne<{
+  const profile = await getOneAsUser<{
     profile_data: Record<string, any>;
     forge_output: Record<string, any> | null;
-  }>(
+  }>(userId, 
     `SELECT profile_data, forge_output FROM consumer_profile WHERE user_id = $1`,
     [userId]
   );
@@ -61,7 +61,7 @@ export async function GET() {
   // Prefer the BASE resume (source='forge') -- it holds what the user typed
   // about themselves; a tailored artifact's contact is derived and circular.
   if (!contact.phone || !contact.city) {
-    const artifact = await getOne<{ content: Record<string, any> }>(
+    const artifact = await getOneAsUser<{ content: Record<string, any> }>(userId, 
       `SELECT content FROM refinery_artifact
        WHERE user_id = $1 AND artifact_type = 'resume'
        ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
@@ -119,19 +119,19 @@ export async function PATCH(request: Request) {
 
   try {
     // Upsert consumer_profile with contact in profile_data
-    const existing = await getOne<{ profile_data: Record<string, any> }>(
+    const existing = await getOneAsUser<{ profile_data: Record<string, any> }>(userId, 
       `SELECT profile_data FROM consumer_profile WHERE user_id = $1`,
       [userId]
     );
 
     if (existing) {
       const profileData = { ...(existing.profile_data || {}), contact };
-      await query(
+      await queryAsUser(userId, 
         `UPDATE consumer_profile SET profile_data = $1, updated_at = now() WHERE user_id = $2`,
         [JSON.stringify(profileData), userId]
       );
     } else {
-      await query(
+      await queryAsUser(userId, 
         `INSERT INTO consumer_profile (user_id, profile_data) VALUES ($1, $2)`,
         [userId, JSON.stringify({ contact })]
       );

@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { query } from "@crucible/core";
+import { query, queryAsUser } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export async function GET(request: Request) {
@@ -17,11 +17,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").trim().toLowerCase();
 
-  const users = await query(
+  // Run AS the admin: the application count comes through an admin view, and
+  // the base table is owner-only under row-level security.
+  const users = await queryAsUser(
+    guard.userId,
     `SELECT u.id, u.name, u.email, u.tier, u.current_stage, u.created_at,
             (SELECT MAX(atu.created_at) FROM ai_token_usage atu WHERE atu.user_id = u.id) AS last_ai_at,
             COALESCE((SELECT SUM(atu.cost_usd) FROM ai_token_usage atu WHERE atu.user_id = u.id), 0)::numeric(12,4) AS ai_cost_usd,
-            (SELECT COUNT(*) FROM job_application ja WHERE ja.user_id = u.id)::int AS applications,
+            -- admin_job_application: a view that answers only to someone in platform_admin
+            (SELECT COUNT(*) FROM admin_job_application ja WHERE ja.user_id = u.id)::int AS applications,
             NULL::text AS joined_via
        FROM users u
       WHERE ($1 = '' OR LOWER(COALESCE(u.email,'')) LIKE '%' || $1 || '%'
