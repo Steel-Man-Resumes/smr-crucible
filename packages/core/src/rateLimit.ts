@@ -225,10 +225,38 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
     [userId]
   );
 
-  if (!row) return DEFAULT_DAILY_LIMIT;
+  if (!row) {
+    // ORG STAFF AND OWNERS NEVER REDEEM A CODE -- they are attached to the
+    // organization through org_staff or by owning it -- so this lookup found
+    // nothing and handed a working case manager the anonymous job-seeker
+    // allowance, then told them to "enter a partner code". Their allowance
+    // comes from the organization they work for.
+    return (await getOrgMemberDailyLimit(userId)) ?? DEFAULT_DAILY_LIMIT;
+  }
   if (row.tier === "admin" || row.tier === "unlimited") return 0; // 0 = unlimited
   // 'partner' and 'client' codes both carry their minted daily_limit
   return row.daily_limit ?? 200;
+}
+
+/** Staff work a caseload all day; the floor is a working day, not a trial. */
+export const ORG_MEMBER_DAILY_FLOOR = 200;
+
+/**
+ * Daily limit for somebody who belongs to an organization, or null if they do
+ * not. Resolved through resolveOrgActor so the membership rules (owner wins,
+ * org_staff read as the user under row-level security) live in one place.
+ */
+export async function getOrgMemberDailyLimit(userId: string): Promise<number | null> {
+  const { resolveOrgActor } = await import("./authz/resolveOrgActor");
+  const actor = await resolveOrgActor(userId).catch(() => null);
+  if (!actor) return null;
+  const code = await getOne<{ tier: string; daily_limit: number | null }>(
+    `SELECT tier, daily_limit FROM access_code WHERE id = $1`,
+    [actor.orgId]
+  );
+  if (!code) return ORG_MEMBER_DAILY_FLOOR;
+  if (code.tier === "admin" || code.tier === "unlimited") return 0; // 0 = unlimited
+  return Math.max(code.daily_limit ?? ORG_MEMBER_DAILY_FLOOR, ORG_MEMBER_DAILY_FLOOR);
 }
 
 /**

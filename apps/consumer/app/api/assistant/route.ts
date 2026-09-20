@@ -47,6 +47,9 @@ export const maxDuration = 60;
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";
 
+const ORG_RATE_LIMIT_MESSAGE =
+  "You've reached today's assistant limit for your account. It resets at midnight. If your team regularly needs more, tell us and we will raise it.";
+
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
@@ -62,7 +65,14 @@ export async function POST(request: Request) {
     const limit = await getUserDailyLimit(userId);
     const newCount = await incrementUserUsage(userId, "assistant");
     if (limit !== 0 && newCount > limit) {
-      return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+      // "Enter a partner code" is advice for a job seeker. Somebody at work for
+      // an organization needs to know it resets and who can raise it.
+      const { getOrgMemberDailyLimit } = await import("@crucible/core");
+      const isOrgMember = (await getOrgMemberDailyLimit(userId).catch(() => null)) !== null;
+      return NextResponse.json(
+        { error: isOrgMember ? ORG_RATE_LIMIT_MESSAGE : RATE_LIMIT_MESSAGE },
+        { status: 429 }
+      );
     }
   } else {
     // Pre-auth (Forge flow): IP-rate-limited (atomic increment-then-check)
