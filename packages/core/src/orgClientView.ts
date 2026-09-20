@@ -298,3 +298,93 @@ export async function addClientNote(actor: OrgActor, clientId: string, input: {
   ]);
   return made[0] ? { ok: true, id: made[0].id } : { ok: false, error: "That person is not on your caseload." };
 }
+
+/* ------------------------------------------------ across the whole caseload -- */
+
+/** "In my reach" for a row that names its participant as `WHO` ($1 org, $2 sees-all, $3 actor). */
+const reachOf = (who: string) => `
+  ($2::boolean OR EXISTS (
+     SELECT 1 FROM client_staff_assignment a
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
+
+function listParams(actor: OrgActor) {
+  return [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId];
+}
+
+export interface OrgSharingRequest {
+  id: string;
+  client_user_id: string;
+  client_name: string | null;
+  scope: string;
+  reason: string;
+  status: "pending" | "approved" | "declined" | "cancelled";
+  requested_by: string | null;
+  requested_by_name: string | null;
+  created_at: string;
+  answered_at: string | null;
+}
+
+/**
+ * Every ask made of people on this actor's caseload, newest first. A decline is
+ * shown as a decline and nothing more: the participant is promised that staff
+ * are not told why, and there is no "why" stored to tell.
+ */
+export async function listSharingRequests(actor: OrgActor): Promise<ClientViewResult<OrgSharingRequest>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[OrgSharingRequest[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `SELECT sr.id, sr.user_id AS client_user_id, u.name AS client_name, sr.scope, sr.reason, sr.status,
+              sr.requested_by, rb.name AS requested_by_name, sr.created_at, sr.answered_at
+         FROM sharing_request sr
+         JOIN users u ON u.id = sr.user_id
+         LEFT JOIN users rb ON rb.id = sr.requested_by
+        WHERE sr.access_code_id = $1::uuid AND ${reachOf("sr.user_id")}
+        ORDER BY (sr.status = 'pending') DESC, sr.created_at DESC LIMIT 200`,
+      listParams(actor)
+    ),
+  ]);
+  return { ok: true, rows: rows.filter((r) => isSharingScope(r.scope)) };
+}
+
+/** Take back an ask that has not been answered. Your own, or any if you see the whole cohort. */
+export async function withdrawSharingRequest(actor: OrgActor, requestId: string): Promise<{ ok: boolean }> {
+  if (refuseActor(actor) || !actor.capabilities.has("org.client.request_sharing")) return { ok: false };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `UPDATE sharing_request SET status = 'cancelled'
+        WHERE id = $4::uuid AND access_code_id = $1::uuid AND status = 'pending'
+          AND ($2::boolean OR requested_by = $3::uuid)
+        RETURNING id`,
+      [...listParams(actor), requestId]
+    ),
+  ]);
+  return { ok: rows.length > 0 };
+}
+
+export interface OrgNote extends CaseNote {
+  client_user_id: string;
+  client_name: string | null;
+}
+
+/** The record across this actor's caseload, newest first. */
+export async function listRecentNotes(actor: OrgActor, limit = 100): Promise<ClientViewResult<OrgNote>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[OrgNote[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `SELECT n.id, n.client_user_id, c.name AS client_name, n.kind, n.body, n.occurred_at,
+              u.name AS author_name, n.author_user_id, n.visible_to_participant, n.drafted_by_assistant, n.edited_at
+         FROM case_note n
+         JOIN users c ON c.id = n.client_user_id
+         LEFT JOIN users u ON u.id = n.author_user_id
+        WHERE n.access_code_id = $1::uuid AND ${reachOf("n.client_user_id")}
+        ORDER BY n.occurred_at DESC LIMIT ${Math.max(1, Math.min(500, Math.floor(limit)))}`,
+      listParams(actor)
+    ),
+  ]);
+  return { ok: true, rows };
+}

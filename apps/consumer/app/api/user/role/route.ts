@@ -36,6 +36,14 @@ export async function GET() {
   // tables currently disagree with each other; this is what replaces them.
   const actor = org ? await resolveOrgActor(userId).catch(() => null) : null;
 
+  // Is the per-participant workspace switched on for this organization? The
+  // shell uses it to choose which staff navigation to show.
+  const flag = actor
+    ? await (await import("@crucible/core"))
+        .getOne<{ crm_v2: boolean }>(`SELECT crm_v2 FROM access_code WHERE id = $1`, [actor.orgId])
+        .catch(() => null)
+    : null;
+
   const impersonation = (session as { impersonation?: { mode: "view" | "assist" } })
     .impersonation;
 
@@ -46,6 +54,7 @@ export async function GET() {
       orgName: org?.orgName ?? null,
       capabilities: actor ? Array.from(actor.capabilities) : [],
       cohortReach: actor?.reach ?? "none",
+      crmV2: !!flag?.crm_v2,
       impersonating: impersonation ? { mode: impersonation.mode } : null,
     },
   });

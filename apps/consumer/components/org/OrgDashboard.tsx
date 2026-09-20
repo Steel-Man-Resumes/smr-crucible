@@ -36,6 +36,14 @@ import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformanc
 // Deep import: canonical stage vocabulary without dragging the core barrel
 // (db/pg) into the client bundle.
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
+import {
+  DEFAULT_STAFF_PREFS,
+  CASELOAD_SORTS,
+  CASELOAD_SORT_LABELS,
+  type CaseloadColumn,
+  type CaseloadSort,
+  type StaffPrefs,
+} from "@crucible/core/src/staffPrefsShared";
 
 const STAGE_LABELS = JOURNEY_STAGES.map((s) => s.long);
 
@@ -135,7 +143,19 @@ function StatusBadge({ status }: { status: ClientStatus }) {
   return <span className={`px-2 py-0.5 border text-xs font-medium ${cls}`}>{label}</span>;
 }
 
-export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
+/**
+ * Which part of the console to show. The console grew as ONE long page with
+ * jump-links; in the staff workspace each part is its own destination.
+ *   all       everything, as it always was (organizations without crm_v2)
+ *   caseload  the people: numbers, where to start, the client list
+ *   team      staff, roles, seats, and the per-staff drill-down
+ *   add       invite a participant, and pending invites
+ */
+export type OrgDashboardView = "all" | "caseload" | "team" | "add";
+
+const STATUS_RANK: Record<ClientStatus, number> = { behind: 0, steady: 1, active: 2, hired: 3 };
+
+export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { codeId?: string; view?: OrgDashboardView }) {
   // WRITES MUST TARGET THE ORGANIZATION ON SCREEN.
   //
   // Reads passed ?codeId= and writes did not, so a platform admin viewing
@@ -148,6 +168,32 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
   const canView = tier === "partner" || tier === "admin";
   const [data, setData] = useState<OrgPayload | null>(null);
   const [legacyCohort, setLegacyCohort] = useState<Cohort | null>(null);
+  // In the staff workspace the home page IS the caseload; Team and Add
+  // participants have their own destinations in the nav. Everywhere else the
+  // home page stays the whole console, exactly as it was.
+  const view: OrgDashboardView = requestedView === "all" && data?.crmV2 ? "caseload" : requestedView;
+  // How this person likes their caseload arranged (Settings -> My workflow).
+  // Defaults until it loads, so the table never waits on a preference.
+  const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
+  const [sort, setSort] = useState<CaseloadSort | null>(null);
+  const [find, setFind] = useState("");
+  useEffect(() => {
+    fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
+  }, []);
+  const activeSort = sort ?? prefs.caseloadSort;
+  const hidden = (c: CaseloadColumn) => prefs.caseloadHidden.includes(c);
+  const sortRows = (rows: CohortClient[]) => {
+    const t = (v: string | null) => (v ? new Date(v).getTime() || 0 : 0);
+    const byName = (a: CohortClient, b: CohortClient) => (a.name || "").localeCompare(b.name || "");
+    const out = [...rows];
+    if (activeSort === "name") out.sort(byName);
+    else if (activeSort === "last_active") out.sort((a, b) => t(b.lastActiveAt) - t(a.lastActiveAt) || byName(a, b));
+    else if (activeSort === "stage") out.sort((a, b) => b.currentStage - a.currentStage || byName(a, b));
+    // "Who needs me first": quiet people, then steady, then active, then hired;
+    // inside each, whoever has been quiet longest comes first.
+    else out.sort((a, b) => STATUS_RANK[clientStatus(a)] - STATUS_RANK[clientStatus(b)] || t(a.lastActiveAt) - t(b.lastActiveAt) || byName(a, b));
+    return out;
+  };
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [saving, setSaving] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -379,7 +425,8 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
         staff.find((m) => m.userId === drillStaffId)?.email ||
         "Staff member";
 
-  function ClientTable({ rows, showAssign }: { rows: CohortClient[]; showAssign: boolean }) {
+  function ClientTable({ rows: unsorted, showAssign }: { rows: CohortClient[]; showAssign: boolean }) {
+    const rows = sortRows(unsorted);
     if (rows.length === 0) {
       return (
         <div className="text-t-phos-dim bg-t-panel border border-t-line px-5 py-8 text-center">
@@ -402,13 +449,13 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
           <thead>
             <tr className="text-left text-xs uppercase text-t-phos-dim border-b border-t-line">
               <th className="px-4 py-3 font-semibold">Client</th>
-              <th className="px-4 py-3 font-semibold">Stage</th>
-              <th className="px-4 py-3 font-semibold">Next step</th>
-              <th className="px-4 py-3 font-semibold text-center">Apps</th>
-              <th className="px-4 py-3 font-semibold">Last active</th>
-              {data && showAssign && <th className="px-4 py-3 font-semibold">Staff</th>}
+              {!hidden("stage") && <th className="px-4 py-3 font-semibold">Stage</th>}
+              {!hidden("nextStep") && <th className="px-4 py-3 font-semibold">Next step</th>}
+              {!hidden("applications") && <th className="px-4 py-3 font-semibold text-center">Apps</th>}
+              {!hidden("lastActive") && <th className="px-4 py-3 font-semibold">Last active</th>}
+              {data && showAssign && !hidden("staff") && <th className="px-4 py-3 font-semibold">Staff</th>}
               {showCosts && <th className="px-4 py-3 font-semibold text-right">AI cost</th>}
-              <th className="px-4 py-3 font-semibold">Status</th>
+              {!hidden("status") && <th className="px-4 py-3 font-semibold">Status</th>}
             </tr>
           </thead>
           <tbody>
@@ -424,14 +471,16 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
                   )}
                   {c.email && <div className="text-xs text-t-phos-dim">{c.email}</div>}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-t-white">{c.currentStage} / 6</div>
-                  <div className="text-xs text-t-phos-dim">{STAGE_LABELS[c.currentStage] ?? ""}</div>
-                </td>
-                <td className="px-4 py-3 text-t-phos-dim max-w-[200px]">{c.nextStepAction || "--"}</td>
-                <td className="px-4 py-3 text-center text-t-white">{c.applications}</td>
-                <td className="px-4 py-3 text-t-phos-dim">{fmtDate(c.lastActiveAt)}</td>
-                {data && showAssign && (
+                {!hidden("stage") && (
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-t-white">{c.currentStage} / 6</div>
+                    <div className="text-xs text-t-phos-dim">{STAGE_LABELS[c.currentStage] ?? ""}</div>
+                  </td>
+                )}
+                {!hidden("nextStep") && <td className="px-4 py-3 text-t-phos-dim max-w-[200px]">{c.nextStepAction || "--"}</td>}
+                {!hidden("applications") && <td className="px-4 py-3 text-center text-t-white">{c.applications}</td>}
+                {!hidden("lastActive") && <td className="px-4 py-3 text-t-phos-dim">{fmtDate(c.lastActiveAt)}</td>}
+                {data && showAssign && !hidden("staff") && (
                   <td className="px-4 py-3">
                     {canManage ? (
                       <select
@@ -457,9 +506,11 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
                     {usd(c.aiCostUsd || 0)}
                   </td>
                 )}
-                <td className="px-4 py-3">
-                  <StatusBadge status={clientStatus(c)} />
-                </td>
+                {!hidden("status") && (
+                  <td className="px-4 py-3">
+                    <StatusBadge status={clientStatus(c)} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -513,6 +564,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
       </div>
 
       {/* Summary */}
+      {(view === "all" || view === "caseload") && (
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 my-6">
         {[
           { label: "Joined", value: String(joinedCount) },
@@ -531,6 +583,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
           </div>
         ))}
       </div>
+      )}
 
       {/* ── Admin drill-down: one staff member's clients ────────────────── */}
       {drillStaffId ? (
@@ -552,7 +605,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
       ) : (
         <>
           {/* ── Team org-chart (admin/owner only) ─────────────────────── */}
-          {showTeam && attention.length > 0 && (
+          {showTeam && attention.length > 0 && (view === "all" || view === "caseload") && (
             <div className="mb-6 border border-t-amber/40 bg-t-panel">
               <div className="border-b border-t-line px-4 py-3">
                 <h2 className="text-sm font-bold text-t-amber-bright">
@@ -589,7 +642,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
           )}
 
           {/* ── Team org-chart (admin/owner only) ─────────────────── */}
-          {showTeam && (
+          {showTeam && (view === "all" || view === "team") && (
             <div id="team" className="mb-8 scroll-mt-24">
               <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
                 <h2 className="text-lg font-bold text-t-white">Team</h2>
@@ -692,7 +745,7 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
           )}
 
           {/* Add participant + pending invites */}
-          {data && canInvite && (
+          {data && canInvite && (view === "all" || view === "add") && (
             <div id="add" className="bg-t-panel border border-t-line px-4 py-4 mb-6 scroll-mt-24">
               <h2 className="text-sm font-semibold text-t-white mb-1">Add a participant</h2>
               <p className="text-xs text-t-phos-dim mb-3">
@@ -783,6 +836,8 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
             </div>
           )}
 
+          {(view === "all" || view === "caseload") && (
+          <>
           {/* Privacy note */}
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
             {data?.crmV2
@@ -801,13 +856,29 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
             <h2 className="text-lg font-bold text-t-white">
               {isStaffView ? "Your clients" : "All clients"}
             </h2>
-            {showTeam && clients.length > 0 && (
+            {showTeam && clients.length > 0 && view === "all" && (
               <span className="text-xs text-t-phos-dim">
                 Tap a team member above to focus on their clients.
               </span>
             )}
+            {clients.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2 ml-auto">
+                <label className="sr-only" htmlFor="caseload-find">Find a client by name</label>
+                <input id="caseload-find" type="search" value={find} onChange={(e) => setFind(e.target.value)}
+                  placeholder="Find by name" autoComplete="off"
+                  className="t-focus bg-t-panel border border-t-line text-xs text-t-white px-2 py-1.5 w-36" />
+                <label className="sr-only" htmlFor="caseload-sort">Sort clients</label>
+                <select id="caseload-sort" value={activeSort} onChange={(e) => setSort(e.target.value as CaseloadSort)}
+                  className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
+                  {CASELOAD_SORTS.map((k) => <option key={k} value={k}>{CASELOAD_SORT_LABELS[k]}</option>)}
+                </select>
+              </div>
+            )}
           </div>
-          <ClientTable rows={clients} showAssign={!!data} />
+          <ClientTable
+            rows={find.trim() ? clients.filter((c) => (c.name || "").toLowerCase().includes(find.trim().toLowerCase())) : clients}
+            showAssign={!!data}
+          />
 
           {clients.length > 0 && joinedNotSharing > 0 && (
             <p className="text-xs text-t-phos-dim mt-4">
@@ -821,6 +892,8 @@ export function OrgDashboard({ codeId = "" }: { codeId?: string }) {
               AI cost is the exact provider-billed token spend for each client&apos;s use of the
               platform&apos;s AI features. Staff accounts do not see this column.
             </p>
+          )}
+          </>
           )}
         </>
       )}

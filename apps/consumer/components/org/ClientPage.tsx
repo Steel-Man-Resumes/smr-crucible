@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
+import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
 
 type Scope = "applications" | "resume" | "documents";
 const SCOPES: { key: Scope; label: string; wouldShow: string }[] = [
@@ -29,7 +30,8 @@ const STATUS_LABEL: Record<string, string> = {
   saved: "Saved", applied: "Applied", heard_back: "Heard back", interviewing: "Interviewing",
   offered: "Offered", hired: "Hired", started_work: "Started work", rejected: "Not selected", declined: "Declined",
 };
-const NOTE_KINDS = [["note", "Note"], ["meeting", "Meeting"], ["call", "Call"], ["text", "Text"], ["email", "Email"], ["referral", "Referral"]] as const;
+const NOTE_KINDS = KINDS.map((k) => [k, NOTE_KIND_LABELS[k]] as const);
+const LAST_TAB_KEY = "smr.staff.clientTab";
 
 interface ScopeState { shared: boolean; sharedAt: string | null; requestPending: boolean }
 interface Client {
@@ -61,6 +63,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const [tab, setTab] = useState<Scope | "notes">("notes");
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
   const [loadingTab, setLoadingTab] = useState(false);
+  const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
+  const [opened, setOpened] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/org/clients/${clientId}`);
@@ -69,9 +73,13 @@ export function ClientPage({ clientId }: { clientId: string }) {
     setClient(d.client); setNotes(d.notes); setViewer(d.viewer);
   }, [clientId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
+  }, []);
 
   const openTab = useCallback(async (next: Scope | "notes") => {
     setTab(next); setShared(null);
+    try { localStorage.setItem(LAST_TAB_KEY, next); } catch {}
     if (next === "notes" || !client?.scopes[next].shared) return;
     // Opening a shared tab IS the logged access. Not on hover, not on page
     // load: only when the staff member actually asks to see it.
@@ -80,6 +88,18 @@ export function ClientPage({ clientId }: { clientId: string }) {
     const d = res.ok ? await res.json() : { rows: [] };
     setShared(d.rows ?? []); setLoadingTab(false);
   }, [client, clientId]);
+
+  // Start where this person asked to start (Settings -> My workflow). A tab is
+  // only opened automatically if it is already shared: landing on a shared tab
+  // is a logged access, which they chose; landing on an unshared one would just
+  // be an "ask" form nobody asked for.
+  useEffect(() => {
+    if (!client || opened) return;
+    setOpened(true);
+    let want: string = prefs.clientTab;
+    if (want === "last") { try { want = localStorage.getItem(LAST_TAB_KEY) || "notes"; } catch { want = "notes"; } }
+    if (want !== "notes" && (want === "applications" || want === "resume" || want === "documents") && client.scopes[want].shared) openTab(want);
+  }, [client, opened, prefs.clientTab, openTab]);
 
   if (error) return <Shell><p className="text-sm text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3">{error}</p></Shell>;
   if (!client) return <Shell><p className="text-sm text-t-phos-dim">Loading...</p></Shell>;
@@ -116,7 +136,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </div>
 
       {tab === "notes" ? (
-        <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load} />
+        <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load}
+          defaultKind={prefs.noteKind} defaultVisible={prefs.noteVisible} />
       ) : client.scopes[tab].shared ? (
         <section aria-live="polite">
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
@@ -295,10 +316,15 @@ function AskPanel({ clientId, first, scope, pending, canRequest, onAsked }: {
   );
 }
 
-function NotesPanel({ clientId, first, notes, canWrite, onSaved }: { clientId: string; first: string; notes: Note[]; canWrite: boolean; onSaved: () => void }) {
+function NotesPanel({ clientId, first, notes, canWrite, onSaved, defaultKind, defaultVisible }: {
+  clientId: string; first: string; notes: Note[]; canWrite: boolean; onSaved: () => void; defaultKind: string; defaultVisible: boolean;
+}) {
   const [body, setBody] = useState("");
-  const [kind, setKind] = useState("note");
-  const [visible, setVisible] = useState(false);
+  const [kind, setKind] = useState(defaultKind);
+  const [visible, setVisible] = useState(defaultVisible);
+  // Preferences arrive a moment after the page; adopt them unless the person
+  // has already started writing.
+  useEffect(() => { if (!body) { setKind(defaultKind); setVisible(defaultVisible); } }, [defaultKind, defaultVisible]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function save() {
@@ -306,7 +332,7 @@ function NotesPanel({ clientId, first, notes, canWrite, onSaved }: { clientId: s
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "add_note", body, kind, visibleToParticipant: visible }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setVisible(false); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setVisible(defaultVisible); setKind(defaultKind); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
   }
   return (
     <section>
