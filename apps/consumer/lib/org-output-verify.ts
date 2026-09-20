@@ -31,6 +31,8 @@ export interface OrgFacts {
   caseload: number;
   stalled: number;
   neverStarted: number;
+  /** Active in the last two weeks: caseload minus stalled, given not derived. */
+  activeRecently?: number;
   hired: number;
   unassigned: number;
   /** First names inside this viewer's reach. Anyone else is out of bounds. */
@@ -70,6 +72,7 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
     facts.caseload,
     facts.stalled,
     facts.neverStarted,
+    facts.activeRecently ?? facts.caseload - facts.stalled,
     facts.hired,
     facts.unassigned,
   ];
@@ -167,8 +170,9 @@ export async function checkOrgClaimsWithModel(
 
 ESTABLISHED FACTS (each of these is TRUE and may be stated or paraphrased):
 - This viewer's caseload is ${facts.caseload} people: ${facts.visibleNames.join(", ") || "(no names)"}.
+- ${facts.activeRecently ?? facts.caseload - facts.stalled} of them have been active in the last two weeks.
 - ${facts.stalled} of them have had no activity in the last two weeks.
-- ${facts.neverStarted} of them have never started.
+- ${facts.neverStarted} of them have never started. These are INCLUDED in the ${facts.stalled} with no activity, not in addition to them. A message that presents the never-started as additional, separate people beyond the ${facts.stalled} is making an UNSUPPORTED claim.
 - ${facts.hired} of them have started work.
 - ${facts.unassigned} of them are assigned to nobody.
 ${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for two weeks or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
@@ -182,7 +186,7 @@ ${text.slice(0, 4000)}
 
 Go through the message sentence by sentence. For EACH sentence output one object:
   "text": the sentence, shortened if long
-  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
+  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
   "supported": for a claim, true if it restates or paraphrases an established fact above, false if the established facts do not support it. For "other", true.
 
 Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":true}]}`;

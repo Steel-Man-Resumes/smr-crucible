@@ -142,6 +142,7 @@ export async function POST(request: Request) {
           caseload: cohort.clients.length,
           stalled: rollup.reduce((n, r) => n + r.stalled, 0),
           neverStarted: rollup.reduce((n, r) => n + r.neverStarted, 0),
+          activeRecently: cohort.clients.length - rollup.reduce((n, r) => n + r.stalled, 0),
           hired: cohort.summary.hired,
           unassigned: cohort.clients.filter((c) => !c.assignedStaffId).length,
           // First names only. Enough to be specific, never a data dump into a
@@ -257,6 +258,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       caseload: context.org.caseload,
       stalled: context.org.stalled,
       neverStarted: context.org.neverStarted,
+      activeRecently: context.org.activeRecently ?? context.org.caseload - context.org.stalled,
       hired: context.org.hired,
       unassigned: context.org.unassigned,
       visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],

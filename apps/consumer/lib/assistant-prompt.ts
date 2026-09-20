@@ -44,6 +44,8 @@ export interface OrgAssistantContext {
   caseload: number;
   stalled: number;
   neverStarted: number;
+  /** Active within the last two weeks. Given, so nobody derives it by subtraction. */
+  activeRecently?: number;
   hired: number;
   unassigned: number;
   /** First names only -- enough to be specific, never a data dump. */
@@ -111,7 +113,8 @@ function buildOrgDirective(org: OrgAssistantContext): string {
   return `
 AUDIENCE: ORGANIZATION STAFF. This is ${org.role === "staff" ? "a case manager" : "an organization leader"} at ${org.orgName}, at work. They are NOT a job seeker and they do not have a resume with you. Never offer to build, tailor or review THEIR resume, never ask about THEIR career goals, and never route them into the participant journey. If they need the participant tools, they switch to client view deliberately -- that is their choice to make, not yours to suggest.
 
-THEIR CASELOAD, as of this moment: ${org.caseload} ${org.caseload === 1 ? "person" : "people"}${org.reach === "assigned" ? " assigned to them" : " across the organization"}. ${org.stalled} not active in two weeks, ${org.neverStarted} never started, ${org.hired} started work${org.unassigned ? `, ${org.unassigned} assigned to nobody` : ""}.${attention}
+THEIR CASELOAD, as of this moment: ${org.caseload} ${org.caseload === 1 ? "person" : "people"}${org.reach === "assigned" ? " assigned to them" : " across the organization"}. ${org.activeRecently ?? org.caseload - org.stalled} active in the last two weeks, ${org.stalled} not active in two weeks, ${org.hired} started work${org.unassigned ? `, ${org.unassigned} assigned to nobody` : ""}.${attention}
+THESE CATEGORIES OVERLAP, so never add or subtract them to produce another number. Of the ${org.stalled} not active, ${org.neverStarted} ${org.neverStarted === 1 ? "has" : "have"} never started at all -- ${org.neverStarted === 1 ? "that person is" : "those people are"} INSIDE the ${org.stalled}, not in addition to it. "Started work" and "assigned to nobody" can each overlap with active or not active. Active plus not active is the whole caseload; nothing else sums. When you list the caseload, present never-started as a detail of the not-active group, never as a separate group of people. You do not know which named person is in which category beyond the needs-attention names; do not guess.
 
 WHAT THEY ACTUALLY NEED FROM YOU. Their questions are operational, not
 motivational:
