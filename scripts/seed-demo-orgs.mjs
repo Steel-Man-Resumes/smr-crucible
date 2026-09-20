@@ -185,6 +185,22 @@ for (const org of ORGS) {
                  WHERE id = ${id}`;
     }
 
+    // Plausible AI spend, so the admin's "you see exactly what you fund"
+    // column shows something. Every demo participant reading $0.00 makes a
+    // working feature look broken, which is worse than not showing it.
+    await sql`DELETE FROM ai_token_usage WHERE user_id = ${id} AND endpoint LIKE ${"demo-%"}`;
+    const runs = Math.max(1, Math.round((c.stage ?? 1) * 1.6));
+    for (let r = 0; r < runs; r++) {
+      const inTok = 2400 + ((i + r) * 317) % 5200;
+      const outTok = 700 + ((i + r) * 211) % 1900;
+      await sql`INSERT INTO ai_token_usage
+                  (user_id, endpoint, provider, model, input_tokens, output_tokens, cost_usd, created_at)
+                VALUES (${id}, ${"demo-" + ["analyze","generate-docs","fit-check","interview"][r % 4]},
+                        'anthropic', 'claude-sonnet-5', ${inTok}, ${outTok},
+                        ${Number(((inTok * 3 + outTok * 15) / 1_000_000).toFixed(6))},
+                        now() - ((${r} * 3) || ' days')::interval)`;
+    }
+
     if (c.hired) {
       await sql`INSERT INTO job_application (user_id, job_title, company, status, hired_at)
                 VALUES (${id}, 'Warehouse Associate', 'Demo Logistics Co', 'hired', now() - interval '9 days')
