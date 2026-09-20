@@ -818,6 +818,29 @@ async function sharingChecks() {
     check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
   }
 
+  // -- helping without touching their work: a suggested job, a comment beside a shared document
+  const [sharedResume] = await sql`SELECT id FROM refinery_artifact WHERE user_id = ${wes} AND artifact_type = 'resume' AND is_current`;
+  const [letter] = await sql`SELECT id FROM refinery_artifact WHERE user_id = ${wes} AND artifact_type = 'cover_letter'`;
+  const [plan] = await sql`SELECT id FROM refinery_artifact WHERE user_id = ${wes} AND artifact_type = 'disclosure_plan'`;
+  const appsBefore = (await sql`SELECT count(*)::int AS n FROM job_application WHERE user_id = ${wes}`)[0].n;
+  const sj = await core.suggestJob(aRuss, wes, { jobTitle: "Prep Cook", company: "River Cafe", applyUrl: "https://example.com/jobs/1", why: "Day shift, on the bus line." });
+  check("a case manager can suggest a job", sj.ok === true, JSON.stringify(sj));
+  check("suggesting a job does NOT put it in the participant's tracker", (await sql`SELECT count(*)::int AS n FROM job_application WHERE user_id = ${wes}`)[0].n === appsBefore);
+  check("a link that is not https is refused", (await core.suggestJob(aRuss, wes, { jobTitle: "X", company: "Y", applyUrl: "javascript:alert(1)", why: "because" })).ok === false);
+  check("a colleague cannot suggest to somebody else's participant", (await core.suggestJob(aNora, wes, { jobTitle: "X", company: "Y", why: "because" })).ok === false);
+  check("a comment is allowed on the resume they shared", (await core.commentOnArtifact(aRuss, wes, sharedResume.id, "Lead with the 300 meals a day line.", "Prepared three daily meals")).ok === true);
+  check("NOT on the cover letter they did not share", (await core.commentOnArtifact(aRuss, wes, letter.id, "Nice letter")).ok === false);
+  check("and never on a disclosure plan, shared scope or not", (await core.commentOnArtifact(aRuss, wes, plan.id, "About your plan")).ok === false);
+  const mySug = await core.getMySuggestions(wes);
+  check("the participant sees both, with who they are from", mySug.length === 2 && mySug.every((m) => m.from_name?.includes("s-russ")) && mySug.some((m) => m.kind === "comment" && /300 meals/.test(m.body)));
+  const selfAnswer = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${russ}, true)`,
+    app`UPDATE staff_suggestion SET status = 'saved' WHERE id = ${sj.id}`]));
+  check("staff cannot mark their own suggestion as taken up", !!selfAnswer && /withdraw a suggestion/.test(selfAnswer), selfAnswer ?? "updated");
+  check("somebody else cannot answer it", (await core.answerSuggestion(stranger, sj.id, "saved")) === false);
+  check("the participant can dismiss it, and that is final", (await core.answerSuggestion(wes, sj.id, "dismissed")) === true && (await core.answerSuggestion(wes, sj.id, "saved")) === false);
+  const rewrite = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${wes}, true)`, app`UPDATE staff_suggestion SET body = 'rewritten' WHERE client_user_id = ${wes} AND status = 'open'`]));
+  check("the participant cannot rewrite what staff said", !!rewrite && /only the status/.test(rewrite), rewrite ?? "updated");
+
   // -- across the caseload: the Requests and Case notes pages
   const lee2 = await mkUser("s-lee2"); // same org, on nobody's caseload but the owner's view
   await core.redeemAccessCode(lee2, org.code);

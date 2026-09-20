@@ -16,6 +16,7 @@
  */
 
 import { MySharedTasks } from "@/components/MySharedTasks";
+import { MySuggestions } from "@/components/MySuggestions";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -321,6 +322,7 @@ export default function DashboardPage() {
       <MiniForgeBanner />
       <JourneyHeader />
       <MySharedTasks />
+      <MySuggestions />
       {/* Welcome / Narrative */}
       <section>
         {hasForgeData ? (

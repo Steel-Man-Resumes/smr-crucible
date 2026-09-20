@@ -162,3 +162,31 @@ export async function getMyAccessLog(userId: string, limit = 50): Promise<Access
   );
   return rows.map((r) => ({ kind: r.access_reason === 'org_work_queue' ? 'queue' as const : 'opened' as const, at: r.accessed_at, who: r.who, orgName: r.org_name, scope: r.resource_type.replace(/^shared:/, "") }));
 }
+
+/* -------------------------------------------- what my case manager suggested -- */
+
+export interface MySuggestion {
+  id: string; kind: "job" | "comment"; job_title: string | null; company: string | null; location: string | null; apply_url: string | null;
+  artifact_id: string | null; artifact_label: string | null; quote: string | null; body: string; status: string; from_name: string | null; created_at: string;
+}
+
+export async function getMySuggestions(userId: string): Promise<MySuggestion[]> {
+  return queryAsUser<MySuggestion>(
+    userId,
+    `SELECT s.id, s.kind, s.job_title, s.company, s.location, s.apply_url, s.artifact_id, s.quote, s.body, s.status, u.name AS from_name, s.created_at,
+            CASE WHEN ra.id IS NULL THEN NULL
+                 ELSE COALESCE(NULLIF(ra.target_context->>'targetJob', ''), CASE ra.artifact_type WHEN 'cover_letter' THEN 'your cover letter' ELSE 'your resume' END) END AS artifact_label
+       FROM staff_suggestion s LEFT JOIN users u ON u.id = s.author_user_id LEFT JOIN refinery_artifact ra ON ra.id = s.artifact_id
+      WHERE s.client_user_id = $1 AND s.status IN ('open', 'saved') AND (s.status = 'open' OR s.responded_at > now() - interval '7 days')
+      ORDER BY (s.status = 'open') DESC, s.created_at DESC LIMIT 50`,
+    [userId]
+  );
+}
+
+/** The participant's answer. 'saved' on a job means THEY saved it (the page does that with their own session first). */
+export async function answerSuggestion(userId: string, suggestionId: string, status: "saved" | "dismissed"): Promise<boolean> {
+  const [rows] = await runAsUser<[{ id: string }[]]>(userId, (sql) => [
+    sql`UPDATE staff_suggestion SET status = ${status} WHERE id = ${suggestionId}::uuid AND client_user_id = ${userId} AND status = 'open' RETURNING id`,
+  ]);
+  return rows.length > 0;
+}

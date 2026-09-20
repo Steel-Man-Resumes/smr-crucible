@@ -37,6 +37,7 @@ export const RESTRICTED_GRANTS = {
   // Ended or corrected on the record; a check, once made, stands.
   outcome_record: ["SELECT", "INSERT", "UPDATE"],
   retention_check: ["SELECT", "INSERT"],
+  staff_suggestion: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

@@ -29,6 +29,7 @@ export const RLS_PROTECTED_TABLES = [
   "staff_task",
   "outcome_record",
   "retention_check",
+  "staff_suggestion",
 ] as const;
 
 export interface RlsHealth {

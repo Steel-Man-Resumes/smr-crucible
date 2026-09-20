@@ -60,9 +60,10 @@ function readable(content: unknown, depth = 0): string[] {
 export function ClientPage({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<Client | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean } | null>(null);
+  const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks" | "outcomes">("notes");
+  const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks" | "outcomes" | "suggestions">("notes");
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
@@ -72,17 +73,17 @@ export function ClientPage({ clientId }: { clientId: string }) {
     const res = await fetch(`/api/org/clients/${clientId}`);
     if (!res.ok) { setError(res.status === 404 ? "This person is not on your caseload, or does not exist." : "Could not load this participant."); return; }
     const d = await res.json();
-    setClient(d.client); setNotes(d.notes); setViewer(d.viewer);
+    setClient(d.client); setNotes(d.notes); setViewer(d.viewer); setSuggestions(d.suggestions ?? []);
   }, [clientId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
 
-  const openTab = useCallback(async (next: Scope | "notes" | "screen" | "tasks" | "outcomes") => {
+  const openTab = useCallback(async (next: Scope | "notes" | "screen" | "tasks" | "outcomes" | "suggestions") => {
     setTab(next); setShared(null);
     try { localStorage.setItem(LAST_TAB_KEY, next); } catch {}
-    if (next === "notes" || next === "screen" || next === "tasks" || next === "outcomes" || !client?.scopes[next].shared) return;
+    if (next === "notes" || next === "screen" || next === "tasks" || next === "outcomes" || next === "suggestions" || !client?.scopes[next].shared) return;
     // Opening a shared tab IS the logged access. Not on hover, not on page
     // load: only when the staff member actually asks to see it.
     setLoadingTab(true);
@@ -133,7 +134,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </header>
 
       <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
-        {([["notes", "Your notes"], ["tasks", "Tasks"], ["outcomes", "Outcomes"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen" | "tasks" | "outcomes", string][]).map(([key, label]) => (
+        {([["notes", "Your notes"], ["tasks", "Tasks"], ["suggestions", "Suggestions"], ["outcomes", "Outcomes"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen" | "tasks" | "outcomes" | "suggestions", string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => openTab(key)}
             className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
             {label}
@@ -141,7 +142,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
         ))}
       </div>
 
-      {tab === "outcomes" ? (
+      {tab === "suggestions" ? (
+        <SuggestionsPanel clientId={clientId} first={first} items={suggestions} canSuggest={!!viewer?.canSuggest} onChange={load} />
+      ) : tab === "outcomes" ? (
         <OutcomesPanel clientId={clientId} first={first} />
       ) : tab === "tasks" ? (
         <TasksPanel clientId={clientId} first={first} />
@@ -159,7 +162,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
           </p>
           {loadingTab || !shared ? <p className="text-sm text-t-phos-dim">Loading...</p>
             : shared.length === 0 ? <p className="text-sm text-t-phos-dim">Shared, and there is nothing here yet.</p>
-            : tab === "applications" ? <Applications rows={shared} /> : <Documents rows={shared} />}
+            : tab === "applications" ? <Applications rows={shared} />
+            : <Documents rows={shared} clientId={clientId} first={first} canComment={!!viewer?.canSuggest} comments={suggestions.filter((x) => x.kind === "comment")} onChange={load} />}
         </section>
       ) : client.scopes[tab].required ? (
         <section className="bg-t-panel border border-t-line p-5">
@@ -287,6 +291,87 @@ function TasksPanel({ clientId, first }: { clientId: string; first: string }) {
   );
 }
 
+interface Suggestion {
+  id: string; kind: "job" | "comment"; job_title: string | null; company: string | null; location: string | null; apply_url: string | null;
+  artifact_id: string | null; quote: string | null; body: string; status: "open" | "saved" | "dismissed" | "withdrawn"; author_name: string | null; created_at: string;
+}
+const SUGGESTION_STATUS: Record<Suggestion["status"], string> = { open: "Waiting for them", saved: "They took it up", dismissed: "Not for them", withdrawn: "Withdrawn" };
+
+async function postClient(clientId: string, body: Record<string, unknown>): Promise<string | null> {
+  const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return res.ok ? null : (await res.json().catch(() => ({}))).error || "That did not save.";
+}
+
+/** A comment sits BESIDE the document. It never changes it; the participant decides what to do with it. */
+function CommentBox({ clientId, artifactId, first, canComment, existing, onChange }: {
+  clientId: string; artifactId: string; first: string; canComment: boolean; existing: Suggestion[]; onChange: () => void;
+}) {
+  const [body, setBody] = useState(""); const [quote, setQuote] = useState(""); const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <div className="border-t border-t-line mt-4 pt-3">
+      {existing.map((c) => (
+        <p key={c.id} className="text-xs text-t-phos mb-2">
+          <span className="text-t-phos-dim">{c.author_name || "Staff"}, {day(c.created_at)} · {SUGGESTION_STATUS[c.status]}:</span> {c.quote ? `On "${c.quote}": ` : ""}{c.body}
+        </p>
+      ))}
+      {canComment && (
+        <form onSubmit={async (e) => { e.preventDefault(); const err = await postClient(clientId, { action: "comment", artifactId, body, quote }); setMsg(err); if (!err) { setBody(""); setQuote(""); onChange(); } }}>
+          <label htmlFor={`cq-${artifactId}`} className="sr-only">The words your comment is about (optional)</label>
+          <input id={`cq-${artifactId}`} value={quote} onChange={(e) => setQuote(e.target.value)} maxLength={500} placeholder="The words it is about (optional)"
+            className="t-focus w-full bg-t-panel-2 border border-t-line text-xs text-t-white px-3 py-1.5 mb-2" />
+          <label htmlFor={`cb-${artifactId}`} className="sr-only">Your comment</label>
+          <textarea id={`cb-${artifactId}`} value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={1500} placeholder={`A suggestion for ${first}. They will see it under your name and decide what to do with it.`}
+            className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
+          <button disabled={body.trim().length < 3} className="t-focus border border-t-line text-xs text-t-phos px-3 py-1.5 disabled:opacity-50">Send comment</button>
+          {msg && <span role="alert" className="text-xs text-t-amber-bright ml-3">{msg}</span>}
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SuggestionsPanel({ clientId, first, items, canSuggest, onChange }: { clientId: string; first: string; items: Suggestion[]; canSuggest: boolean; onChange: () => void }) {
+  const [f, setF] = useState({ jobTitle: "", company: "", location: "", applyUrl: "", why: "" });
+  const [msg, setMsg] = useState<string | null>(null);
+  const field = "t-focus bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 w-full";
+  return (
+    <section>
+      {canSuggest && (
+        <form className="bg-t-panel border border-t-line p-5 mb-5" onSubmit={async (e) => { e.preventDefault(); const err = await postClient(clientId, { action: "suggest_job", ...f }); setMsg(err); if (!err) { setF({ jobTitle: "", company: "", location: "", applyUrl: "", why: "" }); onChange(); } }}>
+          <h3 className="font-semibold text-t-white mb-1">Suggest a job</h3>
+          <p className="text-xs text-t-phos-dim mb-3">It shows up on {first}&apos;s dashboard under your name. It only becomes one of their saved jobs if they save it.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div><label htmlFor="sj-title" className="block text-xs text-t-phos-dim mb-1">Job title</label><input id="sj-title" className={field} value={f.jobTitle} onChange={(e) => setF({ ...f, jobTitle: e.target.value })} required /></div>
+            <div><label htmlFor="sj-co" className="block text-xs text-t-phos-dim mb-1">Employer</label><input id="sj-co" className={field} value={f.company} onChange={(e) => setF({ ...f, company: e.target.value })} required /></div>
+            <div><label htmlFor="sj-loc" className="block text-xs text-t-phos-dim mb-1">Location (optional)</label><input id="sj-loc" className={field} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></div>
+            <div><label htmlFor="sj-url" className="block text-xs text-t-phos-dim mb-1">Link to the posting (optional, https)</label><input id="sj-url" type="url" className={field} value={f.applyUrl} onChange={(e) => setF({ ...f, applyUrl: e.target.value })} placeholder="https://" /></div>
+            <div className="sm:col-span-2"><label htmlFor="sj-why" className="block text-xs text-t-phos-dim mb-1">Why it might suit them</label><textarea id="sj-why" rows={2} maxLength={1500} className={field} value={f.why} onChange={(e) => setF({ ...f, why: e.target.value })} required /></div>
+          </div>
+          <button className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 mt-3">Send suggestion</button>
+          {msg && <p role="alert" className="text-xs text-t-amber-bright mt-2">{msg}</p>}
+        </form>
+      )}
+      {items.length === 0 ? <p className="text-sm text-t-phos-dim">Nothing suggested yet. To comment on a resume or letter, open it from its tab.</p> : (
+        <ul className="space-y-2">
+          {items.map((s) => (
+            <li key={s.id} className="bg-t-panel border border-t-line px-4 py-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-t-white">{s.kind === "job" ? `${s.job_title} at ${s.company}` : "Comment on a shared document"}</p>
+                <p className="text-sm text-t-phos">{s.quote ? `On "${s.quote}": ` : ""}{s.body}</p>
+                <p className="text-xs text-t-phos-dim mt-1">{s.author_name || "Staff"} · {day(s.created_at)}</p>
+              </div>
+              <div className="text-right">
+                <p className={`text-xs px-2 py-1 border inline-block ${s.status === "saved" ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos-dim"}`}>{SUGGESTION_STATUS[s.status]}</p>
+                {s.status === "open" && canSuggest && <button onClick={async () => { await postClient(clientId, { action: "withdraw_suggestion", suggestionId: s.id }); onChange(); }} className="t-focus block ml-auto mt-2 text-xs text-t-phos-dim underline hover:text-t-white">Withdraw</button>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -382,7 +467,9 @@ function ArtifactBody({ content }: { content: unknown }) {
   );
 }
 
-function Documents({ rows }: { rows: Record<string, unknown>[] }) {
+function Documents({ rows, clientId, first, canComment, comments, onChange }: {
+  rows: Record<string, unknown>[]; clientId: string; first: string; canComment: boolean; comments: Suggestion[]; onChange: () => void;
+}) {
   return (
     <div className="space-y-4">
       {rows.map((r) => {
@@ -400,6 +487,8 @@ function Documents({ rows }: { rows: Record<string, unknown>[] }) {
             <div className="text-sm text-t-phos leading-relaxed max-h-[32rem] overflow-y-auto">
               <ArtifactBody content={r.content} />
             </div>
+            <CommentBox clientId={clientId} artifactId={String(r.id)} first={first} canComment={canComment}
+              existing={comments.filter((c) => c.artifact_id === String(r.id))} onChange={onChange} />
           </article>
         );
       })}
