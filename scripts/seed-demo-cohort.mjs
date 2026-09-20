@@ -44,7 +44,7 @@ const russ = staff.find((s) => s.name === "Russ Feeney")?.user_id, alma = staff.
 if (!russ || !alma) { console.error("Demo staff not found."); process.exit(1); }
 
 const at = (d) => new Date(Date.now() + d * 86400000).toISOString();
-const TEXT_VERSION = "2026-09-20.1";
+const TEXT_VERSION = "2026-09-20.3"; // current wording, which mentions the daily work list
 const email = (n) => `${n.toLowerCase().replace(/[^a-z]+/g, ".")}@mtdemo.example.invalid`;
 
 async function person(name, stage, lastActiveDays, staffId) {

@@ -39,7 +39,19 @@ export const CLIENT_TAB_LABELS: Record<ClientTabPref, string> = {
   last: "Whichever I had open last",
 };
 
+export const LANDINGS = ["today", "caseload"] as const;
+export type Landing = (typeof LANDINGS)[number];
+export const LANDING_LABELS: Record<Landing, string> = { today: "Today: who needs me and why", caseload: "Caseload: everyone, in a table" };
+
+/** Kept here (not imported from orgToday) so this file stays safe for the browser. */
+export const TODAY_SECTION_KEYS = ["tasks", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
+export type TodaySectionKey = (typeof TODAY_SECTION_KEYS)[number];
+
 export interface StaffPrefs {
+  /** Where signing in lands. */
+  landing: Landing;
+  /** Today sections to HIDE (stored as hidden, so a new section shows by default). */
+  todayHidden: TodaySectionKey[];
   caseloadSort: CaseloadSort;
   /** Columns to HIDE. Stored as hidden, so a column added later shows by default. */
   caseloadHidden: CaseloadColumn[];
@@ -50,6 +62,8 @@ export interface StaffPrefs {
 }
 
 export const DEFAULT_STAFF_PREFS: StaffPrefs = {
+  landing: "today",
+  todayHidden: [],
   caseloadSort: "needs_attention",
   caseloadHidden: [],
   noteKind: "note",
@@ -65,6 +79,9 @@ export function normalizeStaffPrefs(raw: unknown): Partial<StaffPrefs> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const r = raw as Record<string, unknown>;
   const out: Partial<StaffPrefs> = {};
+  const landing = oneOf(LANDINGS, r.landing);
+  if (landing) out.landing = landing;
+  if (Array.isArray(r.todayHidden)) out.todayHidden = Array.from(new Set(r.todayHidden.map((c) => oneOf(TODAY_SECTION_KEYS, c)).filter(Boolean))) as TodaySectionKey[];
   const sort = oneOf(CASELOAD_SORTS, r.caseloadSort);
   if (sort) out.caseloadSort = sort;
   if (Array.isArray(r.caseloadHidden)) {

@@ -20,6 +20,8 @@ export * from './orgClientView';
 export * from './staffPrefs';
 export * from './orgAccess';
 export * from './orgInsights';
+export * from './staffTasks';
+export * from './orgToday';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './outcomeAggregate';

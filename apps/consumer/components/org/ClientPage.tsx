@@ -61,7 +61,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Scope | "notes" | "screen">("notes");
+  const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks">("notes");
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
@@ -78,10 +78,10 @@ export function ClientPage({ clientId }: { clientId: string }) {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
 
-  const openTab = useCallback(async (next: Scope | "notes" | "screen") => {
+  const openTab = useCallback(async (next: Scope | "notes" | "screen" | "tasks") => {
     setTab(next); setShared(null);
     try { localStorage.setItem(LAST_TAB_KEY, next); } catch {}
-    if (next === "notes" || next === "screen" || !client?.scopes[next].shared) return;
+    if (next === "notes" || next === "screen" || next === "tasks" || !client?.scopes[next].shared) return;
     // Opening a shared tab IS the logged access. Not on hover, not on page
     // load: only when the staff member actually asks to see it.
     setLoadingTab(true);
@@ -132,7 +132,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       </header>
 
       <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
-        {([["notes", "Your notes"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen", string][]).map(([key, label]) => (
+        {([["notes", "Your notes"], ["tasks", "Tasks"], ["screen", `${first}'s screen`], ...SCOPES.map((s) => [s.key, s.label])] as [Scope | "notes" | "screen" | "tasks", string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => openTab(key)}
             className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
             {label}
@@ -140,7 +140,9 @@ export function ClientPage({ clientId }: { clientId: string }) {
         ))}
       </div>
 
-      {tab === "screen" ? (
+      {tab === "tasks" ? (
+        <TasksPanel clientId={clientId} first={first} />
+      ) : tab === "screen" ? (
         <TheirScreen client={client} first={first} onOpen={openTab} />
       ) : tab === "notes" ? (
         <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load}
@@ -222,6 +224,62 @@ function TheirScreen({ client, first, onOpen }: { client: Client; first: string;
         <Area group="Build" name="Interview Prep" what="Practice interviews, including voice practice. You see only how many sessions, above." state="never" />
         <Area group="My stuff" name="Vault" what="Documents they store, like an ID or a certificate." state="never" />
       </ul>
+    </section>
+  );
+}
+
+interface TaskRow { id: string; title: string; due_on: string | null; shared_with_participant: boolean; done_at: string | null; done_by_participant: boolean; owner_name: string | null }
+
+/** What you and this person have agreed to do. A shared task shows on THEIR dashboard, and they can tick it. */
+function TasksPanel({ clientId, first }: { clientId: string; first: string }) {
+  const [tasks, setTasks] = useState<TaskRow[] | null>(null);
+  const [title, setTitle] = useState(""); const [due, setDue] = useState(""); const [shared, setShared] = useState(true);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = useCallback(() => { fetch(`/api/org/tasks?clientId=${clientId}`).then((r) => (r.ok ? r.json() : { tasks: [] })).then((d) => setTasks(d.tasks)); }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+  async function post(body: Record<string, unknown>) {
+    setMsg(null);
+    const res = await fetch("/api/org/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
+    load();
+  }
+  return (
+    <section>
+      <form onSubmit={(e) => { e.preventDefault(); if (title.trim().length < 2) return; post({ action: "add", title, dueOn: due || null, clientId, shared }); setTitle(""); setDue(""); }}
+        className="bg-t-panel border border-t-line p-5 mb-5">
+        <label htmlFor="task-title" className="block font-semibold text-t-white mb-2">Add a task</label>
+        <div className="flex flex-wrap gap-2">
+          <input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} placeholder="Bring your ID and Social Security card Thursday"
+            className="t-focus flex-1 min-w-[14rem] bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
+          <label className="sr-only" htmlFor="task-due">Due date</label>
+          <input id="task-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="t-focus bg-t-panel-2 border border-t-line text-sm text-t-phos px-3 py-2" />
+          <button disabled={title.trim().length < 2} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">Add</button>
+        </div>
+        <label className="text-xs text-t-phos-dim flex items-center gap-2 mt-3">
+          <input type="checkbox" className="t-focus" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+          Show this on {first}&apos;s dashboard so they can tick it off. Untick it for a reminder that is only yours.
+        </label>
+        {msg && <p role="alert" className="text-xs text-t-amber-bright mt-2">{msg}</p>}
+      </form>
+      {!tasks ? <p className="text-sm text-t-phos-dim">Loading...</p> : tasks.length === 0 ? <p className="text-sm text-t-phos-dim">No tasks yet.</p> : (
+        <ul className="space-y-2">
+          {tasks.map((t) => (
+            <li key={t.id} className="bg-t-panel border border-t-line px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className={`text-sm ${t.done_at ? "text-t-phos-dim line-through" : "text-t-white"}`}>{t.title}</p>
+                <p className="text-xs text-t-phos-dim">
+                  {t.due_on ? `Due ${day(t.due_on + "T12:00:00Z")} · ` : ""}{t.shared_with_participant ? `${first} can see this` : "Only staff can see this"}
+                  {t.done_at ? ` · done${t.done_by_participant ? ` by ${first}` : ""}` : ""}
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <button onClick={() => post({ action: t.done_at ? "reopen" : "done", taskId: t.id })} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">{t.done_at ? "Reopen" : "Mark done"}</button>
+                {!t.done_at && <button onClick={() => post({ action: "cancel", taskId: t.id })} className="t-focus text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-white">Cancel</button>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

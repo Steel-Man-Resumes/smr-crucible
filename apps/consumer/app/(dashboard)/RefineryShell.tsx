@@ -143,6 +143,7 @@ const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
   {
     label: "Work",
     items: [
+      { href: "/dashboard/today", label: "Today" },
       { href: "/dashboard", label: "Caseload" },
       { href: "/dashboard/requests", label: "Sharing requests" },
     ],

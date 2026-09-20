@@ -24,7 +24,7 @@ interface Payload {
   policies: (RequirementPolicy & { orgId: string; acknowledged: boolean })[];
   requiredText: RequirementText;
   orgs: OrgState[];
-  log: { at: string; who: string | null; orgName: string | null; scope: string }[];
+  log: { kind?: string; at: string; who: string | null; orgName: string | null; scope: string }[];
   text: { scopes: ScopeText[]; always: { control: string; log: string; staffNotes: string; leaving: string } };
 }
 
@@ -129,7 +129,10 @@ export function SharingControls() {
         {data.log.length === 0 ? <p className="text-sm text-t-phos-dim">Nobody has opened anything you shared.</p> : (
           <ul className="text-sm text-t-phos space-y-1">
             {data.log.map((e, i) => (
-              <li key={i}>{e.who || "A staff member"}{e.orgName ? ` at ${e.orgName}` : ""} opened {label(e.scope).toLowerCase()} on {when(e.at)}</li>
+              <li key={i}>
+                {e.who || "A staff member"}{e.orgName ? ` at ${e.orgName}` : ""}{" "}
+                {e.kind === "queue" ? "had your interview and follow-up dates on their daily work list" : `opened ${label(e.scope).toLowerCase()}`} on {when(e.at)}
+              </li>
             ))}
           </ul>
         )}

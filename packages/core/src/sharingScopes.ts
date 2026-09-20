@@ -17,6 +17,15 @@
  */
 export const SHARING_TEXT_VERSION = "2026-09-20.3";
 
+/**
+ * Wording versions under which sharing applications ALSO means their dates may
+ * appear on a case manager's daily work list. Anyone who shared under earlier
+ * words agreed to their applications being OPENED, not to that, so the work
+ * queue ignores their grant until they share again under current words.
+ * Append here when the version changes and the sentence is still in it.
+ */
+export const WORK_QUEUE_TEXT_VERSIONS: readonly string[] = ["2026-09-20.3"];
+
 export const SHARING_SCOPES = ["applications", "resume", "documents"] as const;
 export type SharingScope = (typeof SHARING_SCOPES)[number];
 
@@ -39,7 +48,7 @@ export const SHARING_SCOPE_TEXT: Record<SharingScope, SharingScopeText> = {
   applications: {
     label: "Your job applications",
     shows:
-      "The jobs you are tracking: job title, company, location, where each one stands, the dates, your follow-up date and the link to apply.",
+      "The jobs you are tracking: job title, company, location, where each one stands, the dates, your follow-up date and the link to apply. Your interview and follow-up dates also show up on your case manager's daily work list, so they can help you get ready in time.",
     never: "Your private notes on a job, the pay you wrote down, and the full job description you saved.",
     firstTime: "This includes the applications already in your tracker, not only new ones.",
   },
@@ -61,7 +70,7 @@ export const SHARING_SCOPE_TEXT: Record<SharingScope, SharingScopeText> = {
 export const SHARING_ALWAYS_TEXT = {
   control:
     "You decide this, and you can turn any of it off at any time. Turning it off stops new viewing from that moment. It cannot take back something a person already read or wrote down.",
-  log: "Every time someone at your organization opens something you shared, it is recorded, and you can see that record here.",
+  log: "Every time someone at your organization opens something you shared, or your dates appear on their daily work list, it is recorded, and you can see that record here.",
   staffNotes:
     "Your case manager keeps their own notes about working with you. Your organization manages those notes. This screen shows only notes they choose to share with you; it does not determine any right you may have to request their records.",
   leaving:

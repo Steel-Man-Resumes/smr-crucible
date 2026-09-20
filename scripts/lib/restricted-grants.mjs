@@ -32,6 +32,8 @@ export const RESTRICTED_GRANTS = {
   // Written only by smr_set_sharing_policy / smr_acknowledge_policy.
   org_sharing_policy_version: ["SELECT"],
   sharing_ack: ["SELECT"],
+  // Finished or cancelled, never deleted.
+  staff_task: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */

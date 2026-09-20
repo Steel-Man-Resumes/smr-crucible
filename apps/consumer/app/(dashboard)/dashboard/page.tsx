@@ -15,6 +15,7 @@
  * Admin: god mode (everything unlocked, all states skipped).
  */
 
+import { MySharedTasks } from "@/components/MySharedTasks";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -319,6 +320,7 @@ export default function DashboardPage() {
     <div className="space-y-10">
       <MiniForgeBanner />
       <JourneyHeader />
+      <MySharedTasks />
       {/* Welcome / Narrative */}
       <section>
         {hasForgeData ? (

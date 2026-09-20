@@ -36,6 +36,7 @@ export const ORG_CAPABILITIES = [
   "org.client.view_content",
   "org.client.request_sharing",
   "org.note.write",
+  "org.task.write",
   // Bringing people in. Inviting a PARTICIPANT is ordinary casework; inviting
   // STAFF decides who can read case data and stays with admins (org.staff.invite).
   "org.participant.invite",
@@ -88,6 +89,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.task.write",
     "org.participant.invite",
   ],
   org_admin: [
@@ -98,6 +100,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.task.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -115,6 +118,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.client.view_content",
     "org.client.request_sharing",
     "org.note.write",
+    "org.task.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -187,6 +191,7 @@ export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string;
   { capability: "org.client.view_content", label: "Open what participants have shared", help: "Resumes, applications and letters a participant chose to share. Every open is visible to the participant." },
   { capability: "org.client.request_sharing", label: "Ask participants to share", help: "The participant sees their name and their reason, and decides." },
   { capability: "org.note.write", label: "Write case notes", help: "Notes belong to the organization and cannot be deleted." },
+  { capability: "org.task.write", label: "Create tasks", help: "Their own to-dos, and tasks shared with a participant." },
   { capability: "org.client.assign", label: "Assign participants to staff", help: "Move people between caseloads." },
   { capability: "org.participant.invite", label: "Invite participants", help: "Each invite uses one of your seats." },
   { capability: "org.insights.view", label: "See the organization's numbers", help: "Funnel, outcomes and workload by staff member." },
