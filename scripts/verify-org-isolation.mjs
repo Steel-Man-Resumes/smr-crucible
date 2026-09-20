@@ -30,6 +30,7 @@
 
 import { neon } from "@neondatabase/serverless";
 import { readFileSync } from "node:fs";
+import { checkRestrictedGrants } from "./lib/restricted-grants.mjs";
 
 const URL_VAR = "ISOLATION_TEST_DATABASE_URL";
 const CRED_FILE = ".env.isolation";
@@ -354,6 +355,56 @@ async function main() {
     !cohortA3.clients.some((c) => c.userId === noConsent) && cohortA3.pendingCount >= 1,
     `pendingCount=${cohortA3.pendingCount}`
   );
+
+  await platformAdminChecks();
+}
+
+/**
+ * Platform admin cannot be minted by the application (migration 047).
+ *
+ * These run AS THE APP ROLE on purpose. The owner can do all of this, and is
+ * supposed to be able to; the claim under test is that the app cannot.
+ */
+async function platformAdminChecks() {
+  console.log("\n  -- platform admin --");
+  const problems = await checkRestrictedGrants((q) => sql(q));
+  check("app role holds only SELECT on org_audit and platform_admin", problems.length === 0, problems.join("; "));
+
+  if (!appUrl) {
+    console.log("  skip  app-role admin checks (no app credential; they would prove nothing)");
+    return;
+  }
+  const app = neon(appUrl);
+  const core = await import("../packages/core/dist/index.js");
+  const nobody = await mkUser("notadmin");
+  const boss = await mkUser("realadmin");
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+
+  const selfGrant = await raised(() => app`INSERT INTO platform_admin (user_id) VALUES (${nobody})`);
+  check("the app cannot insert a platform_admin row", !!selfGrant && /permission denied/i.test(selfGrant), selfGrant ?? "insert succeeded");
+
+  const tierWrite = await raised(() => app`UPDATE users SET tier = 'admin' WHERE id = ${nobody}`);
+  const [after] = await sql`SELECT tier FROM users WHERE id = ${nobody}`;
+  check("the app cannot set tier admin on someone who is not a platform admin",
+    !!tierWrite && after.tier !== "admin", tierWrite ?? `tier is now ${after.tier}`);
+
+  check("isPlatformAdmin is false for them, as the app role", (await core.isPlatformAdmin(nobody)) === false);
+  check("isPlatformAdmin is true for a real admin, as the app role", (await core.isPlatformAdmin(boss)) === true);
+
+  // The latent bug this also closes: an admin who redeemed a partner code was
+  // re-synced to 'partner' and silently lost the admin console.
+  await core.syncUserTierFromCodes(boss);
+  const [pinned] = await sql`SELECT tier FROM users WHERE id = ${boss}`;
+  check("a tier re-sync cannot demote a platform admin", pinned.tier === "admin", `tier is ${pinned.tier}`);
+
+  const adminCode = await raised(() => sql`INSERT INTO access_code (code, partner_name, tier) VALUES (${"ISOADMIN" + Date.now().toString(36).toUpperCase().slice(-6)}, 'isolation fixture', 'admin')`);
+  check("an access code cannot be created with tier admin, even by the owner", !!adminCode && /access_code_tier_check/.test(adminCode), adminCode ?? "insert succeeded");
+
+  await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
+  const [revoked] = await sql`SELECT tier FROM users WHERE id = ${boss}`;
+  check("revoking platform admin drops the cached tier", revoked.tier !== "admin", `tier is ${revoked.tier}`);
 }
 
 main()

@@ -9,23 +9,56 @@ name: org-isolation
 # PATH-FILTERED ON PURPOSE. Every run creates a Neon branch and wakes compute.
 # The org layer lives in a few places; a copy change should not pay for this.
 
+# RUNS ON PULL REQUESTS TOO, and that is the half that makes it a gate. On
+# push-to-main only, Vercel was already deploying the commit while this was
+# still creating its branch: it could report a broken boundary, never stop one.
+# Authorization work goes through a PR and merges when this is green.
 on:
+  pull_request:
+    paths:
+      - "packages/core/src/**"
+      - "packages/core/migrations/**"
+      - "apps/consumer/auth.ts"
+      - "apps/consumer/lib/org-*.ts"
+      - "apps/consumer/lib/effective-auth.ts"
+      - "apps/consumer/app/api/org/**"
+      - "apps/consumer/app/api/partner/**"
+      - "apps/consumer/app/api/admin/**"
+      - "apps/consumer/app/api/dev/**"
+      - "apps/consumer/app/api/user/**"
+      - "apps/consumer/app/api/consent/**"
+      - "apps/consumer/app/api/hub-unlock/**"
+      - "apps/consumer/app/api/assistant/**"
+      - "scripts/verify-org-isolation.mjs"
+      - "scripts/rls-stage1-create-role.mjs"
+      - "scripts/lib/**"
+      - "scripts/neon-branch.mjs"
+      - ".github/workflows/org-isolation.yml"
   push:
     branches: [main]
     paths:
       - "packages/core/src/**"
       - "packages/core/migrations/**"
+      - "apps/consumer/auth.ts"
+      - "apps/consumer/lib/org-*.ts"
+      - "apps/consumer/lib/effective-auth.ts"
       - "apps/consumer/app/api/org/**"
       - "apps/consumer/app/api/partner/**"
+      - "apps/consumer/app/api/admin/**"
       - "apps/consumer/app/api/dev/**"
+      - "apps/consumer/app/api/user/**"
+      - "apps/consumer/app/api/consent/**"
+      - "apps/consumer/app/api/hub-unlock/**"
+      - "apps/consumer/app/api/assistant/**"
       - "scripts/verify-org-isolation.mjs"
       - "scripts/rls-stage1-create-role.mjs"
+      - "scripts/lib/**"
       - "scripts/neon-branch.mjs"
       - ".github/workflows/org-isolation.yml"
   workflow_dispatch:
 
 concurrency:
-  group: org-isolation
+  group: org-isolation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:

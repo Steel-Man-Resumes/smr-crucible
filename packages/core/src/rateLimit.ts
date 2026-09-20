@@ -204,7 +204,7 @@ export async function incrementIpUsage(
 
 /**
  * Resolve the daily limit for a user based on their redeemed access codes.
- * Highest tier wins: admin > unlimited > partner > default.
+ * Highest tier wins: unlimited > partner > default. (Codes cannot be admin.)
  */
 export async function getUserDailyLimit(userId: string): Promise<number> {
   const row = await getOne<{ tier: string; daily_limit: number | null }>(
@@ -216,7 +216,6 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
        AND (ac.expires_at IS NULL OR ac.expires_at > now())
      ORDER BY
        CASE ac.tier
-         WHEN 'admin' THEN 0
          WHEN 'unlimited' THEN 1
          WHEN 'partner' THEN 2
          WHEN 'client' THEN 3
@@ -233,7 +232,7 @@ export async function getUserDailyLimit(userId: string): Promise<number> {
     // comes from the organization they work for.
     return (await getOrgMemberDailyLimit(userId)) ?? DEFAULT_DAILY_LIMIT;
   }
-  if (row.tier === "admin" || row.tier === "unlimited") return 0; // 0 = unlimited
+  if (row.tier === "unlimited") return 0; // 0 = unlimited
   // 'partner' and 'client' codes both carry their minted daily_limit
   return row.daily_limit ?? 200;
 }
@@ -255,7 +254,7 @@ export async function getOrgMemberDailyLimit(userId: string): Promise<number | n
     [actor.orgId]
   );
   if (!code) return ORG_MEMBER_DAILY_FLOOR;
-  if (code.tier === "admin" || code.tier === "unlimited") return 0; // 0 = unlimited
+  if (code.tier === "unlimited") return 0; // 0 = unlimited
   return Math.max(code.daily_limit ?? ORG_MEMBER_DAILY_FLOOR, ORG_MEMBER_DAILY_FLOOR);
 }
 

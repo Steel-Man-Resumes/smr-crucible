@@ -22,6 +22,7 @@
 import { neon } from "@neondatabase/serverless";
 import { readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { applyRestrictedGrants, checkRestrictedGrants } from "./lib/restricted-grants.mjs";
 
 const PROD_ENDPOINT = "ep-little-cloud-aphpkqbd";
 const APP_ROLE = "smr_app";
@@ -85,6 +86,18 @@ await sql(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
 await sql(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
              GRANT USAGE, SELECT ON SEQUENCES TO ${APP_ROLE}`);
 console.log("  grants applied (current objects + default privileges)");
+
+// The blanket grant above just handed back what individual migrations
+// withhold (their REVOKEs are skipped on a fresh database, where this role did
+// not exist yet). Re-apply the withheld list, then refuse to continue if the
+// result is not what the list says.
+await applyRestrictedGrants((q) => sql(q));
+const grantProblems = await checkRestrictedGrants((q) => sql(q));
+if (grantProblems.length) {
+  console.error("\nFAILED: restricted grants are wrong:\n  " + grantProblems.join("\n  ") + "\n");
+  process.exit(1);
+}
+console.log("  restricted tables re-locked (org_audit, platform_admin: SELECT only)");
 
 // THE ASSERTION THIS WHOLE STAGE EXISTS FOR.
 const [role] = await sql`

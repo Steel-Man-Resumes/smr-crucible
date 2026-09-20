@@ -34,12 +34,11 @@ export async function effectiveAuth(): Promise<any> {
   if (!imp || imp.adminId !== real.user.id) return real;
 
   try {
-    const { getOne, getUserTier } = await import("@crucible/core");
+    const { getOne, isPlatformAdmin } = await import("@crucible/core");
 
     // Only admins can impersonate, ever -- checked against the database, for
     // the REAL user, on every single request that carries the cookie.
-    const liveTier = await getUserTier(real.user.id);
-    if (liveTier !== "admin") return real;
+    if (!(await isPlatformAdmin(real.user.id))) return real;
 
     const target = await getOne<{
       id: string;
