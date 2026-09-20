@@ -46,3 +46,4 @@ persona-runs/
 
 # Generated app-role credential for the RLS cutover. Never committed.
 .env.smr-app
+.env.smr-app-prod
