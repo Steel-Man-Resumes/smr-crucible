@@ -81,20 +81,8 @@ export async function POST(request: Request) {
     );
 
     if (!existingPreauth) {
-      // Create preauth table if it doesn't exist (idempotent)
-      await query(`
-        CREATE TABLE IF NOT EXISTS hub_preauthorizations (
-          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-          email text NOT NULL,
-          hub_user_id text NOT NULL,
-          access_code_id uuid NOT NULL REFERENCES access_code(id),
-          unlock_level text NOT NULL,
-          created_at timestamptz DEFAULT now(),
-          redeemed_at timestamptz,
-          UNIQUE(email, access_code_id)
-        )
-      `, []);
-
+      // The table comes from migration 050. It used to be created here, per
+      // request, AFTER the SELECT above had already needed it.
       await query(
         `INSERT INTO hub_preauthorizations (email, hub_user_id, access_code_id, unlock_level)
          VALUES ($1, $2, $3, $4)
