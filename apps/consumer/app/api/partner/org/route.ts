@@ -26,6 +26,7 @@ import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { requireOrgCapability } from "@/lib/org-guard";
 import {
   getOne,
+  resolveOrgActor,
   getUserTier,
   getOrgContext,
   getOrgStaff,
@@ -73,8 +74,19 @@ export async function GET(request: Request) {
       { status: ctx.error }
     );
   }
-  const { org, userId } = ctx;
-  const isOrgAdmin = org.role === "owner" || org.role === "org_admin";
+  const { org, userId, tier } = ctx;
+  // WHAT THIS PERSON SEES IS DECIDED BY THEIR CAPABILITIES, not their role name.
+  // It used to be `owner or org_admin` inline, so switching one case manager to
+  // "see everyone", or an admin's AI-cost view off, changed nothing on screen.
+  // The role is only the fallback when no actor can be resolved.
+  const roleIsAdmin = org.role === "owner" || org.role === "org_admin";
+  const actor = await resolveOrgActor(userId, { isPlatformAdmin: tier === "admin", orgId: org.accessCodeId }).catch(() => null);
+  const can = (cap: Parameters<NonNullable<typeof actor>["capabilities"]["has"]>[0], fallback: boolean) =>
+    actor ? actor.capabilities.has(cap) : fallback;
+  const isOrgAdmin = can("org.client.view_all", roleIsAdmin);
+  const seesCosts = can("org.costs.view", org.role === "owner");
+  const seesSeats = can("org.seats.view", roleIsAdmin);
+  const managesStaff = can("org.staff.manage", roleIsAdmin);
 
   try {
     const [staff, cohort, invites] = await Promise.all([
@@ -87,7 +99,7 @@ export async function GET(request: Request) {
     ]);
 
     // Staff never see the money column -- that is org-admin/owner information.
-    const clients = isOrgAdmin
+    const clients = seesCosts
       ? cohort.clients
       : cohort.clients.map((c) => ({ ...c, aiCostUsd: 0 }));
 
@@ -113,14 +125,17 @@ export async function GET(request: Request) {
         logoUrl: org.logoUrl,
         role: org.role,
         // Seat cap is org-admin/owner information (null = unlimited).
-        seatLimit: isOrgAdmin ? org.seatLimit : null,
+        seatLimit: seesSeats ? org.seatLimit : null,
       },
       staff,
       cohort: { ...cohort, clients },
       invites,
-      canManage: isOrgAdmin,
-      canInvite: true,
-      showCosts: isOrgAdmin,
+      canManage: managesStaff,
+      canAssign: can("org.client.assign", roleIsAdmin),
+      seesEveryone: isOrgAdmin,
+      canInvite: can("org.participant.invite", true),
+      showCosts: seesCosts,
+      capabilities: actor ? Array.from(actor.capabilities) : [],
     });
   } catch (err: any) {
     console.error("partner org GET failed:", err?.message || err);
@@ -234,6 +249,10 @@ export async function POST(request: Request) {
 
     // Invite actions: open to org admins AND staff (Troy 2026-08-05).
     if (body.action === "invite") {
+      // Inviting a participant spends a seat. An owner can switch it off for
+      // one person; until now nothing checked, so the switch would have lied.
+      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId });
+      if (!inviteGuard.ok) return inviteGuard.response;
       const name = String(body.name || "").trim();
       const email = String(body.email || "").toLowerCase().trim();
       if (!name) {

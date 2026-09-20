@@ -17,6 +17,8 @@ export * from './sharingScopes';
 export * from './sharing';
 export * from './orgClientView';
 export * from './staffPrefs';
+export * from './orgAccess';
+export * from './orgInsights';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './outcomeAggregate';

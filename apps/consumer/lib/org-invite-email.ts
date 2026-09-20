@@ -101,6 +101,51 @@ export function buildInviteEmail(opts: {
 }
 
 /** The notice for someone who already had an account and got attached. */
+/** The welcome for someone joining an organization's STAFF. Not a job seeker's email. */
+export function buildStaffInviteEmail(opts: {
+  inviteeName: string | null;
+  inviterName: string | null;
+  orgName: string;
+  roleLabel: string;
+  url: string;
+  origin: string;
+}): EmailContent {
+  const hello = firstName(opts.inviteeName);
+  const inviter = opts.inviterName || opts.orgName;
+  const loginUrl = `${opts.origin}/login`;
+  const subject = `${opts.orgName} added you to their team on Steel Man Resumes`;
+  const body =
+    `${inviter} added you to the ${opts.orgName} team as ${opts.roleLabel}. ` +
+    `This is where your organization works with the people it serves: your caseload, ` +
+    `your case notes, and anything a participant chooses to share with you.`;
+  const privacy =
+    `One thing to know before you start: participants decide what you can see, one item at a time, ` +
+    `and they can see each time you open something they shared.`;
+  const text =
+    `Hi ${hello},\n\n${body}\n\n${privacy}\n\n` +
+    `Open your account (no password needed):\n${opts.url}\n\n` +
+    `This link works for ${INVITE_TTL_DAYS} days. If it stops working, go to ${loginUrl}, ` +
+    `enter this email address, and choose "Email me a sign-in link."\n\n` +
+    `Steel Man Resumes -- Truth. Told Strong.`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
+      <h1 style="font-size:22px;margin:0 0 12px">You are on the ${opts.orgName} team</h1>
+      <p>Hi ${hello},</p>
+      <p>${body}</p>
+      <p>${privacy}</p>
+      <p style="margin:24px 0">
+        <a href="${opts.url}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
+      </p>
+      <p style="font-size:13px;color:#666">No password needed. If the button does not work, copy and paste this link:</p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${opts.url}</p>
+      <p style="font-size:13px;color:#666">This link works for ${INVITE_TTL_DAYS} days. After that, go to
+      <a href="${loginUrl}" style="color:#4a6741">${loginUrl}</a>, enter this email address, and choose "Email me a sign-in link."</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes -- Truth. Told Strong.</p>
+    </div>
+  `;
+  return { subject, html, text };
+}
+
 export function buildAddedEmail(opts: {
   inviteeName: string | null;
   inviterName: string | null;

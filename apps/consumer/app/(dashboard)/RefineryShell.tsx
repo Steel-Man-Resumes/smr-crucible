@@ -134,7 +134,9 @@ const ORG_ADMIN_NAV: OrgNavItem[] = [
 // organization-wide view.
 interface OrgNavGroup {
   label: string;
-  items: (OrgNavItem & { admin?: boolean })[];
+  /** `needs`: shown only to people who hold that capability -- the nav mirrors
+   *  the authorization model rather than guessing from a role name. */
+  items: (OrgNavItem & { needs?: string })[];
 }
 const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
   {
@@ -148,8 +150,9 @@ const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
   {
     label: "Organization",
     items: [
-      { href: "/dashboard/participants", label: "Add participants" },
-      { href: "/dashboard/team", label: "Team & seats", admin: true },
+      { href: "/dashboard/insights", label: "Insights", needs: "org.insights.view" },
+      { href: "/dashboard/team", label: "Team & access", needs: "org.staff.manage" },
+      { href: "/dashboard/participants", label: "Add participants", needs: "org.participant.invite" },
       { href: "/dashboard/org-security", label: "Security & privacy" },
     ],
   },
@@ -631,7 +634,8 @@ export function RefineryShell({
       <>
         {workspace ? (
           ORG_WORKSPACE_NAV.map((group, gi) => {
-            const items = group.items.filter((i) => !i.admin || isOrgAdmin);
+            const caps = effectiveRole?.capabilities ?? [];
+            const items = group.items.filter((i) => !i.needs || caps.includes(i.needs));
             if (items.length === 0) return null;
             return (
               <div key={group.label} className={gi > 0 ? "mt-3" : ""}>
@@ -762,6 +766,15 @@ export function RefineryShell({
           )}
           {/* The client journey banner is participant chrome -- org leaders run
               the org, they are not working a resume journey here. */}
+          {/* DEMO ORGANIZATIONS SAY SO, ON EVERY SCREEN. Their participants are
+              invented, and some are paired with real local employers so the
+              demonstration looks like the real world. Without this line a made-up
+              placement at a named employer could be read as a claim that it happened. */}
+          {isOrgPartner && /\(Demo\)\s*$/.test(effectiveRole?.orgName ?? "") && (
+            <p role="note" className="border-b border-t-amber/40 bg-t-panel px-4 py-1.5 text-center text-xs text-t-amber-bright">
+              Sample data. These participants are fictional. The employers and local services named are real; no application or hire shown here took place.
+            </p>
+          )}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
           {children}
         </main>

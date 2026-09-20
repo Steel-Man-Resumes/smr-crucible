@@ -16,6 +16,7 @@ import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { SharingControls } from "@/components/SharingControls";
 import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
+import { OrgSetupGuide } from "@/components/org/OrgSetupGuide";
 import { ConsentPanel } from "@/components/ConsentPanel";
 import { AiCostsOwnSection } from "@/components/AiCostsSection";
 import { DecisionLogViewer } from "@/components/DecisionLogViewer";
@@ -401,6 +402,12 @@ export default function SettingsPage() {
 
       {isOrgStaff && (
         <div id="workflow" className="scroll-mt-32 mb-10">
+          {(effectiveRole?.capabilities ?? []).includes("org.staff.manage") && effectiveRole?.crmV2 && (
+            <>
+              <GroupHeading>Organization</GroupHeading>
+              <OrgSetupGuide />
+            </>
+          )}
           <GroupHeading>My workflow</GroupHeading>
           <StaffWorkflowSettings workspace={!!effectiveRole?.crmV2} />
         </div>
