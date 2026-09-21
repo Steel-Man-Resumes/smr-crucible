@@ -498,7 +498,7 @@ export default function RushPage() {
               <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
                 The Forge builds your real narrative — strengths, career paths,
                 resources for your situation, and documents that hold up in an
-                interview. Takes about 10 minutes.
+                interview.
               </p>
               <TBtn
                 onClick={() => {

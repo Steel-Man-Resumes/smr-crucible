@@ -29,7 +29,7 @@ const PATHS: PathOption[] = [
   {
     id: "client",
     label: "I’m rebuilding my career",
-    subtitle: "Full Forge flow, about 10 minutes",
+    subtitle: "Full Forge flow, built to finish in one sitting",
     route: "/welcome",
   },
   {
@@ -176,7 +176,7 @@ export default function IntroPage() {
             <li>You give me your resume (or we build one together)</li>
             <li>I ask a few questions about what you want and what&apos;s in your way</li>
             <li>You get: a resume, cover letter, career paths, and resources for your situation</li>
-            <li>~10 minutes. Free. Nothing stored unless you say so.</li>
+            <li>Free. Nothing stored unless you say so.</li>
           </ol>
         </div>
 

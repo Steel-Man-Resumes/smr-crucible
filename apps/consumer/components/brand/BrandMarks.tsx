@@ -35,7 +35,7 @@ export function SteelManBrand({ compact = false, inverse = false, href = "/", cl
         <span className="leading-none">
           <strong className="block text-sm font-semibold">Steel Man Resumes</strong>
           <span className={`mt-1 block font-term text-[9px] uppercase ${inverse ? "text-[#b9bdb6]" : "text-t-bone-dim"}`}>
-            Career intelligence
+            Career report
           </span>
         </span>
       )}

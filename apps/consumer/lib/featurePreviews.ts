@@ -70,7 +70,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     id: "jobs",
     title: "Job Board",
     whatItDoes:
-      "It finds real job listings from fair-chance employers who are hiring now, so you have a target to tailor your resume to.",
+      "It searches several job sources at once and marks employers our team has published as hiring people with records, so you have a target to tailor your resume to.",
     sampleOutput:
       "Sample listing: \"Bagel Launch Technician -- Rocketship Bagels, Planet Zorp. Pay: 400 gold coins per week. Fair-chance employer.\" A Sample only -- real listings come from real employers near you.",
     trialTaste:

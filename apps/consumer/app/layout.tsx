@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     template: "%s | Steel Man Resumes",
   },
   description:
-    "Free career intelligence for justice-impacted individuals. Your past doesn't define your paycheck.",
+    "A free career report for justice-impacted individuals. Your past doesn't define your paycheck.",
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Steel Man Resumes Career Tools",
     description:
-      "Free career intelligence for justice-impacted individuals. Your past doesn't define your paycheck.",
+      "A free career report for justice-impacted individuals. Your past doesn't define your paycheck.",
     siteName: "Steel Man Resumes",
     type: "website",
     images: [{ url: "/og.png", width: 1200, height: 630, alt: "Steel Man Resumes" }],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Steel Man Resumes Career Tools",
-    description: "Free career intelligence for justice-impacted individuals.",
+    description: "A free career report for justice-impacted individuals.",
     images: ["/og.png"],
   },
 };

@@ -351,7 +351,7 @@ export default function DashboardPage() {
                   <p className="text-sm text-t-phos leading-relaxed">
                     I&apos;m t.ROY. The Refinery is where the real work happens -- targeted
                     resumes, interview practice, disclosure strategy, job matching. But I
-                    need your story first. The Forge takes about 10 minutes and gives me
+                    need your story first. The Forge is built to finish in one sitting and gives me
                     everything I need to help you win.
                   </p>
                 </div>
@@ -378,7 +378,7 @@ export default function DashboardPage() {
                 Start The Forge
               </Link>
               <p className="text-xs text-t-phos-dim mt-4">
-                Free. ~10 minutes. No account needed until you&apos;re ready to save.
+                Free. No account needed until you&apos;re ready to save.
               </p>
               <p className="text-xs text-t-phos-dim mt-2">
                 Already completed The Forge on another device? Your data syncs automatically.

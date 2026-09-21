@@ -120,7 +120,7 @@ export function PartnerToolsOverview({ noOrgCallout }: { noOrgCallout?: boolean 
       <section className="bg-t-panel border border-t-line p-6">
         <h2 className="font-semibold text-t-white mb-2">Try it with a client</h2>
         <p className="text-sm text-t-phos-dim mb-4">
-          The Forge takes about 10 minutes. Walk through it yourself or sit with a client while
+          The Forge is built to finish in one sitting. Walk through it yourself or sit with a client while
           they do -- you&apos;ll see exactly what they experience and what it produces.
         </p>
         <TBtn href="/intro" size="sm">start The Forge</TBtn>

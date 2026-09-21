@@ -132,7 +132,7 @@ const JOURNEY = [
   {
     stage: "Stage 1",
     name: "The Forge",
-    time: "~10 minutes",
+    time: "One sitting",
     what: "Upload a resume or describe your work history. Answer a few questions about goals, barriers, readiness, and record. The Forge outputs: a resume, a cover letter, career paths matched to your background, and a resource plan -- all in plain language.",
     tech: "Claude Sonnet (Anthropic) with a custom prompt scaffold that enforces the 10 behavioral rules. Resume parsed via OCR + NLP. Output hashed and logged.",
     color: "amber",
@@ -141,7 +141,7 @@ const JOURNEY = [
     stage: "Stage 2",
     name: "Profile and Job Board",
     time: "5 minutes",
-    what: "Fill in your contact info. Browse the verified fair-chance employer board -- real companies, real listings, manually verified to hire justice-impacted people.",
+    what: "Fill in your contact info. Browse the verified fair-chance employer board -- real companies, real listings from several job sources.",
     tech: "Employers sourced from Airtable (SMR Employers base), imported to Neon PostgreSQL. Fair-chance verification is a manual human step -- not automated.",
     color: "phos",
   },
