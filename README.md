@@ -20,10 +20,12 @@ A seven-stage journey, with one suggested next step surfaced at every point:
 1. **Foundation (The Forge)** -- narrative-first analysis of strengths, skills, and
    career paths. No scoring, no grading.
 2. **Find fair-chance work** -- a job board fed by several job-data providers. An
-   employer is flagged fair-chance only when it is in a verified employer table.
+   employer carries the fair-chance badge only when it matches an entry a person
+   published to the employer table. An AI cannot grant it.
 3. **Tailor a resume** -- an ATS-aware resume targeted to a saved job. Generation is
-   evidence-only: a truth gate blocks claims the person never made. Justice involvement
-   never appears on paper.
+   evidence-only: a second model checks generated lines against the person's own words
+   and removes unsupported specifics. Correctional facility names are kept off the
+   resume by design.
 4. **Plan disclosure** -- how to talk about a record, with the relevant ban-the-box and
    expungement law as background. Every output carries "coaching, not legal advice."
 5. **Practice interviews** -- text or live voice.
@@ -121,7 +123,7 @@ Stack: Next.js 14.2 (App Router) and React 18, TypeScript 5, Tailwind CSS 3, Neo
 through the Neon serverless driver, Auth.js v5 (NextAuth) with the Postgres adapter
 (email magic link, password with optional two-factor, optional Google sign-in), Cloudflare
 R2 for files, the Vercel AI SDK with Anthropic as primary and OpenAI as fallback, Resend
-for email. Node 20. High-risk systems sit behind feature flags.
+for email. Node 20. Newer systems, such as the organization workspace, are switched on per organization by feature flag.
 
 ## Product world map
 
