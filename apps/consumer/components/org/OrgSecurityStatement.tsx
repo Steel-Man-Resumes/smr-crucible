@@ -37,9 +37,9 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Can another organization see our participants?",
-        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session -- so removing someone takes effect on their next click, not whenever their session happens to expire. Beneath that, the database itself refuses: your staff list and your caseload assignments are protected by row-level security, and the application connects as a database role that has no ability to bypass it. The last section says exactly which tables that covers and which it does not yet.",
+        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session -- so removing someone takes effect on their next click, not whenever their session happens to expire. Beneath that, organization boundaries are enforced by the database itself, not only by application code: row-level security covers the organization tables, and the application connects as a database role that has no ability to bypass it. The last section says exactly what the database decides and what it does not.",
         proof:
-          "A test suite runs against a real database and tries to break it: reading another org's cohort, writing to another org's staff, claiming another org's participant. It connects the code under test as the same restricted database role production uses, because a test that runs with administrator rights proves nothing. We run it before changes to this layer ship; it is not yet an automatic gate on every release, and we would rather say that than imply otherwise.",
+          "A test suite runs against a real database and tries to break it: reading another org's cohort, writing to another org's staff, claiming another org's participant. It connects the code under test as the same restricted database role production uses, because a test that runs with administrator rights proves nothing. It runs automatically on every pull request that changes the organization or database layer, connected as that restricted role.",
       },
       {
         q: "Can one of our case managers see another case manager's caseload?",
@@ -69,7 +69,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Which AI companies see this data?",
-        a: "Two. Anthropic writes and coaches. OpenAI runs a smaller model that fact-checks what the first one wrote. Neither trains on your data. Voice practice, if used, streams audio to OpenAI who hold it up to 30 days for abuse monitoring.",
+        a: "Two. Anthropic writes and coaches. OpenAI runs a smaller model that fact-checks what the first one wrote. Neither trains on your data. Voice practice, if used, streams audio to OpenAI, where it is processed under OpenAI's own retention policy, which we do not control.",
       },
       {
         q: "Can the assistant tell a case manager something that is not true?",
@@ -117,11 +117,11 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Is isolation enforced by the database itself?",
-        a: "Partly, and the boundary is worth knowing. Row-level security is enforced today on the tables that define your organization: who is on your staff, which participant is assigned to which staff member, and the audit record of changes to both. A query for those rows without your organization's scope returns nothing, whatever the application code says. It does NOT yet cover the table recording which participants joined under your code, or the participant-owned tables -- applications, documents, profile. Those are isolated by application code and tests, the same as before. Extending the database layer to them is in progress.",
+        a: "Between organizations, yes. Organization boundaries are enforced by the database itself, not only by application code. A query without your organization's scope returns nothing, whatever the application code says. A participant's applications, resumes and profile can be read only by that participant. Staff see a shared item through a restricted view that does not contain private notes, pay, or disclosure plans at all. The boundary worth knowing is inside your organization: which colleague may open a participant is enforced in application code and covered by tests, not by a database rule.",
       },
       {
         q: "Is the isolation test an automatic gate on every release?",
-        a: "Not yet. It is run deliberately before changes to the organization layer ship, not automatically on every change. Until it is wired into the release pipeline, that depends on discipline rather than machinery.",
+        a: "For the layer it protects, yes. The isolation suite runs automatically on every pull request that changes the organization or database layer, connected as the restricted database role production uses rather than as an administrator. A change that touches none of that code, such as a wording change, does not trigger it.",
       },
     ],
   },
