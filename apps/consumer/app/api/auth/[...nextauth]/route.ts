@@ -4,7 +4,7 @@ import {
   checkAuthRateLimit,
   getClientIp,
   isValidEmail,
-  AUTH_LIMITS,
+  signInRateLimits,
 } from "@/lib/auth-rate-limit";
 
 export const { GET } = handlers;
@@ -34,8 +34,12 @@ export async function POST(request: NextRequest) {
     const csrfToken = params.get("csrfToken");
 
     // Only rate-limit sign-in actions (not signout, callback, etc.)
-    // Magic link and password sign-in both POST with an email field
+    // Magic link and password sign-in both POST with an email field, but they
+    // are limited separately: a magic link burns an email send (strict hourly
+    // limits), a password sign-in does not (brute-force limits).
     if (email) {
+      const limits = signInRateLimits(request.nextUrl.pathname, ip, email);
+
       // Email format validation -- reject garbage before burning a send
       if (!isValidEmail(email)) {
         return NextResponse.json(
@@ -45,10 +49,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Rate limit by IP
-      const ipCheck = checkAuthRateLimit(
-        `auth:ip:${ip}`,
-        AUTH_LIMITS.magicLinkPerIp
-      );
+      const ipCheck = checkAuthRateLimit(limits.ip.key, limits.ip.config);
       if (!ipCheck.allowed) {
         return NextResponse.json(
           { error: "Too many sign-in attempts. Please try again later." },
@@ -63,8 +64,8 @@ export async function POST(request: NextRequest) {
 
       // Rate limit by email (prevents spamming a single address)
       const emailCheck = checkAuthRateLimit(
-        `auth:email:${email}`,
-        AUTH_LIMITS.magicLinkPerEmail
+        limits.email.key,
+        limits.email.config
       );
       if (!emailCheck.allowed) {
         return NextResponse.json(
