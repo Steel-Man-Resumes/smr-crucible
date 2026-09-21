@@ -191,7 +191,7 @@ M3. Seed the nonprofit lane -- REAL data, Troy's call. Build a genuine second ba
     Troy's true background for a nonprofit marketing/development role: founder and operator
     of Steel Man Resumes and The Midnight Garden; advisor to Justice Beacon Solutions
     (advises JBS -- never "his company"); coalition building in Milwaukee reentry
-    (MRN/CJC), sponsorship development (EXPO relationship), grant research and program
+    (MRN/CJC), sponsorship development (a partner relationship), grant research and program
     design, P2P scholar program work, nine years serving justice-impacted individuals.
     Locked as `lane: "Nonprofit -- Marketing & Development"`. He will actually use it, and it
     demos the one-master-per-vertical model with zero fabrication. Full page-fit and naming

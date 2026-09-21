@@ -14,7 +14,8 @@ authoritative sequence, scope, and decision record. Where the two disagree, this
   encryption/consent design, the artifact/revision contract, and the page-fit engine.
   Sonnet for well-specified implementation and mechanical sweeps. Haiku for grep-level
   recon only. Code-review every phase with a fresh-context review agent before ship.
-- One phase per session. Start every session: read this doc, HANDOFF.md top, then
+- One phase per session. Start every session: read this doc, the top of the private
+  handoff (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo), then
   `git status` + pull. End every session: HANDOFF entry (what shipped, what was NOT
   verified), commit, push, deploy per repo rules.
 - QUALITY MANDATE (Troy, verbatim intent): build it correctly. Do not slap code on top of
@@ -67,7 +68,7 @@ authoritative sequence, scope, and decision record. Where the two disagree, this
    has submit route, admin list, assistant escalation; do not build a parallel one).
 10. Second lane: NONPROFIT marketing/development baseline built from Troy's REAL background
     (SMR/TMG founder-operator, JBS advising -- never "his company", Milwaukee coalition work,
-    EXPO sponsorship development, grant research, P2P). He will actually use it.
+    partner sponsorship development, grant research, P2P). He will actually use it.
 11. Preview/prod separation: YES -- separate Neon branch/database + separate storage
     credentials BEFORE any sensitive store (transcripts, disclosure recordings, uploads)
     exists.

@@ -22,7 +22,7 @@ Codex finding 1 (API fixed, builder still broken) is why. Plus an adversarial te
   suite `apps/consumer/test/adversarial.mts`, `npm run test:adversarial`, 39 green). Pushed; Vercel
   preview build READY (085c26d); LIVE /api/analyze verified (no WOTC/8850/eligibility, corrected WI
   ban-the-box, grounded narrative). Deep UI Playwright regression = Phase 4 (Sol+Fable). NEXT = Phase 2.
-  See HANDOFF.md top entry for exact files + approach per item.
+  See the private handoff (`~/todash/smr/crucible-handoff/HANDOFF.md`) entry of this date for exact files + approach per item.
 
 ## TROY DECISIONS (2026-08-07)
 - **Report privacy (Codex 3):** the downloadable Career Analysis KEEPS the barrier/legal/resource
@@ -78,7 +78,7 @@ Foundational refactor first (fixes several findings at once), then the point fix
 All 4 items shipped on `crucible-overhaul-wave1-2026-08-06` (commits a596ff0, cb8b022, a6f6c5c, a6a3504,
 e065423, 4c4a0bd). Adversarial suite 80/80; core build + consumer tsc clean. Migrations 027/028/029 on the
 shared Neon (additive); GR/Kent seed is promote-only (`node scripts/seed-gr-kent-employers.mjs` at Phase 4).
-See HANDOFF.md top entry for the per-item verification + the `users` vs `"user"` FK footgun.
+See the private handoff (`~/todash/smr/crucible-handoff/HANDOFF.md`) entry of this date for the per-item verification + the `users` vs `"user"` FK footgun.
 
 - **P2.0 URL-fetch tailoring (Codex 14, Troy ratified).** Server-side fetcher pulls the posting text from
   a pasted URL (UA + timeout + size cap); on paywall/anti-bot/timeout, fall back to "paste the description"
@@ -115,6 +115,6 @@ to prod - prod smoke.
 
 ## OPS NOTE (resolved 2026-08-07)
 `comms-health` (todash scheduled monitor) was emailing a daily FAILURE since 8/6: the sole red check was
-`five-star-site.vercel.app` 404 -- a stale entry, 5 Star Impact was offboarded 8/5 (domain released).
+a former client site returning 404 -- a stale entry (the site had been retired).
 Removed the URL from `tooling/comms-health/check.mjs` (todash `529eefd`). Next 14:00 UTC run goes green.
 Not related to the crucible work. smr-crucible gitleaks on main is clean; branch pushes don't trigger it.

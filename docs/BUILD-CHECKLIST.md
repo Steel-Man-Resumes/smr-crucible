@@ -2,8 +2,8 @@
 
 **Purpose:** Troy's real-time window into the build. Organized by SYSTEM so the architecture is learnable, not just the chronology. Every working session updates this file; every line maps to commits you can read in `git log`.
 **How to watch:** (1) this file, (2) `git log --oneline -15` in `~/repos/smr-crucible`, (3) the session task list in Claude Code, (4) Vercel deployments on project `the-crucible`, (5) prod probes: `/api/health/skills`.
-**Companion docs:** `FABLE-ANALYSIS-REPORT-2026-06-09.md` (the audit) -- `FABLE-REASSESSMENT-AGENCY-2026-06-10.md` (the architecture + decisions).
-**Deadlines:** EXPO cohort ~Jun 16 -- Reentry United Aug 14 -- repo public Aug 15.
+**Companion docs:** the 2026-06-09 analysis report (the audit; kept in the private working record, not in this repo) -- `FABLE-REASSESSMENT-AGENCY-2026-06-10.md` (the architecture + decisions).
+**Deadlines:** first partner cohort ~Jun 16 -- conference demo Aug 14 -- repo public Aug 15.
 
 Legend: [x] shipped+verified -- [~] shipped, awaiting Troy's hands-on test -- [ ] queued
 
@@ -31,7 +31,7 @@ Legend: [x] shipped+verified -- [~] shipped, awaiting Troy's hands-on test -- [ 
 - [ ] DATA-ARCHITECTURE.md: one Neon, per-tool domains, event spine + nightly DB-intelligence agent auditing invariants into Troy's brief (Task 17)
 
 ## 4. Pilot & Licensing (the seats)
-- [~] Seats v1 SHIPPED (`7b7d533`): 'client' code tier (migration 019, applied) -- seat-holders keep the full client journey; atomic seat claims (max_redemptions = seats, no oversell race); /access cookie -> per-code Forge pool (limit x seats, cap 50) replaces the shared NAT-IP bucket; admin Mint Access Code form (type/seats/daily limit; admin+unlimited never mintable). SEEDED live: EXPOCREW / BAKERCREW / JFWCREW (client, 10 seats, 200/day each). Partner staff codes (EXPO2026/BAKER2026/JFW2026) unchanged.
+- [~] Seats v1 SHIPPED (`7b7d533`): 'client' code tier (migration 019, applied) -- seat-holders keep the full client journey; atomic seat claims (max_redemptions = seats, no oversell race); /access cookie -> per-code Forge pool (limit x seats, cap 50) replaces the shared NAT-IP bucket; admin Mint Access Code form (type/seats/daily limit; admin+unlimited never mintable). SEEDED live: three cohort codes, `<ACCESS_CODE>` x3 (client, 10 seats, 200/day each). Partner staff codes (EXPO2026/BAKER2026/JFW2026) unchanged.
 - [~] Legal disclaimer "coaching, not legal advice" on plan view + plan PDF + vault PDF + Tailor brief; non-WI jurisdictions now general-info-only (no hallucinated statutes) (`b49898d`)
 - [ ] Certification retest vs the v2 test folder -- Troy walks it (Task 4, blocked by 1+2+3)
 

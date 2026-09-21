@@ -92,8 +92,8 @@ Key facts:
 - **Same app, two domains**: forge.steelmanresumes.com (unauthenticated) + refinery.steelmanresumes.com (authenticated dashboard)
 - **Same Neon DB** -- not separate databases despite different subdomains
 - **localStorage cross-domain issue**: Forge writes to forge.* localStorage; Refinery can't read it (different browser origin). Profile data must go through `/api/forge/save` server-side at Forge completion -- THIS FIX IS NOT YET DONE (as of 2026-06-08)
-- **Admin account**: troyrichardcarr@gmail.com -- bypasses all onboarding gates (tier=admin, god mode)
-- **Dev test account**: d3vt3st3rt.roy@gmail.com / D3vt3st3rt.r0y1!2@3#
+- **Admin account**: `<ADMIN_EMAIL>` -- bypasses all onboarding gates (tier=admin, god mode)
+- **Dev test account**: credentials are never written in this repo (it is public). They live in the private hub.
 - **MOCK_AI**: must be OFF in production (check apps/consumer/.env.local)
 - **Skill files**: `apps/consumer/lib/skills/` -- loaded server-side in `app/api/assistant/route.ts` via `loadSkillsForContext()`
 

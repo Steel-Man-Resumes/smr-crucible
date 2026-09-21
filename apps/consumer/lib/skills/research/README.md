@@ -88,7 +88,7 @@ When you complete a research brief, set `Status: DRAFT`. CC reviews and either i
 
 Priority is set by Troy and updated here by CC.
 
-### P1 -- Needed before next JFW pilot interaction
+### P1 -- Needed before next partner pilot interaction
 
 | Topic | File to create | Key question to answer |
 |-------|---------------|----------------------|

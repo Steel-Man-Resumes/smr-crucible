@@ -1,6 +1,6 @@
 # Fable Reassessment -- t.ROY Agency + Unified Platform
 
-**Date:** 2026-06-10 (same Fable session as `FABLE-ANALYSIS-REPORT-2026-06-09.md`)
+**Date:** 2026-06-10 (same Fable session as the 2026-06-09 analysis report, which is kept in the private working record)
 **Trigger:** Troy's answers to the analysis + new directive: the platform's center of gravity is **t.ROY's intelligence and agency**, inside a unified suite (web + Mini Forge tablets + future native apps), open-sourced Aug 15 with seat licensing + consulting.
 
 ---
@@ -12,7 +12,7 @@
 | Fabricated numbers on tailored resume | "I didn't tell it any numbers; it totally fabricated those" -- and base-resume numbers too | **P0-1 operator-confirmed, both lanes.** Highest priority stands. |
 | Recovery-services career path | Persona DID mention recovery | **Withdrawn.** The analysis personalized correctly -- a point FOR the intelligence layer. |
 | Identity desync | Persona split was intentional; "if it would persist to a regular user, fix it" | **In scope.** The contact-clobber + Tailor-contact-source bugs hit real users (any account name != resume name; any forge re-sync wipes saved contact). Now also the FOUNDATION for agency (sec. 3). |
-| From-scratch builder | Never meant to be a feature; Dr. Baker insisted; added last-minute. "Make it simply award-winning if we have to include it." | **Elevated to commitment.** Plan in sec. 4. |
+| From-scratch builder | Never meant to be a feature; a partner organization's director insisted; added last-minute. "Make it simply award-winning if we have to include it." | **Elevated to commitment.** Plan in sec. 4. |
 | Forge emergency output | "Ill-advised... tighten the disclaimer and make the process better" | Truth-gate + honest draft framing both confirmed. |
 | Cohort logistics | Unknown -- "wing it" | Build the seat model anyway (sec. 6); it's the durable answer. |
 | Brand | "Steel Man" condensed is correct for the 501(c)(3); SMR stays the original business name; the name is the antidote-to-strawman story | Brand sweep = real to-do before Aug 14 public materials. |
@@ -77,7 +77,7 @@ The spine already exists (Phase 7: ingest -> assess -> build -> carry-forward). 
 1. **Truth-gate `generate-docs`** (P0-1) -- an award-winning builder cannot fabricate. Done this week.
 2. **Make the workshop unmissable.** Troy built a resume and never saw the product's crown jewel. In the guided/from-scratch path, weak or number-less bullets should AUTO-OPEN the workshop (or inline its 5 questions as the default way bullets get written), not wait behind a small "Strengthen with help" link. The workshop IS the from-scratch experience.
 3. **Adaptive extraction depth** (spec 7.3's promise): run the progressive-intake engine inside the builder -- thin material -> deeper interview; rich import -> 1-2 confirmations. The engine exists (`lib/intake-engine.ts`); it is wired into disclosure but not the builder.
-4. **Import-first posture** (Troy's instinct stands): Indeed/LinkedIn import + IRS/Work Number/Credly recovery links stay the promoted path; from-scratch is the full-care path for people with nothing -- which is exactly the population story for Dr. Baker.
+4. **Import-first posture** (Troy's instinct stands): Indeed/LinkedIn import + IRS/Work Number/Credly recovery links stay the promoted path; from-scratch is the full-care path for people with nothing -- which is exactly the population story for that partner organization.
 5. **Honest draft framing:** until a workshop/intake pass has touched the bullets, exports carry a visible "DRAFT -- make sure you can defend every line" treatment (Troy's "tighten the disclaimer" answer).
 6. Certifications field + the artifact-layer fixes from the report (they all land on this surface).
 

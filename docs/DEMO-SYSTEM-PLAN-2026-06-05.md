@@ -209,8 +209,8 @@ You leaned toward "toggle first." Recommended order:
 ## Open decisions (need your call before building)
 
 1. **Which account gets the presenter toggle?** You said "my normal browser gmail
-   account." Admin in Crucible is `marcusinplainsight@gmail.com`; your everyday
-   account looks like `troyrichardcarr@gmail.com`. Add your everyday account to a
+   account." Admin in Crucible is `<ADMIN_EMAIL>`; your everyday
+   account looks like `<FOUNDER_EMAIL>`. Add your everyday account to a
    presenter allowlist? Or only use the admin account for demos?
 2. **Presenter mode over the real app, the cinematic, or both?** (Recommend both,
    default cinematic for safety.)
