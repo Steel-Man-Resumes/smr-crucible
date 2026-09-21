@@ -54,9 +54,14 @@ It is switched on for an organization by arrangement.
 
 The organization workspace is built and running in production for demonstration
 organizations, and is available by arrangement. The rule it is built on: staff suggest,
-participants decide. Staff never edit a participant's work, and never sign in as a
-participant. They get a map of the participant's screen, and see inside an area only if
+participants decide. An organization's staff never edit a participant's work, and never sign
+in as a participant. They get a map of the participant's screen, and see inside an area only if
 it was shared.
+
+Separately, Steel Man's own platform administrators have a support-access path
+(`apps/consumer/lib/impersonation.ts`): a read-only view capped at 60 minutes, or an
+act-as mode capped at 30 minutes that requires a stated reason. Every such session is
+recorded in `impersonation_session`.
 
 What the staff workspace contains:
 
