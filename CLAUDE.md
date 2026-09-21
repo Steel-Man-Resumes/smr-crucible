@@ -1,5 +1,10 @@
 # CRUCIBLE
 
+## Public Repository Rule
+This repository is public. Working notes, credentials, access codes and the names of partners, leads or participants never go in it.
+
+Session handoffs and working notes live in the private hub at `~/todash/smr/crucible-handoff/HANDOFF.md` (new entries at the top). Do not create a `HANDOFF.md` in this repo; CI (`scripts/lint-no-secrets-in-docs.mjs`) fails if one appears or if a doc carries a credential-shaped line. Public, product-level history goes in `CHANGELOG.md`.
+
 ## What This Is
 AI-assisted career services platform. Replaces smr-forge and smr-refinery with unified persistent architecture. Produces a complete career services package — resume, cover letters, employer battle plan, interview prep, salary negotiation sheet, portfolio, and more — from a single resume upload.
 
@@ -32,7 +37,7 @@ AI-assisted career services platform. Replaces smr-forge and smr-refinery with u
 
 ### What Works
 - **v1 pipeline (career_intake_v1)**: 4-step sequential pipeline. Extract → Parse → Analyze → Generate. Produces a single DOCX resume. Fully functional end-to-end.
-- **v2 pipeline (career_intake_v2)**: 10-step Stage A pipeline + 13 parallel Stage B artifact generators + Stage C assembly. Produces a full career package from a single resume upload. Tested end-to-end with real resume (Nicholas Vicich).
+- **v2 pipeline (career_intake_v2)**: 10-step Stage A pipeline + 13 parallel Stage B artifact generators + Stage C assembly. Produces a full career package from a single resume upload. Tested end-to-end with a real resume.
 - **First real test results (v2)**: 10 of 13 artifacts generated successfully on first run. Cover letters targeted real employers (McDonald's, Wendy's, Texas Roadhouse) found via JSearch. Alloy Report correctly triggered for employment gap barrier.
 - **Auth**: Magic link via Resend (prod) + Credentials bypass (dev). Dev login auto-creates users.
 - **Upload + Storage**: File upload to R2, signed URL generation, artifact download all working.
@@ -422,9 +427,11 @@ Troy's voice as an AI companion. Named "Opus" — Troy's magnum opus, but really
 - ANTHROPIC_API_KEY
 
 ### Seeded Access Codes
-- SECONDMILE — admin tier (Troy + staff)
-- PARTNER2026 — partner tier, 200/day, max 100 redemptions
-- UNLIMITED2026 — unlimited tier, max 50 redemptions
+- `<ACCESS_CODE>` — admin tier (founder + staff)
+- `<ACCESS_CODE>` — partner tier, 200/day, max 100 redemptions
+- `<ACCESS_CODE>` — unlimited tier, max 50 redemptions
+
+Code values are never written in this repo. They live in the private hub.
 
 ### Consumer Build & Dev
 - `npm run dev -w apps/consumer` — Dev server (port 3001)

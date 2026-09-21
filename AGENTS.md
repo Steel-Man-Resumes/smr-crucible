@@ -15,18 +15,26 @@ This is the **Crucible** -- a monorepo housing Forge (behavioral career analysis
 
 ## Before You Change Anything
 
-1. Read `CLAUDE.md` for full architecture, principles, and current state
+1. Read `CLAUDE.md` for full architecture and principles. Current state and session handoffs are private: `~/todash/smr/crucible-handoff/HANDOFF.md`
 2. Never put incarceration, prison, parole, probation, or justice involvement in any AI-generated resume output -- not even obliquely
 3. Always say "justice-impacted" -- never "second-chance," "ex-offender," or "felon"
 4. Build `packages/core` before `apps/consumer` if touching shared packages
 5. All canonical state lives in PostgreSQL -- browser state is cache only
 6. Heavy compute runs on the VPS worker (76.13.98.230), never in Vercel serverless
 
+## Public Repository Rule
+
+This repository is public. Working notes, credentials, access codes and the names of partners, leads or participants never go in it.
+
+Session handoffs go at the top of `~/todash/smr/crucible-handoff/HANDOFF.md` (private hub), never in this repo. CI fails if a root `HANDOFF.md` exists or a doc carries a credential-shaped line (`scripts/lint-no-secrets-in-docs.mjs`). Public product history goes in `CHANGELOG.md`.
+
 ## Key Files
 
 | Need to... | Read this |
 |------------|-----------|
 | Understand the platform | `CLAUDE.md` |
+| Pick up where the last session left off | `~/todash/smr/crucible-handoff/HANDOFF.md` (private, not in this repo) |
+| See what shipped, publicly | `CHANGELOG.md` |
 | Understand AI pipeline | `apps/consumer/app/api/analyze/route.ts` |
 | Understand session flow | `apps/consumer/lib/forge-context.tsx` |
 | Understand shared types | `packages/core/src/types/` |

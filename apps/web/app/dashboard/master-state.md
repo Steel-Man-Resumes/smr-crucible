@@ -8,7 +8,7 @@
 
 ## Works Now
 - Upload resume → v2 pipeline → 13 parallel artifacts → ZIP bundle → download
-- 10/13 artifacts succeeded on first real test (Nicholas Vicich, food service, Waukesha WI)
+- 10/13 artifacts succeeded on first real test (a food service resume)
 - v1 single-resume pipeline still works
 - Dev auth bypass, signed URL downloads, human review (approve/reject)
 

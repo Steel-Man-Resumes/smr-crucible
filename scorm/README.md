@@ -22,7 +22,7 @@ Montana DOC's tablet vendor is ViaPath. CypherWorx is already on those tablets.
 Third-party content reaches a tablet by being wrapped in SCORM, added to the
 CypherWorx LMS, vetted by ViaPath for security, and then added to the catalog.
 
-Steve Stookey of CypherWorx named the obstacle exactly: *"For many of the tablet
+A contact at the LMS vendor named the obstacle exactly: *"For many of the tablet
 providers, there is a very significant fear of a web app or anything that allows
 an inmate to get out to the web."*
 

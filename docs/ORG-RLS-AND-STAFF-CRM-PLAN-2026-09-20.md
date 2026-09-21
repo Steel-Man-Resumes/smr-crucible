@@ -508,7 +508,7 @@ item; none write to participant-owned tables.
 ## 6. Sequence and the Tuesday cut line
 
 Everything new ships behind a per-org flag `crm_v2` on `access_code`, enabled
-first ONLY for the three `(Demo)` orgs. Real orgs (EXPO cohort) see no change
+first ONLY for the three `(Demo)` orgs. Real orgs (the live pilot cohort) see no change
 until the flag is turned on for them after D2.
 
 | Stage | Work | Est. | When |

@@ -62,7 +62,7 @@ Code is live but invisible until these exist:
 - Company/role research assist button (accepted AI cost -- needs a spec pass).
 - Print take-away package (narrative pamphlet + resources + QR to Refinery).
 - Methodology page layered disclosure restructure.
-- Partner dashboard build-out (Marianne/workers hierarchy) and
+- Partner dashboard build-out (org admin/workers hierarchy) and
   PartnerView/User toggle + assist-as-user with acting-as banner.
 - Defensibility checklist made mandatory with typed-name ownership.
 - Extending guided multiple-choice to more analysis fields.
