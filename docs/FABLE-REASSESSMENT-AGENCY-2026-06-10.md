@@ -94,7 +94,7 @@ The spine already exists (Phase 7: ingest -> assess -> build -> carry-forward). 
 Design on top of what exists (`access_code` has usage limits, redemption log, partner ownership; W7 partner dashboard keys on code OWNERSHIP):
 - `access_code.seat_limit` (default 10): a redemption consumes a durable seat (one registered user, forever -- not concurrent). Redemptions beyond the limit are refused with a friendly "ask your organization" message.
 - **Role/tier split (resolves the flagged tier tension):** redeeming a seat makes you a `client` (full journey, onboarding intact) with the code's `daily_limit`; the code OWNER is the `partner` (dashboard, cohort view). Seat-holders never skip the journey.
-- **Pre-auth Forge limits become code-aware:** a forge session that entered via `/access?code=X` carries the code; forge endpoints validate it and count against a per-code bucket instead of the shared IP bucket. Solves classrooms/labs/libraries permanently and gives per-org pilot telemetry (the data story for Marianne + funders).
+- **Pre-auth Forge limits become code-aware:** a forge session that entered via `/access?code=X` carries the code; forge endpoints validate it and count against a per-code bucket instead of the shared IP bucket. Solves classrooms/labs/libraries permanently and gives per-org pilot telemetry (the data story for the partner organization + funders).
 - Admin console: create/disable codes, set seats + daily limits, see redemptions + usage per org. This IS the licensing mechanism for the open-source-plus-hosted model: a "license" = a partner code with N seats on Troy's hosted instance.
 
 ## 7. Revised runway to Aug 14
