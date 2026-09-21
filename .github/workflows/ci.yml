@@ -17,6 +17,8 @@ jobs:
       # No database needed, so it runs on every push: an unscoped query against a
       # row-level-protected table returns nothing instead of failing.
       - run: node scripts/lint-protected-tables.mjs
+      # The repo is public: fail on credential-shaped lines in docs or a root HANDOFF.md.
+      - run: node scripts/lint-no-secrets-in-docs.mjs
       - run: npm run build -w packages/core
       - run: npm run test -w packages/core
       - run: npm run typecheck -w apps/consumer
