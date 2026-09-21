@@ -66,7 +66,7 @@ export default function MethodologyPage() {
               {isPartnerOrAdmin ? "During the session" : "The process"}
             </h3>
             <p className="text-t-phos-dim">
-              10-15 minutes. {isPartnerOrAdmin
+              {isPartnerOrAdmin
                 ? "Can be done independently or with a facilitator present. The AI assistant (t.ROY) is available on every page but never auto-opens. Clients can ask questions, talk through decisions, or skip sections they’re not ready for."
                 : "You’ll share your resume (or build one), tell us what matters to you, and describe what’s in your way. t.ROY is there on every page if you need help."}
             </p>

@@ -21,7 +21,7 @@ const CLIENT_WORKFLOW = [
   {
     step: "1",
     title: "Share The Forge link",
-    detail: "Send your clients to forge.steelmanresumes.com. No login required to start. They complete the 10-minute intake on any device.",
+    detail: "Send your clients to forge.steelmanresumes.com. No login required to start. They complete the intake on any device.",
   },
   {
     step: "2",
@@ -65,7 +65,7 @@ const DASHBOARD_FEATURES = [
 ];
 
 const WHAT_CLIENTS_GET = [
-  { tool: "The Forge", desc: "10-minute career intake -- resume, cover letter, strengths analysis, career paths, resources" },
+  { tool: "The Forge", desc: "Career intake -- resume, cover letter, strengths analysis, career paths, resources" },
   { tool: "Job Board", desc: "Verified fair-chance employer listings -- real companies, manually checked" },
   { tool: "Application Tailor", desc: "Targeted resume, cover letter, and disclosure for a specific job, with AI guidance at each step" },
   { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },

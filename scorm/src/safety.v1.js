@@ -47,9 +47,11 @@
  * reported, never counted, and never persists past the render. There is a test
  * that fails the build if any safety flag ever reaches the saved payload.
  *
- * That is what lets the consent screen keep saying "nobody here reads your
- * answers" while the program still helps. Both things are true at once, and
- * they are only both true because the noticing is thrown away.
+ * That is what lets the consent screen keep saying "nobody is watching this
+ * while you work" while the program still helps. Both things are true at once,
+ * and they are only both true because the noticing is thrown away. (The
+ * answers themselves ARE saved in the learning record, which the institution
+ * can read, and the consent screen says that too. Only the noticing is not.)
  *
  * ---------------------------------------------------------------------------
  * PRECISION OVER RECALL, DELIBERATELY

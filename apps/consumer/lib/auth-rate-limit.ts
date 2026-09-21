@@ -38,6 +38,8 @@ export const AUTH_LIMITS = {
   magicLinkPerIp: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
   magicLinkPerEmail: { maxRequests: 3, windowMs: 3_600_000 } as RateLimitConfig,
   passwordPerIp: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
+  // Brute-force ceiling on one account; a real person retyping a password fits well inside it.
+  passwordPerEmail: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
   // Registration: deliberately generous per-IP -- a classroom or conference
   // room signs up behind one NAT, and real people must never be choked.
   // 120/hr/IP passes any human burst; sustained bot floods do not look human.
@@ -75,6 +77,34 @@ export function checkAuthRateLimit(
 
   entry.timestamps.push(now);
   return { allowed: true, resetIn: config.windowMs };
+}
+
+/**
+ * Which limits apply to a sign-in POST that carries an email.
+ *
+ * A password sign-in sends no email, so it gets the brute-force limits. Every
+ * other email-bearing POST (the magic-link request) burns a send, so it keeps
+ * the stricter hourly limits. The two kinds use separate counter keys: signing
+ * in with a password never spends the magic-link allowance, or the reverse.
+ */
+export function signInRateLimits(
+  pathname: string,
+  ip: string,
+  email: string
+): {
+  ip: { key: string; config: RateLimitConfig };
+  email: { key: string; config: RateLimitConfig };
+} {
+  if (pathname.endsWith("/callback/password-login")) {
+    return {
+      ip: { key: `auth:pw:ip:${ip}`, config: AUTH_LIMITS.passwordPerIp },
+      email: { key: `auth:pw:email:${email}`, config: AUTH_LIMITS.passwordPerEmail },
+    };
+  }
+  return {
+    ip: { key: `auth:ip:${ip}`, config: AUTH_LIMITS.magicLinkPerIp },
+    email: { key: `auth:email:${email}`, config: AUTH_LIMITS.magicLinkPerEmail },
+  };
 }
 
 /**

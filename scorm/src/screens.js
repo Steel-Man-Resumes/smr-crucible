@@ -138,9 +138,9 @@
       kind: "info",
       title: "Before you start",
       body: [
-        "Nobody here reads your answers. Not staff. Not this facility. This program does not send anything anywhere, and it cannot.",
-        "Your answers are stored with your learning record, the same way any course on this tablet stores your progress.",
-        "Because nobody is reading it, nobody can help you through it either. If something is wrong right now, tell staff. Do not put it here and wait."
+        "This program does not send your answers anywhere, and it cannot. They are saved with your learning record on this system, the same way any course saves your progress.",
+        "The people who run this learning system could look at that record, so do not write anything here you would not want them to see.",
+        "Nobody is watching this while you work, so nobody can help you through it either. If something is wrong right now, tell staff. Do not put it here and wait."
       ],
       footnote: "You never have to type anything you do not want to type. Every written answer is optional.",
       next: "I understand",
@@ -245,7 +245,7 @@
       table: "CHALLENGES",
       title: "What is in your way?",
       help: "Pick anything that applies. This is how we find the right help for you later.",
-      footnote: "Nothing you pick here is shared with the facility or with anyone else.",
+      footnote: "What you pick here is saved with your learning record. Steel Man does not send it to anyone.",
       why: {
         forWhat: "Naming the real obstacles so the plan works around them instead of pretending they are not there.",
         hard: "This is the screen people skip. Writing down what is in your way can feel like admitting you lost. It is the opposite of that.",
@@ -813,9 +813,10 @@
     /**
      * THE PAPER EXIT.
      *
-     * Everywhere else in this product the promise is that nobody here reads
-     * your answers. Paper is the one place that promise cannot hold, because
-     * somebody has to run the printer.
+     * Everywhere else in this product the answers sit in the learning record
+     * and are handed to nobody. (The institution can look at that record, and
+     * the consent screen says so.) Paper is the one place the work is put
+     * directly into somebody's hands, because somebody has to run the printer.
      *
      * So the answer is not to hide the tension. It is to say it plainly, list
      * what is on the page and what is not, and let the person decide. The
@@ -831,7 +832,7 @@
       title: "Printing means somebody handles it",
       why: {
         forWhat: "Deciding whether this page goes on paper, which is the one thing in this program that other people can hold.",
-        hard: "Everywhere else in here the promise is that nobody reads your answers. Paper cannot keep that promise, because somebody runs the printer, and that is a real cost rather than a technicality.",
+        hard: "Everywhere else in here your answers sit in your learning record and are not handed to anybody. Paper is different, because somebody runs the printer and holds the page, and that is a real cost rather than a technicality.",
         buys: "Somebody on the outside who can act on it. A case manager or a release planner holding a printed page can do things you cannot do from in here.",
         evidence: "The words on that page already went through a check that swaps anything that would give away where you have been. That check ran before you ever saw it."
       },

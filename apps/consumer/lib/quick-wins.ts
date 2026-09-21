@@ -67,7 +67,7 @@ const RULES: WinRule[] = [
       id: "start-forge",
       title: "Explore The Forge",
       description:
-        "Takes about 10 minutes. We find your skills, match you to careers, and point you toward realistic next steps. Everything stays private.",
+        "We find your skills, match you to careers, and point you toward realistic next steps. Everything stays private.",
       action: { type: "link", label: "Start The Forge", href: "/welcome" },
       category: "foundation",
     },

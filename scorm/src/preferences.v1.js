@@ -117,7 +117,7 @@
     // curfew by a program running on a corrections tablet is a reasonable
     // thing to be wary of, and the answer to that wariness is to say where the
     // answer goes before the question is asked.
-    obligationsNote: "These never print and they are never reported to anybody here. They exist so nobody sends you after a job that needs you across town at the exact hour you have to be somewhere else.",
+    obligationsNote: "These never print, and Steel Man does not send them to anyone. They are saved with your learning record, like your other answers. They exist so nobody sends you after a job that needs you across town at the exact hour you have to be somewhere else.",
 
     transportLabel: "How will you get to work?",
     distanceLabel: "How far can you realistically get?",

@@ -33,7 +33,7 @@ export default function ProductHome() {
           <SteelManBrand inverse href="https://steelmanresumes.com" />
           <span className="hidden items-center gap-2 text-[10px] text-[#aeb5ad] sm:flex">
             <ShieldCheck size={15} aria-hidden="true" />
-            Free career intelligence
+            Free career report
           </span>
         </div>
       </header>

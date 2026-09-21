@@ -176,13 +176,18 @@ function LoginForm() {
       // Fail-open: if precheck is unavailable, fall through to sign-in (which
       // still enforces 2FA on its own) rather than blocking a valid login.
       if (!twoFactorStep) {
-        const pre = await fetch("/api/auth/password-precheck", {
+        const preRes = await fetch("/api/auth/password-precheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: email.trim(), password }),
-        })
-          .then((r) => r.json())
-          .catch(() => null);
+        }).catch(() => null);
+        // A rate-limited precheck is not a wrong password. Say what happened.
+        if (preRes && preRes.status === 429) {
+          setError("Too many sign-in attempts. Wait a few minutes and try again.");
+          setSending(false);
+          return;
+        }
+        const pre = preRes ? await preRes.json().catch(() => null) : null;
         if (pre && pre.ok === false) {
           setError("Invalid email or password.");
           setSending(false);
