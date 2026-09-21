@@ -7,12 +7,14 @@ qualifier in the "Say it like this" column. "DEMO ORGS ONLY" means it works in p
 today but no real organization can use it yet; describe it as available, not as something
 customers are using. "NOT BUILT" means do not mention it as a feature. Every LIVE row names
 the evidence: a test in `scripts/verify-org-isolation.mjs` (250 assertions, run as the
-restricted database role on every pull request) or a production check recorded in `HANDOFF.md`.
+restricted database role on every pull request) or a production check recorded in
+the private session record (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo).
 
 **Scope.** This sheet covers what was built or verified on 2026-09-19/20: the organization
 workspace, sharing, and database enforcement. The participant tools (Forge, Refinery, job
 search, truth gate, disclosure planner, interview practice, vault, tablet package) are NOT
-re-verified here; take claims about them from `HANDOFF.md` and
+re-verified here; take claims about them from
+the private session record (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo) and
 `~/todash/smr/MT-DOC-DEMO-RUN-SHEET-2026-09-22.md` section 5 (the claims check).
 
 **On competitors.** Nothing here says what another product does or does not do. I have not

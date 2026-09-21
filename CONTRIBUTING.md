@@ -13,6 +13,12 @@ work, and contributions are welcome under that shared goal.
 - **Privacy first.** Do not add anything that stores a person's practice answers,
   interview transcripts, audio, or disclosure wording. We store progress and frames,
   not content. Sensitive data is consent-gated and minimized.
+- **Public repository.** This repository is public. Working notes, credentials, access codes and the names of partners, leads or participants never go in it.
+  Maintainer session notes are kept in a private record outside this repo
+  (`~/todash/smr/crucible-handoff/HANDOFF.md` on the maintainer's machine). Use
+  placeholders such as `<ACCESS_CODE>` and roles instead of names in docs, comments,
+  commit messages and PR descriptions. CI runs `scripts/lint-no-secrets-in-docs.mjs`
+  and fails on credential-shaped lines in docs or a root `HANDOFF.md`.
 - **Style.** Plain language, sixth-grade reading level in user-facing copy. No em
   dashes. No emojis in product or professional content.
 
