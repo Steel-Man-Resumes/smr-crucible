@@ -23,6 +23,7 @@ import { PageFitCheck } from "./PageFitCheck";
 import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
+import { isSamePerson } from "@/lib/is-same-person";
 
 interface SavedResume {
   id: string;
@@ -30,36 +31,6 @@ interface SavedResume {
   scaffold_level: number;
   iteration_number: number;
   updated_at: string;
-}
-
-/**
- * Are these two names plausibly the same human?
- *
- * Deliberately generous, because the cost of the two answers is not symmetric.
- * A false "same" pastes the account holder's contact details onto someone
- * else's resume. A false "different" leaves a field blank on a form the user is
- * already editing. So middle names, initials and suffixes must not split a
- * match ("Troy Carr" and "Troy Richard Carr" are one person), while genuinely
- * different names must not merge.
- *
- * An absent name on either side returns false: with nothing to compare, we do
- * not get to assume.
- */
-function isSamePerson(a: string | undefined, b: string | undefined): boolean {
-  const tokens = (s: string | undefined) =>
-    (s ?? "")
-      .toLowerCase()
-      .replace(/[.,]/g, " ")
-      .split(/\s+/)
-      .filter((t) => t.length > 1 && !["jr", "sr", "ii", "iii", "iv"].includes(t));
-
-  const ta = tokens(a);
-  const tb = tokens(b);
-  if (!ta.length || !tb.length) return false;
-
-  // Every token of the shorter name must appear in the longer one.
-  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
-  return short.every((t) => long.includes(t));
 }
 
 export function ResumeWorkspace() {

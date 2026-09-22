@@ -25,6 +25,7 @@ import {
   type UserTier,
 } from "@/lib/useUserTier";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { isSamePerson } from "@/lib/is-same-person";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
@@ -398,6 +399,28 @@ export function RefineryShell({
         clearPersonalLocalStorage();
         window.dispatchEvent(new Event("forge-synced"));
         return;
+      }
+
+      // UNCLAIMED blob (no `_ownerUserId` yet): the legitimate case is a brand
+      // new account claiming the anonymous Forge run it just did itself. The
+      // dangerous case is a stale, unrelated run left in this browser (a demo
+      // persona, a walkthrough, a different account) that the next person to
+      // sign in here would otherwise silently inherit -- and this effect would
+      // then WRITE that stranger's identity onto the signed-in account's real
+      // Forge session and base resume artifact via /api/forge/save. (Found
+      // 2026-09-22: a demo-account run persisted into Troy's own account this
+      // way and then fed a live job search.) An unclaimed blob whose own
+      // captured name plainly isn't the signed-in account's name is foreign;
+      // treat it exactly like an owner mismatch above instead of claiming it.
+      if (!forgeData._ownerUserId) {
+        const blobName: string | undefined =
+          forgeData.forgeOutput?.contact?.name || forgeData.resumeDoc?.contact?.name;
+        const accountName = sessionData?.user?.name ?? undefined;
+        if (blobName && accountName && !isSamePerson(blobName, accountName)) {
+          clearPersonalLocalStorage();
+          window.dispatchEvent(new Event("forge-synced"));
+          return;
+        }
       }
 
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
