@@ -412,13 +412,46 @@ export function RefineryShell({
       // way and then fed a live job search.) An unclaimed blob whose own
       // captured name plainly isn't the signed-in account's name is foreign;
       // treat it exactly like an owner mismatch above instead of claiming it.
+      //
+      // Claiming requires a POSITIVE match, not the absence of a mismatch.
+      // The first version of this guard read `blobName && accountName &&
+      // !isSamePerson(...)`, which short-circuited before `isSamePerson` ever
+      // ran whenever either name was missing -- and then fell through to the
+      // claim. So the one case the helper is most careful about (it returns
+      // false for an absent name: "with nothing to compare, we do not get to
+      // assume") was the one case that skipped the check entirely. A named
+      // stranger's run landing in a browser where the signed-in account has no
+      // name was silently inherited.
       if (!forgeData._ownerUserId) {
         const blobName: string | undefined =
           forgeData.forgeOutput?.contact?.name || forgeData.resumeDoc?.contact?.name;
         const accountName = sessionData?.user?.name ?? undefined;
-        if (blobName && accountName && !isSamePerson(blobName, accountName)) {
-          clearPersonalLocalStorage();
-          window.dispatchEvent(new Event("forge-synced"));
+
+        if (blobName && accountName) {
+          if (!isSamePerson(blobName, accountName)) {
+            // Foreign: purge so it can't sync to or surface for this account.
+            clearPersonalLocalStorage();
+            window.dispatchEvent(new Event("forge-synced"));
+            return;
+          }
+          // Names match: fall through and claim, as before.
+        } else {
+          // UNVERIFIABLE: one side has no name, so ownership can be neither
+          // established nor disproved. Do all three of these, because any one
+          // alone is wrong:
+          //   - do not claim it (no /api/forge/save, no `_ownerUserId` stamp),
+          //     so an unproven run never enters an account;
+          //   - do not DESTROY it either. It may well be this person's own
+          //     in-progress run, and a false "different" costs someone the
+          //     work they just did. `forge_session` stays put.
+          //   - clear what is DERIVED from it. `forge_preload`, saved and
+          //     hidden jobs, the last job search and the approved baseline are
+          //     all rendered from the run, so leaving them would show an
+          //     unverified stranger's material on this account's screens --
+          //     the visible half of the 2026-09-22 bleed, minus the write.
+          // Self-healing by design: once the account has a name and it matches,
+          // the next sign-in claims the run through the normal path above.
+          clearRunScopedLocalStorage();
           return;
         }
       }
