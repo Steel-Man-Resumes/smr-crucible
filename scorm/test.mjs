@@ -1604,6 +1604,26 @@ check("the safety copy never promises to tell anyone, and never threatens to", (
     "the crisis screen does not tell the person that nobody is being told");
 });
 
+check("no screen promises the answers are private from the institution", () => {
+  // The answers ride in cmi.suspend_data, which the institution's LMS stores
+  // and can read. v1.0 told people "Nobody here reads your answers. Not
+  // staff. Not this facility." and the crisis screen said "Nothing you wrote
+  // has been sent anywhere". Both read as a privacy promise the package cannot
+  // keep, on the exact screens where someone may be deciding what to write.
+  // Every file that ships, not just two modules, so a new screen cannot
+  // quietly bring the promise back.
+  const text = readdirSync(join(HERE, "src")).filter((f) => f.endsWith(".js"))
+    .map((f) => readFileSync(join(HERE, "src", f), "utf8")).join("\n").toLowerCase()
+    .replace(/\s+/g, " ");
+  for (const phrase of ["nobody here reads", "not staff. not this facility",
+                        "nothing you wrote has been sent anywhere",
+                        "no access to answer", "nobody can read", "no one can read"]) {
+    assert(!text.includes(phrase), 'the copy still says "' + phrase + '"');
+  }
+  assert(JSON.stringify(SAFETY).includes("saved with your learning record"),
+    "the crisis screen does not say where what they typed is kept");
+});
+
 check("no phone numbers, because none of them work from a tablet inside", () => {
   const text = JSON.stringify(SAFETY);
   assert(!/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(text), "a phone number is in the safety copy");
