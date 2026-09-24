@@ -82,7 +82,14 @@ for (const o of data.organizations) {
   if (key.length < 2) { bump("org skipped: empty name"); continue; }
   const text = (assessmentsByOrg.get(o.id) ?? []).map((a) => `${a.claim ?? ""} ${a.limitations ?? ""}`).join(" ").toLowerCase();
   const model = /franchis/.test(text) ? "franchise" : "unknown";
-  const kind = o.organization_type === "government" ? "government"
+  // Public employers are often recorded as plain "employer" in the ledger. A
+  // name like "Flathead County" or "City of Milwaukee", or a government
+  // industry, marks them government, which lets their own policy count as
+  // local (migration 062).
+  const isGov = o.organization_type === "government"
+    || (o.organization_type === "employer" && (/^(city|county|state|town|village) of\b|\bcounty$/i.test(o.canonical_name.trim())
+                                              || /\bgovernment\b/i.test(o.industry ?? "")));
+  const kind = isGov ? "government"
     : ["ecosystem_partner", "association"].includes(o.organization_type) ? "ecosystem_partner"
     : /staffing/i.test(o.industry ?? "") ? "staffing_agency" : "employer";
   let rec = byKey.get(key);

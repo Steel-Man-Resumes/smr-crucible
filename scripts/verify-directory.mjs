@@ -170,6 +170,23 @@ try {
     check(`company policy alone (${model}) reads 'company_policy' with no mark`, s?.standing === "company_policy" && !s?.earns_mark, JSON.stringify(s));
   }
 
+  // 062: an employer that only operates locally speaks for its own place.
+  for (const [label, extra] of [["government", { kind: "government" }], ["independent", { model: "independent" }]]) {
+    const lo = await fresh(`Local Operator ${label}`, extra);
+    await evidence({ org: lo.o.id, claim: "confirmed_corporate" });
+    s = await standing(lo.p);
+    check(`a ${label} employer's own policy reads 'says_yes_here' and earns the mark`, s?.standing === "says_yes_here" && s?.earns_mark === true, JSON.stringify(s));
+  }
+  const chain = await fresh("Chain Unknown Model");
+  await evidence({ org: chain.o.id, claim: "confirmed_corporate" });
+  s = await standing(chain.p);
+  check("a chain of unknown model keeps 'company_policy' with no mark", s?.standing === "company_policy" && !s?.earns_mark, JSON.stringify(s));
+  const loNo = await fresh("Local Operator Says No", { kind: "government" });
+  await evidence({ org: loNo.o.id, claim: "confirmed_corporate" });
+  await evidence({ org: loNo.o.id, place: loNo.p, claim: "negative_written", kind: "job_posting" });
+  s = await standing(loNo.p);
+  check("a local operator's policy plus a written no is 'mixed'", s?.standing === "mixed" && !s?.earns_mark, JSON.stringify(s));
+
   const partner = await fresh("Partner Program", { kind: "ecosystem_partner" });
   await evidence({ org: partner.o.id, place: partner.p, claim: "confirmed_hire", kind: "casework_aggregate", outcomes: 1, orgs: 1, sourceOrgs: ["org:x"] });
   s = await standing(partner.p);
