@@ -19,7 +19,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const API = "https://console.neon.tech/api/v2";
-const PROJECT_HINT = /steel\s*man/i;
+// Exact name, not a substring: a separate "Steel Man preview" project exists
+// since 2026-09-24 (the Vercel preview database), and a loose match made this
+// script refuse to choose, which broke every isolation run.
+const PROJECT_HINT = /^steel\s*man$/i;
 const PROD_ENDPOINT = "ep-little-cloud-aphpkqbd";
 
 function envVar(name) {
