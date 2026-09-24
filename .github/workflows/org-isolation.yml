@@ -30,6 +30,7 @@ on:
       - "apps/consumer/app/api/hub-unlock/**"
       - "apps/consumer/app/api/assistant/**"
       - "scripts/verify-org-isolation.mjs"
+      - "scripts/verify-directory.mjs"
       - "scripts/rls-stage1-create-role.mjs"
       - "scripts/lib/**"
       - "scripts/neon-branch.mjs"
@@ -51,6 +52,7 @@ on:
       - "apps/consumer/app/api/hub-unlock/**"
       - "apps/consumer/app/api/assistant/**"
       - "scripts/verify-org-isolation.mjs"
+      - "scripts/verify-directory.mjs"
       - "scripts/rls-stage1-create-role.mjs"
       - "scripts/lib/**"
       - "scripts/neon-branch.mjs"
@@ -98,6 +100,9 @@ jobs:
 
       - name: Cross-org isolation suite
         run: npm run verify:isolation
+
+      - name: Employer directory rules (061)
+        run: npm run verify:directory
 
       - name: Delete the branch
         if: always()
