@@ -196,7 +196,7 @@
     title: "Stop for a second",
     body: [
       "You wrote something that sounded heavy, and this program is not going to walk past it.",
-      "Nobody is being told. Nothing you wrote has been sent anywhere and nothing has been flagged to staff, because this program has no way to do either of those things and would not do them if it could.",
+      "Nobody is being told. Nothing has been flagged to staff, because this program has no way to do that and would not do it if it could. What you typed is saved with your learning record, like your other answers, the same as the first screen said.",
       "But you should not be on your own with it either."
     ],
     primary: "Show me who I can actually talk to",

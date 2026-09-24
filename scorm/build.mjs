@@ -61,7 +61,7 @@ const BRAND = {
   DESCRIPTION:
     "A short, offline career intake. Seven questions about what you are good at " +
     "and what you want next. Produces a code the learner carries out with them.",
-  VERSION: "1.0",
+  VERSION: "1.1",
   // Typical duration, ISO 8601. Used by some LMS catalogs for the course card.
   TYPICAL_DURATION: "PT10M"
 };
