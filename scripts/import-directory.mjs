@@ -81,7 +81,10 @@ for (const o of data.organizations) {
   const key = normalizeEmployerName(o.canonical_name);
   if (key.length < 2) { bump("org skipped: empty name"); continue; }
   const text = (assessmentsByOrg.get(o.id) ?? []).map((a) => `${a.claim ?? ""} ${a.limitations ?? ""}`).join(" ").toLowerCase();
-  const model = /franchis/.test(text) ? "franchise" : "unknown";
+  // A researcher's explicit marker wins ([operating_model=...] in the ledger's
+  // notes); otherwise a franchise mention in the evidence; otherwise unknown.
+  const marked = /\[operating_model=(independent|franchise|corporate)\]/.exec(o.notes ?? "");
+  const model = marked ? marked[1] : /franchis/.test(text) ? "franchise" : "unknown";
   // Public employers are often recorded as plain "employer" in the ledger. A
   // name like "Flathead County" or "City of Milwaukee", or a government
   // industry, marks them government, which lets their own policy count as
@@ -182,7 +185,10 @@ for (const e of data.evidence) {
   if (claim === "confirmed_corporate" || claim === "context_only") scope = "company";
   else if (claim === "direct_role_signal") scope = "role";
   else scope = placeId ? "place" : "company";
-  const observed = date(e.accessed_on) ?? date(a.verified_on) ?? today;
+  // The fact's own date when the source gives one (a 2023 press release is a
+  // 2023 fact, however recently it was read); otherwise the day it was read.
+  const published = date(e.published_on);
+  const observed = (published && published <= today ? published : null) ?? date(e.accessed_on) ?? date(a.verified_on) ?? today;
   if (observed > today) { bump("evidence skipped: future date"); continue; }
   const grade = ["A", "B", "C", "D"].includes(e.evidence_grade) ? e.evidence_grade : "D";
   const likely = ["A", "B"].includes(grade) && e.source_url && e.accessed_on;
@@ -201,6 +207,27 @@ for (const e of data.evidence) {
   bump(`evidence created: ${claim}`);
   bump(`evidence confidence: ${likely ? "likely" : "guessing"}`);
   if (statements.length >= 80) { await sql.transaction(statements); statements.length = 0; }
+}
+if (statements.length) { await sql.transaction(statements); statements.length = 0; }
+
+// ---- Business contacts the employer publishes (careers inbox, HR line, form) -----------
+const CONTACTS = resolve(dirname(SOURCE), "../../data/business_contacts.jsonl");
+let contactLines = [];
+try { contactLines = readFileSync(CONTACTS, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)); }
+catch { /* no contacts file yet */ }
+for (const c of contactLines) {
+  const rec = byKey.get(normalizeEmployerName(c.organization ?? ""));
+  if (!rec || !["role_inbox", "hr_line", "careers_form"].includes(c.kind) || !c.value || !c.source_url) { bump("business contacts skipped"); continue; }
+  const ext = `${rec.key}|${c.value}`.slice(0, 300);
+  if (seen.has(`business_contacts:${ext}`)) { bump("business contacts already present"); continue; }
+  const email = c.kind === "role_inbox" ? c.value : null;
+  const phone = c.kind === "hr_line" ? c.value : null;
+  const form = c.kind === "careers_form" ? c.value : null;
+  statements.push(sql`INSERT INTO employer_contact (org_id, contact_kind, email, phone, form_url, source_url, checked_on)
+    VALUES (${rec.id}, ${c.kind}, ${email}, ${phone}, ${form}, ${c.source_url}, ${date(c.checked_on) ?? today})`);
+  statements.push(sql`INSERT INTO directory_import (source_system, source_table, external_id, org_id, raw)
+    VALUES ('employer_intel', 'business_contacts', ${ext}, ${rec.id}, ${JSON.stringify(c)}) ON CONFLICT DO NOTHING`);
+  bump("business contacts created");
 }
 if (statements.length) { await sql.transaction(statements); statements.length = 0; }
 
