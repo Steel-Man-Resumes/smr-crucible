@@ -27,7 +27,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
-import { getVerifiedEmployerNameSet, isVerifiedFairChance } from "@crucible/core";
+import { getEmployerMarks, isMarked, type EmployerMarks } from "@crucible/core";
 import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
 import crypto from "crypto";
 
@@ -502,7 +502,7 @@ interface CareerOneStopJob {
 async function fetchCareerOneStopJobs(
   keyword: string,
   location: string,
-  verified: Set<string>,
+  marks: EmployerMarks,
   radiusMiles: number
 ): Promise<EnrichedJob[]> {
   const uid = process.env.CAREERONESTOP_USER_ID;
@@ -529,7 +529,9 @@ async function fetchCareerOneStopJobs(
     const jobs: CareerOneStopJob[] = res.json?.Jobs ?? [];
     return jobs.slice(0, 15).map((j, i) => {
       const company = j.Company || "Employer";
-      const fair = isVerifiedFairChance(company, verified);
+      // CareerOneStop gives "City, ST" in one string.
+      const [cosCity, cosState] = (j.Location || "").split(",").map((x) => x.trim());
+      const fair = isMarked(company, { city: cosCity || null, state: cosState || null, title: j.JobTitle }, marks);
       return {
         id: j.JvId || `cos-${i}`,
         title: j.JobTitle || "Job",
@@ -558,7 +560,7 @@ async function fetchCareerOneStopJobs(
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
   context: { hasRecord: boolean; recordType?: string; location: string; userId?: string | null },
-  verified: Set<string>
+  marks: EmployerMarks
 ): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -568,7 +570,9 @@ async function enrichJobsWithAI(
     const posted = formatPosted(j.job_posted_at_datetime_utc);
     const title = unwrapMaybeJsonArray(j.job_title);
     const company = unwrapMaybeJsonArray(j.employer_name);
-    const fair = isVerifiedFairChance(company, verified);
+    // The mark needs the listing's own place and title: a directory mark is
+    // earned at a place, sometimes for one role (DIRECTORY_MARK_ENABLED).
+    const fair = isMarked(company, { city: j.job_city ?? null, state: j.job_state ?? null, title }, marks);
 
     return {
       id: j.job_id,
@@ -785,10 +789,10 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   // Single source of truth for fair-chance flags: exact-name matches against the
   // verified employer table (Codex 12). Bounded so a stalled employer query never
   // blows the route budget; a failure yields an empty set -- no false badges.
-  const verified = await withDeadline(
-    getVerifiedEmployerNameSet(),
+  const marks = await withDeadline<EmployerMarks>(
+    getEmployerMarks(),
     DB_DEADLINE_MS,
-    new Set<string>(),
+    { source: "legacy", names: new Set<string>() },
     "verified employers"
   );
 
@@ -840,7 +844,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     const cosJobs = await fetchCareerOneStopJobs(
       searchRole,
       searchLocation,
-      verified,
+      marks,
       tenantGeo.searchRadiusMiles
     );
     if (cosJobs.length > 0) {
@@ -885,7 +889,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       location: searchLocation,
       userId: userId ?? null,
     },
-    verified
+    marks
   );
 
   // 4. Sort: fair-chance first, then by recency

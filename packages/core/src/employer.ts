@@ -103,13 +103,19 @@ export function normalizeEmployerName(name: string): string {
 // Cache the verified-name set briefly so a job search doesn't hit the DB per call.
 let _verifiedNameCache: { set: Set<string>; at: number } | null = null;
 const VERIFIED_NAME_TTL_MS = 5 * 60 * 1000;
+/**
+ * How long a cached mark list may still be served after the database starts
+ * failing. Past this, no marks at all: a stale "yes" has a victim (the 9/23
+ * advisory found the old fallback had no limit).
+ */
+export const MARK_MAX_STALE_MS = 60 * 60 * 1000;
 
 /**
  * The set of normalized names of PUBLISHED verified employers -- the single source
  * of truth for fair-chance flags on live job listings (Codex 12). A listing is
  * flagged fair-chance ONLY when its employer name EXACTLY matches (normalized) a
- * verified employer in this set. Cached ~5 min; fail-safe to the last-known set
- * (or empty) on a DB error, so a transient failure never produces a false badge.
+ * verified employer in this set. Cached ~5 min; on a DB error the last set is
+ * served for at most MARK_MAX_STALE_MS, then an empty set -- never a false badge.
  */
 export async function getVerifiedEmployerNameSet(): Promise<Set<string>> {
   const now = Date.now();
@@ -127,7 +133,8 @@ export async function getVerifiedEmployerNameSet(): Promise<Set<string>> {
     return set;
   } catch (err) {
     console.error("getVerifiedEmployerNameSet failed:", err);
-    return _verifiedNameCache?.set ?? new Set();
+    if (_verifiedNameCache && now - _verifiedNameCache.at < MARK_MAX_STALE_MS) return _verifiedNameCache.set;
+    return new Set();
   }
 }
 
@@ -135,6 +142,133 @@ export async function getVerifiedEmployerNameSet(): Promise<Set<string>> {
 export function isVerifiedFairChance(company: string, verified: Set<string>): boolean {
   const key = normalizeEmployerName(company);
   return key.length > 0 && verified.has(key);
+}
+
+// ─── The directory mark (migration 061), behind DIRECTORY_MARK_ENABLED ──────
+//
+// The directory's mark knows WHERE and, for a posting, WHAT ROLE. A yes at the
+// Kalispell store is not a yes at the Missoula store, and a posting that
+// welcomes records for line cooks says nothing about drivers. So a listing is
+// marked only when its employer name matches exactly AND its place matches the
+// mark's place AND, for a role mark, its title matches the role. When the
+// listing does not say enough to be sure (no state, no city, a county-level
+// mark we cannot place), there is no mark. Missing a mark is the safe failure.
+
+export interface DirectoryMark {
+  basis: "employer" | "role";
+  roleFamily: string | null;
+  roleTitle: string | null;
+  placeKind: string;
+  state: string;
+  county: string | null;
+  city: string | null;
+}
+
+/** What the job search holds: the old name set, or the directory's placed marks. */
+export type EmployerMarks =
+  | { source: "legacy"; names: Set<string> }
+  | { source: "directory"; byKey: Map<string, DirectoryMark[]> };
+
+export interface ListingPlace {
+  city?: string | null;
+  state?: string | null;
+  title?: string | null;
+}
+
+export function directoryMarkEnabled(): boolean {
+  return process.env.DIRECTORY_MARK_ENABLED === "true";
+}
+
+const STATE_CODES: Record<string, string> = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT",
+  delaware: "DE", "district of columbia": "DC", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL",
+  indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD",
+  massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT",
+  nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+  "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA",
+  "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT",
+  vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY",
+};
+
+/** "MT", "mt", "Montana" -> "MT"; anything else -> null. */
+export function toStateCode(state: string | null | undefined): string | null {
+  const s = (state ?? "").trim();
+  if (/^[A-Za-z]{2}$/.test(s)) {
+    const code = s.toUpperCase();
+    return Object.values(STATE_CODES).includes(code) ? code : null;
+  }
+  return STATE_CODES[s.toLowerCase()] ?? null;
+}
+
+const words = (s: string | null | undefined) => normalizeEmployerName(s ?? "").split(" ").filter(Boolean);
+
+function placeMatches(m: DirectoryMark, state: string, city: string | null): boolean {
+  if (m.state !== state) return false;
+  if (m.placeKind === "statewide") return true;
+  if (m.placeKind === "site") {
+    return Boolean(m.city && city && m.city.trim().toLowerCase() === city.trim().toLowerCase());
+  }
+  // county, service_area, remote: the listing does not carry enough to place it.
+  return false;
+}
+
+function roleMatches(m: DirectoryMark, title: string | null | undefined): boolean {
+  if (m.basis === "employer") return true;
+  const want = words(m.roleTitle);
+  if (want.length === 0) return false;
+  const have = new Set(words(title));
+  return want.every((w) => have.has(w));
+}
+
+/** The single decision for a listing's mark, whichever source is switched on. */
+export function isMarked(company: string, where: ListingPlace, marks: EmployerMarks): boolean {
+  const key = normalizeEmployerName(company);
+  if (!key) return false;
+  if (marks.source === "legacy") return marks.names.has(key);
+  const entries = marks.byKey.get(key);
+  if (!entries?.length) return false;
+  const state = toStateCode(where.state);
+  if (!state) return false;
+  const city = where.city?.trim() || null;
+  return entries.some((m) => placeMatches(m, state, city) && roleMatches(m, where.title));
+}
+
+let _directoryCache: { byKey: Map<string, DirectoryMark[]>; at: number } | null = null;
+
+async function getDirectoryMarks(): Promise<Map<string, DirectoryMark[]>> {
+  const now = Date.now();
+  if (_directoryCache && now - _directoryCache.at < VERIFIED_NAME_TTL_MS) return _directoryCache.byKey;
+  try {
+    const rows = await query<{
+      name_key: string; basis: "employer" | "role"; role_family: string | null; role_title: string | null;
+      place_kind: string; state: string; county: string | null; city: string | null;
+    }>(`SELECT name_key, basis, role_family, role_title, place_kind, state, county, city FROM directory_mark_v`);
+    const byKey = new Map<string, DirectoryMark[]>();
+    for (const r of rows) {
+      const list = byKey.get(r.name_key) ?? [];
+      list.push({ basis: r.basis, roleFamily: r.role_family, roleTitle: r.role_title, placeKind: r.place_kind,
+                  state: r.state, county: r.county, city: r.city });
+      byKey.set(r.name_key, list);
+    }
+    _directoryCache = { byKey, at: now };
+    return byKey;
+  } catch (err) {
+    console.error("getDirectoryMarks failed:", err);
+    if (_directoryCache && now - _directoryCache.at < MARK_MAX_STALE_MS) return _directoryCache.byKey;
+    return new Map();
+  }
+}
+
+/** The marks the job search uses: the directory when switched on, else the old table. */
+export async function getEmployerMarks(): Promise<EmployerMarks> {
+  if (directoryMarkEnabled()) return { source: "directory", byKey: await getDirectoryMarks() };
+  return { source: "legacy", names: await getVerifiedEmployerNameSet() };
+}
+
+/** Test hook: forget cached marks. */
+export function _resetMarkCaches(): void {
+  _verifiedNameCache = null;
+  _directoryCache = null;
 }
 
 export interface EmployerStats {
