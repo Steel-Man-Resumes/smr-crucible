@@ -96,9 +96,11 @@ BEGIN
     REVOKE ALL ON org_audit FROM smr_app;
     GRANT SELECT, INSERT ON org_audit TO smr_app;
     GRANT USAGE, SELECT ON SEQUENCE org_audit_id_seq TO smr_app;
+    -- And exclude it from the blanket default so a future re-grant cannot quietly
+    -- hand back UPDATE and DELETE. Inside the guard (2026-09-24): on a fresh
+    -- database the role does not exist yet, and this line alone stopped every
+    -- migration after 044. rls-stage1 sets default privileges when it creates
+    -- the role, then re-applies scripts/lib/restricted-grants.mjs.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE UPDATE, DELETE ON TABLES FROM smr_app;
   END IF;
 END $$;
-
--- And exclude it from the blanket default so a future re-grant cannot quietly
--- hand back UPDATE and DELETE.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE UPDATE, DELETE ON TABLES FROM smr_app;
