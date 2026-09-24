@@ -31,6 +31,7 @@ on:
       - "apps/consumer/app/api/assistant/**"
       - "scripts/verify-org-isolation.mjs"
       - "scripts/verify-directory.mjs"
+      - "scripts/verify-directory-grants.mjs"
       - "scripts/rls-stage1-create-role.mjs"
       - "scripts/lib/**"
       - "scripts/neon-branch.mjs"
@@ -53,6 +54,7 @@ on:
       - "apps/consumer/app/api/assistant/**"
       - "scripts/verify-org-isolation.mjs"
       - "scripts/verify-directory.mjs"
+      - "scripts/verify-directory-grants.mjs"
       - "scripts/rls-stage1-create-role.mjs"
       - "scripts/lib/**"
       - "scripts/neon-branch.mjs"
@@ -94,6 +96,10 @@ jobs:
             const r = cp.spawnSync("npm", ["run","migrate","-w","packages/core"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } });
             process.exit(r.status ?? 1);
           '
+
+      # Before rls-stage1 repairs grants, so a migration's own grant defects show.
+      - name: Directory grants as the migration left them
+        run: node scripts/verify-directory-grants.mjs
 
       - name: Create the restricted app role on the branch
         run: node scripts/rls-stage1-create-role.mjs

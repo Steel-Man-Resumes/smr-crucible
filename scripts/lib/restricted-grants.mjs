@@ -47,6 +47,8 @@ export const RESTRICTED_GRANTS = {
   employer_place: ["SELECT", "INSERT", "UPDATE"],
   employer_contact: ["SELECT", "INSERT", "UPDATE"],
   employer_relationship: ["SELECT", "INSERT", "UPDATE"],
+  // A confirmation is a dated record of a fact; it is never edited.
+  employer_relationship_confirmation: ["SELECT", "INSERT"],
   employer_evidence: ["SELECT", "INSERT", "UPDATE"],
   employer_signup: ["SELECT", "INSERT", "UPDATE"],
   employer_requirement: ["SELECT", "INSERT", "UPDATE"],
@@ -61,6 +63,38 @@ export const RESTRICTED_GRANTS = {
   directory_mark_v: ["SELECT"],
   directory_health_v: ["SELECT"],
 };
+
+/** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
+export const DIRECTORY_OBJECTS = [
+  "directory_claim_policy", "employer_org", "employer_alias", "employer_place", "employer_contact",
+  "employer_relationship", "employer_relationship_confirmation", "employer_evidence", "employer_signup",
+  "employer_requirement", "employer_reply", "directory_proposal", "directory_import",
+  "directory_evidence_live", "directory_place_evidence", "employer_standing_v",
+  "directory_public_v", "directory_public_evidence_v", "directory_mark_v", "directory_health_v",
+];
+
+/**
+ * Effective privileges (direct, PUBLIC and inherited) the app role holds on each
+ * directory object, compared with RESTRICTED_GRANTS. Returns violations.
+ * `run` takes SQL text and resolves to rows; any connection that can read the catalog.
+ */
+export async function checkEffectiveDirectoryGrants(run, role = APP_ROLE) {
+  const problems = [];
+  const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
+  for (const name of DIRECTORY_OBJECTS) {
+    const allowed = RESTRICTED_GRANTS[name];
+    if (!allowed) { problems.push(`${name} is missing from RESTRICTED_GRANTS`); continue; }
+    const exists = await run(`SELECT to_regclass('public.${name}') IS NOT NULL AS ok`);
+    if (!exists?.[0]?.ok) { problems.push(`${name} does not exist`); continue; }
+    for (const p of PRIVS) {
+      const [row] = await run(`SELECT has_table_privilege('${role}', 'public.${name}', '${p}') AS has`);
+      if (row.has !== allowed.includes(p)) {
+        problems.push(`${role} ${row.has ? "HOLDS" : "LACKS"} ${p} on ${name}; allowed: ${allowed.join(", ") || "nothing"}`);
+      }
+    }
+  }
+  return problems;
+}
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */
 export async function applyRestrictedGrants(run, role = APP_ROLE) {
