@@ -175,7 +175,8 @@ try {
     const lo = await fresh(`Local Operator ${label}`, extra);
     await evidence({ org: lo.o.id, claim: "confirmed_corporate" });
     s = await standing(lo.p);
-    check(`a ${label} employer's own policy reads 'says_yes_here' and earns the mark`, s?.standing === "says_yes_here" && s?.earns_mark === true, JSON.stringify(s));
+    check(`${label === "independent" ? "an" : "a"} ${label} employer's own policy reads 'says_yes_here' and earns the mark`, s?.standing === "says_yes_here" && s?.earns_mark === true, JSON.stringify(s));
+    check(`${label === "independent" ? "an" : "a"} ${label} employer's mark shows when it runs out`, s?.soonest_local_expiry != null, JSON.stringify(s));
   }
   const chain = await fresh("Chain Unknown Model");
   await evidence({ org: chain.o.id, claim: "confirmed_corporate" });
