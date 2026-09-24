@@ -38,6 +38,28 @@ export const RESTRICTED_GRANTS = {
   outcome_record: ["SELECT", "INSERT", "UPDATE"],
   retention_check: ["SELECT", "INSERT"],
   staff_suggestion: ["SELECT", "INSERT", "UPDATE"],
+  // Employer directory (061). Platform-admin tables: RLS decides who, and
+  // nothing is ever deleted. The internal views run as the owner and see
+  // through every policy, so the app holds nothing on them at all.
+  directory_claim_policy: ["SELECT"],
+  employer_org: ["SELECT", "INSERT", "UPDATE"],
+  employer_alias: ["SELECT", "INSERT", "UPDATE"],
+  employer_place: ["SELECT", "INSERT", "UPDATE"],
+  employer_contact: ["SELECT", "INSERT", "UPDATE"],
+  employer_relationship: ["SELECT", "INSERT", "UPDATE"],
+  employer_evidence: ["SELECT", "INSERT", "UPDATE"],
+  employer_signup: ["SELECT", "INSERT", "UPDATE"],
+  employer_requirement: ["SELECT", "INSERT", "UPDATE"],
+  employer_reply: ["SELECT", "INSERT", "UPDATE"],
+  directory_proposal: ["SELECT", "INSERT", "UPDATE"],
+  directory_import: ["SELECT"],
+  directory_evidence_live: [],
+  directory_place_evidence: [],
+  employer_standing_v: [],
+  directory_public_v: ["SELECT"],
+  directory_public_evidence_v: ["SELECT"],
+  directory_mark_v: ["SELECT"],
+  directory_health_v: ["SELECT"],
 };
 
 /** `run` takes SQL text and resolves to rows. Must be an owner connection. */
@@ -46,7 +68,8 @@ export async function applyRestrictedGrants(run, role = APP_ROLE) {
     const exists = await run(`SELECT to_regclass('public.${table}') IS NOT NULL AS ok`);
     if (!exists?.[0]?.ok) continue;
     await run(`REVOKE ALL ON public.${table} FROM ${role}`);
-    await run(`GRANT ${allowed.join(", ")} ON public.${table} TO ${role}`);
+    // An empty list means the app holds nothing on it at all.
+    if (allowed.length) await run(`GRANT ${allowed.join(", ")} ON public.${table} TO ${role}`);
   }
 }
 
