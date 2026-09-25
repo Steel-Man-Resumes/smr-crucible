@@ -9,7 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isMarked, toStateCode, type EmployerMarks, type DirectoryMark } from "../employer";
+import { isMarked, toStateCode, roleWords, type EmployerMarks, type DirectoryMark } from "../employer";
 
 const site = (city: string, state = "MT"): DirectoryMark =>
   ({ basis: "employer", roleFamily: null, roleTitle: null, placeKind: "site", state, county: null, city });
@@ -65,4 +65,14 @@ test("state codes: codes and names map; nonsense does not", () => {
   assert.equal(toStateCode("Wisconsin"), "WI");
   assert.equal(toStateCode("XX"), null);
   assert.equal(toStateCode(""), null);
+});
+
+test("role titles recorded with a city or 'job description' still match on the job words", () => {
+  assert.deepEqual(roleWords("Housekeeper, Billings"), ["housekeeper"]);
+  assert.deepEqual(roleWords("Licensed Addiction Counselor job description"), ["licensed", "addiction", "counselor"]);
+  const role: DirectoryMark = { ...site("Billings"), basis: "role", roleTitle: "Housekeeper, Billings", roleFamily: null };
+  const marks = dir({ "peopleready": [role] });
+  assert.equal(isMarked("PeopleReady", { city: "Billings", state: "MT", title: "Housekeeper" }, marks), true);
+  assert.equal(isMarked("PeopleReady", { city: "Billings", state: "MT", title: "Forklift Driver" }, marks), false);
+  assert.equal(isMarked("PeopleReady", { city: "Missoula", state: "MT", title: "Housekeeper" }, marks), false);
 });

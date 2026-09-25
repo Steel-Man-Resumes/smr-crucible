@@ -212,9 +212,21 @@ function placeMatches(m: DirectoryMark, state: string, city: string | null): boo
   return false;
 }
 
+/**
+ * The job part of a recorded role title. Research records postings as they
+ * appear ("Housekeeper, Billings", "Licensed Addiction Counselor job
+ * description"), and requiring the city or the words "job description" in a
+ * listing's title meant no role mark ever matched. The place is checked
+ * separately, so only the job words count here.
+ */
+export function roleWords(roleTitle: string | null | undefined): string[] {
+  const jobPart = (roleTitle ?? "").split(/[,|(]/)[0].replace(/\b(job )?(description|posting|opening)s?\b/gi, " ");
+  return words(jobPart);
+}
+
 function roleMatches(m: DirectoryMark, title: string | null | undefined): boolean {
   if (m.basis === "employer") return true;
-  const want = words(m.roleTitle);
+  const want = roleWords(m.roleTitle);
   if (want.length === 0) return false;
   const have = new Set(words(title));
   return want.every((w) => have.has(w));
