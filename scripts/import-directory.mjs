@@ -180,6 +180,14 @@ for (const e of data.evidence) {
     bump("evidence re-graded: pledge/coalition -> context_only");
   }
   if (!a || !rec || !claim) { bump("evidence skipped: no usable assessment"); continue; }
+  // A role signal needs a real job title. Legacy Airtable rows carry labels
+  // like "Legacy Airtable source 1" or "CRST careers" instead, which can never
+  // match a listing and are not evidence of a role; they arrive as leads.
+  const roleTitle = cap(e.source_title || a.claim || "", 200);
+  if (claim === "direct_role_signal" && /legacy airtable source|careers?$|employment opportunit|^job posting$|^\s*$/i.test(roleTitle)) {
+    claim = "candidate_unverified";
+    bump("evidence re-graded: role signal without a job title -> lead");
+  }
   const placeId = a.location_id ? placeById.get(a.location_id) ?? null : null;
   let scope;
   if (claim === "confirmed_corporate" || claim === "context_only") scope = "company";
@@ -198,7 +206,7 @@ for (const e of data.evidence) {
   statements.push(sql`INSERT INTO employer_evidence (org_id, place_id, scope, claim_type, role_title, source_kind, source_url, source_title,
       publisher, excerpt, source_grade, confidence, confidence_score, observed_on, accessed_on, found_by, limitations)
     VALUES (${rec.id}, ${scope === "company" ? null : placeId}, ${scope}, ${claim},
-            ${scope === "role" ? cap(e.source_title || a.claim || "role posting", 200) : null},
+            ${scope === "role" ? roleTitle : null},
             ${kind}, ${e.source_url}, ${cap(e.source_title, 300)}, ${cap(e.publisher, 200)}, ${cap(e.claim_supported, 500)},
             ${grade}, ${likely ? "likely" : "guessing"}, ${a.confidence ?? null}, ${observed}, ${date(e.accessed_on)},
             ${FOUND_BY}, ${cap(a.limitations, 2000)})`);
