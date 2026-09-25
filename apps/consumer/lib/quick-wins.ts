@@ -110,7 +110,7 @@ const RULES: WinRule[] = [
       id: "browse-second-chance-board",
       title: "Review second-chance job lanes",
       description:
-        "Start with fair-chance-friendly lanes, then search live jobs that match your skills and constraints.",
+        "Start with job paths that are realistic with a record, then search live jobs that match your skills and constraints.",
       action: {
         type: "link",
         label: "Open Job Board",
@@ -238,7 +238,7 @@ const RULES: WinRule[] = [
       id: "first-job-search",
       title: "Search for jobs that match your skills",
       description:
-        "Real listings from employers hiring right now. Fair-chance companies highlighted. Save the ones that look good.",
+        "Real listings from employers hiring right now. Employers we checked for hiring people with records are marked. Save the ones that look good.",
       action: {
         type: "link",
         label: "Open Job Board",

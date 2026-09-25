@@ -278,7 +278,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Prioritize hard skills and quantifiable competencies.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
-- For each path: show HOW to find fair-chance employers in their area (the state American Job Center, local reentry orgs, national fair-chance job boards) rather than naming a specific local company as fair-chance, which you cannot verify. SHRM data shows 85% of HR pros say JI employees perform equal or better -- this person should know that data exists.
+- For each path: show HOW to find employers that hire people with records in their area (the state American Job Center, local reentry orgs, job boards for people with records) rather than naming a specific local company as one, which you cannot verify. In what you write to the person, say "employers that hire people with records", never "fair-chance". SHRM data shows 85% of HR pros say JI employees perform equal or better -- this person should know that data exists.
 - Next steps should be specific and immediate ("apply on Indeed this week", "call this organization Monday").
 - Salary ranges with negotiation context.
 - Note seasonal hiring patterns if relevant.
@@ -289,7 +289,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Include "what to say when asked" disclosure strategies.
 - Prioritize resources by immediacy and impact.
 - Frame barriers as solvable logistics, not identity: "The system has this obstacle. Here is exactly how to move through it."
-- Include fair-chance employer intelligence -- HOW to identify employers open to fair hiring (fair-chance job boards, the state American Job Center, local reentry orgs), never a claim that a specific named company has committed to it without a verifiable source.`,
+- Include how to find employers that hire people with records (job boards for people with records, the state American Job Center, local reentry orgs), never a claim that a specific named company does without a verifiable source. Say it in those plain words, never "fair-chance".`,
     careerCount: "3-5",
   },
 };

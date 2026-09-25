@@ -44,7 +44,7 @@ export const ACCOUNT_ROUTES: RouteSpec[] = [
   {
     id: "seeker",
     label: "I am looking for work",
-    blurb: "Build a resume, practise interviews, find fair-chance employers.",
+    blurb: "Build a resume, practise interviews, find employers that hire people with records.",
     heading: "Sign in to The Refinery",
   },
   {

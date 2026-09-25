@@ -381,7 +381,7 @@ function RefineryScreen() {
     { name: "Application Tailor", desc: "Tailor a resume to any job, with AI.", bg: "#f4f7f4", bd: "#c2d1c0", c: GREEN },
     { name: "Disclosure Planner", desc: "Practice talking about your record.", bg: "#f0f7fb", bd: "#bfddeb", c: "#336f94" },
     { name: "Interview Practice", desc: "Mock interviews with AI feedback.", bg: "#fdf8f0", bd: "#f2d6af", c: "#c05e1f" },
-    { name: "Job Board", desc: "Fair-chance employers hiring now.", bg: "#f4f7f4", bd: "#c2d1c0", c: GREEN },
+    { name: "Job Board", desc: "Real listings; checked employers marked.", bg: "#f4f7f4", bd: "#c2d1c0", c: GREEN },
     { name: "Resources", desc: "Housing, legal aid, training.", bg: "#f9f6f3", bd: BORDER, c: "#855440" },
     { name: "Progress", desc: "Track every step of the journey.", bg: "#f0f7fb", bd: "#bfddeb", c: "#336f94" },
   ];

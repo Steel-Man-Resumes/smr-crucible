@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Verified Employers -- fair-chance employers verified by the SMR team (imported
- * from the SMR Employers research base). Job-seeker view: what they do, where,
+ * Employers That Hire People With Records -- employers with current, dated evidence
+ * from the employer directory (each mark applies where the evidence was found). Job-seeker view: what they do, where,
  * roles, why they're a fit, honest caveats, and a direct apply link.
  */
 
@@ -91,24 +91,24 @@ function EmployersList() {
   }, [employers, industry, q]);
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading verified employers...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading employers...</div>;
   }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Verified Employers</h1>
+      <h1 className="text-2xl font-bold text-t-white">Employers That Hire People With Records</h1>
       <p className="text-t-phos-dim mt-1 mb-4">
-        Employers our team verified as open to people with records. Each one was checked
-        against a real fair-chance hiring signal. Read the notes -- some have honest caveats.
+        Employers we checked for hiring people with records. Each one shows where we checked
+        and when, and the words we found. Read the notes -- some have honest caveats.
       </p>
 
       {/* N2: honest "in progress" banner while the curated list is small and growing. */}
       <div className="mb-5 border-l-4 border-t-amber bg-t-panel-2 px-4 py-3">
         <p className="text-sm font-bold text-t-amber-bright">This database is still being built.</p>
         <p className="text-sm text-t-phos-dim mt-1 leading-relaxed">
-          The list is deliberately small: an employer is added only after we confirm its
-          fair-chance hiring with a real source, so a name here means something. It is growing
-          weekly. If your area is not covered yet, that is not a dead end -- use Job Search for
+          The list is deliberately small: an employer is added only when we find current,
+          dated evidence that it hires people with records, and the mark runs out on its own
+          unless someone confirms it again. A name here means something. If your area is not covered yet, that is not a dead end -- use Job Search for
           live listings and the disclosure planner to prepare. A missing employer is not a "no."
         </p>
       </div>
@@ -130,7 +130,7 @@ function EmployersList() {
 
       {employers.length === 0 ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
-          No verified employers are published yet. Check back soon.
+          No employers carry the mark here yet. Check back soon.
         </div>
       ) : (
         <>
@@ -157,7 +157,7 @@ function EmployersList() {
           <div className="space-y-3">
             {shown.length === 0 && (
               <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-10">
-                No verified employers match this lane yet.{" "}
+                No checked employers match this path yet.{" "}
                 <a href="/dashboard/employers" className="text-t-amber-bright font-medium hover:text-t-amber">
                   Show all
                 </a>

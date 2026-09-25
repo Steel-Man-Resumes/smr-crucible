@@ -72,7 +72,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     whatItDoes:
       "It searches several job sources at once and marks employers our team has published as hiring people with records, so you have a target to tailor your resume to.",
     sampleOutput:
-      "Sample listing: \"Bagel Launch Technician -- Rocketship Bagels, Planet Zorp. Pay: 400 gold coins per week. Fair-chance employer.\" A Sample only -- real listings come from real employers near you.",
+      "Sample listing: \"Bagel Launch Technician -- Rocketship Bagels, Planet Zorp. Pay: 400 gold coins per week. Hires people with records.\" A Sample only -- real listings come from real employers near you.",
     trialTaste:
       "Sample match reason: \"This role fits because it values reliability and hands-on work, two of your listed strengths.\"",
     requiredState: "needs_resume",

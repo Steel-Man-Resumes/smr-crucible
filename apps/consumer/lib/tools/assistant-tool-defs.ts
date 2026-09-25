@@ -43,7 +43,7 @@ export const TOUR_TARGETS: Record<string, string> = {
   "nav-application-tailor": "Application Tailor link in the sidebar",
   "nav-disclosure": "Disclosure Planner link in the sidebar",
   "nav-interview": "Interview Practice link in the sidebar",
-  "nav-resources": "Fair-Chance Lanes link in the sidebar",
+  "nav-resources": "Job Paths link in the sidebar",
   "jobs-search-role": "the role/keyword input on the Job Board",
   "jobs-search-button": "the search button on the Job Board",
   "jobs-first-result": "the first job card in the Job Board results",

@@ -17,7 +17,7 @@ const CLIENT_MESSAGES: Record<string, string> = {
   "application-tailor":
     "Every bullet needs a number. Focus on what you accomplished, not what you were assigned. I'll help.",
   jobs:
-    "Fair-chance employers are highlighted first. They're not doing you a favor -- they know the value. Find one that fits.",
+    "Employers we checked for hiring people with records are marked and shown first. They're not doing you a favor -- they know the value. Find one that fits.",
   disclosure:
     "Most people skip this. The ones who don't get the job. Let's prepare what to say.",
   interview:

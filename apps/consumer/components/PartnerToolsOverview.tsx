@@ -45,11 +45,11 @@ const TOOL_OVERVIEW = [
     title: "Job Board",
     href: "/dashboard/jobs",
     description:
-      "Real listings via JSearch API -- no hallucinated jobs. Fair-chance employers flagged and sorted first. No outbound links; everything renders natively.",
+      "Real listings via JSearch API -- no hallucinated jobs. Employers with dated, local evidence of hiring people with records are marked and sorted first. No outbound links; everything renders natively.",
     research: "SHRM fair-chance employer data, Granovetter weak ties",
   },
   {
-    title: "Fair-Chance Lanes",
+    title: "Job Paths",
     href: "/dashboard/resources",
     description:
       "Curated fair-chance opportunity lanes, employer signals, and handoffs into live listings, targeted resumes, interview practice, and disclosure planning.",

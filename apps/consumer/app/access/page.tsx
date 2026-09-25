@@ -40,11 +40,11 @@ Food safety and kitchen sanitation training
 ServSafe | Renewal status unknown`;
 
 const TOOLS = [
-  ["Job Board", "Local listings with fair-chance employer information and plain-language descriptions."],
+  ["Job Board", "Local listings in plain language, with employers we checked for hiring people with records marked."],
   ["Application Tailor", "A targeted resume, cover letter, and disclosure materials built from Forge output."],
   ["Disclosure Planner", "Timing guidance, legal-rights context, and a natural conversation script."],
   ["Interview Prep", "Adaptive practice with structured written feedback."],
-  ["Fair-Chance Lanes", "Opportunity pathways connected to live search and career materials."],
+  ["Job Paths", "Job paths that are realistic with a record, connected to live search and career materials."],
   ["Application Tracker", "A measurable record from intake through placement."],
 ] as const;
 
