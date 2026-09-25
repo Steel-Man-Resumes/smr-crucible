@@ -89,7 +89,7 @@ const NODE_DEFS: NodeDef[] = [
   {
     id: "find-resources",
     title: "Review second-chance lanes",
-    description: "Find realistic fair-chance starting points",
+    description: "Find starting points that are realistic with a record",
     phase: "foundation",
     toolLink: "/dashboard/resources",
     isCompleted: (ctx) => ctx.activity.resources_viewed >= 2,
@@ -129,7 +129,7 @@ const NODE_DEFS: NodeDef[] = [
   {
     id: "search-jobs",
     title: "Search for 5 jobs",
-    description: "Real listings. Fair-chance employers first.",
+    description: "Real listings. Checked employers first.",
     phase: "action",
     toolLink: "/dashboard/jobs",
     isCompleted: (ctx) => ctx.activity.job_searches >= 5,

@@ -89,7 +89,7 @@ async function handlePost(request: Request) {
     `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes -- Truth. Told Strong.<br>` +
     `You received this because you asked for your Forge package at forge.steelmanresumes.com. ` +
     `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-    `fair-chance employers actually hiring, real openings, and insights that move your search forward. ` +
+    `employers that hire people with records, real openings, and insights that move your search forward. ` +
     `Asking is one step -- create your free account at ` +
     `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
     `</div>`;
@@ -102,7 +102,7 @@ async function handlePost(request: Request) {
     (coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${coverLetterText}\n\n` : "") +
     `Next step: your free Refinery account -- https://refinery.steelmanresumes.com/login\n\n` +
     `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-    `fair-chance employers actually hiring, real openings, and insights that move your search forward. ` +
+    `employers that hire people with records, real openings, and insights that move your search forward. ` +
     `Asking is one step -- create your free account at the link above.\n`;
 
   try {

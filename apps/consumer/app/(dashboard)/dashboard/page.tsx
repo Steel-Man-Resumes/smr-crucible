@@ -49,7 +49,7 @@ const ALL_TOOLS: ToolCard[] = [
   {
     href: "/dashboard/jobs",
     title: "Job Board",
-    description: "Find real job listings from fair-chance employers hiring now.",
+    description: "Real job listings. Employers we checked for hiring people with records are marked.",
     color: "bg-t-panel border-t-phos",
     accent: "text-t-phos",
     minState: "needs_resume",
@@ -80,8 +80,8 @@ const ALL_TOOLS: ToolCard[] = [
   },
   {
     href: "/dashboard/resources",
-    title: "Fair-Chance Lanes",
-    description: "Find realistic fair-chance job lanes and live search paths.",
+    title: "Job Paths",
+    description: "Job paths that are realistic with a record, and where to search for them.",
     color: "bg-t-panel border-t-amber",
     accent: "text-t-amber-bright",
     minState: "full_access",
@@ -501,7 +501,7 @@ export default function DashboardPage() {
               <p className="text-sm text-t-phos-dim">
                 {forgeData.career_paths?.[0]?.title
                   ? `Search "${forgeData.career_paths[0].title}" and other roles that fit, then tailor your resume to one. That unlocks the rest.`
-                  : "Real listings, fair-chance employers first. Pick one and tailor your resume to it -- that unlocks the rest."}
+                  : "Real listings, with employers we checked for hiring people with records shown first. Pick one and tailor your resume to it -- that unlocks the rest."}
               </p>
             </Link>
             <Link
@@ -705,7 +705,7 @@ function ObserverDashboard() {
     {
       finding: "85% of HR professionals say justice-impacted employees perform the same as or better than other employees",
       source: "SHRM, 2021",
-      detail: "31% lower turnover in year one. The fair-chance employer matching in this tool is built on evidence that hiring people with records is good business — not charity.",
+      detail: "31% lower turnover in year one. The employer marks in this tool are built on evidence that hiring people with records is good business — not charity.",
     },
     {
       finding: "Redemption sequences (bad→good narratives) predict higher well-being and generativity",

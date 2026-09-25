@@ -45,7 +45,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: "find-jobs",
     title: "How do I find jobs?",
     keywords: ["find jobs", "job board", "search jobs", "look for work", "openings"],
-    body: "Open the Job Board. It shows real openings near you and puts fair-chance employers first. Save the ones you like, then tailor your resume to them.",
+    body: "Open the Job Board. It shows real openings near you and puts employers we checked for hiring people with records first. Save the ones you like, then tailor your resume to them.",
   },
   {
     id: "disclosure",

@@ -9,7 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isMarked, toStateCode, roleWords, type EmployerMarks, type DirectoryMark } from "../employer";
+import { isMarked, toStateCode, roleWords, publicCaveat, type EmployerMarks, type DirectoryMark } from "../employer";
 
 const site = (city: string, state = "MT"): DirectoryMark =>
   ({ basis: "employer", roleFamily: null, roleTitle: null, placeKind: "site", state, county: null, city });
@@ -75,4 +75,15 @@ test("role titles recorded with a city or 'job description' still match on the j
   assert.equal(isMarked("PeopleReady", { city: "Billings", state: "MT", title: "Housekeeper" }, marks), true);
   assert.equal(isMarked("PeopleReady", { city: "Billings", state: "MT", title: "Forklift Driver" }, marks), false);
   assert.equal(isMarked("PeopleReady", { city: "Missoula", state: "MT", title: "Housekeeper" }, marks), false);
+});
+
+test("public caveats keep the honest caveat and drop the research log", () => {
+  assert.equal(publicCaveat("Still true from prior ledger, re-verified today. The evidence is an aggregator copy for one role."),
+               "The evidence is an aggregator copy for one role.");
+  assert.equal(publicCaveat("Confirm current openings. [found_by: claude (sweep)]"), "Confirm current openings.");
+  assert.equal(publicCaveat("[CC spot-check 2026-09-24: the page lists a background check as a requirement]"),
+               "the page lists a background check as a requirement.");
+  assert.equal(publicCaveat("Reads as ban-the-box style language. Confirm the opening."), "Confirm the opening.");
+  assert.equal(publicCaveat("Re-verified today, no change."), null);
+  assert.equal(publicCaveat(null), null);
 });

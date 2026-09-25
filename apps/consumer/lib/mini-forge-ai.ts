@@ -146,7 +146,7 @@ Rules:
 - 2-3 career paths
 - No external links -- resources as plain text only
 - No tel: links -- phone numbers as plain text
-- Fair chance employers preferred in next steps
+- Employers that hire people with records preferred in next steps (say it that way)
 - Never mention the word "felon" or "offender"
 - If criminal record is a challenge, include a legal resource for the location
 - 5th grade reading level throughout`;

@@ -32,7 +32,7 @@ const ENGAGEMENT_FACTS = [
   "Ban-the-box laws now cover over 37 states. Many employers can't ask about your record on the application.",
   "Studies show that formerly incarcerated employees have lower turnover rates than average.",
   "The first 6 months after release are the hardest for finding work. It gets easier.",
-  "Fair-chance employers actively seek people with records. They know the value you bring.",
+  "Some employers actively hire people with records. They know the value you bring.",
   "Research shows naming your challenges out loud reduces their power over you.",
   "Your transferable skills — reliability, problem-solving, resilience — are what employers need most.",
 ];

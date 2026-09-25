@@ -42,8 +42,75 @@ function locationOf(e: { primary_city: string | null; county: string | null; wi_
   return e.primary_city || e.wi_region || e.county || null;
 }
 
-/** Published employers for the fair-chance board, ranked best-first. */
+/**
+ * With DIRECTORY_MARK_ENABLED, the employer list comes from the directory, so it
+ * shows exactly the employers that carry the mark on listings: each place with a
+ * current mark, or a live posting for one role, plus the quoted evidence, its
+ * caveat and the date it was last confirmed. Nothing here is from the old table.
+ */
+/**
+ * The honest caveat a job seeker should read, without the research log: drop
+ * bracketed review notes and any sentence about how or when it was researched.
+ */
+export function publicCaveat(limitations: string | null | undefined): string | null {
+  if (!limitations) return null;
+  // A bracketed review note can hold a caveat a job seeker needs (a background-
+  // check requirement); keep its text, minus the "who reviewed it:" label.
+  const text = limitations.replace(/\[([^\]]*)\]/g, (_m, inner: string) => {
+    const t = inner.replace(/^[^:]{0,60}\d{4}-\d{2}-\d{2}:\s*/, "").trim();
+    return " " + (/[.!?]$/.test(t) ? t : t + ".");
+  });
+  const internal = /ledger|re-?verified|re-?check|prior|sweep|airtable|found_by|curated|\bCC\b|agent|this session|today|ban.the.box|fair.chance|individualized.assessment/i;
+  const kept = text.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x && !internal.test(x));
+  return kept.length ? kept.join(" ") : null;
+}
+
+async function listDirectoryEmployers(opts: { limit?: number; industry?: string }): Promise<PublicEmployer[]> {
+  const limit = Math.min(opts.limit ?? 100, 200);
+  const params: unknown[] = [];
+  let where = `WHERE (p.earns_mark OR p.standing = 'says_yes_for_roles')`;
+  if (opts.industry) {
+    params.push(opts.industry);
+    where += ` AND p.industry = $${params.length}`;
+  }
+  const rows = await query<{
+    place_id: string; canonical_name: string; industry: string | null; careers_url: string | null; website: string | null;
+    city: string | null; county: string | null; state: string; standing: string; last_evidence_on: string | null;
+    excerpt: string | null; limitations: string | null; role_titles: string | null;
+  }>(
+    `SELECT p.place_id, p.canonical_name, p.industry, p.careers_url, p.website, p.city, p.county, p.state, p.standing,
+            p.last_evidence_on::text AS last_evidence_on,
+            ev.excerpt, ev.limitations,
+            (SELECT string_agg(DISTINCT r.role_title, '; ') FROM directory_public_evidence_v r
+              WHERE r.org_id = p.org_id AND r.place_id = p.place_id AND r.claim_type = 'direct_role_signal') AS role_titles
+       FROM directory_public_v p
+       LEFT JOIN LATERAL (
+         SELECT e.excerpt, e.limitations FROM directory_public_evidence_v e
+          WHERE e.org_id = p.org_id AND (e.place_id = p.place_id OR e.place_id IS NULL) AND e.polarity = 'yes'
+          ORDER BY e.observed_on DESC NULLS LAST LIMIT 1) ev ON true
+       ${where}
+      ORDER BY p.earns_mark DESC, p.state, p.canonical_name
+      LIMIT ${limit}`,
+    params
+  );
+  return rows.map((r) => ({
+    id: r.place_id,
+    name: r.canonical_name,
+    industry: r.industry,
+    location: [r.city ?? r.county, r.state].filter(Boolean).join(", ") || null,
+    applyUrl: r.careers_url || r.website,
+    roleTypes: r.standing === "says_yes_for_roles" ? r.role_titles : null,
+    // Older records hold a researcher's summary, newer ones the employer's exact
+    // words; we cannot tell them apart here, so neither is shown as a quote.
+    whyGoodFit: r.excerpt ? `What we found: ${r.excerpt}` : null,
+    caveats: publicCaveat(r.limitations),
+    lastVerified: r.last_evidence_on,
+  }));
+}
+
+/** Published employers for the board, ranked best-first. */
 export async function listPublishedEmployers(opts: { limit?: number; industry?: string } = {}): Promise<PublicEmployer[]> {
+  if (directoryMarkEnabled()) return listDirectoryEmployers(opts);
   const params: unknown[] = [];
   let where = `WHERE published = true`;
   if (opts.industry) {

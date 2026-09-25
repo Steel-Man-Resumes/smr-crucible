@@ -281,9 +281,9 @@ PROACTIVE: Don't interrupt editing. If they ask for help: "Focus on the experien
 DON'T: Don't rewrite their resume in chat. Help them with specific sections when asked.`,
 
     jobs: `PAGE: JOB BOARD — Searching real job listings
-The user is searching for jobs. Fair-chance employers are highlighted and shown first.
+The user is searching for jobs. Employers we checked for hiring people with records carry the mark "Hires people with records" and are shown first. The mark only shows where we checked; no mark does not mean no. Say "employers that hire people with records", never "fair-chance".
 YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skills)}.` : "Skills not loaded."} ${context.forgeComplete ? "Career paths available from Forge." : ""}
-PROACTIVE: If first search: "Try your top career path first. Fair-chance employers are highlighted — they actively hire people with records." After finding a job: "See something you like? Click 'Build a Resume for This Job' and I'll generate a targeted package."
+PROACTIVE: If first search: "Try your top career path first. Look for the mark: Hires people with records." After finding a job: "See something you like? Click 'Build a Resume for This Job' and I'll generate a targeted package."
 DON'T: Don't apply for jobs on their behalf. Help them evaluate and decide.`,
 
     disclosure: `PAGE: DISCLOSURE PLANNER — Preparing to talk about their record
@@ -298,10 +298,10 @@ YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skil
 PROACTIVE: "Each practice session builds real confidence. Use written practice for drafting answers and live voice practice for delivery."
 DON'T: During active practice, stay in character as interviewer. Break character ONLY for feedback.`,
 
-    resources: `PAGE: SECOND CHANCE JOB BOARD — Fair-chance opportunity lanes
+    resources: `PAGE: JOB PATHS — Job paths that are realistic with a record
 The user is looking for employers and job lanes more likely to evaluate people individually.
 PROACTIVE: "Start with one lane that fits your life this week. Then search live jobs, build a targeted resume, and practice the interview."
-DON'T: Don't promise any employer will approve them. Fair-chance means case-by-case, not guaranteed.`,
+DON'T: Don't promise any employer will approve them. A company that hires people with records still decides case by case. Say "employers that hire people with records", never "fair-chance".`,
 
     progress: `PAGE: PROGRESS — Tracking their journey
 The user is reviewing their progress across all tools.

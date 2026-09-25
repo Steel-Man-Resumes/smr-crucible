@@ -111,7 +111,7 @@ const READINESS_CONFIG: Record<string, {
     docsHeading: "Your Documents",
     docsSubtext: "Resume and cover letter ready to customize. Replace [Company Name] and [Hiring Manager] before sending.",
     refineryHeading: "Take the next step",
-    refineryBody: "Save your results and unlock The Refinery: targeted resume versions, interview practice, disclosure planning, and a job board filtered for fair-chance employers.",
+    refineryBody: "Save your results and unlock The Refinery: targeted resume versions, interview practice, disclosure planning, and a job board that marks employers we checked for hiring people with records.",
     refineryCta: "Continue to The Refinery",
     refinerySubtext: "Free. No credit card. Your results carry over.",
     careersHeading: "Career Paths That Fit",
@@ -122,7 +122,7 @@ const READINESS_CONFIG: Record<string, {
     docsHeading: "Your Documents",
     docsSubtext: "Download, customize, and send. Replace [Company Name] and [Hiring Manager] with the real employer.",
     refineryHeading: "Get 10x more in The Refinery",
-    refineryBody: "Your Forge results are the foundation. The Refinery gives you targeted resume versions for each job, AI interview practice, disclosure strategy for your specific record, and a fair-chance job board.",
+    refineryBody: "Your Forge results are the foundation. The Refinery gives you targeted resume versions for each job, AI interview practice, disclosure strategy for your specific record, and a job board that marks employers we checked.",
     refineryCta: "Start Using The Refinery",
     refinerySubtext: "Free. No credit card. Built for exactly where you are right now.",
     careersHeading: "Career Paths That Fit",
@@ -824,7 +824,7 @@ export default function OutputPage() {
           <p className="text-sm text-t-phos-dim leading-relaxed">
             The Refinery is where the real work happens. Target your resume for specific jobs,
             practice interview questions, plan your disclosure strategy, and browse a job board
-            filtered for fair-chance employers -- all built on what you just created here.
+            that marks employers we checked for hiring people with records -- all built on what you just created here.
           </p>
         </div>
 

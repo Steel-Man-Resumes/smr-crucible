@@ -14,7 +14,7 @@ export interface SecondChanceOpportunity {
   employerExamples: string[];
   roles: string[];
   searchTerm: string;
-  hiringSignal: "Public fair-chance signal" | "Case-by-case review" | "Partner-supported path";
+  hiringSignal: "Public commitment" | "Case-by-case review" | "Partner-supported path";
   whyItFits: string;
   watchOut: string;
   bestMove: string;
@@ -51,7 +51,7 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
       "Lead with attendance, pace, safety, and production numbers. Build a resume around reliability and shift readiness.",
     goodFor: ["physical_work", "overtime", "no_degree", "employment_gap", "criminal_record"],
     cautions: ["transportation", "recent_theft", "recent_violence"],
-    sourceNote: "Employer signals are based on public fair-chance commitments, workforce patterns, and pledge lists.",
+    sourceNote: "Employer signals are based on public commitments to hire people with records, workforce patterns, and pledge lists.",
   },
   {
     id: "manufacturing-production",
@@ -60,7 +60,7 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
     employerExamples: ["Nehemiah Manufacturing", "Georgia-Pacific", "Koch companies", "JBM Packaging"],
     roles: ["Production Worker", "Machine Operator", "Assembler", "Packaging Associate"],
     searchTerm: "Production Worker",
-    hiringSignal: "Public fair-chance signal",
+    hiringSignal: "Public commitment",
     whyItFits:
       "Manufacturing employers often value attendance, safety, trainability, and supervisor references more than a perfect resume.",
     watchOut:
@@ -96,7 +96,7 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
     employerExamples: ["Paper Transport", "Waste Management", "Sysco-style distributors", "Local courier fleets"],
     roles: ["Driver Helper", "Delivery Assistant", "CDL Trainee", "Route Assistant"],
     searchTerm: "Driver Helper",
-    hiringSignal: "Public fair-chance signal",
+    hiringSignal: "Public commitment",
     whyItFits:
       "Driver-helper and warehouse-to-driver paths let someone start near transportation work even when a license, insurance, or record issue blocks immediate driving.",
     watchOut:
@@ -114,7 +114,7 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
     employerExamples: ["Televerde", "Local call centers", "Utilities contractors", "Retail support desks"],
     roles: ["Customer Service Representative", "Call Center Agent", "Scheduler", "Intake Specialist"],
     searchTerm: "Customer Service Representative",
-    hiringSignal: "Public fair-chance signal",
+    hiringSignal: "Public commitment",
     whyItFits:
       "Phone support can convert communication skills into a cleaner career path, especially for people moving out of physical labor.",
     watchOut:
@@ -146,7 +146,7 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
   {
     id: "honest-jobs-support",
     category: "support",
-    title: "Fair-Chance Job Platforms",
+    title: "Job Boards for People With Records",
     employerExamples: ["Honest Jobs", "70 Million Jobs-style boards", "LinkedIn fair-chance filter"],
     roles: ["Any matched role", "Second chance jobs", "Fair chance hiring"],
     searchTerm: "Second Chance",
@@ -154,12 +154,12 @@ export const SECOND_CHANCE_OPPORTUNITIES: SecondChanceOpportunity[] = [
     whyItFits:
       "Specialized boards and filters reduce wasted applications by starting with employers that publicly signal openness to applicants with records.",
     watchOut:
-      "A fair-chance label is not a guarantee. The specific job, offense relationship, timing, and background-check vendor still matter.",
+      "A \"hires people with records\" label is not a guarantee. The specific job, offense relationship, timing, and background-check vendor still matter.",
     bestMove:
       "Use these sources for leads, then return here to tailor the resume, practice the interview, and plan disclosure.",
     goodFor: ["criminal_record", "research", "employment_gap"],
     cautions: ["false_positive_employer_lists"],
-    sourceNote: "LinkedIn and public fair-chance boards maintain separate employer signals.",
+    sourceNote: "LinkedIn and public job boards for people with records keep separate employer signals.",
   },
 ];
 

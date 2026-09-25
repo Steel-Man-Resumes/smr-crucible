@@ -79,8 +79,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/employers", label: "Verified Employers", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Fair-Chance Lanes", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/employers", label: "Employers That Hire", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/resources", label: "Job Paths", minTier: "client", minState: "needs_profile" },
     ],
   },
   {

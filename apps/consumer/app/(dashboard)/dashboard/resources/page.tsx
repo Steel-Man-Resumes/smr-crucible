@@ -108,7 +108,7 @@ function SecondChanceBoardPage() {
     <div className="max-w-5xl space-y-8">
       <header className="max-w-3xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Fair-Chance Lanes
+          Job Paths
         </h1>
         <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
         <p className="text-base text-t-phos-dim leading-relaxed">
@@ -118,7 +118,7 @@ function SecondChanceBoardPage() {
         </p>
         <div className="mt-4 border border-t-amber bg-t-panel-2 px-4 py-3">
           <p className="text-sm text-t-amber-bright leading-relaxed">
-            Fair-chance does not mean automatic approval. Background checks
+            A company that hires people with records does not approve everyone automatically. Background checks
             still vary by role, location, timing, and the relationship between
             the record and the job.
           </p>

@@ -94,7 +94,7 @@ export const CATEGORY_META: Record<
   employment: {
     label: "Employment Help",
     icon: "\u{1F4BC}",
-    description: "Job centers, career counseling, fair-chance employers",
+    description: "Job centers, career counseling, employers that hire people with records",
   },
 };
 

@@ -436,18 +436,18 @@ function JobBoardPage() {
       </h1>
       <GhostGuide message={getOpusMessage("jobs")} pageId="jobs" />
       <p className="text-base text-t-phos-dim mb-6">
-        Real job listings updated daily. Fair-chance employers highlighted.
+        Real job listings updated daily. Employers we checked for hiring people with records are marked.
         Everything stays right here in your dashboard.
       </p>
 
-      {/* Cross-link into the curated fair-chance lanes (completes the loop) */}
+      {/* Cross-link into the curated job paths (completes the loop) */}
       <Link
         href="/dashboard/resources"
         className="t-focus flex items-center justify-between gap-3 bg-t-panel border border-t-line px-4 py-3 mb-6 hover:border-t-phos-dim transition-colors"
       >
         <span className="text-sm text-t-phos">
           <span className="font-semibold text-t-white">Not sure where to start?</span>{" "}
-          Explore curated fair-chance lanes for your field.
+          Explore job paths for your field that are realistic with a record.
         </span>
         <svg
           width="16"
@@ -574,7 +574,7 @@ function JobBoardPage() {
             onClick={() => setFairChanceOnly((v) => !v)}
             className={`t-focus text-xs px-3 py-1.5 border transition-colors ${fairChanceOnly ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
-            Fair chance only
+            Hires people with records
           </button>
           <button
             onClick={() => setRemoteOnly((v) => !v)}
@@ -605,14 +605,17 @@ function JobBoardPage() {
         </div>
       )}
 
-      {/* Fair chance info box */}
+      {/* Applying-with-a-record info box (AI-written general guidance, not a checked list) */}
       {fairChanceInfo && (
         <div className="bg-t-panel p-5 border border-t-steel mb-6">
           <h2 className="font-semibold text-t-steel mb-2">
-            Fair-Chance Hiring in Your Area
+            Applying With a Record Here
           </h2>
           <p className="text-sm text-t-phos leading-relaxed">
             {fairChanceInfo}
+          </p>
+          <p className="text-xs text-t-phos-dim mt-2">
+            General guidance, not a list of employers we checked.
           </p>
         </div>
       )}
@@ -680,7 +683,7 @@ function JobBoardPage() {
                         </h3>
                         {job.second_chance && (
                           <span className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5 whitespace-nowrap">
-                            Fair Chance
+                            Hires people with records
                           </span>
                         )}
                         {job.remote && (
@@ -751,11 +754,11 @@ function JobBoardPage() {
                         ))}
                     </div>
 
-                    {/* Fair chance reason */}
+                    {/* Why this listing carries the mark */}
                     {job.fair_chance_reason && (
                       <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
                         <p className="text-xs font-medium text-t-amber-bright">
-                          Fair-chance employer -- {job.fair_chance_reason}
+                          {job.fair_chance_reason}
                         </p>
                       </div>
                     )}
@@ -979,10 +982,10 @@ function JobBoardPage() {
             </span>
           </div>
           <div className="p-3 bg-t-panel border border-t-line">
-            <span className="text-sm font-medium text-t-white block">Fair Chance First</span>
+            <span className="text-sm font-medium text-t-white block">Checked Employers First</span>
             <span className="text-xs text-t-phos-dim">
-              Companies known to hire people with records are highlighted and
-              shown first.
+              Employers we checked for hiring people with records are marked
+              and shown first. The mark only shows where we checked.
             </span>
           </div>
           <div className="p-3 bg-t-panel border border-t-line">
