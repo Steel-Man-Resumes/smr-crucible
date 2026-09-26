@@ -36,7 +36,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { encryptBuffer, decryptBuffer, EncryptedPayload } from "./crypto";
-import { getS3Client, getSecureBucket } from "./storage";
+import { assertBucketAllowed, getS3Client, getSecureBucket } from "./storage";
 import { query, getOne, insert } from "./db";
 
 export interface SecureObjectRecord {
@@ -135,6 +135,7 @@ export async function getDecryptedObject(params: {
   if (!record) return null;
   if (record.owner_user_id !== ownerUserId) return null; // exclusive ownership, no bypass
 
+  assertBucketAllowed(record.bucket);
   const client = getS3Client();
   const obj = await client.send(new GetObjectCommand({ Bucket: record.bucket, Key: key }));
   const ciphertext = await streamToBuffer(obj.Body);
@@ -164,6 +165,7 @@ export async function deleteObject(params: {
   if (!record) return { status: "not_found" };
   if (record.owner_user_id !== ownerUserId) return { status: "not_owner" };
 
+  assertBucketAllowed(record.bucket);
   const client = getS3Client();
   await client.send(new DeleteObjectCommand({ Bucket: record.bucket, Key: key }));
   await query(`DELETE FROM secure_object WHERE object_key = $1`, [key]);

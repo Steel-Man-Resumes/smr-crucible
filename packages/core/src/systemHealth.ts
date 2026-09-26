@@ -8,6 +8,7 @@
  */
 
 import { query, getOne, getOneAsUser } from "./db";
+import { getR2Config, isNonProductionVercel } from "./storage";
 
 export type HealthStatus = "ok" | "warn" | "error" | "info";
 
@@ -161,8 +162,22 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
     present(process.env.JSEARCH_API_KEY) ? "Key set." : "Missing -- live job search degraded.");
   const cos = present(process.env.CAREERONESTOP_USER_ID) && present(process.env.CAREERONESTOP_TOKEN);
   add("Integrations", "CareerOneStop (fallback)", cos ? "ok" : "info", cos ? "Configured." : "Not configured (optional fallback).");
-  const r2 = ["R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"].every((k) => present(process.env[k]));
-  add("Integrations", "Cloudflare R2 (storage)", r2 ? "ok" : "warn", r2 ? "All 4 vars set." : "Incomplete -- file storage unavailable.");
+  const previewStorage = isNonProductionVercel();
+  let r2: boolean;
+  if (previewStorage) {
+    try {
+      getR2Config();
+      r2 = true;
+    } catch {
+      r2 = false;
+    }
+  } else {
+    r2 = ["R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"].every((k) => present(process.env[k]));
+  }
+  const r2Detail = r2
+    ? (previewStorage ? "Dedicated Preview storage configuration valid." : "All 4 general vars set.")
+    : "Incomplete or unsafe configuration -- file storage unavailable.";
+  add("Integrations", "Cloudflare R2 (storage)", r2 ? "ok" : "warn", r2Detail);
   add("Integrations", "Document encryption key", present(process.env.DOCUMENT_ENCRYPTION_KEY) ? "ok" : "warn",
     present(process.env.DOCUMENT_ENCRYPTION_KEY) ? "Set." : "Missing -- document vault encryption unavailable.");
   const twilio = present(process.env.TWILIO_ACCOUNT_SID) && present(process.env.TWILIO_AUTH_TOKEN);
