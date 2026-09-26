@@ -85,7 +85,7 @@ export const webSearchTool = tool({
       query: {
         type: "string",
         description:
-          "A focused search query. Include the jurisdiction (state/city) and the year when the answer could vary by place or time.",
+          "A focused search query. Include the jurisdiction (state/city) and the year when the answer could vary by place or time. Never include the user's name, contact details, employer history, case details, or resume text; ask the general question only.",
       },
     },
     required: ["query"],

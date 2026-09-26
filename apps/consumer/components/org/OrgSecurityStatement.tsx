@@ -69,7 +69,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Which AI companies see this data?",
-        a: "Two. Anthropic writes and coaches. OpenAI runs a smaller model that fact-checks what the first one wrote. Neither trains on your data. Voice practice, if used, streams audio to OpenAI, where it is processed under OpenAI's own retention policy, which we do not control.",
+        a: "Three. Anthropic writes and coaches. OpenAI runs a smaller model that fact-checks what the first one wrote. Under their API terms, neither trains on this data by default. When the coach needs a current fact, such as a state law or an employer's hiring policy, it sends a short search question to Perplexity. That question is not their resume, and the coach is instructed to leave out names and contact details. Voice practice, if used, streams audio to OpenAI, where it is processed under OpenAI's own retention policy, which we do not control.",
       },
       {
         q: "Can the assistant tell a case manager something that is not true?",

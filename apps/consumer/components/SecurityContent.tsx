@@ -294,6 +294,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
           <p>AI -- writing and coaching: Anthropic Claude. No training on user data.</p>
           <p>AI -- fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume text and our draft both pass through OpenAI on that check. No training on user data.</p>
+          <p>AI -- current-fact lookup: Perplexity (sonar). When the coach checks a current law or employer fact, it sends a short search question, not your resume. The coach is instructed to leave out your name and contact details.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
