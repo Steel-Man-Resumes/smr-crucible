@@ -45,7 +45,6 @@ const TOOL_ACTIVITY: Record<string, string> = {
   add_follow_up_reminder: "Setting your reminder",
   take_me_there: "Taking you there",
   highlight_element: "Pointing at it",
-  web_search: "Checking current facts",
   file_feedback: "Sending that to Troy",
 };
 
