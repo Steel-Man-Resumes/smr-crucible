@@ -22,7 +22,6 @@ import { auth } from "@/auth";
 import { sanitizeForPrompt } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_CHAT } from "@/lib/ai/models";
-import { webSearchTool } from "@/lib/tools/web-search";
 import {
   buildAssistantTools,
   buildHandsSection,
@@ -59,6 +58,13 @@ export async function GET() {
   const history = await loadCoachHistory(userId, 50);
   return NextResponse.json({ data: history.filter((m) => m.role !== "system") });
 }
+
+// No live lookup tool: the coach cannot check current law, so it must not
+// present law as settled. Kept here, next to the tool list it compensates for.
+const CURRENT_LAW_NOTE = `
+
+## Current law
+You cannot look anything up. When an answer depends on current law or policy (ban-the-box, expungement or sealing, WOTC, licensing, a program's status), say that the rules vary by place and change over time, and point the person to the official state or city source or a local legal aid office to confirm. Never state law as settled.`;
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -111,6 +117,7 @@ export async function POST(request: Request) {
     buildCoachSystemPrompt(profile) +
     skillsContext +
     buildHandsSection(toolOptions) +
+    CURRENT_LAW_NOTE +
     memorySection;
 
   // Persist the newest user turn for cross-session memory -- but ONLY when the
@@ -130,10 +137,7 @@ export async function POST(request: Request) {
     messages: messages as never,
     maxTokens: profile.coachLength === "brief" ? 400 : 700,
     temperature: Math.min(Math.max(profile.coachCreativity / 100, 0), 1),
-    tools: {
-      ...buildAssistantTools(toolOptions),
-      web_search: webSearchTool,
-    },
+    tools: buildAssistantTools(toolOptions),
     maxSteps: 4,
     toolCallStreaming: true,
     async onFinish({ text, usage, finishReason, steps }) {
