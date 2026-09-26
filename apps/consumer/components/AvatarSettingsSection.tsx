@@ -10,12 +10,12 @@
  *  2. Photo path (optional): the user picks an image; the browser crops it to a
  *     square and compresses it (<canvas>, max 512px) BEFORE upload -- no server
  *     image library. The photo is stored ENCRYPTED (owner-only) and shown through
- *     an owner-exclusive proxy. Uploaded photos + any generated headshots appear
- *     in a compare grid; each is selectable as the avatar, and the original is
+ *     an owner-exclusive proxy. Uploaded photos (and any headshot generated
+ *     before AI generation was removed) appear in a compare grid; each is selectable as the avatar, and the original is
  *     always retained. A photo is NEVER automatically added to a resume.
  *
- * AI headshot generation is provider-gated: when it is not turned on, the control
- * is shown as a plain "not available yet" note (never a broken button).
+ * AI headshot generation was removed (2026-09-26): a face photo is never sent
+ * to an AI provider.
  *
  * Saving/selecting dispatches UI_PREFS_EVENT so the nav avatar updates without a
  * reload.
@@ -77,8 +77,6 @@ export function AvatarSettingsSection() {
   });
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [assets, setAssets] = useState<AvatarAssetView[]>([]);
-  const [genEnabled, setGenEnabled] = useState(false);
-  const [genRemaining, setGenRemaining] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [busy, setBusy] = useState(false);
@@ -102,8 +100,7 @@ export function AvatarSettingsSection() {
     Promise.all([
       fetch("/api/user/ui-prefs").then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch("/api/avatar/assets").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch("/api/avatar/generate").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([prefs, assetList, gen]) => {
+    ]).then(([prefs, assetList]) => {
       if (cancelled) return;
       const av = prefs?.data?.avatar as AvatarChoice | null | undefined;
       if (av) {
@@ -117,12 +114,6 @@ export function AvatarSettingsSection() {
         setSelectedPhotoId(av.photoAssetId ?? null);
       }
       if (assetList?.data) setAssets(assetList.data as AvatarAssetView[]);
-      if (gen?.data) {
-        setGenEnabled(Boolean(gen.data.enabled));
-        setGenRemaining(
-          typeof gen.data.remaining === "number" ? gen.data.remaining : null
-        );
-      }
       setLoaded(true);
     });
     return () => {
@@ -253,31 +244,8 @@ export function AvatarSettingsSection() {
     }
   }
 
-  async function generateHeadshot(sourceAssetId: string) {
-    setBusy(true);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/avatar/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceAssetId }),
-      });
-      const j = await res.json().catch(() => null);
-      if (res.ok) {
-        await refreshAssets();
-        setMsg("Headshot generated. Choose it below to use it.");
-        if (typeof j?.data?.remaining === "number") setGenRemaining(j.data.remaining);
-      } else {
-        setMsg(j?.message || "AI headshot generation is not available right now.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!loaded) return null;
 
-  const originals = assets.filter((a) => a.kind === "original_photo");
   const usingPhoto = selectedPhotoId != null;
 
   return (
@@ -446,42 +414,6 @@ export function AvatarSettingsSection() {
             </div>
           </div>
         )}
-
-        {/* ---- AI headshot generation (gated) ---- */}
-        <div className="mt-5 pt-4 border-t border-t-line">
-          <h4 className="font-semibold text-t-white mb-1">AI headshot</h4>
-          {genEnabled ? (
-            <>
-              <p className="text-sm text-t-phos-dim mb-2">
-                Turn one of your uploaded photos into a professional headshot. You
-                can generate up to {genRemaining ?? 3} today. Your original photo
-                is always kept.
-              </p>
-              {originals.length === 0 ? (
-                <p className="text-sm text-t-phos-dim">
-                  Upload a photo first, then you can generate a headshot from it.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {originals.map((o) => (
-                    <TBtn
-                      key={o.id}
-                      onClick={() => generateHeadshot(o.id)}
-                      disabled={busy || (genRemaining !== null && genRemaining <= 0)}
-                      size="sm"
-                    >
-                      generate from this photo
-                    </TBtn>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-t-phos-dim">
-              AI headshot generation is not available yet.
-            </p>
-          )}
-        </div>
 
         <p className="sr-only" role="status" aria-live="polite">
           {msg ?? ""}
