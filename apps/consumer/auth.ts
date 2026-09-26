@@ -248,6 +248,10 @@ if (isDev) {
 }
 
 const isProduction = process.env.NODE_ENV === "production";
+// The shared-domain session cookie only works on steelmanresumes.com hosts. On a
+// Vercel Preview (*.vercel.app) the browser drops it and sign-in silently fails,
+// so it is limited to the Production deployment.
+const useSharedDomainCookie = isProduction && process.env.VERCEL_ENV === "production";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PostgresAdapter(pool as any),
@@ -258,7 +262,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   // Share session cookie across all .steelmanresumes.com subdomains
   // so the marketing site can detect auth state
-  ...(isProduction && {
+  ...(useSharedDomainCookie && {
     cookies: {
       sessionToken: {
         name: "authjs.session-token",

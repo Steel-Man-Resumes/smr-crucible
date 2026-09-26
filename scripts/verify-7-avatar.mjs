@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const env = readFileSync(new URL('../apps/consumer/.env.local', import.meta.url), 'utf8');
-for (const k of ['DATABASE_URL', 'DOCUMENT_ENCRYPTION_KEY', 'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'HEADSHOT_GEN_ENABLED', 'OPENAI_API_KEY']) {
+for (const k of ['DATABASE_URL', 'DOCUMENT_ENCRYPTION_KEY', 'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME']) {
   const m = env.match(new RegExp('^' + k + '=["\']?([^"\'\n]+)', 'm'));
   if (m) process.env[k] = m[1];
 }
