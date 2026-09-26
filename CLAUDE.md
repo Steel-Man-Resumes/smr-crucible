@@ -271,6 +271,13 @@ All routes require auth. Org resolved from authenticated user's membership.
 - PERPLEXITY_API_KEY
 - JSEARCH_API_KEY (RapidAPI key for JSearch job discovery)
 
+### Vercel Preview storage for apps/consumer
+- Set `R2_PREVIEW_ENDPOINT`, `R2_PREVIEW_BUCKET_NAME`, `R2_PREVIEW_ACCESS_KEY_ID`, and `R2_PREVIEW_SECRET_ACCESS_KEY` to Preview-only values.
+- Use a dedicated Preview bucket and an object-storage credential restricted to that bucket. Do not reuse Production values.
+- `R2_PREVIEW_SECURE_BUCKET_NAME` is optional; if absent, encrypted Preview objects use the dedicated Preview bucket.
+- Preview bucket names must contain `preview`. The storage module fails closed on any non-Production Vercel deployment (including one with `VERCEL_ENV` missing) if these values are missing, name a bucket without `preview`, or match any general bucket or credential. Rows that name a bucket outside the Preview buckets are refused. Production and local development continue to use `R2_*`.
+- The code checks catch misconfiguration. The real boundary is the Cloudflare token scope, so confirm the Preview token can reach only the Preview bucket.
+
 ## Commands
 - npm run dev -w apps/web          # Start web app dev server (port 3000)
 - npm run dev -w services/worker   # Start worker in dev mode (uses --env-file=.env)

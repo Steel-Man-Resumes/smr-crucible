@@ -14,7 +14,7 @@
  * wait on R2.
  */
 import { insert, query } from "./db";
-import { getS3Client } from "./storage";
+import { assertBucketAllowed, getS3Client } from "./storage";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 export interface DeletionTaskRecord {
@@ -73,6 +73,7 @@ export async function runDeletionTasks(limit = 50): Promise<{ processed: number;
     try {
       if (task.target_kind === "r2_object") {
         const { bucket, key } = parseR2TargetRef(task.target_ref);
+        assertBucketAllowed(bucket);
         await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
       } else {
         throw new Error(`Unknown deletion target_kind: ${task.target_kind}`);
