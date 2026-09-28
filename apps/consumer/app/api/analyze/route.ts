@@ -197,7 +197,7 @@ const READINESS_DIRECTIVES: Record<string, {
     narrative: `This person is EXPLORING. They are not committed to a job search yet.
 - Write the headline as an identity statement, not a job target ("A problem-solver with hands-on expertise" not "Seeking warehouse position")
 - Summary should feel like a mirror, not a sales pitch. Reflect who they are, not where they should apply.
-- Reflection should validate that exploring is smart, not passive.
+- Reflection should validate that exploring is a smart, active step.
 - Strengths: focus on transferable, identity-level strengths ("You lead naturally" not "Leadership skills applicable to management roles").`,
     skills: `This person is exploring, not actively job searching.
 - Emphasize transferable and soft skills over hard/technical ones.
@@ -218,8 +218,8 @@ const READINESS_DIRECTIVES: Record<string, {
     narrative: `This person is THINKING ABOUT IT. They know they need to do something but feel stuck.
 - Headline should name their direction without locking them in.
 - Summary should acknowledge both their experience AND their ambivalence. "You have more to work with than you think."
-- Reflection should validate that thinking is not wasted time — and gently point toward a next small step.
-- Strengths: connect to possibilities. "This strength opens doors in X and Y." Frame strengths as the foundation of a future identity, not just resume bullets.`,
+- Reflection should validate that thinking it through counts as progress, and gently point toward a next small step.
+- Strengths: connect to possibilities. "This strength opens doors in X and Y." Frame strengths as the foundation of a future identity, which is more than a line on a resume.`,
     skills: `This person is weighing their options.
 - Full skill extraction, but frame transferable skills prominently.
 - For each skill cluster, hint at what industries value it.
@@ -227,7 +227,7 @@ const READINESS_DIRECTIVES: Record<string, {
     careers: `This person is THINKING, not applying.
 - Suggest 3 paths, ranging from accessible to aspirational.
 - Frame as "options worth considering" with a sense of possibility.
-- For each path, include what Giordano calls a "hook": a specific program, org, or entry point in this field where someone could build a relationship — not just find a job.
+- For each path, include what Giordano calls a "hook": a specific program, org, or entry point in this field where someone could build a relationship as well as find a job.
 - Include what makes each path a good FIT for them specifically.
 - Next steps should be low-commitment ("learn more about..." not "apply to...").
 - Salary ranges help them see the upside.`,
@@ -235,14 +235,14 @@ const READINESS_DIRECTIVES: Record<string, {
 - Name barriers honestly. Connect each to resources.
 - Frame resources as "when you're ready, here's where to start."
 - Legal notes: clear and informative. Knowledge is power even before action.
-- 2-3 resources per barrier. At least one should be a potential "hook for change" — a program or org that builds relationships, not just delivers services.`,
+- 2-3 resources per barrier. At least one should be a potential "hook for change": a program or org that builds relationships as well as delivering services.`,
     careerCount: "3",
   },
   preparation: {
     narrative: `This person has DECIDED to make a change. They need a plan.
 - Headline should be resume-ready and targeted.
-- Summary should be confident and forward-looking. This IS the replacement self Giordano describes — help them see it.
-- Reflection should celebrate the decision and reinforce the identity shift: they are not "someone trying to get a job," they are a professional in a specific field.
+- Summary should be confident and forward-looking. This IS the replacement self Giordano describes. Help them see it.
+- Reflection should celebrate the decision and reinforce the identity shift: they are a professional in a specific field.
 - Strengths: tie directly to target career paths with specific evidence. Frame as proof of the new identity.`,
     skills: `This person is getting ready to move.
 - Full skill extraction with resume-ready language.
@@ -251,7 +251,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Include industry keywords where natural.`,
     careers: `This person is PREPARING to act.
 - Suggest 3-5 paths with concrete detail.
-- For the top path, identify the specific "hook" — an org, program, or employer in their area that could be both a job opportunity AND a genuine turning-point relationship.
+- For the top path, identify the specific "hook": an org, program, or employer in their area that could be both a job opportunity AND a genuine turning-point relationship.
 - Include specific next steps (certifications to get, organizations to contact, people to meet).
 - Salary ranges with growth potential ("starts at X, moves to Y within 2 years").
 - Note which paths have the lowest barrier to entry for their situation.
@@ -262,14 +262,14 @@ const READINESS_DIRECTIVES: Record<string, {
 - Timelines only as general ballpark, framed to verify ("record-clearing can take months and it varies. A legal-aid resource can confirm for your case"), never a firm promise.
 - Frame through agency: "here's what you do first."
 - Name the structural reality (Pager's research) and the navigation: "Employers can discriminate even where ban-the-box applies. Here's how to get ahead of it."
-- At least one resource per barrier should be a potential "hook" org where a relationship can form, not just a service.`,
+- At least one resource per barrier should be a potential "hook" org where a relationship can form beyond the service itself.`,
     careerCount: "3-5",
   },
   action: {
     narrative: `This person is READY TO GO. They are actively looking for work.
 - Headline must be resume-ready, keyword-rich, and targeted to their strongest career path.
 - Summary should read like a professional brand statement an employer would respond to.
-- Reflection can be brief — they have made the identity shift. Reinforce it: "You're not job-searching. You're connecting your skills to the right employer."
+- Reflection can be brief. They have made the identity shift. Reinforce it with a line built from their own facts: they are matching real skills to the right employer.
 - Strengths: frame as competitive advantages with specific evidence and metrics.`,
     skills: `This person is actively job searching.
 - Comprehensive extraction with ATS-optimized language.
@@ -278,7 +278,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Prioritize hard skills and quantifiable competencies.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
-- For each path: show HOW to find employers that hire people with records in their area (the state American Job Center, local reentry orgs, job boards for people with records) rather than naming a specific local company as one, which you cannot verify. In what you write to the person, say "employers that hire people with records", never "fair-chance". SHRM data shows 85% of HR pros say JI employees perform equal or better, this person should know that data exists.
+- For each path: show HOW to find employers that hire people with records in their area (the state American Job Center, local reentry orgs, job boards for people with records) rather than naming a specific local company as one, which you cannot verify. In what you write to the person, say "employers that hire people with records", never "fair-chance". SHRM data shows 85% of HR pros say JI employees perform equal or better. This person should know that data exists.
 - Next steps should be specific and immediate ("apply on Indeed this week", "call this organization Monday").
 - Salary ranges with negotiation context.
 - Note seasonal hiring patterns if relevant.
@@ -328,8 +328,8 @@ const RESOURCE_VERIFICATION_DISCIPLINE = `SOURCING & VERIFICATION DISCIPLINE (no
  * less than narrate another state's statutes at someone.
  */
 const STATE_LEGAL_CONTEXT: Record<string, string> = {
-  WI: `- Wisconsin: "ban-the-box" (removing the conviction question from the initial application) applies to PUBLIC hiring only: Wisconsin state civil service (2015 Wisconsin Act 150) and the City of Milwaukee's own civil-service applicants. It does NOT bind private employers, and there is no Milwaukee or statewide private-employer ban-the-box (do not claim one). The protection that DOES reach private employers is the Wisconsin Fair Employment Act (Wis. Stat. 111.321 / 111.335): an employer may not discriminate based on conviction record UNLESS the conviction is substantially related to the particular job, state this as general information, never as a ruling on this person. A record-clearing statute (Wis. Stat. 973.015) exists; say a legal-aid resource can assess whether it applies, do NOT assert the person's own eligibility.`,
-  MI: `- Michigan: "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only: a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule, it requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific, say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.`,
+  WI: `- Wisconsin: "ban-the-box" (removing the conviction question from the initial application) applies to PUBLIC hiring only: Wisconsin state civil service (2015 Wisconsin Act 150) and the City of Milwaukee's own civil-service applicants. It does NOT bind private employers, and there is no Milwaukee or statewide private-employer ban-the-box (do not claim one). The protection that DOES reach private employers is the Wisconsin Fair Employment Act (Wis. Stat. 111.321 / 111.335): an employer may not discriminate based on conviction record UNLESS the conviction is substantially related to the particular job. State this as general information, never as a ruling on this person. A record-clearing statute (Wis. Stat. 973.015) exists; say a legal-aid resource can assess whether it applies. Do NOT assert the person's own eligibility.`,
+  MI: `- Michigan: "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only: a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule. It requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific. Say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.`,
 };
 
 /** USPS state code from a "City, ST" location string, or null. */
@@ -362,7 +362,7 @@ function buildContext(input: ForgeInput): string {
     parts.push(`GOAL NARRATIVE: ${sanitizeForPrompt(input.goalNarrative, 1000)}`);
   }
   if (input.hookNarrative) {
-    parts.push(`HOOK FOR CHANGE (what would make work feel meaningful — Giordano's turning-point context): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
+    parts.push(`HOOK FOR CHANGE (Giordano's turning-point context: what would make work feel meaningful): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
   }
 
   if (input.challenges?.length) {
@@ -574,17 +574,17 @@ async function analyzeBarriers(
   const system = `You are a reentry resource specialist grounded in evidence-based practice.
 
 CORE FRAMING (non-negotiable):
-Barriers are structural obstacles and logistics to navigate — not character flaws or personal failures.
+Barriers are structural obstacles and logistics to navigate. They are never character flaws or personal failures.
 Devah Pager's audit studies showed that discrimination in hiring is measurable and systematic.
-Your job is to arm this person with real resources, legal rights, and navigation strategies — not to help them feel better about a system that is genuinely unfair to them.
+Your job is to arm this person with real resources, legal rights, and navigation strategies. Do not try to make them feel better about a system that is genuinely unfair to them.
 
-At the same time: Giordano et al. (2002) showed that lasting change requires both a concrete "hook" (a job, a program, a mentor) AND identity work. For each barrier, surface potential hooks — organizations and programs where the person might find not just a service, but a connection that could become a turning point.
+At the same time: Giordano et al. (2002) showed that lasting change requires both a concrete "hook" (a job, a program, a mentor) AND identity work. For each barrier, surface potential hooks: organizations and programs where the person might find a connection that could become a turning point, beyond the service itself.
 
 For each barrier this person faces, provide:
 - Practical resources and organizations that help
-- Legal context where relevant (ban-the-box, fair chance laws) — be jurisdiction-specific when the state is known
+- Legal context where relevant (ban-the-box, fair chance laws). Be jurisdiction-specific when the state is known
 - Specific, actionable next steps
-- At least one potential "hook for change" — an org or program where this person could build a relationship, not just receive a service
+- At least one potential "hook for change": an org or program where this person could build a relationship as well as receive a service
 
 READINESS-AWARE INSTRUCTIONS:
 ${rd.barriers}

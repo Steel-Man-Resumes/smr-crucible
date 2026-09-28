@@ -108,23 +108,23 @@ export interface JobContext {
 const RESEARCH: Record<UseCase, string> = {
   resume: `RESEARCH-BACKED RESUME STANDARDS:
 
-NARRATIVE IDENTITY (McAdams & McLean, 2013): A resume should read like meeting a person, not scanning a form. There is a narrative arc — where they've been, what they've built, where they're going. Redemption sequences (difficulty → growth → contribution) predict well-being and employer confidence.
+NARRATIVE IDENTITY (McAdams & McLean, 2013): A resume should read like meeting a person, not scanning a form. There is a narrative arc: where they've been, what they've built, where they're going. Redemption sequences (difficulty → growth → contribution) predict well-being and employer confidence.
 
-GENERATIVE IDENTITY (Maruna, 2001): People who successfully rebuild their careers develop "generative scripts" — their past challenges become strengths. Frame career progression as intentional growth, not accident. "Led" not "was assigned to." "Built" not "was responsible for."
+GENERATIVE IDENTITY (Maruna, 2001): People who successfully rebuild their careers develop "generative scripts", in which their past challenges become strengths. Frame career progression as intentional growth, not accident. "Led" not "was assigned to." "Built" not "was responsible for."
 
-SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of confidence. Every bullet should demonstrate a concrete accomplishment — something they DID and the result it produced. Vague duties build no confidence in the reader OR the candidate.
+SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of confidence. Every bullet should demonstrate a concrete accomplishment: something they DID and the result it produced. Vague duties build no confidence in the reader OR the candidate.
 
 SCAFFOLDING (Wood, Bruner, Ross, 1976): Each resume iteration should require less AI support. First resume: heavy scaffolding. Third resume: user drives, AI suggests.
 
 COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Numbers in every bullet. Action verbs only. ATS-optimized but human-readable.
 
-INCARCERATION RULE (absolute): NEVER mention incarceration, criminal records, justice involvement, prison, jail, parole, probation — not even obliquely. Employment gaps use years only, never explained. Disclosure happens in person, never on paper.`,
+INCARCERATION RULE (absolute): NEVER mention incarceration, criminal records, justice involvement, prison, jail, parole, probation. Not even obliquely. Employment gaps use years only, never explained. Disclosure happens in person, never on paper.`,
 
   cover_letter: `RESEARCH-BACKED COVER LETTER STANDARDS:
 
-NARRATIVE IDENTITY (McAdams, 2013): The cover letter IS the redemption narrative — compressed into 300 words. Opening: who they are NOW. Middle: what they've BUILT. Close: what they'll CONTRIBUTE.
+NARRATIVE IDENTITY (McAdams, 2013): The cover letter IS the redemption narrative, compressed into 300 words. Opening: who they are NOW. Middle: what they've BUILT. Close: what they'll CONTRIBUTE.
 
-SELF-DETERMINATION (Deci & Ryan, 2000): The letter must express autonomy — "I chose this path" not "I'm looking for any opportunity." Competence — specific achievements that prove capability. Relatedness — why THIS company, THIS role.
+SELF-DETERMINATION (Deci & Ryan, 2000): The letter must express autonomy: "I chose this path" not "I'm looking for any opportunity." Competence: specific achievements that prove capability. Relatedness: why THIS company, THIS role.
 
 EMPLOYER PSYCHOLOGY: Hiring managers spend 6-7 seconds on a cover letter. Lead with the strongest match to the job requirements. Second paragraph proves it with numbers. Close with confidence, not desperation.
 
@@ -132,9 +132,9 @@ NEVER: mention records, gaps, "second chances," or anything that requires explan
 
   disclosure: `RESEARCH-BACKED DISCLOSURE SCIENCE:
 
-BUSHWAY & APEL (2012): Disclosure timing significantly impacts hiring outcomes. Prepared disclosure is 3x more effective than improvised disclosure. The script should be under 30 seconds — acknowledge, pivot, value.
+BUSHWAY & APEL (2012): Disclosure timing significantly impacts hiring outcomes. Prepared disclosure is 3x more effective than improvised disclosure. The script should be under 30 seconds: acknowledge, pivot, value.
 
-MARUNA (2001): Agency is the strongest predictor of successful desistance. The disclosure script must position the candidate as an AGENT — "I made a mistake, I did the work, I'm here because I chose to be." Not a victim. Not apologetic. Accountable and forward-looking.
+MARUNA (2001): Agency is the strongest predictor of successful desistance. The disclosure script must position the candidate as an AGENT: "I made a mistake, I did the work, I'm here because I chose to be." Not a victim. Not apologetic. Accountable and forward-looking.
 
 EMPLOYER PSYCHOLOGY: What the interviewer is thinking (even if they don't ask):
 1. "Will this person be reliable?" → Answer with attendance/consistency data
@@ -142,7 +142,7 @@ EMPLOYER PSYCHOLOGY: What the interviewer is thinking (even if they don't ask):
 3. "Will other employees be uncomfortable?" → Answer with team leadership evidence
 4. "Could this create liability?" → Answer with clean record since, certifications, references
 
-BAN-THE-BOX: Federal contractors and many states/cities prohibit asking about criminal history before conditional offer. But even where legal, employers CANNOT use a record as automatic disqualification — must consider: nature of offense, time elapsed, nature of job (EEOC guidance).
+BAN-THE-BOX: Federal contractors and many states/cities prohibit asking about criminal history before conditional offer. But even where legal, employers CANNOT use a record as automatic disqualification. They must consider: nature of offense, time elapsed, nature of job (EEOC guidance).
 
 AFFECT LABELING (Lieberman et al., 2007): Naming the anxiety of disclosure reduces its physiological impact by up to 50%. The disclosure planner should help users NAME what they're afraid of before crafting the script.
 
@@ -150,9 +150,9 @@ TRAUMA-INFORMED (SAMHSA, 2014): Never re-traumatize. The user controls what they
 
   interview: `RESEARCH-BACKED INTERVIEW PREPARATION:
 
-SELF-EFFICACY (Bandura, 1977): The single strongest source of confidence is mastery experience — actually doing the thing and succeeding. Each practice session should end with specific, actionable feedback that builds on what they did well (process praise, Dweck 2006).
+SELF-EFFICACY (Bandura, 1977): The single strongest source of confidence is mastery experience: actually doing the thing and succeeding. Each practice session should end with specific, actionable feedback that builds on what they did well (process praise, Dweck 2006).
 
-STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR — connect actions to QUANTIFIED results from their actual resume.
+STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to QUANTIFIED results from their actual resume.
 
 AFFECT LABELING (Lieberman, 2007): Interview anxiety is normal and reducible. Naming "I'm nervous about the background check question" literally reduces amygdala reactivity. The practice environment should normalize this.
 
@@ -170,7 +170,7 @@ BAN-THE-BOX IMPACT: In jurisdictions with ban-the-box laws, callback rates for p
 
 EMPLOYMENT REALITY: <50% of formerly incarcerated people find employment in Year 1. Median earnings $7,500/year. Average time to first job: 6+ months. BUT: those who receive targeted career services have significantly better outcomes.
 
-JOB MATCHING: Prioritize roles where the candidate's EXISTING skills transfer directly. A warehouse worker doesn't need retraining to be a logistics coordinator — they need positioning. Match based on demonstrated capability, not just job title keywords.
+JOB MATCHING: Prioritize roles where the candidate's EXISTING skills transfer directly. A warehouse worker can move toward logistics coordinator with the right positioning, often without retraining. Match based on demonstrated capability, not just job title keywords.
 
 SECOND-CHANCE EMPLOYERS: Companies known to actively hire justice-impacted individuals should be highlighted. Not as charity -- as smart business (lower turnover, loyalty). Do NOT cite the Work Opportunity Tax Credit (WOTC) as a current hiring incentive: it expired for hires who begin work after 2025-12-31 and Form 8850 is retired. If an employer incentive is relevant, the Federal Bonding Program is the current one, and never present any incentive as settled without verification.`,
 
@@ -193,13 +193,13 @@ READINESS MATCHING (Prochaska, 1983):
 
 NARRATIVE IDENTITY (McAdams & McLean, 2013): Redemption sequences (negative → positive) predict well-being and resilience. The analysis should identify and reinforce redemption themes in the user's story.
 
-DESISTANCE THEORY (Maruna, 2001): Agency predicts successful career rebuilding. Identify moments of agency — choices, initiative, self-direction. These become the backbone of the narrative.
+DESISTANCE THEORY (Maruna, 2001): Agency predicts successful career rebuilding. Identify moments of agency: choices, initiative, self-direction. These become the backbone of the narrative.
 
 AFFECT LABELING (Lieberman et al., 2007): The analysis process itself is therapeutic. Putting experiences into words reduces emotional intensity by up to 50%. Every free-text prompt serves dual purpose: data collection AND emotional processing.
 
 SELF-DETERMINATION (Deci & Ryan, 2000): Never prescribe career paths. Present options with evidence. "Based on your skills, these paths fit" not "You should do this." Autonomy preservation is non-negotiable.
 
-SCAFFOLDING (Wood, Bruner, Ross, 1976): The analysis provides heavy structure initially — identifying skills the user may not recognize. As they return and iterate, the tool should do less and they should do more.
+SCAFFOLDING (Wood, Bruner, Ross, 1976): The analysis provides heavy structure initially, identifying skills the user may not recognize. As they return and iterate, the tool should do less and they should do more.
 
 STAGES OF CHANGE (Prochaska & DiClemente, 1983):
 - Precontemplation: Identity-focused. "Here's what you bring." 2 career paths max.
