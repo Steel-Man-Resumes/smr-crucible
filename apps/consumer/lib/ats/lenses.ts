@@ -291,7 +291,7 @@ function impactEvidence(text: string, sourceText?: string): LensScore {
     for (const phrase of lost.slice(0, 4)) {
       findings.push({
         message:
-          "You gave us this detail and it is not on the finished resume. A number you actually know is the strongest thing a resume can carry -- it should not have been dropped.",
+          "You gave us this detail and it is not on the finished resume. A number you actually know is the strongest thing a resume can carry. It should not have been dropped.",
         evidence: phrase,
       });
     }
@@ -326,7 +326,7 @@ function impactEvidence(text: string, sourceText?: string): LensScore {
 
   if (quantRatio < 0.4) {
     findings.push({
-      message: `Only ${quantified.length} of ${bs.length} lines carry a number. One real number does more than a paragraph of description -- a crew size, a count per shift, a percentage, a dollar figure.`,
+      message: `Only ${quantified.length} of ${bs.length} lines carry a number. One real number does more than a paragraph of description: a crew size, a count per shift, a percentage, a dollar figure.`,
     });
   }
   for (const d of weak.slice(0, 5)) {
@@ -519,7 +519,7 @@ function keywordCoverage(text: string, posting?: string): LensScore {
         kind: "confirm_then_add",
         term,
         label: `I have done this`,
-        question: `Have you actually done work involving "${term}"? If yes, we will add it in your own words. If no, it stays off -- a keyword you cannot back up fails at the interview instead of the filter.`,
+        question: `Have you actually done work involving "${term}"? If yes, we will add it in your own words. If no, it stays off. A keyword you cannot back up fails at the interview instead of the filter.`,
       },
     })),
   };

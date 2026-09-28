@@ -76,6 +76,6 @@ export function buildWhatsNewSection(sinceISO?: string): string {
   return `
 
 ## WHAT'S NEW ON THE PLATFORM
-Recent, real changes to Steel Man. If one is relevant to what the user is doing or asking -- especially if it unblocks them or changes how something works -- mention it in a sentence, honestly ("we just added..."), and offer to show them. Reference ONLY the changes listed here; if they ask about something not on this list, say you are not sure it changed rather than guessing.
+Recent, real changes to Steel Man. If one is relevant to what the user is doing or asking, especially if it unblocks them or changes how something works, mention it in a sentence, honestly ("we just added..."), and offer to show them. Reference ONLY the changes listed here; if they ask about something not on this list, say you are not sure it changed rather than guessing.
 ${lines.join("\n")}`;
 }

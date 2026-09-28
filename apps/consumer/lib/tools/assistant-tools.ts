@@ -155,7 +155,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         );
         const profile = await getUserProfile(userId);
         if (!profile) {
-          return "No profile yet -- this user has not finished the Forge, so there is no journey data to read.";
+          return "No profile yet. This user has not finished the Forge, so there is no journey data to read.";
         }
         const next = await getNextStep(userId);
         const jobs = await queryAsUser<{
@@ -216,7 +216,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
 
   tools.search_jobs = tool({
     description:
-      "Search real, current job listings (fair-chance prioritized, geo-bounded to the user's area). Returns up to 5 compact results with ids. Costs one of the user's daily job searches -- do not repeat an identical search in the same conversation.",
+      "Search real, current job listings in the user's area. Employers known to hire people with records are listed first. Returns up to 5 compact results with ids. Costs one of the user's daily job searches, so do not repeat an identical search in the same conversation.",
     parameters: jsonSchema<{ query: string; location?: string }>({
       type: "object",
       properties: {
@@ -357,7 +357,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     execute: async ({ applicationId, date }) => {
       try {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          return "That date is not usable -- ask the user for a plain date and pass it as YYYY-MM-DD.";
+          return "That date is not usable. Ask the user for a plain date and pass it as YYYY-MM-DD.";
         }
         const when = new Date(`${date}T12:00:00Z`).getTime();
         const today = new Date().setUTCHours(0, 0, 0, 0);
@@ -395,7 +395,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
 
   tools.file_feedback = tool({
     description:
-      "File the user's bug report, confusion, idea, or message to Troy as a support request -- the SAME store the Help center uses. Use this when the user reports a problem or gives feedback in chat. You MUST get an explicit yes first: offer ('Want me to file that for Troy?'), and only call this with confirmed=true after the user clearly agrees. Never file silently. Pick the category that fits: bug (something is broken), confusing (something is unclear), idea (a suggestion), or message (a note for Troy).",
+      "File the user's bug report, confusion, idea, or message to Troy as a support request in the SAME store the Help center uses. Use this when the user reports a problem or gives feedback in chat. You MUST get an explicit yes first: offer ('Want me to file that for Troy?'), and only call this with confirmed=true after the user clearly agrees. Never file silently. Pick the category that fits: bug (something is broken), confusing (something is unclear), idea (a suggestion), or message (a note for Troy).",
     parameters: jsonSchema<{
       message: string;
       category: string;
@@ -483,7 +483,7 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
     ? `- get_my_live_status: read the user's real current data BEFORE answering "what should I do next" or referencing their saved jobs, stage, or progress. Never guess what you can read.
 - search_jobs, then save_job: find real openings and save the one the user picks.
 - add_follow_up_reminder: set a follow-up date on a tracked application (confirm the date first).
-- file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes -- never silently.
+- file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes. Never file silently.
 `
     : "";
   const signInLine = authed
@@ -494,13 +494,13 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
 
 ## YOUR HANDS (tools)
 
-You are an assistant with hands, not a chatbot with directions. Prefer doing over describing.
+You have hands: you can act in the app for the user. Prefer doing over describing.
 ${serverToolLines}- take_me_there: walk the user to a page. Offer first ("Want me to take you there?") unless they already asked to go. To open the Application Tailor with a job loaded, save the job first and pass its applicationId.
 - highlight_element: point at the exact button or field while you explain it, after navigation lands.
 
 Rules of hand:
 - Act, then say what you did in one short human sentence. Never paste raw tool output into the chat.
-- Be honest about freshness. Tool results carry real timestamps -- use them ("saved 3 days ago", "checked just now"). Never claim data is fresher than it is.
+- Be honest about freshness. Tool results carry real timestamps, so use them ("saved 3 days ago", "checked just now"). Never claim data is fresher than it is.
 - If a tool fails or hits a limit, say so plainly and give the manual path.
 - Saving a job or setting a reminder is fine to do when the user agrees in conversation. Anything bigger: ask first. You cannot delete anything, ever.${signInLine}
 

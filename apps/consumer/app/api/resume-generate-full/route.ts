@@ -418,13 +418,13 @@ ${contactName || "Candidate"}`;
           : record.most_recent === "1-3 years" ? "a couple years ago"
           : record.most_recent === "3-5 years" ? "several years ago"
           : "some time ago";
-        briefScript = `I want to be upfront with you — I have a ${record.type || "conviction"} on my record from ${recencyText}. ${record.supervision === "completed" ? "I've completed all supervision requirements. " : ""}Since then, I've been focused on building my career in ${jobTitle.toLowerCase()}, and I'm ready to show what I bring to ${jobCompany}.`;
-        timingAdvice = `For ${jobTitle} roles, disclose after they've seen your qualifications — ideally during or just after the first interview, not on the application.`;
+        briefScript = `I want to be upfront with you. I have a ${record.type || "conviction"} on my record from ${recencyText}. ${record.supervision === "completed" ? "I've completed all supervision requirements. " : ""}Since then, I've been focused on building my career in ${jobTitle.toLowerCase()}, and I'm ready to show what I bring to ${jobCompany}.`;
+        timingAdvice = `For ${jobTitle} roles, disclose after they've seen your qualifications. Ideally, do it during or just after the first interview, not on the application.`;
         upgradeMessage = "Strong starting point. The full Disclosure Planner will prepare you for follow-up questions, identify legal protections in your state, and let you practice the conversation.";
       } else if (factors >= 1) {
         confidenceLevel = "medium";
         confidencePercent = 45;
-        briefScript = `I want to be transparent — I have a ${record.type || "record"} in my background. Since then, I've been building skills and experience, and I'm committed to contributing to ${jobCompany}.`;
+        briefScript = `I want to be honest with you. I have a ${record.type || "record"} in my background. Since then, I've been building skills and experience, and I'm committed to contributing to ${jobCompany}.`;
         timingAdvice = "Disclose in person during the interview, never on paper. The Disclosure Planner can help you nail the timing.";
         upgradeMessage = "Good start, but we can do better. The full Disclosure Planner will craft a strategy specific to this employer, including what they're likely thinking and how to handle follow-ups.";
       } else {
@@ -475,7 +475,7 @@ ${contactName || "Candidate"}`;
     }
 
     const tailoringNotes: string[] = Array.isArray(parsed.tailoring_notes)
-      ? parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4)
+      ? plainPunctuation(parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4), swapLog)
       : [];
 
     return NextResponse.json({

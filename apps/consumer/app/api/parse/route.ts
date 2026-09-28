@@ -187,12 +187,12 @@ Return a JSON object with:
   "skills_mentioned": string[]
 }
 
-RULES (a dropped or altered field is a failure -- this feeds a real resume):
-1. CONTACT VERBATIM: copy email, phone, full_name, city, state EXACTLY as written, character for character. NEVER normalize, "clean up", correct, or drop any part -- keep an email's plus-tag ("name+tag@x.com" stays "name+tag@x.com"), keep the full phone, keep the exact spelling.
+RULES (this feeds a real resume, so a dropped or altered field is a failure):
+1. CONTACT VERBATIM: copy email, phone, full_name, city, state EXACTLY as written, character for character. NEVER normalize, "clean up", correct, or drop any part. Keep an email's plus-tag ("name+tag@x.com" stays "name+tag@x.com"), keep the full phone, keep the exact spelling.
 2. DATES: if a job shows dates, preserve start_date and end_date exactly as written (e.g. "2019", "Jan 2019", "2019-2022"). Do not drop or reformat them.
 3. CITY/STATE: if the contact line shows a city and/or state, capture them. Do not leave them null when they are present.
 4. EDUCATION is ONLY real schools, training programs, degrees, GEDs, or credentials. NEVER create an education entry from a section header ("ADDITIONAL", "SKILLS", "SUMMARY"), a narrative sentence, or a date fragment. If a line is not clearly a school/program/credential, leave it out.
-5. Capture ALL skills, tools, and certifications mentioned -- do not omit them.
+5. Capture ALL skills, tools, and certifications mentioned. Do not omit them.
 6. NEVER carry any mention of incarceration, prison, jail, parole, probation, "release", "reentry", or justice involvement into ANY field. Omit such phrases entirely; never turn them into an education entry, title, or bullet.
 7. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
         },

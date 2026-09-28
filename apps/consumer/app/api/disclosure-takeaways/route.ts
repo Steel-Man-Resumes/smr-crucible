@@ -58,12 +58,12 @@ async function handlePost(request: Request) {
       hurdleLabel ? ` about sharing: ${sanitizeForPrompt(hurdleLabel, 80)}` : ""
     }${personaLabel ? `, practicing with a ${sanitizeForPrompt(personaLabel, 80)}` : ""}.
 
-Read the practice below and write short, warm, encouraging takeaways. This person may carry shame -- your job is to build confidence, never to grade or criticize.
+Read the practice below and write short, warm, encouraging takeaways. This person may carry shame. Your job is to build confidence, never to grade or criticize.
 
 RULES:
-- 2 or 3 short "what went well" notes -- specific to what they actually did.
-- 1 gentle "one thing to try next" -- framed as a small, doable next step, never a failure.
-- Plain, warm, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No emojis.
+- 2 or 3 short "what went well" notes, specific to what they actually did.
+- 1 gentle "one thing to try next", framed as a small, doable next step, never a failure.
+- Plain, warm, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
 - Never shame. Never promise a hiring outcome.
 
 PRACTICE:

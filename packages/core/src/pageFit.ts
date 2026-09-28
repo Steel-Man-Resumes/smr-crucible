@@ -198,7 +198,7 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
     if (result.pageCount === 1) {
       ledger.push({
         kind: "add",
-        message: `This resume fills about ${fullness}% of one page. That fits comfortably on a single page. If you want it fuller, add real achievements to your most recent role -- do not pad it.`,
+        message: `This resume fills about ${fullness}% of one page. That fits comfortably on a single page. If you want it fuller, add real achievements to your most recent role. Do not pad it.`,
       });
     } else {
       ledger.push({
@@ -222,7 +222,7 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
 
   ledger.push({
     kind: "omit",
-    message: `This resume renders about ${result.pageCount} pages. To bring it to ${targetPages} page${targetPages === 1 ? "" : "s"}, about ${twipsToBodyLines(overflowTwips)} lines of content need to come off. You choose what to cut -- nothing is removed for you. Lowest-priority items first:`,
+    message: `This resume renders about ${result.pageCount} pages. To bring it to ${targetPages} page${targetPages === 1 ? "" : "s"}, about ${twipsToBodyLines(overflowTwips)} lines of content need to come off. You choose what to cut. Nothing is removed for you. Lowest-priority items first:`,
   });
 
   // Rank and offer lowest-priority (highest rank) removable items first. Never
@@ -240,7 +240,7 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
       label: r.block.label,
       index: r.index,
       recoverableTwips: r.heightTwips,
-      message: `Consider cutting: "${r.block.label}"${r.section ? ` (under ${r.section})` : ""} -- recovers about ${twipsToBodyLines(r.heightTwips)} line${twipsToBodyLines(r.heightTwips) === 1 ? "" : "s"}.`,
+      message: `Consider cutting: "${r.block.label}"${r.section ? ` (under ${r.section})` : ""}. That recovers about ${twipsToBodyLines(r.heightTwips)} line${twipsToBodyLines(r.heightTwips) === 1 ? "" : "s"}.`,
     });
     accumulated += r.heightTwips;
   }
@@ -262,7 +262,7 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
   if (cannotReachBandByLevers) {
     ledger.push({
       kind: "omit",
-      message: `Even after trimming every lower-priority item above and tightening spacing, this still runs long. The core experience itself is too much for ${targetPages} page${targetPages === 1 ? "" : "s"}. Decide which roles or achievements matter most for this job -- a person, not the tool, makes that call.`,
+      message: `Even after trimming every lower-priority item above and tightening spacing, this still runs long. The core experience itself is too much for ${targetPages} page${targetPages === 1 ? "" : "s"}. Decide which roles or achievements matter most for this job. A person makes that call, not the tool.`,
     });
   }
 

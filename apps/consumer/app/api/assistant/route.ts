@@ -240,7 +240,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
     if (langRow?.coach_language === "es") {
       localizedSystemPrompt = `${systemPrompt}
 
-LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English -- refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
+LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English, so refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
     }
   }
 
@@ -315,7 +315,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       out +=
         "\n\n---\n**Check these before you use them.** I could not support " +
         verdict.problems.map((p) => p).join("; ") +
-        ". Your dashboard is the system of record -- take the figure from there, not from me.";
+        ". Your dashboard is the system of record, so take the figure from there, not from me.";
     } else if (!verdict.modelChecked) {
       out +=
         "\n\n_Second-pass check did not run this time. The numbers above match your dashboard; anything else here is worth a look before it goes into a report._";

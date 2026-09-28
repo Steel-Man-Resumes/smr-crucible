@@ -116,7 +116,7 @@ const HONEST: Record<ApplyDestinationKind, { label: (h: string | null) => string
     ],
   },
   job_board: {
-    label: (h) => `Opens on ${h || "the job board"} -- an account may be required`,
+    label: (h) => `Opens on ${h || "the job board"} (an account may be required)`,
     expectation:
       "You may need to sign in or make an account. Budget 20 to 40 minutes to re-enter your work history.",
     prep: [
@@ -126,7 +126,7 @@ const HONEST: Record<ApplyDestinationKind, { label: (h: string | null) => string
     ],
   },
   aggregator: {
-    label: (h) => `Opens on ${h || "a search site"} -- the real posting is one more click`,
+    label: (h) => `Opens on ${h || "a search site"}, one click from the real posting`,
     expectation:
       "This link may bounce you through a search page. The real employer posting is one more click in.",
     prep: [
@@ -135,7 +135,7 @@ const HONEST: Record<ApplyDestinationKind, { label: (h: string | null) => string
     ],
   },
   google_jobs: {
-    label: () => "Opens a Google jobs search -- the real posting is one more click",
+    label: () => "Opens a Google jobs search, one click from the real posting",
     expectation:
       "This link may bounce you through a search page. The real employer posting is one more click in.",
     prep: [
@@ -158,7 +158,7 @@ const HONEST: Record<ApplyDestinationKind, { label: (h: string | null) => string
       "We could not tell where this link goes. Open it carefully and confirm it is the real employer.",
     prep: [
       "Confirm the site is the real employer before entering anything",
-      "Do not enter payment details -- real jobs never ask for that",
+      "Do not enter payment details. Real jobs never ask for that",
     ],
   },
   invalid: {

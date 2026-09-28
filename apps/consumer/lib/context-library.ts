@@ -172,7 +172,7 @@ EMPLOYMENT REALITY: <50% of formerly incarcerated people find employment in Year
 
 JOB MATCHING: Prioritize roles where the candidate's EXISTING skills transfer directly. A warehouse worker can move toward logistics coordinator with the right positioning, often without retraining. Match based on demonstrated capability, not just job title keywords.
 
-SECOND-CHANCE EMPLOYERS: Companies known to actively hire justice-impacted individuals should be highlighted. Not as charity -- as smart business (lower turnover, loyalty). Do NOT cite the Work Opportunity Tax Credit (WOTC) as a current hiring incentive: it expired for hires who begin work after 2025-12-31 and Form 8850 is retired. If an employer incentive is relevant, the Federal Bonding Program is the current one, and never present any incentive as settled without verification.`,
+SECOND-CHANCE EMPLOYERS: Companies known to actively hire justice-impacted individuals should be highlighted. Frame them as smart business (lower turnover, loyalty), not as charity. Do NOT cite the Work Opportunity Tax Credit (WOTC) as a current hiring incentive: it expired for hires who begin work after 2025-12-31 and Form 8850 is retired. If an employer incentive is relevant, the Federal Bonding Program is the current one, and never present any incentive as settled without verification.`,
 
   resources: `RESEARCH-BACKED RESOURCE MATCHING:
 

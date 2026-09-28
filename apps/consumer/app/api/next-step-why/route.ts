@@ -68,8 +68,8 @@ async function handlePost() {
       `Disclosure plan made: ${m.hasDisclosurePlan ? "yes" : "no"}. ` +
       `Interviews started: ${m.interviewsStarted}. Applications sent: ${m.applicationsSent}.`;
 
-    const prompt = `A justice-impacted job seeker's decided next step is: "${sanitizeForPrompt(step.action, 200)}".
-Here is where they are in their journey (facts only -- do NOT add anything that is not listed here):
+    const prompt = `A job seeker with a record has this decided next step: "${sanitizeForPrompt(step.action, 200)}".
+Here is where they are so far (facts only; do NOT add anything that is not listed here):
 ${factLine}
 
 Write ONE or TWO short sentences explaining WHY this is the right next step for THEM right now.
@@ -77,7 +77,7 @@ Rules:
 - Warm, honest, encouraging. Plain words, 6th grade reading level.
 - Do NOT change the step. Do NOT suggest a different action.
 - Do NOT invent facts, numbers, dates, company names, or laws.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
 - Return only the sentence(s). No labels, no quotes.`;
 
     const raw = await callAI("", [{ role: "user", content: prompt }], 160, MODEL_FAST, {

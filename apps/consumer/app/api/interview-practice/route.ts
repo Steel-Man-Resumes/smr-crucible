@@ -13,6 +13,7 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
@@ -61,7 +62,7 @@ async function handlePost(request: Request) {
     let applicationBlock = "";
     if (resume?.text) {
       const jobLabel = [resume.targetJob, resume.targetCompany].filter(Boolean).join(" at ");
-      applicationBlock += `\n\nTHE CANDIDATE'S ACTUAL RESUME${jobLabel ? ` (tailored for ${sanitizeForPrompt(jobLabel, 160)})` : ""} -- ask about THIS real experience by name (specific jobs, tools, results), not hypotheticals:\n${sanitizeForPrompt(resume.text, 2800)}`;
+      applicationBlock += `\n\nTHE CANDIDATE'S ACTUAL RESUME${jobLabel ? ` (tailored for ${sanitizeForPrompt(jobLabel, 160)})` : ""}. Ask about THIS real experience by name (specific jobs, tools, results), not hypotheticals:\n${sanitizeForPrompt(resume.text, 2800)}`;
     }
     // Interview handoff (Phase 7.5): the bullet-workshop proof behind their
     // bullets. Probe these for depth and build model answers from them.
@@ -84,11 +85,11 @@ async function handlePost(request: Request) {
         .filter((l: string) => l.trim().length > 3)
         .join("\n");
       if (proof) {
-        applicationBlock += `\n\nPROOF BEHIND THEIR BULLETS -- the concrete facts they gave for each accomplishment. Probe these for depth ("you said you trained 3 new hires -- walk me through that"), and build model answers from them. Never invent beyond these facts:\n${proof}`;
+        applicationBlock += `\n\nPROOF BEHIND THEIR BULLETS: the concrete facts they gave for each accomplishment. Probe these for depth ("You said you trained 3 new hires. Walk me through that."), and build model answers from them. Never invent beyond these facts:\n${proof}`;
       }
     }
     if (typeof jobDescription === "string" && jobDescription.trim()) {
-      applicationBlock += `\n\nTHE JOB POSTING THEY ARE APPLYING TO -- tailor your questions to THESE specific requirements:\n${sanitizeForPrompt(jobDescription, 2000)}`;
+      applicationBlock += `\n\nTHE JOB POSTING THEY ARE APPLYING TO. Tailor your questions to THESE specific requirements:\n${sanitizeForPrompt(jobDescription, 2000)}`;
     }
 
     const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
@@ -125,14 +126,15 @@ ${config.interviewType === "industry" ? `Ask questions specific to the ${sanitiz
 YOUR ROLE:
 - Be professional, warm, and realistic
 - Ask one question at a time
-- React naturally to their answers — acknowledge what they said before moving on
+- React naturally to their answers. Acknowledge what they said before moving on
 - Don't be hostile, but don't be a pushover. Ask follow-ups a real interviewer would.
 - Keep your responses to 2-3 sentences max
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y".
 ${candidateBlock}${applicationBlock}${focusBlock}
 ${isDisclosure ? `DISCLOSURE ELEMENT:
 - At some point during the interview (around exchange 3-4), naturally bring up background checks
 - Say something like "We do run a background check as part of our process. Is there anything you'd like to share about that?"
-- React professionally to their disclosure — not too positive, not negative. Just professional.` : ""}`;
+- React professionally to their disclosure. Not too positive, not negative. Just professional.` : ""}`;
 
     if (shouldWrapUp) {
       // Generate feedback instead of continuing
@@ -152,7 +154,7 @@ Return JSON:
     "improvements": ["2-3 specific things to work on"],
     "overall": "1-2 sentence overall assessment. Encouraging but honest.",
     "better_answers": [
-      { "question": "a real question from this interview they could have answered more strongly", "model_answer": "a stronger model answer, 2-4 sentences, built from THEIR real experience (use the resume) -- show, do not tell" }
+      { "question": "a real question from this interview they could have answered more strongly", "model_answer": "a stronger model answer, 2-4 sentences, built from THEIR real experience (use the resume). Show, do not tell." }
     ],
     "frame": "1-2 sentences: the single posture or through-line to carry into the real interview for this role.",
     ${isDisclosure ? '"disclosure_notes": "How they handled the disclosure moment specifically. What worked, what to adjust."' : '"disclosure_notes": null'}
@@ -160,11 +162,11 @@ Return JSON:
 }
 
 RULES:
-- Be specific — reference actual things they said
+- Be specific. Reference actual things they said
 - Focus on communication skills: confidence, clarity, brevity, pivot to strengths
-- ACCOUNTABILITY CHECK (do not skip): if any answer shifted blame, minimized their role, or framed their record as something that was done TO them ("it wasn't really my fault," "they charged me with," "the system"), you MUST name it plainly in improvements -- kindly, not as a lecture -- and in better_answers model the SAME point rewritten with ownership (what they did, what they learned, who they are now). Employers, and especially peer-support and reentry roles, hire for ownership; a polished answer that dodges it still fails the interview. If they owned their story well, say so in strengths.
-- For better_answers, model 1-2 stronger responses built from their real resume, in their own voice -- show them what good sounds like
-- 6th grade reading level
+- ACCOUNTABILITY CHECK (do not skip): if any answer shifted blame, minimized their role, or framed their record as something that was done TO them ("it wasn't really my fault," "they charged me with," "the system"), you MUST name it plainly in improvements, kindly and not as a lecture. In better_answers, model the SAME point rewritten with ownership (what they did, what they learned, who they are now). Employers, and especially peer-support and reentry roles, hire for ownership; a polished answer that dodges it still fails the interview. If they owned their story well, say so in strengths.
+- For better_answers, model 1-2 stronger responses built from their real resume, in their own voice. Show them what good sounds like
+- 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
 - JSON only (after the closing statement)`;
     }
 
@@ -174,6 +176,8 @@ RULES:
     }));
 
     const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice" });
+    // Belt-and-braces dash sweep on model-written text only (counts logged, never content).
+    const swapLog = logDashSwaps("interview-practice");
 
     if (shouldWrapUp) {
       // Log wrapup decision
@@ -201,15 +205,20 @@ RULES:
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
-          return NextResponse.json({
-            response:
-              parsed.closing || "Thank you for your time today. We'll be in touch.",
-            feedback: parsed.feedback,
-          });
+          return NextResponse.json(
+            plainPunctuation(
+              {
+                response:
+                  parsed.closing || "Thank you for your time today. We'll be in touch.",
+                feedback: parsed.feedback,
+              },
+              swapLog
+            )
+          );
         } catch {
           // If JSON parse fails, return the text as closing with generic feedback
           return NextResponse.json({
-            response: text.split("{")[0].trim() || "Thank you for your time today.",
+            response: plainPunctuation(text.split("{")[0].trim() || "Thank you for your time today.", swapLog),
             feedback: {
               strengths: ["You completed the full practice interview"],
               improvements: [
@@ -223,7 +232,7 @@ RULES:
         }
       }
       return NextResponse.json({
-        response: text,
+        response: plainPunctuation(text, swapLog),
         feedback: {
           strengths: ["You showed up and practiced — that takes courage"],
           improvements: ["Keep practicing to build confidence"],
@@ -252,7 +261,7 @@ RULES:
       console.error("Decision log failed (interview):", err);
     }
 
-    return NextResponse.json({ response: text });
+    return NextResponse.json({ response: plainPunctuation(text, swapLog) });
   } catch (error: any) {
     console.error("Interview practice error:", error);
     return NextResponse.json(

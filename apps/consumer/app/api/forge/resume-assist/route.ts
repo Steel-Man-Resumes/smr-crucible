@@ -24,6 +24,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getToolsForTitle } from "@/lib/onet";
 
@@ -31,19 +32,20 @@ export const maxDuration = 30;
 
 const BULLET_SYSTEM = `You are an expert resume writer and career coach for justice-impacted jobseekers. You turn a person's real, plainly-stated work facts into ONE strong resume bullet.
 
-IRON RULES (the truth gate -- never break these):
-- Use ONLY the facts the person gave you. Never invent a number, a tool, a result, or a duty they did not state. If a detail is missing, leave it out -- do not guess or pad.
+IRON RULES (the truth gate). Never break these:
+- Use ONLY the facts the person gave you. Never invent a number, a tool, a result, or a duty they did not state. If a detail is missing, leave it out. Do not guess or pad.
 - No inflation. A strong TRUE bullet beats an impressive false one. Their story has to survive an interview.
 
 HOW TO WRITE IT:
 - Start with a strong, specific action verb (Operated, Trained, Tracked, Repaired, Coordinated, Maintained, Loaded, Resolved...).
-- Lead with what they did; fold in the tool/process, the scale (how often / how many), and the result -- but ONLY the ones they actually gave.
+- Lead with what they did; fold in the tool/process, the scale (how often / how many), and the result, but ONLY the ones they actually gave.
 - Be concrete, never generic. Kill empty phrases: no "hard worker", "team player", "results-driven", "detail-oriented".
 - Never let them undersell. If they say they "just" did something, write the real skill in it.
-- Reframe honestly: work done in a work program, training, or while incarcerated is REAL experience -- name the skill, not the setting. NEVER write the words incarceration, prison, jail, inmate, offender, or felon. Disclosure is handled in its own place, never on the resume.
+- Reframe honestly: work done in a work program, training, or while incarcerated is REAL experience. Name the skill, not the setting. NEVER write the words incarceration, prison, jail, inmate, offender, or felon. Disclosure is handled in its own place, never on the resume.
 - One sentence. Plain, dignified, true. 6th-grade reading level.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
-Return ONLY the bullet text -- no quotes, no bullet symbol, no preamble, no explanation.`;
+Return ONLY the bullet text: no quotes, no bullet symbol, no preamble, no explanation.`;
 
 async function aiSuggestTools(title: string, userId: string | null | undefined): Promise<string[]> {
   try {
@@ -137,10 +139,14 @@ ${bullets ? `Their experience includes: ${bullets}` : ""}
 
 RULES:
 - 6th-grade reading level. Specific, not generic. No buzzwords (no "results-driven", "detail-oriented", "hard worker").
-- Honest and grounded -- only claim what the experience supports. Never invent.
+- Honest and grounded: only claim what the experience supports. Never invent.
 - NEVER mention incarceration, a record, or justice involvement. Disclosure is handled separately.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - 2-3 sentences. Return ONLY the summary text.`;
-      const suggestion = (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim();
+      const suggestion = plainPunctuation(
+        (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
+        logDashSwaps("forge-resume-assist")
+      );
       await logShape(`summary targetJob=${targetJob}`, `Suggested a base-resume summary${targetJob ? ` for ${targetJob}` : ""}.`, {
         type: "resume_summary",
         suggestion_length: suggestion.length,
@@ -179,8 +185,12 @@ ${targetJob ? `They are aiming for a ${targetJob} role.\n` : ""}The person's own
 
 Write the single strongest TRUE bullet from ONLY these facts.`;
 
-      const bullet = (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { userId, endpoint: "resume-assist" }))
-        .trim()
+      // Sweep dashes BEFORE the quote/bullet strip, so a leading em dash (which the
+      // sweep turns into "- ") is then removed by the strip instead of surviving.
+      const bullet = plainPunctuation(
+        (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
+        logDashSwaps("forge-resume-assist")
+      )
         .replace(/^["'\s•\-]+|["']+$/g, "")
         .trim();
 

@@ -35,11 +35,11 @@ export const MAX_FOLLOWUP_ROUNDS = 2;
 function topicFraming(topic: string): string {
   switch (topic) {
     case "disclosure":
-      return "They are preparing to talk about their record with an employer -- the framing, the timing, and the pivot to their strengths. Focus on how they want to TELL their story now, not the legal details of what happened. Never ask them to relive the offense.";
+      return "They are preparing to talk about their record with an employer: the framing, the timing, and the pivot to their strengths. Focus on how they want to TELL their story now, not the legal details of what happened. Never ask them to relive the offense.";
     case "interview":
-      return "They are preparing for a real job interview. Draw out concrete stories, numbers, and examples they can turn into strong answers -- the specifics behind what they have told you.";
+      return "They are preparing for a real job interview. Draw out concrete stories, numbers, and examples they can turn into strong answers: the specifics behind what they have told you.";
     case "jobs":
-      return "They are figuring out what work to look for. Draw out what they actually want and are good at, and the real-life constraints that matter -- schedule, location, pay, transportation, what a good day looks like.";
+      return "They are figuring out what work to look for. Draw out what they actually want and are good at, and the real-life constraints that matter: schedule, location, pay, transportation, what a good day looks like.";
     default:
       return "Draw out the specific, real, usable detail behind what they have told you.";
   }
@@ -64,22 +64,22 @@ export function buildFollowupsSystemPrompt(
     );
   }
   if (context.hasRecord) {
-    known.push("They have a criminal record (already known -- do NOT ask them to describe the offense).");
+    known.push("They have a criminal record. This is already known, so do NOT ask them to describe the offense.");
   }
   const knownBlock = known.length
     ? known.join("\n")
-    : "(No Forge profile yet -- ask the foundational questions for this topic.)";
+    : "(No Forge profile yet. Ask the foundational questions for this topic.)";
 
-  return `You are an expert career coach for justice-impacted jobseekers. You ask the SHARPEST possible follow-up questions -- the ones that pull the specific, real, usable detail a generic form never would. You are the expert; it is your responsibility to extract what matters, even from someone who does not know what to say.
+  return `You are an expert career coach for justice-impacted jobseekers. You ask the SHARPEST possible follow-up questions: the ones that pull the specific, real, usable detail a generic form never would. You are the expert; it is your responsibility to extract what matters, even from someone who does not know what to say.
 
 CONTEXT FOR THIS PERSON:
 ${topicFraming(topic)}
 
-WHAT YOU ALREADY KNOW ABOUT THEM (use it -- reference their real situation, never re-ask it):
+WHAT YOU ALREADY KNOW ABOUT THEM (use it to reference their real situation, and never re-ask it):
 ${knownBlock}
 
 You will be given what they have answered so far. Read it closely, then EITHER:
-- Ask 2-3 specific follow-up questions that go DEEPER on what they actually said -- name the thing they mentioned, build on their words. OR
+- Ask 2-3 specific follow-up questions that go DEEPER on what they actually said. Name the thing they mentioned, build on their words. OR
 - If their answers already hold enough concrete, usable depth for this topic, stop.
 
 RULES:
@@ -88,11 +88,12 @@ RULES:
       ? "\n- PLAIN-LANGUAGE MODE IS ON: keep every question extra short and simple. Use everyday words. Aim for a 4th-grade reading level. No jargon."
       : ""
   }
-- One idea per question -- no compound questions.
+- One idea per question. No compound questions.
 - Build on THEIR words. If they mention a place, a person, or a task, ask about THAT.
 - Never re-ask anything they already told you or that you already know above.
-- Forward-looking and strengths-oriented, even on disclosure -- about how they talk now, not the details of an offense or any trauma.
-- Return JSON ONLY, no prose: {"questions":["...","..."],"done":false}  -- or, when there is already enough depth: {"questions":[],"done":true}`;
+- Forward-looking and strengths-oriented, even on disclosure. Ask about how they talk now, not the details of an offense or any trauma.
+- Write every question without a dash used as punctuation: no em dash and no "--". Use a period or a comma, or reword the question.
+- Return JSON ONLY, no prose. Use {"questions":["...","..."],"done":false}, or {"questions":[],"done":true} when there is already enough depth.`;
 }
 
 export function buildAnswersBlock(answersSoFar: IntakeAnswer[], round: number): string {

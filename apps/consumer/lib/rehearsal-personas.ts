@@ -56,7 +56,7 @@ export const REHEARSAL_PERSONAS: readonly RehearsalPersona[] = [
     label: "Hiring manager (skeptical)",
     blurb: "A tougher room, so the real one feels easier.",
     framing:
-      "You are a hiring manager in a job interview who is a little skeptical and asks pointed follow-up questions. You are never hostile or cruel -- you are a fair professional who needs to be convinced. Give the candidate a real but respectful challenge.",
+      "You are a hiring manager in a job interview who is a little skeptical and asks pointed follow-up questions. You are never hostile or cruel. You are a fair professional who needs to be convinced. Give the candidate a real but respectful challenge.",
   },
   {
     id: "coworker",
@@ -115,7 +115,7 @@ export const GENTLENESS_LEVELS: readonly GentlenessLevel[] = [
     id: "direct",
     label: "Direct",
     framing:
-      "Ask the real, pointed follow-ups this person might actually ask. Stay respectful and never hostile, but do not soften everything -- this is the tougher practice they asked for.",
+      "Ask the real, pointed follow-ups this person might actually ask. Stay respectful and never hostile, but do not soften everything. This is the tougher practice they asked for.",
   },
 ] as const;
 
@@ -151,7 +151,7 @@ export function buildRehearsalSystemOverride(params: RehearsalOverrideParams): s
 
   if (params.hurdleLabel) {
     lines.push(
-      `WHAT THEY ARE PRACTICING SHARING: ${params.hurdleLabel}. Let them bring it up in their own time -- do not force it into the first question.`
+      `WHAT THEY ARE PRACTICING SHARING: ${params.hurdleLabel}. Let them bring it up in their own time. Do not force it into the first question.`
     );
   }
   if (params.targetJob && (persona.id === "hiring_warm" || persona.id === "hiring_skeptical")) {

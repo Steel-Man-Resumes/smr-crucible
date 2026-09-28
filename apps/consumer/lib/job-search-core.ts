@@ -635,7 +635,7 @@ Return JSON:
 }
 
 RULES:
-- Only rewrite the description into plain language. Do NOT judge which employers are fair-chance -- that is decided elsewhere.
+- Only rewrite the description into plain language. Do NOT judge which employers are fair-chance. That is decided elsewhere.
 - Keep descriptions simple and actionable
 - 6th grade reading level
 - fair_chance_info is PRACTICAL guidance only. Do NOT name, cite, paraphrase, or
