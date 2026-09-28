@@ -50,7 +50,7 @@ const LEVEL_DIRECTIVES: Record<UserLevel, string> = {
   foundation: `USER LEVEL: Foundation (entry-level, rebuilding, limited resume history)
 LANGUAGE: Write at a 6th grade reading level. Short sentences. No jargon.
 TONE: Warm, encouraging, patient. Explain everything. Heavy scaffolding.
-RESUME FORMAT: Functional format acceptable if chronological history is thin. Estimate metrics generously.
+RESUME FORMAT: Functional format acceptable if chronological history is thin. Use only numbers the person gave or picked. If a line has no number, leave it without one. Never estimate.
 INTERVIEW: General questions, slow pace, more encouragement. Build confidence.
 DISCLOSURE: Simple script, basic timing advice. Don't overwhelm.`,
 
@@ -116,7 +116,7 @@ SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of c
 
 SCAFFOLDING (Wood, Bruner, Ross, 1976): Each resume iteration should require less AI support. First resume: heavy scaffolding. Third resume: user drives, AI suggests.
 
-COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Numbers in every bullet. Action verbs only. ATS-optimized but human-readable.
+COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Keep every number the person gave, exactly as given: a range stays a range, and "about 20" stays "about 20". Never add a number they did not give. Action verbs only. ATS-optimized but human-readable.
 
 INCARCERATION RULE (absolute): NEVER mention incarceration, criminal records, justice involvement, prison, jail, parole, probation. Not even obliquely. Employment gaps use years only, never explained. Disclosure happens in person, never on paper.`,
 
