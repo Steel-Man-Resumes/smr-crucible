@@ -480,7 +480,7 @@ IMPORTANT:
 - Use [Company Name] and [Hiring Manager] as the ONLY placeholders.
 - Everything else must be real: real skills, real achievements, real strengths.
 - 250-350 words for the body.
-- Address barriers in ONE natural sentence if applicable, otherwise omit entirely.`;
+- Do not mention barriers, gaps, or anything the person would have to explain. That conversation happens in person.`;
 
   return await callClaude(system, prompt, userId);
 }
