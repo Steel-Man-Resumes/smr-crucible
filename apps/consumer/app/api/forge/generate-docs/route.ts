@@ -416,9 +416,10 @@ RULES:
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
+- FACTS AS GIVEN: when you open from a fact, state it the way the profile states it. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "asset to your team", "eager to bring", or "fast-paced environment". End plainly: say they would like to talk, thank the reader in a few words, and stop.
 - VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.`;
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly.`;
 
   const parts: string[] = [];
 

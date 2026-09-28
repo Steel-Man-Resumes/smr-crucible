@@ -228,9 +228,10 @@ RULES:
 - Open: who they are, what role, why this company. Middle: 2-3 real achievements matching the requirements. Close: grounded confidence.
 - NEVER mention incarceration, criminal records, justice involvement. NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
+- FACTS AS GIVEN: when you open from a fact, state it the way the profile states it. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "asset to your team", "eager to bring", or "fast-paced environment". End plainly: say they would like to talk, thank the reader in a few words, and stop.
 - VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
-- Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Sign with the applicant's name.`;
+- Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly. Sign with the applicant's name.`;
 
     const coverLetterPrompt = `Write the cover letter.
 
