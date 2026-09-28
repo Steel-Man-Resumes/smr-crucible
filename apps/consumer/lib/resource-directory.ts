@@ -117,8 +117,8 @@ export const BARRIER_CATEGORY_MAP: Record<string, ResourceCategory[]> = {
 export const RESOURCE_DIRECTORY: ResourceEntry[] = [
   // ════════════════════════════════════════════════════════════════════════
   // MONTANA -- Lincoln County. Both entries vetted 2026-09-10 against the
-  // providers' own listings (todash LIBBY-OUTREACH-SHEET-2026-09-10.md). More
-  // exist in that sheet and are NOT here because they have not been re-verified.
+  // providers' own listings. Others are NOT here because they have not been
+  // re-verified.
   // ════════════════════════════════════════════════════════════════════════
   {
     id: "mt-job-service-libby",
