@@ -507,3 +507,9 @@ Cover Letters: each targets a SPECIFIC Tier 1 employer by name. No placeholders.
 ## Ecosystem Context
 
 For full ecosystem context (brand rules, naming conventions, deadlines, all ventures): `~/todash/COMMAND-CENTER.md`
+
+## Routines (cloud agents)
+
+This project is part of a move to scheduled cloud routines (Claude Code in the cloud), because no machine here is always on. Routines research, monitor, and report; they propose fixes (PR or written findings) and never push to main, deploy, or send outreach without approval. Secrets needed by a routine live in the cloud environment settings, never in the prompt. Master direction + registry: `~/todash/CLAUDE.md` and `~/todash/tooling/routines/REGISTRY.md`.
+
+Candidates for this repo: daily health check of Forge/Refinery public routes + /api/health; weekly dependency/security audit report; weekly Neon data-hygiene report (read-only, org-isolation aware).
