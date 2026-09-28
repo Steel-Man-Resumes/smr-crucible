@@ -159,7 +159,7 @@ Company: ${jobCompany}
 Description: ${jobDescription}
 </job_posting>
 
-CURRENT RESUME (the only source of facts -- do not add to it):
+CURRENT RESUME (the only source of facts. Do not add to it):
 ${JSON.stringify(
         {
           summary: baseFields.summary,
@@ -171,7 +171,7 @@ ${JSON.stringify(
         2
       )}
 
-Return this exact JSON structure (same content, re-emphasized -- never expanded):
+Return this exact JSON structure (same content, re-emphasized, never expanded):
 {
   "summary": "re-emphasized summary using only existing facts",
   "experience": [ { "title": "", "company": "", "startDate": "", "endDate": "", "bullets": ["existing bullet, re-emphasized"] } ],

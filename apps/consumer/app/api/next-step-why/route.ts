@@ -77,7 +77,7 @@ Rules:
 - Warm, honest, encouraging. Plain words, 6th grade reading level.
 - Do NOT change the step. Do NOT suggest a different action.
 - Do NOT invent facts, numbers, dates, company names, or laws.
-- Use "--" never an em dash. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No emojis.
 - Return only the sentence(s). No labels, no quotes.`;
 
     const raw = await callAI("", [{ role: "user", content: prompt }], 160, MODEL_FAST, {
