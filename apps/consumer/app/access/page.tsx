@@ -56,7 +56,7 @@ const TOOLS = [
  * anyone who reads either one. A retired code left in this map is an open seat
  * and a corrupted cohort attribution waiting to happen.
  *
- * Removed 2026-09-19 as retired (Troy): BAKER2026, BAKERCREW, JFW2026, JFWCREW.
+ * Removed 2026-09-19 as retired (Troy): four partner/client codes (names kept out of this public repo).
  * They are also deactivated in the database -- taking a code out of this map
  * stops advertising it, it does not stop it being redeemed.
  */

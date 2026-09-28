@@ -5,14 +5,17 @@ work, and contributions are welcome under that shared goal.
 
 ## Ground rules (non-negotiable)
 
-- **Language.** Always "justice-impacted," never "ex-offender," "felon," "convict," or
-  "second-chance." Use "fair-chance," not "second-chance." These reflect the dignity of
-  the people we serve.
+- **Language.** Never label a person: say "if you have a felony," never "you are a felon."
+  On job-seeker surfaces, the searcher's own words ("felony," "jobs for felons,"
+  "second chance jobs") are allowed so people can find us. "Justice-impacted" and
+  "fair-chance" are practitioner words for buyer and funder pages. Never "ex-offender,"
+  "ex-con" or "convict." These rules protect the dignity of the people we serve.
 - **No legal advice.** Features inform and help people decide; they never give legal
   advice. Keep that boundary in copy and behavior.
-- **Privacy first.** Do not add anything that stores a person's practice answers,
-  interview transcripts, audio, or disclosure wording. We store progress and frames,
-  not content. Sensitive data is consent-gated and minimized.
+- **Privacy first.** Conversation text (disclosure rehearsal, interview practice) is
+  stored only through `packages/core/src/conversationStore.ts`: text only, encrypted in
+  the app, never audio. Do not add another path that stores what a person said.
+  Sensitive data is consent-gated and minimized.
 - **Public repository.** This repository is public. Working notes, credentials, access codes and the names of partners, leads or participants never go in it.
   Maintainer session notes are kept in a private record outside this repo
   (`~/todash/smr/crucible-handoff/HANDOFF.md` on the maintainer's machine). Use
