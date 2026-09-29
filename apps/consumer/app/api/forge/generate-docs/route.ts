@@ -169,7 +169,7 @@ async function handlePost(request: Request) {
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
     const credentialChecks = [
       ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
-      ...findOverstatedCredentials(coverLetter, statuses).map((claim) => ({ claim, doc: "cover_letter" as const })),
+      ...findOverstatedCredentials(coverLetter, statuses, { firstPerson: true }).map((claim) => ({ claim, doc: "cover_letter" as const })),
     ];
     if (cityCheck.removed || credentialChecks.length) {
       console.warn(

@@ -7,16 +7,17 @@
  * fields and not others, so this is a deterministic backstop over what the
  * report, the cover letter and the resume say.
  *
- * For common reentry-trade credentials it reads the status from the person's
- * own words, clause by clause: held, a course they took, one they want, one
- * that is no longer current (expired, suspended, revoked), or only mentioned.
- * Only the course, wanted and not-current cases are checked, since those are
- * the ones the person's words settle. A sentence that plainly claims more than
- * that status for that credential is FLAGGED for the person to check, never
- * deleted: two reviews showed that
- * reading status from free text is too uncertain to delete on, and deleting a
- * true line about someone's real license is the worst mistake here. The prompts
- * and the truth check steer the model away from overstating in the first place.
+ * Two halves, both narrow on purpose (2026-09-29, after three reviews, a
+ * labeled test set and white-box attacks):
+ * - Reading the person's words, sentence by sentence: any sign they hold the
+ *   credential now wins (a plain listing, "passed", a renewal, "valid"). Only
+ *   when nothing says so does a course, a goal or an expiry decide.
+ * - Reading what we wrote: a sentence counts only when it says the PERSON holds
+ *   it ("you have", "your CDL opens", "list your EPA 608", "I am a CNA", a bare
+ *   resume listing). Advice about getting one, or talk about jobs and other
+ *   people, never counts.
+ * Anything found is FLAGGED for the person to check, never deleted. Misses are
+ * left to the truth check and the prompts.
  */
 
 type Status = "held" | "course" | "wanted" | "not_current" | "mentioned";
@@ -26,14 +27,13 @@ type Status = "held" | "course" | "wanted" | "not_current" | "mentioned";
  * also a skill (forklift, welding), so only an explicit certification claim counts.
  * `exam`: earning it takes a test after the class (EPA 608, CDL, CNA). For
  * completion credentials (OSHA 10/30, CPR, flagger, food handler, forklift, an
- * NCCER level) finishing the training IS getting it, so a finished training
- * line is not a course-only status.
+ * NCCER level) finishing the training IS getting it.
  */
 const CREDENTIALS: { key: string; re: RegExp; named: boolean; exam: boolean }[] = [
   { key: "EPA 608", re: /\bEPA\s*(?:section\s*)?608\b/i, named: true, exam: true },
   { key: "OSHA 10", re: /\bOSHA[\s-]*10\b|\b10[\s-]*(?:hour|hr)\s+OSHA\b/i, named: true, exam: false },
   { key: "OSHA 30", re: /\bOSHA[\s-]*30\b|\bOSHA[\s-]*10\s*\/\s*30\b|\b30[\s-]*(?:hour|hr)\s+OSHA\b/i, named: true, exam: false },
-  { key: "CDL", re: /\bCDL\b|\bcommercial driver'?s? licen[cs]e\b/i, named: true, exam: true },
+  { key: "CDL", re: /\bCDL\b|\bCLP\b|\bcommercial driver'?s? licen[cs]e\b|\bclass\s+[ab]\s+(?:driver'?s\s+)?licen[cs]e\b/i, named: true, exam: true },
   { key: "ServSafe", re: /\bserv\s?safe\b/i, named: true, exam: true },
   { key: "NCCER", re: /\bNCCER\b/i, named: true, exam: false },
   { key: "CNA", re: /\bCNA\b|\bcertified nursing assistant\b/i, named: true, exam: true },
@@ -44,51 +44,70 @@ const CREDENTIALS: { key: string; re: RegExp; named: boolean; exam: boolean }[] 
   { key: "welding", re: /\bweld(?:ing|er|ers)\b/i, named: false, exam: true },
 ];
 
+// ---------------------------------------------------------------------------
+// Reading the person's words
+// ---------------------------------------------------------------------------
+
 const NOT_CURRENT_WORDS = String.raw`(?:expired|lapsed|out of date|suspended|revoked|cancell?ed|inactive|ran out|run out|no longer (?:valid|current|active|good)|not (?:valid|current|active)|pending reinstatement)`;
-// Signs it is current now, said next to the credential ("valid Class A CDL",
-// "CDL is current"), or as renewal anywhere on its line.
-const CURRENT_NEAR_RE = /\b(valid|current|active|in good standing|up to date)\b/i;
-const RENEWED_RE = /\b(renewed|recertified|reinstated|restored|reissued|retook|retested|re-took|re-tested|valid again|current again|active again|have it again|driving again|got (?:it|them|my [\w-]+(?: [\w-]+)?) back)\b/i;
-// A line part that is only a currency word: "Class A CDL, current", "CDL - active".
+const NOT_CURRENT_RE = new RegExp(String.raw`\b${NOT_CURRENT_WORDS}\b`, "i");
+const NEGATION = /\b(?:never|not|no|without|wasnt|isnt|hasnt|havent|didnt|werent|aint)\b|n['’]t\b/i;
+// Current again, said anywhere in the sentence.
+const RENEWED_RE = /\b(renewed|recertified|reinstated|restored|reissued|retook|retested|re-took|re-tested|valid again|current again|active again|have it again|driving again|(?:got|have|has) (?:it|them|my [\w-]+(?: [\w-]+)?) back|(?:it'?s|its) back|back in good standing|cleared(?: up)?|(?:suspension|revocation)\s+(?:ended|was lifted|lifted|is over|was over)|that'?s over|it'?s over|all good now)\b/i;
+const STILL_CURRENT = /\b(?:it'?s|it is|its|now|still|i'?m|im|i am|shows?|is|are)\s+(?:valid|current|active|good)\b|\b(?:valid|current|active)\b[^.;,]{0,25}\b(?:now|again|as of)\b|\bgot a new (?:one|card|cert\w*|license|licence)\b|\bgood (?:for\s+)?\d+\s+(?:years?|yrs)\b|\b(?:did|took|passed)\s+(?:the\s+|my\s+)?(?:[\w-]+\s+){0,2}(?:test|exam)\s+again\b/i;
+// A part that is only a currency word: "Class A CDL, current", "CDL - active".
 const CURRENT_PART = /^\s*\(?\s*(?:still\s+|now\s+)?(?:valid|current|active|in good standing|up to date)(?:\s+(?:now|again|through\s+\S+|thru\s+\S+|until\s+\S+|till\s+\S+))?\s*\)?\s*$/i;
-const STILL_CURRENT = /\b(?:it'?s|it is|its|now|still|i'?m|im|i am)\s+(?:valid|current|active|good)\b|\b(?:valid|current|active)\b[^.;,]{0,25}\b(?:now|again)\b/i;
+const CURRENT_NEAR_RE = /\b(valid|current|active|in good standing|up to date)\b/i;
 // A pending renewal ("need to get it renewed", "can be restored") never counts.
 const PENDING_RE = /\b(?:need|needs|trying|try|want|wants|hope|hoping|plan|planning|waiting|going|have)\s+to\s+(?:get\s+)?(?:it\s+|them\s+|my\s+[\w-]+(?:\s+[\w-]+)?\s+)?(?:renew\w*|reinstat\w*|restor\w*|recertif\w*|back|valid|current|active)\b|\b(?:can|could|will|should|would)\s+be\s+(?:renew\w*|reinstat\w*|restor\w*|valid|current|active)\b|\bworking on getting (?:it|them|my [\w-]+) back\b/gi;
-// Signs the person holds it, in the clause that names it.
+// Signs the person holds it, in the part that names it...
 const HOLD_WORDS = String.raw`(?:certified|certification|certificate|cert|certs|licensed|license|licence|card|passed|holder|endorsement|registry|permit|ticket|i have|i've got|i hold|which i have|got my|have my|earned my|i got (?:my|it|them|the|a|an))`;
-// ...and elsewhere on its line, only unmistakable ones.
+// ...and elsewhere in the sentence, only unmistakable ones.
 const REST_HOLD_RE = /\b(passed|registry|certified|licensed|which i have|i have (?:it|one|them)|got it|earned it|got my (?:license|licence|cert\w*|card|cdl|ticket))\b/i;
-// A hold word right after one of these is not holding it: "get certified",
-// "no card", "never got certified".
-const NOT_HOLD_BEFORE = /\b(?:get|getting|be|become|becoming|being|to|no|not|never|without|don'?t have|do not have|didn'?t get|haven'?t|havent|never got)\s+(?:\w+\s+)?$/i;
-const COURSE_RE = /\b(course|courses|class|classes|training|coursework|program|school|academy|college|diploma|curriculum|modules?|studying|enrolled|in progress)\b/i;
+// A hold word right after one of these is not holding it: "get certified", "no card".
+const NOT_HOLD_BEFORE = /\b(?:get|getting|be|become|becoming|being|to|no|not|never|without|don'?t have|dont have|do not have|didn'?t get|didnt get|haven'?t|havent|never got)\s+(?:\w+\s+)?$/i;
+const COURSE_WORD = String.raw`(?:course|courses|class|classes|training|coursework|program|academy|curriculum|modules?|prep|school|college|diploma|semesters?|quarters?|studying|enrolled)`;
 // Not finished yet: a course even for a completion credential.
-const UNFINISHED_RE = /\b(in progress|enrolled|currently enrolled|studying|currently taking|signed up|sign up|starting|halfway|partway|module \d+ of \d+|not finished|never finished|didn'?t finish|haven'?t finished|still in training|still training|haven'?t yet|havent yet|not yet|haven'?t taken|havent taken)\b/i;
+const UNFINISHED_RE = /\b(in progress|enrolled|currently enrolled|studying|currently taking|signed up|sign up|signing up|starting|before i (?:could )?finish(?:ed)?|most of the modules|never got to finish|didn'?t get to finish|started (?:the|a|my)\s+(?:[\w-]+\s+){0,3}(?:class|course|program|training|modules)|halfway|partway|module \d+ of \d+|not finished|never finished|didn'?t finish|haven'?t finished|still in training|still training|haven'?t yet|havent yet|not yet|haven'?t taken|havent taken)\b/i;
+// ...unless it is about something else: "Hazmat endorsement in progress",
+// "currently enrolled in the HVAC program".
+const OTHER_PROGRESS = /\b(?:endorsement|upgrade|lpn|rn|degree|ged|hazmat|tanker|level\s+\d)\b|\b(?:enrolled|signed up|taking|starting|started)\s+(?:in|for)\s+(?:an?\s+|the\s+|my\s+)?[\w-]+(?:\s+[\w-]+)?\s+(?:program|course|class|degree|school)\b/i;
+// Not having it, said next to it: "no card or anything", "never signed me off",
+// "they was going to certify me".
+const NOT_HELD_RE = /\bno (?:card|cert\w*|license|licence|paper(?:work)?|ticket)\b|\bnever (?:had|got|received) (?:a |the |my )?(?:card|cert\w*|license|licence|ticket)\b|\bdidn'?t get (?:a |the |my )?(?:card|cert\w*)\b|\bnever signed (?:me )?off\b|\bnot signed off\b|\b(?:was|were) going to certify\b|\bnever (?:got|was|been) certified\b/i;
 // A CDL learner's permit is not a CDL until the road test is passed.
 const CDL_PERMIT = /\b(?:CDL\s+(?:\w+\s+)?permit|CLP|learner'?s permit|instruction permit)\b/i;
 const PASSED_ROAD = /\bpassed\b[^.;]{0,25}\b(?:road|skills|driving|behind the wheel)\b/i;
 // Wanting it: an aim at getting the credential itself, right before its name.
 const WANT_BEFORE = new RegExp(
-  String.raw`(?:\b(?:want|wants|wanting|need|needs|plan|plans|planning|hope|hoping|going|trying|would like|'d like|looking)\s+to\s+(?:get|earn|obtain|go for|pursue|be|become)\s+(?:an?\s+|my\s+|the\s+)?` +
+  String.raw`(?:\b(?:want|wants|wanting|need|needs|plan|plans|planning|hope|hoping|going|trying|would like|'d like|looking|goal is|supposed|told me|said)\s+to\s+(?:get|earn|obtain|go for|pursue|be|become|take)\s+(?:an?\s+|my\s+|the\s+)?` +
+    String.raw`|\b(?:should|must|gotta|got to)\s+(?:get|earn|take)\s+(?:an?\s+|my\s+|the\s+)?` +
     String.raw`|\b(?:working toward|working towards|working on getting|studying for|saving for|save up for|save for|looking into getting)\s+(?:an?\s+|my\s+|the\s+)?` +
     String.raw`|\b(?:plan|plans|goal|goals|next step|next)\s*:\s*(?:to\s+)?(?:take|get|earn|pass)\s+(?:the\s+|my\s+|an?\s+)?` +
     String.raw`|\bi\s+(?:really\s+|still\s+)?(?:want|need)\s+an?\s+` +
-    String.raw`|\b(?:no|not|isn'?t|don'?t have|do not have|never had|never got)\s+(?:an?\s+)?)$`,
+    String.raw`|\b(?:no|not|isn'?t|don'?t have|dont have|do not have|never had|never got)\s+(?:an?\s+)?)$`,
   "i"
 );
 // ...and nothing after the name that makes it about something else ("a CDL job",
-// "my CDL physical", "no CDL violations").
-const WANT_AFTER = /^(?:\s+(?:class\s+)?[a-d]\b)?(?:\s*$|\s*[,.;!?)]|\s+(?:yet|someday|soon|eventually|license|licence|permit|card|certification|cert|certified|licensed|trained|test|exam|so|because|to|and|but|next|this|in|by|first|now|either)\b)/i;
+// "my CDL physical", "no CDL violations", "my CNA license transferred").
+const WANT_AFTER = /^(?:\s+(?:class\s+)?[a-d]\b)?(?:\s*$|\s*[,.;!?)]|\s+(?:yet|someday|soon|eventually|license|licence|permit|card|certification|cert|certified|licensed|trained|test|exam|so|because|to|and|but|next|this|in|by|first|now|either)\b)(?!\s*(?:license|licence|permit|card|certification|cert)?\s*(?:transferred|replaced|renewed|reinstated|back|moved|updated|reissued)\b)/i;
 // Headings over a list: what the person holds, or what they are still taking.
 const HEADING_WORD = String.raw`(?:licen[cs]es?|certifications?|certificates?|certs?|credentials?|training|cards?|tickets?)`;
 const HELD_HEADING = new RegExp(String.raw`^\s*${HEADING_WORD}(?:\s*(?:and|&|/|,)\s*${HEADING_WORD})*\s*(?::\s*)?$`, "i");
 const INLINE_HEADING = new RegExp(String.raw`^\s*${HEADING_WORD}(?:\s*(?:and|&|/|,)\s*${HEADING_WORD})*\s*:\s*\S`, "i");
 const HOLDING_WORD = /licen[cs]|certif|\bcerts?\b|credential|card|ticket/i; // "Training" alone lists courses
-const COURSE_HEADING = /^\s*(?:enrolled|in progress|currently (?:enrolled|taking)|coursework|classes|courses|upcoming|planned)\s*(?::\s*)?$/i;
-const OTHER_HEADING = /^\s*(?:work\s+|job\s+|professional\s+|relevant\s+)?(?:experience|employment|employment history|work history|job history|education|skills|summary|objective|profile|references|projects|volunteer|volunteering|volunteer experience|awards|interests|contact|contact information)\s*(?::\s*)?$/i;
+// "ENROLLED" lists what is not finished; "CLASSES" lists finished classes.
+const UNFINISHED_HEADING = /^\s*(?:enrolled|in progress|currently (?:enrolled|taking)|upcoming|planned|next steps?|goals?)\s*(?::\s*)?$/i;
+const COURSE_HEADING = /^\s*(?:coursework|classes|courses|training completed|completed training)\s*(?::\s*)?$/i;
+const OTHER_HEADING = /^\s*(?:work\s+|job\s+|professional\s+|relevant\s+|career\s+)?(?:experience|employment|employment history|work history|job history|history|education|skills|summary|objective|profile|qualifications|references|projects|volunteer|volunteering|volunteer experience|awards|interests|contact|contact information)\s*(?::\s*)?$/i;
 const THIS_YEAR = new Date().getFullYear();
-// "exp. 03/2022", "exp 2019": an expiry date already past.
-const EXP_DATE = /\bexp(?:\.|ires|iration|:)?\s*:?\s*(?:\d{1,2}[\/.-]){0,2}((?:19|20)\d\d)\b/i;
+// "exp. 03/2022", "exp 2019": an expiry date already past (not "8 yrs exp 2012-2020").
+const EXP_DATE = /\bexp(?:\.|ires|iration|:)?\s*:?\s*(?:\d{1,2}[\/.-]){0,2}((?:19|20)\d\d)\b(?!\s*(?:-|–|to|through)\s*(?:19|20)?\d\d)/i;
+const EXPERIENCE_EXP = /\b(?:yrs?|years?|months?)\b[^.;,]{0,15}\bexp\b/i;
+const ENDED_RANGE = /^\s*\)?\s*(?:from\s+)?(?:19|20)\d\d\s*(?:-|–|to|through|until)\s*(?:19|20)\d\d\b/i;
+// Other papers a not-current word can be about.
+const OTHER_PAPERS = /\b(?:parole|probation|sentence|registration|insurance|id|medicaid|unemployment|resume|benefits|snap|lease|plates?|tags|visa)\b/i;
+const OTHER_LICENSE = /\b(?:driver'?s|drivers|license|licence)\b/i;
+const LINKS = /\b(?:and|but|while|though|however|so|because|before|after|when|until)\b(?!\s+(?:it|its|it's|they|that|this|then)\b)/i;
 
 function otherCredentialIn(text: string, re: RegExp): boolean {
   const rest = text.replace(new RegExp(re.source, "gi"), " ");
@@ -99,7 +118,7 @@ function unpending(text: string): string {
   return text.replace(PENDING_RE, " ");
 }
 
-/** A hold word in this clause, outside the credential's own name ("Certified
+/** A hold word in this part, outside the credential's own name ("Certified
  *  Nursing Assistant" names CNA, it is not a claim) and not negated or wanted. */
 function holdsIn(text: string, re: RegExp): boolean {
   const t = text.replace(new RegExp(re.source, "gi"), " cred ");
@@ -109,74 +128,182 @@ function holdsIn(text: string, re: RegExp): boolean {
   return false;
 }
 
-function negatedOrEnded(text: string, m: RegExpMatchArray, inside: string): boolean {
-  const before = text.slice(0, m.index ?? 0).split(/\s+/).slice(-3).join(" ");
-  if (/\b(never|not|no|without)\b/i.test(`${before} ${inside.replace(new RegExp(NOT_CURRENT_WORDS, "gi"), " ")}`)) return true;
-  const after = text.slice((m.index ?? 0) + inside.length);
-  return /^\s*(?:from\s+)?(?:19|20)\d\d\s*(?:-|–|to|through|until)\s*(?:19|20)\d\d\b/i.test(after);
+function pastExpiry(text: string): boolean {
+  const m = text.match(EXP_DATE);
+  if (!m || Number(m[1]) >= THIS_YEAR) return false;
+  return !EXPERIENCE_EXP.test(text.slice(0, (m.index ?? 0) + 4));
 }
 
-/** The status word sits next to THIS credential ("my CDL was suspended"), is
- *  not negated ("never had my license suspended"), is not about another
- *  credential in between, and is not a period that ended ("suspended 2019 to 2021"). */
-function notCurrentNear(text: string, re: RegExp): boolean {
-  const cred = `(?:${re.source})`;
-  const near = new RegExp(String.raw`${cred}(?:\W+\w+){0,5}?\W+${NOT_CURRENT_WORDS}\b|\b${NOT_CURRENT_WORDS}(?:\W+\w+){0,3}?\W+${cred}`, "gi");
+/** The status word is about THIS credential ("my CDL was suspended"): close to
+ *  its name, with no "and", "but" or other paper between them ("my forklift card
+ *  and my license is suspended"), not negated ("wasn't revoked"), and not a
+ *  period that ended ("suspended 2019 - 2021"). */
+function notCurrentNear(text: string, cred: { key: string; re: RegExp }): boolean {
+  const c = `(?:${cred.re.source})`;
+  const near = new RegExp(String.raw`${c}(?:\W+\w+){0,5}?\W+${NOT_CURRENT_WORDS}\b|\b${NOT_CURRENT_WORDS}(?:\W+\w+){0,3}?\W+${c}`, "gi");
+  const own = new RegExp(String.raw`${c}(?:\s+(?:license|licence|card|cert\w*|registration|endorsement))?`, "gi");
   for (const m of Array.from(text.matchAll(near))) {
-    if (otherCredentialIn(m[0], re) || /\bbut\b/i.test(m[0])) continue;
-    if (!negatedOrEnded(text, m, m[0])) return true;
+    const inside = m[0];
+    if (otherCredentialIn(inside, cred.re)) continue;
+    const between = inside.replace(own, " ").replace(new RegExp(NOT_CURRENT_WORDS, "gi"), " ");
+    if (LINKS.test(between) || OTHER_PAPERS.test(between)) continue;
+    if (cred.key !== "CDL" && OTHER_LICENSE.test(between)) continue;
+    const before = text.slice(0, m.index ?? 0).split(/\s+/).slice(-3).join(" ");
+    if (NEGATION.test(`${before} ${between}`)) continue;
+    if (ENDED_RANGE.test(text.slice((m.index ?? 0) + inside.length))) continue;
+    return true;
   }
-  const exp = text.match(EXP_DATE);
-  return !!exp && Number(exp[1]) < THIS_YEAR;
+  return pastExpiry(text);
 }
 
-/** A line part (not naming the credential) that says it is no longer current:
+/** Another part of the same sentence that says it is no longer current:
  *  "Food handler card, expired June 2026", "CPR - exp. 03/2022". */
-function restNotCurrent(part: string): boolean {
-  const m = part.match(new RegExp(String.raw`\b${NOT_CURRENT_WORDS}\b`, "i"));
-  const negated = m && /\b(never|not|no|without|didn'?t|haven'?t|hasn'?t|wasn'?t)\b/i.test(part.slice(0, m.index ?? 0));
-  if (m && !negated && !negatedOrEnded(part, m, m[0])) return true;
-  const exp = part.match(EXP_DATE);
-  return !!exp && Number(exp[1]) < THIS_YEAR;
+function partNotCurrent(part: string, key: string): boolean {
+  const m = part.match(NOT_CURRENT_RE);
+  if (m) {
+    const before = part.slice(0, m.index ?? 0);
+    const after = part.slice((m.index ?? 0) + m[0].length);
+    const aboutOther = OTHER_PAPERS.test(part) || (key !== "CDL" && /\bdriver'?s\b/i.test(part));
+    if (!aboutOther && !NEGATION.test(before) && !ENDED_RANGE.test(after)) return true;
+  }
+  return pastExpiry(part);
+}
+
+/** "CDL school", "EPA 608 Type I and II course", "class for CPR": a course word
+ *  right next to the name. Not "drove a school bus with my CDL" or "a CNA in the
+ *  memory care program". */
+function courseNear(text: string, re: RegExp): boolean {
+  const c = `(?:${re.source})`;
+  const after = new RegExp(String.raw`${c}(?:\s+(?!(?:in|at|for|with|from|on|to|by|of|as)\b)[\w&/()-]+){0,4}?\s+${COURSE_WORD}\b`, "i");
+  const before = new RegExp(String.raw`\b${COURSE_WORD}\s+(?:(?!(?:in|at|with|from)\b)[\w&/-]+\s+){0,1}(?:(?:for|on|in)\s+)?(?:the\s+|my\s+|a\s+)?${c}`, "i");
+  return after.test(text) || before.test(text);
 }
 
 /** "certification course" is a course; "Class A" next to a CDL or license is not a class. */
 function prep(text: string): string {
   return text
     .replace(/\b(certification|license|licence)\s+(course|class|prep|training|program)\b/gi, "$2")
-    .replace(/\bclass\s+[a-d]\b(?=\s*(?:cdl|commercial|license|licence|driver))/gi, " ")
+    .replace(/\bclass\s+[a-d]\b(?=\s*(?:cdl|commercial|driver))/gi, " ")
     .replace(/\b(cdl\s{0,3})class\s+[a-d]\b/gi, "$1 ");
 }
 
-type Clause = { text: string; others: string[]; next: string; underHeading: boolean; underCourseHeading: boolean };
+const ABBREV = /\b(?:st|mt|ft|dr|mr|mrs|ms|jr|sr|inc|co|no|vs|approx|ave|rd|blvd|exp|lic|cert|dept|hwy|etc|[a-z])$/i;
 
-/**
- * Classify one clause that mentions the credential. `others` are the other
- * parts of the same line when that line names no other credential, so
- * "Completed CNA program, on the state registry" or "suspended for 2 years,
- * reinstated in 2020" is read as one statement.
- */
-function clauseStatus(cl: Clause, cred: { key: string; re: RegExp; named: boolean; exam: boolean }): Status {
-  const c = prep(cl.text);
-  const others = cl.others.map(prep);
-  const rest = others.join(" ; ");
+/** Sentences of one line. A period after a short abbreviation ("St. Louis",
+ *  "exp. 2022", an initial) does not end one. */
+function sentencesIn(line: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  for (const m of Array.from(line.matchAll(/[.!?]+\s+/g))) {
+    const end = (m.index ?? 0) + 1;
+    if (ABBREV.test(line.slice(start, m.index ?? 0).split(/\s+/).pop() ?? "")) continue;
+    out.push(line.slice(start, end));
+    start = (m.index ?? 0) + m[0].length;
+  }
+  out.push(line.slice(start));
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+type Unit = { parts: string[]; text: string; next: string; underHeading: boolean; underCourseHeading: boolean; underUnfinishedHeading: boolean };
+
+/** The person's words as sentences, each tagged with the heading above it. */
+function unitsOf(source: string): Unit[] {
+  const lines = source.split("\n");
+  const units: Unit[] = [];
+  let underHeading = false;
+  let underCourseHeading = false;
+  let underUnfinishedHeading = false;
+  const set = (h: boolean, c: boolean, u: boolean) => { underHeading = h; underCourseHeading = c; underUnfinishedHeading = u; };
+  for (const line of lines) {
+    if (!line.trim()) { set(false, false, false); continue; }
+    // Headings are short; the length check also keeps a huge pasted line fast.
+    const short = line.length <= 80;
+    if (short && HELD_HEADING.test(line) && HOLDING_WORD.test(line)) { set(true, false, false); continue; }
+    if (short && UNFINISHED_HEADING.test(line)) { set(false, false, true); continue; }
+    if (short && COURSE_HEADING.test(line)) { set(false, true, false); continue; }
+    if (short && OTHER_HEADING.test(line)) { set(false, false, false); continue; }
+    // Any other all-caps heading ends the section, unless it names a credential ("WELDING").
+    if (short && /^[^a-z0-9]*[A-Z][A-Z &/]{3,}:?\s*$/.test(line.trim()) && !CREDENTIALS.some((c) => c.re.test(line))) {
+      set(false, false, false); continue;
+    }
+    const inline = INLINE_HEADING.test(line.slice(0, 200)) && HOLDING_WORD.test(line.split(":")[0]);
+    for (const sentence of sentencesIn(line)) {
+      // Parts: split at , and ; and at a spaced hyphen that is not a year range.
+      const parts = sentence.split(/[;,](?=\s|$)|(?<=[^\d\s]\s)-(?=\s)/).map((p) => p.trim()).filter(Boolean);
+      units.push({ parts, text: sentence, next: "", underHeading: underHeading || inline, underCourseHeading, underUnfinishedHeading });
+    }
+  }
+  units.forEach((u, i) => (u.next = units[i + 1]?.text ?? ""));
+  return units;
+}
+
+type Signals = { renewed: boolean; current: boolean; nc: boolean; hold: boolean; unfinished: boolean; notHeld: boolean };
+
+/** Per-part signals, computed once per sentence (so a long pasted line stays fast). */
+function partSignals(parts: string[], key: string): Signals[] {
+  return parts.map((p) => {
+    const t = unpending(prep(p));
+    return {
+      renewed: RENEWED_RE.test(t) || STILL_CURRENT.test(t),
+      current: CURRENT_PART.test(p),
+      nc: partNotCurrent(p, key),
+      hold: REST_HOLD_RE.test(t),
+      unfinished: UNFINISHED_RE.test(p) && !OTHER_PROGRESS.test(p),
+      notHeld: NOT_HELD_RE.test(p),
+    };
+  });
+}
+
+function clauseStatus(
+  part: string,
+  rest: Signals,
+  unit: Unit,
+  cred: { key: string; re: RegExp; named: boolean; exam: boolean }
+): Status {
+  const c = prep(part);
   const at = c.search(cred.re);
   const before = at > 0 ? c.slice(0, at) : "";
   const after = at >= 0 ? c.slice(at).replace(cred.re, "") : "";
   const cu = unpending(c);
-  const renewedHere =
-    RENEWED_RE.test(cu) || RENEWED_RE.test(unpending(rest)) || STILL_CURRENT.test(unpending(rest)) ||
-    others.some((o) => CURRENT_PART.test(o)) ||
-    (!CREDENTIALS.some((k) => k.re.test(cl.next)) && RENEWED_RE.test(unpending(cl.next)));
+  const nextFree = !CREDENTIALS.some((k) => k.re.test(unit.next));
+  const nextRenews = nextFree && (RENEWED_RE.test(unpending(unit.next)) || STILL_CURRENT.test(unpending(unit.next)));
+  const renewedHere = RENEWED_RE.test(cu) || rest.renewed || rest.current || nextRenews;
   const currentHere = renewedHere || CURRENT_NEAR_RE.test(cu.replace(new RegExp(NOT_CURRENT_WORDS, "gi"), " "));
-  if (notCurrentNear(c, cred.re) || others.some(restNotCurrent)) return currentHere ? "held" : "not_current";
-  if (WANT_BEFORE.test(before) && WANT_AFTER.test(after)) return "wanted";
-  if (cred.key === "CDL" && (CDL_PERMIT.test(c) || CDL_PERMIT.test(rest)) && !PASSED_ROAD.test(`${c} ${rest}`)) return "course";
-  if (currentHere || holdsIn(c, cred.re) || REST_HOLD_RE.test(unpending(rest))) return "held";
-  if (cl.underCourseHeading || UNFINISHED_RE.test(c) || UNFINISHED_RE.test(rest)) return "course";
-  if (cl.underHeading && !COURSE_RE.test(c)) return "held";
-  if (COURSE_RE.test(c)) return cred.exam ? "course" : "held";
-  return cred.named ? "held" : "mentioned";
+  if (notCurrentNear(c, cred) || rest.nc) return currentHere ? "held" : "not_current";
+  if (WANT_BEFORE.test(before) && WANT_AFTER.test(after) && !/\buntil\s+(?:19|20)\d\d\b/i.test(c)) return "wanted";
+  const nextNotHeld = nextFree && NOT_HELD_RE.test(unit.next);
+  if ((NOT_HELD_RE.test(c) || rest.notHeld || nextNotHeld) && !currentHere && !holdsIn(c, cred.re)) return "wanted";
+  // "Got my CDL permit (CLP)": a permit, unless a full license is named too
+  // ("permit in March and my Class A license in May").
+  if (cred.key === "CDL" && CDL_PERMIT.test(c) && !PASSED_ROAD.test(c)) {
+    const rest = c.replace(new RegExp(CDL_PERMIT.source, "gi"), " ");
+    if (!/\b(?:license|licence|cdl)\b(?!\s+permit)/i.test(rest)) return "course";
+  }
+  if (currentHere || holdsIn(c, cred.re) || rest.hold) return "held";
+  if (unit.underUnfinishedHeading) return "course";
+  if (unit.underCourseHeading) return cred.exam || UNFINISHED_RE.test(c) ? "course" : "held";
+  if ((UNFINISHED_RE.test(c) && !OTHER_PROGRESS.test(c)) || rest.unfinished) return "course";
+  if (unit.underHeading && !courseNear(c, cred.re)) return "held";
+  if (courseNear(c, cred.re)) {
+    // "Foreman said take the flagger class first. Haven't yet." / "class next week"
+    const nextUnfinished = nextFree && UNFINISHED_RE.test(unit.next) && !OTHER_PROGRESS.test(unit.next);
+    const ahead = /\bnext (?:week|month|year|spring|summer|fall|winter)\b|\bwill\b|\bgoing to\b/i.test(c);
+    return cred.exam || nextUnfinished || ahead ? "course" : "held";
+  }
+  // Said later that it is no longer current: "I was a CNA from 2012 to 2017.
+  // After my case the state took me off the registry, the website says revoked."
+  if (nextFree && partNotCurrent(unit.next, cred.key)) return "not_current";
+  // A named credential counts as held when it is listed or owned ("Class A
+  // CDL, 2019", "my CDL", "as a CNA"), not when it is only mentioned ("no CDL
+  // needed for those").
+  if (cred.named && at >= 0) {
+    const lead = before.trim().split(/\s+/).slice(-2).join(" ");
+    const listed =
+      !before.trim() || /^[\W\d]*$/.test(before) || c.trim().split(/\s+/).length <= 5 ||
+      /\b(?:my|a|an|have|has|hold|holds|with|as|been|was|am|is|got|earned|licensed|certified|valid|current|active)$/i.test(lead);
+    return listed ? "held" : "mentioned";
+  }
+  return "mentioned";
 }
 
 /**
@@ -185,92 +312,79 @@ function clauseStatus(cl: Clause, cred: { key: string; re: RegExp; named: boolea
  * Only when nothing says so does a course, a goal or an expiry decide.
  */
 export function credentialStatuses(source: string): Map<string, Status> {
-  const lines = source.split("\n");
-  const byLine: { parts: string[]; line: string; next: string; underHeading: boolean; underCourseHeading: boolean }[] = [];
-  let underHeading = false;
-  let underCourseHeading = false;
-  lines.forEach((line, i) => {
-    if (!line.trim()) { underHeading = false; underCourseHeading = false; return; }
-    // Headings are short; the length check also keeps a huge pasted line fast.
-    const short = line.length <= 80;
-    if (short && HELD_HEADING.test(line) && HOLDING_WORD.test(line)) { underHeading = true; underCourseHeading = false; return; }
-    if (short && COURSE_HEADING.test(line)) { underCourseHeading = true; underHeading = false; return; }
-    if (short && OTHER_HEADING.test(line)) { underHeading = false; underCourseHeading = false; return; }
-    const inline = INLINE_HEADING.test(line.slice(0, 200)) && HOLDING_WORD.test(line.split(":")[0]);
-    // Clauses: split at , ; . and at a spaced hyphen (checked one character each
-    // side, so a long run of spaces cannot make it slow).
-    // "exp. 03/2022" stays one piece.
-    const parts = line.replace(/\bexp\.\s/gi, "exp ").split(/[;,.](?=\s|$)|(?<=\s)-(?=\s)/).map((p) => p.trim()).filter(Boolean);
-    byLine.push({ parts, line, next: lines[i + 1] ?? "", underHeading: underHeading || inline, underCourseHeading });
-  });
+  const units = unitsOf(source);
   const out = new Map<string, Status>();
   for (const cred of CREDENTIALS) {
-    const statuses: Status[] = [];
-    for (const l of byLine) {
-      if (!cred.re.test(l.line)) continue;
-      const sharedLine = otherCredentialIn(l.line, cred.re);
-      l.parts.forEach((p, j) => {
+    const statuses = new Set<Status>();
+    for (const u of units) {
+      if (!cred.re.test(u.text)) continue;
+      // A sentence that names another credential too is read part by part only.
+      const shared = otherCredentialIn(u.text, cred.re);
+      const sig = shared ? [] : partSignals(u.parts, cred.key);
+      const count = (k: keyof Signals) => sig.filter((x) => x[k]).length;
+      const totals = { renewed: count("renewed"), current: count("current"), nc: count("nc"), hold: count("hold"), unfinished: count("unfinished"), notHeld: count("notHeld") };
+      u.parts.forEach((p, j) => {
         if (!cred.re.test(p)) return;
         // "ServSafe Food Handler" is one credential: the named key decides.
         if (cred.key === "food handler" && /\bserv\s?safe\b/i.test(p)) return;
-        const others = sharedLine ? [] : l.parts.filter((_, k) => k !== j);
-        statuses.push(clauseStatus({ text: p, others, next: l.next, underHeading: l.underHeading, underCourseHeading: l.underCourseHeading }, cred));
+        const own = sig[j];
+        const rest = {
+          renewed: totals.renewed - (own?.renewed ? 1 : 0) > 0,
+          current: totals.current - (own?.current ? 1 : 0) > 0,
+          nc: totals.nc - (own?.nc ? 1 : 0) > 0,
+          hold: totals.hold - (own?.hold ? 1 : 0) > 0,
+          unfinished: totals.unfinished - (own?.unfinished ? 1 : 0) > 0,
+          notHeld: totals.notHeld - (own?.notHeld ? 1 : 0) > 0,
+        };
+        statuses.add(clauseStatus(p, rest, u, cred));
       });
     }
-    if (!statuses.length) continue;
+    if (!statuses.size) continue;
     const order: Status[] = ["held", "not_current", "course", "wanted", "mentioned"];
-    out.set(cred.key, order.find((s) => statuses.includes(s))!);
+    out.set(cred.key, order.find((s) => statuses.has(s))!);
   }
   return out;
 }
 
-const CERT_WORDS = String.raw`(?:certification|certificate|license|licence|card|credential)`;
-const NOT_OWNING_NEXT = String.raw`(?!\s+(?:type\s+[ivx]+(?:\s+and\s+[ivx]+)?\s+)?(?:course|courses|class|classes|training|coursework|program|prep|practice|test|tests|exam|exams|fee|fees|study|studying|permit|school|physical|job|jobs|route|routes|requirement|requirements|goal))`;
-// Earning it, not claiming it: a real earning verb, or a condition ("once you
-// pass"), aimed at the credential, a certification word or the exam.
-const EARN_VERBS = String.raw`\b(?:get|getting|earn|earning|pass|passing|renew|renewing|become|becoming|enroll|enrolling|sign up for|study for|studying for|apply for|register for|schedule|scheduling|take|taking|working toward|working towards|work toward|work towards|working on|preparing for|prepare for|once you|after you|when you|until you|before you)\b`;
-function earnsIt(sentence: string, cred: string): boolean {
-  return new RegExp(String.raw`${EARN_VERBS}[^.!?]{0,30}(?:${cred}|certified|certification|certificate|licensed|license|licence|card|exam|test)`, "i").test(sentence);
-}
-const CURRENT_WORDS = String.raw`(?:current|currently|active|valid|renewable|up to date|in good standing)`;
+// ---------------------------------------------------------------------------
+// Reading what we wrote
+// ---------------------------------------------------------------------------
 
+const CERT_NOUN = String.raw`(?:certification|certificate|cert|license|licence|card|credential|endorsement|registration)`;
+const CERT_WORDS = String.raw`(?:certifications?|certificates?|licen[cs]es?|cards?|credentials?)`;
+// Words after a name that make it a sub-kind of the same credential.
+const QUAL = String.raw`(?:\s+(?:type\s+[ivx]+(?:\s+(?:and|&)\s+[ivx]+)?|universal|core|general industry|construction|manager|food handler|level\s+\d|[ab]))?`;
+// Words after a name that make it about something else: "your CNA state exam",
+// "your CDL permit", "CDL driver openings".
+const THING = String.raw`(?:course|courses|class|classes|training|coursework|program|prep|practice|test|tests|exam|exams|fee|fees|study|studying|permit|school|physical|job|jobs|route|routes|requirement|requirements|goal|goals|date|dates|result|results|application|option|options|plan|plans|opening|openings|shortage|student|students|trainee|trainees|candidate|candidates|instructor|experience|history|work|skill|skills|duties|career|path|pathway|clinical|clinicals|rotation|hours|module|modules|completion|position|positions|role|roles|companies|carriers|recruiters|holders|renewal|reinstatement)`;
+const NOT_THING_NEXT = String.raw`(?!\s+(?:[\w-]+\s+)?${THING}\b)`;
+const ASSERT_VERB = String.raw`(?:is|are|shows?|proves?|makes?|opens?|gives?|puts?|sets?|means?|qualifies|helps?|covers?|lets?|counts?|matters?|stands?|keeps?|lands?|backs?|carries|speaks?|demonstrates?|allows?|already|directly|also|really|gets? you)`;
+const PRESENT_VERB = String.raw`(?:put|list|add|highlight|show|mention|lead with|bring|feature|include|display|use|uses|using|point to|keep)`;
+// Just before a claim, these make it about getting it or a condition.
+const EARN_OR_IF = /\b(?:get|getting|earn|earning|pass|passing|renew|renewing|become|becoming|go for|pursue|save for|budget|start|finish|complete|look into|work toward|working toward|prepare for|study for|sign up for|enroll|apply for|register for|once|after|until|when|if|would|will|could|before)\b[^.;!?]{0,20}$/i;
 // Words that link to something else, so "certified with the EPA 608 course" is not
 // "certified EPA 608".
 const LINK = String.raw`(?!(?:with|and|in|for|the|to|from|at|after|before|behind|plus|but|or|by|through|on|of|while)\b)`;
+const CURRENT_WORDS = String.raw`(?:current|active|valid|renewable|up to date|up-to-date|in good standing|good)`;
+const SAYS_NOT_CURRENT = /\b(renew(?!able)\w*|retak\w*|re-?certif\w*|reinstat\w*|expire[sd]?|lapse[sd]?)\b/i;
 
-/** A claim of holding the credential, bound to that credential's name. */
-function bound(sentence: string, re: RegExp, named: boolean): boolean {
-  const cred = `(?:${re.source})`;
+function credC(re: RegExp): string {
   // "your Class A CDL": a license class before the name.
-  const credC = String.raw`(?:class\s+[a-d]\s+)?${cred}`;
-  const tests = [
-    // "your EPA 608 Type I and II certification", "my forklift card"
-    String.raw`\b(?:your|my)\s+(?:[\w-]+\s+){0,2}${cred}(?:\s+[\w()-]+){0,5}?\s+${CERT_WORDS}\b`,
-    // "certified forklift operator", "EPA 608 certified", "Forklift Certified"
-    String.raw`\b(?:certified|licensed)\s+(?:${LINK}[\w-]+\s+){0,2}${cred}`,
-    String.raw`${cred}(?:\s+${LINK}[\w-]+){0,2}\s+(?:certified|licensed)\b`,
-    // "Class B CDL holder"
-    String.raw`${cred}\s+holder\b`,
-  ];
-  if (named) {
-    tests.push(
-      // "your EPA 608" (not "your EPA 608 course" or "your EPA 608 test fee")
-      String.raw`\b(?:your|my)\s+${credC}${NOT_OWNING_NEXT}`,
-      // "you have EPA 608", "I hold a CDL", "holds a CDL"
-      String.raw`\b(?:you|i)(?:'ve|\s+have|\s+hold|\s+earned|\s+got)\s+(?:an?\s+|the\s+|your\s+|my\s+)?${credC}${NOT_OWNING_NEXT}`,
-      String.raw`\b(?:hold|holds|has)\s+(?:an?\s+|the\s+|your\s+)?${credC}${NOT_OWNING_NEXT}`,
-      // "As a certified nursing assistant with...", "since you are a CNA,"
-      // (not "as a CDL driver" or "a CNA student")
-      String.raw`\b(?:as|am|are|i'm|you're)\s+an?\s+${credC}(?=\s*$|\s*[,.;!?)]|\s+(?:with|and|who|since|for|in|at)\b)`
-    );
-  } else {
-    tests.push(String.raw`\b(?:you|i)(?:'ve|\s+have|\s+hold|\s+earned|\s+got)\s+(?:an?\s+|the\s+|your\s+|my\s+)?${cred}\s+${CERT_WORDS}\b`);
-  }
-  // A match that also names another credential is about that one.
-  return tests.some((t) => Array.from(sentence.matchAll(new RegExp(t, "gi"))).some((m) => !otherCredentialIn(m[0], re)));
+  return String.raw`(?:class\s+[a-d]\s+)?(?:${re.source})`;
 }
 
-const NOT_CURRENT_RE = new RegExp(String.raw`\b${NOT_CURRENT_WORDS}\b`, "i");
+/** Matches of any pattern, dropping ones about another credential or right after
+ *  "get", "once", "if" and the like. */
+function claimed(sentence: string, patterns: string[], re: RegExp): boolean {
+  for (const t of patterns) {
+    for (const m of Array.from(sentence.matchAll(new RegExp(t, "gi")))) {
+      if (otherCredentialIn(m[0], re)) continue;
+      if (EARN_OR_IF.test(sentence.slice(Math.max(0, (m.index ?? 0) - 40), m.index))) continue;
+      return true;
+    }
+  }
+  return false;
+}
 
 /** "You are certified" close to this credential's name: within five words, in
  *  the same clause, and not about another credential. "Certified" counts only
@@ -292,64 +406,101 @@ function saysCertified(sentence: string, re: RegExp): boolean {
  *  never said anything about, is left to the truth check. */
 const FLAGGED: Status[] = ["course", "wanted", "not_current"];
 
-/** Does this sentence claim more than the person's own words give a credential? */
-export function claimsMoreThanGiven(sentence: string, statuses: Map<string, Status>): boolean {
+/** Does this sentence say the person holds a credential their words don't give them? */
+export function claimsMoreThanGiven(sentence: string, statuses: Map<string, Status>, opts: { firstPerson?: boolean } = {}): boolean {
   for (const { key, re, named } of CREDENTIALS) {
     if (!re.test(sentence)) continue;
     const status = statuses.get(key);
     if (!status || !FLAGGED.includes(status)) continue;
-    const cred = `(?:${re.source})`;
+    const c = credC(re);
+    const own = String.raw`${c}${QUAL}`;
     if (status === "not_current") {
-      if (NOT_CURRENT_RE.test(sentence)) continue; // it says so
-      // Calling it current is a claim even when the sentence also talks about
-      // renewing, unless it is a condition ("retaking the class would make your
-      // card current again").
-      const callsCurrent = Array.from(
-        sentence.matchAll(new RegExp(String.raw`${cred}[^.!?]{0,40}?\b${CURRENT_WORDS}\b|\b${CURRENT_WORDS}\s+(?:[\w-]+\s+){0,2}${cred}`, "gi"))
-      ).some((m) => !/\b(would|will|could|can|make|makes|once|after|if|when|until|become|becomes|get|gets)\b/i.test(m[0]));
-      if (callsCurrent) return true;
-      // "needs renewing", "retake the class": it says it is not current.
-      if (/\b(renew\w*|retak\w*|re-?certif\w*|reinstat\w*|expire[sd]?|lapse[sd]?)\b/i.test(sentence)) continue;
-      if (earnsIt(sentence, cred)) continue;
-      if (bound(sentence, re, named) || saysCertified(sentence, re)) return true;
-      continue;
+      // Calling it current: "your forklift certification is renewable", "your active CNA".
+      const current = [
+        String.raw`\b(?:your|my)\s+(?:${CURRENT_WORDS}|up-to-date)\s+${own}`,
+        String.raw`\b(?:your|my)\s+${own}(?:\s+${CERT_NOUN})?\s+(?:is|are)\s+(?:still\s+)?${CURRENT_WORDS}\b`,
+        String.raw`\b(?:you|i)\s+(?:still\s+)?(?:have|hold)\s+(?:an?\s+|the\s+|your\s+|my\s+)?(?:current|valid|active)\s+${own}`,
+      ];
+      if (claimed(sentence, current, re)) return true;
+      // It says so, or talks about renewing: not a claim that it is current.
+      if (NOT_CURRENT_RE.test(sentence) || SAYS_NOT_CURRENT.test(sentence)) continue;
     }
-    if (earnsIt(sentence, cred)) continue;
-    if (bound(sentence, re, named)) return true;
+    const patterns = [
+      // "you have EPA 608", "I hold a Class A CDL", "you have a forklift card"
+      String.raw`\b(?:you|i)(?:'ve|\s+have|\s+hold|\s+earned|\s+got|\s+carry|\s+(?:already|still|now)\s+(?:have|hold))\s+(?:an?\s+|the\s+|your\s+|my\s+)?(?:current\s+|valid\s+|active\s+)?${own}${named ? "" : String.raw`\s+${CERT_NOUN}`}${NOT_THING_NEXT}`,
+      // "explain you cooked for years and hold EPA 608"
+      String.raw`\byou\b[^.;!?]{1,60}?\band\s+(?:have|hold|carry)\s+(?:an?\s+|the\s+|your\s+)?${own}${named ? "" : String.raw`\s+${CERT_NOUN}`}${NOT_THING_NEXT}`,
+      // "your EPA 608 certification covers", "your Class A CDL opens doors"
+      String.raw`\b(?:your|my)\s+(?:current\s+|valid\s+|active\s+)?${own}(?:\s+${CERT_NOUN})?\s+${ASSERT_VERB}\b`,
+      // "your EPA 608 and hands-on repair history make you"
+      String.raw`\b(?:your|my)\s+${own}(?:\s+${CERT_NOUN})?\s+and\s+(?:your\s+|my\s+)?(?:[\w-]+\s+){0,8}?(?:make|makes|show|shows|give|gives|put|puts|set|sets|prove|proves|qualify|qualifies|help|helps|open|opens|mean|means)\b`,
+      // "With your OSHA 30, you can apply for crew lead roles now."
+      String.raw`\bwith\s+(?:your|my)\s+(?:current\s+|valid\s+)?${own}(?:\s+${CERT_NOUN})?\s*,\s*(?:you|i)\b`,
+      // "put your EPA 608 at the top", "highlight your EPA 608", "it uses your kitchen knowledge and your EPA 608"
+      String.raw`\b${PRESENT_VERB}\s+(?:both\s+)?(?:(?:your|my)\s+[\w-]+(?:\s+[\w-]+)?\s*(?:,|and)\s+)?(?:your|my)\s+(?:current\s+|valid\s+|active\s+)?${own}(?:\s+${CERT_NOUN})?${NOT_THING_NEXT}`,
+      // "since you are a CNA,", "I am a Certified Nursing Assistant with"
+      String.raw`\b(?:you(?:'re|\s+are)|i(?:'m|\s+am))\s+(?:already\s+|now\s+|still\s+)?an?\s+${own}(?=\s*$|\s*[,.;!?]|\s+(?:with|and|who|since)\b)`,
+      // "As a certified nursing assistant with five years", "As a CNA, I"
+      String.raw`\bas\s+an?\s+${own}(?:\s*,)?\s+(?:i\b|with\s+(?:[\w-]+\s+){0,3}(?:years?|experience|background))`,
+      // "you are EPA 608 certified", "I'm a certified forklift operator", "you are an AWS certified welder"
+      String.raw`\b(?:you(?:'re|\s+are)|i(?:'m|\s+am))\s+(?:an?\s+)?(?:(?:fully|now|also|already)\s+)?(?:${own}(?:\s+${LINK}[\w-]+){0,2}\s+(?:certified|licensed)\b|(?:[\w-]+\s+)?(?:certified|licensed)\s+(?:${LINK}[\w-]+\s+){0,2}${own})`,
+    ];
+    // On the resume and in the letter the person is speaking, so a phrase with no
+    // subject is theirs: "Licensed Class A CDL driver", "EPA 608 certified", "CDL holder".
+    if (opts.firstPerson) {
+      patterns.push(
+        String.raw`\b(?:certified|licensed)\s+(?:${LINK}[\w-]+\s+){0,2}${own}`,
+        String.raw`${own}(?:\s+${LINK}[\w-]+){0,2}\s+(?:certified|licensed)\b`,
+        String.raw`${own}\s+holder\b`
+      );
+    }
+    if (claimed(sentence, patterns, re)) return true;
     if (saysCertified(sentence, re)) return true;
-    // "the course, which is the certification": a course equated with the credential.
+    // "the course, which is exactly the certification": a course equated with it.
     if (
-      COURSE_RE.test(sentence) &&
-      /\bcertification\b(?!\s+(?:course|class|prep|training|program))/i.test(sentence) &&
-      !/\b(exam|test|prepare|prepares|toward|towards|next step|require|requires|required)\b/i.test(sentence)
+      status !== "not_current" &&
+      new RegExp(String.raw`\b${COURSE_WORD}\b[^.;!?]{0,40}\b(?:which|that)\s+(?:is|counts as)\s+(?:[\w-]+\s+){0,2}?(?:the\s+|a\s+)?(?:certification|license|credential)\b`, "i").test(sentence)
     ) return true;
   }
   return false;
 }
 
+// Items that are plainly about a course, a goal, a renewal or the past.
+const NOT_A_CLAIM_ITEM = /\b(course|courses|class(?!\s+[a-d]\b)|classes|training|program|school|prep|exam|exams|test|tests|in progress|enrolled|pending|planned|goal|goals|scheduled|candidate|coursework|clinical|clinicals|rotation|student|trainee|permit|learner'?s|renewal|reinstatement|renew(?!able)\w*|retak\w*|expired|lapsed|revoked|suspended|inactive|seeking|pursuing|working toward|in training)\b/i;
+const PAST_RANGE = /\b(?:19|20)\d\d\s*(?:-|–|to)\s*((?:19|20)\d\d)\b/;
+
 /** A short item (a skill name, a resume certification line) naming the
- *  credential as a certification, license or card is itself a claim. */
+ *  credential as held: "EPA 608 Certification", "Forklift Certified", a bare
+ *  "CNA (Wisconsin Nurse Aide Registry)" in a list. */
 export function itemClaimsMoreThanGiven(item: string, statuses: Map<string, Status>): boolean {
-  if (claimsMoreThanGiven(item, statuses)) return true;
-  for (const { key, re } of CREDENTIALS) {
-    if (!re.test(item)) continue;
-    const status = statuses.get(key);
-    if (!status || !FLAGGED.includes(status)) continue;
-    if (status === "not_current" && NOT_CURRENT_RE.test(item)) continue;
-    const cred = `(?:${re.source})`;
-    if (new RegExp(String.raw`${cred}(?:\s+[\w()-]+){0,4}?\s+${CERT_WORDS}\b(?!\s+(?:course|class|prep|training|program|exam|test))|\b${CERT_WORDS}\s*(?:in|for|of|:)?\s*${cred}|${cred}(?:\s+[\w()-]+){0,4}?\s+(?:certified|licensed)\b`, "i").test(item)) {
-      return true;
-    }
-    // A named credential listed on its own ("CNA (Wisconsin Nurse Aide Registry)",
-    // "Certified Nursing Assistant (CNA) | ServSafe | CPR", "EPA 608, 2026") is a
-    // claim to hold it.
-    if (CREDENTIALS.find((c) => c.key === key)?.named) {
-      // Up to four plain qualifier words may follow ("OSHA 30 Construction",
-      // "EPA 608 Type I and II"), but not one that says it is a course, a goal,
-      // no longer current, or a kind of work ("CDL driving jobs").
-      const qualifier = String.raw`(?:\s+(?!(?:course|courses|class|classes|training|program|school|prep|exam|test|in|progress|enrolled|pending|planned|goal|expired|lapsed|revoked|suspended|driving|driver|drivers|job|jobs|work|route|routes|experience|student|trainee|permit)\b)[A-Za-z0-9/&-]+){0,4}`;
-      const alone = new RegExp(String.raw`^\s*(?:class\s+[a-d]\s+)?${cred}${qualifier}(?:\s*\([^)]*\))?(?:\s*[-,]?\s*(?:19|20)\d\d)?\s*$`, "i");
-      if (item.split(/\s*[|,;]\s*/).some((seg) => alone.test(seg))) return true;
+  // An item on a resume or a skills list is the person's own claim.
+  // "Skills: Class A CDL, ..." and "Certifications: CPR/AED, ..." are lists.
+  const text = item.replace(/\s+/g, " ").trim().replace(/^(?:skills|certifications?|certs?|licen[cs]es?|credentials?|core competencies)\s*:\s*/i, "");
+  if (!text || text.length > 300 || NOT_A_CLAIM_ITEM.test(text)) return false;
+  const range = text.match(PAST_RANGE);
+  if (range && Number(range[1]) < THIS_YEAR) return false; // it says when it was held
+  // A job line ("CNA | Sunrise Care Center"): only a part that says certified,
+  // licensed or a card is a claim.
+  // A skills row ("Class A CDL | Clean driving record") is checked whole.
+  const segs = text.split(/\s*\|\s*/);
+  const jobLine = segs.length > 1 && segs.slice(1).some((p) => /^(?:[A-Z][\w.'&-]*\s+){1,4}[A-Z][\w.'&-]*$/.test(p.trim()));
+  const pieces = jobLine ? segs.filter((p) => /certif|licen[cs]|\bcard\b|endorse/i.test(p)) : [text];
+  for (const piece of pieces) {
+    if (claimsMoreThanGiven(piece, statuses, { firstPerson: true })) return true;
+    for (const { key, re, named } of CREDENTIALS) {
+      if (!re.test(piece)) continue;
+      const status = statuses.get(key);
+      if (!status || !FLAGGED.includes(status)) continue;
+      const c = credC(re);
+      if (
+        new RegExp(String.raw`${c}(?:\s+${LINK}(?!(?:your|my|once|if|when|so)\b)[\w()-]+){0,4}?\s+${CERT_WORDS}\b|\b${CERT_WORDS}\s*(?:in|for|of|:)?\s*${c}|${c}(?:\s+[\w()-]+){0,4}?\s+(?:certified|licensed)\b|\b(?:certified|licensed)\s+(?:[\w-]+\s+){0,2}${c}`, "i").test(piece)
+      ) return true;
+      // A named credential listed on its own is a claim to hold it. Up to four
+      // plain qualifier words may follow ("OSHA 30 Construction").
+      if (named) {
+        const alone = new RegExp(String.raw`^\s*${c}(?:\s+[A-Za-z0-9/&-]+){0,4}?(?:\s*\([^)]*\))?(?:\s*[-,]?\s*(?:19|20)\d\d)?\s*$`, "i");
+        if (piece.split(/\s*[,;]\s*/).some((seg) => seg.length <= 80 && alone.test(seg))) return true;
+      }
     }
   }
   return false;
@@ -362,10 +513,10 @@ function sentencesOf(text: string): string[] {
 /** Sentences in prose that claim more than the person's words give a credential.
  *  Nothing is removed: these are shown to the person to check. Reading status
  *  from free text is too uncertain to delete on, and a wrong flag costs a glance. */
-export function findOverstatedCredentials(text: string, statuses: Map<string, Status>): string[] {
+export function findOverstatedCredentials(text: string, statuses: Map<string, Status>, opts: { firstPerson?: boolean } = {}): string[] {
   const found: string[] = [];
   for (const line of text.split("\n")) {
-    for (const s of sentencesOf(line)) if (s.trim() && claimsMoreThanGiven(s, statuses)) found.push(s.trim());
+    for (const s of sentencesOf(line)) if (s.trim() && claimsMoreThanGiven(s, statuses, opts)) found.push(s.trim());
   }
   return found;
 }
@@ -384,7 +535,7 @@ export function findOverstatedCredentialLines(text: string, statuses: Map<string
     if (words <= 12) {
       if (itemClaimsMoreThanGiven(trimmed.replace(/^[-\u2022*]\s*/, ""), statuses)) found.push(trimmed);
     } else {
-      found.push(...findOverstatedCredentials(trimmed, statuses));
+      found.push(...findOverstatedCredentials(trimmed, statuses, { firstPerson: true }));
     }
   }
   return found;

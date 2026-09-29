@@ -79,9 +79,10 @@ describe("a finished course is not a certification", () => {
 describe("an expired credential stays expired", () => {
   for (const s of [
     "Say clearly that you are certified experience and want forklift placements.",
-    "Forklift Certification (renewable, previously certified)",
     "My forklift certification is renewable, and I am ready to renew it.",
   ]) it(`caught: ${s.slice(0, 60)}`, () => assert.equal(claimsMoreThanGiven(s, expired), true));
+  it("caught as a resume item: Forklift Certification (renewable, previously certified)", () =>
+    assert.equal(itemClaimsMoreThanGiven("Forklift Certification (renewable, previously certified)", expired), true));
 
   for (const s of [
     "Your forklift certification expired in 2013.",
