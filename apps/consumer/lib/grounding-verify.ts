@@ -250,7 +250,7 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
     parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.flags)) throw new Error("verifier reply has the wrong shape");
   } catch {
     return { ...original, verifierRan: false };
   }
@@ -405,7 +405,7 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
     parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.bullets)) throw new Error("verifier reply has the wrong shape");
   } catch {
     return { ...original, verifierRan: false };
   }
@@ -583,7 +583,7 @@ ${eduLines.join("\n") || "(none)"}`;
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
     parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || (!("keptSkills" in parsed) && !("education" in parsed))) throw new Error("verifier reply has the wrong shape");
   } catch {
     return { ...original, verifierRan: false };
   }

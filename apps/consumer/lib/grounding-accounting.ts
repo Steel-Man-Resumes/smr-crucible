@@ -8,28 +8,47 @@
  * A persona run showed a letter still saying an expired certification was
  * "renewable" under that exact promise.
  *
- * So each flag is checked against the text before and after: it counts as
- * removed only if its phrase was in the original and is gone from what the
- * person receives. Anything still there, or that cannot be matched either way,
- * counts as something they should check.
+ * Each flag is checked against the text before and after the check:
+ *   removed     its phrase was in the original, and neither the phrase nor most
+ *               of its words and numbers are left together on any line.
+ *   changed     the exact phrase is gone, but most of its words or one of its
+ *               numbers is still there on one line: it was reworded, not cut.
+ *   still_there the exact phrase is still in the final text.
+ *   unmatched   the phrase was never found in the original, so we cannot say
+ *               what happened to it.
+ * Only "removed" is reported as taken out. The rest ask the person to look.
  */
 
 import type { GroundingFlag } from "./grounding-verify";
+import { plainPunctuationText } from "./legal-sanitize";
 
 export type GroundedDoc = "resume" | "cover_letter";
+export type FlagStatus = "removed" | "changed" | "still_there" | "unmatched";
 
 export interface FlagOutcome {
   claim: string;
   doc: GroundedDoc;
-  status: "removed" | "still_there";
+  status: FlagStatus;
 }
 
-/** Lowercase, letters digits and % only, single spaces: so a swapped dash,
- *  a curly quote or a line break never decides whether a phrase survived. */
+const NUMBER_WORDS: Record<string, string> = {
+  one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9",
+  ten: "10", eleven: "11", twelve: "12", fifteen: "15", twenty: "20", thirty: "30", fifty: "50", hundred: "100",
+};
+
+const STOP_WORDS = new Set(
+  "a an the and or of to in on for with at by from as is are was were be been his her their your my i you we it this that over across every each per".split(" ")
+);
+
+/** Lowercase, letters digits and % only, number words as digits, single spaces:
+ *  so a swapped dash, a curly quote or "five" vs "5" never decides it. */
 export function normalizeForMatch(s: string): string {
   return s
     .toLowerCase()
     .replace(/[^a-z0-9%]+/g, " ")
+    .split(" ")
+    .map((w) => NUMBER_WORDS[w] ?? w)
+    .join(" ")
     .trim();
 }
 
@@ -38,23 +57,51 @@ function contains(haystack: string, needle: string): boolean {
   return n.length > 0 && ` ${normalizeForMatch(haystack)} `.includes(` ${n} `);
 }
 
-export function flagOutcome(flag: GroundingFlag, original: string, final: string): FlagOutcome["status"] {
-  if (contains(original, flag.claim) && !contains(final, flag.claim)) return "removed";
-  return "still_there";
+/** Is most of the claim still sitting together on one line of the text? */
+function survivesReworded(claim: string, text: string): boolean {
+  const words = normalizeForMatch(claim).split(" ").filter((w) => w && !STOP_WORDS.has(w));
+  if (!words.length) return false;
+  const numbers = words.filter((w) => /\d/.test(w));
+  const content = words.filter((w) => !/\d/.test(w));
+  return text.split(/\n+/).some((line) => {
+    const have = new Set(normalizeForMatch(line).split(" "));
+    const contentHits = content.filter((w) => have.has(w)).length;
+    if (numbers.some((n) => have.has(n)) && contentHits >= 1) return true;
+    return content.length >= 2 && contentHits >= Math.ceil(content.length / 2);
+  });
+}
+
+export function flagOutcome(flag: GroundingFlag, original: string, final: string): FlagStatus {
+  if (!contains(original, flag.claim)) return "unmatched";
+  if (contains(final, flag.claim)) return "still_there";
+  if (survivesReworded(flag.claim, final)) return "changed";
+  return "removed";
 }
 
 export function accountFlags(
   checks: { doc: GroundedDoc; flags: GroundingFlag[]; original: string; final: string }[]
-): { removed: number; residual: number; outcomes: FlagOutcome[] } {
+): { removed: number; changed: number; residual: number; unmatched: number; outcomes: FlagOutcome[] } {
   const outcomes: FlagOutcome[] = [];
   for (const c of checks) {
+    const seen = new Set<string>();
     for (const f of c.flags) {
-      outcomes.push({ claim: f.claim, doc: c.doc, status: flagOutcome(f, c.original, c.final) });
+      const key = normalizeForMatch(f.claim);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      outcomes.push({
+        // Shown on a job-seeker page, so it gets the same dash sweep as the documents.
+        claim: plainPunctuationText(f.claim).text.slice(0, 200),
+        doc: c.doc,
+        status: flagOutcome(f, c.original, c.final),
+      });
     }
   }
+  const count = (s: FlagStatus) => outcomes.filter((o) => o.status === s).length;
   return {
-    removed: outcomes.filter((o) => o.status === "removed").length,
-    residual: outcomes.filter((o) => o.status === "still_there").length,
+    removed: count("removed"),
+    changed: count("changed"),
+    residual: count("still_there"),
+    unmatched: count("unmatched"),
     outcomes,
   };
 }

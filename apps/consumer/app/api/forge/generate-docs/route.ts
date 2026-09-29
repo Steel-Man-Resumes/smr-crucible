@@ -166,7 +166,8 @@ async function handlePost(request: Request) {
       { doc: "cover_letter", flags: coverCheck.flags, original: coverLetterRaw, final: coverLetter },
     ]);
     const removedCount = accounting.removed;
-    const residualCount = accounting.residual;
+    // Reworded and still-there flags both ask the person to look.
+    const residualCount = accounting.residual + accounting.changed;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
@@ -220,6 +221,10 @@ async function handlePost(request: Request) {
         // An unverified document is not a verified one, and the page has to be
         // able to tell the difference to say so honestly.
         verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
+        // Per document, so the page can say which one went unchecked.
+        verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        changed: accounting.changed,
+        unmatched: accounting.unmatched,
       },
       generated_at: new Date().toISOString(),
     });

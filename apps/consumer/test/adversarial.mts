@@ -209,8 +209,18 @@ section("truth check accounting");
     flagOutcome({ claim: "Five-year accident-free record", why: "" }, orig, fin) === "removed");
   check("a phrase still in the final text is not removed",
     flagOutcome({ claim: "certification is renewable", why: "" }, orig, fin) === "still_there");
-  check("a phrase that cannot be matched either way is not counted as removed",
-    flagOutcome({ claim: "clean safety record", why: "" }, orig, fin) === "still_there");
+  check("a phrase never found in the original is unmatched, not removed",
+    flagOutcome({ claim: "clean safety record", why: "" }, orig, fin) === "unmatched");
+  // Reworded but still there: the claim survives in other words.
+  check("one word added inside the phrase is changed, not removed",
+    flagOutcome({ claim: "certification is renewable", why: "" }, "My certification is renewable.", "My certification is still renewable.") === "changed");
+  check("a trimmed claim that keeps its core is changed",
+    flagOutcome({ claim: "Maintained a clean safety record over 5 years", why: "" }, "Maintained a clean safety record over 5 years.", "Maintained a clean safety record.") === "changed");
+  check("a number word and its digits are the same claim",
+    flagOutcome({ claim: "Five years of accident-free driving", why: "" }, "Five years of accident-free driving.", "5 years of accident-free driving.") === "still_there");
+  check("a shortened list of traits is changed",
+    flagOutcome({ claim: "consistent attendance across every shift, on time and ready to work", why: "" },
+      "Brings consistent attendance across every shift, on time and ready to work.", "Brings consistent attendance across every shift.") === "changed");
   check("dashes, quotes and case do not decide it",
     normalizeForMatch("Five\u2014year \u201caccident-free\u201d RECORD") === normalizeForMatch("five year accident free record"));
   check("a phrase only matches whole words",
@@ -220,6 +230,10 @@ section("truth check accounting");
     { doc: "cover_letter", flags: [{ claim: "renewable", why: "" }], original: "It is renewable.", final: "It is renewable." },
   ]);
   check("counts come from outcomes", acc.removed === 1 && acc.residual === 1 && acc.outcomes.length === 2, JSON.stringify(acc));
+  const dup = accountFlags([{ doc: "resume", flags: [{ claim: "zero accidents", why: "" }, { claim: "Zero accidents", why: "" }], original: "Zero accidents.", final: "" }]);
+  check("the same claim flagged twice counts once", dup.outcomes.length === 1);
+  const dash = accountFlags([{ doc: "cover_letter", flags: [{ claim: "safety first \u2014 always", why: "" }], original: "safety first \u2014 always", final: "" }]);
+  check("a claim shown on the page has no dash", !/\u2014| -- /.test(dash.outcomes[0].claim), dash.outcomes[0].claim);
   check("each outcome names its document", acc.outcomes[1].doc === "cover_letter" && acc.outcomes[1].status === "still_there");
 }
 
