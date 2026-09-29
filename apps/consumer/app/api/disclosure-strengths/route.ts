@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_DISCLOSURE_STRENGTHS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
@@ -52,28 +52,34 @@ async function handlePost(request: Request) {
     // every proposal must trace to something they actually did or said.
     const historyParts: string[] = [];
 
-    if (forgeContext?.headline) {
-      historyParts.push(`Their Forge headline: ${sanitizeForPrompt(forgeContext.headline, 200)}`);
+    // Each block is pushed only when it has real content, so the empty-history
+    // guard below still fires and the model is never asked to mine a blank.
+    const headline = sanitizeOrEmpty(forgeContext?.headline, 200);
+    if (headline) historyParts.push(`Their Forge headline: ${headline}`);
+    if (Array.isArray(forgeContext?.strengths)) {
+      const strengthLines = forgeContext.strengths
+        .map((s: any) => {
+          const title = sanitizeOrEmpty(s?.title, 120);
+          const evidence = sanitizeOrEmpty(s?.evidence, 300);
+          return title ? `- ${title}${evidence ? `: ${evidence}` : ""}` : "";
+        })
+        .filter(Boolean);
+      if (strengthLines.length) {
+        historyParts.push(`Forge strengths already on file:\n${strengthLines.join("\n")}`);
+      }
     }
-    if (Array.isArray(forgeContext?.strengths) && forgeContext.strengths.length) {
-      historyParts.push(
-        `Forge strengths already on file:\n${forgeContext.strengths
-          .map((s: any) => `- ${sanitizeForPrompt(s.title, 120)}: ${sanitizeForPrompt(s.evidence, 300)}`)
-          .join("\n")}`
-      );
+    if (Array.isArray(forgeContext?.skills)) {
+      const skillNames = forgeContext.skills
+        .map((s: any) => sanitizeOrEmpty(typeof s === "string" ? s : s?.name, 60))
+        .filter(Boolean);
+      if (skillNames.length) historyParts.push(`Skills on file: ${skillNames.join(", ")}`);
     }
-    if (Array.isArray(forgeContext?.skills) && forgeContext.skills.length) {
-      historyParts.push(
-        `Skills on file: ${forgeContext.skills.map((s: any) => sanitizeForPrompt(s.name || s, 60)).join(", ")}`
-      );
-    }
-    if (Array.isArray(intakeAnswers) && intakeAnswers.length) {
-      historyParts.push(
-        `In their own words (recent intake):\n${intakeAnswers
-          .filter((a: any) => a && typeof a.answer === "string" && a.answer.trim())
-          .map((a: any) => `- ${sanitizeForPrompt(a.question, 200)}: ${sanitizeForPrompt(a.answer, 500)}`)
-          .join("\n")}`
-      );
+    if (Array.isArray(intakeAnswers)) {
+      const intakeLines = intakeAnswers
+        .filter((a: any) => a && typeof a.answer === "string" && a.answer.trim())
+        .map((a: any) => `- ${sanitizeForPrompt(a.question, 200)}: ${sanitizeForPrompt(a.answer, 500)}`)
+        .join("\n");
+      if (intakeLines) historyParts.push(`In their own words (recent intake):\n${intakeLines}`);
     }
 
     // Pull the user's own interview-practice and disclosure history for evidence.

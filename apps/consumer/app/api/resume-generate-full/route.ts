@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getArtifact } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { JD_MAX, RESUME_SOURCE_MAX } from "@/lib/limits";
 import { resolveApprovedBase } from "@/lib/approved-base";
 import { formatResumeDownload, migrateLegacyResume } from "@/components/resume/resumeModel";
@@ -148,11 +148,14 @@ async function handlePost(request: Request) {
       ? sanitizeForPrompt(approvedResumeText, RESUME_SOURCE_MAX, "approvedResumeText")
       : "";
 
-    const contactName = sanitizeForPrompt(contact?.name, 100);
-    const contactPhone = sanitizeForPrompt(contact?.phone, 30);
-    const contactEmail = sanitizeForPrompt(contact?.email, 100);
-    const contactCity = sanitizeForPrompt(contact?.city, 50);
-    const contactState = sanitizeForPrompt(contact?.state, 20);
+    // Blank stays blank: the name signs a letter an employer reads, so a missing
+    // name must fall back to "Candidate", never the prompt label "not specified".
+    const contactName = sanitizeOrEmpty(contact?.name, 100);
+    const contactPhone = sanitizeOrEmpty(contact?.phone, 30);
+    const contactEmail = sanitizeOrEmpty(contact?.email, 100);
+    const contactCity = sanitizeOrEmpty(contact?.city, 50);
+    const contactState = sanitizeOrEmpty(contact?.state, 20);
+    const contactPlace = [contactCity, contactState].filter(Boolean).join(", ");
 
     // ─── Generate resume + cover letter in parallel ───────────────────
 
@@ -206,11 +209,11 @@ ${cleanedApprovedResume ? `- APPROVED BASE RESUME (the person built and approved
 ${strengths ? `- Strengths: ${strengths}` : ""}
 
 CONTACT INFO:
-- Name: ${contactName}
-- Phone: ${contactPhone}
-- Email: ${contactEmail}
-- City: ${contactCity}
-- State: ${contactState}
+- Name: ${contactName || "(not given)"}
+- Phone: ${contactPhone || "(not given)"}
+- Email: ${contactEmail || "(not given)"}
+- City: ${contactCity || "(not given)"}
+- State: ${contactState || "(not given)"}
 
 Return this exact JSON structure:
 {
@@ -251,7 +254,7 @@ Description: ${jobDescription}
 Requirements: ${jobRequirements}
 </job_posting>
 
-APPLICANT: ${contactName || "Candidate"} from ${contactCity}, ${contactState}
+APPLICANT: ${contactName || "Candidate"}${contactPlace ? ` from ${contactPlace}` : ""}
 BACKGROUND (the only source of facts): ${narrative}
 KEY SKILLS: ${skills}
 ${strengths ? `STRENGTHS: ${strengths}` : ""}

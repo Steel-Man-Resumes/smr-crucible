@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FOLLOW_UP } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
@@ -69,18 +69,30 @@ async function handlePost(request: Request) {
 
   const days = daysSince(app.applied_at);
   const strengths: string[] = Array.isArray(forgeContext?.strengths)
-    ? forgeContext.strengths.map((s: any) => (typeof s === "string" ? s : s?.title)).filter(Boolean)
+    ? forgeContext.strengths
+        .map((s: any) => (typeof s === "string" ? s : s?.title))
+        // Strings only: a non-string title would reach the prompt as "not specified".
+        .filter((s: unknown): s is string => typeof s === "string" && s !== "")
     : [];
 
   const candidateBlock = strengths.length
     ? `\nThe candidate's key strengths to reference briefly: ${sanitizeArray(strengths)}`
     : "";
 
+  // Blank stays blank: this message goes to an employer, so the model gets an
+  // explicit instruction for a missing field, never a stand-in word to echo.
+  const role = sanitizeOrEmpty(app.job_title);
+  const company = sanitizeOrEmpty(app.company);
+  // A non-blank title goes in verbatim, as it always did.
+  const fallbackSubject = role
+    ? `Following up on my application for ${app.job_title}`
+    : "Following up on my application";
+
   const prompt = `You are helping a job seeker write a short follow-up message after applying for a job.
 
 THE APPLICATION:
-- Role: ${sanitizeForPrompt(app.job_title)}
-- Company: ${sanitizeForPrompt(app.company)}
+- Role: ${role || "(not given: say 'the position', never write a placeholder)"}
+- Company: ${company || "(not given: say 'your team', never write a placeholder)"}
 - Current status: ${sanitizeForPrompt(app.status, 50)}
 ${days !== null ? `- Applied about ${days} day(s) ago` : ""}${app.notes ? `\n- Their notes: ${sanitizeForPrompt(app.notes, 400)}` : ""}${candidateBlock}
 
@@ -97,14 +109,14 @@ Return JSON only:
       try {
         const parsed = JSON.parse(jsonMatch[0]);
         result = {
-          subject: typeof parsed.subject === "string" ? parsed.subject : `Following up on my application for ${app.job_title}`,
+          subject: typeof parsed.subject === "string" ? parsed.subject : fallbackSubject,
           body: typeof parsed.body === "string" ? parsed.body : text.trim(),
         };
       } catch {
-        result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
+        result = { subject: fallbackSubject, body: text.trim() };
       }
     } else {
-      result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
+      result = { subject: fallbackSubject, body: text.trim() };
     }
     result = plainPunctuation(result, logDashSwaps("follow-up"));
 

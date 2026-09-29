@@ -21,7 +21,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
@@ -161,15 +161,17 @@ RULES:
 
     // --- write_bullet: the truth-gated bullet workshop ---
     if (action === "write_bullet") {
-      const jobTitle = sanitizeForPrompt(body.jobTitle, 120);
-      const company = sanitizeForPrompt(body.company, 120);
-      const targetJob = sanitizeForPrompt(body.targetJob, 120);
+      // Blank stays blank here: these answers are saved with the bullet, and the
+      // empty check below has to be able to see an empty answer.
+      const jobTitle = sanitizeOrEmpty(body.jobTitle, 120);
+      const company = sanitizeOrEmpty(body.company, 120);
+      const targetJob = sanitizeOrEmpty(body.targetJob, 120);
       const a = body.answers && typeof body.answers === "object" ? body.answers : {};
-      const did = sanitizeForPrompt(a.did, 600);
-      const tools = sanitizeForPrompt(a.tools, 400);
-      const often = sanitizeForPrompt(a.often, 200);
-      const quantity = sanitizeForPrompt(a.quantity, 200);
-      const improved = sanitizeForPrompt(a.improved, 400);
+      const did = sanitizeOrEmpty(a.did, 600);
+      const tools = sanitizeOrEmpty(a.tools, 400);
+      const often = sanitizeOrEmpty(a.often, 200);
+      const quantity = sanitizeOrEmpty(a.quantity, 200);
+      const improved = sanitizeOrEmpty(a.improved, 400);
 
       if (!did && !tools && !quantity && !improved) {
         return NextResponse.json({ error: "Tell me what you did first, then I can help." }, { status: 400 });
@@ -242,7 +244,12 @@ Write the single strongest TRUE bullet from ONLY these facts.${
       const quantitySource = ["typed", "picked", "unsure"].includes(a.quantitySource) ? a.quantitySource : undefined;
       return NextResponse.json({
         bullet,
-        evidence: { bullet, did, tools, often, quantity, improved, ...(quantitySource ? { quantitySource } : {}) },
+        // Only the answers the person actually gave.
+        evidence: {
+          bullet,
+          ...Object.fromEntries(Object.entries({ did, tools, often, quantity, improved }).filter(([, v]) => v)),
+          ...(quantitySource ? { quantitySource } : {}),
+        },
       });
     }
 

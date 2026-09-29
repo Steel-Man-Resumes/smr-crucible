@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeOrEmpty, sanitizeArrayOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
@@ -123,10 +123,13 @@ async function handlePost(request: Request) {
           .map((a: any) => `- ${sanitizeForPrompt(a.question, 200)}: ${sanitizeForPrompt(a.answer, 500)}`)
           .join("\n");
       }
-      const strengthsLine =
-        forgeContext?.strengths?.length
-          ? forgeContext.strengths.map((s: any) => sanitizeForPrompt(s.title, 120)).join(", ")
-          : "";
+      // Blank titles are dropped so an empty list leaves the line out entirely.
+      const strengthsLine = Array.isArray(forgeContext?.strengths)
+        ? forgeContext.strengths
+            .map((s: any) => sanitizeOrEmpty(s?.title, 120))
+            .filter(Boolean)
+            .join(", ")
+        : "";
 
       const nonRecordPrompt = `You are a supportive career coach helping a jobseeker prepare to talk about a hurdle that is NOT a criminal record. The hurdle is: ${sanitizeForPrompt(g.label, 80)}.
 
@@ -228,15 +231,31 @@ Return JSON ONLY:
     let candidateBlock = "";
     if (targetJob || forgeContext) {
       const parts: string[] = [];
-      if (targetJob) parts.push(`Target role: ${sanitizeForPrompt(targetJob)}`);
-      if (forgeContext?.headline) parts.push(`Professional headline: ${sanitizeForPrompt(forgeContext.headline)}`);
-      if (forgeContext?.strengths?.length) {
-        parts.push(`Key strengths to pivot to after disclosure: ${forgeContext.strengths.map((s: any) => `${sanitizeForPrompt(s.title)}: ${sanitizeForPrompt(s.evidence)}`).join("; ")}`);
+      // Blank or non-string values are skipped, so the parts.length check below
+      // never emits a CANDIDATE PROFILE header with no real content.
+      const role = sanitizeOrEmpty(targetJob);
+      if (role) parts.push(`Target role: ${role}`);
+      const headline = sanitizeOrEmpty(forgeContext?.headline);
+      if (headline) parts.push(`Professional headline: ${headline}`);
+      // A strength with no title is dropped; one with no evidence keeps just
+      // its title, so the pivot script never cites a blank placeholder.
+      if (Array.isArray(forgeContext?.strengths)) {
+        const pivots = forgeContext.strengths
+          .map((s: any) => {
+            const title = sanitizeOrEmpty(s?.title);
+            const evidence = sanitizeOrEmpty(s?.evidence);
+            return title ? (evidence ? `${title}: ${evidence}` : title) : "";
+          })
+          .filter(Boolean);
+        if (pivots.length) parts.push(`Key strengths to pivot to after disclosure: ${pivots.join("; ")}`);
       }
-      if (forgeContext?.skills?.length) {
-        parts.push(`Top skills: ${sanitizeArray(forgeContext.skills.map((s: any) => s.name))}`);
+      if (Array.isArray(forgeContext?.skills)) {
+        const skillNames = sanitizeArrayOrEmpty(
+          forgeContext.skills.map((s: any) => (typeof s === "string" ? s : s?.name))
+        );
+        if (skillNames) parts.push(`Top skills: ${skillNames}`);
       }
-      candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
+      if (parts.length) candidateBlock = `\n\nCANDIDATE PROFILE:\n${parts.join("\n")}`;
     }
 
     // Enriched progressive-intake answers -- the user's own words about how they
@@ -264,10 +283,11 @@ Return JSON ONLY:
     const disclosureResearch = buildFullContext("disclosure", userCtx, { targetJob });
 
     // Derive jurisdiction from forge context location (preferences.location)
-    const locationRaw = sanitizeForPrompt(forgeContext?.location || forgeContext?.preferences?.location || "", 200);
+    const locationRaw = sanitizeOrEmpty(forgeContext?.location || forgeContext?.preferences?.location, 200);
     const stateMatch = locationRaw.match(/,\s*([A-Z]{2})$/) || locationRaw.match(/\b([A-Z]{2})\b/);
-    // No state given means no state: never fall back to one state's law.
-    const jurisdiction = stateMatch ? stateMatch[1] : sanitizeForPrompt(record.state || "", 10);
+    // No state given means no state: never fall back to one state's law. Blank
+    // stays "" so the "not given" / "Do not assume one" labels below can fire.
+    const jurisdiction = stateMatch ? stateMatch[1] : sanitizeOrEmpty(record.state, 10);
 
     const prompt = `${disclosureResearch}
 
@@ -279,7 +299,7 @@ THEIR SITUATION:
 - Most recent: ${sanitizeForPrompt(record.most_recent)}
 - Probation/parole: ${sanitizeForPrompt(record.supervision)}
 - State/Jurisdiction: ${jurisdiction || "not given"}
-- Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}${intakeBlock}
+- Preferred timing: ${sanitizeOrEmpty(timing, 200) || "not sure"}${candidateBlock}${intakeBlock}
 
 JURISDICTION-SPECIFIC CONTEXT:
 ${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin (general information to verify, not legal advice; checked against the Wisconsin statutes and City of Milwaukee records on 2026-09-28):

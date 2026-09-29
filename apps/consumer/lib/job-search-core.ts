@@ -23,7 +23,7 @@
  * than requiring a source edit.
  */
 
-import { sanitizeForPrompt } from "@/lib/sanitize";
+import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
@@ -619,7 +619,7 @@ async function enrichJobsWithAI(
       description: j.description,
     }));
 
-    const prompt = `You are a reentry employment specialist. Simplify these job listings for someone with a criminal record looking for work in ${sanitizeForPrompt(context.location)}.
+    const prompt = `You are a reentry employment specialist. Simplify these job listings for someone with a criminal record looking for work in ${sanitizeOrEmpty(context.location) || "their area"}.
 
 JOBS:
 ${JSON.stringify(jobSummaries)}
@@ -632,7 +632,7 @@ Return JSON:
       "simple_description": "What this job involves in plain language. 1-2 sentences. 6th grade reading level."
     }
   ],
-  "fair_chance_info": "1-2 sentences of practical encouragement for applying with a record in ${sanitizeForPrompt(context.location)}."
+  "fair_chance_info": "1-2 sentences of practical encouragement for applying with a record in ${sanitizeOrEmpty(context.location) || "their area"}."
 }
 
 RULES:
@@ -772,11 +772,11 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   const { role, location, skills, hasRecord, recordType, userId } = params;
 
   const tenantGeo = getTenantConfig().geo;
-  const searchLocation = sanitizeForPrompt(location ?? "") || tenantGeo.primaryLocations[0];
+  const searchLocation = sanitizeOrEmpty(location) || tenantGeo.primaryLocations[0];
 
   // Build cache key from search params
   const cacheParams = {
-    role: sanitizeForPrompt(role),
+    role: sanitizeOrEmpty(role),
     location: searchLocation,
   };
   const queryHash = hashQuery(cacheParams);
@@ -811,7 +811,10 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   // Providers are independent by construction: each is separately configured,
   // separately bounded, and returns `failed` rather than throwing, so one being
   // unconfigured, rate-limited, or down never removes the others.
-  const searchRole = sanitizeForPrompt(role) || "jobs";
+  // roleClean stays "" for a location-only search so USAJOBS can skip its
+  // Keyword filter; the other providers get the "jobs" fallback.
+  const roleClean = sanitizeOrEmpty(role);
+  const searchRole = roleClean || "jobs";
   const providerNames: string[] = [];
   const settled = await Promise.all([
     fetchJSearchJobs(searchRole, searchLocation, tenantGeo.searchRadiusMiles).then((r) => {
@@ -827,7 +830,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       if (r.jobs.length) providerNames.push("adzuna");
       return r;
     }),
-    fetchUsaJobs(searchRole, tenantGeo.stateFullName, PARALLEL_PROVIDER_TIMEOUT_MS).then((r) => {
+    fetchUsaJobs(roleClean, tenantGeo.stateFullName, PARALLEL_PROVIDER_TIMEOUT_MS).then((r) => {
       if (r.jobs.length) providerNames.push("usajobs");
       return r;
     }),

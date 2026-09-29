@@ -27,7 +27,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { reserveVoiceSession } from "@crucible/core";
-import { sanitizeForPrompt } from "@/lib/sanitize";
+import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { REALTIME_MODEL, type VoiceSessionBody } from "@/lib/voice-instructions";
 
 export const maxDuration = 15;
@@ -65,7 +65,9 @@ async function handlePost(request: Request) {
     body = {};
   }
 
-  const targetRole = sanitizeForPrompt(body.config?.targetRole, 120);
+  // Stored in voice_session.target_role: a blank role is NULL, never the
+  // prompt label "not specified".
+  const targetRole = sanitizeOrEmpty(body.config?.targetRole, 120) || null;
 
   const reservation = await reserveVoiceSession(userId, targetRole);
 

@@ -13,7 +13,7 @@ export function sanitizeForPrompt(
   // real source material is always observable (Phase 2.4).
   field?: string
 ): string {
-  if (!input) return "not specified";
+  if (!input || typeof input !== "string") return "not specified";
   const collapsed = input
     .replace(/\n/g, " ")           // Collapse newlines (tidiness, not a defense)
     .replace(/\r/g, " ")           // Remove carriage returns
@@ -24,6 +24,29 @@ export function sanitizeForPrompt(
     console.warn(`[sanitizeForPrompt] truncated ${field}: ${collapsed.length} -> ${maxLength} chars (data loss)`);
   }
   return collapsed.slice(0, maxLength);
+}
+
+/**
+ * Like sanitizeForPrompt, but blank stays blank. The "not specified" label is
+ * for a model reading a prompt. Anything that is stored, shown to a person,
+ * sent to an employer, or tested for emptiness must use this instead: a letter
+ * once risked being signed "not specified", and saved workshop answers read
+ * "not specified" where the person had left a field empty.
+ */
+export function sanitizeOrEmpty(input: unknown, maxLength = 500, field?: string): string {
+  if (typeof input !== "string" || !input.trim()) return "";
+  return sanitizeForPrompt(input, maxLength, field);
+}
+
+/** List version of sanitizeOrEmpty: blank items are dropped, and an empty or
+ *  missing list is "" so a fallback like `skills || "none yet"` can fire. */
+export function sanitizeArrayOrEmpty(arr: unknown, maxItems = 20, maxItemLength = 200): string {
+  if (!Array.isArray(arr)) return "";
+  return arr
+    .slice(0, maxItems)
+    .map((item) => sanitizeOrEmpty(item, maxItemLength))
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function sanitizeArray(arr: string[] | undefined | null, maxItems = 20, maxItemLength = 200): string {

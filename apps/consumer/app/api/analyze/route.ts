@@ -17,7 +17,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
@@ -376,8 +376,13 @@ function buildContext(input: ForgeInput): string {
 
   if (input.criminalRecord?.type) {
     const cr = input.criminalRecord;
+    // The story page starts these as "", so a skipped field must read as an
+    // explicit "(not given)" label, never as "not specified charge(s)".
+    const count = sanitizeOrEmpty(cr.charge_count);
+    const recent = sanitizeOrEmpty(cr.most_recent);
+    const sup = sanitizeOrEmpty(cr.supervision);
     parts.push(
-      `CRIMINAL RECORD: ${sanitizeForPrompt(cr.type)}, ${sanitizeForPrompt(cr.charge_count)} charge(s), most recent: ${sanitizeForPrompt(cr.most_recent)}, supervision: ${sanitizeForPrompt(cr.supervision)}`
+      `CRIMINAL RECORD: ${sanitizeForPrompt(cr.type)}, ${count ? `${count} charge(s)` : "number of charges: (not given)"}, most recent: ${recent || "(not given)"}, supervision: ${sup || "(not given)"}`
     );
     if (cr.context) parts.push(`CONTEXT: ${sanitizeForPrompt(cr.context, 1000)}`);
   }
@@ -385,7 +390,7 @@ function buildContext(input: ForgeInput): string {
   if (input.preferences) {
     const p = input.preferences;
     parts.push(
-      `PREFERENCES: schedule=${sanitizeForPrompt(p.schedule) || "any"}, environment=${sanitizeForPrompt(p.environment) || "any"}, commute=${sanitizeForPrompt(p.commute) || "any"}, location=${sanitizeForPrompt(p.location)}`
+      `PREFERENCES: schedule=${sanitizeOrEmpty(p.schedule) || "any"}, environment=${sanitizeOrEmpty(p.environment) || "any"}, commute=${sanitizeOrEmpty(p.commute) || "any"}, location=${sanitizeOrEmpty(p.location) || "(not given)"}`
     );
     // Extract state for jurisdiction-specific barrier analysis
     if (p.location) {
