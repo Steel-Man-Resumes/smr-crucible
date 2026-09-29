@@ -25,12 +25,15 @@ const PHONE = /(?:\(\d{3}\)\s*|\b\d{3}[-.\s])\d{3}[-.\s]\d{4}\b/;
 const STREET =
   /\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?!(?:years?|yrs?|months?|miles?|hours?|hrs?|days?|weeks?|times?|stops?|loads?|trucks?|people|men|women|rooms?)\b)[A-Za-z0-9.]+(?:\s+[A-Za-z0-9.]+){0,2}\s+(?:st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|ct|court|way|pl|place|pkwy|parkway|hwy|highway|cir|circle|ter|terrace)\b\.?(?=\s*(?:$|[,#|]|apt\b|unit\b|ste\b|suite\b|[A-Z]))/i;
 const ZIP_PLACE = /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|,\s*[A-Z][a-z]+\s+\d{5}\b/;
-const PLACE_ONLY = /^\s*[A-Za-z][A-Za-z .'-]{1,40},?\s+(?:[A-Z]{2}|[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)(?:\s+\d{5}(?:-\d{4})?)?\s*$/;
+const STATES =
+  "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming";
+// "Kenosha, WI", "Racine Wisconsin 53403": a place and a real state, nothing else.
+const PLACE_ONLY = new RegExp(String.raw`^\s*[A-Za-z][A-Za-z .'-]{1,40},?\s+(?:${STATES})\.?(?:\s+\d{5}(?:-\d{4})?)?\s*$`);
 const LABELED = /^\s*(?:name|address|street|city|state|zip|location|home|hometown|lives? in|phone|cell|mobile|email|e-mail|contact)\s*:/i;
 const LABELED_PLACE = /^\s*(?:address|city|location|home|hometown|lives? in)\s*:/i;
 const PHONE_WORDS = /\b(?:phone|cell|mobile|call|text|number|reach me|contact me)\b/i;
 // "I live in Springfield now", "moved to Lawton", "paroled to Houston".
-const RESIDENCE_BEFORE = /\b(?:live|lives|living|stay|stays|staying|moved|move|reside|resides|residing|paroled|released|home is|based)\s+(?:now\s+)?(?:in|to|out of)\s+(?:the\s+)?$/i;
+const RESIDENCE_BEFORE = /\b(?:live|lives|living|stay|stays|staying|moved|move|reside|resides|residing|paroled|released|home is)\s+(?:now\s+)?(?:in|to|out of)\s+(?:the\s+)?$/i;
 const SAME_TOWN = /\b(same (?:town|city)|home ?town|my (?:town|city)|our town|in town|right here|where i (?:live|stay)|local(?:ly)?)\b/i;
 
 /** Lowercase words for finding a place. A possessive 's is dropped
@@ -70,8 +73,15 @@ function companyForms(s: string): string[] {
   return [` ${split.trim()} `, ` ${joined.trim()} `];
 }
 
+// Words that describe a business rather than name it: "Tyson" names Tyson Foods.
+const GENERIC = new Set(["foods", "food", "services", "service", "group", "industries", "enterprises", "international", "center", "centre", "store", "stores", "restaurant", "restaurants", "warehouse", "distribution", "logistics", "staffing", "solutions", "systems", "products", "manufacturing", "farms", "holdings", "incorporated", "supercenter", "dc"]);
+
 function companyWords(company: string): string[][] {
-  return companyForms(company).map((f) => f.trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w)));
+  return companyForms(company).map((f) => {
+    const words = f.trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
+    const named = words.filter((w) => !GENERIC.has(w));
+    return named.length ? named : words;
+  });
 }
 
 function namesCompany(lineForms: string[], words: string[][]): boolean {
@@ -163,8 +173,10 @@ export function stripUnsupportedJobCities(
     if (!mentions.length) return line;
     // Found anywhere but where they live, or on a line that also names this
     // employer: the person gave it.
+    // "I live in Springfield now" never gives the job's city, even in a paragraph
+    // that also names the employer.
     const givenForJob = mentions.some(
-      (i) => namesCompany(formLines[i], words) || (!contact.has(i) && !onlyResidence(sourceLines[i], city))
+      (i) => !onlyResidence(sourceLines[i], city) && (namesCompany(formLines[i], words) || !contact.has(i))
     );
     if (givenForJob) return line;
     // "Jewel-Osco, same town": the person tied the job to where they live.

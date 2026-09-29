@@ -1,5 +1,5 @@
 {
- "about": "Synthetic, labeled inputs for the employer-city and credential backstops (2026-09-29): a first set, a blind holdout and cases from white-box attackers, all written by reviewers who never saw the code. Made-up people, example.com emails, 555 numbers. expect/expect_flag is what a careful human reviewer says is right; ambiguous cases are labeled for the safe side and not asserted.",
+ "about": "Synthetic, labeled inputs for the employer-city and credential backstops (2026-09-29): a first set, a blind holdout, a final blind gate and cases from white-box attackers, all written by reviewers who never saw the code. Made-up people, example.com emails, 555 numbers. expect/expect_flag is what a careful human reviewer says is right; ambiguous cases are labeled for the safe side and not asserted.",
  "city": [
   {
    "id": "city-keep-1",
@@ -954,6 +954,411 @@
    "ambiguous": false,
    "why": "attacker case",
    "group": "attack-city"
+  },
+  {
+   "id": "fc-1",
+   "source": "MARCUS T. DELANEY\nKenosha, WI 53140 | (262) 555-0148 | mdelaney88@example.com\nOBJECTIVE\nReliable warehouse worker looking for full time 2nd or 3rd shift work\nWORK EXPERIENCE\nUline Kenosha, WI\nForklift Driver 2017 - 2019\n- Loaded and unloaded trailers, 60+ pallets a shift\n- Sit down and stand up forklift, no accidents\nPiggly Wiggly Racine, WI\nStock Clerk 2015 - 2017\n- Stocked grocery and dairy, rotated product\nEDUCATION\nHSED, 2014",
+   "resume_line": "FORKLIFT DRIVER | Uline | Kenosha, WI | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The employer line reads 'Uline Kenosha, WI', so the city is stated for this job. It also matches his home address, but that is a coincidence, not the bug. Deleting it would drop a true city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-2",
+   "source": "Tasha Whitfield\n4410 N 38th St Omaha NE 68111\n(402) 555-0193  tasha.whitfield@example.com\nEXPERIENCE\nTyson Foods\nProduction Line Worker\nMarch 2016 - Nov 2018\nTrimmed and packed product, worked the boxing line\n10 hr shifts in the cold room\nCasey's General Store\nCashier / Cook\n2014-2016\nSKILLS\nForklift cert (expired), food handler card",
+   "resume_line": "PRODUCTION LINE WORKER | Tyson Foods | Omaha, NE | 2016 - 2018",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "No city is given for Tyson. Omaha appears only in her street address at the top. Tyson runs several plants in Nebraska, so the home city is a guess.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-3",
+   "source": "ive lived in pikeville ky my whole life except when i was locked up. before i went in i worked at the walmart there for like 6 years, 2013 to 2019, started pushing carts and ended up overnight stocking lead. got out in 2022. staying with my mom at her place outside town now, 606-555-0117",
+   "resume_line": "OVERNIGHT STOCKING LEAD | Walmart | Pikeville, KY | 2013 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the walmart there' points straight back to Pikeville. The job is in his home town, and he says so for this job.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-4",
+   "source": "Job history (most recent first)\nLumiere Place casino - dishwasher then prep cook - 2019 to 2020 - downtown STL\nwas in the feds 2012-2018\nSchnucks in Florissant - deli clerk - 2010-2012\n\nContact: Andre Pullman, 618-555-0162, andre.pullman@example.com, living in Belleville IL right now",
+   "resume_line": "PREP COOK | Lumiere Place Casino | St. Louis, MO | 2019 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'downtown STL' is St. Louis, stated for this job. His home is Belleville IL, which the tool correctly did not use.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-5",
+   "source": "i worked at the kroger on the east side of columbus ohio, the one on main st, about 3 yrs 2015-2018 in produce. then i caught a case and did 2 yrs at the prison in marion. i live in reynoldsburg now with my girlfriend and her son. i dont have a car yet",
+   "resume_line": "PRODUCE CLERK | Kroger | Columbus, OH | 2015 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the east side of columbus ohio' names the city for this Kroger. His home is Reynoldsburg, a different city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-6",
+   "source": "I live in Tulsa now with my sister and her kids. Before I went in (2011) I drove forklift at a Sysco warehouse for about 3 years, 2008 to 2011, and I was good at it, never had a write up. Did 9 years in DOC, got out in March. I want warehouse or delivery work, I can pass a drug test.",
+   "resume_line": "FORKLIFT OPERATOR | Sysco | Tulsa, OK | 2008 - 2011",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Tulsa is where she lives 'now', after a 9 year sentence. She gives no city for the Sysco warehouse, and the time gap makes the home city a guess.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-7",
+   "source": "on work release out of the tacoma center jan 2021 to aug 2021, they had me at a fred meyer in tacoma on the dock unloading trucks 5am to 1pm. after i got released they kept me on till nov 2022. now im in lakewood. 253-555-0104",
+   "resume_line": "RECEIVING ASSOCIATE | Fred Meyer | Tacoma, WA | 2021 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'a fred meyer in tacoma' states the job city. He lives in Lakewood now, so this is not the home-city fill.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-8",
+   "source": "Was at the work release center in Racine WI from 2019-2020. The job they got me was at a plastics plant about 40 min away, I honestly dont remember the name of the town, I rode the van every day. Company was Midwest Molding I think. Machine operator on injection molding presses, 2nd shift. After I finished I came home to Racine and been doing odd jobs.",
+   "resume_line": "MACHINE OPERATOR | Midwest Molding | Racine, WI | 2019 - 2020",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "He says the plant was 40 minutes away in a town he can't remember. Racine is where the work release center was and where he lives now. It is not the job's city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-9",
+   "source": "2016-2019 Labor Ready, memphis tn. they sent me all over, fedex hub, warehouses in southaven and olive branch, some construction cleanup, general labor. 2019-2020 temp to hire at a distribution center, didnt get hired on bc of my background. Im in Horn Lake MS now. 901-555-0131",
+   "resume_line": "GENERAL LABORER | Labor Ready | Memphis, TN | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The line gives 'Labor Ready, memphis tn' for the agency job. Assignments in other towns do not change the branch city he gave, and his home is Horn Lake MS.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-10",
+   "source": "work history: meijer - cashier then front end - 2018 to 2020 (the one by my house). family fare - bagger - 2016-2017 (wyoming)\n\nabout me: 23, live on the southeast side of grand rapids with my grandma, on probation till 2025, no license yet but i take the bus everywhere",
+   "resume_line": "CASHIER | Meijer | Grand Rapids, MI | 2018 - 2020",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "'the one by my house' ties the store to where she lives, the southeast side of Grand Rapids. A reviewer could argue the nearest Meijer might sit over a suburb line. Her words still point to Grand Rapids, and deleting a true city is the worse error.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-11",
+   "source": "Mike Ostrowski  joliet.mike77@example.com  815-555-0139\nExperience\nAmazon  Warehouse Associate  2020-2022  picked and packed orders on the scanner, hit rate every week\nMenards  Yard Associate  2017-2019  loaded lumber for customers, forklift\nIncarcerated 2022-2024, worked kitchen and laundry\nGED 2016",
+   "resume_line": "WAREHOUSE ASSOCIATE | Amazon | Joliet, IL | 2020 - 2022",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Joliet appears only inside his email address. No city is given for Amazon, which runs several buildings in that region.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-12",
+   "source": "JAMAL R. PRICE jprice.work@example.com 555-0171EXPERIENCELine Cook, Waffle House 2018-2021 (Macon, GA)Worked the grill on 3rd shift, trained new cooksDishwasher, Cracker Barrel 2016-2018 (Warner Robins, GA)EDUCATIONCentral High School, Macon GA, 2015",
+   "resume_line": "LINE COOK | Waffle House | Macon, GA | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "In the run-together PDF text, '(Macon, GA)' comes right after the Waffle House dates, so it belongs to that job. Macon also appears on his high school line, but the job has its own city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-13",
+   "source": "Home Depot, Augusta GA - lot associate - 2019-2021\nBojangles - cook - 2016-2018\nMcDonalds - crew - 2015\nAddress: 1187 Pecan Hill Dr, Augusta, GA 30906\nCell: 706-555-0150",
+   "resume_line": "COOK | Bojangles | Augusta, GA | 2016 - 2018",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "He wrote a city for Home Depot but none for Bojangles. The only other Augusta is his home address, so the city on this line is the home-city fill.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-14",
+   "source": "EXPERIENCE\nMaintenance Tech - Sunrise Apartments - Amarillo TX - 2019-2023\nPlumbing, drywall, make readies on 180 units, on call rotation\nRoofer Helper - Panhandle Roofing - Canyon TX - 2017-2019\nSKILLS: basic electrical, HVAC helper, own tools, valid TX DL\nRicky Salazar | Amarillo, TX | 806-555-0152 | rsalazar.tx@example.com",
+   "resume_line": "MAINTENANCE TECHNICIAN | Sunrise Apartments | Amarillo, TX | 2019 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The job line itself says 'Amarillo TX'. His contact block at the bottom also says Amarillo, but the city is stated for this employer.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-15",
+   "source": "Employer Name: The Home Depot\nCity/State: mesa az\nPosition: Lot Associate / Freight\nDates: 06/2017 to 02/2019\nReason for leaving: incarcerated\nMay we contact: yes\n\nEmployer Name: Circle K\nCity/State: \nPosition: Customer service\nDates: 2015-2017\nReason for leaving: better job\n\nApplicant address: 1340 W Juniper Ave, Mesa AZ 85201",
+   "resume_line": "LOT ASSOCIATE | The Home Depot | Mesa, AZ | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The application's City/State field for Home Depot says 'mesa az'. It does not matter that his home address is also Mesa, because the field was filled in for this employer.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-16",
+   "source": "ok so my story is kind of long. i grew up in el paso but moved to albequerque when i was 19 for a girl lol. got on at a sonic there as a carhop then cook, from 2009 to 2012. then i caught my case in 2012 and did 7 years. when i got out i came back to el paso to be near my mom and ive been doing day labor, roofing mostly, cash jobs. i want something steady with benefits. 915-555-0186",
+   "resume_line": "COOK | Sonic Drive-In | Albuquerque, NM | 2009 - 2012",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'moved to albequerque... got on at a sonic there' puts the job in Albuquerque, even with the misspelling. His home is El Paso, which the tool did not use.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-17",
+   "source": "PROFESSIONAL SUMMARYHard worker with 8 years in food service and cleaning. Dependable and on time.WORK HISTORYJanitor - ABM Industries - 2019 to 2022Cleaned office floors, stripped and waxed, restocked supplies.Contact: Latrice Moore, 2231 E 55th St, Cleveland OH 44103, 216-555-0178, latricemoore@example.comLine Cook - Denny's - 2014 to 2018EDUCATIONGED 2012",
+   "resume_line": "JANITOR | ABM Industries | Cleveland, OH | 2019 - 2022",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Cleveland is in her contact block, which the PDF extraction dropped between the two jobs. It reads as if it follows the ABM job, but it is her home address. She gave no city for ABM.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-18",
+   "source": "worked 2 yrs at a speedway gas station in indy 2019-2021 then fedex ground on the westside of indy, package handler 2021-2023. i live in greenwood now, text me 317-555-0120. i have a misdemeanor and a felony from 2017",
+   "resume_line": "PACKAGE HANDLER | FedEx Ground | Indianapolis, IN | 2021 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the westside of indy' is Indianapolis, stated for the FedEx job. He lives in Greenwood.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-19",
+   "source": "WORK EXPERIENCE (while incarcerated)\nFood Service Worker, Dept. of Corrections, Jackson MI, 2016-2020\nPrepped and served meals for 1,200+ men a day, kept temp logs\nTutor Aide, Education Dept., same facility, 2020-2022\nHelped men study for the GED math test\nCONTACT: Darnell Hicks, Lansing MI, 517-555-0133",
+   "resume_line": "FOOD SERVICE WORKER | Michigan Department of Corrections | Jackson, MI | 2016 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The facility city, Jackson MI, is written on the job line. His home is Lansing.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-20",
+   "source": "Porter / Floor Crew - Ohio DRC, Lebanon OH - 2014-2017\nKitchen - same institution - 2017-2019\nBarber - same place - 2019-2021, got my barber license inside\nReleased 2021. Now: 88 Fairview Ln, Dayton OH 45402, 937-555-0109, k.boyd@example.com",
+   "resume_line": "KITCHEN WORKER | Ohio Department of Rehabilitation and Correction | Lebanon, OH | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'same institution' refers back to the Lebanon OH facility on the line above. His home is Dayton, so this is the stated job city carried forward, not the bug.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-21",
+   "source": "did porter work for a management company (Riverside Realty Mgmt) at 3 buildings in the Bronx from 2018 to 2020, garbage, mopping halls, snow removal, some painting. i live in Yonkers now at my moms. before that i did 5 yrs upstate. no license.",
+   "resume_line": "PORTER | Riverside Realty Management | Bronx, NY | 2018 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'3 buildings in the Bronx' gives the job location. His home is Yonkers.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-22",
+   "source": "Jose Luis Arreola\nCompton, CA\n(310) 555-0145\njlarreola@example.com\nWork\nWarehouse Associate, Smart & Final distribution, Commerce CA, 2021-present\nDishwasher, El Pollo Loco, Watts (LA), 2017-2019\nFire crew while incarcerated 2019-2021",
+   "resume_line": "DISHWASHER | El Pollo Loco | Los Angeles, CA | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Watts (LA)' names a Los Angeles neighborhood for this job. His home is Compton, a separate city, so the tool used the job's city and not the home city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-23",
+   "source": "WORK HISTORYWarehouse Selector | Kroger Distribution Center | Nashville, TN | 2018-2021Built pallets for store orders on voice pick, ran electric pallet jack.Contact Info: Brandon Keel, 615-555-0191, bkeel@example.com, Nashville TN 37207Stocker | Dollar General | Clarksville TN | 2015-2017SKILLSPallet jack, RF scanner, voice pick",
+   "resume_line": "WAREHOUSE SELECTOR | Kroger Distribution Center | Nashville, TN | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The job line itself has 'Nashville, TN'. His contact block, which the PDF dropped in the middle, is also Nashville, but the job has its own city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-24",
+   "source": "welder at Summit Steel Fabrication in ft wayne, started as a helper in 2012, welding full time 2015 to 2017. took mig and stick classes inside. live in auburn IN now with my wife, 260-555-0126",
+   "resume_line": "WELDER | Summit Steel Fabrication | Fort Wayne, IN | 2015 - 2017",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'in ft wayne' is Fort Wayne, stated for this employer. He lives in Auburn.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-25",
+   "source": "I report to my parole agent in Fresno every 2 weeks. Before prison I worked at Foster Farms 2014-2016 on the line deboning, and at a Chevron station as cashier 2012-2014. Looking for any production or packing job, I can work nights.",
+   "resume_line": "PRODUCTION WORKER | Foster Farms | Fresno, CA | 2014 - 2016",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Fresno is only where he reports to parole now. No city is given for Foster Farms, which runs plants in several Central Valley towns.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-26",
+   "source": "Im from Toledo and I worked at the Jeep plant 2005-2010 on the line, doing door install. Lost that job when I got arrested. Did 12 years. Now Im back home staying with my aunt. I know cars and I know assembly work, I just need somebody to give me a shot.",
+   "resume_line": "ASSEMBLY LINE WORKER | Jeep Assembly Plant | Toledo, OH | 2005 - 2010",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "He names Toledo as where he is from in the same sentence as 'the Jeep plant', and Toledo's Jeep plant is well known. Toledo is not stated strictly as the job location, but a reasonable reader takes it that way, so the safe label is keep.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-27",
+   "source": "Jobs:\n- UPS philly hub, preloader, 2016-2018 (part time nights)\n- my uncles moving company, helper, 2018-2019, paid cash\n- SCI 2019-2023, worked in the laundry\nhome: Chester PA\nphone 610-555-0158",
+   "resume_line": "PRELOADER | UPS | Philadelphia, PA | 2016 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'UPS philly hub' is Philadelphia, stated for this job. His home is Chester.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-28",
+   "source": "work\nsonic cook 2012-2014\ntractor supply 2014-2017 loader/stocker\nwent to prison 2017 got out 2022\nliving in cleburne tx now 817-555-0199\nwant: warehouse, feed store, anything outside",
+   "resume_line": "STOCKER / LOADER | Tractor Supply Co. | Cleburne, TX | 2014 - 2017",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "He gives no city for Tractor Supply. Cleburne is only where he is 'living now', after a five year sentence.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-29",
+   "source": "Work history\nCub Foods, north mpls, cashier 2017-2019\nTarget Center event staff, downtown, 2019 (seasonal)\nKeep in mind im on supervised release till 2026. I live in Brooklyn Park.",
+   "resume_line": "CASHIER | Cub Foods | Minneapolis, MN | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'north mpls' is North Minneapolis, given for this job. His home is Brooklyn Park.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-30",
+   "source": "jobs\nsubway sandwich artist 2015 2016 lufkin\nbrookshire bros stocker 2016 2018 lufkin\nlocked up 2018 2023 tdcj worked in the field then the boot factory\nnow in lufkin with my dad 936 555 0112",
+   "resume_line": "STOCKER | Brookshire Brothers | Lufkin, TX | 2016 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'lufkin' is typed at the end of the Brookshire line, so it is stated for this job, even though he also lives in Lufkin now.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-31",
+   "source": "Cooked at Frenchmens Po-Boys in the Marigny (Nola) 2016 to 2019, fry station and line. Then did 5 yrs. Staying in Baton Rouge at my sisters now, 225-555-0147, need something with a kitchen",
+   "resume_line": "LINE COOK | Frenchmen's Po-Boys | New Orleans, LA | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the Marigny (Nola)' is a New Orleans neighborhood, given for this job. His home is Baton Rouge.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-32",
+   "source": "Randall  Cope      rcope@example.com      Billings,   MT\nEXPERIENCE\nRanch Hand      Double Bar Ranch      Roundup,   MT      2010  -  2014\nLaborer      Knife River      Billings,   MT      2014  -  2016\nEquipment Operator      Knife River      Billings   MT      2016  -  2018\nIncarcerated      2018  -  2022      ranch and dairy crew",
+   "resume_line": "LABORER | Knife River | Billings, MT | 2014 - 2016",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The spaced-out PDF row puts 'Billings, MT' on the Knife River laborer line. His header also says Billings, but the job has its own city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-33",
+   "source": "OBJECTIVE: Full time job in HVAC or maintenance in the Charlotte area where I live (Charlotte NC 28208, 704-555-0164, dquinn@example.com).\nEXPERIENCE\nHVAC Helper, Carolina Comfort Heating & Air, 2016-2019\nRan duct, carried units, helped on installs and service calls\nMaintenance, Budget Inn, 2014-2016\nOTHER\nCompleted HVAC basics course while incarcerated, 2021",
+   "resume_line": "HVAC HELPER | Carolina Comfort Heating & Air | Charlotte, NC | 2016 - 2019",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Charlotte appears only in the objective, as where he lives and wants to work next. He gives no city for the HVAC employer.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-34",
+   "source": "Housekeeping and porter at the Excalibur in Vegas 2017-2020. EVS at a hospital 2015-2017. I moved to Henderson after I got out in 2023, parole is done. 702-555-0183",
+   "resume_line": "PORTER | Excalibur Hotel & Casino | Las Vegas, NV | 2017 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the Excalibur in Vegas' is Las Vegas, stated for this job. The person lives in Henderson.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-35",
+   "source": "i live in hazard ky, small town. worked at the dollar general in town for about 2 yrs 2020-2022, cashier and unloading the truck. before that i helped my uncle doing drywall all over eastern ky. got 3 yrs probation on my last charge, no jail time.",
+   "resume_line": "CASHIER / STOCKER | Dollar General | Hazard, KY | 2020 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'the dollar general in town' refers to the town she just named, Hazard. She states her home town as this job's town.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-36",
+   "source": "I worked at the Georgia-Pacific mill in Brunswick GA from 2011 to 2015, forklift first and then paper machine helper. Went in 2015, got out 2021. I live in Savannah now and I'm on probation till 2027. 912-555-0122",
+   "resume_line": "PAPER MACHINE HELPER | Georgia-Pacific | Savannah, GA | 2011 - 2015",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "He said the mill was in Brunswick. Savannah is only where he lives now, so the city on this line is the home city, not the job's city, and must come off. Brunswick is the true city.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-37",
+   "source": "SUMMARY: Lifelong Duluth resident, 6 years as a cook at local restaurants. ServSafe certified.\nEXPERIENCE:\nLine Cook, Harbor Light Grill, 2016-2019\nPrep Cook, Lakeside Pizza Co., 2013-2016\nIncarcerated 2019-2022, kitchen crew\nADDRESS: 12 E 4th St Apt 2, Duluth MN 55805 | 218-555-0114",
+   "resume_line": "LINE COOK | Harbor Light Grill | Duluth, MN | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "The job line has no city. The summary says he is a lifelong Duluth resident who cooked at 'local restaurants', which a reader can take to mean Duluth. The city is not on the job line itself, so a reviewer could go either way. Keep, because deleting a true city is the worse error.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-38",
+   "source": "Work history\nPeterbilt - assembler - 2012-2016\nPaccar parts - warehouse - 2016-2018\n\nMore about me: I spent 4 years building trucks at the Peterbilt plant in Denton before I lost my way. Did 3 years TDCJ, clean since 2019. I live in Fort Worth now and want to get back into manufacturing. 817-555-0168",
+   "resume_line": "ASSEMBLER | Peterbilt | Denton, TX | 2012 - 2016",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The job list has no city, but later in his story he says 'the Peterbilt plant in Denton'. His home is Fort Worth, so this is a true city he stated for the job.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-39",
+   "source": "Employer: Family Dollar\nPosition: Assistant Manager\nDates: 2015 - 2018\nSupervisor: Carla (last name?)\nReason for leaving: the Gary store closed down and they didnt have a spot for me at another one\n\nEmployer: Popeyes\nPosition: Cook\nDates: 2013 - 2015\nReason for leaving: \n\nApplicant: Terrence Vaughn, Merrillville IN, 219-555-0175",
+   "resume_line": "ASSISTANT MANAGER | Family Dollar | Gary, IN | 2015 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The city appears only in the reason for leaving ('the Gary store closed down'), but that is his own statement of where this job was. His home is Merrillville.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "fc-40",
+   "source": "i was a cook at the golden corral on academy in co springs 2018-2020 then i got violated and went back for 2 yrs. before that i did roofing for cash. living in pueblo now at a sober living house, 719-555-0138",
+   "resume_line": "COOK | Golden Corral | Colorado Springs, CO | 2018 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'co springs' is Colorado Springs, stated for the Golden Corral job. His home is Pueblo.",
+   "group": "final-gate-city"
+  },
+  {
+   "id": "final-atk-city-1",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "John Smith\nCouncil Bluffs, IA | (402) 555-0182\nProfessional Experience\nTyson Foods\nOmaha, NE\nForklift Operator\nJune 2018 - May 2021",
+   "resume_line": "Forklift Operator | Tyson Foods | Omaha, NE | 2018 - 2021",
+   "expect": "keep",
+   "group": "final-attack-city"
+  },
+  {
+   "id": "final-atk-city-2",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I live in Omaha. Worked at Tyson here in town for 3 years before my case.",
+   "resume_line": "Forklift Operator | Tyson Foods | Omaha, NE | 2018 - 2021",
+   "expect": "keep",
+   "group": "final-attack-city"
+  },
+  {
+   "id": "final-atk-city-3",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I drove OTR for Werner from 2016 to 2019.\nI was based out of Omaha.",
+   "resume_line": "OTR Driver | Werner | Omaha, NE | 2016 - 2019",
+   "expect": "keep",
+   "group": "final-attack-city"
+  },
+  {
+   "id": "final-atk-city-4",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I did roofing for Heartland Roofing from 2015 to 2018.\nThey're based in Omaha.",
+   "resume_line": "ROOFER | Heartland Roofing | Omaha, NE | 2015 - 2018",
+   "expect": "keep",
+   "group": "final-attack-city"
+  },
+  {
+   "id": "final-atk-city-5",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Marcus Brown\nJanesville, WI 53545\nmarcusb77@example.com\nWarehouse Associate\nAmazon\nBeloit, WI\n2019 - 2021",
+   "resume_line": "WAREHOUSE ASSOCIATE | Amazon | Beloit, WI | 2019 - 2021",
+   "expect": "keep",
+   "group": "final-attack-city"
   }
  ],
  "credential": [
@@ -4295,6 +4700,1203 @@
    "sentence": "As a certified nursing assistant with five years of caregiving, I am ready to join your team.",
    "expect_flag": true,
    "group": "attack-credential"
+  },
+  {
+   "id": "fo-1",
+   "source": "MARCUS T. BELL  Dayton, OH 45417 | 937-555-0142 | mbell.hvac@example.com\nSUMMARY\nHard working HVAC helper looking to get into install work.\nTRAINING\nHVAC Fundamentals, county adult vo-tech, 2025 - took the EPA 608 prep class at the end, havent took the actual test yet cuz its like 60 bucks and i didnt have it that month",
+   "sentence": "Skills: EPA 608 Universal Certified",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He took the prep class and says outright that he has not taken the exam. EPA 608 comes only from passing the exam, so the class alone does not make him certified.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-2",
+   "source": "took the epa 608 class thru the hvac program at the tech center in toledo. the test is scheduled nov 14 at the supply house on airport hwy, its the universal one",
+   "sentence": "Resume line: EPA 608 exam prep, HVAC program, Toledo OH (Universal exam scheduled November 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It calls the class exam prep and lists the exam as scheduled. It does not say he holds the certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-3",
+   "source": "Q: Do you hold a valid commercial drivers license? If yes list class and endorsements.\nA: no. i did 3 weeks at a truck driving school in memphis in 2024 and got my permit but my PO wouldnt approve the travel to the testing yard so i never took the road test. my regular class D is valid",
+   "sentence": "Cover letter: As a Class A CDL holder, I can start running routes out of your Memphis terminal right away.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He answered no. He had school and a permit but never took the skills test, so he does not hold a Class A CDL.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-4",
+   "source": "got my CLP in august, passed all 3 knowledge tests (general, air brakes, combo) at the DMV in knoxville. road test is booked oct 22. the company hired me as a trainee and is paying for school",
+   "sentence": "Resume line: Class A Commercial Learner's Permit (August 2026); CDL skills test scheduled October 22, 2026",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It names the permit he actually holds and gives the road test date. It does not claim a CDL.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-5",
+   "source": "DESIREE WATKINS  Tulsa, OK  918-555-0187  dwatkins@example.com EDUCATION Nurse Aide Training Program  2025  75 hrs incl. clinical rotation at long term care facility STATE EXAM  passed written, failed skills portion (missed a handwashing step)  retest in january EXPERIENCE Dietary Aide  Sunnyside Manor  2023 - present",
+   "sentence": "Headline: Certified Nursing Assistant with long-term care clinical experience",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She finished the training but failed the skills part of the state exam and is waiting to retest. Without passing the exam and getting on the registry she is not a CNA.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-6",
+   "source": "finished my nurse aide class at the community college in wichita in august, 75 hours plus clinicals at a rehab center. i have to wait for my test date from the state, they said 4-6 weeks",
+   "sentence": "Report: Put your nurse aide training and clinical hours on your resume now, and add CNA only after you pass the state exam and show up on the registry.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is advice to list the training as training and wait on the credential until the exam is passed.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-7",
+   "source": "BUILDING TRADES PROGRAM  Jackson, MI  2022 - 2023\n- did NCCER core, got thru basic safety, hand tools, power tools and construction math before they moved me to a different camp. never finished the other modules and never got the wallet card",
+   "sentence": "Resume line: NCCER Core Curriculum certified, 2023",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He finished only some Core modules and never got the credential or wallet card. Calling that Core certified claims a credential he didn't complete.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-8",
+   "source": "while i was down at the state facility in south carolina i finished NCCER Core and Electrical Level 1, the instructor entered it in the registry. i printed my transcript off the NCCER site when i got out in 2024",
+   "sentence": "Resume line: NCCER Core Curriculum and Electrical Level 1 (NCCER Registry, 2024)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He finished both and has a registry transcript to prove it. The line matches what he earned.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-9",
+   "source": "learned to weld in vo tech at the facility in louisiana, mig and stick mostly and some flux core. about 900 hrs. we never did a bend test or cert test, instructor just signed off on our hours when we finished",
+   "sentence": "Skills: Certified welder: MIG, Stick, Flux-Core",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says he never took a bend test or cert test. The instructor only signed off on hours, and that is training, not welding certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-10",
+   "source": "Houston TX. doing the welding program at the tech college on work release, 6 months, mig and stick. we been practicing 1G and 2G plate. the bend test is end of next month at the testing lab",
+   "sentence": "Skills: MIG and stick welding, 1G and 2G plate (in training; 2G bend test scheduled late October 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It says he is in training and that the test is still ahead. It does not claim certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-11",
+   "source": "went to the labor ready office in tacoma for orientation, they showed us a video about flagging and gave us a vest. lady said i need to do the real 8 hr class to get the card before they can send me out on flagging jobs",
+   "sentence": "Skills: Certified Flagger (Washington)",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He watched an orientation video, and the agency told him he still needs the real class to get a card. He has no flagger card.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-12",
+   "source": "temp agency in spokane said most of the road jobs want a flagger card and i dont got one yet. i have steel toes and a vest already",
+   "sentence": "Report: Road jobs in Washington need a flagger card from an approved one-day class, so ask the agency whether they pay the class fee for workers they plan to send out.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is advice on how to get the card and says what the jobs require. It does not claim he has one.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-13",
+   "source": "Carpenter Helper  Summerlin job site, Las Vegas NV  2023 - 2024\n- super made all of us do OSHA 10 before we could get on site, I still have the card",
+   "sentence": "Skills: OSHA 30-Hour Construction",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He has an OSHA 10 card. OSHA 30 is a different, longer course that he never mentions taking.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-14",
+   "source": "did my OSHA 10 online in feb 2025 before i started at the roofing company in denver, have the plastic card in my wallet",
+   "sentence": "Skills: OSHA 10-Hour Construction card (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He finished the course and has the card. OSHA 10 is a course-completion card, so the line is accurate.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-15",
+   "source": "i want to get my forklift cert, every warehouse job around indianapolis asks for it. i been doing general labor, picking and packing at a temp place since march",
+   "sentence": "Headline: Forklift-certified warehouse associate with picking and packing experience",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says he wants to get forklift certified. He hasn't done it yet.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-16",
+   "source": "picking and packing at the amazon warehouse in shakopee 8 months through a temp agency, they said they might train me on the reach truck after 90 days",
+   "sentence": "Headline: Warehouse associate with 8 months of picking and packing, interested in forklift training",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It states only the experience and his interest in training. It does not claim a forklift certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-17",
+   "source": "hoping to get into cdl school after i get off paper in june. want to drive a dump truck or garbage truck, my cousin does it in mesa and says class B is enough",
+   "sentence": "Skills: Class B CDL",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He only hopes to go to CDL school after June. He has no CDL.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-18",
+   "source": "want to drive for the city in phoenix, garbage truck or street sweeper, need a CDL i think. still on parole till march, does that matter",
+   "sentence": "Report: City sanitation jobs usually need a Class B CDL. Ask your parole officer now whether a CDL program needs approval, so you can enroll soon after March.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This says what the jobs require and gives next steps and timing. It does not say he holds a CDL.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-19",
+   "source": "my goal is to become a cna, my aunt been one for 20 years in birmingham and she says the nursing homes always hiring. i took care of my grandma for 3 yrs after she had the stroke",
+   "sentence": "Report: Your CNA certification and three years of hands-on care for your grandmother make you a strong fit for nursing home roles.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Becoming a CNA is her goal, and it's her aunt who holds the certification. The report gives her a credential she doesn't have.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-20",
+   "source": "took care of my granny 3 years in montgomery, bathing, meds reminders, getting her in and out the chair. want to work in a nursing home",
+   "sentence": "Report: Most hands-on jobs in Alabama nursing homes ask for a CNA, so a CNA class is your next step. Your three years caring for your grandmother goes on the resume now as caregiving experience.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This says what the jobs require and points to getting the credential next. It does not claim she has it.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-21",
+   "source": "signed up for the osha 10 online through the union hall in pittsburgh, it starts next monday. been doing demo and cleanup for a contractor on the north side",
+   "sentence": "Resume line: OSHA 10-Hour Construction Safety, completed 2026",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The course starts next week, so nothing is finished. Saying completed is false.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-22",
+   "source": "doing my osha 30 online, 16 hrs done so far, gotta finish within 6 months or it makes you start over. working as a laborer for a concrete company in milwaukee",
+   "sentence": "Resume line: OSHA 30-Hour Construction course, in progress (16 of 30 hours complete)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It lists the course as in progress and gives the exact hours done. That matches what he said.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-23",
+   "source": "want to do welding, thinking about the 6 month program at the community college in beaumont but i gotta figure out money first. i did some fab work helping my uncle build trailers, cutting and grinding mostly",
+   "sentence": "Cover letter: My welding certification and experience fabricating trailers make me ready to contribute on your shop floor from day one.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He is only thinking about a welding program and hasn't enrolled. He has no welding certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-24",
+   "source": "helped my uncle build trailers in san antonio for like 2 yrs, cutting grinding and he let me tack stuff. going to start the welding program at the college in january",
+   "sentence": "Cover letter: I spent two years helping build trailers, cutting, grinding and tacking parts, and I start a welding program in January to earn my certification.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It describes the real work and presents certification as a future goal. It does not claim he has it.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-25",
+   "source": "on the waitlist for the EPA 608 class at the trade school in charlotte. did 2 years HVAC helper for a guy doing residential installs, carried equipment, ran line sets, cleaned up",
+   "sentence": "Headline: EPA 608 certified HVAC technician",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He is only on the waitlist for the class. He hasn't taken the class or the exam.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-26",
+   "source": "EXPERIENCE HVAC Tech  Carrier dealer, Baton Rouge LA  2006-2011 CERTIFICATIONS EPA 608 Universal (2008) - lost the card when i went in, i got the cert number wrote down though",
+   "sentence": "Skills: EPA 608 Universal certification (2008)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 does not expire. He earned Universal in 2008 and only lost the card, which he can replace with the cert number he kept.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-27",
+   "source": "RAY DELGADO  Louisville KY  502-555-0119  rdelgado@example.com\nhad my class A with hazmat and tanker, drove for a fuel company out of louisville 2011-2016. got the DUI in 2016 which is how i got locked up, CDL got suspended and i never did anything about it since",
+   "sentence": "Resume line: Class A CDL with Hazmat and Tanker endorsements",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "His CDL was suspended in 2016, and he says he never took any steps to reinstate it. Listing it as held misstates his current status.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-28",
+   "source": "drove class A for a fuel company in lexington 2011-2016, cdl got suspended after my DUI, released march 2025. want to drive again",
+   "sentence": "Report: Call the Kentucky Transportation Cabinet to find out what reinstating your CDL takes. Until it is back, list your five years of tanker driving as experience and leave the license off.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is reinstatement advice, and it says to keep the license off the resume until it is restored.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-29",
+   "source": "worked as a CNA at 2 nursing homes in columbus ohio 2010-2016. after my case my name went on the abuse registry and my certification got revoked. i know i cant do that no more but i was good at it",
+   "sentence": "Headline: Experienced Certified Nursing Assistant, 6 years in long-term care",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She says her certification was revoked. Presenting her as a Certified Nursing Assistant claims a credential she no longer holds.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-30",
+   "source": "i was a cna in dayton 7 yrs, lost it after the charge. its revoked. i want something where i can still help people but not medical",
+   "sentence": "Report: Because your CNA was revoked, leave the certification off your resume. Your seven years of patient care can still go under experience, described by the work you did.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It treats the revoked credential correctly. The advice is to leave it off and describe the work instead.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-31",
+   "source": "KEVIN OLSON Stillwater, MN 651-555-0172 kolson@example.comEXPERIENCEFood Service Worker   MN correctional facility kitchen   2021 - 2024Fed 1,200 men three meals a day. Prep, line, dish.CERTIFICATIONSServSafe Manager class (education dept) - proctor never came for the test, CO said it got cancelled",
+   "sentence": "Resume line: ServSafe Food Protection Manager Certification, 2024",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He took the class, but the exam was cancelled and never given. ServSafe Manager requires passing the proctored exam.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-32",
+   "source": "did servsafe manager class in the kitchen program while i was inside, never got to take the test. back in kansas city now looking for cook jobs",
+   "sentence": "Report: You finished the ServSafe Manager course but never took the exam. Book the proctored exam so you can list the certification, and until then list it as ServSafe Manager coursework completed.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It calls the class coursework and gives the exam as the next step. It does not claim certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-33",
+   "source": "Server/Host  Applebees  Fayetteville NC  2015-2017   got my servsafe food handler there in 2016 i think. then 2017-2024 unavailable",
+   "sentence": "Skills: ServSafe Food Handler certified",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "A 2016 food handler card is long expired, since these usually last two to three years. Nothing suggests she renewed it, so the line claims a current credential she likely doesn't have.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-34",
+   "source": "servsafe food handler from 2017 when i worked at the waffle house in macon. want to get back in a kitchen",
+   "sentence": "Report: Your ServSafe Food Handler from 2017 has almost surely expired, since those usually last two to three years depending on the county. The online course and test take a couple of hours, so redo it before you apply to kitchens.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is renewal advice that says the old card has lapsed. It does not claim a current credential.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-35",
+   "source": "TANYA REED  Newark NJ  973-555-0164  treed@example.com\nSecurity Officer, Allied Universal, Newark NJ 2018-2020\n- CPR/AED and first aid card from 2019 through the company",
+   "sentence": "Skills: CPR/AED and First Aid certified",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Her only CPR card is from 2019. These cards usually last two years, and she mentions no renewal.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-36",
+   "source": "did cpr and first aid at my new warehouse job in salt lake in july, they gave us cards good for 2 years",
+   "sentence": "Skills: CPR and First Aid (July 2026, valid through July 2028)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The training was recent, he has cards, and the dates match what he said.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-37",
+   "source": "Tyson Foods  Springdale AR  2009-2012 - forklift driver in the freezer warehouse, was certified on sit down and stand up. locked up 2012-2025",
+   "sentence": "Skills: Forklift certified (sit-down and stand-up)",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The certification was from one employer in 2012, and forklift authorizations need re-evaluation every three years. With no date on the line, it reads as current when it lapsed long ago.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-38",
+   "source": "was at tyson in fort smith 2008-2011, drove forklift in the freezer, sit down and stand up. out since june",
+   "sentence": "Resume line: Forklift operator (sit-down and stand-up), Tyson Foods freezer warehouse, Fort Smith AR, 2008 to 2011",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is dated work history. It does not claim a current certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-39",
+   "source": "road construction crew, knoxville TN 2017-2019, running flag and doing cone setup. had my flagger card from 2018, it said good for 4 years on the back",
+   "sentence": "Resume line: Certified Flagger (current card), road construction crew, Knoxville TN, 2017 to 2019",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "By his own words the 2018 card expired in 2022. Calling it current is false.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-40",
+   "source": "i had a flagger card in oregon in 2016 when i was on a road crew. moving back to salem next month",
+   "sentence": "Report: Your Oregon flagger card from 2016 has expired. A one-day flagger class will get you a new card before you apply to road crews in Salem.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It says the card lapsed and gives the renewal step. It does not claim a current card.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-41",
+   "source": "my food handler card expired last year and i need to redo it before the taco place in el paso will put me on the schedule",
+   "sentence": "Skills: Valid Texas food handler card",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She says herself that the card expired and has to be redone. Calling it valid is false.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-42",
+   "source": "got my food handler card online in march 2026 for the wendys job in tucson, i still have the pdf on my phone",
+   "sentence": "Skills: Food handler card (March 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card is recent, she has proof, and the date matches.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-43",
+   "source": "DARNELL HAYES  Omaha NE  402-555-0133\ndrove OTR for Werner 2014-2019. my DOT medical card lapsed while i was in county and the state downgraded my CDL to a regular license. got out in august",
+   "sentence": "Headline: Class A CDL driver with five years of OTR experience",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "His CDL was downgraded to a regular license, and he mentions no restoration. The headline claims a Class A CDL he doesn't currently hold.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-44",
+   "source": "drove OTR 5 yrs for Swift before. my class A got downgraded when my DOT medical expired while i was inside. got a new medical card in july and the DMV in des moines put the CDL back on my license aug 5, i have the new card",
+   "sentence": "Headline: Class A CDL driver, five years over-the-road, license restored August 2026",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He says the CDL was put back on his license and he has the new card. The line is accurate and dated.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-45",
+   "source": "I was a CNA in Savannah from 2012 to 2018. my certification lapsed while i was incarcerated cause you have to work so many hours every 2 years to keep it active. released in 2025",
+   "sentence": "Resume line: Certified Nursing Assistant, State of Georgia Nurse Aide Registry",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She says the certification lapsed, and she mentions no reinstatement. The line presents her as currently on the registry.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-46",
+   "source": "was a cna in augusta ga 5 years, it lapsed while i was locked up. want to get back in it",
+   "sentence": "Report: Call the Georgia nurse aide registry and ask what it takes to reactivate a lapsed CNA. Many states ask you to retest, and a refresher course can help.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is reinstatement advice. It does not claim an active CNA.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-47",
+   "source": "pascagoula MS shipyard 2011-2016, certified 3G and 4G flux core structural. i know you gotta weld every 6 months to keep it and i havent struck an arc since 2016",
+   "sentence": "Cover letter: I am a certified 3G and 4G flux-core structural welder with five years at the Pascagoula shipyard.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says the qualification needs continuous welding and he hasn't welded since 2016, so it lapsed. The cover letter states it as current.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-48",
+   "source": "shipyard welder in newport news 2010-2015, was certified 3G flux core, it lapsed. want to retest",
+   "sentence": "Resume line: Structural welder, Newport News shipyard, 2010 to 2015; held 3G flux-core certification (lapsed, ready to retest)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It dates the certification and says it lapsed, which matches his words.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-49",
+   "source": "took the servsafe food handler class at the job center in baltimore in 2025 and took the test at the end, they said the certificate gets emailed but i used my old email that got locked so idk if i passed",
+   "sentence": "Skills: ServSafe Food Handler certified (2025)",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "She took the test but doesn't know whether she passed and has no certificate. She may well hold it, but that isn't confirmed. Safer to check the result or list it as test taken, results pending.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-50",
+   "source": "Amazon Fulfillment (via temp agency)  Joliet IL  2024 - 2025\n- drove the reach truck and the stand-up forklift every shift in inbound",
+   "sentence": "Skills: Forklift certified (reach truck, stand-up)",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "Running those trucks daily almost certainly meant Amazon trained and authorized him. But he never says certified, and forklift authorization belongs to that employer and does not carry to the next job. Safer to list the operating experience.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-51",
+   "source": "passed the weld test at a fab shop in tulsa to get hired, welded there 8 months in 2023. they didnt give no paper, just hired me. havent welded since",
+   "sentence": "Headline: Certified MIG welder with structural fab experience",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "A hiring weld test qualified him at that one shop, but he got no paperwork and hasn't welded since 2023, so any qualification has likely lapsed. Some people would still call that certified. The safe reading is that certified overstates it.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-52",
+   "source": "did the osha 10 class on work release in 2024 near charleston wv, 2 days, the instructor said the cards would get mailed to us but i never got mine",
+   "sentence": "Skills: OSHA 10-Hour Construction card",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "He finished the course, but no card was ever issued, and there is no confirmation the trainer reported him. Employers ask to see the card. Safer to write course completed, card pending, and ask the trainer for a replacement.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-53",
+   "source": "did cpr at my job at the group home in buffalo last year, i think its good for 1 or 2 years, i dont remember",
+   "sentence": "Skills: CPR and First Aid certified",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "If the card is good for one year it has already expired, and if two, it is still valid. He doesn't know which, so the current claim needs checking before it goes on the resume.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-54",
+   "source": "passed the permit test at the BMV in columbus, got my CLP for class A, start driving school in november. been doing warehouse at a temp service meanwhile",
+   "sentence": "Resume line: Class A CDL (Ohio)",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "A learner's permit is not a CDL. He hasn't started school or taken the skills test.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-55",
+   "source": "i was on the delivery truck with a driver for lowes in albuquerque in 2019, i loaded and unloaded appliances and he had the CDL not me",
+   "sentence": "Resume line: Delivery helper, Lowe's, Albuquerque NM, 2019: loaded and unloaded appliances on a two-person team with a CDL driver",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The CDL is correctly credited to the other driver. The line claims only his own helper work.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-56",
+   "source": "want to get on a plant turnaround job in lake charles, my buddy makes good money doing it. what do i need",
+   "sentence": "Report: Most turnaround contractors around Lake Charles ask for OSHA 10 before your first day, so get that done first. It is a short online course.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This says what the jobs require and gives a next step. It does not claim he holds OSHA 10.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-57",
+   "source": "finished NCCER core and plumbing level 1 at the facility in boise in 2025, i got the wallet card and the transcript",
+   "sentence": "Skills: NCCER Core Curriculum; NCCER Plumbing Level 1 (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He finished both, has the card and transcript, and the credentials are current.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-58",
+   "source": "line cook 4 years total at dennys and a waffle house in jacksonville. taking the servsafe manager test on oct 10",
+   "sentence": "Cover letter: I have four years on the line at Denny's and Waffle House, and I sit for the ServSafe Manager exam on October 10.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It gives the exam as an upcoming date. It does not claim he has the certification.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-59",
+   "source": "im 34 in fresno, got a felony from 2019, is it even worth going to cdl school or will nobody hire me",
+   "sentence": "Report: Before you pay for CDL school, ask the school which carriers have hired its graduates who have records, and get the company names.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is advice about getting the credential. It does not claim he has a CDL.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fo-60",
+   "source": "got my flagger card through the temp agency in billings in may 2026, card says good for 3 years",
+   "sentence": "Skills: Montana flagger card (May 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card is recent and valid by its own terms, and the line dates it correctly.",
+   "group": "final-gate-over"
+  },
+  {
+   "id": "fh-1",
+   "source": "ok so i got my forklift cert thru the temp agency in march 2026 when they sent me to the warehouse in groveport, sit down and stand up reach, they did the class and the drive test and gave me the card. my drivers license is still suspended til i pay off the fines so i been taking the bus 2 hrs each way. also my state id expired last month need to get to the bmv. on parole til 2027 in columbus ohio",
+   "sentence": "Skills: Forklift certified (sit-down counterbalance and stand-up reach), March 2026",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He finished the training and the drive evaluation in March 2026, well inside the three-year evaluation window. The suspended driver's license, expired state ID and parole are separate problems and have nothing to do with the forklift certification.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-2",
+   "source": "Q: List any professional licenses or certifications you hold.\nA: Class A CDL - Texas. it got suspended 2019 after my case but DPS reinstated it feb 2024 and ive been running otr for a small carrier out of laredo since march 2024. tanker endorsement (N). dot medical card good thru 2027. no accidents",
+   "sentence": "Resume line: Class A CDL (Texas) with Tanker (N) endorsement, DOT medical card current through 2027",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The 2019 suspension ended when the license was reinstated in Feb 2024, and he has driven OTR ever since. He says he holds the tanker endorsement and a medical card good through 2027. The suspension is past history.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-3",
+   "source": "MARCUS T. BELLAMY Macon, GA 31201  478-555-0193  mbellamy@example.comCERTIFICATIONSEPA Section 608 Universal Certification  2021OSHA 10-Hour Construction  2021VOCATIONAL TRAININGHVAC/R Program, State Correctional Vocational School  1,200 hrs  2020-2021EXPERIENCEMaintenance Helper  Facility Maintenance Dept  2019 - 2023Assisted with repair of rooftop units, walk-in coolers and ice machines Recovered refrigerant per EPA rules",
+   "sentence": "Report: Your EPA 608 Universal certification never expires, so it is still good even though you earned it in 2021 while you were inside. Put it at the top of your resume for HVAC helper jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 is a lifetime certification. Earning it in a prison vocational program does not make it any less real, and it has not expired.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-4",
+   "source": "i did the osha 10 construction class at the union hall training in detroit last year (june 2025), passed the test, the card got mailed to my sisters house but its lost somewhere in the move. i can order a replacement. also lost my food assistance bc i missed the redetermination letter, and my lights are getting shut off, its been a month",
+   "sentence": "Skills: OSHA 10-Hour Construction (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed OSHA 10 in 2025 and the card was issued. Losing the physical card does not take away the credential, a replacement can be ordered, and OSHA 10 cards do not expire. The lost benefits are unrelated.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-5",
+   "source": "i ran the kitchen line at the parish jail for 2 yrs and they let a few of us take the servsafe manager exam in 2023, i passed with an 84. certificate says expires 2028. i got out in january and my license is suspended over child support so i cant get out to the restaurants in the suburbs, i need something on the bus line in baton rouge. can cook breakfast lunch dinner, did 400 trays a meal",
+   "sentence": "Cover letter: I hold a ServSafe Food Protection Manager certification that is valid through 2028, and I spent two years running a kitchen line that put out about 400 trays a meal.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the ServSafe Manager exam in 2023, and his certificate runs to 2028. It was earned inside and it is current. The only thing suspended is his driver's license.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-6",
+   "source": "Im a CNA, active on the kentucky nurse aide registry, I looked it up last week and it says active. worked at a nursing home in bowling green from 2023 til may 2026 when they let me go when my background came back on the new check they ran. lost my medicaid too its a whole mess. want home health or hospital, i do good with dementia patients",
+   "sentence": "Report: Your CNA is active on the Kentucky registry, so lead with it. Home health agencies and hospitals are both good targets, and your dementia care experience is worth naming.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She checked the registry last week and it shows active. One employer letting her go after a background check, and losing Medicaid, do not change her registry status.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-7",
+   "source": "have my class b cdl w/ passenger endorsement, drove a 56 passenger coach for a charter company in tucson 2021-2024. want to get my class A next, theres a school up in phoenix that does it in 4 weeks. no tickets no accidents. i was locked up 2014 to 2017 if that matters",
+   "sentence": "Headline: Class B CDL Driver | Passenger Endorsement | 3 Years Charter Coach Experience",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He holds a Class B with the passenger endorsement. Class A is only something he wants, and the headline does not claim it.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-8",
+   "source": "flagger card - washington state, took the class april 2025, card is good 3 yrs. did traffic control for a company in tacoma summer 2025 til the season ended in oct. my DL is valid now, suspension got lifted in july after i paid off the old tickets and did the payment plan. looking for next season or year round",
+   "sentence": "Resume line: Washington State Flagger Certification (valid through April 2028)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A WA flagger card issued April 2025 is good for three years. The only suspension he mentions was on his driver's license, and it was lifted in July.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-9",
+   "source": "DeShawn Pruitt  Tulsa, OK  (918) 555-0147  dpruitt@example.comSKILLSSMAW, FCAW, GMAW   Blueprint reading   Grinding and fit-upCERTIFICATIONSNCCER Welding Level 1 and 2 (earned 2022, correctional vocational program)3G/4G Structural Plate SMAW - certified 2025, continuity maintained at current employerEXPERIENCEWelder  Cimarron Steel Works LLC  Aug 2025 - PresentWeld structural beams and columns per drawings, maintain fit-up tolerances",
+   "sentence": "Resume line: 3G/4G SMAW Structural Plate Certification (2025), continuity maintained",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He tested in 2025 and still welds for the employer that keeps his continuity, so the certification is current.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-10",
+   "source": "notes for resume: cpr/first aid lapsed back in 2023 when i was in county. recertified june 2026 thru my job at the group home, card good 2 yrs. im also a CNA in colorado, active. license got suspended 2022, reinstated 2025. want to move to a hospital job in pueblo or colorado springs",
+   "sentence": "Skills: CPR and First Aid (current, renewed June 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card lapsed in 2023, but she renewed it in June 2026 and it is good for two years. The old lapse and the driver's license suspension (reinstated 2025) are both over.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-11",
+   "source": "i can drive forklift, got certified at the amazon in murfreesboro sept 2024, stand up reach and the order picker, still there part time on nights. my license got suspended for no insurance so i been getting rides from my cousin. want full time somewhere with benefits, did 4 yrs in the state pen for a drug charge, got out 2023",
+   "sentence": "Headline: Certified Forklift Operator | Stand-Up Reach and Order Picker | Amazon Warehouse Experience",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He was certified in Sept 2024, still works at the same site, and is inside the three-year window. A driver's license suspension has nothing to do with forklift certification.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-12",
+   "source": "got my food handler card from the texas online class in august 2026 its on my phone. my ID is expired and DPS cant see me til november so im using my release ID and birth certificate for now. applying to whataburger, waffle house, and the kitchen at the hospital in houston",
+   "sentence": "Report: Your Texas food handler card is current, so list it on every restaurant application. Your expired state ID is a separate thing to fix for hiring paperwork, not a reason to leave the food handler card off.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card was earned in Aug 2026 and is current. The word 'expired' in the sentence correctly refers to the state ID, not the credential.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-13",
+   "source": "Certifications:\nOSHA 30 Hour Construction Safety - completed Oct 2024\nForklift - Telehandler (2025)\nFirst Aid/CPR - exp 03/2027\n\nObjective: Looking for foreman or lead position in the Pittsburgh area. I was lead on the paint crew at the state correctional institution for 4 yrs and have worked commercial painting since release in 2023.",
+   "sentence": "Resume line: OSHA 30-Hour Construction Safety (October 2024)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He completed OSHA 30 in Oct 2024 and the DOL card does not expire.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-14",
+   "source": "my class A CDL got DQd for a year back in 2020 bc of a refusal, BMV put it back in 2021 and ive been clean since. drive for a flatbed outfit out of gary hauling steel coils, 3 yrs now. i dont have hazmat, the TSA check probably wouldnt clear me with my felony so i'm not even trying for it right now",
+   "sentence": "Report: You hold an active Class A CDL and have driven flatbed since your disqualification ended in 2021. Leave hazmat off your resume, since that endorsement is not on your license.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The one-year disqualification ended in 2021 when the BMV restored the license, and he drives now. The sentence correctly leaves out hazmat, which he does not hold.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-15",
+   "source": "i got my nccer core and carpentry level 1 in 2020 at the prison trade school, they put it in the registry, i looked myself up online and its there with my card number. been out 14 months now, working for a framing crew in huntsville but its cash. child support took my whole tax refund so i need something on the books with a check",
+   "sentence": "Cover letter: I hold NCCER Core Curriculum and Carpentry Level 1 credentials, both listed in the national registry, and I have spent the past year framing houses in Huntsville.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He found both credentials in the NCCER registry himself. They were earned inside, NCCER credentials do not expire, and his child support problems are unrelated.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-16",
+   "source": "my cna 1 lapsed while i was incarcerated 2019-2022 so i retook the class and the state test in 2024 and the board reissued it, it says active thru 2027 on the lookup. ive been doing memory care at an assisted living in salem since. on post prison supervision til next year",
+   "sentence": "Headline: Oregon CNA 1 | Active Certification | Memory Care and Long-Term Care",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It lapsed while she was incarcerated, but she retested and the board reissued it in 2024. The state lookup shows it active through 2027, so the old lapse no longer matters.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-17",
+   "source": "Q: Certifications/licenses (list with dates)\nA: EPA 608 type 2 (2018, doesnt expire), forklift (2025 at the Sysco in jacksonville).\nQ: Do you have a valid drivers license?\nA: No, suspended, reinstatement date 12/2026\nQ: Reliable transportation?\nA: bus and bike",
+   "sentence": "Skills: EPA 608 Type II Certified",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 Type II is a lifetime certification. The 'No, suspended' is his answer to a different question, about his driver's license.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-18",
+   "source": "i have the servsafe food handler not the manager one, got it at my job at bojangles in 2025. trying to move up to shift lead, maybe get the manager cert later when they pay for it. i been there 11 months, never missed a shift. on probation still, greensboro",
+   "sentence": "Resume line: ServSafe Food Handler Certificate (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He holds the Food Handler certificate from 2025, which is still current. The line correctly says Food Handler, not the Manager certification he only wants.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-19",
+   "source": "got my osha 10 general industry card in 2023 from the class at the transitional house, want osha 30 so i can be a lead at the plant. im a machine operator at a packaging plant in st louis, 2 yrs",
+   "sentence": "Report: You already hold the OSHA 10 General Industry card. The OSHA 30 would be a good next step toward a lead role, but you can list the OSHA 10 now.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He has held the OSHA 10 card since 2023. The sentence mentions OSHA 30 only as a goal and does not say he holds it.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-20",
+   "source": "on work release right now at a fab shop in green bay, passed my 6G pipe test TIG root stick fill and cap in may 2026, shop keeps my continuity log. PO approved the job. my license is revoked for OWI so the work release van takes me. out fully in feb",
+   "sentence": "Cover letter: I passed a 6G pipe weld test in May 2026, TIG root with stick fill and cap, and my current shop keeps my continuity log up to date.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the test in May 2026 and welds every day at the shop that logs his continuity. The only thing revoked is his driver's license.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-21",
+   "source": "flagger cert expired in 2024 while i was locked up. took the class again aug 2026, got a new card, good til 2029 or whatever it is. did flagging for 3 summers before. minneapolis area, no car rn",
+   "sentence": "Resume line: Certified Flagger (renewed August 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The old card expired in 2024, but a new card was issued in Aug 2026. He is unsure of the exact end date, but a card issued last month is clearly current.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-22",
+   "source": "parole says i cant leave nevada without permission so im only looking at local or regional. got my class A in 2025 from a truck driving school in vegas, passed the road test first try. have doubles/triples endorsement. applying to LTL companies for local p&d",
+   "sentence": "Headline: Class A CDL Driver | Doubles/Triples Endorsement | Seeking Local and Regional Routes",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned the Class A with the doubles/triples endorsement in 2025. Parole limits where he can drive, not whether he holds the license.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-23",
+   "source": "was certified on forklift at a temp agency assignment at a warehouse in joliet, 2024, they did a class and a drive test and gave me a wallet card. assignment ended in feb and i been looking since. dont have a car and my license is suspended from tickets i had from before i got locked up",
+   "sentence": "Skills: Forklift certified (2024)",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "He was trained and evaluated in 2024, inside the three-year window. Forklift certification is tied to the employer that did the evaluation, and a new employer will evaluate him again, so a reviewer could say it does not carry over. But listing it is normal and honest, so the safe label is no flag. The driver's license suspension is unrelated.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-24",
+   "source": "armed? no. unarmed security guard, have my georgia security officer license (unarmed) and CPR/AED/first aid, took it may 2025, card says expires may 2027. work nights at a warehouse in atlanta doing gate check",
+   "sentence": "Resume line: CPR/AED and First Aid Certified (expires May 2027)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card was issued May 2025 and expires May 2027, so it is valid today.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-25",
+   "source": "cdl b got pulled in 2022 for back child support. set up a payment plan and DMV restored my privileges march 2025. been driving a dump truck for a paving company in columbia since april 2025. want to get on with the county or a bigger outfit",
+   "sentence": "Report: Your Class B CDL was restored in March 2025 and you have been driving a dump truck since April, so present it as a current license.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The child support suspension ended when his driving privileges were restored in March 2025, and he has driven commercially ever since.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-26",
+   "source": "resume stuff: hvac tech helper 3 yrs. epa 608 universal (got it inside 2020). osha 10 construction (2024). no car, license suspended, working on it. wichita",
+   "sentence": "Headline: HVAC Helper | EPA 608 Universal Certified | OSHA 10",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 Universal (earned inside) is a lifetime certification, and his OSHA 10 is from 2024. The suspended license is unrelated to either one.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-27",
+   "source": "someone at my old job filed a complaint on me in 2023 with the dept of health, they investigated and it was unsubstantiated, nothing went on the registry. my STNA stayed active and still is, i checked. ive worked at 2 nursing homes since then. ohio calls it STNA not CNA. dayton area",
+   "sentence": "Resume line: State Tested Nurse Aide (STNA), Ohio, active",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The complaint was investigated and found unsubstantiated, with no finding on the registry. She checked and her STNA is active, and she has kept working as one.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-28",
+   "source": "food handler card maricopa county, got it 2 weeks ago online. lost my ahcccs and snap when i moved and im trying to fix that. i can work any shift, any day, did dish and prep at a diner in mesa before i went in",
+   "sentence": "Cover letter: I have a current Maricopa County food handler card and I can work any shift, any day.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She got the card two weeks ago. Losing her health coverage and SNAP benefits has nothing to do with it.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-29",
+   "source": "OSHA 10 construction 2024. flagger cert 2025 (NM is good 4 yrs i think). my license is suspended from a DWI so i need a crew that picks up or meets at a yard i can bus to. albuquerque. did road crew work before prison",
+   "sentence": "Skills: OSHA 10 Construction; Flagger Certified (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The OSHA 10 card does not expire, and a flagger card from 2025 is current even if he is unsure of the exact term. The DWI suspension applies only to his driver's license.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-30",
+   "source": "on work release i worked at a diner in grand rapids and the owner paid for my servsafe manager, passed 9/2025. im off work release now, on parole, still at the diner as lead cook. want kitchen manager",
+   "sentence": "Report: Your ServSafe Manager certification from September 2025 is good for five years, so it is current and worth putting in your headline for kitchen manager jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed in Sept 2025 while on work release, and the certificate is good for five years. Being on parole does not affect it.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-31",
+   "source": "got my welding certs at the state pen, 3G and 4G stick, but those lapsed after i got out cause i wasnt welding. went to a test facility in lake charles jan 2026 and recertified 3G/4G SMAW. doing turnarounds with a contractor at the plants since feb",
+   "sentence": "Resume line: 3G/4G SMAW Certified (recertified January 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The certs he earned inside lapsed, but he recertified in Jan 2026 and has welded steadily since February, so the current certification is valid.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-32",
+   "source": "CDL A, tanker, hazmat (TSA finally cleared me in 2025, took 5 months). got suspended once in 2016 for points, cleared it. been hauling water and crude in the oilfield since 2024 out of okc and the permian",
+   "sentence": "Headline: Class A CDL | Tanker and Hazmat Endorsed | Oilfield Hauling",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the TSA check in 2025, so the hazmat endorsement is held. The 2016 points suspension was cleared long ago, and he drives now.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-33",
+   "source": "J A S M I N E   R O D R I G U E Z\nNewark, NJ  |  973-555-0122  |  jrodriguez@example.com\nC E R T I F I C A T I O N S\nForklift Operator Certification  (Reach, Sit-Down)  Issued 06/2025   Lowe's Distribution Center\nOSHA 30 (in progress)\nE X P E R I E N C E\nMaterial Handler  Lowe's Distribution Center  06/2025 - Present\nLoad/unload trailers, put-away, cycle counts",
+   "sentence": "Skills: Forklift Operator Certification (reach and sit-down), June 2025",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The forklift certification was issued June 2025 at the employer where she still works. The OSHA 30 she has in progress is not in the sentence.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-34",
+   "source": "CNA in mississippi, active, i checked the registry in august it says active thru 2027. im doing private duty for an older lady in jackson now, 4 days a week. my license expired while i was in and i havent renewed it yet. snap got cut off in july",
+   "sentence": "Cover letter: I am a certified nursing assistant, active in Mississippi, and I currently provide private-duty care for an elderly client four days a week.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She checked the registry in August and it shows active through 2027. The expired item is her driver's license, and the SNAP loss is unrelated.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-35",
+   "source": "epa 608 type I and II, got it at a trade school in 2022. license suspended for unpaid tickets, MVA says 1,100 to fix it. i can take the bus to most of the apartment complexes in baltimore county for maintenance jobs. did make ready and hvac filter changes at my last job",
+   "sentence": "Report: Your EPA 608 Type I and II certification does not expire, so list it first when you apply for apartment maintenance jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 is a lifetime certification. The suspension is on his driver's license, over unpaid tickets.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-36",
+   "source": "i have osha 30 construction from 2023. want to go to the community college for construction management next fall, applying for pell grant, my PO said it was fine. richmond va. worked as a laborer and then lead on a concrete crew",
+   "sentence": "Report: Your OSHA 30 card from 2023 is worth naming on your resume and in your college application, since it shows safety training beyond the entry level.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He holds an OSHA 30 card from 2023, and it does not expire. His college plans are about the future and do not suggest he lacks the card.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-37",
+   "source": "finished nccer electrical level 1 and 2 at the vocational program when i was locked up 2021-2023, its in the registry. been doing residential wiring helper work for a small contractor in indy. want to get into an apprenticeship and finish level 3 and 4",
+   "sentence": "Cover letter: I have completed NCCER Electrical Levels 1 and 2, and I want to keep building toward Level 3 as an apprentice with your company.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He completed Levels 1 and 2 inside and they are in the registry. The sentence presents Level 3 only as a goal.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-38",
+   "source": "food handler card from louisville metro health, got it 2025. my manager at kfc wants me to take the servsafe manager so i can run shifts, the class is next month. never been late in 8 months. still on probation",
+   "sentence": "Resume line: Food Handler Card, Louisville Metro (2025)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She holds the food handler card from 2025. The ServSafe Manager class is next month, and the sentence does not claim it.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-39",
+   "source": "got a letter in 2025 saying my CDL was gonna be suspended over a ticket but i fought it in court and it got dismissed, DOT sent another letter saying the suspension is rescinded, it never went into effect. still driving for the grain co-op, class A, iowa",
+   "sentence": "Resume line: Class A CDL (Iowa), active",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The suspension was rescinded before it ever took effect, and he still drives commercially. The license has been valid the whole time.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-40",
+   "source": "got first aid/cpr at the regional jail class feb 2025, card is good 2 yrs. also osha 10 from the same class. out since june, living with my mom in charleston wv, looking for construction or roofing",
+   "sentence": "Skills: First Aid/CPR (valid to February 2027); OSHA 10",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Both were earned in a class at the jail. The First Aid/CPR card is good through Feb 2027 and OSHA 10 does not expire.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-41",
+   "source": "parole says no working at bars or anywhere serving alcohol after 10pm so i want breakfast and lunch spots. servsafe manager 2024. i was lead cook at a diner for 2 yrs before i went in and im at a biscuit place now. nashville",
+   "sentence": "Headline: Lead Cook | ServSafe Manager Certified | Breakfast and Lunch Service",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "His ServSafe Manager from 2024 is good for five years. Parole limits where he can work, not the credential.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-42",
+   "source": "forklift cert at the walmart dc in bentonville, recertified jan 2025, still there on nights, sit down and reach. im on parole til 2028 and my PO wants me to find something with more hours",
+   "sentence": "Report: You were recertified on forklift in January 2025, so your certification is current. Being on parole does not change that, and you can list it on every warehouse application.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He was recertified in Jan 2025 and still works at that site. Parole does not affect a forklift certification.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-43",
+   "source": "flagger card colorado got it may 2025, good for 4 years, exp 5/2029 it says. 2 seasons traffic control in colorado springs, 2025 and 2026. also the old license suspension from 2019 is done, i drive again",
+   "sentence": "Cover letter: I am a certified flagger with a card valid through 2029, and I have worked two seasons of road construction traffic control in Colorado Springs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card says it expires 5/2029. The only suspension he mentions was on his driver's license in 2019, and it is over.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-44",
+   "source": "my cdl got downgraded to a regular class D when my med card lapsed while i was locked up. when i got out i did the dot physical and the BMV upgraded it back to class A same day, dec 2025. looking for a regional job out of toledo",
+   "sentence": "Report: Your Class A CDL was restored in December 2025 after your new DOT physical, so it is current. Put the CDL and your medical card expiration at the top of your resume.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The license was downgraded when his medical card lapsed, then restored to Class A in Dec 2025 once he passed a new physical, so he holds it now.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-45",
+   "source": "passed the d1.1 3g/4g flux core bend test at the college in salt lake in march 2026, still welding every week at my job at a trailer manufacturer. on parole, 2 yrs left. want to get into structural steel",
+   "sentence": "Resume line: D1.1 Structural Welding Certification, FCAW 3G/4G (March 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the bend test in March 2026 and welds every week, so the certification is current.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-46",
+   "source": "forklift yes (2025 at the potato plant, still there), osha 10 yes (2024), cdl no, want it someday but my license is suspended anyway so cant yet. idaho falls",
+   "sentence": "Skills: Forklift Certified; OSHA 10",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He holds both the forklift certification and OSHA 10. The CDL he said no to and the suspended license are not in the sentence.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-47",
+   "source": "cna new york, on the nys registry, got it 2024 after i got my certificate of relief from disabilities. working nights at a nursing home in rochester. want to go to LPN school eventually",
+   "sentence": "Headline: Certified Nurse Aide (NY) | Night Shift Long-Term Care",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She is on the NY registry and currently works as a CNA. LPN school is only a goal and is not claimed.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-48",
+   "source": "epa 608 universal from 2017, lost the wallet card when i got arrested in 2022 and all my stuff got tossed. requested a new one online from the testing company, they had my record and emailed me my cert number. omaha",
+   "sentence": "Report: Your EPA 608 Universal certification is still valid even though the card was lost. Keep the certification number from the email handy for employers until the replacement card comes.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 is a lifetime certification. The testing company confirmed his record and sent his certification number, so only the physical card is missing.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-49",
+   "source": "got my A back after the suspension, about 18 months ago, been driving port drayage out of savannah since. clean MVR since i got it back. want to go OTR or dedicated for better pay",
+   "sentence": "Cover letter: I hold a Class A CDL and have spent the last year and a half hauling port drayage out of Savannah with a clean driving record.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "'Got my A back' means his Class A was reinstated about 18 months ago. He has driven since, and he says his record has been clean since then.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "fh-50",
+   "source": "got my california food handler card in 2025 before i paroled, good 3 yrs, expires 2028. working at a taco shop in sacramento now. got a violation from parole for missing a check in but still on parole, didnt go back",
+   "sentence": "Resume line: California Food Handler Card (expires 2028)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned the card inside in 2025 and it expires in 2028. The parole violation is about his supervision and has nothing to do with the card.",
+   "group": "final-gate-held"
+  },
+  {
+   "id": "final-atk-cred-1",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I have my CNA, but the nursing home revoked my job offer after the background check.",
+   "sentence": "Cover letter: As a CNA with six years of experience, I know how to keep residents safe and comfortable.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-2",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Class A CDL - Hazmat endorsement revoked after my conviction",
+   "sentence": "Resume line: Class A CDL",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-3",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Class A CDL, 10 years OTR, not yet back on the road since my release.",
+   "sentence": "Resume line: Class A CDL",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-4",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I drove with my Class A CDL for 10 years. Never got a ticket.",
+   "sentence": "Cover letter: I hold a Class A CDL and a clean driving record.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-5",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I finished the EPA 608 course at the prison but haven't taken the test yet.",
+   "sentence": "Report: Your EPA 608 is one exam away: schedule it at a testing center this month.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-6",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I finished the EPA 608 course at the prison but haven't taken the test yet.",
+   "sentence": "Report: Add your EPA 608 to your resume once you pass the exam.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-7",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I'm in the CNA program at MATC right now, I finish in June.",
+   "sentence": "Cover letter: I hope to be certified as a CNA by June.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-8",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "CERTIFICATIONS\nClass A CDL (Roehl training program, 2019)\n\nWORK HISTORY\nOTR Driver | Roehl | 2019 - 2023",
+   "sentence": "Resume line: Class A CDL (2019)",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-9",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I did the CNA program at MATC and worked as a CNA at Sunrise for 4 years.",
+   "sentence": "Cover letter: As a CNA with four years of experience, I know how to keep residents safe.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-10",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I had my CDL suspended once in 2015 for a speeding ticket, clean ever since.",
+   "sentence": "Cover letter: I hold a Class A CDL.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-11",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I'm in the CNA program at MATC right now, I finish in June.",
+   "sentence": "Resume line: Certified Nursing Assistant (Expected June 2027)",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-12",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Class A CDL, OTR Exp: 2012 - Present",
+   "sentence": "Resume line: Class A CDL",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-13",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Finished CDL school at Roehl in September. Road test is November 3.",
+   "sentence": "Report: You completed the CDL training that is required for the license, so the road test is the last step.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-14",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Had my Class A CDL 12 years, no ticket, no accidents.",
+   "sentence": "Cover letter: I hold a Class A CDL.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-15",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "My CDL got suspended for 90 days in 2016 after a DUI. Been driving local routes since 2017.",
+   "sentence": "Cover letter: I hold a Class A CDL.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-16",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I'm in the CNA program at MATC right now, I finish in June.",
+   "sentence": "Report: Your CNA certification is within reach: you finish the program in June.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-17",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I finished the EPA 608 course at the prison but haven't taken the test yet.",
+   "sentence": "Report: Put your EPA 608 at the top of your resume as soon as you pass.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-18",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I'm in the CNA program at MATC right now, I finish in June.",
+   "sentence": "Cover letter: I am on track to be licensed as a CNA this summer.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-19",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I finished the EPA 608 course at the prison but haven't taken the test yet.",
+   "sentence": "Cover letter: I expect to be EPA 608 certified by March.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-20",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I want to get my CDL.",
+   "sentence": "Resume line: Class A CDL - In Process",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-21",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "I went to CDL school in 2018 and drove OTR for Schneider for 3 years.",
+   "sentence": "Cover letter: I hold a Class A CDL.",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-22",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "Class A CDL, TWIC card revoked in 2019",
+   "sentence": "Resume line: Class A CDL",
+   "expect_flag": false,
+   "group": "final-attack-credential"
+  },
+  {
+   "id": "final-atk-cred-23",
+   "ambiguous": false,
+   "why": "final attacker case",
+   "source": "CERTIFICATIONS\nEPA 608 Universal (HVAC program at MATC, 2021)",
+   "sentence": "Resume line: EPA 608 Universal",
+   "expect_flag": false,
+   "group": "final-attack-credential"
   }
  ]
 }

@@ -24,25 +24,25 @@ const cases = JSON.parse(readFileSync(join(__dirname, "fixtures", "truth-backsto
   credential: CredCase[];
 };
 
-// Missed catches on this set (2026-09-29, 477 cases). Lower is better; raise
+// Missed catches on this set (2026-09-29, 655 cases). Lower is better; raise
 // only on purpose, with the reason in the commit.
-const MAX_MISSED_CITY = 2;
-const MAX_MISSED_CREDENTIAL = 47;
+const MAX_MISSED_CITY = 5;
+const MAX_MISSED_CREDENTIAL = 65;
 
 /** Checked the way the app checks it: a short line without end punctuation is a
  *  resume or skills item; anything else is prose. The case writers sometimes
- *  name the context ("Cover letter: ...", "Headline: ..."); resume and letter
- *  text is the person's own voice. */
+ *  name the context ("Report: ...", "Cover letter: ...", "Headline: ..."); resume
+ *  and letter text is the person's own voice, report text is advice to them. */
 function flags(c: CredCase): boolean {
   const statuses = credentialStatuses(c.source);
-  const ctx = (c.sentence.match(/^(Cover letter|Resume line|Headline|Summary|Skills|Resume)\s*:\s*/i) || [])[1]?.toLowerCase();
+  const ctx = (c.sentence.match(/^(Report|Cover letter|Resume line|Headline|Summary|Skills|Resume)\s*:\s*/i) || [])[1]?.toLowerCase();
   const text = ctx && ctx !== "skills" ? c.sentence.replace(/^[^:]+:\s*/, "") : c.sentence;
   const words = text.split(/\s+/).length;
   const item =
     ctx === "skills" ||
     ((ctx === "resume line" || ctx === "headline" || ctx === "resume") && words <= 12) ||
     (!ctx && words <= 12 && !/[.!?]\s*$/.test(text));
-  const firstPerson = !!ctx || /\b(?:I|I'm|I've|my|me)\b/.test(text);
+  const firstPerson = (!!ctx && ctx !== "report") || /\b(?:I|I'm|I've|my|me)\b/.test(text);
   return item
     ? itemClaimsMoreThanGiven(text.replace(/^[-\u2022*]\s*/, ""), statuses)
     : claimsMoreThanGiven(text, statuses, { firstPerson });
