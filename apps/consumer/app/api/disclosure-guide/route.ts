@@ -17,6 +17,7 @@ import { isMockEnabled, MOCK_DISCLOSURE_PLAN } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getHurdleGuidance, isRecordHurdle } from "@/lib/hurdle-guidance";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
@@ -38,13 +39,13 @@ const GENERIC_DISCLOSURE_TEMPLATE = {
   timing_advice:
     "You get to choose when and whether to bring up your record. Unless a form directly and lawfully asks, a common approach is to wait until they can see you are a strong fit. That means later in the process, not on the first application. You are never required to volunteer it earlier than you are comfortable.",
   legal_context:
-    "Many states and cities have ban-the-box or fair-chance rules that limit when an employer may ask about a record, and most states have some process to seal or expunge older records. These vary a lot by place, so treat this as general information to verify -- not legal advice. A local reentry legal aid organization can tell you exactly what applies where you live.",
+    "Many states and cities have ban-the-box or fair-chance rules that limit when an employer may ask about a record, and most states have some process to seal or expunge older records. These vary a lot by place, so treat this as general information to verify. It is not legal advice. A local reentry legal aid organization can tell you exactly what applies where you live.",
   script:
     "I want to be upfront about something in my past. I made a mistake, I took responsibility, and I have spent the time since then building the skills and habits I bring to this job. What I care about now is doing good work here, and I am glad to answer any questions you have.",
   tips: [
-    "Keep it short -- a sentence or two, then pivot to a real strength.",
+    "Keep it short. Say a sentence or two, then pivot to a real strength.",
     "Practice it out loud until it feels natural, not rehearsed.",
-    "You decide how much detail to share -- you do not owe anyone more than you want to give.",
+    "You decide how much detail to share. You do not owe anyone more than you want to give.",
     "For your exact rights and any record-clearing options, check with a local reentry legal aid organization.",
   ],
 };
@@ -91,11 +92,11 @@ async function handlePost(request: Request) {
     const g = getHurdleGuidance(hurdle);
     return NextResponse.json({
       timing_advice:
-        "You get to choose when and whether to bring this up. Often the best moment is after they already see you are a strong fit -- later in the process, not on the first form.",
+        "You get to choose when and whether to bring this up. Often the best moment is after they already see you are a strong fit. That means later in the process, not on the first form.",
       legal_context: g.coachingFrame,
       script: g.scriptScaffold,
       tips: [
-        "Keep it short -- a sentence or two, then move on.",
+        "Keep it short. Say a sentence or two, then move on.",
         "Pivot straight to a real strength.",
         "You do not owe anyone more detail than you want to give.",
         "Practice it out loud until it feels natural.",
@@ -159,14 +160,20 @@ Return JSON ONLY:
       const m = raw.match(/\{[\s\S]*\}/);
       if (!m) throw new Error("No JSON in response");
       const parsed = JSON.parse(m[0]);
+      // Dash sweep on the model-written fields only (counts logged, never content).
+      const swapLog = logDashSwaps("disclosure-guide");
       // legal_context is the STATIC reviewed frame, injected verbatim -- never
       // model-generated, so no fabricated statute can reach the user.
       const nonRecordResult = {
-        timing_advice: typeof parsed.timing_advice === "string" ? parsed.timing_advice : "",
+        timing_advice:
+          typeof parsed.timing_advice === "string" ? plainPunctuation(parsed.timing_advice, swapLog) : "",
         legal_context: g.coachingFrame,
-        script: typeof parsed.script === "string" ? parsed.script : g.scriptScaffold,
+        script: typeof parsed.script === "string" ? plainPunctuation(parsed.script, swapLog) : g.scriptScaffold,
         tips: Array.isArray(parsed.tips)
-          ? parsed.tips.filter((t: unknown): t is string => typeof t === "string").slice(0, 6)
+          ? plainPunctuation(
+              parsed.tips.filter((t: unknown): t is string => typeof t === "string").slice(0, 6),
+              swapLog
+            )
           : [],
       };
 
@@ -259,7 +266,8 @@ Return JSON ONLY:
     // Derive jurisdiction from forge context location (preferences.location)
     const locationRaw = sanitizeForPrompt(forgeContext?.location || forgeContext?.preferences?.location || "", 200);
     const stateMatch = locationRaw.match(/,\s*([A-Z]{2})$/) || locationRaw.match(/\b([A-Z]{2})\b/);
-    const jurisdiction = stateMatch ? stateMatch[1] : (sanitizeForPrompt(record.state || "", 10) || "Wisconsin");
+    // No state given means no state: never fall back to one state's law.
+    const jurisdiction = stateMatch ? stateMatch[1] : sanitizeForPrompt(record.state || "", 10);
 
     const prompt = `${disclosureResearch}
 
@@ -270,15 +278,19 @@ THEIR SITUATION:
 - Number of charges: ${sanitizeForPrompt(record.charge_count)}
 - Most recent: ${sanitizeForPrompt(record.most_recent)}
 - Probation/parole: ${sanitizeForPrompt(record.supervision)}
-- State/Jurisdiction: ${jurisdiction}
+- State/Jurisdiction: ${jurisdiction || "not given"}
 - Preferred timing: ${sanitizeForPrompt(timing, 200) || "not sure"}${candidateBlock}${intakeBlock}
 
 JURISDICTION-SPECIFIC CONTEXT:
-${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin ban-the-box: state/county government employers cannot ask about criminal history on applications. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement eligibility: WI s.973.015 allows expungement for offenses committed under age 25, or for misdemeanors/minor felonies with no prior felony convictions. Process takes 6-18 months. Provide this specific guidance (this block is curated and current, so you may cite it).` : `Jurisdiction is ${jurisdiction}. You cannot look up current law, so describe protections GENERALLY: many states and cities have ban-the-box / fair-chance rules that limit when employers may ask about records, and most states have some record-clearing process. Do NOT cite specific statute numbers, ordinance names, or eligibility rules for ${jurisdiction} unless you are certain they are real and current. A wrong citation harms the user. Instead, name the general protection type and direct them to verify with a local reentry legal aid organization.`}
+${jurisdiction === "WI" || jurisdiction === "Wisconsin" ? `Wisconsin (general information to verify, not legal advice; checked against the Wisconsin statutes and City of Milwaukee records on 2026-09-28):
+- Ban-the-box in Wisconsin covers public jobs. State law (Wis. Stat. 230.16(1)(ap), from 2015 Wisconsin Act 150) stops the state civil service from asking about conviction records until an applicant is certified for a job, except where a particular conviction is disqualifying. It does not cover county, city or private employers. The City of Milwaukee keeps conviction and pending-charge questions off its own initial job applications (Common Council File 120663, a 2016 resolution) and only encourages other employers to do the same. There is no Milwaukee or statewide ban-the-box law for private employers. Do not claim one.
+- The Wisconsin Fair Employment Act (Wis. Stat. 111.321, 111.322, 111.335) covers employers with at least one employee. An employer may not refuse to hire or fire someone because of a conviction record or a pending charge unless its circumstances substantially relate to the circumstances of the particular job, or a narrow exception applies. Private employers may still ask about convictions and pending charges. Employers may not ask about arrests other than pending charges. A person who believes they were turned down unlawfully can file a complaint with the state Equal Rights Division within 300 days.
+- Expungement (Wis. Stat. 973.015): a judge may order it at sentencing when the person was under 25 at the time of the offense and the maximum prison term is 6 years or less, if the judge finds the person will benefit and society will not be harmed. It is not allowed for a Class H or Class I felony if the person has a prior felony conviction or the felony is a violent offense, and some other offenses are excluded. If ordered, it takes effect when the sentence is successfully completed. Never tell the person whether they qualify, and never estimate how long anything takes. Say a legal aid organization can review their case.
+Cite only the statutes and the Milwaukee resolution named here.` : `${jurisdiction ? `Jurisdiction is ${jurisdiction}.` : "Their state is not known. Do not assume one."} You cannot look up current law, so describe protections GENERALLY: many states and cities have ban-the-box / fair-chance rules that limit when employers may ask about records, and most states have some record-clearing process. Do NOT cite specific statute numbers, ordinance names, or eligibility rules for ${jurisdiction || "any state"} unless you are certain they are real and current. A wrong citation harms the user. Instead, name the general protection type and direct them to verify with a local reentry legal aid organization.`}
 
 GENERATE a disclosure plan as JSON:
 {
-  "timing_advice": "When they should disclose and why, specific to their situation and jurisdiction. Apply the ban-the-box rules for their state.",
+  "timing_advice": "When they should disclose and why, specific to their situation and jurisdiction. Most ban-the-box rules cover only public jobs; say whether one applies to the kind of employer they are targeting, and never assume it covers private employers.",
   "legal_context": "Rights and protections relevant to their jurisdiction, framed as general information to verify, not as legal advice. Cite a specific statute ONLY from the curated context above; otherwise describe the protection generally and point to local legal aid.",
   "script": "A natural, conversational script they can use. Under 30 seconds spoken. Acknowledges the past, pivots to growth and value. If candidate strengths are provided, reference them specifically in the pivot. Must sound human, not rehearsed.",
   "tips": [
@@ -302,7 +314,8 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 
-    const result = JSON.parse(jsonMatch[0]);
+    // Every field on the record path is model-written, so the whole plan is swept.
+    const result = plainPunctuation(JSON.parse(jsonMatch[0]), logDashSwaps("disclosure-guide"));
 
     // Log decision for JBS compliance
     try {
