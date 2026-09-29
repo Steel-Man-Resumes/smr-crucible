@@ -10,7 +10,8 @@
  * labeled test set): a city is taken off a job line only when the person's own
  * words mention that city ONLY as where they live: their contact details (the
  * header, a signature block at the end, labeled fields like "City:"), or a
- * story phrase like "I live in Springfield now". Any other mention, in any
+ * story phrase like "I live in Springfield now", or their location preference.
+ * Any other mention, in any
  * layout, keeps it. A city found nowhere in their words, or a neighbor job's
  * city, is left to the truth check. What is taken out is listed on the page.
  * Lines with fewer than four parts (contact lines) are not touched.
@@ -116,6 +117,16 @@ function contactLines(lines: string[]): Set<number> {
     header.push(i);
   }
   takeBlock(header);
+  // A name and a city with nothing else ("MARCUS DELANEY / Milwaukee WI", then a
+  // blank line or a heading) is a header too, even with no phone or email.
+  const nonEmpty = lines.map((l, i) => [l, i] as const).filter(([l]) => l.trim());
+  if (nonEmpty.length >= 2) {
+    const [[first], [second, j]] = nonEmpty;
+    const after = lines[j + 1] ?? "";
+    const looksLikeName = /^\s*[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){1,3}\s*$/.test(first) && !YEAR.test(first);
+    const endsHeader = !after.trim() || /^\s*(?:work|jobs?|experience|employment|work history|job history|skills|education|summary|objective|profile)\b[\w ]*:?\s*$/i.test(after) || EMAIL.test(after) || PHONE.test(after);
+    if (looksLikeName && PLACE_ONLY.test(second) && endsHeader) out.add(j);
+  }
   // Signature block at the end.
   const tail: number[] = [];
   for (let i = lines.length - 1; i >= 0 && tail.length <= 6; i--) {
@@ -151,8 +162,12 @@ function onlyResidence(rawLine: string, city: string): boolean {
 
 export function stripUnsupportedJobCities(
   resume: string,
-  source: string
+  source: string,
+  // Where the person told us they live (their location preference). The model
+  // sees it, so a home-town fill can come from here and nowhere else.
+  opts: { homeLocation?: string } = {}
 ): { text: string; removed: number; removedCities: string[] } {
+  const homeCity = opts.homeLocation ? placeNorm(opts.homeLocation.split(",")[0]) : "";
   const sourceLines = source.split("\n");
   const contact = contactLines(sourceLines);
   const placeLines = sourceLines.map(placeNorm);
@@ -169,8 +184,9 @@ export function stripUnsupportedJobCities(
     const words = companyWords(company);
     // Every line of the person's words that mentions this city.
     const mentions = placeLines.map((l, i) => (l.includes(city) ? i : -1)).filter((i) => i >= 0);
-    // Found nowhere: nothing to judge by here.
-    if (!mentions.length) return line;
+    // Found nowhere in their words: nothing to judge by, unless it is the place
+    // they said they live.
+    if (!mentions.length && !(homeCity.trim() && homeCity === city)) return line;
     // Found anywhere but where they live, or on a line that also names this
     // employer: the person gave it.
     // "I live in Springfield now" never gives the job's city, even in a paragraph

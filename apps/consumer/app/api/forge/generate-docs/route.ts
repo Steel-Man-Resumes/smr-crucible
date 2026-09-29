@@ -163,7 +163,8 @@ async function handlePost(request: Request) {
     const statuses = credentialStatuses(groundingSource);
     const cityCheck = stripUnsupportedJobCities(
       plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog),
-      groundingSource
+      groundingSource,
+      { homeLocation: typeof input.preferences?.location === "string" ? input.preferences.location : undefined }
     );
     const resume = cityCheck.text;
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
