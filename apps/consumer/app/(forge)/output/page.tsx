@@ -156,11 +156,20 @@ export default function OutputPage() {
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   // Grounding gate result (F2): claims removed vs. residual (found but not
   // auto-removed -- the user must review those). Codex 8: never conflate them.
-  const [groundingNote, setGroundingNote] = useState<{ removed: number; residual: number } | null>(null);
+  const [groundingNote, setGroundingNote] = useState<{
+    removed: number;
+    residual: number;
+    unmatched: number;
+    // Documents where the checker reported something but named no phrase we could show.
+    unnamed: ("resume" | "cover_letter")[];
+    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" }[];
+  } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
   // It fails open so a person still gets their documents -- but they should be
   // told the machine check was skipped rather than shown a silent clean pass.
   const [verifierRan, setVerifierRan] = useState(true);
+  // Which document's check did not run, when only one of them failed.
+  const [uncheckedDoc, setUncheckedDoc] = useState<"resume" | "cover letter" | null>(null);
   const [docError, setDocError] = useState<string>("");
   const [downloading, setDownloading] = useState<string>("");
   const [copied, setCopied] = useState<string>("");
@@ -207,16 +216,25 @@ export default function OutputPage() {
       const data = await response.json();
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
-      if (data.grounding && (data.grounding.removed || data.grounding.residual)) {
+      const g = data.grounding;
+      const outcomes = Array.isArray(g?.outcomes) ? g.outcomes : [];
+      if (g && (g.removed || g.residual || g.unmatched || outcomes.length || g.hasFabrication)) {
         setGroundingNote({
-          removed: data.grounding.removed || 0,
-          residual: data.grounding.residual || 0,
+          removed: g.removed || 0,
+          residual: g.residual || 0,
+          unmatched: g.unmatched || 0,
+          unnamed: (["resume", "cover_letter"] as const).filter((d) => g.unnamedByDoc?.[d] === true),
+          outcomes,
         });
       }
       // Absent means an older response shape, which we treat as "ran" rather
       // than alarming everyone during a rollout. An explicit false is the
       // signal that matters.
-      setVerifierRan(data.grounding?.verifierRan !== false);
+      setVerifierRan(g?.verifierRan !== false);
+      const byDoc = g?.verifierRanByDoc;
+      if (byDoc && byDoc.resume !== byDoc.cover_letter) {
+        setUncheckedDoc(byDoc.resume === false ? "resume" : "cover letter");
+      }
       setDocState("done");
     } catch (err: any) {
       console.error("Doc generation error:", err);
@@ -601,33 +619,63 @@ export default function OutputPage() {
                   Automatic check did not run
                 </p>
                 <p className="text-xs leading-relaxed text-t-phos">
-                  Your documents are here and nothing was changed. The
-                  second-pass check that traces every line back to what you told
-                  us could not run this time, so read these over before you send
-                  them. Look hard at anything specific, like a number, a date or
-                  a certification.
+                  {uncheckedDoc
+                    ? `The second check that traces every line back to what you told us did not run on your ${uncheckedDoc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.`
+                    : "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification."}
                 </p>
               </div>
             )}
 
-            {groundingNote && (
-              <div className="bg-t-panel border border-t-amber px-4 py-3">
-                <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
-                  Kept true to you
-                </p>
-                <p className="text-xs text-t-phos leading-relaxed">
-                  {groundingNote.removed > 0 && (
-                    <>
-                      We reviewed every line and removed {groundingNote.removed}{" "}
-                      {groundingNote.removed === 1 ? "detail" : "details"} we couldn&apos;t trace to what you told us.{" "}
-                    </>
+            {groundingNote && (() => {
+              const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length;
+              const docName = (d: "resume" | "cover_letter") => (d === "resume" ? "resume" : "letter");
+              const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
+                o.status === "removed"
+                  ? `Taken out of your ${docName(o.doc)}: `
+                  : o.status === "changed"
+                    ? `Reworded in your ${docName(o.doc)}. Find the new wording and check it. It used to say: `
+                    : o.status === "also_in"
+                    ? `Something like this is also in your ${docName(o.doc)}, check it: `
+                    : o.status === "still_there"
+                      ? `Still in your ${docName(o.doc)}, check it: `
+                      : `We couldn't find these exact words in your ${docName(o.doc)}. Look for anything like them: `;
+              return (
+                <div className="bg-t-panel border border-t-amber px-4 py-3">
+                  <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
+                    {open > 0 ? "Check these before you send" : "What the check found"}
+                  </p>
+                  <p className="text-xs text-t-phos leading-relaxed">
+                    {groundingNote.removed > 0 &&
+                      `We took out ${groundingNote.removed} ${groundingNote.removed === 1 ? "detail" : "details"} we couldn't match to what you told us. `}
+                    {groundingNote.residual > 0 &&
+                      `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged may still be in there, maybe reworded. `}
+                    {groundingNote.unmatched > 0 &&
+                      `The check quoted ${groundingNote.unmatched === 1 ? "words" : "some words"} we couldn't find in your documents. `}
+                    {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
+                    {open > 0
+                      ? "Read these closely before you send anything."
+                      : "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best."}
+                  </p>
+                  {groundingNote.outcomes.length > 0 && (
+                    <details className="mt-2" open={open > 0}>
+                      <summary className="t-focus cursor-pointer text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2">
+                        See what we flagged
+                      </summary>
+                      <ul className="mt-1.5 space-y-1">
+                        {groundingNote.outcomes.map((o, i) => (
+                          <li key={i} className="text-[11px] leading-relaxed text-t-phos">
+                            <span className={o.status === "removed" ? "text-t-phos-dim" : "font-bold text-t-amber-bright"}>
+                              {label(o)}
+                            </span>
+                            {`"${o.claim}"`}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   )}
-                  {groundingNote.residual > 0
-                    ? `A few specifics still couldn't be verified from your input. Double-check anything that doesn't sound like you before you send it.`
-                    : `Your documents contain only what's true about you. Add more detail anytime to make them fuller.`}
-                </p>
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* Resume */}
             {resumeText && (

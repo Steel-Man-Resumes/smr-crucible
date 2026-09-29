@@ -17,6 +17,7 @@
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
 import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
 import { liveTestKeyAllowed, LIVE_TEST_DAILY_LIMIT, LIVE_TEST_MIN_KEY_LENGTH } from "@/lib/live-test-key";
+import { accountFlags, flagOutcome, normalizeForMatch } from "@/lib/grounding-accounting";
 import { numbersIn, unsupportedNumbers, RANGE_CHOICES, QUANTITY_UNITS, evidenceAnswerText } from "@/lib/number-truth";
 import { computeGrounding } from "@/lib/grounding";
 import {
@@ -199,6 +200,73 @@ section("live test key");
   check("the key plus extra is refused", liveTestKeyAllowed(key + "x", key) === false);
   check("the exact key is accepted", liveTestKeyAllowed(key, key) === true);
   check("the bucket is bounded", LIVE_TEST_DAILY_LIMIT > 0 && LIVE_TEST_DAILY_LIMIT <= 100);
+}
+
+// ── Truth-check accounting: count what the text shows, not the flags ─────────
+section("truth check accounting");
+{
+  const orig = "Forklift Operator. Five-year accident-free record. Forklift certification is renewable.";
+  const fin = "Forklift Operator. Forklift certification is renewable.";
+  check("a phrase that is gone counts as removed",
+    flagOutcome({ claim: "Five-year accident-free record", why: "" }, orig, fin) === "removed");
+  check("a phrase still in the final text is not removed",
+    flagOutcome({ claim: "certification is renewable", why: "" }, orig, fin) === "still_there");
+  check("a phrase never found in the original is unmatched, not removed",
+    flagOutcome({ claim: "clean safety record", why: "" }, orig, fin) === "unmatched");
+  // Reworded but still there: the claim survives in other words.
+  check("one word added inside the phrase is changed, not removed",
+    flagOutcome({ claim: "certification is renewable", why: "" }, "My certification is renewable.", "My certification is still renewable.") === "changed");
+  check("a trimmed claim that keeps its core is changed",
+    flagOutcome({ claim: "Maintained a clean safety record over 5 years", why: "" }, "Maintained a clean safety record over 5 years.", "Maintained a clean safety record.") === "changed");
+  check("a number word and its digits are the same claim",
+    flagOutcome({ claim: "Five years of accident-free driving", why: "" }, "Five years of accident-free driving.", "5 years of accident-free driving.") === "still_there");
+  check("a shortened list of traits is changed",
+    flagOutcome({ claim: "consistent attendance across every shift, on time and ready to work", why: "" },
+      "Brings consistent attendance across every shift, on time and ready to work.", "Brings consistent attendance across every shift.") === "changed");
+  check("dashes, quotes and case do not decide it",
+    normalizeForMatch("Five\u2014year \u201caccident-free\u201d RECORD") === normalizeForMatch("five year accident free record"));
+  check("a phrase only matches whole words",
+    flagOutcome({ claim: "able", why: "" }, "Reliable and able.", "Reliable.") === "removed");
+  const acc = accountFlags([
+    { doc: "resume", flags: [{ claim: "Five-year accident-free record", why: "" }], original: orig, final: fin },
+    { doc: "cover_letter", flags: [{ claim: "renewable", why: "" }], original: "It is renewable.", final: "It is renewable." },
+  ]);
+  // "renewable" is in both final documents: the letter's flag is found in the resume too.
+  check("counts come from outcomes", acc.removed === 1 && acc.residual === 2 && acc.outcomes.length === 3, JSON.stringify(acc));
+  const cross = accountFlags([
+    { doc: "resume", flags: [{ claim: "Forklift Certification (2013, renewable)", why: "" }], original: "Forklift Certification (2013, renewable)", final: "Forklift Certification (2013, expired)" },
+    { doc: "cover_letter", flags: [], original: "My forklift certification is renewable.", final: "My forklift certification is renewable." },
+  ]);
+  check("a claim the resume check caught is also found in the letter",
+    cross.outcomes.some((o) => o.doc === "cover_letter" && o.status !== "removed"), JSON.stringify(cross.outcomes));
+  check("a trimmed safety claim is changed, not removed",
+    flagOutcome({ claim: "Maintained a clean safety record across five years of daily forklift operation.", why: "" },
+      "Maintained a clean safety record across five years of daily forklift operation.", "Clean safety record.") === "changed");
+  check("a trimmed attendance claim is changed, not removed",
+    flagOutcome({ claim: "Brings reliable attendance, physical stamina, and steady work under time pressure.", why: "" },
+      "Brings reliable attendance, physical stamina, and steady work under time pressure.", "Reliable attendance.") === "changed");
+  // Words already elsewhere in the document never make a removed claim look reworded.
+  const letterBefore = "I run 2nd shift at Kettle Ridge. The plant manager trusts me.\nWhat I bring to [Company Name] is a supervisor who can step up when the plant manager is away.\nI am applying at [Company Name].";
+  const letterAfter = "I run 2nd shift at Kettle Ridge. The plant manager trusts me.\nI am applying at [Company Name].";
+  check("a removed claim stays removed when its words are elsewhere in the letter",
+    flagOutcome({ claim: "What I bring to [Company Name] is a supervisor who can step up when the plant manager is away.", why: "" }, letterBefore, letterAfter) === "removed");
+  check("a deleted line stays removed when its year is on a job line",
+    flagOutcome({ claim: "Forklift Certification (2013, renewable)", why: "" },
+      "Forklift Operator, Midwest Pallet Supply, 2013 to 2018\nForklift Certification (2013, renewable)",
+      "Forklift Operator, Midwest Pallet Supply, 2013 to 2018") === "removed");
+  const soft = accountFlags([
+    { doc: "resume", flags: [{ claim: "Targeting a first shift supervisory role at a larger plant", why: "" }], original: "Targeting a first shift supervisory role at a larger plant.", final: "" },
+    { doc: "cover_letter", flags: [], original: "", final: "I am applying for the First Shift Production Supervisor role." },
+  ]);
+  check("a two-word match in the other document is only 'also in'",
+    soft.outcomes.some((o) => o.doc === "cover_letter" && o.status === "also_in"), JSON.stringify(soft.outcomes));
+  check("a short claim with one key word, reworded around it, is changed",
+    flagOutcome({ claim: "is renewable", why: "" }, "It is renewable.", "It stays renewable.") === "changed");
+  const dup = accountFlags([{ doc: "resume", flags: [{ claim: "zero accidents", why: "" }, { claim: "Zero accidents", why: "" }], original: "Zero accidents.", final: "" }]);
+  check("the same claim flagged twice counts once", dup.outcomes.length === 1);
+  const dash = accountFlags([{ doc: "cover_letter", flags: [{ claim: "safety first \u2014 always", why: "" }], original: "safety first \u2014 always", final: "" }]);
+  check("a claim shown on the page has no dash", !/\u2014| -- /.test(dash.outcomes[0].claim), dash.outcomes[0].claim);
+  check("each outcome names its document", acc.outcomes[1].doc === "cover_letter" && acc.outcomes[1].status === "still_there");
 }
 
 // ── Cover letter closings vary by person, stay fixed per person ──────────────
