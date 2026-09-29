@@ -15,7 +15,9 @@ import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
-import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { plainPunctuation, plainPunctuationText, logDashSwaps } from "@/lib/legal-sanitize";
+import { credentialStatuses, findOverstatedCredentialLines, findOverstatedCredentials } from "@/lib/credential-truth";
+import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 
@@ -154,8 +156,26 @@ async function handlePost(request: Request) {
     // finished resume. That document gets sent to an employer without being
     // re-read. Deterministic sweep, belt-and-braces like plainPunctuation.
     const swapLog = logDashSwaps("generate-docs");
-    const resume = plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog);
+    // Deterministic backstops on what the model added. An employer city the
+    // person never gave is removed (a missing city harms no one). A sentence or
+    // line that may overstate a credential is flagged for the person to check,
+    // never deleted.
+    const statuses = credentialStatuses(groundingSource);
+    const cityCheck = stripUnsupportedJobCities(
+      plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog),
+      groundingSource
+    );
+    const resume = cityCheck.text;
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    const credentialChecks = [
+      ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
+      ...findOverstatedCredentials(coverLetter, statuses, { firstPerson: true }).map((claim) => ({ claim, doc: "cover_letter" as const })),
+    ];
+    if (cityCheck.removed || credentialChecks.length) {
+      console.warn(
+        `[added-facts] generate-docs: removed ${cityCheck.removed} unsupported employer city(ies); flagged ${credentialChecks.length} possible credential overstatement(s)`
+      );
+    }
     // Count what the check actually did, from the text itself: a flag is "removed"
     // only if its phrase was in the original and is gone from what the person
     // receives. A flag whose phrase survived, or that can't be matched, is left for
@@ -165,9 +185,22 @@ async function handlePost(request: Request) {
       { doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume },
       { doc: "cover_letter", flags: coverCheck.flags, original: coverLetterRaw, final: coverLetter },
     ]);
-    const removedCount = accounting.removed;
-    // Reworded and still-there flags both ask the person to look.
-    const residualCount = accounting.residual + accounting.changed + accounting.alsoIn;
+    const clean = (claim: string) => plainPunctuationText(claim).text.slice(0, 200);
+    const known = new Set(accounting.outcomes.map((o) => `${o.doc}|${o.claim.toLowerCase()}`));
+    const outcomes = [
+      ...accounting.outcomes,
+      // Cities the backstop took out are real removals.
+      ...cityCheck.removedCities.map((claim) => ({ claim: clean(claim), doc: "resume" as const, status: "removed" as const })),
+      // Credential lines are left in place and listed for the person to check,
+      // under their own label: they are not something the truth check tried to cut.
+      ...credentialChecks
+        .filter((c) => !known.has(`${c.doc}|${clean(c.claim).toLowerCase()}`))
+        .map((c) => ({ claim: clean(c.claim), doc: c.doc, status: "credential" as const })),
+    ];
+    const removedCount = accounting.removed + cityCheck.removed;
+    // Reworded, still-there and also-in items: what the truth check flagged that
+    // may still be there. Credential items are counted by the page on their own.
+    const residualCount = outcomes.filter((o) => o.status === "still_there" || o.status === "changed" || o.status === "also_in").length;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
@@ -213,7 +246,7 @@ async function handlePost(request: Request) {
         residual: residualCount,
         flags: groundingFlags,
         // Per flag: which document, and whether its phrase is gone or still there.
-        outcomes: accounting.outcomes,
+        outcomes,
         // Whether the check actually RAN. It fails open by design -- a missing
         // key, a timeout or an unparseable reply returns the document
         // untouched -- but that used to be invisible from here, so an outage
@@ -288,7 +321,7 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
 10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance. Never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
 11. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Hyphens inside words (first-piece, part-time) are fine.
-12. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give. No endings like ", freeing capacity for additional production" or ", supporting a smooth flow during busy hours", and no "high-volume", "fast-paced", "peak service" or "busy" unless they said it. A plain true bullet beats a dressed-up one. Keep every result the person did give, in their own terms ("never had an accident in 5 years", "so we didn't have to call a tech"). Dropping one is as bad as inventing one.
+12. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give. No endings like ", freeing capacity for additional production" or ", supporting a smooth flow during busy hours", and no "high-volume", "fast-paced", "peak service" or "busy" unless they said it. A plain true bullet beats a dressed-up one. Keep every result the person did give, in their own terms ("never had an accident in 5 years", "so we didn't have to call a tech"). Dropping one is as bad as inventing one. Never add what a duty covered beyond what they said: "Trained 11 new operators" stays exactly that, never "on setup, quality and safety".
 13. NO CHARACTER CLAIMS: no "dependable", "reliable", "shows up ready", "consistent" or anything like them in the headline, summary or bullets unless the person said it about themselves.
 
 DATA CLEANING (FIX INPUT ERRORS):
@@ -305,11 +338,12 @@ SECTION ORDER (exact):
 4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
 5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, and never drop real ones. Every term must name something the person said they did, used or learned. No soft-skill filler (Attention to Detail, Task Prioritization, Time Management) unless they said it. Typically 9 to 15, fewer for a short history.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
-   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year
+   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
    - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
 7. EDUCATION
-   - Institution, dates. Add relevant coursework if it strengthens the resume.
-8. CERTIFICATIONS (separate section if they have any. Don't bury them in education.)
+   - Institution, dates. City and state only if the source gives them. Add relevant coursework if it strengthens the resume.
+8. CERTIFICATIONS (separate section if they have any. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
+- CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
 
 OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
 
@@ -386,6 +420,7 @@ Term 7 | Term 8 | Term 9
 PROFESSIONAL EXPERIENCE
 
 JOB TITLE | Company Name | City, State | Start Year - End Year
+(City, State only if the source gives that job's city. Otherwise: JOB TITLE | Company Name | Start Year - End Year)
 - Strong verb + what was done + result, quantified where the source states a number.
 - Strong verb + achievement with scope (headcount, volume, percentage) when the source gives it.
 - As many bullets as the role's real achievements support (typically 3 to 6); write fewer rather than pad.
@@ -394,6 +429,7 @@ JOB TITLE | Company Name | City, State | Start Year - End Year
 
 EDUCATION
 Institution Name, City, State | Start Year - End Year
+(City, State only if the source gives them.)
 Relevant coursework or focus area if it adds value (only what the source states).
 
 CERTIFICATIONS
@@ -437,9 +473,10 @@ RULES:
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
 - FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size.
-- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY and KEY STRENGTHS were written by an earlier step and can overstate. When they differ, the person's words win. Never repeat a claim about character or reliability ("dependable", "someone you can count on", "shows up ready") unless the work history says it.
+- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS were written by an earlier step and can overstate. When they differ, the person's words win. Never repeat a claim about character or reliability ("dependable", "someone you can count on", "shows up ready") unless the work history says it.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${closingStyle}
 - REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
+- CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
 - VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine.`;
 

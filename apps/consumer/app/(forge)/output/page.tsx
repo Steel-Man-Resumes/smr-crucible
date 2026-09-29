@@ -146,6 +146,12 @@ export default function OutputPage() {
   const skills = output.skills || [];
   const barriers = output.barriers || [];
   const careerPaths = output.career_paths || [];
+  // Report sentences that may say more about a credential than the person did.
+  // Checked on the server when the report was made; shown with the report, so
+  // they appear whether or not documents are ever made.
+  const reportChecks: string[] = Array.isArray((output as { credential_checks?: unknown })?.credential_checks)
+    ? ((output as { credential_checks: unknown[] }).credential_checks.filter((c) => typeof c === "string") as string[])
+    : [];
 
   // Prevent double-submission on mount
   const hasStarted = useRef(false);
@@ -162,7 +168,7 @@ export default function OutputPage() {
     unmatched: number;
     // Documents where the checker reported something but named no phrase we could show.
     unnamed: ("resume" | "cover_letter")[];
-    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" }[];
+    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" | "credential" }[];
   } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
   // It fails open so a person still gets their documents -- but they should be
@@ -218,12 +224,12 @@ export default function OutputPage() {
       setCoverLetterText(data.coverLetter || "");
       const g = data.grounding;
       const outcomes = Array.isArray(g?.outcomes) ? g.outcomes : [];
-      if (g && (g.removed || g.residual || g.unmatched || outcomes.length || g.hasFabrication)) {
+      if ((g && (g.removed || g.residual || g.unmatched || g.hasFabrication)) || outcomes.length) {
         setGroundingNote({
-          removed: g.removed || 0,
-          residual: g.residual || 0,
-          unmatched: g.unmatched || 0,
-          unnamed: (["resume", "cover_letter"] as const).filter((d) => g.unnamedByDoc?.[d] === true),
+          removed: g?.removed || 0,
+          residual: g?.residual || 0,
+          unmatched: g?.unmatched || 0,
+          unnamed: (["resume", "cover_letter"] as const).filter((d) => g?.unnamedByDoc?.[d] === true),
           outcomes,
         });
       }
@@ -379,6 +385,22 @@ export default function OutputPage() {
           </p>
         )}
       </section>
+
+      {/* Report lines that may say more about a credential than the person did.
+          Flagged, never removed: the person knows what they hold. */}
+      {reportChecks.length > 0 && (
+        <section className="mb-10 border border-t-amber bg-t-panel px-4 py-3">
+          <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">Check these lines</p>
+          <p className="text-xs leading-relaxed text-t-phos">
+            {reportChecks.length === 1 ? "This line" : "These lines"} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {reportChecks.map((c, i) => (
+              <li key={i} className="text-[11px] leading-relaxed text-t-phos">{`"${c}"`}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Strengths */}
       {strengths.length > 0 && (
@@ -627,10 +649,13 @@ export default function OutputPage() {
             )}
 
             {groundingNote && (() => {
-              const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length;
-              const docName = (d: "resume" | "cover_letter") => (d === "resume" ? "resume" : "letter");
+              const credentialCount = groundingNote.outcomes.filter((o) => o.status === "credential").length;
+              const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length + credentialCount;
+              const docName = (d: "resume" | "cover_letter") => (d === "cover_letter" ? "letter" : d);
               const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
-                o.status === "removed"
+                o.status === "credential"
+                  ? `A line in your ${docName(o.doc)} may say more about a card, license or certification than you told us. Check it: `
+                  : o.status === "removed"
                   ? `Taken out of your ${docName(o.doc)}: `
                   : o.status === "changed"
                     ? `Reworded in your ${docName(o.doc)}. Find the new wording and check it. It used to say: `
@@ -649,6 +674,8 @@ export default function OutputPage() {
                       `We took out ${groundingNote.removed} ${groundingNote.removed === 1 ? "detail" : "details"} we couldn't match to what you told us. `}
                     {groundingNote.residual > 0 &&
                       `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged may still be in there, maybe reworded. `}
+                    {credentialCount > 0 &&
+                      `${credentialCount === 1 ? "One line" : `${credentialCount} lines`} may say more about a card, license or certification than you told us. `}
                     {groundingNote.unmatched > 0 &&
                       `The check quoted ${groundingNote.unmatched === 1 ? "words" : "some words"} we couldn't find in your documents. `}
                     {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
