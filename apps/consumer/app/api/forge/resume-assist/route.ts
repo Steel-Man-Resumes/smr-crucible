@@ -25,6 +25,7 @@ import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { unsupportedNumbers } from "@/lib/number-truth";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getToolsForTitle } from "@/lib/onet";
 
@@ -41,6 +42,7 @@ HOW TO WRITE IT:
 - Lead with what they did; fold in the tool/process, the scale (how often / how many), and the result, but ONLY the ones they actually gave.
 - Be concrete, never generic. Kill empty phrases: no "hard worker", "team player", "results-driven", "detail-oriented".
 - Never let them undersell. If they say they "just" did something, write the real skill in it.
+- A number they gave as a range or a bound stays exactly that ("about 6 to 10", "under 50", "more than 25"). Never turn it into one exact number.
 - Reframe honestly: work done in a work program, training, or while incarcerated is REAL experience. Name the skill, not the setting. NEVER write the words incarceration, prison, jail, inmate, offender, or felon. Disclosure is handled in its own place, never on the resume.
 - One sentence. Plain, dignified, true. 6th-grade reading level.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
@@ -186,26 +188,61 @@ ${targetJob ? `They are aiming for a ${targetJob} role.\n` : ""}The person's own
 - How many (people, orders, shifts, units, dollars, hours): ${quantity || "(blank)"}
 - What got better because of them: ${improved || "(blank)"}
 
-Write the single strongest TRUE bullet from ONLY these facts.`;
+Write the single strongest TRUE bullet from ONLY these facts.${
+        a.quantitySource === "picked"
+          ? `\nThe "How many" answer is a range they picked because they don't know the exact number. Keep it as a range, with its words (about, under, more than).`
+          : ""
+      }`;
 
       // Sweep dashes BEFORE the quote/bullet strip, so a leading em dash (which the
       // sweep turns into "- ") is then removed by the strip instead of surviving.
-      const bullet = plainPunctuation(
-        (await callAI(BULLET_SYSTEM, [{ role: "user", content: userMsg }], 250, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
-        logDashSwaps("forge-resume-assist")
-      )
-        .replace(/^["'\s•\-]+|["']+$/g, "")
-        .trim();
+      const writeBullet = async (messages: { role: "user" | "assistant"; content: string }[]) =>
+        plainPunctuation(
+          (await callAI(BULLET_SYSTEM, messages, 250, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
+          logDashSwaps("forge-resume-assist")
+        )
+          .replace(/^["'\s•\-]+|["']+$/g, "")
+          .trim();
+
+      // Every number in the bullet must be one the person typed or picked. The
+      // prompt says so; this check makes it hold. One rewrite, then refuse.
+      // Only the person's answers supply numbers: never the job title, company or
+      // target job (a posting's title is not their words). The "How many?" answer is
+      // checked strictly, so a picked range can never become one exact figure.
+      const ownWords = [did, tools, often, improved].join("\n");
+      let bullet = await writeBullet([{ role: "user", content: userMsg }]);
+      let invented = unsupportedNumbers(bullet, ownWords, quantity);
+      let numberCheck: "clean" | "rewritten" | "refused" = "clean";
+      if (invented.length) {
+        bullet = await writeBullet([
+          { role: "user", content: userMsg },
+          { role: "assistant", content: bullet },
+          {
+            role: "user",
+            content: `That bullet uses a number the person never gave (${invented.join(", ")}). Write it again using only numbers from their own words above. If they gave no number, use none.`,
+          },
+        ]);
+        invented = unsupportedNumbers(bullet, ownWords, quantity);
+        numberCheck = invented.length ? "refused" : "rewritten";
+      }
 
       await logShape(
         `bullet jobTitle=${jobTitle}`,
         `Bullet workshop generated a truth-gated bullet for ${jobTitle || "a role"}.`,
-        { type: "bullet_workshop", bullet_length: bullet.length, had_quantity: !!quantity }
+        { type: "bullet_workshop", bullet_length: bullet.length, had_quantity: !!quantity, number_check: numberCheck }
       );
 
+      if (numberCheck === "refused") {
+        return NextResponse.json(
+          { error: "That draft used a number you didn't give us, so we didn't show it. Try again, or type the number in yourself if it's true." },
+          { status: 422 }
+        );
+      }
+
+      const quantitySource = ["typed", "picked", "unsure"].includes(a.quantitySource) ? a.quantitySource : undefined;
       return NextResponse.json({
         bullet,
-        evidence: { bullet, did, tools, often, quantity, improved },
+        evidence: { bullet, did, tools, often, quantity, improved, ...(quantitySource ? { quantitySource } : {}) },
       });
     }
 

@@ -23,6 +23,7 @@ import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { letterClosingStyle } from "@/lib/letter-style";
+import { evidenceAnswerText } from "@/lib/number-truth";
 import {
   verifyGrounding,
   verifyResumeBullets,
@@ -105,6 +106,9 @@ async function handlePost(request: Request) {
     // Client-supplied resume text with an "approved" flag is no longer read --
     // that door let any session POST arbitrary text as trusted grounding.
     let approvedResumeText = "";
+    // The person's own bullet-workshop answers saved on that approved resume
+    // (what they did, how many, and so on), read server-side like the rest of it.
+    let approvedEvidenceAnswers: string[] = [];
     if (approvedArtifactId !== undefined) {
       if (typeof approvedArtifactId !== "string" || !approvedArtifactId) {
         return NextResponse.json(
@@ -128,6 +132,7 @@ async function handlePost(request: Request) {
         );
       }
       const doc = decision.content as any;
+      approvedEvidenceAnswers = evidenceAnswerText(doc);
       approvedResumeText = formatResumeDownload(
         doc?.formatVersion === 2 || doc?.formatVersion === 3
           ? doc
@@ -297,6 +302,9 @@ ${contactName || "Candidate"}`;
       // Server-resolved (Phase 1A): approvedResumeText only exists when the
       // artifact passed ownership + approval checks above.
       approvedResume: { text: approvedResumeText, approved: !!approvedResumeText },
+      // Numbers the person typed or picked in the workshop are theirs, so the
+      // truth check treats them as supported. Only from the approved artifact.
+      userText: approvedResumeText ? approvedEvidenceAnswers : [],
     });
 
     const [coverCheck, summaryCheck, bulletCheck, listCheck] = await Promise.all([

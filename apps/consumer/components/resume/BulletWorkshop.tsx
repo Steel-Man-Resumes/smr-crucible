@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
+import { RANGE_CHOICES, QUANTITY_UNITS, type QuantityUnit } from "@/lib/number-truth";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -58,8 +59,6 @@ const OFTEN_CHIPS = [
   "weekly",
   "during peak season",
 ] as const;
-
-const QUANTITY_CHIPS = ["people", "crew", "orders", "loads", "units", "hours", "shifts", "miles"] as const;
 
 const IMPROVED_CHIPS = [
   "fewer mistakes",
@@ -115,6 +114,7 @@ type WorkshopDraft = {
   tools: string;
   often: string;
   quantity: string;
+  quantitySource?: BulletEvidence["quantitySource"];
   improved: string;
   draft: string | null;
 };
@@ -144,8 +144,22 @@ export function BulletWorkshop({
   const [tools, setTools] = useState(saved?.tools ?? "");
   const [often, setOften] = useState(saved?.often ?? "");
   const [quantity, setQuantity] = useState(saved?.quantity ?? "");
+  // Typed, picked from the offered ranges, or "not sure". Recorded with the bullet.
+  const [quantitySource, setQuantitySource] = useState<BulletEvidence["quantitySource"]>(saved?.quantitySource);
+  const [quantityUnit, setQuantityUnit] = useState<QuantityUnit | null>(null);
   const [improved, setImproved] = useState(saved?.improved ?? "");
   const [draft, setDraft] = useState<string | null>(saved?.draft ?? null);
+  // A draft belongs to the answers it was written from. If the answers change
+  // afterward (a new number, "I'm not sure"), the draft is stale and cannot be
+  // used until it is rewritten or the person edits it themselves.
+  const answersKey = JSON.stringify([did, tools, often, quantity, improved]);
+  const [draftFrom, setDraftFrom] = useState<string | null>(() => (saved?.draft ? answersKey : null));
+  const [draftEdited, setDraftEdited] = useState(false);
+  const draftStale = draft !== null && draftFrom !== null && draftFrom !== answersKey && !draftEdited;
+  // What was in the "How many?" box before a pick replaced it, so one tap undoes it.
+  const [quantityUndo, setQuantityUndo] = useState<{ value: string; source: BulletEvidence["quantitySource"] } | null>(null);
+  const quantityUnitRef = useRef<QuantityUnit | null>(null);
+  quantityUnitRef.current = quantityUnit;
   const [generating, setGenerating] = useState(false);
   const [toolHints, setToolHints] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -157,6 +171,10 @@ export function BulletWorkshop({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        if (quantityUnitRef.current) {
+          setQuantityUnit(null);
+          return;
+        }
         onClose();
         return;
       }
@@ -190,12 +208,12 @@ export function BulletWorkshop({
     try {
       window.localStorage.setItem(
         DRAFT_PREFIX + storageKey,
-        JSON.stringify({ did, tools, often, quantity, improved, draft })
+        JSON.stringify({ did, tools, often, quantity, quantitySource, improved, draft })
       );
     } catch {
       /* storage full/blocked -- keep working, in-memory state still holds */
     }
-  }, [storageKey, did, tools, often, quantity, improved, draft]);
+  }, [storageKey, did, tools, often, quantity, quantitySource, improved, draft]);
 
   // Memory-joggers for the tools question (O*NET, fail-open to AI).
   useEffect(() => {
@@ -241,6 +259,7 @@ export function BulletWorkshop({
   }
 
   async function generate() {
+    const requestKey = answersKey;
     setGenerating(true);
     setError("");
     try {
@@ -252,11 +271,15 @@ export function BulletWorkshop({
           jobTitle,
           company,
           targetJob,
-          answers: { did, tools, often, quantity, improved },
+          answers: { did, tools, often, quantity, quantitySource, improved },
         }),
       });
       const d = await res.json();
-      if (res.ok && d.bullet) setDraft(d.bullet);
+      if (res.ok && d.bullet) {
+        setDraft(d.bullet);
+        setDraftFrom(requestKey);
+        setDraftEdited(false);
+      }
       else setError(d.error || "Could not write that yet. Add a little more and try again.");
     } catch {
       setError("Something went wrong. Try again.");
@@ -267,7 +290,7 @@ export function BulletWorkshop({
 
   function accept() {
     const finalBullet = (draft || "").trim();
-    if (!finalBullet) return;
+    if (!finalBullet || draftStale) return;
     if (storageKey) {
       try {
         window.localStorage.removeItem(DRAFT_PREFIX + storageKey);
@@ -275,7 +298,18 @@ export function BulletWorkshop({
         /* ignore */
       }
     }
-    onAccept(finalBullet, { bullet: finalBullet, did, tools, often, quantity, improved });
+    // The "What did you do?" box starts with the existing line, which may have been
+    // written by a model. It is saved as the person's own words only if they changed it.
+    const didIsTheirs = !initialBullet || did.trim() !== initialBullet.trim();
+    onAccept(finalBullet, {
+      bullet: finalBullet,
+      did: didIsTheirs ? did : undefined,
+      tools,
+      often,
+      quantity,
+      quantitySource,
+      improved,
+    });
   }
 
   const answered = [did, tools, often, quantity, improved].filter((v) => v.trim()).length;
@@ -287,7 +321,12 @@ export function BulletWorkshop({
       onClick={onClose}
     >
       <div
-        className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5"
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Make this stronger"
+        className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5 focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
@@ -355,23 +394,103 @@ export function BulletWorkshop({
             chips={OFTEN_CHIPS}
             why={WHY.often}
           />
-          <Field
-            label="How many?"
-            value={quantity}
-            onChange={setQuantity}
-            placeholder="e.g., 3 new hires, 200 orders a day"
-            chips={QUANTITY_CHIPS}
-            why={WHY.quantity}
-          />
+          <div>
+            <Field
+              label="How many?"
+              value={quantity}
+              onChange={(v) => {
+                setQuantity(v);
+                setQuantitySource(v.trim() ? "typed" : undefined);
+                setQuantityUndo(null);
+              }}
+              placeholder="e.g., 3 new hires, 200 orders a day"
+              why={WHY.quantity}
+            />
+            {/* Pick what you were counting, then the closest range. The ranges are
+                fixed in code, never written by a model, and a pick only fills the
+                box. Nothing reaches the resume until the person accepts it. */}
+            <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="What were you counting?">
+              {QUANTITY_UNITS.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  aria-pressed={quantityUnit === u}
+                  onClick={() => setQuantityUnit(quantityUnit === u ? null : u)}
+                  className={`t-focus min-h-touch border px-3 text-sm transition-colors hover:border-t-amber ${
+                    quantityUnit === u ? "border-t-amber bg-t-panel text-t-white" : "border-t-line bg-t-panel-2 text-t-phos"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+            {quantityUnit && (
+              <div className="mt-2 border-l-2 border-t-amber pl-2">
+                <p className="mb-1.5 text-[11px] text-t-phos">
+                  {quantityUnit === "crew" ? "About how big was the crew?" : `About how many ${quantityUnit}?`}{" "}
+                  {"Pick the closest one. Only pick it if it's true. You can change it after."}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {RANGE_CHOICES[quantityUnit].map((r) => (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => {
+                        if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
+                        setQuantity(r.fill);
+                        setQuantitySource("picked");
+                        setQuantityUnit(null);
+                        document.getElementById("bw-how-many")?.focus();
+                      }}
+                      className="t-focus min-h-touch border border-t-line bg-t-panel-2 px-3 text-sm text-t-phos transition-colors hover:border-t-amber"
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
+                      setQuantity("");
+                      setQuantitySource("unsure");
+                      setQuantityUnit(null);
+                      document.getElementById("bw-how-many")?.focus();
+                    }}
+                    className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
+                  >
+                    {"I'm not sure"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {quantitySource === "unsure" && !quantity.trim() && (
+              <p className="mt-1.5 text-[11px] text-t-phos-dim">
+                {"That's fine. We'll leave the number out. A true line with no number still works."}
+              </p>
+            )}
+            {quantityUndo && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuantity(quantityUndo.value);
+                  setQuantitySource(quantityUndo.source);
+                  setQuantityUndo(null);
+                }}
+                className="t-focus mt-1 min-h-touch text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2 hover:text-t-white"
+              >
+                {`Undo. Put back "${quantityUndo.value}"`}
+              </button>
+            )}
+          </div>
           {/* Hardest screen #2: the question that carries the most weight and
               gets skipped the most. He only speaks if it is still empty after
               the person has had a moment with the others. */}
           <TroyAttention
             targetSelector="#bw-how-many"
             surfaceId="bullet-quantity"
-            enabled={!quantity.trim()}
+            enabled={!quantity.trim() && quantitySource !== "unsure"}
             delayMs={9000}
-            message="This one is worth the most. Even a rough number you are sure of beats leaving it blank."
+            message="Tap what you counted, or type a number you know is true."
           />
           <Field
             label="What got better because of you?"
@@ -393,12 +512,17 @@ export function BulletWorkshop({
             </p>
             <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setDraftEdited(true);
+              }}
               rows={3}
               className="w-full text-sm bg-t-panel text-t-white border border-t-line px-3 py-2 resize-y focus:border-t-amber focus:outline-none"
             />
             <p className="text-[11px] text-t-phos-dim mt-1">
-              Edit it to sound like you. Everything here is true to what you said.
+              {draftStale
+                ? "Your answers changed after this was written. Tap Rewrite, or fix the line yourself."
+                : "Edit it to sound like you. Check every number. If one isn't right, fix it."}
             </p>
           </div>
         )}
@@ -414,7 +538,8 @@ export function BulletWorkshop({
           {draft !== null && (
             <button
               onClick={accept}
-              className="t-focus px-4 py-2.5 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
+              disabled={draftStale}
+              className="t-focus px-4 py-2.5 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 disabled:border-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
             >
               Use this bullet
             </button>

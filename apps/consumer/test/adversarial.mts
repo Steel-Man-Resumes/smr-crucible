@@ -16,6 +16,7 @@
 
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
 import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
+import { numbersIn, unsupportedNumbers, RANGE_CHOICES, QUANTITY_UNITS, evidenceAnswerText } from "@/lib/number-truth";
 import { computeGrounding } from "@/lib/grounding";
 import {
   buildTrustedSource,
@@ -196,6 +197,43 @@ section("cover letter closing styles");
   check("empty seed still returns a style", typeof letterClosingStyle("") === "string" && letterClosingStyle("").length > 0);
   check("no style asks for the old shared closing",
     LETTER_CLOSING_STYLES.every((s) => !/thanks for reading|like to talk/i.test(s)));
+}
+
+// ── Numbers are the person's: ask, offer ranges, check every number ──────────
+section("number truth");
+{
+  check("numbersIn normalizes commas and keeps the percent", JSON.stringify(numbersIn("1,000 units. Then 3.4%.")) === JSON.stringify(["1000", "3.4%"]));
+  check("numbersIn reads small number words", numbersIn("trained three new hires").includes("3"));
+  check("a number the person gave passes", unsupportedNumbers("Trained 11 new operators", "Trained 11 new operators.").length === 0);
+  check("a picked range passes", unsupportedNumbers("Trained about 6 to 10 new hires", "about 6 to 10 people").length === 0);
+  check("an invented number is caught", JSON.stringify(unsupportedNumbers("Loaded 40 trucks a day", "loaded trucks")) === '["40"]');
+  check("a number written as a word in the answers matches digits", unsupportedNumbers("Trained 3 new hires", "trained three new people").length === 0);
+  check("1,000 and 1000 are the same number", unsupportedNumbers("Picked 1,000 units a day", "about 500 to 1000 units a day").length === 0);
+  check("every unit has ranges", QUANTITY_UNITS.every((u) => RANGE_CHOICES[u].length >= 3));
+  const allFills = QUANTITY_UNITS.flatMap((u) => RANGE_CHOICES[u].flatMap((r) => [r.label, r.fill]));
+  check("range text has no dash punctuation", allFills.every((t) => !/\u2014|\u2013| -- /.test(t)), allFills.find((t) => /\u2014|\u2013| -- /.test(t)));
+  check("each fill carries its label's numbers", QUANTITY_UNITS.every((u) =>
+    RANGE_CHOICES[u].every((r) => unsupportedNumbers(r.label, r.fill).length === 0)));
+  const doc = { experience: [{ bullets: ["Trained 40 people"], evidence: [{ bullet: "Trained 40 people", did: "trained new hires", quantity: "about 6 to 10 people" }] }] };
+  const answers = evidenceAnswerText(doc).join("\n");
+  check("evidence answers include what the person gave", answers.includes("about 6 to 10 people") && answers.includes("trained new hires"));
+  check("evidence answers never include the bullet text", !answers.includes("40"));
+  check("evidence reader is safe on odd input", evidenceAnswerText(null).length === 0 && evidenceAnswerText({ experience: "x" }).length === 0);
+  const stale = { experience: [{ bullets: ["Loaded trucks"], evidence: [{ bullet: "Trained 40 people", quantity: "about 6 to 10 people" }] }] };
+  check("answers behind a deleted line are not trusted", evidenceAnswerText(stale).length === 0);
+  // A picked range or bound has to stay whole.
+  check("a range endpoint alone is caught", JSON.stringify(unsupportedNumbers("Trained 10 new hires", "trained new hires", "a crew of about 6 to 10")) === '["10"]');
+  check("a range kept whole passes", unsupportedNumbers("Led a crew of about 6 to 10", "led a crew", "a crew of about 6 to 10").length === 0);
+  check("\"under 50\" cannot become 50", JSON.stringify(unsupportedNumbers("Processed 50 orders a day", "", "under 50 orders a day")) === '["50"]');
+  check("\"under 50\" kept passes", unsupportedNumbers("Processed under 50 orders a day", "", "under 50 orders a day").length === 0);
+  check("\"1 or 2\" cannot become 2", JSON.stringify(unsupportedNumbers("Worked 2 shifts a week", "", "1 or 2 shifts a week")) === '["2"]');
+  check("an exact typed quantity passes", unsupportedNumbers("Trained 3 new hires", "", "3 new hires").length === 0);
+  // Amounts written as words, and magnitude.
+  check("\"hundreds\" the person never said is caught", unsupportedNumbers("Processed hundreds of orders", "packed orders", "").includes("w:hundred"));
+  check("spelled-out numbers are read", unsupportedNumbers("Trained twenty-five new hires", "trained new hires", "").includes("25"));
+  check("200 orders does not approve $200K", unsupportedNumbers("Handled $200K in orders", "", "about 50 to 200 orders a day").includes("$200k"));
+  check("a percent is its own amount", unsupportedNumbers("Cut errors by 10%", "a crew of 10", "").includes("10%"));
+  check("\"one-on-one\" is not a count", unsupportedNumbers("Coached new hires one-on-one", "coached new hires", "").length === 0);
 }
 
 // ── 3. Grounding gauge realism (Codex 13) ────────────────────────────────────
