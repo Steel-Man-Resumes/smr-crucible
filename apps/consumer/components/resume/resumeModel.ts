@@ -165,6 +165,8 @@ export interface BulletEvidence {
   tools?: string;
   often?: string;
   quantity?: string;
+  /** Whether the person typed the number, picked one of the offered ranges, or said they are not sure. */
+  quantitySource?: "typed" | "picked" | "unsure";
   improved?: string;
 }
 
