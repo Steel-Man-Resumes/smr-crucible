@@ -142,7 +142,16 @@ async function handlePost(request: Request) {
     // never the AI-derived narrative, so invention can't launder itself as source.
     const groundingSource = buildTrustedSource({
       resumeText: input.resumeText,
-      userText: [input.goalNarrative, (input.goals || []).join(", ")],
+      userText: [
+        input.goalNarrative,
+        (input.goals || []).join(", "),
+        // The person's own answers about schedule, commute and place ("open to
+        // any shift", "has a car") so a letter can repeat them without a flag.
+        Object.entries((input.preferences || {}) as Record<string, unknown>)
+          .filter(([, v]) => typeof v === "string" && v.trim())
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("; "),
+      ],
     });
 
     const [resumeCheck, coverCheck] = await Promise.all([

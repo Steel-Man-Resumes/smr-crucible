@@ -114,6 +114,15 @@ describe("vocabulary is not evidence (reviewer counterexamples)", () => {
     );
   });
 
+  it("reads \"never had an accident\" as a safety record, not its opposite", () => {
+    assert.deepEqual(claims("- Zero accidents in five years.", "Never had an accident in 5 years."), []);
+  });
+
+  it("still catches a real accident in the source", () => {
+    const found = claims("- Clean safety record.", "Had an accident on the loading dock in 2017.");
+    assert.equal(found.length, 1);
+  });
+
   it("still allows supervision the source actually states", () => {
     assert.deepEqual(
       claims("- Supervised a crew of six.", "Ran a three man crew when the foreman was off"),

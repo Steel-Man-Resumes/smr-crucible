@@ -20,6 +20,27 @@
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
+import { unsupportedNumbers } from "@/lib/number-truth";
+
+/**
+ * The seams a rewrite leaves: a space at the end of a line where a clause was
+ * cut, two spaces where words were taken out, a space before punctuation.
+ * Indentation at the start of a line is kept.
+ */
+export function tidySeams(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const indent = line.match(/^\s*/)?.[0] ?? "";
+      const body = line
+        .slice(indent.length)
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\s+([,.;:!?])/g, "$1")
+        .replace(/[ \t]+$/g, "");
+      return indent + body;
+    })
+    .join("\n");
+}
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -177,11 +198,13 @@ Two more kinds of fabrication that are easy to miss. A credential stated as MORE
 
 Scrutinize section headers and the employer/date/location lines too, not only the bullets. A specific employer name, city, or date range the source never gives is just as much a fabrication as an invented metric.
 
+SUPPORTED means the source states the same fact in any wording. "Never had an accident in 5 years" supports "no accidents in five years" and "five years without an accident". It does not support "clean safety record", which also covers violations and write-ups, or "zero OSHA recordables". Never flag a faithful restatement of a fact the source gives.
+
 Do NOT flag: strong action verbs, general professional framing, or a reasonable summary of a duty the source states. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
 
 ONE EXCEPTION to "general professional framing", and it is not a small one. A claim about the PERSON'S CHARACTER OR CONDUCT (attendance, punctuality, reliability, work ethic, safety record, honesty, initiative, how well they get along with people) IS flaggable whenever the source does not support it, even though it sounds like framing. A real run turned two sentences about washing dishes into "reliability and consistent attendance across every shift, on time and ready to work", which the person never said about themselves. These claims feel harmless because nothing on paper disproves them; that is exactly what makes them dangerous. A hiring manager asks "tell me about your attendance at that job" and the person is left defending a sentence they did not write. Flag it unless their own words support it.
 
-Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
+Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. If a flagged claim overstates a fact the source DOES give, rewrite it in the source's own words instead of deleting it: never delete a result, number or record the source states. When you cut part of a sentence or a headline, rewrite what is left as a whole sentence built from SOURCE; never leave a fragment. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
 Return ONLY a JSON object:
 {"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason"}], "cleaned": "the full corrected OUTPUT text"}`;
@@ -273,14 +296,19 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   // is not itself a bare drop marker. Below any guard we still surface flags.
   const lengthFloor = Math.floor(output.trim().length * 0.4);
   const withinAuditWindow = output.trim().length <= MAX_VERIFY_CHARS;
+  // (e) The rewrite must not bring in a number of its own: every amount in it
+  // has to be in the person's words or already in the draft it is fixing.
+  const rewriteAddsNumbers = unsupportedNumbers(cleaned, `${source}\n${output}`).length > 0;
+  if (rewriteAddsNumbers) console.warn("[grounding-verify] rewrite introduced a number not in the source or draft; not applied");
   const applyRewrite =
     hasFabrication &&
     withinAuditWindow &&
     !isDropMarker(cleaned) &&
-    cleaned.length >= Math.max(40, lengthFloor);
+    cleaned.length >= Math.max(40, lengthFloor) &&
+    !rewriteAddsNumbers;
 
   return {
-    text: applyRewrite ? cleaned : output,
+    text: applyRewrite ? tidySeams(cleaned) : output,
     hasFabrication,
     applied: applyRewrite,
     flags,

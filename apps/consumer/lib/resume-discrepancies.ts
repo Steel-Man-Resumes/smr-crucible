@@ -180,6 +180,9 @@ const CHARACTER_CLAIMS: Array<{
   licensedBy: RegExp;
   /** Source wording that contradicts the claim outright. */
   contradictedBy?: RegExp;
+  /** Ignore negated phrases ("never had an accident") when looking for a
+   *  contradiction, so a clean record is not read as its opposite. */
+  ignoreNegated?: boolean;
   label: string;
 }> = [
   {
@@ -195,8 +198,9 @@ const CHARACTER_CLAIMS: Array<{
     claim: /\b(?:clean|strong|spotless|excellent|proven)\s+safety\s+record\b|\bzero\s+(?:accidents|injuries|incidents)\b|\bno\s+(?:lost[- ]time\s+)?(?:accidents|injuries|incidents)\b/i,
     // Safety TRAINING is not a safety RECORD. The source must speak to
     // outcomes over time, which is what a record is.
-    licensedBy: /\bno\s+(?:lost[- ]time\s+)?(?:accidents|injuries|incidents)\b|\bzero\s+(?:accidents|injuries|incidents)\b|\bsafety record\b|\baccident[- ]free\b|\bwithout (?:an )?(?:accident|injury|incident)\b/i,
+    licensedBy: /\bno\s+(?:lost[- ]time\s+)?(?:accidents|injuries|incidents)\b|\bzero\s+(?:accidents|injuries|incidents)\b|\bsafety record\b|\baccident[- ]free\b|\bwithout (?:an )?(?:accident|injury|incident)\b|\bnever (?:had|been in|caused|got) (?:an? )?(?:accident|injury|incident)/i,
     contradictedBy: /\b(?:had|an|one)\s+(?:accident|injury|incident)\b|\bosha violation\b|\bsafety violation\b|\bgot hurt\b|\bwas injured\b/i,
+    ignoreNegated: true,
   },
   {
     label: "leading or supervising people",
@@ -410,7 +414,10 @@ export function findDiscrepancies(
       if (!hit) continue;
       // Contradiction first: a source that says the opposite is worse than one
       // that says nothing, because the resume is now arguing with the person.
-      const contradicted = rule.contradictedBy?.test(source) ?? false;
+      const contradictionSource = rule.ignoreNegated
+        ? source.replace(/\b(?:never|not|no|without|zero)\b(?:\s+[\w'-]+){0,3}/gi, " ")
+        : source;
+      const contradicted = rule.contradictedBy?.test(contradictionSource) ?? false;
       if (!contradicted && rule.licensedBy.test(source)) continue;
       found.push({
         kind: "unsupported_claim",
