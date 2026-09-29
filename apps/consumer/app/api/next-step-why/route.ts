@@ -23,6 +23,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_FAST } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import {
   getNextStep,
   buildJourneySnapshot,
@@ -84,7 +85,9 @@ Rules:
       userId,
       endpoint: "next-step-why",
     });
-    const why = raw.trim().replace(/^["']+|["']+$/g, "").trim();
+    const why = plainPunctuation(raw.trim(), logDashSwaps("next-step-why"))
+      .replace(/^["']+|["']+$/g, "")
+      .trim();
     if (!why) throw new Error("empty why from AI");
 
     // Decision log (JBS compliance): the deterministic action is the input; the

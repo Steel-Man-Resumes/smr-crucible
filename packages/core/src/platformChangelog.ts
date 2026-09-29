@@ -51,9 +51,9 @@ export const PLATFORM_CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-08-07",
     title:
-      "Fair-chance employers are now verified against a hand-checked list (starting in Grand Rapids / Kent County, MI) instead of a guess.",
+      "Employers marked \"Hires people with records\" are now verified against a hand-checked list (starting in Grand Rapids / Kent County, MI) instead of a guess.",
     meaning:
-      "A fair-chance badge now means a real person confirmed it from the employer's own words. The list is small and growing.",
+      "The \"Hires people with records\" mark now means a real person confirmed it from the employer's own words. The list is small and growing.",
     page: "employers",
   },
 ];

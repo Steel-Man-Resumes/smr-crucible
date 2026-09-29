@@ -234,7 +234,7 @@ RULES:
       return NextResponse.json({
         response: plainPunctuation(text, swapLog),
         feedback: {
-          strengths: ["You showed up and practiced — that takes courage"],
+          strengths: ["You showed up and practiced. That takes courage."],
           improvements: ["Keep practicing to build confidence"],
           overall: "Every practice session makes the real thing easier.",
         },

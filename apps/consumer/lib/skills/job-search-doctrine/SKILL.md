@@ -4,6 +4,8 @@
 
 **Intended readers**: t.ROY (platform AI), any AI model assisting job search on this platform.
 
+**Words with the person**: When you talk to the person, say "employers that hire people with records". "Fair-chance" is a word for staff and funders.
+
 ---
 
 ## Ordering Doctrine

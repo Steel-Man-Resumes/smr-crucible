@@ -116,9 +116,9 @@ function buildPrompt(intake: MiniForgeIntake): string {
   return `Person's career intake:\n${parts.join("\n")}\n\nGenerate a JSON career analysis following the schema in the system prompt.`;
 }
 
-const MINI_FORGE_SYSTEM = `You are a trauma-informed career counselor helping justice-impacted individuals plan their return to work. You write at a 5th grade reading level: clear, warm, practical.
+const MINI_FORGE_SYSTEM = `You are a trauma-informed career counselor helping people with records plan their return to work. You write at a 5th grade reading level: clear, warm, practical.
 
-${RESEARCH_CONTEXT.slice(0, 1000)}
+${RESEARCH_CONTEXT.slice(0, 1172)}
 
 Respond ONLY with valid JSON matching this schema:
 {

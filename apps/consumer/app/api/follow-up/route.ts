@@ -97,14 +97,14 @@ Return JSON only:
       try {
         const parsed = JSON.parse(jsonMatch[0]);
         result = {
-          subject: typeof parsed.subject === "string" ? parsed.subject : `Following up -- ${app.job_title}`,
+          subject: typeof parsed.subject === "string" ? parsed.subject : `Following up on my application for ${app.job_title}`,
           body: typeof parsed.body === "string" ? parsed.body : text.trim(),
         };
       } catch {
-        result = { subject: `Following up -- ${app.job_title}`, body: text.trim() };
+        result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
       }
     } else {
-      result = { subject: `Following up -- ${app.job_title}`, body: text.trim() };
+      result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
     }
     result = plainPunctuation(result, logDashSwaps("follow-up"));
 

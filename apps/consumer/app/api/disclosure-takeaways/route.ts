@@ -19,6 +19,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_DISCLOSURE_TAKEAWAYS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
@@ -54,7 +55,7 @@ async function handlePost(request: Request) {
       return NextResponse.json({ went_well: [], try_next: "" });
     }
 
-    const prompt = `A justice-impacted jobseeker just finished a private practice conversation${
+    const prompt = `A job seeker with a record just finished a private practice conversation${
       hurdleLabel ? ` about sharing: ${sanitizeForPrompt(hurdleLabel, 80)}` : ""
     }${personaLabel ? `, practicing with a ${sanitizeForPrompt(personaLabel, 80)}` : ""}.
 
@@ -106,7 +107,8 @@ Return JSON ONLY:
       console.error("Decision log failed (disclosure-takeaways):", err);
     }
 
-    return NextResponse.json({ went_well, try_next });
+    // Both fields are model-written: dash sweep (counts logged, never content).
+    return NextResponse.json(plainPunctuation({ went_well, try_next }, logDashSwaps("disclosure-takeaways")));
   } catch (error: any) {
     console.error("Disclosure takeaways error:", error);
     return NextResponse.json({ error: "Could not build takeaways" }, { status: 500 });

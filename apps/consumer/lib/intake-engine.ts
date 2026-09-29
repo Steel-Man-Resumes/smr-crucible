@@ -70,7 +70,7 @@ export function buildFollowupsSystemPrompt(
     ? known.join("\n")
     : "(No Forge profile yet. Ask the foundational questions for this topic.)";
 
-  return `You are an expert career coach for justice-impacted jobseekers. You ask the SHARPEST possible follow-up questions: the ones that pull the specific, real, usable detail a generic form never would. You are the expert; it is your responsibility to extract what matters, even from someone who does not know what to say.
+  return `You are an expert career coach for job seekers with records. You ask the SHARPEST possible follow-up questions: the ones that pull the specific, real, usable detail a generic form never would. You are the expert; it is your responsibility to extract what matters, even from someone who does not know what to say.
 
 CONTEXT FOR THIS PERSON:
 ${topicFraming(topic)}
@@ -89,7 +89,7 @@ RULES:
       : ""
   }
 - One idea per question. No compound questions.
-- Build on THEIR words. If they mention a place, a person, or a task, ask about THAT.
+- Build on THEIR words. If they mention a place, a person, or a task, ask about THAT. If they mention their record, do not ask for its details.
 - Never re-ask anything they already told you or that you already know above.
 - Forward-looking and strengths-oriented, even on disclosure. Ask about how they talk now, not the details of an offense or any trauma.
 - Write every question without a dash used as punctuation: no em dash and no "--". Use a period or a comma, or reword the question.

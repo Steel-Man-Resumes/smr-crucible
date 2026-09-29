@@ -20,6 +20,7 @@ import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt } from "@/lib/sanitize";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import {
@@ -306,7 +307,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     };
     const verdict = await verifyOrgOutput(generated.text, facts, lastUserText(messages) ?? undefined);
 
-    let out = generated.text;
+    // Dash sweep on the model-written answer only, before any notice is added.
+    let out = plainPunctuation(generated.text, logDashSwaps("assistant-org"));
     if (!verdict.ok) {
       // Do not silently rewrite a claim into something else true -- that hides
       // the failure and teaches nobody. Flag it where the reader will see it,

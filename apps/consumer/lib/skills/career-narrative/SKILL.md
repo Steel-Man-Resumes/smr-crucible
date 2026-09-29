@@ -169,9 +169,9 @@ The difference: an explanation is defensive and invites further questioning. Han
 
 **On a resume**: Use years only for employment dates (2018-2022, not March 2018-October 2022). This minimizes the visual gap. A year-only gap reads as one year maximum. A month-and-year gap exposes every month. Never explain a gap on a resume. Gaps are explained in person.
 
-**On an application**: If a gap question appears: "Focused on personal development and family responsibilities" is truthful, complete, and deflects nothing that needs to be deflected. Do not write "incarcerated" on an application unless a specific question requires it. Know the ban-the-box law for that jurisdiction (see legal-rights.md).
+**On an application**: If a gap question appears, answer in one short line built only from what is true for this person. Use "personal development" only if the person said they spent that time working on themselves. Use "family responsibilities" only if the person said they were caring for family. When both are true: "Focused on personal development and family responsibilities." When neither fits, ask what they were doing in that time and build the line from their answer. Never write a reason they did not give you. Do not write "incarcerated" on an application unless a specific question requires it. Know the ban-the-box law for that jurisdiction, and if you are not sure of it, say so.
 
-**In a phone screen**: "I had a period of transition between 2018 and 2020, but I've been actively working since then. I'm happy to talk about that if it's helpful, but I'd rather show you what I've been doing since." If they ask directly, answer directly. If they don't ask, do not volunteer it.
+**In a phone screen**: "I had a period of transition between [the years they give], but I've been actively working since then. I'm happy to talk about that if it's helpful, but I'd rather show you what I've been doing since." If they ask directly, answer directly. If they don't ask, do not volunteer it.
 
 **In an interview**: If it hasn't come up, bring it up yourself in the final-stage interview. Own it rather than hope it doesn't surface. A gap that the candidate raised voluntarily reads as confidence. A gap that the employer discovered reads as concealment.
 

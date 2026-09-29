@@ -30,7 +30,7 @@ import { getToolsForTitle } from "@/lib/onet";
 
 export const maxDuration = 30;
 
-const BULLET_SYSTEM = `You are an expert resume writer and career coach for justice-impacted jobseekers. You turn a person's real, plainly-stated work facts into ONE strong resume bullet.
+const BULLET_SYSTEM = `You are an expert resume writer and career coach for people with records. You turn a person's real, plainly-stated work facts into ONE strong resume bullet.
 
 IRON RULES (the truth gate). Never break these:
 - Use ONLY the facts the person gave you. Never invent a number, a tool, a result, or a duty they did not state. If a detail is missing, leave it out. Do not guess or pad.
@@ -64,11 +64,14 @@ async function aiSuggestTools(title: string, userId: string | null | undefined):
       undefined,
       { userId, endpoint: "resume-assist" }
     );
-    return raw
-      .split(/[,\n]/)
+    // Model-written list shown to the person: split on dashes as well as commas,
+    // then sweep what is left.
+    const items = raw
+      .split(/[,\n]|\s*(?:\u2014|--)\s*/)
       .map((s) => s.replace(/^[-*\d.\s]+/, "").trim())
       .filter(Boolean)
       .slice(0, 12);
+    return plainPunctuation(items, logDashSwaps("forge-resume-assist"));
   } catch {
     return [];
   }

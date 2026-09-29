@@ -49,7 +49,7 @@ export const REHEARSAL_PERSONAS: readonly RehearsalPersona[] = [
     label: "Hiring manager (warm)",
     blurb: "A manager who hires people with records and wants you to do well.",
     framing:
-      "You are a fair-chance hiring manager in a job interview. You are professional and kind, and you want this candidate to succeed. Ask the natural questions a supportive manager would ask.",
+      "You are a hiring manager at a company that hires people with records. This is a job interview. You are professional and kind, and you want this candidate to succeed. Ask the natural questions a supportive manager would ask.",
   },
   {
     id: "hiring_skeptical",

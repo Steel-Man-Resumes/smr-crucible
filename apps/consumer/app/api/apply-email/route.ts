@@ -23,11 +23,11 @@ import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 export const maxDuration = 30;
 
 const MOCK_APPLY_EMAIL = {
-  subject: "Application for Warehouse Associate -- Jordan Williams",
+  subject: "Application for Warehouse Associate from Jordan Williams",
   body:
     "Dear Hiring Manager,\n\nI am applying for the Warehouse Associate role. I bring five years of reliable warehouse and forklift experience, a strong safety record, and a track record of showing up and getting the work done. My resume is attached.\n\nI would welcome the chance to talk about how I can contribute to your team. Thank you for your time and consideration.\n\nSincerely,\nJordan Williams",
   whereToFind:
-    "Look for a \"Careers\" or \"Contact\" link on the company's website -- application emails often go to careers@ or hr@ their domain. If you only find a general info@ address, that is fine; ask them to forward it to hiring. You can also call the main number and ask who receives job applications.",
+    "Look for a \"Careers\" or \"Contact\" link on the company's website. Application emails often go to careers@ or hr@ their domain. If you only find a general info@ address, that is fine; ask them to forward it to hiring. You can also call the main number and ask who receives job applications.",
 };
 
 async function handlePost(request: Request) {
@@ -84,7 +84,7 @@ async function handlePost(request: Request) {
     ? `\nSign the email as: ${sanitizeForPrompt(candidateName, 80)}`
     : "";
 
-  const prompt = `You are t.ROY, helping a justice-impacted job seeker apply for a job by EMAIL because the employer offers no online application link.
+  const prompt = `You are t.ROY, helping a job seeker apply for a job by EMAIL because the employer offers no online application link.
 
 THE JOB:
 - Role: ${sanitizeForPrompt(app.job_title)}
@@ -105,7 +105,7 @@ Return JSON only:
       userId: session.user.id,
     });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const fallbackSubject = `Application for ${app.job_title} -- ${app.company}`;
+    const fallbackSubject = `Application for ${app.job_title} at ${app.company}`;
     let result: { subject: string; body: string; whereToFind: string };
     if (jsonMatch) {
       try {

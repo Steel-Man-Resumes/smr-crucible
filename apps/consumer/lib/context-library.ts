@@ -162,7 +162,9 @@ DISCLOSURE REHEARSAL (Maruna + Bushway): If the user has a record, interview pra
 
 GROWTH MINDSET (Dweck, 2006): Feedback should be process-focused: "You did a great job pivoting from the gap question to your warehouse experience" not "You're a natural interviewer."`,
 
-  job_search: `RESEARCH-BACKED JOB SEARCH GUIDANCE:
+  job_search: `When you talk to the person, use plain words: "employers that hire people with records". "Fair-chance" and "justice-impacted" are words for staff and funders.
+
+RESEARCH-BACKED JOB SEARCH GUIDANCE:
 
 FAIR-CHANCE EMPLOYMENT: Companies with explicit fair-chance hiring policies have 13% lower turnover and report equal or better job performance from justice-impacted hires (SHRM, 2021).
 
