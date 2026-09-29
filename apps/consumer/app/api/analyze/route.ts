@@ -23,6 +23,7 @@ import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
 import { WOTC_RE, stripEmployerTaxCredit, plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { credentialStatuses, stripOverstatedCredentialsDeep } from "@/lib/credential-truth";
 
 export const maxDuration = 120;
 
@@ -148,7 +149,30 @@ async function handlePost(request: Request) {
     if (WOTC_RE.test(JSON.stringify(rawForge))) {
       console.warn("[analyze] Deterministic guard stripped a WOTC / Form 8850 reference the model emitted");
     }
-    const forgeOutput = plainPunctuation(stripEmployerTaxCredit(rawForge), logDashSwaps("analyze"));
+    // Credential backstop: every report field, including the ones the grounding
+    // check above does not cover (career paths, next steps, skills, legal notes).
+    // A sentence that claims more than the person's own words give a credential
+    // (a finished course called a certification, an expired card called
+    // renewable) is removed. It only ever removes text.
+    const credentialSweep = stripOverstatedCredentialsDeep(
+      plainPunctuation(stripEmployerTaxCredit(rawForge), logDashSwaps("analyze")),
+      credentialStatuses(
+        buildTrustedSource({
+          resumeText: input.resumeText,
+          userText: [
+            input.goalNarrative,
+            input.hookNarrative,
+            ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []),
+            input.criminalRecord?.context,
+          ],
+        })
+      )
+    );
+    if (credentialSweep.removed.length) {
+      console.warn(`[credential-truth] analyze: removed ${credentialSweep.removed.length} sentence(s) that overstated a credential`);
+    }
+    // What the backstop took out travels with the report, so the page can say so.
+    const forgeOutput = { ...credentialSweep.value, credential_removals: credentialSweep.removed };
 
     // Log decision for JBS compliance
     try {
@@ -202,7 +226,7 @@ const READINESS_DIRECTIVES: Record<string, {
     skills: `This person is exploring, not actively job searching.
 - Emphasize transferable and soft skills over hard/technical ones.
 - Frame skills as personal assets, not resume keywords.
-- Include skills they may not realize they have.`,
+- Name the skills their stated duties show, even ones they may not see in themselves, and tie each one to the duty it comes from.`,
     careers: `This person is EXPLORING, not ready to apply.
 - Suggest 2 paths max. Frame as "worth knowing about" not "you should apply to."
 - Emphasize what the work IS (day-to-day), not next steps to get hired.
@@ -223,7 +247,7 @@ const READINESS_DIRECTIVES: Record<string, {
     skills: `This person is weighing their options.
 - Full skill extraction, but frame transferable skills prominently.
 - For each skill cluster, hint at what industries value it.
-- Include implied skills generously. They need to see they have more than they think.`,
+- Surface the transferable skills a duty they stated clearly shows, and tie each one to that duty so they can see its value.`,
     careers: `This person is THINKING, not applying.
 - Suggest 3 paths, ranging from accessible to aspirational.
 - Frame as "options worth considering" with a sense of possibility.
@@ -274,7 +298,7 @@ const READINESS_DIRECTIVES: Record<string, {
     skills: `This person is actively job searching.
 - Comprehensive extraction with ATS-optimized language.
 - Categorize precisely. Flag which skills map to which career paths.
-- Include industry-standard terminology and certifications.
+- Include industry-standard terminology. List a certification only if the person says they hold it.
 - Prioritize hard skills and quantifiable competencies.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
@@ -432,6 +456,7 @@ ${rd.narrative}
 
 RULES:
 - Use the person's OWN words and experiences. Never fabricate.
+- CREDENTIAL STATUS (non-negotiable): a finished course, class or training is not a certification or license. Say they finished the course unless the person says they passed, are certified or are licensed. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable. Never tell the person they have or hold a credential they did not say they hold, and never tell them to claim one to anyone.
 - CREDENTIAL FIDELITY: reproduce every certification, license, and credential EXACTLY as the person wrote it. Never add an issuing body, expand an abbreviation, or complete a name that looks incomplete. "flagger certification (2019)" stays "Flagger Certification (2019)" and never becomes "OSHA Flagger Certification." If you are unsure what a credential is, repeat their words and say nothing more about it.
 - DATE HONESTY: if a date range is incomplete, ambiguous, or has no end date, do NOT resolve it. Never assume "Present," never infer how long something lasted, and never build a claim about duration, continuity, or steadiness on a date you had to guess. Describe the experience without a timespan instead.
 - SCOPE FIDELITY: never promote someone's role beyond what they wrote. A ranch hand has not "run a ranch." A crew lead has not "managed a department." Keep the scope they stated.
@@ -483,7 +508,8 @@ async function extractSkills(
 
   const system = `You extract skills from resumes and user narratives.
 Categorize as hard (technical/certifiable), soft (interpersonal), or transferable (cross-industry).
-Be generous: include skills implied by experience, not just explicitly stated.
+Include skills the person's own words show, or that a duty they stated clearly requires. Never list a certification, license or credential they did not say they hold.
+- CREDENTIAL STATUS (non-negotiable): a finished course, class or training is not a certification or license. Say they finished the course unless the person says they passed, are certified or are licensed. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable. Never tell the person they have or hold a credential they did not say they hold, and never tell them to claim one to anyone.
 
 READINESS-AWARE INSTRUCTIONS:
 ${rd.skills}
@@ -530,6 +556,7 @@ RULES:
 - Include concrete next steps for each path.
 - No blue-collar assumptions. Match based on actual skills and interests.
 - Be honest about salary ranges.
+- CREDENTIAL STATUS (non-negotiable): a finished course, class or training is not a certification or license. Say they finished the course unless the person says they passed, are certified or are licensed. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable. Never tell the person they have or hold a credential they did not say they hold, and never tell them to claim one to anyone.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 
 ${RESOURCE_VERIFICATION_DISCIPLINE}
@@ -603,6 +630,7 @@ ${RESOURCE_VERIFICATION_DISCIPLINE}
 - LEGAL DISCIPLINE (non-negotiable): legal_notes is career coaching, not legal advice. Never tell the person their specific charge "qualifies" or "does not qualify" for expungement, sealing, or relief. Say a legal-aid resource can assess whether it applies to them. Describe protections generally; cite a statute only as "a law such as X exists," never as settled individual eligibility. Never invent statutes, numbers, deadlines, or eligibility rules.
 - Employer incentives: do NOT mention the Work Opportunity Tax Credit (WOTC) at all. It expired for hires beginning after 2025-12-31 (Form 8850 retired), and naming it even to dismiss it only adds confusion. If an employer incentive is relevant, reference ONLY the Federal Bonding Program (no-cost fidelity bonding, often accessed via the state's American Job Center / workforce office), and never present any incentive as settled without verification.
 ${stateLegal}
+- CREDENTIAL STATUS (non-negotiable): a finished course, class or training is not a certification or license. Say they finished the course unless the person says they passed, are certified or are licensed. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable. Never tell the person they have or hold a credential they did not say they hold, and never tell them to claim one to anyone.
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
 - "The system has real obstacles here. Here's how to move through them." Never "don't worry about it."

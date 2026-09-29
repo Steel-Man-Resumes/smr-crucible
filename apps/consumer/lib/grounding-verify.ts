@@ -173,6 +173,8 @@ export async function verifyGrounding(params: {
 
 You are given SOURCE (everything the person provided about themselves) and OUTPUT (an AI-generated ${label}). Find every CONCRETE factual claim in OUTPUT that SOURCE does not support: invented tools, equipment, or software; specific numbers, metrics, or percentages; safety or performance records; scope claims (supervision, headcount, budget, "zero X"); certifications, licenses, awards; employers, job titles, or dates; or an assumed gender/pronoun the source never states.
 
+Two more kinds of fabrication that are easy to miss. A credential stated as MORE than the source gives it: a course or class stated as a certification, license or "certified", or an expired credential stated as current, active, valid or renewable. And added scope on a duty the source does state: what was taught, which machines, which areas ("Trained 11 new operators" in SOURCE does not support "trained 11 new operators on setup, quality and safety").
+
 Scrutinize section headers and the employer/date/location lines too, not only the bullets. A specific employer name, city, or date range the source never gives is just as much a fabrication as an invented metric.
 
 Do NOT flag: strong action verbs, general professional framing, or a reasonable summary of a duty the source states. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
