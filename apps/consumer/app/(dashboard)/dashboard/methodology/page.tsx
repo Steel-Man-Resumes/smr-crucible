@@ -58,7 +58,7 @@ export default function MethodologyPage() {
               No prep needed. The Forge requires no login, no paperwork, and no
               prior resume. {isPartnerOrAdmin
                 ? "Clients can start on any device with internet access. Point them to steelmanresumes.com and let t.ROY guide them."
-                : "Just start answering questions honestly — t.ROY guides you through every step."}
+                : "Just start answering questions honestly. t.ROY guides you through every step."}
             </p>
           </div>
           <div className="bg-t-panel p-4 border border-t-line">
@@ -285,7 +285,7 @@ const RULES = [
     citation: "Lieberman et al., 2007; Kircanski et al., 2012",
   },
   {
-    name: "Never prescribe — offer options",
+    name: "Offer options, never prescribe",
     description:
       "Present choices. The user decides. Autonomy is sacred, especially for populations whose autonomy has been systematically stripped.",
     clientFacing: "You always decide. t.ROY shows options, never tells you what to do.",
@@ -302,7 +302,7 @@ const RULES = [
     name: "Meet readiness level",
     description:
       "Adjust guidance intensity based on the user’s stage of change. Don’t push someone in precontemplation; celebrate someone in action.",
-    clientFacing: "t.ROY meets you where you are — no pressure, no rushing.",
+    clientFacing: "t.ROY meets you where you are. No pressure, no rushing.",
     citation: "Prochaska & DiClemente, 1983 (Transtheoretical Model)",
   },
   {
@@ -322,7 +322,7 @@ const RULES = [
   {
     name: "Process praise only",
     description:
-      "Reference what the user DID, not what they ARE. ‘You did a great job describing that’ — never ‘You’re a natural.’",
+      "Reference what the user DID, not what they ARE. Say ‘You did a great job describing that.’ Never say ‘You’re a natural.’",
     clientFacing: "t.ROY celebrates what you do, not labels about who you are.",
     citation: "Dweck, 2006 (growth mindset)",
   },
@@ -343,7 +343,7 @@ const RULES = [
   {
     name: "Never share personal data in responses",
     description:
-      "Even if the user disclosed sensitive information, refer to it obliquely: ‘the situation you described’ — never repeat specifics.",
+      "Even if the user disclosed sensitive information, refer to it obliquely, as ‘the situation you described.’ Never repeat specifics.",
     clientFacing: "t.ROY never repeats your personal details back to you in chat.",
     citation: null,
   },

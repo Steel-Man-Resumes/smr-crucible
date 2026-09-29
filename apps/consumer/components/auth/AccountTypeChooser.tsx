@@ -62,7 +62,7 @@ export const ACCOUNT_ROUTES: RouteSpec[] = [
     blurb: "See how the people you support are doing, and step in when needed.",
     heading: "Sign in to your organization",
     needs:
-      "Your organization's admin adds you to the team. If nobody has, ask them first -- signing up here creates a personal account instead.",
+      "Your organization's admin adds you to the team. If nobody has, ask them first. Signing up here creates a personal account instead.",
   },
   {
     id: "agency",
@@ -112,7 +112,7 @@ export function AccountTypeChooser({
         })}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-t-bone-dim">
-        Same sign-in either way -- this just decides where you land. Plenty of
+        Same sign-in either way. This just decides where you land. Plenty of
         people here hold more than one of these, and you can switch any time.
       </p>
     </fieldset>

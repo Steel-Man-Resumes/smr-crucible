@@ -140,7 +140,7 @@ export async function addOrgStaff(params: {
     : {
         ok: false,
         reason:
-          "That person has no connection to this organization yet. Invite them with your organization's code first -- an account can only be added to a team it already belongs to.",
+          "That person has no connection to this organization yet. Invite them with your organization's code first. An account can only be added to a team it already belongs to.",
       };
 }
 

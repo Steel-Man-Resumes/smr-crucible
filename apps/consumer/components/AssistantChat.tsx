@@ -463,7 +463,7 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
               </button>
             ) : supportStatus === "sent" ? (
               <p className="text-xs text-[#344b38]">
-                Sent. Troy reads these himself -- his reply goes to your email.
+                Sent. Troy reads these himself. His reply goes to your email.
               </p>
             ) : (
               <div className="space-y-2">
@@ -535,7 +535,7 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
                 type="button"
                 onClick={() =>
                   sendQuickPrompt(
-                    `Yes, let's do that -- you suggested: "${proactive}"`
+                    `Yes, let's do that. You suggested: "${proactive}"`
                   )
                 }
                 className="max-w-[85%] rounded-[7px] rounded-bl-sm border border-[#b9cdbd] bg-[#f5f6f4] px-4 py-3 text-left text-sm leading-relaxed text-foreground transition-colors hover:bg-[#e3ede5]"

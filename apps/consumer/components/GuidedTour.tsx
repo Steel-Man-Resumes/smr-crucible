@@ -177,8 +177,8 @@ export function GuidedTour() {
               Every tool. For free. If you qualify.
             </h2>
             <p className="text-body text-muted leading-relaxed mb-3">
-              Steel Man walks you from your first day home to your first day hired -- your
-              story, your resume, disclosure planning, interview practice, job matching, and
+              Steel Man walks you from your first day home to your first day hired. It covers
+              your story, your resume, disclosure planning, interview practice, job matching, and
               follow-through.
             </p>
             <p className="text-body text-foreground font-medium">

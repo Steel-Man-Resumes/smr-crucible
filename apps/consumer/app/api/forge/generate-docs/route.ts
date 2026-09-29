@@ -15,6 +15,8 @@ import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { letterClosingStyle } from "@/lib/letter-style";
 
 export const maxDuration = 120;
 
@@ -62,7 +64,7 @@ function selfDisclosureDirective(input: GenerateDocsInput): string {
   const conf = input.resumeConfidence;
   if (conf === "none" || conf === "rough") {
     bits.push(
-      "The person rates their own history as thin/rough. Lead with a functional, skills-forward structure and narrative scaffolding built from real transferable skills. A shorter, sparser, TRUE resume is correct here -- never pad with invented detail to make it look fuller."
+      "The person rates their own history as thin/rough. Lead with a functional, skills-forward structure and narrative scaffolding built from real transferable skills. A shorter, sparser, TRUE resume is correct here. Never pad with invented detail to make it look fuller."
     );
   } else if (conf === "strong") {
     bits.push(
@@ -149,9 +151,10 @@ async function handlePost(request: Request) {
     // itself used to DEMONSTRATE "(XXX) XXX-XXXX | email@email.com", and when a
     // person supplied no phone or email the model copied the example onto the
     // finished resume. That document gets sent to an employer without being
-    // re-read. Deterministic sweep, belt-and-braces like stripEmDashes.
-    const resume = stripContactPlaceholders(resumeCheck.text);
-    const coverLetter = stripContactPlaceholders(coverCheck.text);
+    // re-read. Deterministic sweep, belt-and-braces like plainPunctuation.
+    const swapLog = logDashSwaps("generate-docs");
+    const resume = plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog);
+    const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
     // Per-document accounting (Codex 8): a flag is "removed" only if THAT document's
     // rewrite was applied. A document that found fabrication but couldn't apply the
     // rewrite (window/floor/drop guard) has RESIDUAL fabrication the user must
@@ -257,11 +260,11 @@ async function generateResume(input: GenerateDocsInput, userId: string | null | 
 
 You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
 
-YOUR JOB: Take whatever the user gives you -- even a terrible, bare-bones resume -- and produce a polished, compelling, TRUE resume that gets interviews and survives them.
+YOUR JOB: Take whatever the user gives you, even a terrible, bare-bones resume, and produce a polished, compelling, TRUE resume that gets interviews and survives them.
 
-ABSOLUTE RULES (the truth gate -- violating any = failure):
-1. TRUTH GATE: use ONLY facts the source data states. NEVER invent a number, metric, tool, certification, employer, title, or result. NEVER estimate, infer, or borrow "industry typical" figures. If a detail is missing, write the bullet strong without it. This person's resume must survive a background-checked interview -- a true unquantified bullet beats an impressive false one.
-2. Numbers ONLY where the source states them, kept exactly as given (ranges stay ranges). This rule runs BOTH WAYS and the second half matters as much as the first: every number the person supplied MUST survive onto the resume. Do not drop a measured detail while rewriting the line that carried it. On a real run the intake said "hauled 40 to 50 loads a week during the season" and the finished resume said only "hauls material for a 6-mile MDT overlay project" -- the load count was moved to the cover letter and deleted from the resume. A number the person actually knows is the single most valuable thing their resume can carry. Losing one is as bad as inventing one, and it is harder to notice.
+ABSOLUTE RULES (the truth gate: violating any = failure):
+1. TRUTH GATE: use ONLY facts the source data states. NEVER invent a number, metric, tool, certification, employer, title, or result. NEVER estimate, infer, or borrow "industry typical" figures. If a detail is missing, write the bullet strong without it. This person's resume must survive a background-checked interview. A true unquantified bullet beats an impressive false one.
+2. Numbers ONLY where the source states them, kept exactly as given (ranges stay ranges). This rule runs BOTH WAYS and the second half matters as much as the first: every number the person supplied MUST survive onto the resume. Do not drop a measured detail while rewriting the line that carried it. On a real run the intake said "hauled 40 to 50 loads a week during the season" and the finished resume said only "hauls material for a 6-mile MDT overlay project". The load count had been moved to the cover letter and deleted from the resume. A number the person actually knows is the single most valuable thing their resume can carry. Losing one is as bad as inventing one, and it is harder to notice.
 3. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into achievement language built from stated facts.
 4. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
 5. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
@@ -269,10 +272,12 @@ ABSOLUTE RULES (the truth gate -- violating any = failure):
 7. Past roles = past tense. Current role = present tense. No exceptions.
 8. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
 9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
-10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance -- never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
-11. Use "--" never an em dash anywhere in the output.
+10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance. Never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
+11. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Hyphens inside words (first-piece, part-time) are fine.
+12. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give. No endings like ", freeing capacity for additional production" or ", supporting a smooth flow during busy hours", and no "high-volume", "fast-paced", "peak service" or "busy" unless they said it. A plain true bullet beats a dressed-up one. Keep every result the person did give, in their own terms ("never had an accident in 5 years", "so we didn't have to call a tech"). Dropping one is as bad as inventing one.
+13. NO CHARACTER CLAIMS: no "dependable", "reliable", "shows up ready", "consistent" or anything like them in the headline, summary or bullets unless the person said it about themselves.
 
-DATA CLEANING -- FIX INPUT ERRORS:
+DATA CLEANING (FIX INPUT ERRORS):
 - If a job title doesn't match the company (e.g., retail cashier work attributed to a printing company), repair the pairing using context clues. Never invent a new employer or role.
 - If dates look wrong or overlapping, use the most logical interpretation.
 - If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
@@ -281,16 +286,16 @@ ${isExploring ? `This person is exploring, not actively job searching. Frame the
 ${selfDisclosureDirective(input)}
 SECTION ORDER (exact):
 1. FULL NAME (all caps)
-2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides -- omit anything missing rather than inventing a placeholder for it.
-3. Branded Headline (one powerful line — NOT an objective. An identity statement.)
+2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
+3. Branded Headline (one powerful line. NOT an objective. An identity statement.)
 4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
-5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, never drop real ones -- typically 9 to 15.)
+5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, and never drop real ones. Every term must name something the person said they did, used or learned. No soft-skill filler (Attention to Detail, Task Prioritization, Time Management) unless they said it. Typically 9 to 15, fewer for a short history.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start Year - End Year
    - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
 7. EDUCATION
    - Institution, dates. Add relevant coursework if it strengthens the resume.
-8. CERTIFICATIONS (separate section if they have any — don't bury in education)
+8. CERTIFICATIONS (separate section if they have any. Don't bury them in education.)
 
 OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
 
@@ -346,14 +351,14 @@ EXACT OUTPUT FORMAT (plain text, follow precisely):
 
 FULL NAME
 City, State | Phone | Email
-  -- Use ONLY contact details the source actually provides. OMIT any you do not
+  NOTE: Use ONLY contact details the source actually provides. OMIT any you do not
      have, along with its separator. A name and a city alone is a correct and
      complete contact line. NEVER write a placeholder: no (XXX) XXX-XXXX, no
      email@email.com, no [Phone], no "Your Email Here". A placeholder on a
      finished resume goes to an employer looking like carelessness, and this is
      a document someone sends without re-reading it.
 
-Branded headline — one powerful line. Not an objective. An identity.
+Branded headline: one powerful line. Not an objective. An identity.
 
 CAREER SUMMARY
 3-4 sentences. Position this person as a professional. What they bring, what industry they've grown through, where they're headed. NO generic filler. NO "dedicated professional" or "proven track record." Write like describing someone you're impressed by.
@@ -362,7 +367,7 @@ CORE COMPETENCIES
 Term 1 | Term 2 | Term 3
 Term 4 | Term 5 | Term 6
 Term 7 | Term 8 | Term 9
-(The real competencies the source supports -- typically 9 to 15. No labels. No categories. Just the skills. Pull from ACTUAL job content. Never pad to a count.)
+(The real competencies the source supports, typically 9 to 15. No labels. No categories. Just the skills. Pull from ACTUAL job content. Never pad to a count.)
 
 PROFESSIONAL EXPERIENCE
 
@@ -382,13 +387,13 @@ CERTIFICATIONS
 - Cert name (year, only if the source states it)
 
 CRITICAL REMINDERS:
-- TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded -- real facts, strong verbs, zero invention.
+- TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded: real facts, strong verbs, zero invention.
 - If a job title/company pairing doesn't make sense (retail work at a printing company), repair the pairing using context. Never invent a new employer or role.
 - Transform duties into achievement language using only the source's facts and stated scale.
 - CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
 - NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: build a FUNCTIONAL resume with skill-area sections and bullets from the strengths data provided -- nothing beyond it.
-- Certifications get their OWN section -- never buried in education.`;
+- If no work history exists: build a FUNCTIONAL resume with skill-area sections and bullets from the strengths data provided and nothing beyond it.
+- Certifications get their OWN section, never buried in education.`;
 
   return await callClaude(system, prompt, userId, 4500);
 }
@@ -401,6 +406,9 @@ async function generateCoverLetter(input: GenerateDocsInput, userId: string | nu
   const careerPaths = input.career_paths || [];
   const barriers = input.barriers || [];
   const narrative = input.narrative || {};
+  const closingStyle = letterClosingStyle(
+    (input.resumeText || "").split("\n").find((l) => l.trim()) || narrative.headline || ""
+  );
 
   const system = `You are a cover letter writer for Steel Man Resumes. You write compelling, confident cover letters for people re-entering the workforce.
 
@@ -413,7 +421,13 @@ RULES:
 - NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information in the cover letter. Disclosure happens in person during interviews, never on paper.
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
-- Use "--" never an em dash.`;
+- OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
+- FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size.
+- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY and KEY STRENGTHS were written by an earlier step and can overstate. When they differ, the person's words win. Never repeat a claim about character or reliability ("dependable", "someone you can count on", "shows up ready") unless the work history says it.
+- CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${closingStyle}
+- REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
+- VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine.`;
 
   const parts: string[] = [];
 
@@ -461,20 +475,20 @@ ${parts.join("\n\n")}
 FORMAT (plain text):
 Dear [Hiring Manager],
 
-[Opening paragraph: who you are, what role you're pursuing, and why]
+[Opening paragraph: a real fact from the profile, stated as given, and the role they want]
 
-[Middle paragraph(s): your strongest qualifications, specific achievements, and what you bring]
+[Middle paragraph(s): their strongest qualifications, specific achievements, and what they bring]
 
-[Closing paragraph: enthusiasm, availability, call to action]
+[Closing paragraph: follow the CLOSING rule for this letter. No availability, start date or schedule.]
 
 Sincerely,
 [Name from resume or "Candidate"]
 
 IMPORTANT:
 - Use [Company Name] and [Hiring Manager] as the ONLY placeholders.
-- Everything else must be real — real skills, real achievements, real strengths.
+- Everything else must be real: real skills, real achievements, real strengths.
 - 250-350 words for the body.
-- Address barriers in ONE natural sentence if applicable, otherwise omit entirely.`;
+- Do not mention barriers, gaps, or anything the person would have to explain. That conversation happens in person.`;
 
   return await callClaude(system, prompt, userId);
 }

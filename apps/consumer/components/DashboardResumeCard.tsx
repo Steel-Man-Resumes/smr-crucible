@@ -77,7 +77,7 @@ export function DashboardResumeCard() {
           <ResumePreview doc={doc} sections={sections} overall={overall} />
           <div className="space-y-3">
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              This is the resume you built in The Forge -- your base resume.
+              This is the resume you built in The Forge. It&apos;s your base resume.
               Everything else in The Refinery starts from it.
             </p>
             <div className="flex flex-col gap-2 max-w-xs">

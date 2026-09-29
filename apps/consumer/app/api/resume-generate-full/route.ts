@@ -21,6 +21,8 @@ import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/c
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { letterClosingStyle } from "@/lib/letter-style";
 import {
   verifyGrounding,
   verifyResumeBullets,
@@ -166,20 +168,22 @@ async function handlePost(request: Request) {
 
 You generate a targeted resume as JSON. ${INJECTION_GUARD}
 
-ABSOLUTE RULES (the truth gate -- violating any = failure):
+ABSOLUTE RULES (the truth gate: violating any = failure):
 1. Target the resume specifically at the role in <job_posting>.
-2. TRUTH GATE: use ONLY facts present in the person's background. NEVER invent a number, metric, tool, certification, title, employer, or result they did not provide. If a detail is missing, leave it out -- do not guess or pad. Must survive a background-checked interview.
+2. TRUTH GATE: use ONLY facts present in the person's background. NEVER invent a number, metric, tool, certification, title, employer, or result they did not provide. If a detail is missing, leave it out. Do not guess or pad. Must survive a background-checked interview.
 3. Numbers ONLY where the background states them, kept exactly as given. A bullet with no stated quantity is written strong WITHOUT a number.
 4. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform duties into achievements using only stated facts.
 5. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
 6. Every bullet starts with a strong action verb.
-7. As many CAR bullets as the role's real achievements support (typically 3 to 6) -- write fewer rather than padding with invented detail, more when the background genuinely supports it.
-8. The skills that match the posting AND are supported by the background -- typically 9 to 15. Never pad to a count, never drop a real match.
-9. Carry forward ALL education and certifications from the background -- a certification becomes its own education entry. Never drop them; never add ones not stated.
+7. As many CAR bullets as the role's real achievements support (typically 3 to 6). Write fewer rather than padding with invented detail, more when the background genuinely supports it.
+8. The skills that match the posting AND are supported by the background, typically 9 to 15. Never pad to a count, never drop a real match.
+9. Carry forward ALL education and certifications from the background. A certification becomes its own education entry. Never drop them; never add ones not stated.
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
-11. If a title/company pairing is clearly garbled, repair it -- never invent a new employer or title.
-12. Years only (no months). Use "--" never an em dash. Return ONLY the JSON object.
-13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.`;
+11. If a title/company pairing is clearly garbled, repair it. Never invent a new employer or title.
+12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
+13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
+14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.
+15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.`;
 
     const resumePrompt = `Generate a complete, targeted resume. Return ONLY valid JSON.
 
@@ -191,7 +195,7 @@ Requirements: ${jobRequirements}
 </job_posting>
 
 PERSON'S BACKGROUND (the only source of facts):
-${cleanedApprovedResume ? `- APPROVED BASE RESUME (the person built and approved this -- it is the PRIMARY source; restructure and re-emphasize THIS for the target role, keep its real achievements and wording where they already read well, and never drop or weaken a true point it contains):\n${cleanedApprovedResume}\n` : ""}- Original resume: ${cleanedResume}
+${cleanedApprovedResume ? `- APPROVED BASE RESUME (the person built and approved this. It is the PRIMARY source; restructure and re-emphasize THIS for the target role, keep its real achievements and wording where they already read well, and never drop or weaken a true point it contains):\n${cleanedApprovedResume}\n` : ""}- Original resume: ${cleanedResume}
 - Narrative: ${narrative}
 - Skills identified: ${skills}
 ${strengths ? `- Strengths: ${strengths}` : ""}
@@ -213,7 +217,7 @@ Return this exact JSON structure:
     { "institution": "School or Program Name", "credential": "Degree, Certificate, or Training", "year": "2020" }
   ],
   "skills": ["skill1", "skill2", "skill3"],
-  "tailoring_notes": ["Plain-language note about what we changed for this job -- max 4, each under 15 words, no corporate speak."]
+  "tailoring_notes": ["Plain-language note about what we changed for this job. Max 4, each under 15 words, no corporate speak."]
 }`;
 
     const coverSystem = `${coverLetterResearch}
@@ -221,12 +225,17 @@ Return this exact JSON structure:
 You write a targeted cover letter (plain text, no JSON). ${INJECTION_GUARD}
 
 RULES:
-- Address the SPECIFIC company. NO [Company Name]/[Hiring Manager] placeholders -- use "Dear Hiring Team" if unknown.
+- Address the SPECIFIC company. NO [Company Name]/[Hiring Manager] placeholders. Use "Dear Hiring Team" if unknown.
 - 250-350 words.
-- TRUTH GATE: every claim comes from the background. NEVER invent achievements, numbers, certifications, or personal facts (transportation, availability, physical capability, references) -- even if the posting asks for it.
+- TRUTH GATE: every claim comes from the background. NEVER invent achievements, numbers, certifications, or personal facts (transportation, availability, physical capability, references), even if the posting asks for it.
 - Open: who they are, what role, why this company. Middle: 2-3 real achievements matching the requirements. Close: grounded confidence.
 - NEVER mention incarceration, criminal records, justice involvement. NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
-- Confident human voice, no buzzwords. Use "--" never an em dash. Sign with the applicant's name.`;
+- OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
+- FACTS AS GIVEN: state every fact the way the background states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
+- CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${letterClosingStyle(contactName || jobCompany || "")}
+- REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
+- VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
+- Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. Sign with the applicant's name.`;
 
     const coverLetterPrompt = `Write the cover letter.
 
@@ -306,7 +315,9 @@ ${contactName || "Candidate"}`;
         education: Array.isArray(parsed.education) ? parsed.education : [],
       }),
     ]);
-    const verifiedCover = coverCheck.text;
+    // Model-written text only. Contact fields are the person's own and are left alone.
+    const swapLog = logDashSwaps("resume-generate-full");
+    const verifiedCover = plainPunctuation(coverCheck.text, swapLog);
     const groundingFlags = [
       ...coverCheck.flags,
       ...summaryCheck.flags,
@@ -354,7 +365,7 @@ ${contactName || "Candidate"}`;
         city: contact?.city || "",
         state: contact?.state || "",
       },
-      summary: summaryCheck.text || parsed.summary || "",
+      summary: plainPunctuation(summaryCheck.text || parsed.summary || "", swapLog),
       // Bullets pass through the structured truth gate (verifyResumeBullets):
       // each is grounded or dropped, so the tailored resume can't ship an
       // invented tool/number/scope claim.
@@ -369,7 +380,7 @@ ${contactName || "Candidate"}`;
         // Filter falsy AND literal drop markers ("null"/"None.") so neither the
         // fail-open path nor a stray generation artifact ships one (Codex 7).
         bullets: Array.isArray(e.bullets)
-          ? e.bullets.filter((b: any) => typeof b === "string" && b.trim() && !isDropMarker(b))
+          ? plainPunctuation(e.bullets.filter((b: any) => typeof b === "string" && b.trim() && !isDropMarker(b)), swapLog)
           : [],
       })),
       // Education comes through the structured-list gate (verifyStructuredLists):
@@ -411,13 +422,13 @@ ${contactName || "Candidate"}`;
           : record.most_recent === "1-3 years" ? "a couple years ago"
           : record.most_recent === "3-5 years" ? "several years ago"
           : "some time ago";
-        briefScript = `I want to be upfront with you — I have a ${record.type || "conviction"} on my record from ${recencyText}. ${record.supervision === "completed" ? "I've completed all supervision requirements. " : ""}Since then, I've been focused on building my career in ${jobTitle.toLowerCase()}, and I'm ready to show what I bring to ${jobCompany}.`;
-        timingAdvice = `For ${jobTitle} roles, disclose after they've seen your qualifications — ideally during or just after the first interview, not on the application.`;
+        briefScript = `I want to be upfront with you. I have a ${record.type || "conviction"} on my record from ${recencyText}. ${record.supervision === "completed" ? "I've completed all supervision requirements. " : ""}Since then, I've been focused on building my career in ${jobTitle.toLowerCase()}, and I'm ready to show what I bring to ${jobCompany}.`;
+        timingAdvice = `For ${jobTitle} roles, disclose after they've seen your qualifications. Ideally, do it during or just after the first interview, not on the application.`;
         upgradeMessage = "Strong starting point. The full Disclosure Planner will prepare you for follow-up questions, identify legal protections in your state, and let you practice the conversation.";
       } else if (factors >= 1) {
         confidenceLevel = "medium";
         confidencePercent = 45;
-        briefScript = `I want to be transparent — I have a ${record.type || "record"} in my background. Since then, I've been building skills and experience, and I'm committed to contributing to ${jobCompany}.`;
+        briefScript = `I want to be honest with you. I have a ${record.type || "record"} in my background. Since then, I've been building skills and experience, and I'm committed to contributing to ${jobCompany}.`;
         timingAdvice = "Disclose in person during the interview, never on paper. The Disclosure Planner can help you nail the timing.";
         upgradeMessage = "Good start, but we can do better. The full Disclosure Planner will craft a strategy specific to this employer, including what they're likely thinking and how to handle follow-ups.";
       } else {
@@ -468,7 +479,7 @@ ${contactName || "Candidate"}`;
     }
 
     const tailoringNotes: string[] = Array.isArray(parsed.tailoring_notes)
-      ? parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4)
+      ? plainPunctuation(parsed.tailoring_notes.filter((n: any) => typeof n === "string").slice(0, 4), swapLog)
       : [];
 
     return NextResponse.json({

@@ -253,7 +253,7 @@ function JobBoardPage() {
           setJobs([]);
           setSearchError(
             data.error === "provider_rate_limited"
-              ? "Our job-listing provider hit its limit for right now. This is on our side, not yours -- your search was fine. Try again in a little while."
+              ? "Our job-listing provider hit its limit for right now. This is on our side, not yours. Your search was fine. Try again in a little while."
               : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
           );
         } else {
@@ -509,11 +509,11 @@ function JobBoardPage() {
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
             <p className="text-xs text-t-phos-dim mt-1">
-              You can combine terms -- e.g., &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;
+              You can combine terms. Try &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;.
             </p>
             {roleFromResume && context.targetRole && (
               <p className="text-xs text-t-amber-bright mt-1">
-                Seeded from your most recent resume -- edit it anytime.
+                Seeded from your most recent resume. Edit it anytime.
               </p>
             )}
             {/* Quick picks — click to set or append */}
@@ -637,7 +637,7 @@ function JobBoardPage() {
           <ul className="text-sm text-t-phos-dim space-y-1">
             <li>A broader role (e.g., &quot;General Labor&quot; instead of a specific title)</li>
             <li>A different location or just &quot;Milwaukee, WI&quot;</li>
-            <li>Searching again in a day — new jobs post every day</li>
+            <li>Searching again in a day. New jobs post every day.</li>
           </ul>
         </div>
       )}
@@ -889,7 +889,7 @@ function JobBoardPage() {
                         <textarea
                           value={hideReason}
                           onChange={(e) => setHideReason(e.target.value)}
-                          placeholder="Reason (optional) -- e.g. a former employer, or already applied"
+                          placeholder="Reason (optional), like a former employer or already applied"
                           rows={2}
                           className="mt-2 w-full px-3 py-2 text-xs bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none resize-y"
                         />

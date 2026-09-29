@@ -61,7 +61,7 @@ interface ProgressiveIntakeProps {
   plainLanguage?: boolean;
 }
 
-const SEED_NOTE_DEFAULT = "From your Forge -- edit anytime.";
+const SEED_NOTE_DEFAULT = "From your Forge. Edit it anytime.";
 
 export function ProgressiveIntake({
   topic,
@@ -175,7 +175,7 @@ export function ProgressiveIntake({
         id: `fu-${nextRoundIndex}-${i}`,
         label,
         multiline: true,
-        placeholder: "Take your time -- a sentence or two is plenty.",
+        placeholder: "Take your time. A sentence or two is plenty.",
       }));
       setRounds((prev) => [...prev, newRound]);
     } catch {
@@ -275,8 +275,8 @@ export function ProgressiveIntake({
       {error && <p className="text-sm text-t-amber-bright">{error}</p>}
 
       <p className="text-xs text-t-phos-dim">
-        You can skip any question. More detail just makes a stronger plan -- it is
-        always your choice how much to share.
+        You can skip any question. More detail just makes a stronger plan. How
+        much you share is always your choice.
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">

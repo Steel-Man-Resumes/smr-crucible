@@ -115,7 +115,7 @@ export default function EvidencePage() {
       {/* Gap Analysis — always visible, trimmed for clients */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-t-white mb-4">
-          {isPartnerOrAdmin ? "The Gap — What No Other Tool Does" : "Why This Tool Is Different"}
+          {isPartnerOrAdmin ? "The Gap: What No Other Tool Does" : "Why This Tool Is Different"}
         </h2>
         <div className="space-y-3">
           {GAPS.map((gap, i) => (
@@ -259,7 +259,7 @@ const CITATIONS = [
     authors: "Bandura, A.",
     year: 1977,
     title: "Self-efficacy: Toward a unifying theory of behavioral change.",
-    finding: "Self-efficacy is built through mastery experiences — real accomplishments, not encouragement or verbal persuasion.",
+    finding: "Self-efficacy is built through mastery experiences (real accomplishments), not encouragement or verbal persuasion.",
   },
   {
     authors: "Prochaska, J. O., & DiClemente, C. C.",
@@ -277,7 +277,7 @@ const CITATIONS = [
     authors: "Maruna, S.",
     year: 2001,
     title: "Making good: How ex-convicts reform and rebuild their lives.",
-    finding: "Desistance from crime correlates with constructing a ‘generative identity’ — seeing oneself as someone who can contribute positively.",
+    finding: "Desistance from crime correlates with constructing a ‘generative identity’: seeing oneself as someone who can contribute positively.",
   },
   {
     authors: "Deci, E. L., & Ryan, R. M.",

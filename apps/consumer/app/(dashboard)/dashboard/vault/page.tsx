@@ -60,7 +60,7 @@ function fmt(s: string): string {
 function title(a: Artifact): string {
   const job = a.target_context?.targetJob;
   const co = a.target_context?.targetCompany;
-  if (job && co) return `${job} -- ${co}`;
+  if (job && co) return `${job} at ${co}`;
   if (job) return job;
   if (a.artifact_type === "resume") return "Base resume";
   return fmt(a.updated_at);

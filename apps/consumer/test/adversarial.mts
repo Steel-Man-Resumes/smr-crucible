@@ -14,7 +14,8 @@
  * Those are honest exceptions, not gaps in coverage of the pure logic below.
  */
 
-import { stripEmployerTaxCredit, stripEmDashes, WOTC_RE } from "@/lib/legal-sanitize";
+import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
+import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
 import { computeGrounding } from "@/lib/grounding";
 import {
   buildTrustedSource,
@@ -152,13 +153,49 @@ check("whole-WOTC string blanks", stripEmployerTaxCredit("Employers may qualify 
   check("nested: clean fields untouched", out.narrative.summary === forge.narrative.summary);
 }
 
-// ── 2. Legal sanitization: em-dash house rule ────────────────────────────────
-section("legal sanitization -- em/en dash");
-check("em dash -> --", stripEmDashes("cost—benefit") === "cost--benefit");
-check("en dash -> -", stripEmDashes("2019–2021") === "2019-2021");
+// ── 2. Output sweep: no dash as punctuation (no em dash, no "--" stand-in) ────
+section("output sweep: plain punctuation");
 {
-  const out = stripEmDashes({ a: "one—two", b: ["x–y", { c: "p—q" }] });
-  check("nested: no em/en dash residual anywhere", !/[—–]/.test(JSON.stringify(out)), JSON.stringify(out));
+  const EM = "\u2014";
+  const EN = "\u2013";
+  const pp = (t: string) => plainPunctuationText(t).text;
+  check("em dash -> comma", pp(`cost${EM}benefit`) === "cost, benefit", pp(`cost${EM}benefit`));
+  check("double hyphen -> comma", pp("depends on -- washing dishes") === "depends on, washing dishes");
+  check("tight double hyphen -> comma", pp("word--word") === "word, word");
+  check("full clause then capital -> period",
+    pp("Thank you for your time and consideration -- I look forward to it.") ===
+      "Thank you for your time and consideration. I look forward to it.");
+  check("en dash -> hyphen", pp(`2019${EN}2021`) === "2019-2021");
+  check("spaced em dash between years -> hyphen", pp(`2019 ${EM} 2021`) === "2019-2021");
+  check("date range with a single hyphen untouched", pp("2019 - Present") === "2019 - Present");
+  check("leading dash is a bullet", pp("-- first\n  -- second") === "- first\n  - second");
+  check("trailing dash dropped", pp("trailing dash --") === "trailing dash");
+  check("no doubled comma", pp("already a comma, -- then more") === "already a comma, then more");
+  check("markdown rule untouched", pp("---\nrule") === "---\nrule");
+  check("swap count reported", plainPunctuationText(`a ${EM} b -- c`).swaps === 2);
+  check("spaced en dash in prose -> comma, counted",
+    pp(`EPA 608 ${EN} refrigerant handling`) === "EPA 608, refrigerant handling" &&
+      plainPunctuationText(`EPA 608 ${EN} refrigerant handling`).swaps === 1,
+    pp(`EPA 608 ${EN} refrigerant handling`));
+  check("spaced en dash between years -> hyphen", pp(`2019 ${EN} 2021`) === "2019-2021");
+
+  let seen = 0;
+  const out = plainPunctuation({ a: `one${EM}two`, b: [`x${EN}y`, { c: "p -- q" }] }, (n) => (seen = n));
+  check("nested: no dash residual anywhere", !/[\u2014\u2013]|--/.test(JSON.stringify(out)), JSON.stringify(out));
+  check("nested: callback gets the total", seen === 2, String(seen));
+}
+
+// ── Cover letter closings vary by person, stay fixed per person ──────────────
+section("cover letter closing styles");
+{
+  const names = ["MARCUS DELANEY", "DARNELL OKAFOR", "RENEE VASQUEZ", "ANTHONY BELL", "Jordan Williams", "Maria Lopez"];
+  const picks = names.map((n) => letterClosingStyle(n));
+  check("same person, same closing", letterClosingStyle("Anthony Bell") === letterClosingStyle("  ANTHONY BELL "));
+  check("a group of people spreads across closings", new Set(picks).size >= 3, String(new Set(picks).size));
+  check("every pick is a listed style", picks.every((p) => (LETTER_CLOSING_STYLES as readonly string[]).includes(p)));
+  check("empty seed still returns a style", typeof letterClosingStyle("") === "string" && letterClosingStyle("").length > 0);
+  check("no style asks for the old shared closing",
+    LETTER_CLOSING_STYLES.every((s) => !/thanks for reading|like to talk/i.test(s)));
 }
 
 // ── 3. Grounding gauge realism (Codex 13) ────────────────────────────────────
@@ -1289,7 +1326,7 @@ section("gate previews + advising");
     check(`registry[${id}]: requiredState is a real locked-above state`, validStates.includes(p.requiredState));
     check(`registry[${id}]: href is a real tool page`, p.href.startsWith("/dashboard/"));
     check(`registry[${id}]: id round-trips from its href`, previewIdForHref(p.href) === id);
-    check(`registry[${id}]: no em dashes in copy`, !/—/.test(p.whatItDoes + p.sampleOutput + p.trialTaste));
+    check(`registry[${id}]: no em dashes in copy`, !/—| -- /.test(p.whatItDoes + p.sampleOutput + p.trialTaste));
     // A real unlock path exists for a user sitting below this feature's requirement.
     const belowSnap = p.requiredState === "full_access"
       ? snap({ profileComplete: true, resumeTailored: false })
@@ -1303,7 +1340,7 @@ section("gate previews + advising");
   // Deterministic WHY map: an entry for every computeNextStep stage (0-6).
   for (const stage of JOURNEY_STAGES) {
     check(`why-map: stage ${stage.stage} has a sentence`, typeof NEXT_STEP_WHY[stage.stage] === "string" && NEXT_STEP_WHY[stage.stage].length > 0);
-    check(`why-map: stage ${stage.stage} sentence has no em dash`, !/—/.test(NEXT_STEP_WHY[stage.stage] ?? ""));
+    check(`why-map: stage ${stage.stage} sentence has no em dash`, !/—| -- /.test(NEXT_STEP_WHY[stage.stage] ?? ""));
   }
   // The pure fallback returns whySource "deterministic" with NO AI call.
   const dw = deterministicWhy({ stage: 3, action: "Tailor your resume", href: "/dashboard/application-tailor" });
@@ -1416,7 +1453,7 @@ section("progress + gamification");
   const allStrings = [...noneMs, ...allMs].flatMap((m) => [m.title, m.celebration, m.earnedFact, m.nextUp]);
   check("milestones: no emojis in any milestone copy", allStrings.every((s) => !EMOJI_RE.test(s)),
     allStrings.find((s) => EMOJI_RE.test(s)));
-  check("milestones: no em dashes in any milestone copy", allStrings.every((s) => !/—/.test(s)));
+  check("milestones: no em dashes in any milestone copy", allStrings.every((s) => !/—| -- /.test(s)));
 
   // --- No leaderboard / rank / cross-user field anywhere on a milestone ---
   check("milestones: no rank/leaderboard field on any milestone",
@@ -1489,7 +1526,7 @@ section("ai usage labels + governance");
   // No em dashes or emojis leak into any label copy (house rules).
   const EMOJI_RE_L = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
   const allLabelCopy = Object.values(ENDPOINT_LABELS);
-  check("labels: no em dashes in any endpoint label", allLabelCopy.every((s) => !/—/.test(s)));
+  check("labels: no em dashes in any endpoint label", allLabelCopy.every((s) => !/—| -- /.test(s)));
   check("labels: no emojis in any endpoint label", allLabelCopy.every((s) => !EMOJI_RE_L.test(s)));
 
   // Login-event labels: every written event value maps to a plain sentence.
@@ -1504,7 +1541,7 @@ section("ai usage labels + governance");
     labelForLoginEvent(null) === "Account activity" &&
     labelForLoginEvent("") === "Account activity");
   check("login-events: no em dashes or emojis in any event label",
-    Object.values(LOGIN_EVENT_LABELS).every((s) => !/—/.test(s) && !EMOJI_RE_L.test(s)));
+    Object.values(LOGIN_EVENT_LABELS).every((s) => !/—| -- /.test(s) && !EMOJI_RE_L.test(s)));
 }
 
 // ── Phase 7.2/7.7: UI accessibility-pref validators are pure and fail safe ────

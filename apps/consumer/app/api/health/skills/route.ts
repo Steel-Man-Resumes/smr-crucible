@@ -52,7 +52,7 @@ export function GET(request: Request) {
     missingCount: missing.length,
     note: ok
       ? "Manifest + all skill files present in the production Lambda."
-      : "Skill delivery problem -- pass the debug token for detail.",
+      : "Skill delivery problem. Pass the debug token for detail.",
   };
 
   // Detail (paths, per-skill list, error string) requires the debug token.

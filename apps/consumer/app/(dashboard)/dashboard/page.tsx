@@ -57,7 +57,7 @@ const ALL_TOOLS: ToolCard[] = [
   {
     href: "/dashboard/application-tailor",
     title: "Application Tailor",
-    description: "Tailor your resume to a specific job -- with a matching cover letter and disclosure brief.",
+    description: "Tailor your resume to a specific job, with a matching cover letter and disclosure brief.",
     color: "bg-t-panel border-t-steel",
     accent: "text-t-steel",
     minState: "needs_resume",
@@ -349,7 +349,7 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY</p>
                   <p className="text-sm text-t-phos leading-relaxed">
-                    I&apos;m t.ROY. The Refinery is where the real work happens -- targeted
+                    I&apos;m t.ROY. The Refinery is where the real work happens: targeted
                     resumes, interview practice, disclosure strategy, job matching. But I
                     need your story first. The Forge is built to finish in one sitting and gives me
                     everything I need to help you win.
@@ -444,7 +444,7 @@ export default function DashboardPage() {
         <section className="bg-t-panel border border-t-steel p-6">
           <h2 className="font-semibold text-t-white mb-3">Here&apos;s how the Refinery works</h2>
           <p className="text-sm text-t-phos-dim mb-4">
-            Your Forge profile is your base resume -- one strong, structured record of your real
+            Your Forge profile is your base resume. It&apos;s one strong, structured record of your real
             experience. The Refinery aims it at real jobs and gets smarter the more you use it.
           </p>
           <div className="space-y-3">
@@ -467,7 +467,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-semibold text-t-white">Tailor it to a specific job</p>
                 <p className="text-xs text-t-phos-dim leading-relaxed">
                   The Application Tailor aims your base resume at the posting&apos;s exact requirements, using your
-                  Forge profile. This unlocks the rest -- do it for as many jobs as you want.
+                  Forge profile. This unlocks the rest. Do it for as many jobs as you want.
                 </p>
               </div>
             </div>
@@ -501,7 +501,7 @@ export default function DashboardPage() {
               <p className="text-sm text-t-phos-dim">
                 {forgeData.career_paths?.[0]?.title
                   ? `Search "${forgeData.career_paths[0].title}" and other roles that fit, then tailor your resume to one. That unlocks the rest.`
-                  : "Real listings, with employers we checked for hiring people with records shown first. Pick one and tailor your resume to it -- that unlocks the rest."}
+                  : "Real listings, with employers we checked for hiring people with records shown first. Pick one and tailor your resume to it. That unlocks the rest."}
               </p>
             </Link>
             <Link
@@ -695,17 +695,17 @@ function ObserverDashboard() {
     {
       finding: "Affect labeling reduces amygdala reactivity by up to 50%",
       source: "Lieberman et al., 2007",
-      detail: "fMRI study. Putting feelings into words activates prefrontal cortex and dampens amygdala response — the mechanism behind why free-text prompts are therapeutic, not just data collection.",
+      detail: "fMRI study. Putting feelings into words activates prefrontal cortex and dampens amygdala response. That is the mechanism behind why free-text prompts are therapeutic, not just data collection.",
     },
     {
-      finding: "A criminal record reduces job callbacks by 50% for white applicants — and 64% for Black applicants",
+      finding: "A criminal record reduces job callbacks by 50% for white applicants and 64% for Black applicants",
       source: "Pager, 2003 (Milwaukee audit study)",
-      detail: "Black applicants without records were called back less than white applicants with records. Employment barriers are structural, not motivational. This tool is designed to navigate that system — not pretend it doesn't exist.",
+      detail: "Black applicants without records were called back less than white applicants with records. Employment barriers are structural, not motivational. This tool is built to work within that system as it really is.",
     },
     {
       finding: "85% of HR professionals say justice-impacted employees perform the same as or better than other employees",
       source: "SHRM, 2021",
-      detail: "31% lower turnover in year one. The employer marks in this tool are built on evidence that hiring people with records is good business — not charity.",
+      detail: "31% lower turnover in year one. The employer marks in this tool are built on evidence that hiring people with records is good business rather than charity.",
     },
     {
       finding: "Redemption sequences (bad→good narratives) predict higher well-being and generativity",
@@ -730,7 +730,7 @@ function ObserverDashboard() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-t-steel mb-1">t.ROY — Evidence View</p>
+            <p className="text-sm font-medium text-t-steel mb-1">t.ROY: Evidence View</p>
             <h1 className="text-2xl font-bold text-t-white mb-2">Built on evidence. Designed for scrutiny.</h1>
             <p className="text-base text-t-phos-dim leading-relaxed">
               Every feature in this tool has a research basis. This view surfaces the citations, outcomes data, and design decisions. The full evidence deck is in the Evidence tab.
@@ -779,7 +779,7 @@ function ObserverDashboard() {
       <section className="bg-t-panel border border-t-line p-6">
         <h2 className="font-semibold text-t-white mb-2">See it in action</h2>
         <p className="text-sm text-t-phos-dim mb-4">
-          The Forge demo runs with sample data — Jordan, a warehouse worker from Milwaukee navigating a felony record. Walk through all 8 pages and see what the tool produces.
+          The Forge demo runs with sample data for Jordan, a warehouse worker from Milwaukee with a felony record. Walk through all 8 pages and see what the tool produces.
         </p>
         <TBtn href="/intro" size="sm">launch demo</TBtn>
       </section>
@@ -850,7 +850,7 @@ function ProfileSetup({
         {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
       </h1>
       <p className="text-base text-t-phos-dim mb-4">
-        I analyzed your background in The Forge — now we put it to work.
+        I analyzed your background in The Forge. Now we put it to work.
         These details go on your resume header. Nothing else.
       </p>
 

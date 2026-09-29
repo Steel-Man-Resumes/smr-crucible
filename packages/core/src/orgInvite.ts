@@ -176,7 +176,7 @@ export async function touchOrgInviteResend(
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
-  if (!row.pending) return { ok: false, error: "They have already joined -- no invite to resend." };
+  if (!row.pending) return { ok: false, error: "They have already joined, so there is no invite to resend." };
   if (Number(row.send_count) >= 10) {
     return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
   }

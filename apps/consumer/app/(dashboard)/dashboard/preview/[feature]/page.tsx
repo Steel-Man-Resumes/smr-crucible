@@ -70,7 +70,7 @@ export default function FeaturePreviewPage() {
         {alreadyUnlocked ? (
           <>
             <p className="text-sm text-t-phos-dim mb-4 leading-relaxed">
-              Good news -- this tool is already unlocked for you. Open it whenever you are ready.
+              Good news. This tool is already unlocked for you. Open it whenever you are ready.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link
@@ -92,7 +92,7 @@ export default function FeaturePreviewPage() {
             <h2 className="text-sm font-bold text-t-white mb-2">How to unlock it</h2>
             <p className="text-sm text-t-phos-dim mb-4 leading-relaxed">
               {gate?.reason ??
-                "Finish your profile and tailor a resume to a target job -- that unlocks this and the rest of your tools."}
+                "Finish your profile and tailor a resume to a target job. That unlocks this and the rest of your tools."}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               {unlockIsExternal ? (

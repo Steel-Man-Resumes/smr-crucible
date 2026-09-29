@@ -403,7 +403,7 @@ export function findDiscrepancies(
   if (options.sourceText?.trim()) {
     const source = options.sourceText;
     const ask =
-      "This says something about you that you did not tell us, so we cannot stand behind it and neither should you. If it is true, say it in your own words and it stays. If it is not, take it out -- an employer who asks about it in an interview is the worst place to find out.";
+      "This says something about you that you did not tell us, so we cannot stand behind it and neither should you. If it is true, say it in your own words and it stays. If it is not, take it out. An employer asking about it in an interview is the worst way to find out.";
 
     for (const rule of CHARACTER_CLAIMS) {
       const hit = lines.find((l) => rule.claim.test(l));
@@ -419,7 +419,7 @@ export function findDiscrepancies(
           : `A claim about ${rule.label}`,
         evidence: hit,
         question: contradicted
-          ? "This says the opposite of what you told us. Whatever the truth is, it has to be yours -- take this out or rewrite it in your own words."
+          ? "This says the opposite of what you told us. Whatever the truth is, it has to be yours. Take this out or rewrite it in your own words."
           : ask,
       });
     }
@@ -475,7 +475,7 @@ export function findDiscrepancies(
       label: "Nothing measured anywhere",
       evidence: bullets[0],
       question:
-        "No line on this resume carries a number -- a count, a size, a crew, a frequency. One real number does more than a page of description. What is a number you actually know?",
+        "No line on this resume carries a number, like a count, a size, a crew or a frequency. One real number does more than a page of description. What is a number you actually know?",
     });
   }
 

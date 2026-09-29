@@ -193,7 +193,7 @@ export default function AdminUsersPage() {
             </h3>
             <p className="text-xs text-t-phos-dim mb-3">
               This session can make REAL changes to their account. Why are you
-              going in? One sentence -- it is stored in the audit log forever.
+              going in? One sentence. It is stored in the audit log forever.
             </p>
             <input
               value={reason}

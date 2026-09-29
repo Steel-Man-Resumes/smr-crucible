@@ -193,7 +193,7 @@ ESTABLISHED FACTS (each of these is TRUE and may be stated or paraphrased):
 ${(facts.needsAttention ?? []).map((n) => `- ${n} has been inactive for ${quietSpan(facts.quietDays ?? 14)} or more (or has never been active) and needs attention. Saying ${n} "went quiet", "is stalled", "needs a check-in", or "is a dropout risk" is SUPPORTED.`).join("\n") || "- Nobody is currently flagged as needing attention."}
 ${
   (facts.needsAttention ?? []).length > 0 && (facts.needsAttention ?? []).length >= facts.stalled
-    ? `- The people named as needing attention ARE the ${facts.stalled} with no activity -- the same ${facts.stalled === 1 ? "person" : "people"}. A message that refers to them AND to some other inactive or quiet person is counting somebody twice, and that is an UNSUPPORTED claim.`
+    ? `- The people named as needing attention ARE the ${facts.stalled} with no activity: the same ${facts.stalled === 1 ? "person" : "people"}. A message that refers to them AND to some other inactive or quiet person is counting somebody twice, and that is an UNSUPPORTED claim.`
     : "- (The needs-attention names are only some of the inactive people.)"
 }
 - Staff in this organization: ${facts.staffNames.join(", ") || "(none)"}.
@@ -211,7 +211,7 @@ ${text.slice(0, 4000)}
 
 Go through the message sentence by sentence. A bullet under a lead-in line inherits that line's meaning: under "Here's what I can't tell you:", the bullet "who found work" means "I cannot tell you who found work", which is the assistant describing a limit, not asserting that someone found work. For EACH sentence output one object:
   "text": the sentence, shortened if long
-  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other" -- questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is any blank template line whose content is bracketed placeholders for the staff member to fill in ("[Name] reported [situation]"). So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
+  "kind": "claim" if it asserts a fact about the caseload, a person, a number, an outcome, a date, or a trend. Otherwise "other". Questions, offers to help, advice, suggested wording or drafts, opinions about priority, and general statements about how the product works are all "other". So is any blank template line whose content is bracketed placeholders for the staff member to fill in ("[Name] reported [situation]"). So is the assistant describing its OWN knowledge or limits ("I don't have their phone numbers", "I can see activity status but not dates"). EXCEPTION: a question or offer that PRESUPPOSES a fact about a person or the caseload ("congratulate Nadia on her new job" presupposes Nadia got a job) is a "claim" about that presupposed fact.
   "supported": for a claim, true if it restates or paraphrases an established fact above, false if the established facts do not support it. For "other", true.
 
 Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":true}]}`;

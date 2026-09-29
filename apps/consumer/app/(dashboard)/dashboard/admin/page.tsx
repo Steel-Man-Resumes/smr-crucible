@@ -83,7 +83,7 @@ export default function AdminEvidenceDashboard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-t-white">Evidence Dashboard</h1>
-          <p className="text-t-phos-dim text-sm mt-1">Admin view -- live outcomes + pilot data. Shows zeros until pilots run.</p>
+          <p className="text-t-phos-dim text-sm mt-1">Admin view of live outcomes + pilot data. Shows zeros until pilots run.</p>
         </div>
         <Link
           href="/dashboard/admin/health"

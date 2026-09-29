@@ -23,6 +23,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_FAST } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import {
   getNextStep,
   buildJourneySnapshot,
@@ -68,8 +69,8 @@ async function handlePost() {
       `Disclosure plan made: ${m.hasDisclosurePlan ? "yes" : "no"}. ` +
       `Interviews started: ${m.interviewsStarted}. Applications sent: ${m.applicationsSent}.`;
 
-    const prompt = `A justice-impacted job seeker's decided next step is: "${sanitizeForPrompt(step.action, 200)}".
-Here is where they are in their journey (facts only -- do NOT add anything that is not listed here):
+    const prompt = `A job seeker with a record has this decided next step: "${sanitizeForPrompt(step.action, 200)}".
+Here is where they are so far (facts only; do NOT add anything that is not listed here):
 ${factLine}
 
 Write ONE or TWO short sentences explaining WHY this is the right next step for THEM right now.
@@ -77,14 +78,16 @@ Rules:
 - Warm, honest, encouraging. Plain words, 6th grade reading level.
 - Do NOT change the step. Do NOT suggest a different action.
 - Do NOT invent facts, numbers, dates, company names, or laws.
-- Use "--" never an em dash. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Return only the sentence(s). No labels, no quotes.`;
 
     const raw = await callAI("", [{ role: "user", content: prompt }], 160, MODEL_FAST, {
       userId,
       endpoint: "next-step-why",
     });
-    const why = raw.trim().replace(/^["']+|["']+$/g, "").trim();
+    const why = plainPunctuation(raw.trim(), logDashSwaps("next-step-why"))
+      .replace(/^["']+|["']+$/g, "")
+      .trim();
     if (!why) throw new Error("empty why from AI");
 
     // Decision log (JBS compliance): the deterministic action is the input; the

@@ -56,8 +56,8 @@ export function SharingConsentSection() {
               Let your support partner see your progress
             </h3>
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              If a partner organization gave you a code, you can let them see where you
-              are in your journey -- your stage, how many jobs you have applied to, and
+              If a partner organization gave you a code, you can let them see your
+              progress. That means your stage, how many jobs you have applied to, and
               when you were last active. This switch never shows them your resume, your
               disclosure plan, or anything you write while practicing. If your organization
               offers it, sharing anything more is a separate choice you make one item at a
@@ -86,8 +86,8 @@ export function SharingConsentSection() {
           {loading
             ? "Loading..."
             : sharing
-              ? "On -- your partner can see your progress signals."
-              : "Off -- your progress is private to you."}
+              ? "On. Your partner can see your progress signals."
+              : "Off. Your progress is private to you."}
         </p>
       </div>
     </section>

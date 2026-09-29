@@ -59,7 +59,7 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
       reason:
         "The Forge builds the story, skills, and career paths everything else is built on. Until it is done, the Refinery tools stay locked.",
       action:
-        "Finish the Forge -- about 10 minutes. It gives t.ROY what it needs to build your resume.",
+        "Finish the Forge. It takes about 10 minutes and gives t.ROY what it needs to build your resume.",
       targetPage: "resume",
       ctaLabel: "Continue the Forge",
     };
@@ -73,7 +73,7 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
         "Progress",
       ],
       reason:
-        "These tools are built around one specific job, so they unlock the moment a resume is tailored to a real posting. No live job search needed -- pasting a job description works just as well.",
+        "These tools are built around one specific job, so they unlock the moment a resume is tailored to a real posting. No live job search is needed. Pasting a job description works just as well.",
       action:
         "Tailor a resume to a job you are aiming at. That single step unlocks the rest of the toolset.",
       targetPage: "application-tailor",
@@ -92,13 +92,13 @@ export function buildBlockSection(block: CurrentBlock | null): string {
     return `
 
 ## CURRENT BLOCK
-Nothing is locked for this user -- they have full access to every tool. Do NOT invent a blocker or imply something is locked. Coach toward their next best move instead.`;
+Nothing is locked for this user. They have full access to every tool. Do NOT invent a blocker or imply something is locked. Coach toward their next best move instead.`;
   }
   return `
 
-## CURRENT BLOCK -- lead with this when it is relevant to what they want
+## CURRENT BLOCK (lead with this when it is relevant to what they want)
 LOCKED for this user right now: ${block.lockedTools.join(", ")}.
 Why: ${block.reason}
 The one move that unlocks all of it: ${block.action}
-When they ask about (or head toward) a locked tool, or when it is clearly what they need, say it plainly and OFFER to take them straight there: call take_me_there with page "${block.targetPage}" ("Want me to open it? One click."), then narrate what they will do when they land. Frame it as helping them get what they came for -- never as a gate, never scold. Never point them at a locked tool as if it were open.`;
+When they ask about (or head toward) a locked tool, or when it is clearly what they need, say it plainly and OFFER to take them straight there: call take_me_there with page "${block.targetPage}" ("Want me to open it? One click."), then narrate what they will do when they land. Frame it as helping them get what they came for. Never frame it as a gate, and never scold. Never point them at a locked tool as if it were open.`;
 }

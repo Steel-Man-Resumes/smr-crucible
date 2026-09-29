@@ -586,7 +586,7 @@ export function RefineryShell({
 
   function navGroupLabel(group: NavGroup): string | undefined {
     if (userTier === "partner" && group.label === "Find Work") {
-      return "Client tools -- what your clients see";
+      return "Client tools (what your clients see)";
     }
     return group.label;
   }
@@ -635,7 +635,7 @@ export function RefineryShell({
                     key={item.href}
                     href={`/dashboard/preview/${previewId}`}
                     onClick={onItemClick}
-                    title={`${lockReason} -- see a preview`}
+                    title={`${lockReason}. See a preview.`}
                     className="t-focus flex min-h-[40px] items-center justify-between rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#9ca29b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
                   >
                     <span>{navItemLabel(item)}</span>

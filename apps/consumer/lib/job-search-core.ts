@@ -27,6 +27,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { getEmployerMarks, isMarked, type EmployerMarks } from "@crucible/core";
 import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
 import crypto from "crypto";
@@ -635,9 +636,11 @@ Return JSON:
 }
 
 RULES:
-- Only rewrite the description into plain language. Do NOT judge which employers are fair-chance -- that is decided elsewhere.
+- Only rewrite the description into plain language. Do NOT judge which employers hire people with records. That is decided elsewhere.
 - Keep descriptions simple and actionable
 - 6th grade reading level
+- Use plain words. In fair_chance_info, say "employers that hire people with records". Never write "fair-chance" or "justice-impacted" anywhere. Never say in a description whether that employer hires people with records.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - fair_chance_info is PRACTICAL guidance only. Do NOT name, cite, paraphrase, or
   characterize any statute, ordinance, ban-the-box law, or legal protection, and
   do NOT state what any jurisdiction requires of employers. The platform does not
@@ -671,7 +674,9 @@ RULES:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
-      const enrichment = JSON.parse(jsonMatch[0]);
+      // Every field in this JSON is model-written (simplified copy + guidance),
+      // so the whole object goes through the dash sweep.
+      const enrichment = plainPunctuation(JSON.parse(jsonMatch[0]), logDashSwaps("job-search"));
 
       // Merge enrichment back into basic jobs -- description copy ONLY. The
       // fair-chance flag stays exactly as the verified-table match set it (Codex 12).

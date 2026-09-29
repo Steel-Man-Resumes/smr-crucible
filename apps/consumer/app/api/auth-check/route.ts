@@ -85,7 +85,7 @@ export async function GET(request: Request) {
       const r = await pool2.query(`SELECT code, partner_name, tier, is_active FROM access_code`);
       checks.access_codes = r.rows.length > 0
         ? JSON.stringify(r.rows.map((c: any) => `${c.code} (${c.tier})`))
-        : "NONE — codes not seeded";
+        : "NONE (codes not seeded)";
     } catch (e: any) {
       checks.access_codes = `ERROR: ${e.message}`;
     } finally {

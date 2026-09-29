@@ -21,6 +21,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { isMockEnabled, MOCK_INTAKE_FOLLOWUPS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import {
   buildFollowupsSystemPrompt,
   buildAnswersBlock,
@@ -69,7 +70,9 @@ async function handlePost(request: Request) {
     const userMsg = buildAnswersBlock(answersSoFar, round);
 
     const raw = await callAI(system, [{ role: "user", content: userMsg }], 800, MODEL_DEEP, { userId, endpoint: "intake-followups" });
-    const result = parseFollowups(raw, { maxQuestions: 3 });
+    // The questions are model-written and shown to the person: dash sweep
+    // (counts logged, never content).
+    const result = plainPunctuation(parseFollowups(raw, { maxQuestions: 3 }), logDashSwaps("intake-followups"));
 
     // Decision log (JBS compliance) -- shape only, never the user's words.
     try {

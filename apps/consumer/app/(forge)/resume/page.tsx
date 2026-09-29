@@ -207,7 +207,7 @@ export default function ResumeIntakePage() {
         />
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode — sample resume pre-loaded
+            Demo mode: sample resume pre-loaded
           </p>
         </div>
         <div className="bg-t-panel p-5 border border-t-line">
@@ -225,7 +225,7 @@ export default function ResumeIntakePage() {
     return (
       <FlowPage
         title="We already have your resume."
-        subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis — no need to re-enter."
+        subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis, so you don't need to enter it again."
         actionLabel="Continue"
         onAction={() => {
           updateSession({ lastPageVisited: "resume" });
@@ -307,7 +307,7 @@ export default function ResumeIntakePage() {
       <FlowPage
         title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
         subtitle="Check that we read it correctly before moving on."
-        actionLabel="Looks good -- continue"
+        actionLabel="Looks good, continue"
         onAction={commitAndContinue}
         showBack
         onBack={() => {
@@ -363,7 +363,7 @@ export default function ResumeIntakePage() {
               Missing anything?
             </p>
             <p className="text-xs text-t-phos-dim mb-3">
-              Not required -- but these go on your resume when you download it.
+              Not required, but these go on your resume when you download it.
             </p>
             <div className="space-y-3">
               {!parsedPhone && (
@@ -406,7 +406,7 @@ export default function ResumeIntakePage() {
     return (
       <FlowPage
         title="Do you have a resume?"
-        subtitle="Any format works -- even a photo of a paper copy."
+        subtitle="Any format works, even a photo of a paper copy."
         showBack
         onBack={() => router.push("/welcome")}
       >
@@ -482,7 +482,7 @@ export default function ResumeIntakePage() {
             </p>
             <p className="text-xs text-t-phos-dim mb-3">
               These free, official sources can remind you. They open on the
-              provider&apos;s own site -- we never see or store them.
+              provider&apos;s own site. We never see or store them.
             </p>
             <div className="space-y-2">
               <a
@@ -491,7 +491,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                IRS Wage &amp; Income Transcript -- every employer that reported your wages
+                IRS Wage &amp; Income Transcript: every employer that reported your wages
               </a>
               <a
                 href="https://www.theworknumber.com/employees"
@@ -499,7 +499,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                The Work Number -- your free annual Employment Data Report
+                The Work Number: your free annual Employment Data Report
               </a>
               <a
                 href="https://www.credly.com/"
@@ -507,7 +507,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                Credly -- digital badges and certifications you&apos;ve earned
+                Credly: digital badges and certifications you&apos;ve earned
               </a>
             </div>
           </div>
@@ -612,7 +612,7 @@ export default function ResumeIntakePage() {
         subtitle="Follow these steps, then come back and upload the file."
         showBack
         onBack={() => setActivePath(null)}
-        actionLabel="I have my file — upload it"
+        actionLabel="Upload my file"
         onAction={() => setActivePath("upload")}
       >
         <div className="space-y-4">
@@ -660,7 +660,7 @@ export default function ResumeIntakePage() {
         subtitle="Pick one, build your resume, then come back and upload it."
         showBack
         onBack={() => setActivePath(null)}
-        actionLabel="I have my resume — upload it"
+        actionLabel="Upload my resume"
         onAction={() => setActivePath("upload")}
         footer={
           <button
@@ -846,7 +846,7 @@ function GuidedBuilder({
 
     for (const job of jobs) {
       if (!(job.title || job.company || job.duties)) continue;
-      const h = [job.title, job.company, job.dates].filter(Boolean).join(" -- ");
+      const h = [job.title, job.company, job.dates].filter(Boolean).join(" | ");
       if (h) lines.push(h);
       if (job.duties) lines.push(job.duties.trim());
       lines.push("");
@@ -883,7 +883,7 @@ function GuidedBuilder({
       <FlowPage
         title="Build your resume from scratch."
         subtitle="We walk you through it, one section at a time."
-        actionLabel="I'm ready -- let's go"
+        actionLabel="I'm ready, let's go"
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -892,7 +892,7 @@ function GuidedBuilder({
           <div className="bg-t-panel p-5 border border-t-line">
             <p className="text-sm text-t-phos leading-relaxed mb-3">
               This takes <strong className="text-t-white">15-20 minutes</strong> if you do it right. That&apos;s not a lot
-              of time to invest in something this important -- but it only works if you take it
+              of time to invest in something this important. But it only works if you take it
               seriously.
             </p>
             <p className="text-sm text-t-phos-dim leading-relaxed">
@@ -904,8 +904,8 @@ function GuidedBuilder({
           <div className="bg-t-panel-2 p-4 border border-t-line">
             <p className="text-xs font-medium text-t-white mb-1">A note on gaps</p>
             <p className="text-xs text-t-phos-dim leading-relaxed">
-              If you have gaps in your history -- incarceration, family obligations, health,
-              or anything else -- you don&apos;t need to hide or explain them here.
+              You might have gaps in your history because of incarceration, family
+              obligations, health, or anything else. You don&apos;t need to hide or explain them here.
               Just include what you have. The Forge helps you figure out how to
               talk about the gaps later, on your terms.
             </p>
@@ -943,7 +943,7 @@ function GuidedBuilder({
     return (
       <FlowPage
         title="Contact information"
-        subtitle="Goes on your resume. Add what you have -- all optional."
+        subtitle="Goes on your resume. Add what you have. It's all optional."
         actionLabel="Next"
         onAction={goNext}
         showBack
@@ -998,8 +998,8 @@ function GuidedBuilder({
         title={first ? "Your most recent job" : `Job ${jobIdx + 1}`}
         subtitle={
           first
-            ? "Last job you held -- full-time, part-time, temp, gig, or work program. All count."
-            : "Same as before -- title, company, and when."
+            ? "The last job you held. Full-time, part-time, temp, gig, or work program. All count."
+            : "Same as before: title, company, and when."
         }
         actionLabel="Next"
         actionDisabled={!curJob.title.trim() && !curJob.company.trim()}
@@ -1046,7 +1046,7 @@ function GuidedBuilder({
     return (
       <FlowPage
         title="What did you do there?"
-        subtitle="Main responsibilities in your own words. Don't make it fancy -- just be honest."
+        subtitle="Main responsibilities in your own words. Don't make it fancy. Just be honest."
         actionLabel="Next"
         actionDisabled={!curJob.duties.trim()}
         onAction={goNext}
@@ -1072,7 +1072,7 @@ function GuidedBuilder({
           targetSelector="#forge-duties"
           surfaceId="forge-duties"
           enabled={!curJob.duties.trim()}
-          message="One number beats a paragraph here. How many, how often, how big -- whatever you actually remember."
+          message="One number beats a paragraph here. How many, how often, how big. Whatever you actually remember."
         />
       </FlowPage>
     );
@@ -1098,14 +1098,14 @@ function GuidedBuilder({
             onClick={addAnotherJob}
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Yes -- add another job</span>
+            <span className="font-medium text-t-white">Yes, add another job</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
           </button>
           <button
             onClick={finishJobs}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">No -- that's my history</span>
+            <span className="font-medium text-t-white">No, that's my history</span>
             <p className="text-sm text-t-phos-dim mt-0.5">Continue to skills and certifications</p>
           </button>
         </div>
@@ -1118,7 +1118,7 @@ function GuidedBuilder({
     return (
       <FlowPage
         title="What are your skills and certifications?"
-        subtitle="What are you good at? Technical skills, people skills, physical skills, licenses -- everything counts."
+        subtitle="What are you good at? Technical skills, people skills, physical skills, licenses. Everything counts."
         actionLabel="Next"
         actionDisabled={!answers.skills.trim()}
         onAction={goNext}
@@ -1147,7 +1147,7 @@ function GuidedBuilder({
     return (
       <FlowPage
         title="Education and training"
-        subtitle="School, GED, trade programs, certifications, military -- all count. Include anything you completed, even programs from inside."
+        subtitle="School, GED, trade programs, certifications, military. They all count. Include anything you completed, even programs from inside."
         actionLabel="Next"
         onAction={goNext}
         showBack
@@ -1182,7 +1182,7 @@ function GuidedBuilder({
         onBack={goBack}
         footer={
           <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
-            Skip -- that&apos;s everything
+            Skip, that&apos;s everything
           </button>
         }
       >
@@ -1208,7 +1208,7 @@ function GuidedBuilder({
       <FlowPage
         title="Here's what we have."
         subtitle="Review before we start the analysis. Go back to fix anything."
-        actionLabel="Looks good -- start the analysis"
+        actionLabel="Looks good, start the analysis"
         actionDisabled={!assembled.trim()}
         onAction={goNext}
         showBack
@@ -1232,7 +1232,7 @@ function GuidedBuilder({
         </div>
         <p className="text-xs text-t-phos-dim">
           This is the raw material for the Forge analysis. The AI transforms it
-          into a structured career narrative -- you&apos;ll see the full output at the end.
+          into a structured career narrative. You&apos;ll see the full output at the end.
         </p>
       </FlowPage>
     );
@@ -1246,7 +1246,7 @@ function GuidedBuilder({
 // Prompt the user can hand to their own AI (ChatGPT/Claude/etc.), then paste
 // the reply back here. Server-side markdown stripping + AI parsing handles
 // whatever formatting their AI produces.
-const YOUR_AI_PROMPT = `Please write out my resume as plain text. Include my name, phone, email, and city. List every job I have held with the employer name, dates, and 2-4 bullet points describing what I actually did. Then list my skills and any education, certificates, or training. Do not invent anything -- only use what you know about me from our conversations or what I tell you now. Ask me questions first if you need more detail.`;
+const YOUR_AI_PROMPT = `Please write out my resume as plain text. Include my name, phone, email, and city. List every job I have held with the employer name, dates, and 2-4 bullet points describing what I actually did. Then list my skills and any education, certificates, or training. Do not invent anything. Only use what you know about me from our conversations or what I tell you now. Ask me questions first if you need more detail.`;
 
 function PasteResume({
   onComplete,

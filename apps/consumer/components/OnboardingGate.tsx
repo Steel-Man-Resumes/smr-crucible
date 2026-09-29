@@ -50,8 +50,8 @@ export function OnboardingGate({
         <p className="text-lg font-bold text-t-white mb-2">{toolName} unlocks after your resume</p>
         <p className="text-sm text-t-phos-dim mb-6 leading-relaxed">
           {needsProfile
-            ? "First, finish your profile in The Forge. Then tailor a resume to a specific job -- that unlocks this and the rest of the toolset."
-            : `${toolName} is built around a specific job. Tailor a resume to the job you're aiming at first -- you can paste the job description, no live search needed -- and this unlocks right away.`}
+            ? "First, finish your profile in The Forge. Then tailor a resume to a specific job. That unlocks this and the rest of the toolset."
+            : `${toolName} is built around a specific job. Tailor a resume to the job you're aiming at first, and this unlocks right away. You can paste the job description. No live search needed.`}
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           {needsProfile ? (

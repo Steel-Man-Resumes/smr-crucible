@@ -415,7 +415,7 @@ export default function ProgressPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium text-t-white block truncate">
-                      Follow up{item.company ? ` -- ${item.company}` : ""}
+                      Follow up{item.company ? ` with ${item.company}` : ""}
                     </span>
                     <span className="text-xs text-t-phos-dim block truncate">
                       {[item.role, item.status].filter(Boolean).join(" · ")}
@@ -628,7 +628,7 @@ export default function ProgressPage() {
       <div className="bg-t-panel p-5 border border-t-amber text-center">
         <p className="text-sm text-t-phos leading-relaxed">
           {totalActions === 0
-            ? "Your journey starts with one step. Check out the suggestions above -- pick whichever one feels right."
+            ? "Your journey starts with one step. Check out the suggestions above and pick whichever one feels right."
             : totalActions < 5
               ? "You're building momentum. Every action you take makes the next one easier."
               : totalActions < 15

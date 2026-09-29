@@ -138,7 +138,7 @@ export function ConsentPanel() {
           </button>
         </div>
         <p className="text-xs text-t-phos-dim mt-3">
-          {loading ? "Loading..." : enhanced ? "On -- t.ROY remembers your recent work." : "Off -- t.ROY starts fresh every session."}
+          {loading ? "Loading..." : enhanced ? "On: t.ROY remembers your recent work." : "Off: t.ROY starts fresh every session."}
         </p>
       </div>
 
@@ -172,7 +172,7 @@ export function ConsentPanel() {
           </button>
         </div>
         <p className="text-xs text-t-phos-dim mt-3">
-          {loading ? "Loading..." : research ? "On -- your de-identified data may be used in research." : "Off -- your data is not used for research."}
+          {loading ? "Loading..." : research ? "On: your de-identified data may be used in research." : "Off: your data is not used for research."}
         </p>
       </div>
 

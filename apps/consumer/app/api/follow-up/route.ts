@@ -13,6 +13,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FOLLOW_UP } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
@@ -83,7 +84,7 @@ THE APPLICATION:
 - Current status: ${sanitizeForPrompt(app.status, 50)}
 ${days !== null ? `- Applied about ${days} day(s) ago` : ""}${app.notes ? `\n- Their notes: ${sanitizeForPrompt(app.notes, 400)}` : ""}${candidateBlock}
 
-Write a brief, professional, warm follow-up email. Reiterate genuine interest, reference one relevant strength if provided, and politely ask about next steps. Do NOT mention any criminal record. Keep it under 120 words.
+Write a brief, professional, warm follow-up email. Reiterate genuine interest, reference one relevant strength if provided, and politely ask about next steps. Do NOT mention any criminal record. Keep it under 120 words. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
 Return JSON only:
 { "subject": "a short subject line", "body": "the email body, with line breaks as \\n" }`;
@@ -96,15 +97,16 @@ Return JSON only:
       try {
         const parsed = JSON.parse(jsonMatch[0]);
         result = {
-          subject: typeof parsed.subject === "string" ? parsed.subject : `Following up -- ${app.job_title}`,
+          subject: typeof parsed.subject === "string" ? parsed.subject : `Following up on my application for ${app.job_title}`,
           body: typeof parsed.body === "string" ? parsed.body : text.trim(),
         };
       } catch {
-        result = { subject: `Following up -- ${app.job_title}`, body: text.trim() };
+        result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
       }
     } else {
-      result = { subject: `Following up -- ${app.job_title}`, body: text.trim() };
+      result = { subject: `Following up on my application for ${app.job_title}`, body: text.trim() };
     }
+    result = plainPunctuation(result, logDashSwaps("follow-up"));
 
     // Save to the vault as a follow_up artifact (not a journey gate).
     try {

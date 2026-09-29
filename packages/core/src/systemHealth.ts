@@ -77,9 +77,9 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
       `SELECT COUNT(*)::text AS n FROM org WHERE id = '00000000-0000-0000-0000-000000000000'`
     );
     if (Number(org?.n ?? 0) === 0) {
-      add("Database", "Sentinel org", "warn", "Missing -- audit events (consent/access-code) will not record until it is seeded.");
+      add("Database", "Sentinel org", "warn", "Missing. Audit events (consent/access-code) will not record until it is seeded.");
     } else {
-      add("Database", "Sentinel org", "ok", "Present -- audit events can record.");
+      add("Database", "Sentinel org", "ok", "Present. Audit events can record.");
     }
 
     const admins = await getOne<{ n: string }>(`SELECT COUNT(*)::text AS n FROM platform_admin`);
@@ -90,7 +90,7 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
   }
 
   // --- Auth ---
-  add("Auth", "AUTH_SECRET", present(process.env.AUTH_SECRET) ? "ok" : "error", present(process.env.AUTH_SECRET) ? "Set." : "MISSING -- sessions break.");
+  add("Auth", "AUTH_SECRET", present(process.env.AUTH_SECRET) ? "ok" : "error", present(process.env.AUTH_SECRET) ? "Set." : "MISSING. Sessions break.");
   add("Auth", "AUTH_URL", present(process.env.AUTH_URL) ? "ok" : "warn",
     present(process.env.AUTH_URL) ? process.env.AUTH_URL!.replace(/^https?:\/\//, "") : "Not set (relies on AUTH_TRUST_HOST).");
   add("Auth", "AUTH_TRUST_HOST", process.env.AUTH_TRUST_HOST === "true" ? "ok" : "info",
@@ -99,7 +99,7 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
   // --- Email (Resend) ---
   const resendKey = process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY;
   if (!present(resendKey)) {
-    add("Email", "Resend key", "error", "MISSING -- password reset + magic links will not send.");
+    add("Email", "Resend key", "error", "MISSING. Password reset and magic links will not send.");
   } else {
     try {
       const res = await fetchWithTimeout("https://api.resend.com/domains", {
@@ -112,7 +112,7 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
         const smr = domains.find((d) => /steelmanresumes\.com$/.test(d.name));
         if (smr) {
           add("Email", "Sending domain", smr.status === "verified" ? "ok" : "error",
-            `${smr.name}: ${smr.status}${smr.status === "verified" ? "." : " -- must be 'verified' for the /forgot-password gate."}`);
+            `${smr.name}: ${smr.status}${smr.status === "verified" ? "." : ". It must be 'verified' for the /forgot-password gate."}`);
         } else {
           add("Email", "Sending domain", "warn", `steelmanresumes.com not found in Resend (${domains.map((d) => d.name).join(", ") || "no domains"}).`);
         }
@@ -124,11 +124,11 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
     }
   }
   add("Email", "AUTH_EMAIL_FROM", present(process.env.AUTH_EMAIL_FROM) ? "ok" : "warn",
-    present(process.env.AUTH_EMAIL_FROM) ? process.env.AUTH_EMAIL_FROM! : "Not set -- falls back to onboarding@resend.dev.");
+    present(process.env.AUTH_EMAIL_FROM) ? process.env.AUTH_EMAIL_FROM! : "Not set. Falls back to onboarding@resend.dev.");
 
   // --- AI keys (validity via free metadata calls; no generation spend) ---
   if (process.env.MOCK_AI === "true") {
-    add("AI", "MOCK_AI", "warn", "ON -- AI generation is mocked. Must be OFF in production.");
+    add("AI", "MOCK_AI", "warn", "ON. AI generation is mocked. Must be OFF in production.");
   } else {
     add("AI", "MOCK_AI", "ok", "Off (real AI).");
   }
@@ -159,7 +159,7 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
 
   // --- Integrations (presence only) ---
   add("Integrations", "JSearch (jobs)", present(process.env.JSEARCH_API_KEY) ? "ok" : "warn",
-    present(process.env.JSEARCH_API_KEY) ? "Key set." : "Missing -- live job search degraded.");
+    present(process.env.JSEARCH_API_KEY) ? "Key set." : "Missing. Live job search degraded.");
   const cos = present(process.env.CAREERONESTOP_USER_ID) && present(process.env.CAREERONESTOP_TOKEN);
   add("Integrations", "CareerOneStop (fallback)", cos ? "ok" : "info", cos ? "Configured." : "Not configured (optional fallback).");
   const previewStorage = isNonProductionVercel();
@@ -176,10 +176,10 @@ export async function getSystemHealth(adminUserId?: string): Promise<HealthRepor
   }
   const r2Detail = r2
     ? (previewStorage ? "Dedicated Preview storage configuration valid." : "All 4 general vars set.")
-    : "Incomplete or unsafe configuration -- file storage unavailable.";
+    : "Incomplete or unsafe configuration. File storage unavailable.";
   add("Integrations", "Cloudflare R2 (storage)", r2 ? "ok" : "warn", r2Detail);
   add("Integrations", "Document encryption key", present(process.env.DOCUMENT_ENCRYPTION_KEY) ? "ok" : "warn",
-    present(process.env.DOCUMENT_ENCRYPTION_KEY) ? "Set." : "Missing -- document vault encryption unavailable.");
+    present(process.env.DOCUMENT_ENCRYPTION_KEY) ? "Set." : "Missing. Document vault encryption unavailable.");
   const twilio = present(process.env.TWILIO_ACCOUNT_SID) && present(process.env.TWILIO_AUTH_TOKEN);
   add("Integrations", "Twilio (SMS)", twilio ? (present(process.env.TWILIO_MESSAGING_SERVICE_SID) ? "ok" : "info") : "info",
     twilio ? (present(process.env.TWILIO_MESSAGING_SERVICE_SID) ? "Configured." : "Keys set; messaging service pending (A2P).") : "Not configured (A2P pending).");

@@ -80,7 +80,7 @@ const NODE_DEFS: NodeDef[] = [
   {
     id: "review-skills",
     title: "Review your skills",
-    description: "See what The Forge found — your starting lineup",
+    description: "See what The Forge found. It's your starting lineup",
     phase: "foundation",
     toolLink: "/dashboard",
     isCompleted: (ctx) => ctx.activity.skills_identified > 0,
@@ -100,7 +100,7 @@ const NODE_DEFS: NodeDef[] = [
   {
     id: "build-resume",
     title: "Build your first resume",
-    description: "Your Forge data is already loaded — refine it",
+    description: "Your Forge data is already loaded. Just refine it",
     phase: "preparation",
     toolLink: "/dashboard/application-tailor",
     isCompleted: (ctx) => ctx.activity.resumes_built >= 1,
@@ -118,7 +118,7 @@ const NODE_DEFS: NodeDef[] = [
   {
     id: "practice-interview",
     title: "Practice an interview",
-    description: "5 minutes with AI feedback — get comfortable",
+    description: "5 minutes with AI feedback to get comfortable",
     phase: "preparation",
     toolLink: "/dashboard/interview",
     isCompleted: (ctx) => ctx.activity.interviews_completed >= 1,

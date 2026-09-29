@@ -17,14 +17,14 @@ const TOOL_OVERVIEW = [
     title: "The Forge",
     href: "/intro",
     description:
-      "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to next steps. Free for all clients -- no account needed until they want to save.",
+      "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to next steps. Free for all clients. No account is needed until they want to save.",
     research: "Stages of Change (Prochaska), Narrative Identity (McAdams), Giordano's hooks-for-change",
   },
   {
     title: "Application Tailor",
     href: "/dashboard/application-tailor",
     description:
-      "Targeted resume, cover letter, and disclosure brief for a specific job. Pulls from the client's Forge profile -- every version is grounded in their actual skills and story, not a template.",
+      "Targeted resume, cover letter, and disclosure brief for a specific job. Pulls from the client's Forge profile, so every version is built from their own skills and story.",
     research: "ATS optimization, Bandura mastery experiences",
   },
   {
@@ -45,7 +45,7 @@ const TOOL_OVERVIEW = [
     title: "Job Board",
     href: "/dashboard/jobs",
     description:
-      "Real listings via JSearch API -- no hallucinated jobs. Employers with dated, local evidence of hiring people with records are marked and sorted first. No outbound links; everything renders natively.",
+      "Real listings via JSearch API. No hallucinated jobs. Employers with dated, local evidence of hiring people with records are marked and sorted first. No outbound links; everything renders natively.",
     research: "SHRM fair-chance employer data, Granovetter weak ties",
   },
   {
@@ -73,7 +73,7 @@ export function PartnerToolsOverview({ noOrgCallout }: { noOrgCallout?: boolean 
             <h1 className="text-2xl font-bold text-t-white mb-2">Welcome to The Refinery</h1>
             <p className="text-base text-t-phos-dim leading-relaxed">
               You&apos;re seeing this as a partner organization. The tools below are what your
-              clients experience -- each one is built on peer-reviewed research and designed
+              clients experience. Each one is built on peer-reviewed research and designed
               specifically for justice-impacted people. Walk through any tool to see it in
               action, or go deeper into the methodology.
             </p>
@@ -121,7 +121,7 @@ export function PartnerToolsOverview({ noOrgCallout }: { noOrgCallout?: boolean 
         <h2 className="font-semibold text-t-white mb-2">Try it with a client</h2>
         <p className="text-sm text-t-phos-dim mb-4">
           The Forge is built to finish in one sitting. Walk through it yourself or sit with a client while
-          they do -- you&apos;ll see exactly what they experience and what it produces.
+          they do. You&apos;ll see exactly what they experience and what it produces.
         </p>
         <TBtn href="/intro" size="sm">start The Forge</TBtn>
       </section>

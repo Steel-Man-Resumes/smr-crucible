@@ -126,7 +126,7 @@ export function AssistantDrawer({
         <button
           onClick={() => setIsOpen(true)}
           className="t-focus group fixed bottom-24 right-2 z-40 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:bottom-5 sm:right-4"
-          aria-label={`${triggerLabel} — open assistant`}
+          aria-label={`${triggerLabel}, open assistant`}
         >
           <span className="pointer-events-none hidden rounded-full border border-[#e4d9ff] bg-white/95 px-3 py-1.5 text-sm font-semibold text-[#4c1d95] opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 sm:inline-block">
             {triggerLabel}

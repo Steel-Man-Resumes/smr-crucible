@@ -229,7 +229,7 @@ function LoginForm() {
     if (!email.trim() || !password || !confirmPassword) return;
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
-    if (!name.trim() || !phone.trim()) { setError("Please add your name and phone -- they go on the resumes you build."); return; }
+    if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
 
@@ -495,7 +495,7 @@ function LoginForm() {
                 disabled={sending}
               />
               <p className="text-[11px] text-t-phos-dim mt-1">
-                Open your authenticator app for the current code -- or use a backup code.
+                Open your authenticator app for the current code, or use a backup code.
               </p>
             </div>
           )}
@@ -752,8 +752,8 @@ function LoginForm() {
             Haven&apos;t started yet?{" "}
             <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
               Try The Forge
-            </a>{" "}
-            — free, no account needed.
+            </a>
+            . It&apos;s free, and you don&apos;t need an account.
           </p>
         </div>
       </div>

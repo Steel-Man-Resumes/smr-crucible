@@ -54,7 +54,7 @@ const TROY_RESPONSES: Record<string, string> = {
   "getting-ready":
     "Good. You've already made the hardest decision. Let's build on it.",
   "ready-now":
-    "Let's go. First thing — your resume.",
+    "Let's go. First thing: your resume.",
 };
 
 const STAGE_MAP: Record<string, ReadinessStage> = {
@@ -169,7 +169,7 @@ function WelcomePageInner() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode — sample data pre-filled. Watch how t.ROY guides each step.
+            Demo mode: sample data pre-filled. Watch how t.ROY guides each step.
           </p>
         </div>
       )}

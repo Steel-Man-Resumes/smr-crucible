@@ -12,6 +12,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_RESUME } from "@/lib/mock-ai";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 
 export const maxDuration = 30;
@@ -71,17 +72,17 @@ RULES:
 - Write at a 6th grade reading level
 - Be specific, not generic
 - No buzzwords like "results-driven" or "detail-oriented"
-- Keep it honest and grounded -- only claim what their skills and experience above support; never invent numbers or experience
+- Keep it honest and grounded. Only claim what their skills and experience above support; never invent numbers or experience
 - NEVER mention incarceration, criminal records, justice involvement, or any disqualifying information
-- Use "--" never an em dash
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
       prompt = `Suggest one experience bullet point for a ${sanitizedTargetJob} resume.
 Their skills: ${sanitizedSkills || "general"}.
 Existing bullets: ${sanitizedBullets || "none yet"}.${forgeBlock}
 
-Write ONE bullet starting with an action verb. Include a number or result ONLY if their input above provides one -- never invent quantities.
-No buzzwords. Keep it honest. One sentence only. Use "--" never an em dash.
+Write ONE bullet starting with an action verb. Include a number or result ONLY if their input above provides one. Never invent quantities.
+No buzzwords. Keep it honest. One sentence only. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 NEVER mention incarceration, criminal records, or any disqualifying information.`;
     } else {
       return NextResponse.json(
@@ -111,7 +112,7 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
       console.error("Decision log failed (resume-generate):", err);
     }
 
-    return NextResponse.json({ suggestion });
+    return NextResponse.json({ suggestion: plainPunctuation(suggestion, logDashSwaps("resume-generate")) });
   } catch (error: any) {
     console.error("Resume generate error:", error);
     return NextResponse.json(

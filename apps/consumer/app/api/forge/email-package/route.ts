@@ -52,7 +52,7 @@ async function handlePost(request: Request) {
 
   if (!resumeText.trim()) {
     return NextResponse.json(
-      { error: "No resume to send yet -- finish the Forge first." },
+      { error: "No resume to send yet. Finish the Forge first." },
       { status: 400 }
     );
   }
@@ -72,7 +72,7 @@ async function handlePost(request: Request) {
   if (coverLetterText.trim()) {
     sections.push(
       `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your cover letter</h2>` +
-        `<p style="color:#6d736d;font-size:12px;">Edit this for every job -- that is why we send it as text you can copy, not a locked file.</p>` +
+        `<p style="color:#6d736d;font-size:12px;">Edit this for every job. That is why we send it as text you can copy instead of a locked file.</p>` +
         `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(coverLetterText)}</pre>`
     );
   }
@@ -80,17 +80,17 @@ async function handlePost(request: Request) {
   const html =
     `<div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;padding:24px;">` +
     `<h1 style="font-size:22px;color:#1c1e1b;">You did the work. Here it is.</h1>` +
-    `<p style="color:#4f554f;line-height:1.6;">This is everything you built in The Forge. It is yours -- print it, ` +
+    `<p style="color:#4f554f;line-height:1.6;">This is everything you built in The Forge. It is yours. Print it, ` +
     `forward it, use it. When you are ready for the next step (finding real jobs, ` +
     `tailoring this resume to them, practicing the hard questions), your free ` +
     `account in The Refinery is waiting at ` +
     `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
     sections.join("") +
-    `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes -- Truth. Told Strong.<br>` +
+    `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
     `You received this because you asked for your Forge package at forge.steelmanresumes.com. ` +
     `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
     `employers that hire people with records, real openings, and insights that move your search forward. ` +
-    `Asking is one step -- create your free account at ` +
+    `Asking takes one step: create your free account at ` +
     `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
     `</div>`;
 
@@ -100,10 +100,10 @@ async function handlePost(request: Request) {
     (summary ? `${summary}\n\n` : "") +
     `=== YOUR RESUME ===\n\n${resumeText}\n\n` +
     (coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${coverLetterText}\n\n` : "") +
-    `Next step: your free Refinery account -- https://refinery.steelmanresumes.com/login\n\n` +
+    `Next step: your free Refinery account at https://refinery.steelmanresumes.com/login\n\n` +
     `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
     `employers that hire people with records, real openings, and insights that move your search forward. ` +
-    `Asking is one step -- create your free account at the link above.\n`;
+    `Asking takes one step: create your free account at the link above.\n`;
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -127,7 +127,7 @@ async function handlePost(request: Request) {
       const detail = await res.text();
       console.error("email-package send failed:", res.status, detail);
       return NextResponse.json(
-        { error: "We couldn't send that email. Download your documents instead -- they're right on this page." },
+        { error: "We couldn't send that email. Download your documents instead. They're right on this page." },
         { status: 502 }
       );
     }

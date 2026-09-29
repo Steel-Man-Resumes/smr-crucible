@@ -18,15 +18,16 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
 const MOCK_APPLY_EMAIL = {
-  subject: "Application for Warehouse Associate -- Jordan Williams",
+  subject: "Application for Warehouse Associate from Jordan Williams",
   body:
     "Dear Hiring Manager,\n\nI am applying for the Warehouse Associate role. I bring five years of reliable warehouse and forklift experience, a strong safety record, and a track record of showing up and getting the work done. My resume is attached.\n\nI would welcome the chance to talk about how I can contribute to your team. Thank you for your time and consideration.\n\nSincerely,\nJordan Williams",
   whereToFind:
-    "Look for a \"Careers\" or \"Contact\" link on the company's website -- application emails often go to careers@ or hr@ their domain. If you only find a general info@ address, that is fine; ask them to forward it to hiring. You can also call the main number and ask who receives job applications.",
+    "Look for a \"Careers\" or \"Contact\" link on the company's website. Application emails often go to careers@ or hr@ their domain. If you only find a general info@ address, that is fine; ask them to forward it to hiring. You can also call the main number and ask who receives job applications.",
 };
 
 async function handlePost(request: Request) {
@@ -83,7 +84,7 @@ async function handlePost(request: Request) {
     ? `\nSign the email as: ${sanitizeForPrompt(candidateName, 80)}`
     : "";
 
-  const prompt = `You are t.ROY, helping a justice-impacted job seeker apply for a job by EMAIL because the employer offers no online application link.
+  const prompt = `You are t.ROY, helping a job seeker apply for a job by EMAIL because the employer offers no online application link.
 
 THE JOB:
 - Role: ${sanitizeForPrompt(app.job_title)}
@@ -91,7 +92,9 @@ THE JOB:
 
 Write a short, professional, warm application email the candidate can send with their resume and cover letter. Reference one relevant strength if provided. Assume the resume is attached. Keep it under 130 words. Do NOT mention any criminal record. Do NOT invent an email address, hiring manager name, or facts about the candidate.
 
-Also write a brief, practical "where to find the address" tip (2-3 sentences) coaching them how to find the employer's careers/HR email -- check the company website's Careers/Contact page, common patterns like careers@ or hr@, or call and ask who receives applications. Never fabricate a specific address.
+Also write a brief, practical "where to find the address" tip (2-3 sentences) coaching them how to find the employer's careers/HR email: check the company website's Careers/Contact page, common patterns like careers@ or hr@, or call and ask who receives applications. Never fabricate a specific address.
+
+In the subject line, the email and the tip, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
 Return JSON only:
 { "subject": "a short subject line naming the role", "body": "the email body, with line breaks as \\n", "whereToFind": "the address-finding tip" }`;
@@ -102,7 +105,7 @@ Return JSON only:
       userId: session.user.id,
     });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const fallbackSubject = `Application for ${app.job_title} -- ${app.company}`;
+    const fallbackSubject = `Application for ${app.job_title} at ${app.company}`;
     let result: { subject: string; body: string; whereToFind: string };
     if (jsonMatch) {
       try {
@@ -134,7 +137,7 @@ Return JSON only:
       console.error("Decision log failed (apply-email):", err);
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json(plainPunctuation(result, logDashSwaps("apply-email")));
   } catch (error: any) {
     console.error("Apply-email generation error:", error);
     return NextResponse.json({ error: "Could not draft an application email" }, { status: 500 });

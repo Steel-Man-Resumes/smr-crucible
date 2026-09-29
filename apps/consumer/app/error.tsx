@@ -19,7 +19,7 @@ export default function Error({
           That step hiccuped.
         </h1>
         <p className="text-sm text-muted mb-6">
-          Nothing is lost -- your work is saved on this device. Try again, and
+          Nothing is lost. Your work is saved on this device. Try again, and
           if it keeps happening, reload the page.
         </p>
         <button

@@ -55,6 +55,6 @@ export async function buildMemorySection(
 
 ## WHAT YOU REMEMBER (recent conversations with this user)
 
-These notes run through ${when}. Nothing newer is stored, and they may overlap with the current chat. You may reference this work naturally (for example, "last time we were getting your application ready"), with its real date when asked. NEVER claim to remember anything not listed here -- if they ask about something older, say you only keep recent notes.
+These notes run through ${when}. Nothing newer is stored, and they may overlap with the current chat. You may reference this work naturally (for example, "last time we were getting your application ready"), with its real date when asked. NEVER claim to remember anything not listed here. If they ask about something older, say you only keep recent notes.
 ${lines.join("\n")}`;
 }

@@ -18,7 +18,7 @@ const STATS = [
   { value: "70M+", label: "Americans with a criminal record" },
   { value: "<50%", label: "Employed in year one after release" },
   { value: "$7,500", label: "Median first-year earnings post-release" },
-  { value: "0", label: "Tools that combined AI career analysis, legal navigation, and disclosure coaching in one place -- before this" },
+  { value: "0", label: "Tools that combined AI career analysis, legal navigation, and disclosure coaching in one place before this one" },
 ];
 
 const TROY_RULES = [
@@ -27,7 +27,7 @@ const TROY_RULES = [
     why: "Affect labeling reduces amygdala reactivity before high-stakes work begins (Lieberman et al., 2007).",
   },
   {
-    rule: "Strengths before gaps -- always",
+    rule: "Strengths before gaps. Always.",
     why: "Deficit-first framing activates threat response. Asset-first activates approach motivation.",
   },
   {
@@ -39,7 +39,7 @@ const TROY_RULES = [
     why: "Cognitive load theory: overwhelming someone mid-crisis loses them permanently.",
   },
   {
-    rule: "Offer the next step -- never a lecture",
+    rule: "Offer the next step. Never a lecture.",
     why: "Autonomy-supportive language predicts sustained engagement (Deci & Ryan, 2000).",
   },
   {
@@ -67,27 +67,27 @@ const TROY_RULES = [
 const RESEARCH = [
   {
     finding: "Affect labeling reduces amygdala reactivity by up to 50%",
-    source: "Lieberman et al., 2007 -- UCLA",
-    detail: "Putting feelings into words activates prefrontal cortex and dampens the stress response. The Forge uses narrative reframing at every step -- not as therapy, but as a documented performance technique that lowers cognitive resistance before high-stakes work.",
+    source: "Lieberman et al., 2007 (UCLA)",
+    detail: "Putting feelings into words activates prefrontal cortex and dampens the stress response. The Forge uses narrative reframing at every step as a documented performance technique that lowers cognitive resistance before high-stakes work. It is not therapy.",
   },
   {
     finding: "Redemption narrative sequences predict higher well-being and post-release stability",
-    source: "McAdams, 2013 -- Northwestern",
-    detail: "People who construct bad-to-good story arcs show measurably better outcomes across health, relationships, and stability. The Forge output is structured as a redemption arc, not a deficit report. This isn't a design flourish -- it's a replication of a documented psychological mechanism.",
+    source: "McAdams, 2013 (Northwestern)",
+    detail: "People who construct bad-to-good story arcs show measurably better outcomes across health, relationships, and stability. The Forge output is structured as a redemption arc, not a deficit report. That structure replicates a documented psychological mechanism.",
   },
   {
     finding: "Autonomy, competence, and relatedness are the three non-negotiable psychological needs",
-    source: "Deci & Ryan, 2000 -- Self-Determination Theory",
+    source: "Deci & Ryan, 2000 (Self-Determination Theory)",
     detail: "Incarceration systematically strips all three. This platform rebuilds them: user-driven choices (autonomy), skills surfaced from real history (competence), and language grounded in lived experience rather than clinical distance (relatedness).",
   },
   {
     finding: "Stigma-based discrimination persists even in Ban-the-Box jurisdictions",
-    source: "Agan & Starr, 2018 -- American Economic Review",
-    detail: "Removing the checkbox doesn't remove the bias. The Refinery's disclosure coaching prepares users for the conversation that happens after the application -- not just the form.",
+    source: "Agan & Starr, 2018 (American Economic Review)",
+    detail: "Removing the checkbox doesn't remove the bias. The Refinery's disclosure coaching prepares users for the form and for the conversation that happens after the application.",
   },
   {
     finding: "Cognitive load undermines decision quality under economic stress",
-    source: "Mullainathan & Shafir, 2013 -- Scarcity",
+    source: "Mullainathan & Shafir, 2013 (Scarcity)",
     detail: "Scarcity (of money, time, housing stability) taxes cognitive bandwidth directly. The platform is designed for people under maximum load: short prompts, no jargon, one question at a time, no decision fatigue.",
   },
   {
@@ -99,31 +99,31 @@ const RESEARCH = [
 
 const DIFFERENTIATORS = [
   {
-    us: "AI career analysis built for justice-impacted people -- employment gaps, records, and barriers included in the model",
+    us: "AI career analysis built for justice-impacted people, with employment gaps, records, and barriers included in the model",
     them: "Generic resume builders that treat a 10-year gap as a red flag",
   },
   {
-    us: "Record-aware disclosure coaching baked into the Refinery -- not an afterthought",
+    us: "Record-aware disclosure coaching built into the Refinery as a core tool",
     them: "Job boards that surface Ban-the-Box listings but give no guidance on what to say when asked",
   },
   {
-    us: "Every AI recommendation logged with input hash, model ID, explanation, and latency -- full audit trail",
+    us: "Every AI recommendation logged with input hash, model ID, explanation, and latency for a full audit trail",
     them: "Black-box recommendations with no accountability",
   },
   {
-    us: "10 research-grounded behavioral rules that govern every t.ROY response -- non-negotiable, documented",
+    us: "10 documented, non-negotiable behavioral rules, grounded in research, that govern every t.ROY response",
     them: "A generic chatbot tuned for engagement, not outcomes",
   },
   {
-    us: "Consent-gated partner dashboard -- organizations can only see clients who have explicitly opted in",
+    us: "Consent-gated partner dashboard where organizations see only clients who have explicitly opted in",
     them: "Program tools that harvest participant data without meaningful consent",
   },
   {
-    us: "Free at every step -- no paywall, no credit card, no data sold -- ever",
+    us: "Free at every step. No paywall, no credit card, and no data sold, ever.",
     them: "Freemium tools that paywall the parts people actually need",
   },
   {
-    us: "Built by someone who navigated the same system -- not designed at a distance",
+    us: "Built by someone who went through the same system firsthand",
     them: "Tools designed by people who have never been incarcerated, for people who have",
   },
 ];
@@ -133,7 +133,7 @@ const JOURNEY = [
     stage: "Stage 1",
     name: "The Forge",
     time: "One sitting",
-    what: "Upload a resume or describe your work history. Answer a few questions about goals, barriers, readiness, and record. The Forge outputs: a resume, a cover letter, career paths matched to your background, and a resource plan -- all in plain language.",
+    what: "Upload a resume or describe your work history. Answer a few questions about goals, barriers, readiness, and record. The Forge outputs a resume, a cover letter, career paths matched to your background, and a resource plan. All of it is in plain language.",
     tech: "Claude Sonnet (Anthropic) with a custom prompt scaffold that enforces the 10 behavioral rules. Resume parsed via OCR + NLP. Output hashed and logged.",
     color: "amber",
   },
@@ -157,7 +157,7 @@ const JOURNEY = [
     stage: "Stage 4",
     name: "Disclosure Planner",
     time: "15-30 minutes",
-    what: "Plan when and how to talk about your record with specific employers. The planner walks through timing, framing, and what to say -- grounded in actual Ban-the-Box law and research on employers that hire people with records.",
+    what: "Plan when and how to talk about your record with specific employers. The planner walks through timing, framing, and what to say. It is grounded in actual Ban-the-Box law and research on employers that hire people with records.",
     tech: "Structured coaching dialogue with t.ROY. Output saved as a disclosure_plan artifact. Nothing in the practice transcript is stored.",
     color: "amber",
   },
@@ -166,7 +166,7 @@ const JOURNEY = [
     name: "Interview Practice",
     time: "Ongoing",
     what: "Text or live voice mock interviews tailored to your target role. Behavioral, situational, and disclosure-specific questions. Real-time feedback on framing, specificity, and narrative arc.",
-    tech: "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). Practice audio is never stored -- only the frame used and whether the point landed.",
+    tech: "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). Practice audio is never stored. Only the frame used and whether the point landed are kept.",
     color: "phos",
   },
   {
@@ -210,7 +210,7 @@ export default function OverviewPage() {
           </h1>
           <p className="text-lg text-t-phos leading-relaxed mb-4">
             Justice-impacted people face a hiring system that treats their record
-            as a disqualifier -- not a data point. No tool combined AI career
+            as an automatic disqualifier. No tool combined AI career
             analysis, record-aware legal navigation, and disclosure coaching in
             one place. Until now.
           </p>
@@ -282,9 +282,9 @@ export default function OverviewPage() {
           </h2>
           <p className="text-sm text-t-phos-dim mb-5">
             t.ROY follows 10 non-negotiable rules on every interaction.
-            These are not personality guidelines -- they are hard constraints
-            derived from peer-reviewed research and Troy&apos;s decade of direct
-            service. They cannot be overridden by user prompting.
+            They are hard constraints derived from peer-reviewed research and
+            Troy&apos;s decade of direct service. They cannot be overridden
+            by user prompting.
           </p>
           <div className="space-y-3">
             {TROY_RULES.map((r, i) => (
@@ -348,18 +348,18 @@ export default function OverviewPage() {
             {[
               {
                 title: "Practice tools store frames, not words",
-                detail: "The Disclosure Planner and Interview Practice tools store whether a coaching frame was used and whether the key point landed -- never the user's actual answers, transcript, or audio. The system can show you progress without survelling your process.",
+                detail: "The Disclosure Planner and Interview Practice tools store whether a coaching frame was used and whether the key point landed. They never store the user's actual answers, transcript, or audio. The system can show you progress without surveilling your process.",
               },
               {
                 title: "Partner access is consent-gated",
-                detail: "Partner organizations (nonprofits, reentry programs, job centers) can only see clients who have explicitly opted in to share their progress. The toggle is in Settings. Off by default. Cannot be enabled by the partner -- only by the user.",
+                detail: "Partner organizations (nonprofits, reentry programs, job centers) can only see clients who have explicitly opted in to share their progress. The toggle is in Settings. Off by default. Only the user can turn it on. The partner cannot.",
               },
               {
                 title: "Forge data stays local until you choose otherwise",
-                detail: "The Forge runs client-side. Resume data, goals, and story answers are stored in your browser's localStorage -- not our servers -- until you create an account and choose to sync. You can complete the Forge and never create an account.",
+                detail: "The Forge runs client-side. Resume data, goals, and story answers are stored in your browser's localStorage, not on our servers, until you create an account and choose to sync. You can complete the Forge and never create an account.",
               },
               {
-                title: "No data sold -- ever",
+                title: "No data sold, ever",
                 detail: "Steel Man Resumes LLC is not funded by advertising. There is no data monetization layer. This is documented in the AGPL-3.0 license and the source code is public.",
               },
               {
@@ -419,14 +419,14 @@ export default function OverviewPage() {
           </div>
           <div className="space-y-3 text-sm">
             {[
-              "Neon PostgreSQL -- all structured data (users, profiles, artifacts, applications, consent records, decision log)",
-              "Cloudflare R2 -- encrypted document storage (uploaded resumes, generated PDFs)",
-              "Vercel -- serverless hosting, edge functions, preview deployments",
-              "Resend -- transactional email (magic links only -- no marketing email)",
-              "Airtable -- verified employer data source (manually curated, imported to PostgreSQL)",
+              "Neon PostgreSQL: all structured data (users, profiles, artifacts, applications, consent records, decision log)",
+              "Cloudflare R2: encrypted document storage (uploaded resumes, generated PDFs)",
+              "Vercel: serverless hosting, edge functions, preview deployments",
+              "Resend: transactional email (magic links only, no marketing email)",
+              "Airtable: verified employer data source (manually curated, imported to PostgreSQL)",
             ].map((item, i) => (
               <div key={i} className="flex gap-2 items-start">
-                <span className="text-t-amber flex-shrink-0 text-xs mt-0.5">--</span>
+                <span className="text-t-amber flex-shrink-0 text-xs mt-0.5">&rsaquo;</span>
                 <p className="text-t-phos-dim leading-relaxed">{item}</p>
               </div>
             ))}
@@ -447,7 +447,7 @@ export default function OverviewPage() {
           <div className="space-y-3 text-sm">
             {[
               { label: "Access code", detail: "One code per program. Clients enter it at sign-in to unlock higher limits. Codes are linked to your partner account." },
-              { label: "Partner dashboard", detail: "See cohort progress -- stage, artifacts completed, last activity -- for clients who have opted in to share. CSV export for program reporting." },
+              { label: "Partner dashboard", detail: "See cohort progress (stage, artifacts completed, last activity) for clients who have opted in to share. CSV export for program reporting." },
               { label: "No vendor lock-in", detail: "AGPL-3.0 license. The source code is public. You can self-host a private instance for your program." },
               { label: "To get an access code", detail: "Email Steel Man Resumes LLC directly. Free for nonprofits and community organizations during the launch period." },
             ].map((item, i) => (
@@ -471,10 +471,10 @@ export default function OverviewPage() {
           </p>
           <div className="space-y-3 text-sm">
             {[
-              { label: "Measurable outputs", detail: "Every Forge completion, resume built, disclosure plan, interview session, and application tracked -- with user consent and without collecting PII in aggregate reports." },
+              { label: "Measurable outputs", detail: "Every Forge completion, resume built, disclosure plan, interview session, and application tracked, with user consent and without collecting PII in aggregate reports." },
               { label: "Audit trail", detail: "The decision_log table captures every AI recommendation with full provenance. Funders can request reports on AI performance, model usage, and outcome signals." },
               { label: "Target population", detail: "Justice-impacted adults in Wisconsin (initial), Midwest (expansion), national (AGPL self-host). Primary focus: people within 90 days of release or recently released." },
-              { label: "No paywall -- by design", detail: "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status." },
+              { label: "No paywall, by design", detail: "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status." },
             ].map((item, i) => (
               <div key={i} className="bg-t-panel-2 p-4 border border-t-line">
                 <p className="font-semibold text-t-white mb-1">{item.label}</p>
@@ -490,7 +490,7 @@ export default function OverviewPage() {
             Built by someone who lived it
           </p>
           <p className="text-base text-t-white leading-relaxed mb-3">
-            Steel Man Resumes was built by Troy Carr -- a justice-impacted
+            Steel Man Resumes was built by Troy Carr, a justice-impacted
             workforce advocate with a decade of direct service navigating the
             same system these tools are designed to help people survive.
           </p>
@@ -506,7 +506,7 @@ export default function OverviewPage() {
             trauma in mind because Troy has lived that too.
           </p>
           <p className="text-xs text-t-phos-dim mt-4">
-            Steel Man Resumes LLC -- Wisconsin -- AGPL-3.0 open source
+            Steel Man Resumes LLC &middot; Wisconsin &middot; AGPL-3.0 open source
           </p>
         </section>
 

@@ -989,13 +989,13 @@ export function ResumeWorkspace() {
           Application Tailor
         </h1>
         <p className="text-base text-t-phos-dim mb-2">
-          Aim your base resume at a specific job. We tailor your resume, cover
-          letter, and disclosure plan to the exact posting -- using your Forge
-          profile.
+          Aim your base resume at a specific job. We use your Forge profile to
+          tailor your resume, cover letter, and disclosure plan to the exact
+          posting.
         </p>
         <p className="text-sm text-t-phos-dim mb-4">
           You work one job at a time. Save as many as you want on the Job Board,
-          then tailor and apply to them one by one -- they wait for you under
+          then tailor and apply to them one by one. They wait for you under
           your saved jobs.
         </p>
         {/* R6: which approved baseline this tailoring restructures. Tailoring
@@ -1064,7 +1064,7 @@ export function ResumeWorkspace() {
                           </span>
                           {isBase && (
                             <span className="text-xs text-t-phos-dim ml-2">
-                              built in The Forge -- your starting point
+                              your starting point from The Forge
                             </span>
                           )}
                           {r.target_context?.targetCompany && (
@@ -1118,7 +1118,7 @@ export function ResumeWorkspace() {
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
               Which company?{" "}
-              <span className="font-normal text-t-phos-dim">(required -- we tailor to a specific employer)</span>
+              <span className="font-normal text-t-phos-dim">(required so we can tailor to a specific employer)</span>
             </label>
             <input
               value={doc.meta.targetCompany}
@@ -1161,7 +1161,7 @@ export function ResumeWorkspace() {
                 </button>
                 <p className="text-xs text-t-phos-dim mt-1">
                   We try to pull the description so we can tailor to it. Some sites block
-                  automatic reading -- if so, just paste the text below.
+                  automatic reading. If that happens, just paste the text below.
                 </p>
                 {fetchPostingMsg && (
                   <p
@@ -1178,12 +1178,12 @@ export function ResumeWorkspace() {
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
               Paste the job description{" "}
-              <span className="font-normal text-t-phos-dim">(optional -- makes the tailoring sharper)</span>
+              <span className="font-normal text-t-phos-dim">(optional, but it makes the tailoring sharper)</span>
             </label>
             <textarea
               value={jobDescription}
               onChange={(e) => { setJobDescription(e.target.value); setJdFetchMeta(null); }}
-              placeholder="Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for -- using only what's true about you."
+              placeholder="Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for, using only what's true about you."
               rows={5}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[120px]"
             />
@@ -1220,7 +1220,7 @@ export function ResumeWorkspace() {
                       ? "Add the job title and the company to tailor your resume to a specific posting."
                       : jobDescription.trim()
                         ? "Uses your base resume and the job description you pasted. Only what's true about you, aimed at this posting."
-                        : "Uses your base resume -- paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
+                        : "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
                   </p>
                   <a
                     href="/resume"
@@ -1299,13 +1299,13 @@ export function ResumeWorkspace() {
           <ul className="space-y-1">
             {tailoringNotes.map((note, i) => (
               <li key={i} className="text-xs text-t-phos flex gap-2">
-                <span className="text-t-phos-dim flex-shrink-0">--</span>
+                <span className="text-t-phos-dim flex-shrink-0">-</span>
                 {note}
               </li>
             ))}
           </ul>
           <p className="text-[10px] text-t-phos-dim mt-2 italic">
-            Use these points in your disclosure and interview prep -- they are where your profile and this job connect.
+            Use these points in your disclosure and interview prep. They are where your profile and this job connect.
           </p>
         </div>
       )}
@@ -1319,13 +1319,13 @@ export function ResumeWorkspace() {
               <path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
             </svg>
             <span className="text-sm font-bold text-t-amber-bright">
-              {applyInfo.applied ? "Applied -- nice work" : "Ready to apply"}
+              {applyInfo.applied ? "Applied, nice work" : "Ready to apply"}
             </span>
           </div>
           <p className="text-xs text-t-phos-dim mb-3">
             {applyInfo.applied
               ? `You applied to ${doc.meta.targetCompany || "this job"}. Keep the momentum going.`
-              : "Dial in your resume below until it reads exactly right, then apply. t.ROY keeps track for you -- no re-typing."}
+              : "Dial in your resume below until it reads exactly right, then apply. t.ROY keeps track for you, so you don't have to re-type anything."}
           </p>
           <ApplyActions
             applicationId={targetApplicationId}
@@ -1427,7 +1427,7 @@ export function ResumeWorkspace() {
           <div className="px-6 pb-5">
             <p className="text-xs text-t-phos-dim bg-t-panel-2 border border-t-line px-3 py-2 leading-relaxed">
               <span className="font-semibold text-t-white">Make it yours before you send.</span>{" "}
-              Download the .docx and personalize it -- confirm the hiring manager&rsquo;s
+              Download the .docx and personalize it. Confirm the hiring manager&rsquo;s
               name, drop in any specific details about the company, and adjust the
               opening if you want. A cover letter usually goes in your email body, so
               keep it editable. Save a PDF later, once it reads exactly how you want.

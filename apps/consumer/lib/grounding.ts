@@ -99,19 +99,19 @@ function scoreJob(job: GroundingJobInput, index: number): GroundingJobScore {
 
 const BAND_COPY: Record<GroundingBand, { headline: string; detail: string }> = {
   red: {
-    headline: "We'd have to guess -- add detail so your resume stays 100% true",
+    headline: "We'd have to guess. Add detail so your resume stays 100% true",
     detail:
-      "There isn't much here yet. We will never invent duties, numbers, or tools to fill the gaps -- so with this little, your resume will be short. Add employers, dates, and what you actually did to make it stronger and still true.",
+      "There isn't much here yet. We will never invent duties, numbers, or tools to fill the gaps, so with this little, your resume will be short. Add employers, dates, and what you actually did to make it stronger and still true.",
   },
   amber: {
-    headline: "Good -- a few gaps we'll leave blank, not fill",
+    headline: "Good: a few gaps we'll leave blank, not fill",
     detail:
-      "We have solid material to work with. Where something's missing, we leave it out rather than make it up. Adding the missing pieces below will make your resume fuller -- and still only what's true about you.",
+      "We have solid material to work with. Where something's missing, we leave it out rather than make it up. Adding the missing pieces below will make your resume fuller, and still only what's true about you.",
   },
   green: {
-    headline: "Strong -- your resume will contain only what you told us",
+    headline: "Strong: your resume will contain only what you told us",
     detail:
-      "You've given us real, specific material. Your resume will be built entirely from it -- nothing invented, nothing padded.",
+      "You've given us real, specific material. Your resume will be built entirely from it, with nothing invented and nothing padded.",
   },
 };
 
@@ -138,7 +138,7 @@ export function computeGrounding(jobs: GroundingJobInput[]): GroundingScore {
 
   const missing: string[] = [];
   if (jobCount === 0) {
-    missing.push("Your work history -- even one job, in your own words");
+    missing.push("Your work history, even one job, in your own words");
   }
   for (const j of scored) {
     const gaps: string[] = [];

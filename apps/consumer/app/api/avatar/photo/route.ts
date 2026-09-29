@@ -84,7 +84,7 @@ export async function POST(request: Request) {
   }
   if (file.size > MAX_PHOTO_BYTES) {
     return NextResponse.json(
-      { error: "That photo is over the 8 MB limit. It should already be small after cropping -- try again." },
+      { error: "That photo is over the 8 MB limit. It should already be small after cropping, so try again." },
       { status: 413 }
     );
   }

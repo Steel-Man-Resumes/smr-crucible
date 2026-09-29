@@ -111,7 +111,7 @@ STRICT RULES:
 - Only propose a strength that is clearly supported by their own history below. Never invent one.
 - For each, write the EVIDENCE as a short, plain sentence that points back to what they actually did or said.
 - Frame each as something for them to confirm, not a verdict. Warm, plain, 6th-grade reading level.
-- Use "--" never an em dash. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No emojis.
 ${targetJob ? `- Favor strengths that matter for: ${sanitizeForPrompt(targetJob, 120)}.` : ""}
 
 THEIR HISTORY:

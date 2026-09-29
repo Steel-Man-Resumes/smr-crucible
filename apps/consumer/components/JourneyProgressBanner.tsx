@@ -32,10 +32,10 @@ const STAGES: Record<
   full_access: {
     progress: 75,
     activeStep: 3,
-    next: "Practice your disclosure and interview prep -- every rep builds confidence.",
+    next: "Practice your disclosure and interview prep. Every rep builds confidence.",
     cta: "Start practicing",
     href: "/dashboard/interview",
-    payoff: "Everything is unlocked. The last 25% is reps -- practice until it feels easy.",
+    payoff: "Everything is unlocked. The last 25% is reps. Practice until it feels easy.",
   },
 };
 

@@ -23,6 +23,7 @@ import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { JD_MAX, RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import {
   buildTrustedSource,
   verifyGrounding,
@@ -54,8 +55,9 @@ RULES:
 - 6th grade reading level. Short sentences. No buzzwords ("results-driven", "detail-oriented").
 - If the resume is thin, work with what's there. An honest 3-bullet resume beats a fabricated 10-bullet one.
 - Do NOT add, infer, or invent any incarceration, criminal-record, or justice-involvement framing that is not already in the person's own resume. Never introduce it, and never spin a neutral fact into a justice-involved one.
-- Keep only what the person themselves wrote. If their resume states where a skill, course, or certification was earned -- including a correctional setting -- keep it exactly as they framed it. Their story is theirs to tell: do not editorialize, expand, explain, dramatize, or add growth/redemption language they did not write.
+- Keep only what the person themselves wrote. If their resume states where a skill, course, or certification was earned, including a correctional setting, keep it exactly as they framed it. Their story is theirs to tell: do not editorialize, expand, explain, dramatize, or add growth/redemption language they did not write.
 - For employment gaps, simply omit or skip that period. Do NOT explain or narrate gaps. A functional/skills-based format is fine.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - Output JSON only.`;
 
 async function handlePost(request: Request) {
@@ -159,6 +161,14 @@ Return JSON:
       })
       .filter(Boolean);
     result.skills = listCheck.skills;
+
+    // Model-written text only: no dash used as punctuation. b.original is the
+    // person's own resume text and is left exactly as they wrote it.
+    const swapLog = logDashSwaps("rush-resume");
+    result.summary = plainPunctuation(result.summary, swapLog);
+    result.bullets = result.bullets.map((b: any) => ({ ...b, text: plainPunctuation(b.text, swapLog) }));
+    result.skills = plainPunctuation(result.skills, swapLog);
+    if (typeof result.tips === "string") result.tips = plainPunctuation(result.tips, swapLog);
 
     const verification = aggregateVerification({
       summary: summaryCheck.verifierRan,

@@ -74,7 +74,7 @@ export function LoginHistoryCard() {
                 </span>
                 <span className="text-xs text-t-phos-dim">
                   {e.device}
-                  {e.location ? ` -- ${e.location}` : ""}
+                  {e.location ? ` · ${e.location}` : ""}
                 </span>
               </span>
               <span className="text-[10px] text-t-phos-dim flex-shrink-0">

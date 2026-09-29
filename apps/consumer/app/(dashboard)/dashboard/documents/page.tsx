@@ -121,7 +121,7 @@ export default function VaultDocumentsPage() {
   function jobLabel(id: string | null): string | null {
     if (!id) return null;
     const j = jobs.find((x) => x.id === id);
-    return j ? `${j.job_title} -- ${j.company}` : null;
+    return j ? `${j.job_title} at ${j.company}` : null;
   }
 
   function onPickFile(f: File | null) {
@@ -265,7 +265,7 @@ export default function VaultDocumentsPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">Vault</h1>
       <p className="text-t-phos-dim mt-1">
-        A safe home for the documents that prove who you are and what you have earned -- your ID,
+        A safe home for the documents that prove who you are and what you have earned: your ID,
         certificates, reference letters, records, and notes. It is yours for life, encrypted, and
         private to your account. Only you can open it. Nothing here is ever shared without your say.
       </p>
@@ -283,7 +283,7 @@ export default function VaultDocumentsPage() {
 
         <div>
           <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-file">
-            Choose a file (PDF, photo, Word document, or text -- up to 25 MB)
+            Choose a file (PDF, photo, Word document, or text, up to 25 MB)
           </label>
           <input
             id="v-file"
@@ -366,7 +366,7 @@ export default function VaultDocumentsPage() {
               <option value="">Not tied to a job</option>
               {jobs.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.job_title} -- {j.company}
+                  {j.job_title} at {j.company}
                 </option>
               ))}
             </select>
@@ -392,7 +392,7 @@ export default function VaultDocumentsPage() {
       {docs.length === 0 ? (
         <div className="mt-8 text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           Your vault is empty. Add your ID, a certificate, or a reference letter above, and it will
-          be here whenever you need it -- for a job, a landlord, or a program.
+          be here whenever you need it for a job, a landlord, or a program.
         </div>
       ) : (
         <div className="mt-10 space-y-8">
@@ -456,7 +456,7 @@ export default function VaultDocumentsPage() {
                                 <option value="">Not tied to a job</option>
                                 {jobs.map((j) => (
                                   <option key={j.id} value={j.id}>
-                                    {j.job_title} -- {j.company}
+                                    {j.job_title} at {j.company}
                                   </option>
                                 ))}
                               </select>

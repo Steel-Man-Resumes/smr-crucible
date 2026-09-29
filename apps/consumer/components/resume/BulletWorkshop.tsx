@@ -80,7 +80,7 @@ const IMPROVED_CHIPS = [
  * themselves, which is the actual goal.
  */
 const WHY = {
-  did: "Employers are scanning for what you handled, not what the job description said. Your own plain words are the raw material -- we do not need them polished.",
+  did: "Employers are scanning for what you handled, not what the job description said. Your own plain words are the raw material. They do not need to be polished.",
   tools:
     "Naming the equipment or system is the fastest proof you have actually done the work, and tools are exactly what employer software searches for.",
   often:
@@ -101,7 +101,7 @@ const WHY = {
  */
 const STAGE_INTRO: Record<string, string> = {
   precontemplation:
-    "No pressure here. Answer whatever comes easily and skip the rest -- even one answer is enough to work with.",
+    "No pressure here. Answer whatever comes easily and skip the rest. Even one answer is enough to work with.",
   contemplation:
     "Answer what you can, in your own words. Even one answer is enough to start, and you can come back to the others.",
   preparation:
@@ -311,7 +311,7 @@ export function BulletWorkshop({
               ? "That is enough to write something. Add more if you want it sharper."
               : answered >= 4
                 ? "That is a lot to work with. This one is going to be strong."
-                : `${answered} of 5 answered -- more than most people give us.`}
+                : `${answered} of 5 answered. That is more than most people give us.`}
         </p>
 
         <div className="space-y-3">
@@ -333,7 +333,7 @@ export function BulletWorkshop({
             />
             {toolHints.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-[11px] text-t-phos-dim mr-0.5">Common for this role -- tap if it fits:</span>
+                <span className="text-[11px] text-t-phos-dim mr-0.5">Common for this role. Tap if it fits:</span>
                 {toolHints.map((t) => (
                   <button
                     key={t}
@@ -428,7 +428,7 @@ export function BulletWorkshop({
         </div>
         {storageKey && (
           <p className="text-[11px] text-t-phos-dim mt-2">
-            Your answers are saved -- close anytime and pick up where you left off.
+            Your answers are saved. Close anytime and pick up where you left off.
           </p>
         )}
       </div>

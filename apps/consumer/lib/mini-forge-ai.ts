@@ -24,6 +24,7 @@ import { RESEARCH_CONTEXT } from "./research-context";
 import { MODEL_FAST } from "./ai/models";
 import { callAI } from "./ai-call";
 import { assertMiniForgeBudget } from "./mini-forge-budget";
+import { plainPunctuation, logDashSwaps } from "./legal-sanitize";
 
 export interface MiniForgeIntake {
   readiness_stage?: string;
@@ -66,7 +67,7 @@ export async function processMiniForge(
   }
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = plainPunctuation(JSON.parse(jsonMatch[0]), logDashSwaps("mini-forge"));
     return { ...parsed, generated_at: new Date().toISOString() };
   } catch {
     return { generated_at: new Date().toISOString(), raw_text: text, parse_error: true };
@@ -115,9 +116,9 @@ function buildPrompt(intake: MiniForgeIntake): string {
   return `Person's career intake:\n${parts.join("\n")}\n\nGenerate a JSON career analysis following the schema in the system prompt.`;
 }
 
-const MINI_FORGE_SYSTEM = `You are a trauma-informed career counselor helping justice-impacted individuals plan their return to work. You write at a 5th grade reading level -- clear, warm, practical.
+const MINI_FORGE_SYSTEM = `You are a trauma-informed career counselor helping people with records plan their return to work. You write at a 5th grade reading level: clear, warm, practical.
 
-${RESEARCH_CONTEXT.slice(0, 1000)}
+${RESEARCH_CONTEXT.slice(0, 1172)}
 
 Respond ONLY with valid JSON matching this schema:
 {
@@ -136,7 +137,7 @@ Respond ONLY with valid JSON matching this schema:
   "barrier_resources": [
     {
       "barrier": "barrier type",
-      "resource": "Organization name -- what they do and how to reach them"
+      "resource": "Organization name: what they do and how to reach them"
     }
   ],
   "resume_starter": "Two short paragraphs. No contact info. Just strengths + experience summary."
@@ -144,8 +145,9 @@ Respond ONLY with valid JSON matching this schema:
 
 Rules:
 - 2-3 career paths
-- No external links -- resources as plain text only
-- No tel: links -- phone numbers as plain text
+- No external links. Resources as plain text only
+- No tel: links. Phone numbers as plain text
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence
 - Employers that hire people with records preferred in next steps (say it that way)
 - Never mention the word "felon" or "offender"
 - If criminal record is a challenge, include a legal resource for the location

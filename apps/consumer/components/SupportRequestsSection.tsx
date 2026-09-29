@@ -109,7 +109,7 @@ export function SupportRequestsSection() {
         </button>
       </div>
       <p className="text-sm text-t-phos-dim mb-4">
-        Messages users sent from the Help center or the assistant. Reply here --
+        Messages users sent from the Help center or the assistant. Reply here and
         your reply shows up in their Help center.
       </p>
 
@@ -168,12 +168,12 @@ export function SupportRequestsSection() {
                     {r.category
                       ? SUPPORT_CATEGORY_LABELS[r.category as SupportCategory] ?? r.category
                       : "Message"}
-                    {" -- "}
+                    {" · "}
                     {r.email || "no email"}
-                    {r.page ? ` -- from ${r.page}` : ""}
-                    {" -- "}
+                    {r.page ? ` · from ${r.page}` : ""}
+                    {" · "}
                     {new Date(r.created_at).toLocaleString()}
-                    {filedByAssistant ? " -- filed by t.ROY" : ""}
+                    {filedByAssistant ? " · filed by t.ROY" : ""}
                   </span>
                 </div>
                 <div className="flex gap-1">

@@ -50,7 +50,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     sampleOutput:
       "Sample plan for a made-up job at Rocketship Bagels (Planet Zorp): wait until after they offer you the job, then use your script. This is only a Sample so you can see the shape of a real plan.",
     trialTaste:
-      "Sample script (2 lines): \"I want to be upfront -- I have something on my record from a while back, and I handled it. What I bring now is that I show up, I work hard, and I am ready to prove it here.\"",
+      "Sample script (2 lines): \"I want to be upfront. I have something on my record from a while back, and I handled it. What I bring now is that I show up, I work hard, and I am ready to prove it here.\"",
     requiredState: "full_access",
     href: "/dashboard/disclosure",
   },
@@ -60,7 +60,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     whatItDoes:
       "It runs mock interviews for your target job by text or voice, then gives you feedback so the real interview feels familiar.",
     sampleOutput:
-      "Sample feedback for a pretend role of Chief Nap Officer at Rocketship Bagels: \"Strong, honest answer. Try naming one number next time, like how many people you trained.\" Sample only -- your real feedback uses your real answers.",
+      "Sample feedback for a pretend role of Chief Nap Officer at Rocketship Bagels: \"Strong, honest answer. Try naming one number next time, like how many people you trained.\" Sample only. Your real feedback uses your real answers.",
     trialTaste:
       "Sample interview question: \"Tell me about a time you had to learn something fast on the job. What did you do?\"",
     requiredState: "full_access",
@@ -72,7 +72,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     whatItDoes:
       "It searches several job sources at once and marks employers our team has published as hiring people with records, so you have a target to tailor your resume to.",
     sampleOutput:
-      "Sample listing: \"Bagel Launch Technician -- Rocketship Bagels, Planet Zorp. Pay: 400 gold coins per week. Hires people with records.\" A Sample only -- real listings come from real employers near you.",
+      "Sample listing: \"Bagel Launch Technician at Rocketship Bagels, Planet Zorp. Pay: 400 gold coins per week. Hires people with records.\" A Sample only. Real listings come from real employers near you.",
     trialTaste:
       "Sample match reason: \"This role fits because it values reliability and hands-on work, two of your listed strengths.\"",
     requiredState: "needs_resume",
@@ -84,7 +84,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     whatItDoes:
       "It keeps every resume, cover letter, and plan you make in one place, so you can reopen or reuse them anytime.",
     sampleOutput:
-      "Sample saved item: \"Resume -- Bagel Launch Technician (Sample), saved 2 moons ago.\" This is a Sample so you can see how your saved work will be listed.",
+      "Sample saved item: \"Resume: Bagel Launch Technician (Sample), saved 2 moons ago.\" This is a Sample so you can see how your saved work will be listed.",
     trialTaste:
       "Once you tailor your first resume, it lands here automatically so you never lose your work.",
     requiredState: "needs_resume",
@@ -96,7 +96,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
     whatItDoes:
       "It tracks each job you apply to, from saved to applied to offered, and reminds you when it is time to follow up.",
     sampleOutput:
-      "Sample tracker row: \"Rocketship Bagels -- Applied, follow up in 3 days.\" Sample only -- your tracker fills in from the real jobs you apply to.",
+      "Sample tracker row: \"Rocketship Bagels: Applied, follow up in 3 days.\" Sample only. Your tracker fills in from the real jobs you apply to.",
     trialTaste:
       "Sample reminder: \"It has been a week since you applied to Rocketship Bagels. A short follow-up note keeps you on their radar.\"",
     requiredState: "full_access",

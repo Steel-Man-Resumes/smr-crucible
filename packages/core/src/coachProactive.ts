@@ -21,7 +21,7 @@ export function computeProactiveMessage(p: UserProfile): ProactiveMessage | null
   if (p.forgeComplete && p.savedJobs.length === 0) {
     return {
       message:
-        "Your foundation is built -- I have your story now. The next move is finding a target job that fits. Open the Job Board and I will help you read the matches.",
+        "Your foundation is built, and I have your story now. The next move is finding a target job that fits. Open the Job Board and I will help you read the matches.",
       reason: "forge_complete",
     };
   }
@@ -33,7 +33,7 @@ export function computeProactiveMessage(p: UserProfile): ProactiveMessage | null
   );
   if (due) {
     return {
-      message: `It is time to follow up with ${due.company}. Around five days out is the sweet spot -- want me to help you draft the message?`,
+      message: `It is time to follow up with ${due.company}. Around five days out is the sweet spot. Want me to help you draft the message?`,
       reason: "follow_up_due",
     };
   }

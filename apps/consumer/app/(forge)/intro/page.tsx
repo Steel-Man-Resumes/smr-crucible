@@ -99,7 +99,7 @@ export default function IntroPage() {
           <h1 className="text-2xl font-bold text-t-white">I&apos;m t.ROY.</h1>
 
           <p className="text-base text-t-white leading-relaxed">
-            I&apos;m an AI -- the best available, aimed at one job: your career.
+            I&apos;m an AI. I&apos;m the best available, and I&apos;m aimed at one job: your career.
             I find what you&apos;re good at, match it to jobs that fit, and
             handle the record stuff so you don&apos;t have to figure it out
             alone.
@@ -195,9 +195,9 @@ export default function IntroPage() {
           <p className="text-sm font-bold text-t-white mb-1">One more thing.</p>
           <p className="text-sm leading-relaxed text-t-bone-dim">
             You&apos;ll see a chat button on every page. That&apos;s me. Real
-            Troy designed every word I say, and I&apos;m here to actually help
-            -- not sell you something. If you get stuck, confused, or just
-            want to talk it through -- use it. That&apos;s what it&apos;s for.
+            Troy designed every word I say, and I&apos;m here to actually help.
+            I&apos;m not selling you anything. If you get stuck, confused, or
+            just want to talk it through, use it. That&apos;s what it&apos;s for.
           </p>
         </div>
       </div>

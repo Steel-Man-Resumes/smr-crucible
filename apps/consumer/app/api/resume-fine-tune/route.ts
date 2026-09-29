@@ -150,7 +150,7 @@ async function handlePost(request: Request) {
 
     let edited = baseFields;
     if (!isMockEnabled()) {
-      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Use "--" never an em dash. Return ONLY the JSON object.`;
+      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.`;
       const prompt = `Fine-tune this resume for the target role. Reorder and re-emphasize its OWN content only. Add nothing new.
 
 <job_posting>
@@ -159,7 +159,7 @@ Company: ${jobCompany}
 Description: ${jobDescription}
 </job_posting>
 
-CURRENT RESUME (the only source of facts -- do not add to it):
+CURRENT RESUME (the only source of facts. Do not add to it):
 ${JSON.stringify(
         {
           summary: baseFields.summary,
@@ -171,7 +171,7 @@ ${JSON.stringify(
         2
       )}
 
-Return this exact JSON structure (same content, re-emphasized -- never expanded):
+Return this exact JSON structure (same content, re-emphasized, never expanded):
 {
   "summary": "re-emphasized summary using only existing facts",
   "experience": [ { "title": "", "company": "", "startDate": "", "endDate": "", "bullets": ["existing bullet, re-emphasized"] } ],

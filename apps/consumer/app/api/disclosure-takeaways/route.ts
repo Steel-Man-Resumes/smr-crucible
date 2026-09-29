@@ -19,6 +19,7 @@ import { sanitizeForPrompt } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_DISCLOSURE_TAKEAWAYS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
+import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 
 export const maxDuration = 30;
 
@@ -54,16 +55,16 @@ async function handlePost(request: Request) {
       return NextResponse.json({ went_well: [], try_next: "" });
     }
 
-    const prompt = `A justice-impacted jobseeker just finished a private practice conversation${
+    const prompt = `A job seeker with a record just finished a private practice conversation${
       hurdleLabel ? ` about sharing: ${sanitizeForPrompt(hurdleLabel, 80)}` : ""
     }${personaLabel ? `, practicing with a ${sanitizeForPrompt(personaLabel, 80)}` : ""}.
 
-Read the practice below and write short, warm, encouraging takeaways. This person may carry shame -- your job is to build confidence, never to grade or criticize.
+Read the practice below and write short, warm, encouraging takeaways. This person may carry shame. Your job is to build confidence, never to grade or criticize.
 
 RULES:
-- 2 or 3 short "what went well" notes -- specific to what they actually did.
-- 1 gentle "one thing to try next" -- framed as a small, doable next step, never a failure.
-- Plain, warm, 6th-grade reading level. Use "--" never an em dash. No emojis.
+- 2 or 3 short "what went well" notes, specific to what they actually did.
+- 1 gentle "one thing to try next", framed as a small, doable next step, never a failure.
+- Plain, warm, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Never shame. Never promise a hiring outcome.
 
 PRACTICE:
@@ -106,7 +107,8 @@ Return JSON ONLY:
       console.error("Decision log failed (disclosure-takeaways):", err);
     }
 
-    return NextResponse.json({ went_well, try_next });
+    // Both fields are model-written: dash sweep (counts logged, never content).
+    return NextResponse.json(plainPunctuation({ went_well, try_next }, logDashSwaps("disclosure-takeaways")));
   } catch (error: any) {
     console.error("Disclosure takeaways error:", error);
     return NextResponse.json({ error: "Could not build takeaways" }, { status: 500 });

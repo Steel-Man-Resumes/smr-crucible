@@ -112,7 +112,7 @@ export default function PreferencesPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode — sample preferences pre-selected
+            Demo mode: sample preferences pre-selected
           </p>
         </div>
       )}

@@ -77,7 +77,7 @@ export function buildInviteEmail(opts: {
     `This link works for ${INVITE_TTL_DAYS} days and signs you in directly. ` +
     `If it stops working, go to ${loginUrl}, enter this email address, and ` +
     `choose "Email me a sign-in link."\n\n` +
-    `Steel Man Resumes -- Truth. Told Strong.\n` +
+    `Steel Man Resumes\nTruth. Told Strong.\n` +
     `You received this because ${inviter} added you to their program.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
@@ -89,11 +89,11 @@ export function buildInviteEmail(opts: {
       <p style="margin:24px 0">
         <a href="${opts.url}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
       </p>
-      <p style="font-size:13px;color:#666">No password needed -- the button signs you in directly. If it does not work, copy and paste this link:</p>
+      <p style="font-size:13px;color:#666">No password needed. The button signs you in directly. If it does not work, copy and paste this link:</p>
       <p style="font-size:13px;word-break:break-all;color:#4a6741">${opts.url}</p>
       <p style="font-size:13px;color:#666">This link works for ${INVITE_TTL_DAYS} days. If it stops working, go to
       <a href="${loginUrl}" style="color:#4a6741">${loginUrl}</a>, enter this email address, and choose "Email me a sign-in link."</p>
-      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes -- Truth. Told Strong.<br>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.<br>
       You received this because ${inviter} added you to their program.</p>
     </div>
   `;
@@ -126,7 +126,7 @@ export function buildStaffInviteEmail(opts: {
     `Open your account (no password needed):\n${opts.url}\n\n` +
     `This link works for ${INVITE_TTL_DAYS} days. If it stops working, go to ${loginUrl}, ` +
     `enter this email address, and choose "Email me a sign-in link."\n\n` +
-    `Steel Man Resumes -- Truth. Told Strong.`;
+    `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
       <h1 style="font-size:22px;margin:0 0 12px">You are on the ${opts.orgName} team</h1>
@@ -140,7 +140,7 @@ export function buildStaffInviteEmail(opts: {
       <p style="font-size:13px;word-break:break-all;color:#4a6741">${opts.url}</p>
       <p style="font-size:13px;color:#666">This link works for ${INVITE_TTL_DAYS} days. After that, go to
       <a href="${loginUrl}" style="color:#4a6741">${loginUrl}</a>, enter this email address, and choose "Email me a sign-in link."</p>
-      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes -- Truth. Told Strong.</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;
   return { subject, html, text };
@@ -160,23 +160,23 @@ export function buildAddedEmail(opts: {
     `Hi ${hello},\n\n` +
     `${inviter} connected your existing Steel Man Resumes account to their organization. ` +
     `Your account and your work are unchanged, and your privacy rules stay the same: ` +
-    `they only ever see progress you choose to share from your Settings -- never your ` +
+    `they only ever see progress you choose to share from your Settings. They never see your ` +
     `resume text, disclosure plans, or practice answers.\n\n` +
     `Sign in any time: ${loginUrl}\n\n` +
-    `Steel Man Resumes -- Truth. Told Strong.`;
+    `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
       <h1 style="font-size:22px;margin:0 0 12px">You are connected to ${opts.orgName}</h1>
       <p>Hi ${hello},</p>
       <p>${inviter} connected your existing Steel Man Resumes account to their organization.
       Your account and your work are unchanged, and your privacy rules stay the same: they
-      only ever see progress you choose to share from your Settings -- never your resume
+      only ever see progress you choose to share from your Settings. They never see your resume
       text, disclosure plans, or practice answers.</p>
       <p style="margin:24px 0">
         <a href="${loginUrl}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in</a>
       </p>
       <p style="font-size:13px;word-break:break-all;color:#4a6741">${loginUrl}</p>
-      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes -- Truth. Told Strong.</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;
   return { subject, html, text };

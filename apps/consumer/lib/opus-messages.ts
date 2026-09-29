@@ -13,11 +13,11 @@ const CLIENT_MESSAGES: Record<string, string> = {
   dashboard:
     "Your Forge results are loaded. Find a job you like and I'll build your resume for it.",
   "dashboard-no-forge":
-    "I'm t.ROY. Start with The Forge -- 10 minutes, and I'll have everything I need to build you a great resume.",
+    "I'm t.ROY. Start with The Forge. Give me 10 minutes and I'll have everything I need to build you a great resume.",
   "application-tailor":
-    "Every bullet needs a number. Focus on what you accomplished, not what you were assigned. I'll help.",
+    "Numbers make a bullet stronger. Use one only if it's true. Say what you did and how it turned out. I'll help.",
   jobs:
-    "Employers we checked for hiring people with records are marked and shown first. They're not doing you a favor -- they know the value. Find one that fits.",
+    "Employers we checked for hiring people with records are marked and shown first. They know what you bring to the job. Find one that fits.",
   disclosure:
     "Most people skip this. The ones who don't get the job. Let's prepare what to say.",
   interview:
@@ -30,36 +30,36 @@ const CLIENT_MESSAGES: Record<string, string> = {
     "This is how far you've come. Every session, every resume, every practice run counts.",
   // Forge pages
   rush:
-    "Paste your resume and tell me the job. I'll rewrite it fast — no fluff, just your real experience sharpened for that specific role.",
+    "Paste your resume and tell me the job. I'll rewrite it fast for that role, using only your real experience.",
   welcome:
     "There's no wrong answer here. I just want to know where you're starting from so I can help the right way.",
   resume:
-    "Don't worry if your resume isn't perfect. I can work with anything — a photo, a PDF, even just a list of jobs you've had.",
+    "Don't worry if your resume isn't perfect. I can work with anything: a photo, a PDF, even just a list of jobs you've had.",
   goals:
-    "Pick what feels true to you. This isn't a test — it's about what matters to you right now.",
+    "Pick what feels true to you right now. Nobody's grading this. I just want to know what matters to you.",
   story:
     "This part takes courage. You only share what you want to. I'm here if you need to talk through it.",
   preferences:
     "Almost done with this part. These details help me find opportunities that actually work for your life.",
   processing:
-    "I'm putting it all together. This takes a minute because I'm being thorough — not because anything's wrong.",
+    "I'm putting it all together. This takes a minute because I'm being careful. Nothing's wrong.",
   output:
     "This is yours. Read through it, save it, and when you're ready, The Refinery has tools to help you take the next step.",
 };
 
 const DEMO_MESSAGES: Record<string, string> = {
   rush:
-    "Rush Mode — single-page fast track. Paste + target job → rewritten resume in under 60 seconds. Same crucible rules: only real facts, never fabricated. Quick start before the full Forge.",
+    "Rush Mode is the single-page fast track. Paste + target job → rewritten resume in under 60 seconds. Same crucible rules: only real facts, never fabricated. Quick start before the full Forge.",
   welcome:
-    "This page detects readiness using Prochaska's Stages of Change — no clinical assessment needed. Clients self-select without realizing they're being screened.",
+    "This page detects readiness using Prochaska's Stages of Change, with no clinical assessment needed. Clients self-select without realizing they're being screened.",
   resume:
-    "We accept anything — photos, PDFs, even a list of jobs. The AI extracts skills from whatever they give us. No perfect resume required.",
+    "We accept anything: photos, PDFs, even a list of jobs. The AI extracts skills from whatever they give us. No perfect resume required.",
   goals:
-    "Purpose exploration before job search. Grounded in Ikigai and Maruna's generative identity — what matters to them, not what's available.",
+    "Purpose exploration before job search. Grounded in Ikigai and Maruna's generative identity. We start from what matters to them, then look at what's available.",
   story:
-    "This is where affect labeling happens. Free-text responses aren't just data — they're therapeutic. Naming barriers reduces their power (Lieberman, 2007).",
+    "This is where affect labeling happens. Free-text responses are data, and they are also therapeutic. Naming barriers reduces their power (Lieberman, 2007).",
   preferences:
-    "Practical constraints matter. Transportation, schedule, commute — these determine whether a job match is real or theoretical.",
+    "Practical constraints matter. Transportation, schedule, and commute determine whether a job match is real or theoretical.",
   processing:
     "The pipeline runs 4 parallel AI analyses: skills extraction, narrative construction, career matching, and barrier-to-resource mapping.",
   output:
@@ -76,23 +76,23 @@ const PARTNER_MESSAGES: Record<string, string> = {
   disclosure:
     "Two-tier system: basic guidance from public data, personalized strategy after consent gate. Research-backed (Bushway & Apel, 2012; Maruna, 2001).",
   interview:
-    "AI mock interviews adapted to role, industry, and disclosure needs. Bandura's mastery experience framework -- practice builds genuine confidence.",
+    "AI mock interviews adapted to role, industry, and disclosure needs. Built on Bandura's mastery experience framework: practice builds genuine confidence.",
   rush:
-    "Rush Mode is for urgent situations — interview tomorrow, application due tonight. One page, paste + target job, rewritten resume in 60 seconds. Same integrity rules as the full Forge. Designed as an on-ramp to deeper engagement.",
+    "Rush Mode is for urgent situations, like an interview tomorrow or an application due tonight. One page, paste + target job, rewritten resume in 60 seconds. Same integrity rules as the full Forge. Designed as an on-ramp to deeper engagement.",
   welcome:
-    "Your clients self-select their readiness stage here. It maps to Prochaska's Stages of Change model — we adjust guidance intensity based on where they are.",
+    "Your clients self-select their readiness stage here. It maps to Prochaska's Stages of Change model, and we adjust guidance intensity based on where they are.",
   resume:
-    "Multiple intake paths reduce friction. Upload, import, or build from scratch. The guided builder scaffolds without auto-generating — the client does the work.",
+    "Multiple intake paths reduce friction. Upload, import, or build from scratch. The guided builder scaffolds without auto-generating, so the client does the work.",
   goals:
-    "We explore purpose before jumping to job titles. Grounded in narrative identity theory and Ikigai — what drives them, not just what's available.",
+    "We explore purpose before jumping to job titles, grounded in narrative identity theory and Ikigai. We start from what drives them, then look at what's available.",
   story:
     "Structured barrier input with optional free-text. The criminal record section captures just enough for legal navigation without feeling like an intake form.",
   preferences:
-    "Real-world constraints that determine whether a job match is viable. Transportation, schedule, location — the practical stuff that breaks placements.",
+    "Real-world constraints that determine whether a job match is viable. Transportation, schedule, location: the practical stuff that breaks placements.",
   processing:
     "Four parallel AI pipelines: skills extraction, narrative construction, career matching, and barrier-to-resource mapping. Each logged for audit.",
   output:
-    "Narrative-first output. Strengths and skills are presented before barriers. Career paths include specific next steps. No scores, no grades — just a path forward.",
+    "Narrative-first output. Strengths and skills are presented before barriers. Career paths include specific next steps. Nothing is scored or graded.",
 };
 
 const OBSERVER_MESSAGES: Record<string, string> = {
@@ -107,15 +107,15 @@ const OBSERVER_MESSAGES: Record<string, string> = {
   interview:
     "Mock interviews implement Bandura's self-efficacy (1977) via mastery experience. Disclosure rehearsal integrated at exchange 3-4. Process praise feedback (Dweck, 2006).",
   rush:
-    "Rush Mode demonstrates the crucible principle at speed: AI enhances what's real, never fabricates. Same ethical constraints as the full pipeline — only facts from the original resume. Designed as a low-friction entry point that funnels into the full Forge flow.",
+    "Rush Mode demonstrates the crucible principle at speed: AI enhances what's real, never fabricates. Same ethical constraints as the full pipeline: only facts from the original resume. Designed as a low-friction entry point that funnels into the full Forge flow.",
   welcome:
     "Readiness detection without clinical assessment. Based on Prochaska & DiClemente's Transtheoretical Model (1983). Each stage gets calibrated guidance intensity.",
   resume:
-    "Multi-path intake reduces abandonment. AI extraction handles any format. The guided builder uses scaffolding (Wood, Bruner, Ross, 1976) — structure without doing it for them.",
+    "Multi-path intake reduces abandonment. AI extraction handles any format. The guided builder uses scaffolding (Wood, Bruner, Ross, 1976), which gives structure without doing the work for them.",
   goals:
     "Purpose-first, not job-first. Grounded in McAdams' narrative identity theory (2013) and Ikigai framework. Generative identity predicts better reentry outcomes (Maruna, 2001).",
   story:
-    "Affect labeling (Lieberman et al., 2007) — naming emotions reduces amygdala reactivity by up to 50%. Free-text narratives serve dual purpose: data collection and therapeutic processing.",
+    "Affect labeling (Lieberman et al., 2007): naming emotions reduces amygdala reactivity by up to 50%. Free-text narratives serve dual purpose: data collection and therapeutic processing.",
   preferences:
     "Constraint mapping ensures job matches are realistic, not aspirational. Transportation deserts and schedule rigidity are top reasons placements fail.",
   processing:

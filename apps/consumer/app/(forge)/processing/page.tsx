@@ -34,7 +34,7 @@ const ENGAGEMENT_FACTS = [
   "The first 6 months after release are the hardest for finding work. It gets easier.",
   "Some employers actively hire people with records. They know the value you bring.",
   "Research shows naming your challenges out loud reduces their power over you.",
-  "Your transferable skills — reliability, problem-solving, resilience — are what employers need most.",
+  "Your transferable skills, like reliability, problem-solving and resilience, are what employers need most.",
 ];
 
 const REFLECTION_PROMPTS = [
@@ -201,7 +201,7 @@ export default function ProcessingPage() {
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
           />
           <p className="text-xs text-t-phos-dim mt-2">
-            Just for you — this isn&apos;t saved or analyzed.
+            Just for you. This isn&apos;t saved or analyzed.
           </p>
         </div>
       </div>
