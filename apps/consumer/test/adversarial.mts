@@ -16,6 +16,7 @@
 
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
 import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
+import { liveTestKeyAllowed, LIVE_TEST_DAILY_LIMIT, LIVE_TEST_MIN_KEY_LENGTH } from "@/lib/live-test-key";
 import { numbersIn, unsupportedNumbers, RANGE_CHOICES, QUANTITY_UNITS, evidenceAnswerText } from "@/lib/number-truth";
 import { computeGrounding } from "@/lib/grounding";
 import {
@@ -184,6 +185,20 @@ section("output sweep: plain punctuation");
   const out = plainPunctuation({ a: `one${EM}two`, b: [`x${EN}y`, { c: "p -- q" }] }, (n) => (seen = n));
   check("nested: no dash residual anywhere", !/[\u2014\u2013]|--/.test(JSON.stringify(out)), JSON.stringify(out));
   check("nested: callback gets the total", seen === 2, String(seen));
+}
+
+// ── Live test key: bounded, off unless configured, exact match only ──────────
+section("live test key");
+{
+  const key = "k".repeat(LIVE_TEST_MIN_KEY_LENGTH) + "abc123";
+  check("off when no key is configured", liveTestKeyAllowed(key, undefined) === false);
+  check("off when the configured key is too short", liveTestKeyAllowed("short", "short") === false);
+  check("no header, no access", liveTestKeyAllowed(null, key) === false && liveTestKeyAllowed("", key) === false);
+  check("wrong key refused", liveTestKeyAllowed(key.slice(0, -1) + "x", key) === false);
+  check("a prefix of the key is refused", liveTestKeyAllowed(key.slice(0, 10), key) === false);
+  check("the key plus extra is refused", liveTestKeyAllowed(key + "x", key) === false);
+  check("the exact key is accepted", liveTestKeyAllowed(key, key) === true);
+  check("the bucket is bounded", LIVE_TEST_DAILY_LIMIT > 0 && LIVE_TEST_DAILY_LIMIT <= 100);
 }
 
 // ── Cover letter closings vary by person, stay fixed per person ──────────────
