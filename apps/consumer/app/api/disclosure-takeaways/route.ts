@@ -64,7 +64,7 @@ Read the practice below and write short, warm, encouraging takeaways. This perso
 RULES:
 - 2 or 3 short "what went well" notes, specific to what they actually did.
 - 1 gentle "one thing to try next", framed as a small, doable next step, never a failure.
-- Plain, warm, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
+- Plain, warm, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Never shame. Never promise a hiring outcome.
 
 PRACTICE:

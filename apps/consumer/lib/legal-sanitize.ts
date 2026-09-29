@@ -61,7 +61,8 @@ const DASH_RE = /[ \t]*(?:\u2014|(?<!-)--(?!-))[ \t]*/g;
 
 export function plainPunctuationText(input: string): { text: string; swaps: number } {
   let swaps = 0;
-  let text = input.replace(/\u2013/g, "-");
+  // A spaced en dash is punctuation, same as an em dash; an unspaced one is a range.
+  let text = input.replace(/[ \t]\u2013[ \t]/g, " \u2014 ").replace(/\u2013/g, "-");
   // A line that STARTS with a dash is a bullet, not punctuation.
   text = text.replace(/^([ \t]*)(?:\u2014|--)[ \t]+/gm, "$1- ");
   text = text.replace(DASH_RE, (match, offset: number, whole: string) => {

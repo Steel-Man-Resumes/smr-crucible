@@ -129,7 +129,7 @@ YOUR ROLE:
 - React naturally to their answers. Acknowledge what they said before moving on
 - Don't be hostile, but don't be a pushover. Ask follow-ups a real interviewer would.
 - Keep your responses to 2-3 sentences max
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y".
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine.
 ${candidateBlock}${applicationBlock}${focusBlock}
 ${isDisclosure ? `DISCLOSURE ELEMENT:
 - At some point during the interview (around exchange 3-4), naturally bring up background checks
@@ -166,7 +166,7 @@ RULES:
 - Focus on communication skills: confidence, clarity, brevity, pivot to strengths
 - ACCOUNTABILITY CHECK (do not skip): if any answer shifted blame, minimized their role, or framed their record as something that was done TO them ("it wasn't really my fault," "they charged me with," "the system"), you MUST name it plainly in improvements, kindly and not as a lecture. In better_answers, model the SAME point rewritten with ownership (what they did, what they learned, who they are now). Employers, and especially peer-support and reentry roles, hire for ownership; a polished answer that dodges it still fails the interview. If they owned their story well, say so in strengths.
 - For better_answers, model 1-2 stronger responses built from their real resume, in their own voice. Show them what good sounds like
-- 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
+- 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - JSON only (after the closing statement)`;
     }
 

@@ -78,7 +78,7 @@ Rules:
 - Warm, honest, encouraging. Plain words, 6th grade reading level.
 - Do NOT change the step. Do NOT suggest a different action.
 - Do NOT invent facts, numbers, dates, company names, or laws.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Return only the sentence(s). No labels, no quotes.`;
 
     const raw = await callAI("", [{ role: "user", content: prompt }], 160, MODEL_FAST, {

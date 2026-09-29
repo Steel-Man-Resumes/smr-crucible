@@ -22,6 +22,7 @@ import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { letterClosingStyle } from "@/lib/letter-style";
 import {
   verifyGrounding,
   verifyResumeBullets,
@@ -180,7 +181,9 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
 11. If a title/company pairing is clearly garbled, repair it. Never invent a new employer or title.
 12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
-13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.`;
+13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
+14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.
+15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.`;
 
     const resumePrompt = `Generate a complete, targeted resume. Return ONLY valid JSON.
 
@@ -228,10 +231,11 @@ RULES:
 - Open: who they are, what role, why this company. Middle: 2-3 real achievements matching the requirements. Close: grounded confidence.
 - NEVER mention incarceration, criminal records, justice involvement. NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
-- FACTS AS GIVEN: when you open from a fact, state it the way the profile states it. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
-- CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "asset to your team", "eager to bring", or "fast-paced environment". End plainly: say they would like to talk, thank the reader in a few words, and stop.
+- FACTS AS GIVEN: state every fact the way the background states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
+- CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${letterClosingStyle(contactName || jobCompany || "")}
+- REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
 - VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
-- Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly. Sign with the applicant's name.`;
+- Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. Sign with the applicant's name.`;
 
     const coverLetterPrompt = `Write the cover letter.
 

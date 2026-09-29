@@ -144,7 +144,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST: ${sanitizeForPrompt(refinementNote, 50
 ABSOLUTE RULES:
 - This is coaching, NOT legal advice. Do NOT state any law, statute, rule, ordinance, "your rights," or protection. Do NOT name any agency or act. If they ask about legal questions, tell them to check with a local job coach or legal aid. Do not answer it yourself.
 - Never ask them to share private detail they do not want to share. Reinforce that they choose how much to say.
-- Warm, plain, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y". No emojis.
+- Warm, plain, 6th-grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 
 Return JSON ONLY:
 {
@@ -307,7 +307,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
 - The script should acknowledge the record briefly, then pivot to what they've done since and what they bring
 - For felonies 10+ years old, note that many employers care less about old records
 - Never minimize what happened, but always connect to growth
-- 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Never build a sentence as "not X, but Y".
+- 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine.
 - JSON only`;
 
     const text = await callAI("", [{ role: "user", content: prompt }], 1500, MODEL_DEEP, { userId, endpoint: "disclosure-guide" });

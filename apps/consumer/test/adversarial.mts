@@ -15,6 +15,7 @@
  */
 
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
+import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
 import { computeGrounding } from "@/lib/grounding";
 import {
   buildTrustedSource,
@@ -172,10 +173,29 @@ section("output sweep: plain punctuation");
   check("no doubled comma", pp("already a comma, -- then more") === "already a comma, then more");
   check("markdown rule untouched", pp("---\nrule") === "---\nrule");
   check("swap count reported", plainPunctuationText(`a ${EM} b -- c`).swaps === 2);
+  check("spaced en dash in prose -> comma, counted",
+    pp(`EPA 608 ${EN} refrigerant handling`) === "EPA 608, refrigerant handling" &&
+      plainPunctuationText(`EPA 608 ${EN} refrigerant handling`).swaps === 1,
+    pp(`EPA 608 ${EN} refrigerant handling`));
+  check("spaced en dash between years -> hyphen", pp(`2019 ${EN} 2021`) === "2019-2021");
+
   let seen = 0;
   const out = plainPunctuation({ a: `one${EM}two`, b: [`x${EN}y`, { c: "p -- q" }] }, (n) => (seen = n));
   check("nested: no dash residual anywhere", !/[\u2014\u2013]|--/.test(JSON.stringify(out)), JSON.stringify(out));
   check("nested: callback gets the total", seen === 2, String(seen));
+}
+
+// ── Cover letter closings vary by person, stay fixed per person ──────────────
+section("cover letter closing styles");
+{
+  const names = ["MARCUS DELANEY", "DARNELL OKAFOR", "RENEE VASQUEZ", "ANTHONY BELL", "Jordan Williams", "Maria Lopez"];
+  const picks = names.map((n) => letterClosingStyle(n));
+  check("same person, same closing", letterClosingStyle("Anthony Bell") === letterClosingStyle("  ANTHONY BELL "));
+  check("a group of people spreads across closings", new Set(picks).size >= 3, String(new Set(picks).size));
+  check("every pick is a listed style", picks.every((p) => (LETTER_CLOSING_STYLES as readonly string[]).includes(p)));
+  check("empty seed still returns a style", typeof letterClosingStyle("") === "string" && letterClosingStyle("").length > 0);
+  check("no style asks for the old shared closing",
+    LETTER_CLOSING_STYLES.every((s) => !/thanks for reading|like to talk/i.test(s)));
 }
 
 // ── 3. Grounding gauge realism (Codex 13) ────────────────────────────────────

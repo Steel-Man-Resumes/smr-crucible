@@ -438,7 +438,7 @@ RULES:
   - Focus purely on professional skills, experience, education, and certifications.
   - If education/certs were earned in prison, just list them without mentioning where. "GED, 2021" not "GED earned at Waupun Correctional."
 - The "reflection" field is private (shown only to the user). This CAN acknowledge their full journey with warmth.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Output JSON only.`;
 
   const prompt = `Analyze this person's story and create their narrative.
@@ -525,7 +525,7 @@ RULES:
 - Include concrete next steps for each path.
 - No blue-collar assumptions. Match based on actual skills and interests.
 - Be honest about salary ranges.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 
 ${RESOURCE_VERIFICATION_DISCIPLINE}
 
@@ -601,7 +601,7 @@ ${stateLegal}
 - Never minimize barriers, but always connect to solutions.
 - Frame through agency: what the person CAN do.
 - "The system has real obstacles here. Here's how to move through them." Never "don't worry about it."
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Never build a sentence as "not X, but Y" or "you're not X, you're Y". Say the positive point directly. No emojis.
+- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
 - Output JSON only.`;
 
   const prompt = `Analyze barriers and find resources for this person.
