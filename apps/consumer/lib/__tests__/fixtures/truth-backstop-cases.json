@@ -1,0 +1,1879 @@
+{
+ "about": "Synthetic, labeled inputs for the employer-city and credential backstops (2026-09-29). Written by reviewers who never saw the code; made-up people, example.com emails, 555 numbers. expect/expect_flag is what a careful human reviewer says is right; ambiguous cases are labeled for the safe side.",
+ "city": [
+  {
+   "id": "city-keep-1",
+   "source": "JAMAL REED\n(414) 555-0132 | jamal.reed@example.com | Milwaukee, WI 53206\n\nEXPERIENCE\nUline, Kenosha, WI\nForklift Driver, 2017-2019\n- Loaded and unloaded 30+ trailers a shift\n- Zero safety incidents",
+   "resume_line": "FORKLIFT DRIVER | Uline | Kenosha, WI | 2017 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Kenosha, WI is written on the Uline employer line itself. Home city is Milwaukee, so nothing was borrowed from the contact line.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-2",
+   "source": "Tasha Greene\n262-555-0190  tgreene@example.com\nKenosha WI 53142\n\nWORK HISTORY\n\nPleasant Prairie, WI\nULINE\nWarehouse Associate   Mar 2020 - Jan 2022\npicked orders w/ RF scanner, 99% accuracy\n\nKenosha, WI\nJockey International\nPacker   2017 - 2020",
+   "resume_line": "WAREHOUSE ASSOCIATE | Uline | Pleasant Prairie, WI | 2020 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "In this layout the location sits on the line above each employer. Pleasant Prairie heads the Uline block, and it differs from the home city Kenosha.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-3",
+   "source": "Brian Kowalski\nbrian.k@example.com\n(262) 555-0111\n\nWalmart Supercenter\nWaukesha, WI\nOvernight Stocker\n06/2018 - 11/2021\n* unloaded trucks, worked the freight team\n* trained 5 new hires",
+   "resume_line": "OVERNIGHT STOCKER | Walmart | Waukesha, WI | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Waukesha, WI is on the line directly under the Walmart employer name. The contact block has no city at all, so the only source is the job itself.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-4",
+   "source": "Kevin Ortiz | Sturtevant, WI | 262-555-0158 | kortiz@example.com\n\nLine Cook, Culver's, 2016-2018, Racine WI\nGrill, fryer, kept the line stocked during rush",
+   "resume_line": "LINE COOK | Culver's | Racine, WI | 2016 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Racine WI comes after the dates on the same Culver's line. Home is Sturtevant, a different city.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-5",
+   "source": "Luis Mendez\nMukwonago WI\n262 555 0126\n\nPress Operator - Generac\n2019 to 2022\n- Ran presses at their Waukesha plant, 2nd shift\n- Hit rate every week, did my own changeovers",
+   "resume_line": "PRESS OPERATOR | Generac | Waukesha, WI | 2019 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The bullet 'Ran presses at their Waukesha plant' places this Generac job in Waukesha. Home is Mukwonago.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-6",
+   "source": "Corey Lindahl\tChippewa Falls, WI 54729\t715-555-0142\tclindahl@example.com\n\nEmployer\tPosition\tLocation\tDates\nMenards\tYard Associate\tEau Claire, WI\t2015 - 2018\nKwik Trip\tStore Clerk\tChippewa Falls, WI\t2018 - 2022",
+   "resume_line": "YARD ASSOCIATE | Menards | Eau Claire, WI | 2015 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "In the tab-separated table, the Location column on the Menards row reads Eau Claire, WI. Home is Chippewa Falls.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-7",
+   "source": "RAYMOND TATE\nZION, IL 60099  847-555-0171  RTATE@EXAMPLE.COM\n\nAMAZON FULFILLMENT CENTER - KENOSHA, WI\nPICKER/PACKER   2021 - PRESENT\nMEET RATE DAILY, CROSS TRAINED ON STOW",
+   "resume_line": "PICKER/PACKER | Amazon | Kenosha, WI | 2021 - Present",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The all caps employer line says KENOSHA, WI for Amazon. Home is Zion, IL, so the city came from the job line.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-8",
+   "source": "dante wills 402 555 0177 dwills@example.com council bluffs ia\n\nwork history\nwerner enterprises omaha ne otr driver 2019-2023\nno accidents 400k miles clean logs",
+   "resume_line": "OTR DRIVER | Werner Enterprises | Omaha, NE | 2019 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The unpunctuated lowercase job line puts 'omaha ne' right after the employer name. Home is Council Bluffs, IA.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-9",
+   "source": "Andre Simmons\nRacine, Wisconsin\n(262) 555-0133\n\nUline - Kenosha, Wisconsin\nMaterial Handler (2018-2020)\n- Ran stand-up reach truck\n- Cycle counts",
+   "resume_line": "MATERIAL HANDLER | Uline | Kenosha, WI | 2018 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The Uline line gives Kenosha, Wisconsin, and WI is the same state abbreviated. Home is Racine.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-10",
+   "source": "Monique Harris, 1520 Birchwood Ln, Racine WI 53405, 262-555-0187, mharris@example.com\n\nAmazon\n7700 Commerce Dr\nKenosha, WI 53144\nWarehouse Team Member, Oct 2019 - Aug 2021",
+   "resume_line": "WAREHOUSE TEAM MEMBER | Amazon | Kenosha, WI | 2019 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The Amazon entry has its own street address with Kenosha, WI 53144. The ZIP doesn't change the city. Home is Racine.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-11",
+   "source": "Terrell Young\nMinneapolis MN 55411\n612-555-0195\n\nCub Foods, Saint Paul, Minnesota\nNight Stocker 2017-2020\nfaced aisles, ran pallet jack",
+   "resume_line": "NIGHT STOCKER | Cub Foods | St. Paul, MN | 2017 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Saint Paul, Minnesota and St. Paul, MN are the same city and state in different spellings. The city is on the Cub Foods line, and home is Minneapolis.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-12",
+   "source": "Greg Pullman\ngpullman@example.com / 260-555-0114\n\nWalmart Distribution Ctr\nOrder Filler, 2013 - 2016 (Ft Wayne, Ind.)\nsafety committee 2015",
+   "resume_line": "ORDER FILLER | Walmart | Fort Wayne, IN | 2013 - 2016",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Ft Wayne, Ind.' comes in parentheses after the dates for this job. It is Fort Wayne, IN spelled out, and the contact line has no city.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-13",
+   "source": "Worked at the Amazon warehouse in St Louis MO as a sortation associate from 2020-2022. Before that I was at a Culver's in Belleville IL 2018-2020. cell 314-555-0172",
+   "resume_line": "SORTATION ASSOCIATE | Amazon | St. Louis, MO | 2020 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The narrative says the Amazon job was in St Louis MO, which is St. Louis without the period. Belleville belongs to the other job.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-14",
+   "source": "Marcus Dean | Arlington TX | 817-555-0160 | mdean@example.com\n\nAmazon (Dallas-Fort Worth area)\nDelivery Station Associate  2020-2022\n- Loaded routes, sorted packages on the 4am shift",
+   "resume_line": "DELIVERY STATION ASSOCIATE | Amazon | Dallas-Fort Worth, TX | 2020 - 2022",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The person named the Dallas-Fort Worth area for this Amazon job, and the resume repeats that metro. Home is Arlington, which is not what the line says.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-15",
+   "source": "I did 3 years at a Target warehouse in the Minneapolis-St. Paul area, 2016 to 2019, unloading trucks. Phone 651-555-0138.",
+   "resume_line": "UNLOADER | Target | Minneapolis, MN | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "The person tied this job to the Minneapolis-St. Paul metro, and Minneapolis is half of what they said. It comes from their words for this job, since there is no contact city to leak. Which city in the metro is uncertain, so the case is kept on the safe side.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-16",
+   "source": "RESUME\nKiara Bennett\nBloomington, MN\n\nJob: Home Depot\nwhere: Minneapolis-St. Paul\nwhat: lot associate, loading customer orders\nwhen: 2021 - now",
+   "resume_line": "LOT ASSOCIATE | Home Depot | Minneapolis-St. Paul, MN | 2021 - Present",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The 'where:' field for Home Depot says Minneapolis-St. Paul, and the resume uses it exactly. Home is Bloomington.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-17",
+   "source": "Darnell Price  612-555-0109  Richfield MN\n\nUPS - Mpls hub - package handler - 2018-2021\nloaded 1,000+ packages an hour on preload",
+   "resume_line": "PACKAGE HANDLER | UPS | Minneapolis, MN | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Mpls is the standard short form of Minneapolis, and it appears on the UPS line. Home is Richfield.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-18",
+   "source": "I dont really have a resume. I worked at Culver's in Racine for two years as a cook, 2015 to 2017. After that I was locked up till 2021. Since I got out I been doing temp work. You can reach me at 262-555-0145, I stay in Kenosha now.",
+   "resume_line": "COOK | Culver's | Racine, WI | 2015 - 2017",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The narrative says 'Culver's in Racine'. Kenosha is where they live now, and it doesn't appear on the resume line.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-19",
+   "source": "Jerome Watts\nKenosha, WI 53140 | 262-555-0152 | jwatts@example.com\n\nEXPERIENCE\nCulver's - Racine, WI - Crew Member - 2014-2016\nMenards - Sturtevant, WI - Yard Associate - 2016-2018\nUline - Pleasant Prairie, WI - Forklift Driver - 2018-2023",
+   "resume_line": "YARD ASSOCIATE | Menards | Sturtevant, WI | 2016 - 2018",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Every job gives its own city, and the Menards line says Sturtevant, WI. That differs from the other jobs and from the home city Kenosha.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-20",
+   "source": "PROFESSIONAL EXPERIENCE\n\nKwik Trip #412 (Onalaska, WI)\nGuest Service Coworker, 2022 - Present\n\nMenards (La Crosse, WI)\nYard Associate, 2019 - 2022\n\nWalmart DC (Tomah, WI)\nOrder Filler, 2016 - 2019\n\nContact: Ray Olson, La Crescent MN, 507-555-0183",
+   "resume_line": "ORDER FILLER | Walmart | Tomah, WI | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The Walmart DC entry gives Tomah, WI in parentheses. Each job has its own city, and home is La Crescent, MN.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-21",
+   "source": "DeAndre Hill\n2218 Larkspur Ct\nRacine, WI 53403\n262-555-0164\n\nCulver's, Racine WI\nShift Lead   2019 - Present\n- Run the drive thru on closing shift\n- Count drawers, train new crew",
+   "resume_line": "SHIFT LEAD | Culver's | Racine, WI | 2019 - Present",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Racine is also the home city, but the Culver's line says Racine WI for this job, so the job's own words support the city.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-22",
+   "source": "My name is Anthony Russo, 262-555-0128. I live in Waukesha and I worked at the Walmart in Waukesha too, overnight stocking from 2018 to 2020. Before that I did landscaping for my uncle.",
+   "resume_line": "OVERNIGHT STOCKER | Walmart | Waukesha, WI | 2018 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Waukesha is the home city, and the person also says 'the Walmart in Waukesha too' for this job, so the city is stated for the employer.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-23",
+   "source": "Name: Shawn Keller\nPhone: 608-555-0170\nAddress: 418 Harrison Ave, Beloit WI 53511\n\nWhat jobs have you had?\nKwik Trip right here in Beloit, cashier, 2020 to now. Before that Menards in Janesville 2017-2020 in receiving.",
+   "resume_line": "CASHIER | Kwik Trip | Beloit, WI | 2020 - Present",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Kwik Trip right here in Beloit' names the city for this job. It matches the home address, but the person said it for the employer.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-24",
+   "source": "LAMAR JOHNSON\nKenosha, WI 53140 * 262.555.0199 * ljohnson@example.com\n\nAmazon - Kenosha\nStower, 2021-2023\n\nUline - Pleasant Prairie\nForklift Operator, 2023-Present",
+   "resume_line": "STOWER | Amazon | Kenosha, WI | 2021 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The Amazon line says Kenosha, which is also the home city. The job gives the city itself, so it isn't a leak from the header.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-25",
+   "source": "Ricky Alvarez\nWaukegan, IL 60085\n847-555-0122\n\nJob history\nJewel-Osco - same town, stocker 2015-2019\nAmazon - Kenosha WI, sorter 2019-2022",
+   "resume_line": "STOCKER | Jewel-Osco | Waukegan, IL | 2015 - 2019",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "'same town' for Jewel-Osco points back to Waukegan in the header, so the person did give a location for this job. Read literally, Waukegan appears only in the contact line, so the case is marked ambiguous and kept on the safe side.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-26",
+   "source": "Hi my name is Crystal Moore. I live at 305 Walnut St, Janesville WI 53545. I've worked at the Menards here in town for 3 years (2021-2024) in the garden center and before that I was at a Culver's in Beloit.",
+   "resume_line": "GARDEN CENTER ASSOCIATE | Menards | Janesville, WI | 2021 - 2024",
+   "expect": "keep",
+   "ambiguous": true,
+   "why": "'the Menards here in town' refers to the town she just said she lives in, Janesville. The support is by reference, not by name, so the case is marked ambiguous and kept.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-27",
+   "source": "Experience\nKitchen Worker (work release), Racine County Jail kitchen, Racine WI, 2019-2020\n- Prepped meals for 400+ a day\n- Passed every health inspection\n\nContact: Jordan Fields, 262-555-0148, Kenosha WI",
+   "resume_line": "KITCHEN WORKER | Racine County Jail | Racine, WI | 2019 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The jail kitchen line states Racine WI explicitly. Home is Kenosha.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-28",
+   "source": "Curtis Blake\nDes Moines, IA\n515-555-0166\n\nWerner Enterprises (Omaha, NE terminal)\nRegional Driver | 2017 - 2021\nClass A, hazmat, dedicated dry van",
+   "resume_line": "REGIONAL DRIVER | Werner Enterprises | Omaha, NE | 2017 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'(Omaha, NE terminal)' on the employer line gives the job location. Home is Des Moines.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-29",
+   "source": "Tony Kaminski, De Pere WI, 920-555-0134\n\nDrove regional for Schneider out of the Green Bay yard from 2016 to 2019. Clean MVR, no DOT violations.",
+   "resume_line": "REGIONAL DRIVER | Schneider | Green Bay, WI | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'out of the Green Bay yard' gives the base city for this driving job. Home is De Pere.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-30",
+   "source": "exp:\n- walmart DC @ beaver dam, order filler, 2014-2019\n- kwik trip @ columbus, clerk, 2019-2021\nphone 920-555-0105 home is watertown wi",
+   "resume_line": "ORDER FILLER | Walmart | Beaver Dam, WI | 2014 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'walmart DC @ beaver dam' uses @ to give the job location. Home is Watertown.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-31",
+   "source": "Brandon Lee\nRacine WI\n\nUline  Kenosah WI  2016-2019\nforklift / loader\n\nCulvers  Racine WI  2014-2016\ncrew",
+   "resume_line": "FORKLIFT OPERATOR / LOADER | Uline | Kenosha, WI | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Kenosah WI' on the Uline line is an obvious typo for Kenosha. Home is Racine, so the city wasn't borrowed.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-32",
+   "source": "Nicole Grant  nicole.grant@example.com  414-555-0176  West Allis WI\n\nMenards  -  Milwakee WI\nCashier / Front End\nJuly 2017 thru Sept 2020",
+   "resume_line": "CASHIER | Menards | Milwaukee, WI | 2017 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Milwakee WI' on the Menards line is a misspelling of Milwaukee. Home is West Allis.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-33",
+   "source": "Green Bay - Georgia-Pacific - Machine Operator - 2012-2015\nAppleton - Walmart - Stocker - 2015-2018\n\nMike Novak | Kaukauna, WI | 920-555-0112",
+   "resume_line": "MACHINE OPERATOR | Georgia-Pacific | Green Bay, WI | 2012 - 2015",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The line opens with the city, Green Bay, followed by the hyphenated company name. 'Georgia' in Georgia-Pacific is part of the company name, not a place. Home is Kaukauna.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-34",
+   "source": "culvers menomonee falls wi 2013-2015 cashier and drive thru\nmenards germantown wi 2015-2017 yard\nme: jaylen brooks 414 555 0191 milwaukee",
+   "resume_line": "CASHIER | Culver's | Menomonee Falls, WI | 2013 - 2015",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The two-word city 'menomonee falls wi' follows the employer on the same unpunctuated line. Home is Milwaukee.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-35",
+   "source": "Samantha Ruiz, Aurora IL, 630-555-0185\n\nWalmart Supercenter\n• Position: Deli Associate\n• Location: Joliet, IL\n• Dates: 2018 - 2021",
+   "resume_line": "DELI ASSOCIATE | Walmart | Joliet, IL | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "A bullet labeled 'Location: Joliet, IL' sits under the Walmart entry. Home is Aurora.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-36",
+   "source": "Amazon\nDelivery\ndriver\nMadison\nWI\n2022-2023\n\nKevin P\n608-555-0150\nSun Prairie",
+   "resume_line": "DELIVERY DRIVER | Amazon | Madison, WI | 2022 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "This phone paste broke every word onto its own line, but Madison WI is inside the Amazon block, before the contact lines. Home is Sun Prairie.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-37",
+   "source": "I got my CDL back in 2020 after my suspension and started driving for Werner out of their Omaha terminal. Did that til 2023 then went local. My number is 402-555-0137 and I live in Lincoln.",
+   "resume_line": "CDL DRIVER | Werner Enterprises | Omaha, NE | 2020 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'driving for Werner out of their Omaha terminal' ties Omaha to this job. Home is Lincoln.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-38",
+   "source": "SHAWNA PIERCE\nBELOIT, WISCONSIN\n\nMENARDS, JANESVILLE, WISCONSIN\nRECEIVING ASSOCIATE\n2017 TO 2020\nUNLOADED TRUCKS, CHECKED IN FREIGHT",
+   "resume_line": "RECEIVING ASSOCIATE | Menards | Janesville, WI | 2017 - 2020",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The all caps Menards line says JANESVILLE, WISCONSIN, which is the same place as Janesville, WI. Home is Beloit.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-39",
+   "source": "Carlos Rivera\nRacine WI 53402 | 262-555-0115\n\nAmazon Delivery Station, Mt Pleasant WI\nWarehouse Associate  2021 - 2023",
+   "resume_line": "WAREHOUSE ASSOCIATE | Amazon | Mount Pleasant, WI | 2021 - 2023",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Mt Pleasant and Mount Pleasant are the same town, and it is named on the Amazon line. Home is Racine.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-40",
+   "source": "Terrence Moore\nHigh Point NC\n336-555-0141\n\nLowe's Distribution  Winston Salem NC\nMaterial Handler  2015-2019",
+   "resume_line": "MATERIAL HANDLER | Lowe's | Winston-Salem, NC | 2015 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Winston Salem NC' is Winston-Salem written without the hyphen, on the Lowe's line. Home is High Point.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-41",
+   "source": "Nate Hoffman\nSheboygan, WI 53081\n920-555-0120\n\nBemis Manufacturing, Sheboygan Falls WI\nMachine Operator, 2011-2017",
+   "resume_line": "MACHINE OPERATOR | Bemis Manufacturing | Sheboygan Falls, WI | 2011 - 2017",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "The employer line gives Sheboygan Falls. Home is Sheboygan, a different city whose name is contained in the job city, so this is not a home leak.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-42",
+   "source": "WORK HISTORY\n\nROCKFORD, IL\n   Walmart - Cashier - 2010-2012\n   Culver's - Cook - 2012-2014\n\nBELOIT, WI\n   Kwik Trip - Clerk - 2014-2019\n\nPhone 815-555-0156 / Email lfoster@example.com / Home: South Beloit IL",
+   "resume_line": "COOK | Culver's | Rockford, IL | 2012 - 2014",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "Jobs are grouped under city headings, and Culver's falls under ROCKFORD, IL. Home is South Beloit.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-43",
+   "source": "Back in Rockford I worked at a Culver's from 2010 to 2012 and then at the Walmart on the east side from 2012 to 2016 doing stocking. Now I live in Beloit, WI. Text me at 608-555-0179.",
+   "resume_line": "STOCKER | Walmart | Rockford, IL | 2012 - 2016",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Back in Rockford' covers both jobs in the sentence, including the Walmart on the east side. Home is now Beloit.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-44",
+   "source": "Employer Name\tCity\tState\tStart\tEnd\tJob Title\nWerner Enterprises\tOmaha\tNE\t05/2019\t08/2022\tDriver Trainee / OTR\nCulver's\tFremont\tNE\t2016\t2019\tCook\n\nApplicant: Isaiah Grant  402-555-0163  Wahoo, NE",
+   "resume_line": "COOK | Culver's | Fremont, NE | 2016 - 2019",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "In this pasted application form, the Culver's row has Fremont in the City column and NE in the State column. Home is Wahoo.",
+   "group": "city"
+  },
+  {
+   "id": "city-keep-45",
+   "source": "Worked for Uline in the Village of Pleasant Prairie (their big warehouse off the interstate) from 2018-2021 as a picker. Address: 6410 39th Ave, Kenosha, WI 53142.",
+   "resume_line": "PICKER | Uline | Pleasant Prairie, WI | 2018 - 2021",
+   "expect": "keep",
+   "ambiguous": false,
+   "why": "'Village of Pleasant Prairie' names the municipality where the Uline job was. The home address is in Kenosha.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-1",
+   "source": "MARCUS BELL\n2210 Birch Hollow Dr, Kenosha, WI 53140\n(262) 555-0147 | marcus.bell@example.com\n\nWORK EXPERIENCE\nUline\nForklift Driver\n2017 - 2019\n- Loaded and unloaded trailers\n- Zero safety incidents in 2 years",
+   "resume_line": "FORKLIFT DRIVER | Uline | Kenosha, WI | 2017 - 2019",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The Uline entry gives no location. Kenosha appears only in the street address in the header, which is exactly the home-city leak.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-2",
+   "source": "Tasha Monroe\t1418 Willow Bend Rd\tRacine, WI 53404\t262-555-0119\ttmonroe@example.com\n\nCulver's\tCrew Member\t2016-2018\nWalmart\tCashier\t2018-2020",
+   "resume_line": "CREW MEMBER | Culver's | Racine, WI | 2016 - 2018",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The tab-separated Culver's row has only employer, title and dates. Racine appears only in the tabbed contact header.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-3",
+   "source": "Evan Strand\nChippewa Falls, WI 54729\n715-555-0142\n\nMenards - Eau Claire, WI - Yard Associate - 2015-2018\nWalmart - Stocker - 2018-2021\n- freight team, unloaded 2 trucks a night",
+   "resume_line": "STOCKER | Walmart | Chippewa Falls, WI | 2018 - 2021",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The Walmart line has no city. Eau Claire belongs to the Menards job, and Chippewa Falls appears only in the contact block.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-4",
+   "source": "Name: Deshawn Price\nPhone: 414-555-0182\nEmail: dprice@example.com\nCity: Milwaukee, WI\n\nTell us about your work: I got my CDL back in 2020 after my suspension. Drove OTR for Werner from 2020 to 2023, mostly midwest and southeast lanes, no accidents.",
+   "resume_line": "OTR DRIVER | Werner Enterprises | Milwaukee, WI | 2020 - 2023",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The narrative gives no terminal or city for Werner, and 'midwest and southeast lanes' is not a city. Milwaukee comes only from the 'City:' contact field.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-5",
+   "source": "ANDRE WILSON\nKENOSHA WI 53144 | 262 555 0103 | kenoshakid88@example.com\n\namazon warehouse\npicker 2021-2022\nmet rate most weeks\n\nkwik trip\ncashier 2022-now",
+   "resume_line": "PICKER | Amazon | Kenosha, WI | 2021 - 2022",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The Amazon block names no place. Kenosha appears only in the all caps contact line and inside the email address, and both are contact info.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-6",
+   "source": "Kiara Thompson\n733 Aldercrest Ln, Saint Paul, Minnesota 55104\n651-555-0197 | kthompson@example.com\n\nHome Depot\nLot Associate\n2019 - 2021\n• Loaded lumber and appliances for customers\n• Kept carts and lot clear",
+   "resume_line": "LOT ASSOCIATE | Home Depot | St. Paul, MN | 2019 - 2021",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "Once normalized, St. Paul, MN matches the home address 'Saint Paul, Minnesota', but the Home Depot entry gives no location of its own.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-7",
+   "source": "Joliet, Illinois 60435\nVictor Hayes  815-555-0124  vhayes@example.com\n\nWORK\nAramark - Cook (jail kitchen, work release) - 2018-2019\nFed 300+ a meal, kept temp logs\n\nWalmart - Overnight Stocker - 2019-2022",
+   "resume_line": "COOK | Aramark | Joliet, IL | 2018 - 2019",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The Aramark jail kitchen line does not say which jail or city. Joliet appears only in the header address, written as 'Joliet, Illinois'.",
+   "group": "city"
+  },
+  {
+   "id": "city-remove-8",
+   "source": "Menards\nYard Associate\n2014 - 2017\n- Ran forklift in the yard\n- Loaded contractor orders\n\nWalmart\nOvernight Stocker\n2017 - 2020\n\nReferences available on request.\nTyrone Ellis | 2847 N Elmwood Ave, Milwaukee WI 53210 | 414-555-0153 | tellis@example.com",
+   "resume_line": "YARD ASSOCIATE | Menards | Milwaukee, WI | 2014 - 2017",
+   "expect": "remove",
+   "ambiguous": false,
+   "why": "The contact line is at the bottom of this resume and is the only place Milwaukee appears. The Menards entry names no location.",
+   "group": "city"
+  }
+ ],
+ "credential": [
+  {
+   "id": "mixed-1",
+   "source": "Marcus Hill\n(262) 555-0147 | mhill.work@example.com\n\nCERTIFICATIONS\n- OSHA 10 Construction (card in hand, 2024)\n- Forklift - training in progress at Goodwill, finish date Nov 2026",
+   "sentence": "Certifications: OSHA 10 Construction; Forklift Operator Certified",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "OSHA 10 is held, but forklift training is still in progress (finish date Nov 2026). Listing 'Forklift Operator Certified' claims a credential the person does not have yet.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-2",
+   "source": "Marcus Hill\n(262) 555-0147 | mhill.work@example.com\n\nCERTIFICATIONS\n- OSHA 10 Construction (card in hand, 2024)\n- Forklift - training in progress at Goodwill, finish date Nov 2026",
+   "sentence": "Certifications: OSHA 10 Construction (2024); forklift training in progress, expected November 2026",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "OSHA 10 is held and the forklift item is correctly described as in progress. Nothing is overclaimed.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-3",
+   "source": "i got my forklift cert at the Menards DC in 2023 and its still good. my CDL class A expired last year while i was locked up, havent renewed it yet",
+   "sentence": "You hold a current forklift certification and a Class A CDL, so lead with both on driving and warehouse jobs.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The forklift cert is current, but the person says the Class A CDL expired and has not been renewed. Presenting the CDL as held is an overclaim.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-4",
+   "source": "i got my forklift cert at the Menards DC in 2023 and its still good. my CDL class A expired last year while i was locked up, havent renewed it yet",
+   "sentence": "Your forklift certification from Menards is current; your Class A CDL lapsed, and renewing it could reopen driving jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The sentence matches the source: forklift current, CDL lapsed. Nothing is claimed beyond what the person said.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-5",
+   "source": "Skills:\n•\tEPA 608 Certification (Type I and II)\n•\tBrazing, soldering\n•\tRefrigerant recovery\n•\tResidential furnace installs",
+   "sentence": "EPA 608 Universal Certified HVAC technician with refrigerant recovery experience.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The source lists only Type I and II. Universal also requires Type III, so 'Universal' overclaims the scope of the EPA 608 credential.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-6",
+   "source": "TERRELL JACKSON  terrell.j@example.com  414.555.0133\nSkills:\n• EPA 608 Certification (Type I and II)\n• OSHA 30 - class started Sept 2026\n• Ductwork, pipe fitting",
+   "sentence": "Holds EPA 608 certification (Type I and II) and is currently completing OSHA 30 training.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 Type I and II is held as listed. OSHA 30 is correctly described as training in progress.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-7",
+   "source": "Certs\nCPR/First Aid - American Red Cross, current thru 2027\nEPA 608 - finished the prep course at the tech school, did NOT take the test yet",
+   "sentence": "You are certified in CPR and finished the EPA 608 course.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "CPR is current through 2027. The EPA 608 item is described only as a finished course, not a certification, which is exactly what the source says.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-8",
+   "source": "My CPR card expired in 2024. I have my EPA 608 type II tho, passed it inside through the HVAC program at Oshkosh Correctional.",
+   "sentence": "You are certified in CPR and hold an EPA 608 Type II certification.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "EPA 608 Type II is held, but the person says the CPR card expired in 2024. Saying 'certified in CPR' presents an expired credential as current.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-9",
+   "source": "CERTS: ServSafe Food Handler (2025), Food Handler Card - Kenosha County\n\nEXPERIENCE\nKitchen Lead, Kenosha County Jail Kitchen  2021 - 2023\n  - ran breakfast line for 400+ meals\n  - trained new workers on sanitation",
+   "sentence": "I am ServSafe Manager certified and led a high-volume kitchen line for two years.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The person holds ServSafe Food Handler, not ServSafe Manager. The Manager credential is a higher-level certification they do not have.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-10",
+   "source": "ServSafe Manager cert - got it 2019 (good for 5 yrs)\nFood handler card - current, got it Feb 2026\nLine cook at Culvers 2019-2022",
+   "sentence": "You hold a current ServSafe Manager certification and a food handler card.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "By the person's own words, the ServSafe Manager cert from 2019 was good for 5 years, so it ran out in 2024. Calling it current overclaims. The food handler card is fine.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-11",
+   "source": "I got my CDL back in 2020 after my suspension. Class B, passenger endorsement. Also did a flagger class last month but the card hasnt come in the mail yet",
+   "sentence": "You hold a Class B CDL with a passenger endorsement and a flagger certification.",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "The CDL was reinstated in 2020 and is held. For flagger, the class is done and a card is on its way, which most readers take to mean they passed and are waiting on the physical card. It could also be read as not yet certified. Labeled for the safe side (no flag).",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-12",
+   "source": "Andre Coleman\nCertifications\nCDL-A (suspended since March 2026, working on getting it back)\nForklift cert - Uline, 2025\nOSHA 10",
+   "sentence": "Certifications: Forklift Operator (Uline, 2025), OSHA 10",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The line lists only the held credentials (forklift, OSHA 10) and correctly leaves out the suspended CDL.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-13",
+   "source": "Andre Coleman\nCertifications\nCDL-A (suspended since March 2026, working on getting it back)\nForklift cert - Uline, 2025\nOSHA 10",
+   "sentence": "Licensed Class A CDL driver with forklift certification and OSHA 10 safety training.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Forklift and OSHA 10 are held, but the CDL-A has been suspended since March 2026. Calling the person a licensed Class A driver overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-14",
+   "source": "TRAINING & CREDENTIALS\nNCCER Core Curriculum - completed 2024 (county reentry program)\nNCCER Carpentry Level 1 - currently enrolled\nOSHA 10 Construction",
+   "sentence": "You completed NCCER Core and Carpentry Level 1 and hold an OSHA 10 card.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "NCCER Core and OSHA 10 are done, but Carpentry Level 1 is still in progress. Saying it was completed overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-15",
+   "source": "TRAINING & CREDENTIALS\nNCCER Core Curriculum - completed 2024 (county reentry program)\nNCCER Carpentry Level 1 - currently enrolled\nOSHA 10 Construction",
+   "sentence": "NCCER Core Curriculum credential (2024); NCCER Carpentry Level 1 in progress; OSHA 10 Construction.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Each item matches its status in the source: Core completed, Carpentry Level 1 in progress, OSHA 10 held.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-16",
+   "source": "finished the CNA class at the tech college in august. state exam is scheduled for october 14. also have my CPR BLS thru AHA good till 2028",
+   "sentence": "I am a Certified Nursing Assistant with current BLS CPR through the American Heart Association.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "BLS is current, but the person has only finished CNA training. The state exam has not been taken yet, so they are not a Certified Nursing Assistant.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-17",
+   "source": "finished the CNA class at the tech college in august. state exam is scheduled for october 14. also have my CPR BLS thru AHA good till 2028",
+   "sentence": "You finished CNA training and test on October 14; your BLS CPR card is current through 2028.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This describes CNA as training finished with the exam pending, and BLS as current through 2028. Both match the source.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-18",
+   "source": "CERTIFICATIONS\nCNA - WI Nurse Aide Registry (inactive since 2022, no paid nursing work in 24 months)\nFood Handler Card - 2026\nCPR/First Aid - 2025",
+   "sentence": "Certifications: Food Handler Card (2026), CPR/First Aid (2025), CNA (Wisconsin Nurse Aide Registry)",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The CNA registry status has been inactive since 2022. Listing it with no 'inactive' qualifier alongside current credentials presents it as active, which overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-19",
+   "source": "Education\nWelding Technology diploma - Moraine Park Technical College, 2022\n(no AWS cert yet, testing for 3G in the spring)\n\nForklift certified - Werner warehouse, 2023",
+   "sentence": "You are an AWS certified welder and forklift certified.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The person has a welding diploma but says there is no AWS cert yet. A trade school diploma is not a welding certification. The forklift cert is held.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-20",
+   "source": "Education\nWelding Technology diploma - Moraine Park Technical College, 2022\n(no AWS cert yet, testing for 3G in the spring)\n\nForklift certified - Werner warehouse, 2023",
+   "sentence": "You earned a Welding Technology diploma from Moraine Park and are forklift certified; the AWS 3G test in spring would add a welding certification.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This correctly separates the diploma from the certification that is still to come. The forklift cert is held.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-21",
+   "source": "Certificate of Completion - Culinary Arts, Goodwill Kitchen Program 2025\nServSafe Food Handler - current\nworked prep at Culver's 2 yrs",
+   "sentence": "You hold a culinary arts certificate and a current ServSafe Food Handler certification.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The culinary arts certificate of completion is out of scope and is supported by the source. ServSafe Food Handler is current. No in-scope credential is overclaimed.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-22",
+   "source": "took a food safety class in the jail kitchen, got a certificate of completion, not a food handlers card tho. forklift certified at amazon 2024",
+   "sentence": "You are certified in food safety and forklift operation.",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "The forklift cert is held. 'Certified in food safety' refers to a class with a certificate of completion, and the sentence does not claim a food handler card or ServSafe. Some reviewers would read it as implying a food handler credential, so it could go either way. Labeled for the safe side (no flag).",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-23",
+   "source": "ROAD CREW / CONSTRUCTION\nFlagger certification - ATSSA, issued 5/2021, good for 4 years\nOSHA 10 - 2021\nCDL B permit (CLP) only, road test not passed yet",
+   "sentence": "Road crew ready: certified flagger, OSHA 10 trained, and Class B CDL holder.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The flagger cert was issued 5/2021 and was good for 4 years, so it expired in 5/2025. The person holds only a CDL permit and has not passed the road test. Both are overclaimed. OSHA 10 is fine.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-24",
+   "source": "flagger card renewed july 2026 thru the state DOT class. OSHA 30 done 2023. working on my CDL permit, test is next month",
+   "sentence": "You hold a current flagger card and an OSHA 30 card, and you are working toward your CDL permit.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The flagger card was renewed in 2026, OSHA 30 was completed in 2023, and the CDL is correctly framed as a goal in progress.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-25",
+   "source": "Certifications:\n  OSHA 10 General Industry (2025)\n  OSHA 30 - signed up, starts next week",
+   "sentence": "Safety-minded warehouse associate, OSHA 10/30 certified.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "OSHA 10 is held, but OSHA 30 has not started yet. 'OSHA 10/30 certified' claims the OSHA 30 card.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-26",
+   "source": "Food Safety Certificate - a kitchen training program 2025 (it's not ServSafe)\nForklift - still in training at Menards, sign-off after 40 hours on the truck",
+   "sentence": "Certified in food safety and forklift operation (Menards).",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The food safety program certificate is out of scope and supported as written, but forklift training at Menards is not signed off yet. Claiming forklift certification overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-27",
+   "source": "CPR/AED - 2021\nForklift (sit down + reach truck) - Walmart DC, 2024",
+   "sentence": "Certifications: CPR/AED; Forklift (sit-down and reach truck, Walmart DC)",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "The forklift cert is held. The CPR/AED card is dated 2021, and CPR cards usually run 2 years, so it is likely expired, but the person never says so. A reviewer could read it either way. Labeled for the safe side (no flag).",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-28",
+   "source": "forklift cert from Uline expired, they only good 3 years and mine was 2021. CPR i just took in june 2026",
+   "sentence": "Lead with your current CPR card; your forklift certification from Uline needs renewing, which is usually a quick class.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "CPR from June 2026 is current, and the forklift cert is correctly described as needing renewal. Nothing is overclaimed.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-29",
+   "source": "forklift cert from Uline expired, they only good 3 years and mine was 2021. CPR i just took in june 2026",
+   "sentence": "I am forklift certified from my time at Uline and recently completed CPR training.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The person says the Uline forklift cert expired. 'I am forklift certified' presents it as current. The CPR part is fine.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-30",
+   "source": "LICENSES\nCDL Class B - since 2018, clean\nCompleted Class A CDL school at Werner (Sept 2026), skills test scheduled 10/20",
+   "sentence": "You hold a Class A CDL and trained at Werner's CDL school.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The person holds Class B. For Class A, they finished the school, but the skills test is still scheduled, so claiming a Class A CDL overclaims the class.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-31",
+   "source": "LICENSES\nCDL Class B - since 2018, clean\nCompleted Class A CDL school at Werner (Sept 2026), skills test scheduled 10/20",
+   "sentence": "Class B CDL holder since 2018; finished Werner's Class A CDL training in September 2026 with the skills test scheduled.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Class B is held, and Class A is correctly described as training done with the test pending.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-32",
+   "source": "My CNA was revoked in 2019 (registry finding). I now have ServSafe Food Handler 2026 and CPR/First Aid through Red Cross, June 2026.",
+   "sentence": "You hold a ServSafe Food Handler card and a current CPR/First Aid certification.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Both are current as of 2026 per the source, and the revoked CNA is not claimed.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-33",
+   "source": "My CNA was revoked in 2019 (registry finding). I now have ServSafe Food Handler 2026 and CPR/First Aid through Red Cross, June 2026.",
+   "sentence": "Certified Nursing Assistant (CNA) | ServSafe Food Handler | CPR",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The CNA was revoked in 2019, so listing it as a held credential overclaims, even though ServSafe and CPR are current.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-34",
+   "source": "i want to get my welding cert and my cdl someday. right now i have my food handlers card and i ran a forklift at the jail warehouse but wasnt certified",
+   "sentence": "You have a food handler card and forklift experience, and welding and CDL are good next goals.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The food handler card is held, forklift is framed as experience rather than a certification, and welding and CDL are framed as goals. All of this matches the source.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-35",
+   "source": "i want to get my welding cert and my cdl someday. right now i have my food handlers card and i ran a forklift at the jail warehouse but wasnt certified",
+   "sentence": "You hold a food handler card and a forklift certification.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The person says outright that they were not forklift certified, only that they operated one. Claiming a forklift certification overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-36",
+   "source": "Passed all 3 parts of the 608 (universal) in 2020 at the county HVAC program. OSHA 10 I did the online modules but never finished the last 2 so no card",
+   "sentence": "You hold EPA 608 Universal certification and an OSHA 10 card.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "EPA 608 Universal is held. The OSHA 10 course was never finished and there is no card, so claiming the OSHA 10 card overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-37",
+   "source": "Passed all 3 parts of the 608 (universal) in 2020 at the county HVAC program. OSHA 10 I did the online modules but never finished the last 2 so no card",
+   "sentence": "EPA 608 Universal (2020); OSHA 10 coursework (partial)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 Universal is held, and OSHA 10 is correctly listed as partial coursework, not a card.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-38",
+   "source": "ServSafe - took the class at Culver's 2025\nCPR - Red Cross 2026",
+   "sentence": "Certifications: ServSafe; CPR (Red Cross, 2026)",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "CPR is current. For ServSafe, 'took the class' does not say whether the person passed the exam. Employer ServSafe classes usually end with the test, but the source is unclear. Labeled for the safe side (no flag).",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-39",
+   "source": "WELDING CERT AWS D1.1 3G/4G PASSED 2025 AT LAKESHORE TECH\nNCCER CORE IN PROGRESS\nFLAGGER CARD 2026",
+   "sentence": "You are AWS D1.1 certified in 3G and 4G, hold a 2026 flagger card, and are working through NCCER Core.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The AWS D1.1 3G/4G welding cert was passed in 2025, the flagger card is from 2026, and NCCER Core is correctly framed as in progress.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "mixed-40",
+   "source": "Certification\tStatus\nForklift\tCurrent (Amazon, 2025)\nCDL Class A\tPermit only\nFirst Aid/CPR\tExpired 2023",
+   "sentence": "Certified forklift operator (Amazon, 2025) with CPR and First Aid certification.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The forklift cert is current, but the person's own table marks First Aid/CPR as expired in 2023. Claiming CPR and First Aid certification overclaims.",
+   "group": "cred-mixed"
+  },
+  {
+   "id": "held-1",
+   "source": "DeShawn Miller\ndeshawn.miller@example.com | (414) 555-0182\n\nLICENSES\nCDL Class A - suspended 2018-2020 after my OWI, reinstated June 2020\n\nEXPERIENCE\nWerner Enterprises - OTR Driver - 2021 to present\n- 48 states, dry van, no violations since reinstatement",
+   "sentence": "Class A CDL holder driving OTR for Werner Enterprises since 2021.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The suspension ended with reinstatement in June 2020 and he has driven for Werner since 2021, so he holds the Class A now.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-2",
+   "source": "got my CDL back when I got out in 2022. had to do the medical card and pay the reinstatement fee but its valid now. class A",
+   "sentence": "Holds a valid Class A CDL, reinstated in 2022.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The person says outright that the Class A is valid now after reinstatement.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-3",
+   "source": "Skills & Certs\n* Forklift certified - sit down + stand up (got it thru the prison work program, recertified at Uline 2025)\n* RF gun, pallet jack, shrink wrap",
+   "sentence": "Forklift certified on sit-down and stand-up trucks, recertified at Uline in 2025.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The cert was earned inside and renewed at Uline in 2025, which is inside the 3-year evaluation window.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-4",
+   "source": "Food Service Worker, County Jail Kitchen (work release)   2023-2024\n- prepped 900+ meals a day\n- earned ServSafe Manager certification, 2024",
+   "sentence": "ServSafe Manager certified (2024) with high-volume kitchen experience.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "ServSafe Manager earned in 2024 through the jail kitchen is still inside its 5-year validity.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-5",
+   "source": "i did the CNA program at the tech college, finished march 2025 and passed the state test (skills + written) in april. im on the registry, working 2nd shift at a nursing home now",
+   "sentence": "Certified Nursing Assistant listed on the state registry, currently working second shift at a nursing home.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "She passed the state exam after the course, is on the registry, and works as a CNA, so this is a held credential and not just a course.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-6",
+   "source": "CDL school at Roehl 2024, passed my road test first try, got my Class A. drove for Roehl 14 months regional flatbed",
+   "sentence": "Class A CDL earned through Roehl's training program in 2024, followed by 14 months of regional flatbed driving.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the road test and got the Class A, then drove on it for 14 months. That is the license, not just school.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-7",
+   "source": "CERTIFICATIONS\nOSHA 10 (Construction), 2021\nFirst Aid / CPR, American Red Cross, 2025\nFlagger, 2024",
+   "sentence": "Holds an OSHA 10 Construction card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A plain listing under CERTIFICATIONS. OSHA 10 DOL cards do not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-8",
+   "source": "Licenses/Certs\nClass B CDL w/ air brakes\nTWIC card\n\nWork\nCity Public Works Dept - Equipment Operator  2020-2025",
+   "sentence": "Class B CDL holder with air brakes and five years as a public works equipment operator.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A Class B CDL listed under Licenses/Certs with matching operator work history.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-9",
+   "source": "Marcus T. Hale  |  marcus.hale@example.com  |  608-555-0144\nWarehouse Associate, Amazon   Jan 2024 - Present\nCerts: forklift, OSHA 10",
+   "sentence": "Certifications: forklift and OSHA 10.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "An inline Certs listing from someone still working in the warehouse role. The sentence repeats it exactly.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-10",
+   "source": "looking for a CDL A job with home time. 6 yrs OTR reefer, clean MVR last 3 yrs, cant do 3 weeks out anymore with my kids",
+   "sentence": "Class A CDL driver with six years of OTR reefer experience seeking a role with regular home time.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He is job hunting for CDL A work with six years of OTR and a recent clean MVR, so he clearly holds the license.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-11",
+   "source": "I need my CDL for work so I don't mess around with it. Class A, 9 years, tanker endorsement, hauling fuel for a local distributor right now.",
+   "sentence": "Class A CDL with tanker endorsement and nine years of driving, currently hauling fuel.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "'I need my CDL for work' comes from someone hauling fuel on it right now, so it describes a license he holds, not one he wants.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-12",
+   "source": "still got my Class A, never lost it. been doing warehouse at Menards since i got out cause it was quick but i want to start using my CDL again",
+   "sentence": "Class A CDL holder with warehouse experience at Menards, looking to return to driving.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "'Still got my Class A, never lost it' means he holds it. 'Want to start using my CDL again' is about the job, not about getting the license.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-13",
+   "source": "EXPERIENCE\nRegional Driver - Schneider - 2020-2025\n• Class A CDL, 5 years, no CDL violations, no preventable accidents\n• Dry van and intermodal",
+   "sentence": "Class A CDL driver with five years at Schneider and no violations or preventable accidents.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He holds a Class A with a clean record. The 'no CDL violations' phrasing is a clean-record claim, not a missing license.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-14",
+   "source": "Without my CDL Id be stuck out here, its the one thing I kept thru everything. Class A good thru 2029, med card good thru 2027.",
+   "sentence": "Holds a Class A CDL valid through 2029 and a current DOT medical card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "'Without my CDL I'd be stuck' says he relies on it. He gives an expiration of 2029 and a med card good through 2027.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-15",
+   "source": "SUMMARY\nDependable CDL-A driver, 11 years behind the wheel. Hauled for Werner and a local lumber yard.\n\nADDITIONAL\nLicense was suspended 2015-2017 (personal matter). Reinstated in 2017 and in good standing since.",
+   "sentence": "Class A CDL driver in good standing with 11 years behind the wheel.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The old suspension is mentioned in a separate section, but the license was reinstated in 2017 and has been in good standing since.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-16",
+   "source": "Tomas Reyes\nHVAC Helper\n\nCertifications\n- EPA 608 Universal (2019)\n- OSHA 10\n\nHVAC Install Helper, Midwest Comfort Heating & Air   2022 - present",
+   "sentence": "EPA 608 Universal certified HVAC install helper with OSHA 10.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "EPA 608 is a lifetime certification, so the 2019 date is fine. OSHA 10 is listed too.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-17",
+   "source": "took the HVAC class at the prison and passed my EPA 608 test, Type I and Type II. got the wallet card when I got home",
+   "sentence": "EPA Section 608 certified for Type I and Type II equipment.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the proctored exam, not just the class, and has the wallet card. The sentence keeps it to Type I and II and does not upgrade it to Universal.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-18",
+   "source": "TRAINING & CERTIFICATIONS\nOSHA 30-Hour Construction ............ 2023\nScaffold User ........................ 2023\nNCCER Core ........................... 2022",
+   "sentence": "Holds an OSHA 30-Hour Construction card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A plain listing under Training & Certifications. The OSHA 30 card does not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-19",
+   "source": "Through the reentry building trades program I completed NCCER Core Curriculum and Carpentry Level 1. I passed both module tests and my credentials show on the NCCER registry.",
+   "sentence": "NCCER credentialed in Core Curriculum and Carpentry Level 1.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed the tests and the credentials are on the NCCER registry, so this is past the course stage.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-20",
+   "source": "Flagger Certified (ATSSA)   exp 06/2028\nOSHA 10   2024\nTraffic control / flagging, Lakeside Paving, summer 2025",
+   "sentence": "ATSSA-certified flagger, valid through June 2028.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The listing gives an expiration date in the future.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-21",
+   "source": "Luis Ortega | 262-555-0199 | lortega@example.com\nWELDER\n\nCertifications:\nAWS D1.1 - 3G & 4G plate, SMAW (tested 2025, continuity kept current at my shop)\n\nFab Welder, Northway Trailer Co.   2024-present",
+   "sentence": "AWS D1.1 certified in 3G and 4G plate SMAW, currently welding at Northway Trailer Co.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He tested in 2025, says continuity is kept current, and is welding now.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-22",
+   "source": "got my welding cert in the DOC vocational program (stick). when i got out i passed the AWS bend test at the shop where im at now so im certified there too",
+   "sentence": "Certified stick (SMAW) welder with a passed AWS bend test at current shop.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned it inside and then passed a bend test at the shop where he works now.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-23",
+   "source": "Culvers - Crew Member 2025-now\nfood handlers card (got it 2025)\ncashier, fry station, drive thru",
+   "sentence": "Holds a current food handler card from 2025.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A food handler card from 2025 is inside the usual 2 to 3 year validity, and she is working food service now.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-24",
+   "source": "CERTIFICATIONS:  CPR/AED & First Aid - American Red Cross - exp. 03/2027",
+   "sentence": "CPR/AED and First Aid certified through the American Red Cross, valid through March 2027.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The listed expiration is in the future.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-25",
+   "source": "my cna lapsed while i was locked up (didnt work 2 yrs). i retook the skills test in 2024 and passed, im active on the registry again and working at a home health agency",
+   "sentence": "Active Certified Nursing Assistant on the state registry, currently working in home health.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The past lapse was fixed by retesting in 2024. She is active on the registry and working as a CNA.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-26",
+   "source": "Renee Jackson   renee.j@example.com   (920) 555-0110\nKitchen Manager, Family Diner   2021-2025\nServSafe Food Protection Manager - Cert # on file - Exp 2029",
+   "sentence": "ServSafe Food Protection Manager certified with four years as a kitchen manager.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The listing gives a 2029 expiration, which is in the future.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-27",
+   "source": "servsafe managr cert thru the county jail kitchen program in 2023, good for 5 yrs",
+   "sentence": "ServSafe Manager certified, valid through 2028.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned it through the jail kitchen in 2023 and it is good for 5 years, so it is valid through 2028.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-28",
+   "source": "LICENSES & CERTIFICATIONS\nCDL CLASS A - TANKER, DOUBLES/TRIPLES\nFORKLIFT CERTIFIED 2025\nNO MOVING VIOLATIONS 5 YRS",
+   "sentence": "Class A CDL with tanker and doubles/triples endorsements.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "An all-caps licenses heading lists the Class A and its endorsements. The sentence matches it.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-29",
+   "source": "Certifications\tOSHA 10 General Industry\t2022\n\tForklift Operator (Counterbalance)\t2025\n\tCPR\t2025",
+   "sentence": "OSHA 10 General Industry certified and a counterbalance forklift operator.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A tab-separated listing pasted from Word. OSHA 10 General Industry does not expire and the forklift cert is from 2025. The sentence keeps General Industry and does not upgrade it to Construction.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-30",
+   "source": "• Class B CDL - current (license was suspended in 2018 over unpaid fines, all cleared 2019)\n• Drove dump truck for county highway dept 3 yrs (2022-2025)\n• plow route winters",
+   "sentence": "Class B CDL driver with three years of dump truck and snow plow experience for a county highway department.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The 2018 suspension for fines was cleared in 2019. The Class B is marked current and was used on the job through 2025.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-31",
+   "source": "My CDL was revoked in 2016 after a DUI. I did the waiting period, retook the written and road tests, and got my Class A back in 2021. It's valid now and I've been driving local since.",
+   "sentence": "Holds a valid Class A CDL and has driven local routes since 2021.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The license was revoked in the past and regained in 2021, and the person says it is valid now.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-32",
+   "source": "CDL disqualified for 1 yr in 2019. reinstated 2020. 4 yrs clean at Schneider since then, dedicated route",
+   "sentence": "CDL driver with four years on a dedicated route at Schneider.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The disqualification ended with reinstatement in 2020, followed by four years of driving.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-33",
+   "source": "Training & Certifications\n- Forklift (sit down, reach truck) - Amazon, 2025\n- OSHA 10 - 2023",
+   "sentence": "I am forklift certified on sit-down and reach trucks and hold an OSHA 10 card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is a cover letter line that matches the listed certs. The forklift cert is from 2025 and OSHA 10 does not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-34",
+   "source": "Certs: CNA (active, WI registry), CPR (BLS) 2026",
+   "sentence": "Put your active CNA certification in your headline so it is the first thing a nursing home recruiter sees.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is report advice. The source itself says the CNA is active on the registry.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-35",
+   "source": "Class A CDL. Got it back in 2019 after my suspension ended. 3 yrs regional since.",
+   "sentence": "Your Class A CDL is your strongest selling point, so list it right under your name.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The suspension ended and the license was regained in 2019, followed by regional driving. The advice treats a held license as held.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-36",
+   "source": "i run a forklift at the walmart DC, they certified me in 2023 and I did the recert this year",
+   "sentence": "Forklift certified at a Walmart distribution center, with a recertification this year.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He was recertified this year and runs a forklift daily.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-37",
+   "source": "Menards - Yard Associate - 2024-Present\n  -Forklift certified in store (2025)\n  -Load contractor orders, lumber and drywall",
+   "sentence": "Forklift certified through Menards in 2025 and experienced loading lumber and drywall orders.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He was certified by his current employer in 2025.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-38",
+   "source": "OBJECTIVE: Local or regional CDL-A position.\nI've held my Class A since 2012, except 2017-2019 when it was suspended. Reinstated Aug 2019 and driving since.",
+   "sentence": "Class A CDL holder seeking a local or regional driving position.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The source mentions the 2017 to 2019 suspension, but the license was reinstated in 2019 and he has driven since. The sentence does not claim an unbroken record since 2012.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-39",
+   "source": "Road crew w/ county highway 2023-now. flagger card current thru 2027, OSHA 10 construction",
+   "sentence": "Holds a current flagger card and an OSHA 10 Construction card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The flagger card is stated as current through 2027 and OSHA 10 Construction does not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-40",
+   "source": "NCCER CORE + ELECTRICAL LEVEL 1 - completed through the prison vocational program, 2022. Transcript is on the NCCER registry.",
+   "sentence": "Holds NCCER Core and Electrical Level 1 credentials, listed on the NCCER registry.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned them inside and they are recorded on the NCCER registry. NCCER credentials do not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-41",
+   "source": "EPA 608 Universal (have it)\nwant to get my NATE cert next\nHVAC install helper 2 yrs",
+   "sentence": "EPA 608 Universal certified, with two years as an HVAC install helper.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "'Have it' confirms the EPA 608. The NATE cert he wants is a different credential and the sentence does not claim it.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-42",
+   "source": "Class A CDL - yes\nHazmat - not yet, studying for it\nTanker - not yet",
+   "sentence": "Holds a Class A CDL.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He explicitly holds the Class A. The sentence leaves out the Hazmat and Tanker endorsements he does not have yet, so it does not overclaim.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-43",
+   "source": "Direct Support Professional, group home 2024-now\nCPR + First Aid (AHA Heartsaver) renewed Jan 2026",
+   "sentence": "CPR and First Aid certified through AHA Heartsaver, renewed January 2026.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Renewed January 2026, so it is inside the 2-year validity.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-44",
+   "source": "got my food handler card thru the county jail kitchen, it ran out so I renewed it online myself in 2025",
+   "sentence": "Holds a current food handler card, renewed in 2025.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The card earned in jail ran out, but he renewed it in 2025, so he holds a current one.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-45",
+   "source": "forklift cert expired while i was down. got recertified at the temp agency in feb 2026, working at a Uline warehouse thru them now",
+   "sentence": "Forklift certified (recertified February 2026) and currently working at a Uline warehouse through a staffing agency.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The old cert expired, but he was recertified in February 2026. The 'expired' wording applies only to the old card.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-46",
+   "source": "did OSHA 10 in the construction class inside in 2020, card got mailed to my mom's house. still got it",
+   "sentence": "Holds an OSHA 10 Construction card.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He earned it inside, has the DOL card, and OSHA 10 cards do not expire.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-47",
+   "source": "Certified welder - AWS SENSE Level 1 (2024)\nMIG + stick\nWelder, trailer shop, 2024-present",
+   "sentence": "AWS SENSE Level 1 certified welder skilled in MIG and stick.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "A listed certification with current welding work. The sentence does not upgrade it to a code cert like D1.1.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-48",
+   "source": "Lost my CDL when I went in. Got it back when I got out in 2021, had to redo the medical card and everything. Driving local for a dairy now, 5 days a week.",
+   "sentence": "CDL holder currently driving local routes for a dairy.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He lost it while incarcerated, got it back in 2021, and drives on it now. The sentence does not invent a class.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-49",
+   "source": "I've had my Class A since 2012. It was suspended once in 2016 for about 8 months but its been valid since 2017, no violations since.",
+   "sentence": "I have held a valid Class A CDL with no violations since 2017.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This cover letter line uses 2017, the date the source says the license became valid again, so it does not hide the suspension or overclaim.",
+   "group": "cred-held"
+  },
+  {
+   "id": "held-50",
+   "source": "SKILLS\nforklift certified (2021), pallet jack, RF scanner\n\nUline - Warehouse Associate - 2021 to present",
+   "sentence": "Forklift certified with five years at Uline.",
+   "expect_flag": false,
+   "ambiguous": true,
+   "why": "OSHA requires a forklift re-evaluation every 3 years, so a 2021 date could look stale. But he is still at the same warehouse, where re-evaluations are routine, and he lists it as a current skill. A reviewer could read it either way, so this is labeled for the safe side (no flag).",
+   "group": "cred-held"
+  },
+  {
+   "id": "over-1",
+   "source": "JAMAL THORNE\njthorne@example.com   (262) 555-0118\n\nTRAINING\nHVAC Fundamentals\tLakeshore Technical College\t2025\n•\tEPA 608 prep course, Core + Type I + Type II\n•\tRecovery machine practice, brazing\n\nEXPERIENCE\nWarehouse Associate\tUline\t2021 - 2024\n•\tPicked and packed 200+ orders a shift",
+   "sentence": "EPA 608 Certified (Core, Type I, Type II), Lakeshore Technical College, 2025",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The source lists an EPA 608 prep course only. EPA 608 certification comes from passing a proctored exam, and nothing says he passed it.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-2",
+   "source": "i did the epa 608 class inside thru the vocational program but they transferred me before test day so i never sat for it. i want to do hvac or appliance repair when i get out in march",
+   "sentence": "Lead with your EPA 608 certification when you apply for HVAC helper jobs.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says outright that he never sat for the exam, so he does not hold EPA 608 certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-3",
+   "source": "Truck Driving Program - Fox Valley Technical College - Spring 2026\n160 hrs classroom and range\n* pre-trip, straight line backing, alley dock, coupling\n* road test scheduled for October",
+   "sentence": "I hold a Class A CDL and finished 160 hours of training at Fox Valley Technical College.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The road test is still scheduled for October. Finishing CDL school is not holding a CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-4",
+   "source": "I been doing warehouse work at Amazon for 3 years, loading trailers mostly. I want to get my CDL so I can drive instead of load. No CDL yet, just my regular license.",
+   "sentence": "Your CDL and three years of loading trailers at Amazon make you a strong fit for local delivery driver jobs.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says 'No CDL yet.' The CDL is something he wants, not something he has.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-5",
+   "source": "RAYMOND KOWALSKI\n(715) 555-0163 | rkowalski@example.com\n\nDRIVER - CLASS A CDL\nWerner Enterprises\t\t2014 - 2018\n- OTR dry van, 48 states\n- 0 preventable accidents\n\n*CDL suspended 2018 (OWI). working on getting it back",
+   "sentence": "You hold a Class A CDL and four years of accident-free OTR miles with Werner.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The CDL was suspended in 2018, and 'working on getting it back' means it is not reinstated. He does not currently hold a CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-6",
+   "source": "my cdl got revoked in 2017 after my case. i can still drive a regular car, i have a valid class D",
+   "sentence": "Class A CDL | Clean driving record since 2017",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The CDL was revoked. He holds only a Class D license, so listing a Class A CDL claims a credential he does not have.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-7",
+   "source": "CERTIFIED NURSING ASSISTANT TRAINING\nRed Cross, Milwaukee WI\nCompleted 120 hr program - Mar 2026\nClinical rotation at Sunrise Care Center\n\n(still need to take the state test)",
+   "sentence": "Tell employers you are CNA certified and already finished clinicals at Sunrise Care Center.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The word 'Certified' is only the program name. She still has to take the state competency test, so she is not a certified CNA yet.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-8",
+   "source": "Home Health Aide, Comfort Keepers, 2012-2017\nCNA - Wisconsin Nurse Aide Registry, 2012-2017\n\nmy CNA lapsed while I was incarcerated, havent been on the registry since 2017",
+   "sentence": "Your active CNA registration puts you ahead of other home health applicants.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She says the CNA lapsed and she has been off the registry since 2017. Nothing shows it is active.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-9",
+   "source": "Shift Lead, Culver's\t2022 - Present\n\tRun closing shift, crew of 8\n\tCash handling, drawer counts\n\tTook the ServSafe Manager class through work in August, exam is next month",
+   "sentence": "ServSafe Food Protection Manager Certified, 2026",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "ServSafe Manager requires passing the proctored exam, and he has not taken it yet. The exam is next month.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-10",
+   "source": "KITCHEN MANAGER\nPerkins Restaurant & Bakery\n2015-2019\nServSafe Manager 2016 (expired 2021)\nordering, scheduling 14 staff, health inspections",
+   "sentence": "Your ServSafe Manager certification lets you serve as the certified food manager on day one.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The ServSafe Manager certificate expired in 2021 and nothing says it was renewed. It cannot count as a current certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-11",
+   "source": "Welding I & II - Madison College - finished Dec 2025\nMIG, stick, a little TIG\ndidnt do the AWS bend test yet",
+   "sentence": "AWS Certified Welder (MIG, Stick), Madison College, 2025",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He finished the classes but says he has not done the AWS bend test. Without passing that test there is no AWS certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-12",
+   "source": "worked in the metal shop at the institution 4 yrs. learned to weld mig and flux core, built trailers and gates. no paper cert, they didnt offer the test",
+   "sentence": "My welding certification and four years building trailers make me ready for a production welder role.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He has real welding experience but says 'no paper cert.' The sentence invents a certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-13",
+   "source": "Structural Welder, Ace Fabrication, 2010-2016\nAWS D1.1 3G/4G certified 2011\nHave not welded since 2016. my certs lapsed",
+   "sentence": "Your AWS D1.1 3G and 4G certifications are current and in high demand.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says the certs lapsed after he stopped welding in 2016. Calling them current contradicts the source.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-14",
+   "source": "FORKLIFT OPERATOR\nMENARDS DISTRIBUTION CENTER - EAU CLAIRE WI\n2016 - 2019\n* FORKLIFT CERTIFIED 2016 (EXPIRED)\n* LOADED OUTBOUND TRUCKS\n* CYCLE COUNTS",
+   "sentence": "Your forklift certification is current, so list it at the top of your resume.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The source marks the 2016 forklift certification as expired. Calling it current is false.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-15",
+   "source": "reach truck + sit down forklift, Walmart DC #6094, 2017-2020. my cert ran out when i left",
+   "sentence": "My forklift certification is up for renewal, and I can renew it my first week.",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "The cert ran out in 2020. Saying it is 'up for renewal' makes it sound like one he still holds, the same pattern as the past-run 'renewable' example. A reader could also take it as an honest note about a lapsed cert, so it is ambiguous and labeled for the safe side.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-16",
+   "source": "SKILLS\npallet jack\nRF scanner\nshrink wrap machine\nwould like to get forklift certified",
+   "sentence": "Forklift Certified | Pallet Jack | RF Scanner | Shrink Wrap",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says he 'would like to get' forklift certified. That is a goal, not a credential.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-17",
+   "source": "Prep Cook\ncounty jail kitchen\n2023-2024\n- prepped meals for 900\n- food handler card thru the kitchen program, expired June 2026",
+   "sentence": "Bring your current food handler card to the interview.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The food handler card expired in June 2026. It is not current.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-18",
+   "source": "CERTIFICATIONS\nCPR/AED & First Aid - American Red Cross - exp. 03/2022\nOSHA 10 Construction - 2021",
+   "sentence": "CPR/AED and First Aid Certified, American Red Cross",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The CPR/First Aid card expired in March 2022. Listing it as 'Certified' with no date reads as current.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-19",
+   "source": "FLAGGER / LABORER\nBadger Paving\t2015-2018\nWisDOT flagger card, exp 2019",
+   "sentence": "Your flagger certification means you can start on a road crew right away.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The flagger card expired in 2019. He would need to recertify before flagging again.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-20",
+   "source": "I have my OSHA 10 from the reentry program. I want to get my OSHA 30 next so I can be a foreman someday",
+   "sentence": "With your OSHA 30, you can apply for crew lead roles now.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He has OSHA 10. OSHA 30 is only something he wants to get next.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-21",
+   "source": "construction laborer, day labor thru LaborMax 2025. no osha card yet, they said i need one for the bigger sites",
+   "sentence": "Add your OSHA 10 card to the Certifications section.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says 'no osha card yet.' There is no OSHA 10 card to list.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-22",
+   "source": "ENROLLED\nNCCER Core Curriculum + Carpentry Level 1\nWorkforce Development Center\nClass starts Nov 2026",
+   "sentence": "I am NCCER certified in Core Curriculum and Carpentry Level 1.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The class has not started yet. Being enrolled is not holding an NCCER credential.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-23",
+   "source": "DESHAWN PRUITT\ndpruitt@example.com\n414-555-0129\n\nGot my CDL permit (CLP) in August 2026. Starting behind the wheel at Roehl in October.",
+   "sentence": "You hold a Class A CDL, so put it right under your name.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "A CLP is a learner's permit, not a CDL. He has not started behind-the-wheel training yet.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-24",
+   "source": "CDL Class B course done at MATC in July. failed the road test twice, retesting in November",
+   "sentence": "You have your Class B CDL, so school bus and dump truck companies are a good fit.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He failed the road test twice and is retesting. He does not have a Class B CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-25",
+   "source": "EPA 608 Type I certified 2024 (small appliances).\nTook the Universal class but only passed Type I.",
+   "sentence": "EPA 608 Universal Certification, 2024",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He passed only Type I. Universal requires passing Core, Type I, Type II and Type III, so the sentence claims a wider certification than he has.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-26",
+   "source": "GOAL: HVAC tech\nPLAN: take EPA 608 in the spring, then apply at Jonson Controls",
+   "sentence": "Your EPA 608 certification makes you eligible for HVAC tech openings at Johnson Controls.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Taking EPA 608 in the spring is a plan. He does not hold the certification now.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-27",
+   "source": "I took care of my grandma for 5 years before she passed. I want to be a CNA. I dont have the training yet.",
+   "sentence": "As a certified nursing assistant with five years of caregiving, I am ready to join your team.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She wants to become a CNA and has not done the training. Family caregiving is not CNA certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-28",
+   "source": "took the servsafe food handler course online but never did the test at the end, my phone died and i never went back",
+   "sentence": "List your ServSafe Food Handler certificate under Certifications.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The ServSafe Food Handler certificate requires the end-of-course assessment, and she says she never took it.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-29",
+   "source": "OBJECTIVE\nGet into weldng. I want to go to welding school and get certified.\n\nEXPERIENCE\nLine Cook, Culver's, 2023-present",
+   "sentence": "Certified welder seeking a production welding position.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Welding school and certification are his goals. He has no welding training or certification yet.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-30",
+   "source": "signed up for CPR/first aid at the Y on the 14th, need it for the daycare van driver job",
+   "sentence": "Your CPR and First Aid certification covers the daycare van requirement.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She has only signed up for the class. She does not hold the card yet.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-31",
+   "source": "Amazon MKE1, Fulfillment Associate, 2024-2025\n- pallet jack only\n- watched the forklift video at orientation but they never signed me off to drive one",
+   "sentence": "Forklift Certified, Amazon, 2024",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "Forklift certification needs training plus a hands-on evaluation, and he says he was never signed off. Watching a video is not certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-32",
+   "source": "I got my CDL back in 2020 after my suspension. Drove for a gravel outfit 2020-2023. Then it got suspended again in 2024 over a ticket I couldnt pay, still suspended.",
+   "sentence": "Your CDL was reinstated in 2020, so you can go straight back to driving.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The 2020 reinstatement was undone by a 2024 suspension that he says is still in effect. The sentence ignores the later suspension.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-33",
+   "source": "Class A CDL 2012\nDrove for Heartland Express 2012 - 2016\nI was away 2016 to 2025. my CDL expired while i was down, have to retake the tests",
+   "sentence": "You still hold the Class A CDL you earned in 2012.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He says the CDL expired and he has to retake the tests. He does not still hold it.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-34",
+   "source": "OTR TEAM DRIVER\nWerner Enterprises, 2019 - 2020\nCDL training through Werner, 2019\n\nOut of work 2020 - 2026",
+   "sentence": "Your Class A CDL is current, so recruiters will call you first.",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "Driving OTR in 2019 and 2020 means he held a CDL then, but nothing says it is still valid after six years out of work. Depending on the state's renewal cycle it could be valid, so a reader could go either way. Calling it current is unsupported, so it is labeled for the safe side.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-35",
+   "source": "Crew Trainer | Culver's | 2021 - 2024\n  o Trained new hires on fryer and custard\n  o Took ServSafe 2023",
+   "sentence": "ServSafe Manager Certified, 2023",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "'Took ServSafe' could mean the Food Handler course or the Manager exam, and it does not say passed. Upgrading it to Manager Certified claims more than the source. Some readers take 'took ServSafe' to mean passed a test, so it is ambiguous and labeled for the safe side.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-36",
+   "source": "OSHA 30 Construction (online) - about halfway, on module 7 of 14",
+   "sentence": "OSHA 30 Construction, 2026",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The course is only half done. A plain resume line with a year reads as a finished OSHA 30 card.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-37",
+   "source": "NCCER Core class inside at the institution 2024. did all the modules. dont know if they ever put me in the registry",
+   "sentence": "Tell employers you hold an NCCER Core credential they can look up in the NCCER registry.",
+   "expect_flag": true,
+   "ambiguous": true,
+   "why": "He finished the modules but does not know whether the credential was ever recorded, so the sentence promises something employers may not be able to verify. He may well be in the registry, so it is ambiguous and labeled for the safe side.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-38",
+   "source": "applying to Culver's and McDonalds. do i need a food handler card?? i dont have one",
+   "sentence": "Mention your food handler card on your Culver's application.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "She says she does not have a food handler card.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-39",
+   "source": "Trying to get on the road crew this summer. Foreman said take the flagger class first. havent yet",
+   "sentence": "Certified Flagger, ATSSA",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "He has not taken the flagger class, so there is no flagger certification to list.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "over-40",
+   "source": "ANGELA VOSS  |  avoss@example.com  |  (262) 555-0184\n\nCNA 2010-2018, nursing homes in Racine\nmy CNA was revoked by the state in 2018",
+   "sentence": "Since you are a CNA, nursing homes are your fastest path back to work.",
+   "expect_flag": true,
+   "ambiguous": false,
+   "why": "The state revoked her CNA in 2018, and nothing says it was restored. She is not a CNA now.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-1",
+   "source": "EPA 608 Type I & II course, Northeast Wisconsin Technical College, finished 2026. I finished the EPA 608 class and I want an HVAC helper job.",
+   "sentence": "Take the EPA 608 exam to get certified, then list it when you apply for HVAC helper jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "The sentence treats the class as preparation and tells him to take the exam. It claims no certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-2",
+   "source": "no CDL yet. i want to drive trucks, been a forklift driver at Menards 2 yrs",
+   "sentence": "Many trucking companies pay for CDL school if you agree to drive for them for a set time.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "This is general advice about getting a CDL. It does not say he has one.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-3",
+   "source": "Forklift / Material Handler\nGreat Lakes Cold Storage\n2014-2019\nsit down + stand up forklift\ncert expired 2019",
+   "sentence": "Your forklift certification expired, and renewing it is a quick step with most employers.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It states plainly that the certification expired and treats renewal as a next step.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-4",
+   "source": "TONYA REED\n(608) 555-0177\ntreed@example.com\n\nCLASS A DRIVER, Schneider National, 2010-2015\n- regional reefer\nCDL suspended 2015, still suspended",
+   "sentence": "Former Class A driver, Schneider National, 2010-2015",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It describes past driving work with dates and 'former.' It does not claim she currently holds a CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-5",
+   "source": "CNA Training Program\nWaukesha County Technical College\n75 hours, completed Aug 2026\nstate skills test: Oct 2026",
+   "sentence": "CNA Training Program, Waukesha County Technical College, completed August 2026 (state exam scheduled October 2026)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It lists the training as training and says the state exam is still ahead.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-6",
+   "source": "Asst Manager - Walmart deli - 2023-now\nstudying for the ServSafe Manager exam, taking it Oct 20",
+   "sentence": "Mention that you take the ServSafe Manager exam on October 20, since deli managers often need it.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It presents the exam as upcoming. It does not say she holds the certificate.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-7",
+   "source": "COOK / KITCHEN LEAD\nDenny's, Kenosha\n2012 - 2017\nServSafe Manager (2013, lapsed 2018)",
+   "sentence": "Your ServSafe Manager certificate lapsed in 2018, so plan to retake the exam before you apply for kitchen manager jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It states the lapse and gives retaking the exam as the next step.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-8",
+   "source": "Welding Fundamentals, Gateway Technical College, 2025\n* MIG + flux core on plate\n* no AWS cert test yet",
+   "sentence": "Welding Fundamentals coursework, Gateway Technical College, 2025 (MIG and flux core)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It calls the entry coursework and makes no certification claim.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-9",
+   "source": "welded 3 years in the institution metal shop, mig and stick, made bunk frames and railings. never got a cert",
+   "sentence": "Three years of MIG and stick welding, building bunk frames and railings in a metal fabrication shop",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It describes his hands-on welding work and says nothing about a certification.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-10",
+   "source": "Nurse aide, Bethany Home, 2009-2016. CNA lapsed, not on the registry anymore",
+   "sentence": "Your CNA lapsed, so call the state nurse aide registry to ask whether you can retest or need to retrain.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It says plainly that the CNA lapsed and points to how to restore it.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-11",
+   "source": "CLP (Class A permit) Sept 2026\nCDL school at Roehl starts Nov 3",
+   "sentence": "Class A CDL permit (CLP), September 2026; CDL training at Roehl begins November 2026",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It names the permit correctly as a CLP and shows training has not started. It does not claim a CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-12",
+   "source": "doing demo and cleanup for a temp service. want my osha 10, dont have it",
+   "sentence": "Getting your OSHA 10 card takes a short class and would help you get on bigger job sites.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It treats OSHA 10 as something to get and does not say he has it.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-13",
+   "source": "Certifications:\nCPR / First Aid (Red Cross) exp 2022\nFood Handler (WI) 2025",
+   "sentence": "Your CPR and First Aid card expired in 2022, and a one-day class would renew it.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It states the expiration and describes renewal as a future step.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-14",
+   "source": "Flagger - Payne & Dolan - summers 2016-2018\nflagger card expired",
+   "sentence": "You worked as a flagger for three summers, and retaking the flagger class would make your card current again.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It credits the past work and makes clear the card is not current now.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-15",
+   "source": "EPA 608 - Type I only, passed 2024\nfailed Type II, want to retake",
+   "sentence": "EPA 608 Type I Certified, 2024",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "He passed Type I in 2024. The line claims exactly that and nothing wider.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-16",
+   "source": "i took care of my uncle after his stroke for 3 years. i want to be a CNA but havent started classes",
+   "sentence": "I cared for my uncle for three years after his stroke, and I am ready to start CNA training.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It presents CNA as training he is about to start, not a credential he holds.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-17",
+   "source": "OBJECTIVE: learn to weld and get certified\nEXPERIENCE: general laborer, Menards yard, 2024-2026",
+   "sentence": "Seeking a welder helper role while I work toward a welding certification.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It frames certification as a goal he is working toward.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-18",
+   "source": "want to apply at Culver's. no food handler card",
+   "sentence": "In many areas a food handler card comes from a short online class, so check whether Culver's needs one before you apply.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It is advice on getting a card and does not claim she has one.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-19",
+   "source": "CDL revoked 2019 (lifetime). used to haul for a grain co-op.",
+   "sentence": "Because your CDL was revoked, look at driving jobs that do not need one, like box trucks under 26,001 pounds.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It accepts the revocation and suggests driving jobs that do not need a CDL.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-20",
+   "source": "Enrolled - NCCER Core + Electrical Level 1 - Milwaukee Area Workforce Center - begins January 2027",
+   "sentence": "Enrolled: NCCER Core and Electrical Level 1, Milwaukee Area Workforce Center, starting January 2027",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It labels the entry as an enrollment with a future start date.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-21",
+   "source": "OSHA 30 General Industry online, 9 of 15 modules done",
+   "sentence": "OSHA 30 General Industry (in progress)",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "Marking it in progress matches a course that is only partly done.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-22",
+   "source": "Class B CDL class done at Gateway, July 2026. failed the skills test once, going back in November",
+   "sentence": "You finished the Class B course, and passing the skills test in November is the last step to your CDL.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It credits the finished course and makes clear the CDL comes only after he passes the skills test.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-23",
+   "source": "Amazon, 2025\npallet jack\nnever got forklift certified there",
+   "sentence": "List your pallet jack work, and ask your next employer to train and certify you on forklift.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It treats forklift certification as something he still needs to get.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-24",
+   "source": "CDL-A 2011-2017, drove for Heartland. expired while i was locked up. need to take the tests again",
+   "sentence": "Your CDL expired, so plan to retake the knowledge and skills tests before you apply to Heartland or other carriers.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It states the expiration and names retesting as the next step.",
+   "group": "cred-overstated"
+  },
+  {
+   "id": "honest-25",
+   "source": "Got my CDL back in 2021 after the first suspension, then it was suspended again in 2025 for unpaid fines.",
+   "sentence": "Your CDL was suspended again in 2025, so check with the DMV about the fines before you apply for driving jobs.",
+   "expect_flag": false,
+   "ambiguous": false,
+   "why": "It reports the most recent status, suspended, and does not rely on the earlier reinstatement.",
+   "group": "cred-overstated"
+  }
+ ]
+}

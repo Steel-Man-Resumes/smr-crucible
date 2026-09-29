@@ -4,21 +4,25 @@
  * The resume format asks for "JOB TITLE | Company | City, State | Years", and
  * when the person gave no city for a job the model filled in their home town. A
  * sample resume put a stamping plant the person named without a city in their
- * current city. A city stays on a job line only if the person gave it near that
- * same employer in their own words; otherwise that part of the line is taken
- * out. When the employer cannot be found in their words at all, nothing can be
- * judged and the city stays. Lines with fewer than four parts (contact lines)
- * are not touched.
+ * current city.
+ *
+ * The check is deliberately narrow, because deleting a true city is the worse
+ * mistake and resume layouts are too varied to read reliably (two reviews found
+ * layout rules that deleted true cities). A city is taken off a job line only
+ * when the person's words mention that city ONLY on their contact lines (email,
+ * phone, street address, or the "City, ST" line in their header). Any other
+ * mention anywhere, in any layout, keeps it. A city found nowhere in their
+ * words, or a neighbor job's city borrowed, is left to the truth check. Lines
+ * with fewer than four parts (contact lines) are not touched.
  */
 
 const CITY_SEG = /^[A-Z][A-Za-z .'-]+,\s*[A-Z]{2}$/;
 const YEAR = /\b(19|20)\d\d\b/;
-const BULLET = /^\s*[-\u2022*]/;
+const SAME_TOWN = /\b(same (?:town|city)|home ?town|in town|right here|here in town|local(?:ly)?)\b/i;
 const COMPANY_NOISE = new Set(["inc", "llc", "co", "corp", "corporation", "company", "ltd", "the", "of", "and"]);
-const STATE_CODES = new Set(
-  "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR".split(" ")
-);
-const ABBREV: Record<string, string> = { saint: "st", fort: "ft", mount: "mt" };
+const EMAIL = /\S+@\S+\.[a-z]{2,}/i;
+const PHONE = /(?:\(\d{3}\)\s*|\b\d{3}[-.\s])\d{3}[-.\s]\d{4}\b/;
+const STREET = /\b\d+\s+(?:[NSEW]\.?\s+)?[A-Za-z0-9.]+(?:\s+[A-Za-z0-9.]+){0,2}\s+(?:st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|ct|court|way|pl|place|pkwy|parkway|hwy|highway|cir|circle|ter|terrace|apt|unit)\b/i;
 
 /** Lowercase words. Apostrophes inside a word join it ("McDonald's" is
  *  "mcdonalds"); hyphens split it, so "Dallas-Fort Worth" still names Dallas.
@@ -30,65 +34,44 @@ function norm(s: string, joined = false): string {
     .replace(/\bst\.?\s/g, "saint ")
     .replace(/\bft\.?\s/g, "fort ")
     .replace(/\bmt\.?\s/g, "mount ")
-    .replace(joined ? /(?<=[a-z0-9])['\u2019.-](?=[a-z0-9])/g : /(?<=[a-z0-9])['\u2019](?=[a-z0-9])/g, "")
+    .replace(joined ? /(?<=[a-z0-9])['’.-](?=[a-z0-9])/g : /(?<=[a-z0-9])['’](?=[a-z0-9])/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()} `;
 }
 
+function companyWords(company: string, joined: boolean): string[] {
+  return norm(company, joined).trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
+}
+
 function namesCompany(line: string, company: string): boolean {
-  const words = mainWords(company);
-  const joinedWords = norm(company, true).trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
   const has = (text: string, ws: string[]) => ws.length > 0 && ws.every((w) => text.includes(` ${w} `));
-  return has(norm(line), words) || has(norm(line, true), joinedWords);
+  return has(norm(line), companyWords(company, false)) || has(norm(line, true), companyWords(company, true));
 }
 
-function mainWords(company: string): string[] {
-  return norm(company).trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
-}
+const SHORT = (l: string) => l.trim().split(/\s+/).length <= 15;
 
-/** State codes the person wrote right after this city: real uppercase codes
- *  only, so "Kansas City to" or "Grand Rapids in 2013" is never read as a state.
- *  A line written all in capitals can't tell "IN" the word from Indiana, so its
- *  states are not read at all (the city is then judged without one). */
-function statesAfter(lines: string[], city: string): string[] {
-  const words = city.split(" ").map((w) => (ABBREV[w] ? `(?:${w}|${ABBREV[w]}\\.?)` : w));
-  const re = new RegExp(String.raw`\b${words.join(String.raw`[\s.,'-]+`)}\b[\s,]+([A-Za-z]{2})\b`, "gi");
-  return lines
-    .filter((l) => /[a-z]/.test(l))
-    .flatMap((l) => Array.from(l.matchAll(re), (m) => m[1]))
-    .filter((c) => c === c.toUpperCase() && STATE_CODES.has(c));
-}
-
-const PLACE_LINE = /^\s*[A-Z][A-Za-z .'-]*,?\s+[A-Z]{2}\s*$/;
-
-/** The employer's block in the person's words. It holds:
- *  - the line naming the employer;
- *  - the line before it, only when that line opens the block (nothing or a
- *    blank line above it), so the previous job's city line is never borrowed;
- *  - the lines after it up to this job's own dates;
- *  - after the dates, one "City, ST" line right below them, and bullet lines.
- *  It stops at a blank line, a "|" line, or the first other line after the
- *  dates (the next job's title or company). */
-function blockAround(lines: string[], i: number): string[] {
-  const block: string[] = [];
-  const prev = lines[i - 1];
-  const opensBlock = i - 2 < 0 || !lines[i - 2].trim();
-  if (prev && prev.trim() && opensBlock && !YEAR.test(prev) && !prev.includes(" | ")) block.push(prev);
-  block.push(lines[i]);
-  let sawYear = YEAR.test(lines[i]);
-  let justAfterDates = sawYear;
-  for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
-    const l = lines[j];
-    if (!l.trim() || l.includes(" | ")) break;
-    if (BULLET.test(l)) { block.push(l); justAfterDates = false; continue; }
-    if (sawYear) {
-      if (justAfterDates && PLACE_LINE.test(l)) { block.push(l); justAfterDates = false; continue; }
-      break; // past this job's dates: the next job starts
-    }
-    block.push(l);
-    if (YEAR.test(l)) { sawYear = true; justAfterDates = true; }
+/** Indexes of the person's contact lines. The header is the first block of
+ *  lines (up to a blank line or a date, at most six lines); when it holds an
+ *  email, phone or street address, its short lines without a date are contact
+ *  lines. Outside the header, only a short line with an email or phone counts:
+ *  a long story line that happens to include a phone number is not a contact
+ *  line, and neither is an employer's street address. */
+function contactLines(lines: string[]): Set<number> {
+  const out = new Set<number>();
+  const header: number[] = [];
+  for (let i = 0; i < lines.length && header.length < 6; i++) {
+    if (!lines[i].trim()) { if (header.length) break; continue; }
+    if (YEAR.test(lines[i])) break;
+    header.push(i);
   }
-  return block;
+  const hasContact = (l: string) => EMAIL.test(l) || PHONE.test(l) || STREET.test(l);
+  if (header.some((i) => hasContact(lines[i]))) {
+    for (const i of header) if (SHORT(lines[i]) && lines[i].length <= 200) out.add(i);
+  }
+  lines.forEach((l, i) => {
+    if (SHORT(l) && (EMAIL.test(l) || PHONE.test(l))) out.add(i);
+  });
+  return out;
 }
 
 export function stripUnsupportedJobCities(
@@ -96,6 +79,7 @@ export function stripUnsupportedJobCities(
   source: string
 ): { text: string; removed: number; removedCities: string[] } {
   const sourceLines = source.split("\n");
+  const contact = contactLines(sourceLines);
   const removedCities: string[] = [];
   const lines = resume.split("\n").map((line) => {
     const segs = line.split(/\s+\|\s+/);
@@ -103,30 +87,16 @@ export function stripUnsupportedJobCities(
     const company = segs[1].trim();
     const idx = segs.findIndex((seg, i) => i >= 2 && CITY_SEG.test(seg.trim()));
     if (idx < 0 || !company) return line;
-    const words = mainWords(company);
-    const city = norm(segs[idx].split(",")[0]).trim();
-    const state = (segs[idx].split(",")[1] || "").trim().toUpperCase();
-    if (!words.length || !city) return line;
-    let named = false;
-    let supported = false;
-    sourceLines.forEach((l, i) => {
-      if (supported) return;
-      if (!namesCompany(l, company)) return;
-      named = true;
-      const block = blockAround(sourceLines, i);
-      // A city that is only part of the company name does not count: take the
-      // company name out as a whole phrase, then look for the city.
-      let text = norm(block.join(" "));
-      for (const phrase of [norm(company), ` ${words.join(" ")} `]) text = text.split(phrase).join(" ");
-      if (!text.includes(` ${city} `)) return;
-      // If the person wrote a state right after the city, it has to match.
-      const given = statesAfter(block, city);
-      if (given.length && state && !given.includes(state)) return;
-      supported = true;
-    });
-    // If we cannot find the employer in the person's words, we cannot judge its
-    // city either, so it stays.
-    if (supported || !named) return line;
+    const city = norm(segs[idx].split(",")[0]);
+    if (!city.trim()) return line;
+    // Every line of the person's words that mentions this city.
+    const mentions = sourceLines.map((l, i) => (norm(l).includes(city) ? i : -1)).filter((i) => i >= 0);
+    // Found nowhere: nothing to judge by here. Found anywhere but a contact line
+    // (or on a contact line that also names this employer): the person gave it.
+    if (!mentions.length) return line;
+    if (mentions.some((i) => !contact.has(i) || namesCompany(sourceLines[i], company))) return line;
+    // "Jewel-Osco, same town": the person tied the job to where they live.
+    if (sourceLines.some((l) => namesCompany(l, company) && SAME_TOWN.test(l))) return line;
     removedCities.push(`${company}: ${segs[idx].trim()}`);
     return segs.filter((_, i) => i !== idx).join(" | ");
   });

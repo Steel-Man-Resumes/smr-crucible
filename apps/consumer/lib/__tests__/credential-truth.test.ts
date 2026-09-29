@@ -232,3 +232,64 @@ describe("'certified' with its own object", () => {
   it("certified in food safety, then a course credential, is kept", () =>
     assert.equal(claimsMoreThanGiven("You are certified in food safety and finished the EPA 608 course.", courseOnly), false));
 });
+
+describe("third pass: any sign of holding it wins", () => {
+  const flags = (src: string, text: string) => claimsMoreThanGiven(text, credentialStatuses(src));
+  const asset = "Your CDL is a real asset for driving jobs.";
+  for (const src of [
+    "My CDL was suspended for 2 years after my OWI, reinstated in 2020",
+    "CDL suspended for DUI in 2015, got it back in 2018",
+    "CDL revoked for 3 years, reinstated 2022",
+    "My CDL got suspended when I was locked up, reinstated 2023",
+    "CDL was suspended for unpaid tickets, it's valid now",
+    "Class A CDL\nOTR driver, Werner, 2016 - present\n\nMy CDL was suspended for a year in 2012 after a DUI.",
+    "Class A CDL, current\n\nMy CDL was suspended in 2012 after my OWI.",
+    "Class A CDL (valid through 2027)\n\nCDL was revoked in 2014 because of my conviction",
+    "CDL - active\n\nCDL suspended in 2014",
+    "Got my CDL in 2016 and drove for Werner since\n\nCDL was suspended in 2012",
+    "Class A CDL, 2016 - present\nCDL suspended for 18 months in 2012",
+    "Went through CDL training at Roehl for 4 weeks, passed the road test",
+    "CDL training at Roehl for 3 weeks, got my license",
+    "I'm trying to get a CDL job close to home",
+    "I want to get a CDL A job with home time",
+    "I want to start using my CDL again",
+    "A lot of jobs want a CDL, which I have",
+    "Hoping to get my CDL job back at Werner",
+    "I need to take my CDL physical again next month",
+    "Drove for Werner 8 years, no CDL or DOT violations",
+    "Without my CDL, I'd be stuck in warehouse work",
+  ]) it(`held: ${src.slice(0, 50)}`, () => assert.equal(flags(src, asset), false));
+
+  for (const [src, text] of [
+    ["EPA 608 prep course, passed the Universal exam", "Your EPA 608 certification opens HVAC doors."],
+    ["Completed the CNA program and sat for the state exam, passed", "Your CNA certification opens doors in home health."],
+    ["ServSafe class for my job at Culver's, passed the exam", "Your ServSafe certification helps."],
+    ["Welding program at MATC for 2 years, AWS certified", "You are a certified welder with MATC training behind you."],
+    ["Took CNA classes when I was locked up and passed the state test", "Your CNA certification opens doors."],
+    ["Took the CNA class to get certified and passed in 2021", "Your CNA certification opens doors."],
+    ["Experience as a certified welder for 6 years\nTook a welding class at MATC in 2019", "You are a certified welder."],
+  ] as const) it(`held: ${src.slice(0, 50)}`, () => assert.equal(flags(src, text), false));
+
+  const cprHeld = credentialStatuses("CPR and first aid card, 2024\nEPA 608 Type I and II course, finished 2026");
+  for (const s of [
+    "Along with the EPA 608 course you are certified in CPR and first aid.",
+    "With the EPA 608 course done you are also certified in CPR.",
+  ]) it(`kept: ${s.slice(0, 50)}`, () => assert.equal(claimsMoreThanGiven(s, cprHeld), false));
+  it("kept: You're OSHA certified with the EPA 608 course behind you.", () =>
+    assert.equal(claimsMoreThanGiven("You're OSHA certified with the EPA 608 course behind you.", credentialStatuses("OSHA 10 card, 2021\nEPA 608 course, 2026")), false));
+
+  it("a long line of spaces is quick", () => {
+    const t = Date.now();
+    credentialStatuses("experience" + " ".repeat(50000) + "x, CDL");
+    assert.ok(Date.now() - t < 200);
+  });
+
+  // Still caught: the cases the check exists for.
+  it("still caught: expired and nothing current", () =>
+    assert.equal(flags("Forklift operator, 2013 - 2018\nForklift certified 2013 (expired)", "Your forklift certification is current."), true));
+  it("still caught: course only", () =>
+    assert.equal(flags("EPA 608 Type I and II course, finished 2026", "Tell them you have EPA 608 and want HVAC."), true));
+  it("still caught: suspended, only wanting it back", () =>
+    assert.equal(flags("CDL suspended in 2019, trying to get it reinstated", "Your CDL is active, so apply now."), true));
+  it("still caught: wanted", () => assert.equal(flags("I want to get my CDL", "You hold a CDL."), true));
+});
