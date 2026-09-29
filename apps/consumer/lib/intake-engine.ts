@@ -14,7 +14,7 @@
  * malformed output so the intake can never trap the user).
  */
 
-import { sanitizeForPrompt } from "./sanitize";
+import { sanitizeForPrompt, sanitizeOrEmpty } from "./sanitize";
 
 export interface IntakeContext {
   targetJob?: string;
@@ -51,18 +51,22 @@ export function buildFollowupsSystemPrompt(
   plainLanguage = false
 ): string {
   const known: string[] = [];
-  if (context.targetJob) known.push(`Target role: ${sanitizeForPrompt(context.targetJob, 120)}`);
-  if (context.headline) known.push(`Their headline: ${sanitizeForPrompt(context.headline, 200)}`);
-  if (context.strengths?.length) {
-    known.push(
-      `Their strengths: ${context.strengths.slice(0, 8).map((s) => sanitizeForPrompt(s, 80)).join("; ")}`
-    );
-  }
-  if (context.skills?.length) {
-    known.push(
-      `Their skills: ${context.skills.slice(0, 12).map((s) => sanitizeForPrompt(s, 60)).join(", ")}`
-    );
-  }
+  // context is the client-supplied request body: a non-string or blank value is
+  // left out rather than printed as "not specified" or an empty label.
+  const targetJob = sanitizeOrEmpty(context.targetJob, 120);
+  if (targetJob) known.push(`Target role: ${targetJob}`);
+  const headline = sanitizeOrEmpty(context.headline, 200);
+  if (headline) known.push(`Their headline: ${headline}`);
+  // Blank items are dropped BEFORE the cap, so an empty strength title never
+  // reaches this "already known" block as a strength called "not specified".
+  const strengths = Array.isArray(context.strengths)
+    ? context.strengths.map((s) => sanitizeOrEmpty(s, 80)).filter(Boolean).slice(0, 8)
+    : [];
+  if (strengths.length) known.push(`Their strengths: ${strengths.join("; ")}`);
+  const skills = Array.isArray(context.skills)
+    ? context.skills.map((s) => sanitizeOrEmpty(s, 60)).filter(Boolean).slice(0, 12)
+    : [];
+  if (skills.length) known.push(`Their skills: ${skills.join(", ")}`);
   if (context.hasRecord) {
     known.push("They have a criminal record. This is already known, so do NOT ask them to describe the offense.");
   }

@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
@@ -72,7 +72,10 @@ async function handlePost(request: Request) {
   }
 
   const strengths: string[] = Array.isArray(forgeContext?.strengths)
-    ? forgeContext.strengths.map((s: any) => (typeof s === "string" ? s : s?.title)).filter(Boolean)
+    ? forgeContext.strengths
+        .map((s: any) => (typeof s === "string" ? s : s?.title))
+        // Strings only: a non-string title would reach the prompt as "not specified".
+        .filter((s: unknown): s is string => typeof s === "string" && s !== "")
     : [];
   const candidateName: string =
     typeof forgeContext?.name === "string" ? forgeContext.name.trim() : "";
@@ -84,11 +87,19 @@ async function handlePost(request: Request) {
     ? `\nSign the email as: ${sanitizeForPrompt(candidateName, 80)}`
     : "";
 
+  // Blank stays blank: this email goes to an employer, so the model gets an
+  // explicit instruction for a missing field, never a stand-in word to echo.
+  // Older rows can hold the literal "not specified" as a location; skip it.
+  const role = sanitizeOrEmpty(app.job_title);
+  const company = sanitizeOrEmpty(app.company);
+  const loc = sanitizeOrEmpty(app.location, 120);
+  const locLine = loc && loc.toLowerCase() !== "not specified" ? `\n- Location: ${loc}` : "";
+
   const prompt = `You are t.ROY, helping a job seeker apply for a job by EMAIL because the employer offers no online application link.
 
 THE JOB:
-- Role: ${sanitizeForPrompt(app.job_title)}
-- Company: ${sanitizeForPrompt(app.company)}${app.location ? `\n- Location: ${sanitizeForPrompt(app.location, 120)}` : ""}${candidateBlock}${nameBlock}
+- Role: ${role || "(not given: say 'the open position', never write a placeholder)"}
+- Company: ${company || "(not given: say 'your company', never write a placeholder)"}${locLine}${candidateBlock}${nameBlock}
 
 Write a short, professional, warm application email the candidate can send with their resume and cover letter. Reference one relevant strength if provided. Assume the resume is attached. Keep it under 130 words. Do NOT mention any criminal record. Do NOT invent an email address, hiring manager name, or facts about the candidate.
 
@@ -105,7 +116,9 @@ Return JSON only:
       userId: session.user.id,
     });
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const fallbackSubject = `Application for ${app.job_title} at ${app.company}`;
+    // A non-blank title or company goes in verbatim, as it always did; only a
+    // blank one is left out or reworded.
+    const fallbackSubject = `Application for ${role ? app.job_title : "the open position"}${company ? ` at ${app.company}` : ""}`;
     let result: { subject: string; body: string; whereToFind: string };
     if (jsonMatch) {
       try {

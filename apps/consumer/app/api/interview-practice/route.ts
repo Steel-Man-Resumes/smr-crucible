@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
@@ -79,8 +79,14 @@ async function handlePost(request: Request) {
           ]
             .filter(Boolean)
             .join("; ");
-          const head = sanitizeForPrompt(p.bullet || p.role || "", 180);
-          return facts ? `- ${head} (${facts})` : `- ${head}`;
+          // "" when there is no bullet or role, so an entry with no facts is
+          // dropped below instead of becoming "- not specified".
+          const head = sanitizeOrEmpty(p.bullet || p.role, 180);
+          return facts
+            ? `- ${head || "(accomplishment not named)"} (${facts})`
+            : head
+              ? `- ${head}`
+              : "";
         })
         .filter((l: string) => l.trim().length > 3)
         .join("\n");
@@ -92,7 +98,8 @@ async function handlePost(request: Request) {
       applicationBlock += `\n\nTHE JOB POSTING THEY ARE APPLYING TO. Tailor your questions to THESE specific requirements:\n${sanitizeForPrompt(jobDescription, 2000)}`;
     }
 
-    const sanitizedTargetRole = sanitizeForPrompt(config.targetRole);
+    // "" for a blank role, so the role fallbacks in the prompts below fire.
+    const sanitizedTargetRole = sanitizeOrEmpty(config.targetRole);
     const sanitizedInterviewType = sanitizeForPrompt(config.interviewType, 100);
 
     // Phase 5.9 progressive practice: skills the user chose to target this run,
@@ -117,7 +124,7 @@ async function handlePost(request: Request) {
 
     let systemPrompt = `${interviewResearch}
 
-You are a hiring manager conducting a job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
+You are a hiring manager conducting a job interview${sanitizedTargetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
 
 INTERVIEW STYLE: ${sanitizedInterviewType}
 ${config.interviewType === "behavioral" ? "Ask STAR-method questions (Situation, Task, Action, Result). Press for specifics." : ""}
@@ -138,7 +145,7 @@ ${isDisclosure ? `DISCLOSURE ELEMENT:
 
     if (shouldWrapUp) {
       // Generate feedback instead of continuing
-      systemPrompt = `You were conducting a mock job interview${config.targetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
+      systemPrompt = `You were conducting a mock job interview${sanitizedTargetRole ? ` for a ${sanitizedTargetRole} position` : ""}.
 ${isDisclosure ? "The interview included a criminal record disclosure element." : ""}
 ${candidateBlock}${applicationBlock}
 

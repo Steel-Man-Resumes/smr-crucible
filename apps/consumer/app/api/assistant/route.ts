@@ -19,7 +19,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
-import { sanitizeForPrompt } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import { loadSkillsForContext } from "@/lib/skills-loader";
@@ -248,19 +248,19 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // Persist the user turn for cross-session memory (authed only, and only
   // when the newest message IS the user speaking -- a client-tool
   // continuation POST ends with an assistant tool-result message).
-  const userTurnText = lastUserText(messages);
+  // Stored rows use sanitizeOrEmpty and are tested after sanitizing, so a
+  // blank or whitespace-only turn is never saved (and never as a label).
+  const storedTurn = sanitizeOrEmpty(lastUserText(messages), 4000);
   if (
     userId &&
     !isDisclosureRehearsal &&
     enhancedConsent &&
     endsWithUserTurn(messages) &&
-    userTurnText
+    storedTurn
   ) {
-    await appendCoachMessage(
-      userId,
-      "user",
-      sanitizeForPrompt(userTurnText, 4000)
-    ).catch((err) => console.error("Assistant memory persist failed:", err));
+    await appendCoachMessage(userId, "user", storedTurn).catch((err) =>
+      console.error("Assistant memory persist failed:", err)
+    );
   }
 
   const startTime = Date.now();

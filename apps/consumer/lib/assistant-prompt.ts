@@ -21,7 +21,7 @@
 
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { RESEARCH_CONTEXT } from "./research-context";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import type { UserFullContext } from "./use-user-context";
 import {
   computeCurrentBlock,
@@ -228,6 +228,8 @@ The user opened the assistant to talk. Be responsive to whatever they need: ques
 function buildPageContext(context: AssistantContext): string {
   const page = context.currentPage;
   const parts: string[] = [];
+  // Blank stays blank, so a missing method drops out instead of reading "not specified".
+  const resumeMethod = sanitizeOrEmpty(context.resumeMethod, 100);
 
   // Deep page-specific intelligence
   const pageIntel: Record<string, string> = {
@@ -245,7 +247,7 @@ COMMON QUESTIONS: "Does this affect what I see?" (Yes. It adjusts how much guida
 
     resume: `PAGE: RESUME INTAKE (Four paths to get a resume in)
 The user can: upload a file/image, download from LinkedIn/Indeed, use a free builder, or build one here with guided questions. We accept anything: PDFs, Word docs, photos of paper resumes, screenshots.
-YOU KNOW: ${context.hasResume ? `They've provided a resume (via ${sanitizeForPrompt(context.resumeMethod, 100)}).` : "They haven't provided a resume yet."}
+YOU KNOW: ${context.hasResume ? `They've provided a resume${resumeMethod ? ` (via ${resumeMethod})` : ""}.` : "They haven't provided a resume yet."}
 PROACTIVE: If they're stuck, the #1 thing they need to hear: "Anything works. A photo of a printed resume is fine. Even a list of jobs you've had." If they say they don't have one, guide them to the "I don't have one yet" option. It builds one through simple questions.
 COMMON QUESTIONS: "I don't have a resume." "Can I use a photo?" (Yes.) "What if my resume has gaps?" (That's fine. Gaps are normal, and the AI handles them.) "My resume is old/bad." (We only read it for skills. Nobody is judging it.)`,
 
@@ -361,7 +363,7 @@ PROACTIVE: Only help if asked. This is admin territory. Don't be chatty.`,
   }
 
   if (context.hasResume) {
-    stateLines.push(`Resume: provided (${sanitizeForPrompt(context.resumeMethod, 100) || "unknown method"})`);
+    stateLines.push(`Resume: provided (${resumeMethod || "unknown method"})`);
   }
 
   if (context.goals?.length) {

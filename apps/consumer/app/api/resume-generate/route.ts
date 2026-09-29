@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { sanitizeForPrompt, sanitizeArray } from "@/lib/sanitize";
+import { sanitizeForPrompt, sanitizeOrEmpty, sanitizeArrayOrEmpty } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
 import { isMockEnabled, MOCK_RESUME } from "@/lib/mock-ai";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
@@ -44,14 +44,17 @@ async function handlePost(request: Request) {
     }
 
     // Build context from Forge data if available
-    const sanitizedTargetJob = sanitizeForPrompt(targetJob);
-    const sanitizedTargetCompany = sanitizeForPrompt(targetCompany);
-    const sanitizedSkills = sanitizeArray(skills);
-    const sanitizedBullets = sanitizeArray(existingBullets, 20, 500);
+    // Blank stays blank here; each prompt below writes its own label for a
+    // missing value, so no placeholder can be echoed into the person's resume.
+    const sanitizedTargetJob = sanitizeOrEmpty(targetJob);
+    const sanitizedTargetCompany = sanitizeOrEmpty(targetCompany);
+    const sanitizedSkills = sanitizeArrayOrEmpty(skills);
+    const sanitizedBullets = sanitizeArrayOrEmpty(existingBullets, 20, 500);
 
     const forgeContext = [];
     if (forgeNarrative) forgeContext.push(`About this person: ${sanitizeForPrompt(forgeNarrative, 1000)}`);
-    if (forgeStrengths?.length) forgeContext.push(`Key strengths: ${sanitizeArray(forgeStrengths)}`);
+    const strengthsList = sanitizeArrayOrEmpty(forgeStrengths);
+    if (strengthsList) forgeContext.push(`Key strengths: ${strengthsList}`);
     if (jobListingUrl) forgeContext.push(`Job listing: ${sanitizeForPrompt(jobListingUrl, 2000)}`);
     const forgeBlock = forgeContext.length > 0 ? `\n\n${forgeContext.join("\n")}` : "";
 
@@ -63,10 +66,10 @@ async function handlePost(request: Request) {
     if (action === "suggest_summary") {
       prompt = `${resumeResearch}
 
-Write a 2-3 sentence professional summary for someone applying for a ${sanitizedTargetJob} position${targetCompany ? ` at ${sanitizedTargetCompany}` : ""}.
+Write a 2-3 sentence professional summary for someone applying for ${sanitizedTargetJob ? `a ${sanitizedTargetJob} position` : "a job (no target role given, keep it general)"}${sanitizedTargetCompany ? ` at ${sanitizedTargetCompany}` : ""}.
 
-Their skills include: ${sanitizedSkills}.
-${existingBullets?.length ? `They've described their experience as: ${sanitizedBullets}` : ""}${forgeBlock}
+Their skills include: ${sanitizedSkills || "(none listed)"}.
+${sanitizedBullets ? `They've described their experience as: ${sanitizedBullets}` : ""}${forgeBlock}
 
 RULES:
 - Write at a 6th grade reading level
@@ -77,7 +80,7 @@ RULES:
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
-      prompt = `Suggest one experience bullet point for a ${sanitizedTargetJob} resume.
+      prompt = `Suggest one experience bullet point for ${sanitizedTargetJob ? `a ${sanitizedTargetJob} resume` : "a general resume (no target role given)"}.
 Their skills: ${sanitizedSkills || "general"}.
 Existing bullets: ${sanitizedBullets || "none yet"}.${forgeBlock}
 

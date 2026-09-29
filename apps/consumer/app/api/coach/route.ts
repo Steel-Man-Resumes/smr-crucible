@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 import { streamText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
-import { sanitizeForPrompt } from "@/lib/sanitize";
+import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import {
@@ -124,9 +124,12 @@ export async function POST(request: Request) {
   // newest message is the user speaking. A client-tool continuation POST ends
   // with an assistant tool-result message; persisting there would double-insert
   // the previous user turn.
+  // Stored rows use sanitizeOrEmpty and are tested after sanitizing, so a
+  // blank or whitespace-only turn is never saved (and never as a label).
   const userTurnText = lastUserText(messages);
-  if (enhancedConsent && endsWithUserTurn(messages) && userTurnText) {
-    await appendCoachMessage(userId, "user", sanitizeForPrompt(userTurnText, 4000));
+  const storedTurn = sanitizeOrEmpty(userTurnText, 4000);
+  if (enhancedConsent && endsWithUserTurn(messages) && storedTurn) {
+    await appendCoachMessage(userId, "user", storedTurn);
   }
 
   const startTime = Date.now();

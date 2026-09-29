@@ -8,7 +8,7 @@
  * one copy means the two can never drift.
  */
 
-import { sanitizeArray, sanitizeForPrompt } from "./sanitize";
+import { sanitizeArray, sanitizeArrayOrEmpty, sanitizeForPrompt } from "./sanitize";
 
 export const REALTIME_MODEL = "gpt-realtime-2";
 
@@ -38,7 +38,9 @@ export function buildVoiceInstructions(body: VoiceSessionBody): string {
   const narrative = sanitizeForPrompt(forge.narrative, 700);
   const includeDisclosure =
     config.includeDisclosure || config.interviewType === "disclosure";
-  const focusAreas = sanitizeArray(config.focusAreas, 4, 60);
+  // "" when there is no focus list (the normal case), so the guard below can
+  // skip the line instead of telling the model the focus is "not specified".
+  const focusAreas = sanitizeArrayOrEmpty(config.focusAreas, 4, 60);
 
   return `You are a professional hiring manager running a live voice mock interview.
 
