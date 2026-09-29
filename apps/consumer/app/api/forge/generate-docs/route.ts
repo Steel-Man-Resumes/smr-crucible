@@ -223,6 +223,7 @@ async function handlePost(request: Request) {
         verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
         // Per document, so the page can say which one went unchecked.
         verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        hasFabricationByDoc: { resume: resumeCheck.hasFabrication, cover_letter: coverCheck.hasFabrication },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
       },

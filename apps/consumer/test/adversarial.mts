@@ -229,7 +229,22 @@ section("truth check accounting");
     { doc: "resume", flags: [{ claim: "Five-year accident-free record", why: "" }], original: orig, final: fin },
     { doc: "cover_letter", flags: [{ claim: "renewable", why: "" }], original: "It is renewable.", final: "It is renewable." },
   ]);
-  check("counts come from outcomes", acc.removed === 1 && acc.residual === 1 && acc.outcomes.length === 2, JSON.stringify(acc));
+  // "renewable" is in both final documents: the letter's flag is found in the resume too.
+  check("counts come from outcomes", acc.removed === 1 && acc.residual === 2 && acc.outcomes.length === 3, JSON.stringify(acc));
+  const cross = accountFlags([
+    { doc: "resume", flags: [{ claim: "Forklift Certification (2013, renewable)", why: "" }], original: "Forklift Certification (2013, renewable)", final: "Forklift Certification (2013, expired)" },
+    { doc: "cover_letter", flags: [], original: "My forklift certification is renewable.", final: "My forklift certification is renewable." },
+  ]);
+  check("a claim the resume check caught is also found in the letter",
+    cross.outcomes.some((o) => o.doc === "cover_letter" && o.status !== "removed"), JSON.stringify(cross.outcomes));
+  check("a trimmed safety claim is changed, not removed",
+    flagOutcome({ claim: "Maintained a clean safety record across five years of daily forklift operation.", why: "" },
+      "Maintained a clean safety record across five years of daily forklift operation.", "Clean safety record.") === "changed");
+  check("a trimmed attendance claim is changed, not removed",
+    flagOutcome({ claim: "Brings reliable attendance, physical stamina, and steady work under time pressure.", why: "" },
+      "Brings reliable attendance, physical stamina, and steady work under time pressure.", "Reliable attendance.") === "changed");
+  check("a short claim with one key word, reworded around it, is changed",
+    flagOutcome({ claim: "is renewable", why: "" }, "It is renewable.", "It stays renewable.") === "changed");
   const dup = accountFlags([{ doc: "resume", flags: [{ claim: "zero accidents", why: "" }, { claim: "Zero accidents", why: "" }], original: "Zero accidents.", final: "" }]);
   check("the same claim flagged twice counts once", dup.outcomes.length === 1);
   const dash = accountFlags([{ doc: "cover_letter", flags: [{ claim: "safety first \u2014 always", why: "" }], original: "safety first \u2014 always", final: "" }]);

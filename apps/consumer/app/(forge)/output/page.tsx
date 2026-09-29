@@ -160,8 +160,8 @@ export default function OutputPage() {
     removed: number;
     residual: number;
     unmatched: number;
-    // The checker reported something but named no phrase we could show.
-    unnamed: boolean;
+    // Documents where the checker reported something but named no phrase we could show.
+    unnamed: ("resume" | "cover_letter")[];
     outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" }[];
   } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
@@ -223,7 +223,9 @@ export default function OutputPage() {
           removed: g.removed || 0,
           residual: g.residual || 0,
           unmatched: g.unmatched || 0,
-          unnamed: !!g.hasFabrication && outcomes.length === 0,
+          unnamed: (["resume", "cover_letter"] as const).filter(
+            (d) => g.hasFabricationByDoc?.[d] && !outcomes.some((o: { doc: string }) => o.doc === d)
+          ),
           outcomes,
         });
       }
@@ -627,7 +629,7 @@ export default function OutputPage() {
             )}
 
             {groundingNote && (() => {
-              const open = groundingNote.residual + groundingNote.unmatched + (groundingNote.unnamed ? 1 : 0);
+              const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length;
               const docName = (d: "resume" | "cover_letter") => (d === "resume" ? "resume" : "letter");
               const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
                 o.status === "removed"
@@ -636,11 +638,11 @@ export default function OutputPage() {
                     ? `Reworded in your ${docName(o.doc)}, check the new words: `
                     : o.status === "still_there"
                       ? `Still in your ${docName(o.doc)}, check it: `
-                      : "We couldn't find these exact words. Look for anything like them: ";
+                      : `We couldn't find these exact words in your ${docName(o.doc)}. Look for anything like them: `;
               return (
                 <div className="bg-t-panel border border-t-amber px-4 py-3">
                   <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
-                    {open > 0 ? "Check these before you send" : "What we changed"}
+                    {open > 0 ? "Check these before you send" : "What the check found"}
                   </p>
                   <p className="text-xs text-t-phos leading-relaxed">
                     {groundingNote.removed > 0 &&
@@ -648,10 +650,11 @@ export default function OutputPage() {
                     {groundingNote.residual > 0 &&
                       `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged ${groundingNote.residual === 1 ? "is" : "are"} still in there or only reworded. `}
                     {groundingNote.unmatched > 0 &&
-                      `${groundingNote.unmatched === 1 ? "One flag" : `${groundingNote.unmatched} flags`} didn't match your text word for word. `}
-                    {groundingNote.unnamed &&
-                      "We found something we couldn't match to what you told us, but couldn't point to the exact words. "}
-                    {open > 0 ? "Read these closely before you send anything." : "Read it once before you send it. You know your history best."}
+                      `${groundingNote.unmatched === 1 ? "One thing we flagged" : `${groundingNote.unmatched} things we flagged`} didn't match your wording exactly. `}
+                    {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
+                    {open > 0
+                      ? "Read these closely before you send anything."
+                      : "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best."}
                   </p>
                   {groundingNote.outcomes.length > 0 && (
                     <details className="mt-2">

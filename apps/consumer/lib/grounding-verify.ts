@@ -423,6 +423,10 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
       byId.set(r.id, { text, flagged: r.flagged === true || text === null, why: r.why });
     }
   }
+  // Grades that match none of the bullets we sent (numeric or missing ids) mean
+  // the check did not actually grade anything.
+  const sentIds = new Set(items.map((it) => it.id));
+  if (!Array.from(byId.keys()).some((id) => sentIds.has(id))) return { ...original, verifierRan: false };
 
   const flags: GroundingFlag[] = [];
   let changed = false;
@@ -583,7 +587,13 @@ ${eduLines.join("\n") || "(none)"}`;
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
     parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || (!("keptSkills" in parsed) && !("education" in parsed))) throw new Error("verifier reply has the wrong shape");
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      (skills.length > 0 && !Array.isArray(parsed.keptSkills)) ||
+      (education.length > 0 && !Array.isArray(parsed.education))
+    ) throw new Error("verifier reply has the wrong shape");
   } catch {
     return { ...original, verifierRan: false };
   }

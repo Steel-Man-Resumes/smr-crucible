@@ -57,17 +57,42 @@ function contains(haystack: string, needle: string): boolean {
   return n.length > 0 && ` ${normalizeForMatch(haystack)} `.includes(` ${n} `);
 }
 
-/** Is most of the claim still sitting together on one line of the text? */
+function claimWords(claim: string): string[] {
+  return normalizeForMatch(claim)
+    .split(" ")
+    .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+}
+
+/** Two words of the claim that sat side by side still sit side by side on a
+ *  line ("safety record", "consistent attendance", "forklift certification"). */
+function keepsAPair(claim: string, text: string): boolean {
+  const words = claimWords(claim);
+  if (words.length < 2) return false;
+  const lines = text.split(/\n+/).map((l) => ` ${normalizeForMatch(l)} `);
+  for (let i = 0; i + 1 < words.length; i++) {
+    const pair = ` ${words[i]} ${words[i + 1]} `;
+    if (lines.some((l) => l.includes(pair))) return true;
+  }
+  return false;
+}
+
+/** Is the claim still there in other words? Errs toward "yes": the cost of a
+ *  wrong "yes" is a glance, the cost of a wrong "taken out" is a claim sent. */
 function survivesReworded(claim: string, text: string): boolean {
-  const words = normalizeForMatch(claim).split(" ").filter((w) => w && !STOP_WORDS.has(w));
+  const words = claimWords(claim);
   if (!words.length) return false;
+  if (keepsAPair(claim, text)) return true;
   const numbers = words.filter((w) => /\d/.test(w));
   const content = words.filter((w) => !/\d/.test(w));
   return text.split(/\n+/).some((line) => {
     const have = new Set(normalizeForMatch(line).split(" "));
     const contentHits = content.filter((w) => have.has(w)).length;
+    // A number of two or more digits (a year, 40, 12) is specific enough alone.
+    if (numbers.some((n) => n.replace(/%/g, "").length >= 2 && have.has(n))) return true;
     if (numbers.some((n) => have.has(n)) && contentHits >= 1) return true;
-    return content.length >= 2 && contentHits >= Math.ceil(content.length / 2);
+    // A one-word claim still on the page is asked about, not called removed.
+    if (content.length === 1 && numbers.length === 0) return contentHits === 1;
+    return content.length >= 2 && contentHits >= Math.max(2, Math.ceil(content.length / 2));
   });
 }
 
@@ -78,22 +103,36 @@ export function flagOutcome(flag: GroundingFlag, original: string, final: string
   return "removed";
 }
 
+/** A flag raised in one document, looked for in the other: the resume check may
+ *  catch a claim the letter check missed. Strict, so shared everyday words
+ *  do not count: the exact phrase, or two of its words still side by side. */
+function inOtherDocument(flag: GroundingFlag, otherFinal: string): FlagStatus | null {
+  if (contains(otherFinal, flag.claim)) return "still_there";
+  if (keepsAPair(flag.claim, otherFinal)) return "changed";
+  return null;
+}
+
 export function accountFlags(
   checks: { doc: GroundedDoc; flags: GroundingFlag[]; original: string; final: string }[]
 ): { removed: number; changed: number; residual: number; unmatched: number; outcomes: FlagOutcome[] } {
   const outcomes: FlagOutcome[] = [];
+  const seen = new Set<string>();
+  const add = (claim: string, doc: GroundedDoc, status: FlagStatus) => {
+    const key = `${doc}|${normalizeForMatch(claim)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    // Shown on a job-seeker page, so it gets the same dash sweep as the documents.
+    outcomes.push({ claim: plainPunctuationText(claim).text.slice(0, 200), doc, status });
+  };
   for (const c of checks) {
-    const seen = new Set<string>();
     for (const f of c.flags) {
-      const key = normalizeForMatch(f.claim);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      outcomes.push({
-        // Shown on a job-seeker page, so it gets the same dash sweep as the documents.
-        claim: plainPunctuationText(f.claim).text.slice(0, 200),
-        doc: c.doc,
-        status: flagOutcome(f, c.original, c.final),
-      });
+      if (!normalizeForMatch(f.claim)) continue;
+      add(f.claim, c.doc, flagOutcome(f, c.original, c.final));
+      for (const other of checks) {
+        if (other.doc === c.doc) continue;
+        const status = inOtherDocument(f, other.final);
+        if (status) add(f.claim, other.doc, status);
+      }
     }
   }
   const count = (s: FlagStatus) => outcomes.filter((o) => o.status === s).length;
