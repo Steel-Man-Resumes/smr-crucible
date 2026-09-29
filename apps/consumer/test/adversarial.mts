@@ -17,6 +17,7 @@
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
 import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
 import { liveTestKeyAllowed, LIVE_TEST_DAILY_LIMIT, LIVE_TEST_MIN_KEY_LENGTH } from "@/lib/live-test-key";
+import { accountFlags, flagOutcome, normalizeForMatch } from "@/lib/grounding-accounting";
 import { numbersIn, unsupportedNumbers, RANGE_CHOICES, QUANTITY_UNITS, evidenceAnswerText } from "@/lib/number-truth";
 import { computeGrounding } from "@/lib/grounding";
 import {
@@ -199,6 +200,27 @@ section("live test key");
   check("the key plus extra is refused", liveTestKeyAllowed(key + "x", key) === false);
   check("the exact key is accepted", liveTestKeyAllowed(key, key) === true);
   check("the bucket is bounded", LIVE_TEST_DAILY_LIMIT > 0 && LIVE_TEST_DAILY_LIMIT <= 100);
+// ── Truth-check accounting: count what the text shows, not the flags ─────────
+section("truth check accounting");
+{
+  const orig = "Forklift Operator. Five-year accident-free record. Forklift certification is renewable.";
+  const fin = "Forklift Operator. Forklift certification is renewable.";
+  check("a phrase that is gone counts as removed",
+    flagOutcome({ claim: "Five-year accident-free record", why: "" }, orig, fin) === "removed");
+  check("a phrase still in the final text is not removed",
+    flagOutcome({ claim: "certification is renewable", why: "" }, orig, fin) === "still_there");
+  check("a phrase that cannot be matched either way is not counted as removed",
+    flagOutcome({ claim: "clean safety record", why: "" }, orig, fin) === "still_there");
+  check("dashes, quotes and case do not decide it",
+    normalizeForMatch("Five\u2014year \u201caccident-free\u201d RECORD") === normalizeForMatch("five year accident free record"));
+  check("a phrase only matches whole words",
+    flagOutcome({ claim: "able", why: "" }, "Reliable and able.", "Reliable.") === "removed");
+  const acc = accountFlags([
+    { doc: "resume", flags: [{ claim: "Five-year accident-free record", why: "" }], original: orig, final: fin },
+    { doc: "cover_letter", flags: [{ claim: "renewable", why: "" }], original: "It is renewable.", final: "It is renewable." },
+  ]);
+  check("counts come from outcomes", acc.removed === 1 && acc.residual === 1 && acc.outcomes.length === 2, JSON.stringify(acc));
+  check("each outcome names its document", acc.outcomes[1].doc === "cover_letter" && acc.outcomes[1].status === "still_there");
 }
 
 // ── Cover letter closings vary by person, stay fixed per person ──────────────

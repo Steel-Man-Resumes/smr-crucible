@@ -246,7 +246,11 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
 
   let parsed: any;
   try {
-    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    // An empty or missing reply is a check that did not happen, not a clean pass.
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
+    parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
   } catch {
     return { ...original, verifierRan: false };
   }
@@ -397,12 +401,17 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
 
   let parsed: any;
   try {
-    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    // An empty or missing reply is a check that did not happen, not a clean pass.
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
+    parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
   } catch {
     return { ...original, verifierRan: false };
   }
   const rows: any[] = Array.isArray(parsed.bullets) ? parsed.bullets : [];
-  if (!rows.length) return original;
+  // Bullets went in and none came back graded: the check did not happen.
+  if (!rows.length) return { ...original, verifierRan: false };
 
   // Map graded bullets by id. A literal drop marker ("null"/"none"/"None.") means
   // remove -- it must never ship as a bullet (Codex 7).
@@ -570,7 +579,11 @@ ${eduLines.join("\n") || "(none)"}`;
 
   let parsed: any;
   try {
-    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    // An empty or missing reply is a check that did not happen, not a clean pass.
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
+    parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== "object") throw new Error("verifier reply is not an object");
   } catch {
     return { ...original, verifierRan: false };
   }

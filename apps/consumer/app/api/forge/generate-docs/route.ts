@@ -17,6 +17,7 @@ import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { letterClosingStyle } from "@/lib/letter-style";
+import { accountFlags } from "@/lib/grounding-accounting";
 
 export const maxDuration = 120;
 
@@ -155,17 +156,17 @@ async function handlePost(request: Request) {
     const swapLog = logDashSwaps("generate-docs");
     const resume = plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog);
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
-    // Per-document accounting (Codex 8): a flag is "removed" only if THAT document's
-    // rewrite was applied. A document that found fabrication but couldn't apply the
-    // rewrite (window/floor/drop guard) has RESIDUAL fabrication the user must
-    // review -- the notice must not claim it was removed.
-    const checks = [resumeCheck, coverCheck];
-    const removedCount = checks
-      .filter((c) => c.applied)
-      .reduce((n, c) => n + c.flags.length, 0);
-    const residualCount = checks
-      .filter((c) => c.hasFabrication && !c.applied)
-      .reduce((n, c) => n + c.flags.length, 0);
+    // Count what the check actually did, from the text itself: a flag is "removed"
+    // only if its phrase was in the original and is gone from what the person
+    // receives. A flag whose phrase survived, or that can't be matched, is left for
+    // the person to check. The page must never call a document clean on the
+    // strength of a flag count (a letter kept "renewable" under that promise).
+    const accounting = accountFlags([
+      { doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume },
+      { doc: "cover_letter", flags: coverCheck.flags, original: coverLetterRaw, final: coverLetter },
+    ]);
+    const removedCount = accounting.removed;
+    const residualCount = accounting.residual;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
@@ -210,6 +211,8 @@ async function handlePost(request: Request) {
         removed: removedCount,
         residual: residualCount,
         flags: groundingFlags,
+        // Per flag: which document, and whether its phrase is gone or still there.
+        outcomes: accounting.outcomes,
         // Whether the check actually RAN. It fails open by design -- a missing
         // key, a timeout or an unparseable reply returns the document
         // untouched -- but that used to be invisible from here, so an outage

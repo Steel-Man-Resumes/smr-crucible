@@ -156,7 +156,11 @@ export default function OutputPage() {
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   // Grounding gate result (F2): claims removed vs. residual (found but not
   // auto-removed -- the user must review those). Codex 8: never conflate them.
-  const [groundingNote, setGroundingNote] = useState<{ removed: number; residual: number } | null>(null);
+  const [groundingNote, setGroundingNote] = useState<{
+    removed: number;
+    residual: number;
+    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "still_there" }[];
+  } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
   // It fails open so a person still gets their documents -- but they should be
   // told the machine check was skipped rather than shown a silent clean pass.
@@ -211,6 +215,7 @@ export default function OutputPage() {
         setGroundingNote({
           removed: data.grounding.removed || 0,
           residual: data.grounding.residual || 0,
+          outcomes: Array.isArray(data.grounding.outcomes) ? data.grounding.outcomes : [],
         });
       }
       // Absent means an older response shape, which we treat as "ran" rather
@@ -618,14 +623,33 @@ export default function OutputPage() {
                 <p className="text-xs text-t-phos leading-relaxed">
                   {groundingNote.removed > 0 && (
                     <>
-                      We reviewed every line and removed {groundingNote.removed}{" "}
-                      {groundingNote.removed === 1 ? "detail" : "details"} we couldn&apos;t trace to what you told us.{" "}
+                      We took out or reworded {groundingNote.removed}{" "}
+                      {groundingNote.removed === 1 ? "detail" : "details"} we couldn&apos;t match to what you told us.{" "}
                     </>
                   )}
                   {groundingNote.residual > 0
-                    ? `A few specifics still couldn't be verified from your input. Double-check anything that doesn't sound like you before you send it.`
-                    : `Your documents contain only what's true about you. Add more detail anytime to make them fuller.`}
+                    ? `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged ${groundingNote.residual === 1 ? "is" : "are"} still in there. Check ${groundingNote.residual === 1 ? "it" : "them"} before you send anything.`
+                    : `Read it once before you send it. You know your history best.`}
                 </p>
+                {groundingNote.outcomes.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="t-focus cursor-pointer text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2">
+                      See what we flagged
+                    </summary>
+                    <ul className="mt-1.5 space-y-1">
+                      {groundingNote.outcomes.map((o, i) => (
+                        <li key={i} className="text-[11px] leading-relaxed text-t-phos">
+                          <span className={o.status === "still_there" ? "font-bold text-t-amber-bright" : "text-t-phos-dim"}>
+                            {o.status === "still_there"
+                              ? `Still in your ${o.doc === "resume" ? "resume" : "letter"}, check it: `
+                              : `Taken out of your ${o.doc === "resume" ? "resume" : "letter"}: `}
+                          </span>
+                          {`"${o.claim}"`}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </div>
             )}
 
