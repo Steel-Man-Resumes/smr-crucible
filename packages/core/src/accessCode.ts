@@ -104,7 +104,7 @@ export async function validateAccessCode(
     return { valid: false, reason: "Code has expired" };
   }
   if (ac.max_redemptions && ac.times_redeemed >= ac.max_redemptions) {
-    return { valid: false, reason: "This code's seats are all taken -- ask your organization for another code" };
+    return { valid: false, reason: "This code's seats are all taken. Ask your organization for another code." };
   }
 
   return { valid: true, accessCode: ac };
@@ -121,7 +121,7 @@ export type RedeemOutcome =
 
 const REDEEM_ERRORS: Record<Exclude<RedeemOutcome, "ok">, string> = {
   already_member: "You've already used this code",
-  full: "This code's seats are all taken -- ask your organization for another code",
+  full: "This code's seats are all taken. Ask your organization for another code.",
   expired: "Code has expired",
   inactive: "Code is no longer active",
   not_found: "Code not found",

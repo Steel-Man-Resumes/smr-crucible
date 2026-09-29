@@ -336,7 +336,7 @@ export default function HelpPage() {
                       ? SUPPORT_CATEGORY_LABELS[r.category as SupportCategory] ??
                         r.category
                       : "Message"}{" "}
-                    -- {new Date(r.created_at).toLocaleDateString()}
+                    &middot; {new Date(r.created_at).toLocaleDateString()}
                   </span>
                   <span className="text-xs px-2 py-0.5 border border-t-line text-t-phos-dim">
                     {displaySupportStatus(r.status)}

@@ -506,7 +506,7 @@ export async function assignClientStaff(
     // caller and to the person clicking. (Found in review.)
     if (removed.length === 0) {
       throw new Error(
-        "Nothing to unassign -- that participant is not assigned to anyone in this organization."
+        "Nothing to unassign. That participant is not assigned to anyone in this organization."
       );
     }
     return;

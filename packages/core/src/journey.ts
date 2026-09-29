@@ -238,7 +238,7 @@ export function computeGateDecision(snapshot: JourneySnapshot, tier: string | nu
   if (!snapshot.metrics.profileComplete) {
     return {
       state: "needs_profile",
-      reason: "Profile is incomplete -- a name and phone number are required.",
+      reason: "Profile is incomplete. It needs a name and a phone number.",
       unlockAction: { label: "Finish in The Forge", href: "https://forge.steelmanresumes.com" },
       trialMode: false,
     };

@@ -71,7 +71,7 @@ export default async function ProcessingPage() {
         </h1>
         <p className="text-muted mb-6">
           A lot of people are using it today. Your answers are saved. Write down
-          your import code below and come back in a little while -- your plan will
+          your import code below and come back in a little while. Your plan will
           be ready to build when you return.
         </p>
         <div className="bg-card border-2 border-accent rounded-[6px] p-8 mb-8 mx-auto max-w-xs">

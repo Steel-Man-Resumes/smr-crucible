@@ -136,7 +136,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
                             entry.company,
                             [entry.startDate, entry.endDate || "Present"]
                               .filter(Boolean)
-                              .join(" -- "),
+                              .join(" - "),
                           ]
                             .filter(Boolean)
                             .join("  |  ")}
@@ -195,7 +195,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
             {/* Footer */}
             <div className="border-t border-gray-100 pt-2 mt-4">
               <p className="text-[8px] text-gray-300 text-center">
-                Built with The Refinery &mdash; steelmanresumes.com
+                Built with The Refinery &bull; steelmanresumes.com
               </p>
             </div>
           </div>

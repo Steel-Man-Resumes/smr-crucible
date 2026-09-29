@@ -108,7 +108,7 @@ export function DevSwitcher() {
       <button
         onClick={() => setOpen(!open)}
         className="t-focus inline-flex min-h-touch items-center gap-1.5 rounded-[4px] border border-t-amber px-2.5 text-xs font-bold text-t-amber-bright transition-colors hover:bg-t-amber/10"
-        title="Developer Switcher -- operate in any capacity"
+        title="Developer Switcher: operate in any capacity"
       >
         DEV
         <span aria-hidden="true" className="text-[9px]">
@@ -185,7 +185,7 @@ export function DevSwitcher() {
                           )}
                           <span className="block text-[11px] text-[#7da4c4]">
                             {p.role === "org_admin" ? "Org leader" : "Staff"}
-                            {p.title ? ` -- ${p.title}` : ""}
+                            {p.title ? `, ${p.title}` : ""}
                           </span>
                         </button>
                       ))}

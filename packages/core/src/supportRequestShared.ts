@@ -185,7 +185,7 @@ export function buildSupportDigestText(
   }
 
   const lines: string[] = [];
-  lines.push(`Support digest -- ${total} total request${total === 1 ? "" : "s"}`);
+  lines.push(`Support digest: ${total} total request${total === 1 ? "" : "s"}`);
 
   lines.push("");
   lines.push("By status:");

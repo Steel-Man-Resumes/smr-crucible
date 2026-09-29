@@ -89,7 +89,7 @@ export function AdminHome() {
           >
             <h3 className="font-semibold text-t-white mb-1">My job search</h3>
             <p className="text-sm text-t-phos-dim">
-              Your own client journey -- jobs, applications, t.ROY. The real thing,
+              Your own client account, with jobs, applications and t.ROY. The real thing,
               not a preview. A banner marks the view; switch back from the top bar.
             </p>
           </button>

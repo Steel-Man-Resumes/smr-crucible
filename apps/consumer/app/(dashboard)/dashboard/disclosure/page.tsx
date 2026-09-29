@@ -400,9 +400,9 @@ function DisclosurePlannerPage() {
 </style>
 </head>
 <body>
-<h1>Disclosure Plan${targetJob ? ` -- ${escapeHtml(targetJob)}` : ""}</h1>
+<h1>Disclosure Plan${targetJob ? `: ${escapeHtml(targetJob)}` : ""}</h1>
 <p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date}</p>
-<div class="callout"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.</div>
+<div class="callout"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.</div>
 <div class="callout">Disclosure is a conversation, not a checkbox. It happens face-to-face, where you control the narrative with your voice and your presence.</div>
 ${plan.timing_advice ? `<h2>When to Disclose</h2><p>${escapeHtml(plan.timing_advice)}</p>` : ""}
 ${plan.legal_context ? `<h2>Your Legal Rights</h2><p>${escapeHtml(plan.legal_context)}</p>` : ""}
@@ -433,7 +433,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
           difference. Let&apos;s build a plan together.
         </p>
         <p className="text-sm text-t-phos-dim mb-8">
-          Disclosure happens in person, face-to-face — never on paper. This
+          Disclosure happens in person, face-to-face. Never on paper. This
           tool helps you prepare and practice what to say.
         </p>
 
@@ -471,7 +471,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               <p className="text-sm text-t-phos leading-relaxed">{hurdleGuidance.coachingFrame}</p>
               <p className="text-xs text-t-phos-dim mt-2">
                 This is coaching, not legal advice. We will only ask what your plan
-                needs -- never private detail you do not want to share.
+                needs. We will never ask for private detail you do not want to share.
               </p>
             </div>
           )}
@@ -482,7 +482,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
           <h2 className="font-semibold text-t-amber-bright mb-1">Find your strengths</h2>
           <p className="text-xs text-t-phos-dim mb-3">
             We can look at your own history and suggest strengths to lead with.
-            You confirm, edit, or skip each one -- nothing is added until you say so.
+            You confirm, edit, or skip each one. Nothing is added until you say so.
           </p>
           {proposalsState !== "done" && proposals.length === 0 && (
             <button
@@ -504,7 +504,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               {proposals.map((p, i) => (
                 <div key={i} className="bg-t-panel-2 px-4 py-3 border border-t-line">
                   <p className="text-xs text-t-steel font-medium mb-1.5">
-                    We noticed this -- does it fit?
+                    We noticed this. Does it fit?
                   </p>
                   <input
                     value={p.title}
@@ -549,7 +549,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               Lead with your strengths
             </h2>
             <p className="text-xs text-t-phos-dim mb-3">
-              From your Forge career analysis -- edit anytime, add your own, or
+              Pulled from your Forge career analysis. Edit anytime, add your own, or
               go deeper. These are what you pivot to after you disclose.
             </p>
 
@@ -579,7 +579,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
                       <textarea
                         value={s.evidence}
                         onChange={(e) => updateStrength(i, "evidence", e.target.value)}
-                        placeholder="The proof -- a specific example an employer would believe."
+                        placeholder="The proof: a specific example an employer would believe."
                         rows={2}
                         className="w-full px-3 py-2 border border-t-line text-xs text-t-phos-dim bg-t-panel focus:border-t-amber focus:outline-none transition-colors resize-y"
                       />
@@ -607,8 +607,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
 
             <p className="text-xs text-t-phos-dim mt-3 italic">
               Good disclosure follows a simple pattern: acknowledge briefly,
-              then pivot to these strengths. Your record is one chapter —
-              these are the rest of the book.
+              then pivot to these strengths. Your record is one chapter.
+              These are the rest of the book.
             </p>
           </div>
         )}
@@ -653,7 +653,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
             </h3>
             <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
               Answer a few questions about your record, your strengths, and the job
-              you want, and I build a disclosure plan for your exact situation -- the
+              you want, and I build a disclosure plan for your exact situation: the
               words to say, when to say them, and your rights in your state. Skip it
               and you get a generic template you will have to rewrite yourself.
             </p>
@@ -708,8 +708,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
                 <p className="font-semibold text-t-white mb-1">What we NEVER do:</p>
                 <ul className="text-t-phos-dim space-y-1 ml-4">
                   <li>Put any of this on your resume or cover letter</li>
-                  <li>Share it with anyone — ever</li>
-                  <li>Store it longer than you want — delete anytime in Settings</li>
+                  <li>Share it with anyone, ever</li>
+                  <li>Store it longer than you want (delete it anytime in Settings)</li>
                 </ul>
               </div>
 
@@ -731,14 +731,14 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
                 }}
                 className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
-                I understand — let&apos;s prepare
+                I understand. Let&apos;s prepare
               </button>
               <button
                 onClick={() => generatePlan(undefined, [], false)}
                 disabled={generating}
                 className="px-4 py-3 text-t-phos-dim text-sm hover:text-t-white transition-colors min-h-touch disabled:opacity-40"
               >
-                Not now — basic guidance
+                Not now, just basic guidance
               </button>
             </div>
           </div>
@@ -856,14 +856,14 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
             id: "story",
             label:
               "In your own words, what do you most want an employer to understand about you?",
-            placeholder: "No wrong answers -- a sentence or two is plenty.",
+            placeholder: "No wrong answers. A sentence or two is plenty.",
             multiline: true,
           },
           {
             id: "since",
             label: "What have you done since then that you are proud of?",
             placeholder:
-              "Work, school, recovery, family, a habit you changed -- anything that shows who you are now.",
+              "Work, school, recovery, family, a habit you changed. Anything that shows who you are now.",
             multiline: true,
           },
           {
@@ -914,7 +914,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
           <div className="mt-4 flex items-center gap-3 bg-t-panel px-4 py-3 border border-t-line">
             <div className="w-4 h-4 border-2 border-t-amber border-t-transparent animate-spin flex-shrink-0" />
             <p className="text-sm text-t-phos">
-              Building your plan around what you shared -- this usually takes
+              Building your plan around what you shared. This usually takes
               about 30 seconds.
             </p>
           </div>
@@ -972,7 +972,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         <div className="bg-t-panel px-4 py-3 border border-t-line mb-4">
           <p className="text-xs text-t-phos leading-relaxed">
             <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
-            Laws change and every situation is different -- for legal guidance,
+            Laws change and every situation is different. For legal guidance,
             contact a reentry attorney or free legal aid in your area.
           </p>
         </div>
@@ -981,7 +981,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
           <p className="text-sm text-t-amber-bright">
             <span className="font-semibold">Saved to your Materials.</span> Come
-            back to it anytime -- it is private to your account.
+            back to it anytime. It is private to your account.
           </p>
           <a
             href="/dashboard/vault"
@@ -996,7 +996,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
           <div className="bg-t-panel p-5 border border-t-steel mb-6">
             <h3 className="font-semibold text-t-steel mb-1">What would you like to change?</h3>
             <p className="text-xs text-t-phos-dim mb-3">
-              Pick a quick option or describe it yourself -- we will refine your plan without starting over.
+              Pick a quick option or describe it yourself. We will refine your plan without starting over.
             </p>
             <div className="flex flex-wrap gap-2 mb-3">
               {[

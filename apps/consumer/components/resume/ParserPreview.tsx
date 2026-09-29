@@ -55,7 +55,7 @@ export function ParserPreview({ doc }: { doc: ResumeDocument }) {
                 {jobs.map((e) => (
                   <li key={e.id}>
                     {e.title.trim() || <span className="text-t-amber-bright">(no title)</span>}
-                    {e.company.trim() ? ` -- ${e.company.trim()}` : ""}
+                    {e.company.trim() ? `, ${e.company.trim()}` : ""}
                     {e.startDate.trim() || e.endDate.trim()
                       ? ` (${[e.startDate.trim(), e.endDate.trim() || "Present"]
                           .filter(Boolean)

@@ -107,7 +107,7 @@ export default function StoryPage() {
     <FlowPage
       title="What&apos;s in your way?"
       subtitle="Check what applies. Skip what doesn&apos;t."
-      actionLabel={isDemo ? "Next" : (selected.length > 0 ? "Continue" : "Nothing right now — skip")}
+      actionLabel={isDemo ? "Next" : (selected.length > 0 ? "Continue" : "Nothing right now, skip")}
       onAction={handleContinue}
       showBack
       onBack={() => router.push("/goals")}
@@ -140,7 +140,7 @@ export default function StoryPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode — sample barriers pre-filled
+            Demo mode: sample barriers pre-filled
           </p>
         </div>
       )}
@@ -258,7 +258,7 @@ export default function StoryPage() {
               onChange={(e) =>
                 setCrimRecord({ ...crimRecord, context: e.target.value })
               }
-              placeholder="In your own words — whatever feels right to say."
+              placeholder="In your own words. Say whatever feels right."
               rows={3}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
             />
@@ -283,7 +283,7 @@ export default function StoryPage() {
                 onChange={(e) =>
                   setNarratives({ ...narratives, [id]: e.target.value })
                 }
-                placeholder="In your own words — whatever you want us to know."
+                placeholder="In your own words. Tell us whatever you want us to know."
                 rows={2}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
               />

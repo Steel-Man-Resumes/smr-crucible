@@ -75,7 +75,7 @@ export function DiscrepancyPanel({
         <p className="mt-1 text-xs text-t-phos-dim">
           Dates have ends, certifications are not obviously stale, and no line
           matched a pattern we know how to catch. That is not the same as
-          &ldquo;everything here is true&rdquo; -- these checks look for specific
+          &ldquo;everything here is true.&rdquo; These checks look for specific
           problems, and a resume can be wrong in ways no checker knows to look
           for. Read it once yourself. You are the only one who can.
         </p>
@@ -103,7 +103,7 @@ export function DiscrepancyPanel({
           </span>
           <span className="block text-[11px] text-t-phos-dim">
             {hasUnsupported
-              ? "Some of this includes wording we generated that your own answers do not support. Check those first -- they are the ones an interview will test."
+              ? "Some of this includes wording we generated that your own answers do not support. Check those first. They are the ones an interview will test."
               : "Nothing was guessed for you. These are the places the tool could not know the answer."}
           </span>
         </span>
@@ -142,7 +142,7 @@ export function DiscrepancyPanel({
           ))}
           <p className="mt-4 border-t border-t-line pt-3 text-[11px] text-t-phos-dim">
             None of this was changed for you. These checks read the document,
-            not your record -- they cannot know whether a certification is
+            not your record. They cannot know whether a certification is
             current or whether a job is still going, which is why they ask. They
             also only catch problems they were built to look for, so a clean
             result is a smaller promise than it sounds.

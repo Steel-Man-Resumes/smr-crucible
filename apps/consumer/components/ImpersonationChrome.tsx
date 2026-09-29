@@ -87,12 +87,12 @@ export function ImpersonationChrome() {
         <span>
           {isAssist ? (
             <>
-              ASSIST MODE -- you are operating <strong>{who}</strong>&apos;s
+              ASSIST MODE. You are operating <strong>{who}</strong>&apos;s
               account. Changes are REAL.
             </>
           ) : (
             <>
-              Viewing as <strong>{who}</strong> -- read-only, changes blocked.
+              Viewing as <strong>{who}</strong> in read-only mode. Changes are blocked.
             </>
           )}
         </span>

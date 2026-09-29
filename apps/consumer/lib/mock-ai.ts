@@ -23,7 +23,7 @@ export const MOCK_FORGE_OUTPUT = {
     summary:
       "Jordan brings hands-on expertise in warehouse operations, inventory management, and team coordination. Known for reliability and efficiency, with a track record of meeting production targets in fast-paced environments.",
     reflection:
-      "You described wanting stability for your family while building toward something more. That combination tells me a lot — you want roots and runway at the same time.",
+      "You described wanting stability for your family while building toward something more. That combination tells me a lot. You want roots and runway at the same time.",
     strengths: [
       {
         title: "Operational reliability",
@@ -66,7 +66,7 @@ export const MOCK_FORGE_OUTPUT = {
         "Your training background and 8 years of floor experience position you above entry level. Supervisory roles build on what you already do.",
       salary_range: "$42,000-$55,000/year",
       next_steps: [
-        "Target Amazon, FedEx, and Sysco — all are Fair Chance Pledge signatories",
+        "Target Amazon, FedEx, and Sysco, all Fair Chance Pledge signatories",
         "Update resume to highlight the 4 hires you trained",
         "Ask about internal advancement track during interviews",
       ],
@@ -121,7 +121,7 @@ export const MOCK_FORGE_OUTPUT = {
         },
       ],
       legal_notes:
-        "Wisconsin ban-the-box applies to state and county government employers. Milwaukee city ordinance extends to private employers with 15+ employees. A felony 3-5 years old may qualify for expungement under WI §973.015 — contact Legal Action of Wisconsin to assess eligibility.",
+        "Wisconsin ban-the-box applies to state and county government employers. Milwaukee city ordinance extends to private employers with 15+ employees. A felony 3-5 years old may qualify for expungement under WI §973.015. Contact Legal Action of Wisconsin to assess eligibility.",
     },
   ],
 };
@@ -186,14 +186,14 @@ export const MOCK_DISCLOSURE_PLAN = {
   timing_advice:
     "With a felony 3-5 years old and Milwaukee as your location, wait until after you receive a conditional job offer before disclosing. Milwaukee's ban-the-box ordinance requires this for employers with 15+ staff. This gives you time to demonstrate your value first.",
   legal_context:
-    "WI ban-the-box (2016) applies to state/county government employers. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement: under WI §973.015, your charge may qualify if committed under age 25 or for certain offense classes. Contact Legal Action of Wisconsin — free, (414) 278-7722.",
+    "WI ban-the-box (2016) applies to state/county government employers. Milwaukee city ordinance extends to private employers with 15+ employees. Expungement: under WI §973.015, your charge may qualify if committed under age 25 or for certain offense classes. Contact Legal Action of Wisconsin for free help at (414) 278-7722.",
   script:
     "I want to be upfront with you. I have a felony on my record from about four years ago. I handled it, completed everything required, and I've been focused on moving forward ever since. What I want you to know about me now is: I've got eight years of warehouse experience, I've trained people on the job, and I show up. I'm applying here because I genuinely want to build something here.",
   tips: [
-    "Practice the script out loud 5-10 times before the interview — natural delivery matters more than perfect words",
-    "Pivot immediately to your strengths after the disclosure — don't linger or over-explain",
+    "Practice the script out loud 5-10 times before the interview. Natural delivery matters more than perfect words",
+    "Pivot immediately to your strengths after the disclosure, and don't linger or over-explain",
     "If asked for details, answer briefly and redirect: 'I'd rather focus on what I bring to this role'",
-    "Research the company's ban-the-box policy before applying — many post it in their careers section",
+    "Research the company's ban-the-box policy before applying. Many post it in their careers section",
   ],
 };
 
@@ -233,14 +233,14 @@ export const MOCK_DISCLOSURE_TAKEAWAYS = {
 };
 
 export const MOCK_FOLLOW_UP = {
-  subject: "Following up -- Warehouse Associate application",
+  subject: "Following up on my Warehouse Associate application",
   body: "Hi,\n\nI wanted to follow up on my application for the Warehouse Associate role I submitted last week. I'm still very interested and would welcome the chance to talk about how my eight years of warehouse experience could help your team.\n\nPlease let me know if there's anything else you need from me. Thank you for your time.\n\nBest,\nJordan Williams",
 };
 
 // Progressive-intake follow-ups (Jordan persona). The route returns these on the
 // first round and signals done on later rounds, so the dev loop terminates.
 export const MOCK_INTAKE_FOLLOWUPS = [
-  "You mentioned training new hires -- what is one thing you taught them that you are genuinely proud of?",
+  "You mentioned training new hires. What is one thing you taught them that you are genuinely proud of?",
   "When you picture the right job, what does a good shift schedule look like for you and your family?",
 ];
 
@@ -252,17 +252,17 @@ Operations professional with 8 years of warehouse and logistics experience. Fork
 
 EXPERIENCE
 
-Warehouse Associate — US Foods, Milwaukee, WI (2022–Present)
+Warehouse Associate | US Foods, Milwaukee, WI (2022-Present)
 - Processed 400+ orders per shift with 98.7% accuracy rate
 - Trained 4 new hires on safety protocols and picking procedures
 - Maintained forklift certification; zero safety incidents over 2 years
 
-Warehouse Worker — Uline, Waukesha, WI (2019–2022)
+Warehouse Worker | Uline, Waukesha, WI (2019-2022)
 - Operated reach truck, electric pallet jack, and stand-up forklift
 - Supported inventory audits with 99.2% count accuracy
 - Recognized as Employee of the Month, March 2021
 
-General Laborer — Manpower Staffing (various sites), 2018–2019
+General Laborer | Manpower Staffing (various sites), 2018-2019
 - Placed in multiple warehouse environments; retained by 3 clients
 - Adapted quickly to different facilities and safety protocols
 

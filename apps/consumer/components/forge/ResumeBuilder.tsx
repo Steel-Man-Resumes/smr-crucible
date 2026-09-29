@@ -149,8 +149,8 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
           Here&apos;s your resume. Let&apos;s make it strong.
         </h1>
         <p className="text-base text-t-phos-dim mb-6 max-w-2xl">
-          We organized what you gave us. Check every section and fix anything --
-          it&apos;s all yours to edit. This becomes your base resume: the one we
+          We organized what you gave us. Check every section and fix anything
+          that&apos;s off. It&apos;s all yours to edit. This becomes your base resume: the one we
           aim at specific jobs later.
         </p>
 
@@ -162,7 +162,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
             <p className="text-xs text-t-phos-dim leading-relaxed">
               The best resumes show what you did, with real numbers. Tap{" "}
               <span className="font-medium text-t-phos">Strengthen with help</span> under any
-              bullet -- we ask a few questions and turn your answer into a strong
+              bullet. We ask a few questions and turn your answer into a strong
               line. We only ever use what you tell us.
             </p>
           </div>
@@ -184,7 +184,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                 onClick={() => onComplete(doc)}
                 className="t-focus px-5 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
-                Looks good -- continue
+                Looks good, continue
               </button>
               {/* Downloading here is premature -- the Forge makes this resume
                   significantly better in the next steps. One small control,
@@ -200,7 +200,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                   <p className="text-xs text-t-phos-dim leading-relaxed mb-2">
                     Heads up: this is the <strong className="text-t-phos">before</strong> version.
                     The next few steps turn it into a much stronger resume and
-                    cover letter -- that&apos;s the whole point of the Forge. If
+                    cover letter. That&apos;s the whole point of the Forge. If
                     you need a copy right now (an appointment today, a program
                     requirement), grab one, then come back and finish.
                   </p>
@@ -220,7 +220,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                     </button>
                     <button
                       onClick={downloadTxt}
-                      title="Plain text -- the safest format for online application boxes"
+                      title="Plain text is the safest format for online application boxes"
                       className="t-focus px-3 py-2 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors text-xs"
                     >
                       .txt (for online forms)
@@ -230,7 +230,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
               )}
             </>
           }
-          actionsHint="Continue when it looks right -- we carry this through the rest of your Forge and make it stronger."
+          actionsHint="Continue when it looks right. We carry this through the rest of your Forge and make it stronger."
         />
 
         {/* Parser preview -- "what a machine reads", the honest ATS view. */}
@@ -242,8 +242,8 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
             Before you go: are you ready to use this?
           </h2>
           <p className="text-xs text-t-phos-dim mb-3">
-            Not a grade -- a gut check. The resume is half of it; owning it is the
-            other half.
+            A gut check, and nothing here is scored. The resume is half of it;
+            owning it is the other half.
           </p>
           <div className="space-y-2">
             {READINESS_ITEMS.map((item, i) => (

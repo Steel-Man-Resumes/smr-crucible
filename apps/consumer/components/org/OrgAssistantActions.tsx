@@ -43,7 +43,7 @@ function buildActions(ctx: OrgActionContext): Action[] {
     {
       label: "Write a case note",
       prompt:
-        `I just spoke with ${who}. Help me write that up as a case note -- ask me what happened first, then put it in plain professional language.`,
+        `I just spoke with ${who}. Help me write that up as a case note. Ask me what happened first, then put it in plain professional language.`,
     },
     {
       label: "Draft a check-in email",
@@ -53,7 +53,7 @@ function buildActions(ctx: OrgActionContext): Action[] {
     {
       label: "What do I say to them?",
       prompt:
-        `Give me language I can actually use with ${who} -- what to open with, and what to avoid.`,
+        `Give me language I can actually use with ${who}. What should I open with, and what should I avoid?`,
     },
   ];
 
@@ -70,7 +70,7 @@ function buildActions(ctx: OrgActionContext): Action[] {
     {
       label: "Numbers for a report",
       prompt:
-        "Pull the numbers I would need for a board or grant report this month -- caseload, activity, outcomes. Say plainly which ones you have and which you do not.",
+        "Pull the numbers I would need for a board or grant report this month: caseload, activity, outcomes. Say plainly which ones you have and which you do not.",
       adminOnly: true,
     },
     {

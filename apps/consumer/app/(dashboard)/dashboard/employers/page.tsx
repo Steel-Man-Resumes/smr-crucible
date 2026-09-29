@@ -99,7 +99,7 @@ function EmployersList() {
       <h1 className="text-2xl font-bold text-t-white">Employers That Hire People With Records</h1>
       <p className="text-t-phos-dim mt-1 mb-4">
         Employers we checked for hiring people with records. Each one shows where we checked
-        and when, and the words we found. Read the notes -- some have honest caveats.
+        and when, and the words we found. Read the notes. Some have honest caveats.
       </p>
 
       {/* N2: honest "in progress" banner while the curated list is small and growing. */}
@@ -108,7 +108,7 @@ function EmployersList() {
         <p className="text-sm text-t-phos-dim mt-1 leading-relaxed">
           The list is deliberately small: an employer is added only when we find current,
           dated evidence that it hires people with records, and the mark runs out on its own
-          unless someone confirms it again. A name here means something. If your area is not covered yet, that is not a dead end -- use Job Search for
+          unless someone confirms it again. A name here means something. If your area is not covered yet, that is not a dead end. Use Job Search for
           live listings and the disclosure planner to prepare. A missing employer is not a "no."
         </p>
       </div>

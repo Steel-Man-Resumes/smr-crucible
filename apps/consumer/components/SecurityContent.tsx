@@ -26,15 +26,15 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       <Section title="What We Collect">
         <ul className="space-y-2">
           <BulletItem>
-            Your resume text — so we can find your skills and match you to
+            Your resume text, so we can find your skills and match you to
             jobs
           </BulletItem>
           <BulletItem>
-            Your answers to Forge questions — so we can match jobs and
+            Your answers to Forge questions, so we can match jobs and
             resources to your situation
           </BulletItem>
           <BulletItem>
-            Your activity in the Refinery — so we can track your progress and
+            Your activity in the Refinery, so we can track your progress and
             suggest next steps
           </BulletItem>
           <BulletItem>
@@ -100,7 +100,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             the physical disks, they could not read your data.
           </BulletItem>
           <BulletItem>
-            Every connection uses HTTPS — your data is encrypted while it
+            Every connection uses HTTPS, so your data is encrypted while it
             moves between your device and our servers
           </BulletItem>
           <BulletItem>Everything is hosted in the United States</BulletItem>
@@ -117,11 +117,11 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       <Section title="What the AI Sees">
         <ul className="space-y-2">
           <BulletItem>
-            The AI reads your resume and answers to help you — that&apos;s
-            its only job
+            The AI reads your resume and answers to help you. That&apos;s
+            its only job.
           </BulletItem>
           <BulletItem>
-            Every AI interaction is logged — we can check exactly what the AI
+            Every AI interaction is logged, so we can check exactly what the AI
             said to you and why
           </BulletItem>
           <BulletItem>
@@ -241,7 +241,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             </DenyItem>
             <DenyItem>No data mining</DenyItem>
             <DenyItem>
-              No surprises — if something changes, we&apos;ll tell you first
+              No surprises. If something changes, we&apos;ll tell you first
             </DenyItem>
           </ul>
         </div>
@@ -265,8 +265,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             up to 30 days for abuse monitoring. We do not store your audio.
           </BulletItem>
           <BulletItem>
-            Users can export or delete their data independently — you
-            don&apos;t control it, they do
+            Users control their own data. They can export or delete it on
+            their own, without going through you
           </BulletItem>
           <BulletItem>
             Rate limiting protects against abuse without blocking legitimate
@@ -292,8 +292,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Two-factor: TOTP with an encrypted secret and bcrypt-hashed one-time backup codes</p>
           <p>Sessions: tracked per device with self-service revocation; new-device sign-ins alert the account owner</p>
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
-          <p>AI -- writing and coaching: Anthropic Claude. No training on user data.</p>
-          <p>AI -- fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume text and our draft both pass through OpenAI on that check. No training on user data.</p>
+          <p>AI writing and coaching: Anthropic Claude. No training on user data.</p>
+          <p>AI fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume text and our draft both pass through OpenAI on that check. No training on user data.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
@@ -308,7 +308,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           Questions about your data or privacy?
         </p>
         <p className="text-sm text-t-phos-dim">
-          Ask t.ROY — he&apos;s on every page. Or email us at{" "}
+          Ask t.ROY. He&apos;s on every page. Or email us at{" "}
           <span className="font-medium text-t-white">
             troyrichardcarr@gmail.com
           </span>

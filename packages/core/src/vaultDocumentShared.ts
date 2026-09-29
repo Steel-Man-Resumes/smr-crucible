@@ -49,7 +49,7 @@ export const VAULT_CATEGORIES: VaultCategoryDef[] = [
   {
     key: "note",
     label: "Notes to yourself",
-    help: "A written note you want to keep -- a phone number, a plan, a reminder.",
+    help: "A written note you want to keep, like a phone number, a plan, or a reminder.",
   },
   {
     key: "other",

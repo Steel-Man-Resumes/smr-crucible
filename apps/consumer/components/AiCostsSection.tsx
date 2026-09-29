@@ -116,7 +116,7 @@ export function AiCostsAdminSection() {
               <tbody>
                 {data.perUser?.map((u: any, i: number) => (
                   <tr key={i} className="border-t border-t-line">
-                    <td className={td}>{u.name ? `${u.name} -- ${u.email}` : u.email}</td>
+                    <td className={td}>{u.name ? `${u.name} (${u.email})` : u.email}</td>
                     <td className={td}>{num(u.calls)}</td>
                     <td className={td}>
                       {num(u.input_tokens)} / {num(u.output_tokens)}
@@ -224,8 +224,8 @@ export function AiCostsOwnSection() {
             shown here.
           </p>
           <p className="text-[10px] text-t-phos-dim">
-            If a partner organization sponsors your account, they see this too --
-            it is how your access stays free.
+            If a partner organization sponsors your account, they see this too.
+            That is how your access stays free.
           </p>
         </div>
       )}

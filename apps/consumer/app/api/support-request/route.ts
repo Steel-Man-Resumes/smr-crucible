@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const count = await incrementUserUsage(userId, "support");
   if (count > DAILY_CAP) {
     return NextResponse.json(
-      { error: "You've sent the maximum messages for today. Troy reads every one -- give him a day to get back to you." },
+      { error: "You've sent the most messages allowed for today. Troy reads every one. Give him a day to get back to you." },
       { status: 429 }
     );
   }

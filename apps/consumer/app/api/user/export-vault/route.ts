@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     const docs = await listVaultDocuments(userId);
     if (docs.length === 0) {
       return NextResponse.json(
-        { error: "Your vault is empty -- there is nothing to download yet." },
+        { error: "Your vault is empty. There is nothing to download yet." },
         { status: 404, headers: NO_STORE_HEADERS }
       );
     }

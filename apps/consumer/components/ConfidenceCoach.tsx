@@ -427,7 +427,7 @@ export function ConfidenceCoach({
           <h1 className="text-2xl font-bold text-t-white">Confidence Coach</h1>
           <p className="text-sm text-t-phos-dim">
             Practicing with a {persona.label.toLowerCase()}
-            {savingOn ? " -- saving this practice" : " -- not saving"}.
+            {savingOn ? ". Saving this practice" : ". Not saving"}.
           </p>
         </div>
         <button onClick={() => setStarted(false)} className="text-sm text-t-phos-dim hover:text-t-white">
@@ -588,7 +588,7 @@ function SaveControls({
       <p className="text-xs text-t-phos-dim leading-relaxed mb-3">
         By default nothing here is saved. If you turn saving on, the words from this practice are
         stored encrypted and private to your account, so you can come back and read them. You can
-        delete saved practice anytime in Settings. Only the text is stored -- never any audio.
+        delete saved practice anytime in Settings. Only the text is stored. Audio is never saved.
       </p>
       <label className="flex items-start gap-2 mb-2 cursor-pointer">
         <input

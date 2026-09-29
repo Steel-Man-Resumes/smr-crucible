@@ -316,7 +316,7 @@ export async function POST(request: Request) {
         message:
           created.kind === "invited"
             ? `Invite sent to ${email}. They'll appear here as invited until they open it.`
-            : `${name} already had an account -- they've been added to your organization and notified.`,
+            : `${name} already had an account. They've been added to your organization and notified.`,
       });
     }
 

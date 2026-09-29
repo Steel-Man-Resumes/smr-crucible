@@ -423,7 +423,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
         <p className="text-t-phos-dim">
           This view is for partner organizations that distribute access codes to the
           people they support. If that is you and you are seeing this, your account is
-          not yet linked to a partner code -- reach out and we will connect it.
+          not yet linked to a partner code. Reach out and we will connect it.
         </p>
         <Link href="/dashboard" className="inline-block mt-6 text-t-amber-bright hover:text-t-amber">
           &larr; Back to dashboard
@@ -600,8 +600,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
             <p className="text-t-phos-dim mt-0.5 text-sm">
               {data
                 ? isStaffView
-                  ? "Staff view -- the clients assigned to you who chose to share progress."
-                  : `Your organization's mission control -- team, client progress, and program reach. Code ${data.org.code}.`
+                  ? "Staff view: the clients assigned to you who chose to share progress."
+                  : `Your organization's mission control for team, client progress, and program reach. Code ${data.org.code}.`
                 : "Progress for the people you support who chose to share it."}
             </p>
           </div>
@@ -674,7 +674,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 </h2>
                 <p className="mt-0.5 text-[11px] text-t-phos-dim">
                   Caseloads with someone who has not moved in two weeks. Not a
-                  judgement of anyone on your team -- a stalled caseload can mean
+                  judgement of anyone on your team. A stalled caseload can mean
                   a hard caseload. It is just where a nudge goes furthest.
                 </p>
               </div>
@@ -711,8 +711,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   <span className="text-t-phos-dim">
                     {staff.length} {staff.length === 1 ? "member" : "members"}
                     {seatLimit != null
-                      ? ` -- ${totalJoined}/${seatLimit} seats used`
-                      : " -- unlimited seats"}
+                      ? `, ${totalJoined}/${seatLimit} seats used`
+                      : ", unlimited seats"}
                   </span>
                   <a
                     href={`mailto:hmu@themidnightgarden.club?subject=${encodeURIComponent(
@@ -811,8 +811,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               <h2 className="text-sm font-semibold text-t-white mb-1">Add a participant</h2>
               <p className="text-xs text-t-phos-dim mb-3">
                 {isStaffView
-                  ? "They get an email that signs them straight in -- no code, no password, and they're assigned to you automatically."
-                  : "They get an email that signs them straight in -- no code, no password. Their seat comes off your organization's allotment right away."}
+                  ? "They get an email that signs them straight in. No code, no password, and they're assigned to you automatically."
+                  : "They get an email that signs them straight in. No code, no password. Their seat comes off your organization's allotment right away."}
               </p>
               <form onSubmit={sendInvite} className="flex flex-wrap gap-2">
                 <input
@@ -852,7 +852,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               {invites.length > 0 && (
                 <div className="mt-4 border-t border-t-line pt-3">
                   <h3 className="text-xs uppercase font-semibold text-t-phos-dim mb-2">
-                    Invited -- waiting to join
+                    Invited and waiting to join
                   </h3>
                   <ul className="space-y-2">
                     {invites.map((inv) => (
@@ -870,7 +870,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                           <div className="text-xs text-t-phos-dim">
                             Invited {fmtDate(inv.invitedAt)}
                             {inv.invitedByName ? ` by ${inv.invitedByName}` : ""}
-                            {inv.sendCount > 1 ? ` -- sent ${inv.sendCount} times` : ""}
+                            {inv.sendCount > 1 ? `, sent ${inv.sendCount} times` : ""}
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -903,7 +903,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
             {data?.crmV2
               ? "You only see clients who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers."
-              : "You only see clients who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers -- only where they are in the journey."}
+              : "You only see clients who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers. You see only how far along they are."}
           </p>
 
           {assignError && (

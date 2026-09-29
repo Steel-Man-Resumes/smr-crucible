@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     );
     if (!ipCheck.allowed || !emailCheck.allowed) {
       return NextResponse.json(
-        { error: "Too many signups from this connection right now. Wait a minute and try again -- your spot is not lost." },
+        { error: "Too many signups from this connection right now. Wait a minute and try again. Your spot is not lost." },
         { status: 429 }
       );
     }
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              'An account with this email already exists. If your organization set it up, open the sign-in link in your invite email -- or go to the sign-in page and choose "Email me a sign-in link." If it is already your account, just sign in.',
+              'An account with this email already exists. If your organization set it up, open the sign-in link in your invite email. You can also go to the sign-in page and choose "Email me a sign-in link." If it is already your account, just sign in.',
           },
           { status: 409 }
         );

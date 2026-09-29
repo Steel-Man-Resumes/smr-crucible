@@ -35,7 +35,7 @@ export function AdminTestModeBanner() {
     return (
       <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "#2d5a85" }}>
         <span>
-          You&apos;re in your personal job search -- private from your team.
+          You&apos;re in your personal job search. It&apos;s private from your team.
         </span>
         <button
           type="button"
@@ -57,7 +57,7 @@ export function AdminTestModeBanner() {
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 text-center text-sm font-medium text-white" style={{ background: "#2d5a85" }}>
       <span>
-        Viewing as {viewLabel} -- your real role is {roleLabel}. The gates and
+        Viewing as {viewLabel}. Your real role is {roleLabel}. The gates and
         locks are real.
       </span>
       <button

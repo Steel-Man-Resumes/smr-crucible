@@ -86,7 +86,7 @@ export function PageFitCheck({
     } else if (result.band === "under") {
       headline = `This resume renders about ${result.pageCount} page${result.pageCount === 1 ? "" : "s"}. The last page is only about ${pct}% full.`;
     } else {
-      headline = `This resume renders about ${result.pageCount} pages -- over two. The last page is about ${pct}% full.`;
+      headline = `This resume renders about ${result.pageCount} pages, which is more than two. The last page is about ${pct}% full.`;
     }
   }
 
@@ -112,7 +112,7 @@ export function PageFitCheck({
 
             {result.band === "under" && (
               <p className="mt-1">
-                Add real achievements to your most recent role, or leave it -- a
+                Add real achievements to your most recent role, or leave it. A
                 shorter resume is fine. Never invent content to fill space.
               </p>
             )}
@@ -134,8 +134,8 @@ export function PageFitCheck({
             )}
 
             <p className="mt-2 text-xs text-t-white/60">
-              This is an estimate of the Word (.docx) render -- it models the exact
-              download page size, margins, and fonts, but is not a pixel-perfect
+              This is an estimate of the Word (.docx) render. It models the exact
+              download page size, margins, and fonts, but it is not a pixel-perfect
               Word page count.
             </p>
           </div>

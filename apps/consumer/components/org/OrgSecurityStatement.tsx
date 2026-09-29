@@ -37,7 +37,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Can another organization see our participants?",
-        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session -- so removing someone takes effect on their next click, not whenever their session happens to expire. Beneath that, organization boundaries are enforced by the database itself, not only by application code: row-level security covers the organization tables, and the application connects as a database role that has no ability to bypass it. The last section says exactly what the database decides and what it does not.",
+        a: "No. Every query that touches participant data is scoped to the organization the signed-in person belongs to, and that membership is read from the database on every request rather than from their login session. That means removing someone takes effect on their next click, not whenever their session happens to expire. Beneath that, organization boundaries are enforced by the database itself, not only by application code: row-level security covers the organization tables, and the application connects as a database role that has no ability to bypass it. The last section says exactly what the database decides and what it does not.",
         proof:
           "A test suite runs against a real database and tries to break it: reading another org's cohort, writing to another org's staff, claiming another org's participant. It connects the code under test as the same restricted database role production uses, because a test that runs with administrator rights proves nothing. It runs automatically on every pull request that changes the organization or database layer, connected as that restricted role.",
       },
@@ -47,7 +47,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Can Steel Man staff see our data?",
-        a: "Yes, and you should assume so of any hosted product -- someone has to be able to fix a broken account. What matters is the constraints. There are two modes. The default is view-only: writes are rejected, and it expires after 60 minutes. The second lets a platform administrator act as the account to repair something; it requires a written reason before it starts and expires after 30 minutes. Entering and leaving either mode is recorded with who, whose account, which mode, the reason, and when. Permission is re-checked against the database on every single request, so revoking it ends an active session immediately.",
+        a: "Yes, and you should assume so of any hosted product, because someone has to be able to fix a broken account. What matters is the constraints. There are two modes. The default is view-only: writes are rejected, and it expires after 60 minutes. The second lets a platform administrator act as the account to repair something; it requires a written reason before it starts and expires after 30 minutes. Entering and leaving either mode is recorded with who, whose account, which mode, the reason, and when. Permission is re-checked against the database on every single request, so revoking it ends an active session immediately.",
       },
     ],
   },
@@ -56,7 +56,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Do we see everything a participant does?",
-        a: "No, and this is the part most tools get wrong. A participant chooses whether to share progress with your organization. If they decline, you see that they joined and nothing else -- they are counted, never named. That choice is theirs to change at any time.",
+        a: "No, and this is the part most tools get wrong. A participant chooses whether to share progress with your organization. If they decline, you see that they joined and nothing else. They are counted, never named. That choice is theirs to change at any time.",
       },
       {
         q: "Do we see their resume, their practice sessions, their disclosure plan?",
@@ -88,7 +88,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Where does it live, and is it encrypted?",
-        a: "PostgreSQL on Neon, encrypted at rest, TLS in transit. Files in Cloudflare R2, encrypted at rest. Passwords are bcrypt hashes at 12 rounds -- we cannot read them and neither can anyone who steals the database.",
+        a: "PostgreSQL on Neon, encrypted at rest, TLS in transit. Files in Cloudflare R2, encrypted at rest. Passwords are bcrypt hashes at 12 rounds. We cannot read them and neither can anyone who steals the database.",
       },
       {
         q: "Can a participant take their data with them, or delete it?",
@@ -96,11 +96,11 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Is there a record of who changed our team or our assignments?",
-        a: "Yes, and it is written by the database rather than by the application, so it records changes made through any path -- including by us, from outside the product. Adding or removing a staff member, changing a role, assigning or unassigning a participant: each writes a row with what changed, when, and who did it. A change made outside the product has no signed-in person to name, and is recorded as exactly that, with the database role that made it. The application can read that record for your organization only, and cannot edit or delete it. There is not yet a screen for it in your console; today we produce it on request.",
+        a: "Yes, and it is written by the database rather than by the application, so it records changes made through any path, including changes we make from outside the product. Adding or removing a staff member, changing a role, assigning or unassigning a participant: each writes a row with what changed, when, and who did it. A change made outside the product has no signed-in person to name, and is recorded as exactly that, with the database role that made it. The application can read that record for your organization only, and cannot edit or delete it. There is not yet a screen for it in your console; today we produce it on request.",
       },
       {
         q: "Is there a record of what the AI did?",
-        a: "Every answer the AI writes -- for a participant or for your staff -- is logged with the model, a hash of the input rather than the input itself, and how long it took. For staff answers the record also holds whether the answer passed its checks. If someone needs to reconstruct why a document said what it said, that record exists.",
+        a: "Every answer the AI writes, for a participant or for your staff, is logged with the model, a hash of the input rather than the input itself, and how long it took. For staff answers the record also holds whether the answer passed its checks. If someone needs to reconstruct why a document said what it said, that record exists.",
       },
     ],
   },
@@ -113,7 +113,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
       },
       {
         q: "Are you SOC 2 certified?",
-        a: "No. Our hosting and AI vendors are, and that is theirs rather than ours -- borrowing a vendor's certificate is not holding one. If your procurement requires SOC 2 from us, we do not meet it today and we will say so in writing.",
+        a: "No. Our hosting and AI vendors are, and that is theirs rather than ours. Borrowing a vendor's certificate is not holding one. If your procurement requires SOC 2 from us, we do not meet it today and we will say so in writing.",
       },
       {
         q: "Is isolation enforced by the database itself?",
@@ -136,7 +136,7 @@ export function OrgSecurityStatement() {
       <p className="mt-2 text-sm leading-relaxed text-t-phos-dim">
         Written for the person who has to answer for this internally. Every
         claim below is one we can point at a mechanism for, and the last section
-        is what we do not have -- because finding that out later is how you stop
+        is what we do not have. Finding that out later is how you stop
         believing the rest.
       </p>
 

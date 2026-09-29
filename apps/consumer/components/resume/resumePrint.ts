@@ -69,7 +69,7 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
 </style></head>
 <body>
 <div class="name">${nameUpper}</div>
-${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" -- ")}</div>` : ""}
+${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" | ")}</div>` : ""}
 ${bodyHtml}
 <script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
 </body></html>`;

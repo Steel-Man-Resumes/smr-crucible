@@ -312,7 +312,7 @@ export default function OutputPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-5 py-4 mb-8 border border-t-amber text-center">
           <p className="text-sm text-t-amber-bright font-medium">
-            This is a sample output — try it with your own data
+            This is a sample output. Try it with your own data.
           </p>
           <button
             onClick={() => router.push("/welcome")}
@@ -457,7 +457,7 @@ export default function OutputPage() {
               planner does. */}
           <p className="text-xs text-t-phos mb-4 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
             <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
-            Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.
+            Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.
           </p>
           <div className="space-y-4">
             {barriers.map((b, i) => (
@@ -604,7 +604,7 @@ export default function OutputPage() {
                   Your documents are here and nothing was changed. The
                   second-pass check that traces every line back to what you told
                   us could not run this time, so read these over before you send
-                  them -- especially anything specific, like a number, a date or
+                  them. Look hard at anything specific, like a number, a date or
                   a certification.
                 </p>
               </div>
@@ -623,8 +623,8 @@ export default function OutputPage() {
                     </>
                   )}
                   {groundingNote.residual > 0
-                    ? `A few specifics still couldn't be verified from your input -- double-check anything that doesn't sound like you before you send it.`
-                    : `Your documents contain only what's true about you -- add more detail anytime to make them fuller.`}
+                    ? `A few specifics still couldn't be verified from your input. Double-check anything that doesn't sound like you before you send it.`
+                    : `Your documents contain only what's true about you. Add more detail anytime to make them fuller.`}
                 </p>
               </div>
             )}
@@ -751,8 +751,8 @@ export default function OutputPage() {
 
             <div className="mt-2 text-center space-y-1">
               <p className="text-xs text-t-phos-dim">
-                <strong className="text-t-phos">Save as PDF</strong> -- preserves the exact formatting you see above. Best for sharing and submitting.
-                &nbsp;<strong className="text-t-phos">Download .docx</strong> -- opens in Word or Google Docs so you can edit if anything needs adjusting.
+                <strong className="text-t-phos">Save as PDF</strong> keeps the exact formatting you see above. Best for sharing and submitting.
+                &nbsp;<strong className="text-t-phos">Download .docx</strong> opens in Word or Google Docs so you can edit if anything needs adjusting.
               </p>
               <p className="text-xs text-t-phos-dim">{rc.docsSubtext}</p>
             </div>
@@ -819,12 +819,12 @@ export default function OutputPage() {
           <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
             When you create your free account, everything you just built is automatically
             waiting in The Refinery: your resume, your career narrative, your strengths,
-            your documents -- all pre-loaded, nothing to re-enter.
+            your documents. It&apos;s all pre-loaded, with nothing to re-enter.
           </p>
           <p className="text-sm text-t-phos-dim leading-relaxed">
             The Refinery is where the real work happens. Target your resume for specific jobs,
             practice interview questions, plan your disclosure strategy, and browse a job board
-            that marks employers we checked for hiring people with records -- all built on what you just created here.
+            that marks employers we checked for hiring people with records. It&apos;s all built on what you just created here.
           </p>
         </div>
 
@@ -838,7 +838,7 @@ export default function OutputPage() {
             <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
               Every client who runs The Forge lands in The Refinery with all of
               this pre-loaded. As a partner, you get an anonymous statistical
-              overview of your cohort -- never their resume content.
+              overview of your cohort. It never includes their resume content.
             </p>
             <div className="flex flex-col gap-2">
               <TBtn onClick={() => router.push("/partner")} className="w-full">
@@ -848,7 +848,7 @@ export default function OutputPage() {
                 href="mailto:troyrichardcarr@gmail.com?subject=Partner%20access%20request"
                 className="t-focus w-full px-4 py-3 text-center border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
               >
-                Request partner access -- troyrichardcarr@gmail.com
+                Request partner access: troyrichardcarr@gmail.com
               </a>
               <button
                 onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}
@@ -1106,13 +1106,13 @@ function resumeTextToStandaloneHtml(text: string): string {
   }
   bodyHtml += `</div>`;
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume -- Steel Man Resumes</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume (Steel Man Resumes)</title>
 <style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{@page{margin:0.5in;size:letter}body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}</style>
 </head><body><div style="max-width:7.5in;margin:0 auto;background:#fff;">
 ${headerHtml}${bodyHtml}
 <div class="no-print" style="padding:12px 20px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
-<p style="font-size:9pt;color:#999;">Steel Man Resumes -- steelmanresumes.com</p>
+<p style="font-size:9pt;color:#999;">Steel Man Resumes &middot; steelmanresumes.com</p>
 <p style="font-size:9pt;color:#aaa;">File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
 </div><script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
 </body></html>`;
@@ -1172,15 +1172,15 @@ function analysisToStandaloneHtml(
       body += `<h3>${escHtml(b.type.replace(/_/g, " "))}</h3>`;
       if (b.legal_notes) body += `<p><em>${escHtml(b.legal_notes)}</em></p>`;
       if (b.resources.length) {
-        body += `<ul>${b.resources.map((r) => `<li><strong>${escHtml(r.name)}</strong> -- ${escHtml(r.description)}</li>`).join("")}</ul>`;
+        body += `<ul>${b.resources.map((r) => `<li><strong>${escHtml(r.name)}:</strong> ${escHtml(r.description)}</li>`).join("")}</ul>`;
       }
       body += `</div>`;
     }
     // Coaching-not-legal-advice disclaimer (F6).
-    body += `<p style="margin-top:14px;font-size:9pt;color:#555;background:#f4f4f4;border-left:3px solid #B8C9E0;padding:8px 12px;"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different -- for legal guidance, contact a reentry attorney or free legal aid in your area.</p>`;
+    body += `<p style="margin-top:14px;font-size:9pt;color:#555;background:#f4f4f4;border-left:3px solid #B8C9E0;padding:8px 12px;"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.</p>`;
   }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis -- Steel Man Resumes</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis (Steel Man Resumes)</title>
 <style>
 body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1200,9 +1200,9 @@ ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
 @media print{@page{margin:.5in;size:letter}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}
 </style></head><body>
 <div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
-<div class="private-banner"><strong>Private -- for your planning.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself -- your resume and cover letter are the documents to share with employers.</div>
+<div class="private-banner"><strong>Private planning document.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself. Your resume and cover letter are the documents to share with employers.</div>
 ${body}
-<div class="footer no-print"><p>Steel Man Resumes -- steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
+<div class="footer no-print"><p>Steel Man Resumes &middot; steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
 <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
 </body></html>`;
 }
@@ -1213,13 +1213,13 @@ function formatOutputAsText(
 ): string {
   const lines: string[] = [
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
-    "  THE FORGE -- Your Story, Reforged",
+    "  THE FORGE: Your Story, Reforged",
     "  Steel Man Resumes",
     "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
     "",
     // P1.6 (Codex 3): this analysis is the person's private planning document --
     // it omits the reflection line and flags itself as not-for-employers.
-    "PRIVATE -- for your planning. This analysis is for your own use as you plan",
+    "PRIVATE PLANNING DOCUMENT. This analysis is for your own use as you plan",
     "your next steps. Keep it for yourself; your resume and cover letter are the",
     "documents to share with employers.",
     "",
@@ -1265,11 +1265,11 @@ function formatOutputAsText(
     lines.push(
       "",
       "This is career coaching, not legal advice. Laws change and every situation is",
-      "different -- for legal guidance, contact a reentry attorney or free legal aid in your area."
+      "different. For legal guidance, contact a reentry attorney or free legal aid in your area."
     );
   }
 
-  lines.push("", "", "Generated by The Forge, powered by t.ROY -- steelmanresumes.com");
+  lines.push("", "", "Generated by The Forge, powered by t.ROY, at steelmanresumes.com");
   return lines.join("\n");
 }
 
@@ -1293,7 +1293,7 @@ function EmailPackageBox({
   async function send() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setState("error");
-      setMessage("That email doesn't look right -- check it and try again.");
+      setMessage("That email doesn't look right. Check it and try again.");
       return;
     }
     setState("sending");
@@ -1330,8 +1330,8 @@ function EmailPackageBox({
         Email me my package
       </p>
       <p className="text-xs text-t-phos-dim mb-3">
-        Your story, resume, and cover letter -- delivered to your inbox so you
-        have them anywhere, even without an account.
+        We&apos;ll send your story, resume, and cover letter to your inbox so
+        you have them anywhere, even without an account.
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <input

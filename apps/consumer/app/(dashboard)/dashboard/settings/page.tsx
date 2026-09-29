@@ -711,7 +711,7 @@ function DataSection({
         <div className="bg-t-panel p-5 border border-t-line">
           <h3 className="font-semibold text-t-white">Confirm your identity</h3>
           <p className="text-sm text-t-phos-dim mt-1">
-            Exporting or deleting your data is sensitive -- confirm it&apos;s
+            Exporting or deleting your data is sensitive, so confirm it&apos;s
             you before either action below. Enter your password, or if you
             sign in with a magic link and have no password, type DELETE.
           </p>
@@ -780,7 +780,7 @@ function DataSection({
               </h3>
               <p className="text-sm text-t-phos-dim mt-1">
                 {isOrgStaff
-                  ? "Erase anything stored on YOUR account. This does not touch your organization, your team, or any participant's records -- only what belongs to you. Your login stays. This cannot be undone."
+                  ? "Erase anything stored on YOUR account. This only touches what belongs to you. It does not touch your organization, your team, or any participant's records. Your login stays. This cannot be undone."
                   : "Erase your resumes, plans, and history. Your login stays, so you can sign back in to a fresh, empty account. This cannot be undone."}
               </p>
             </div>
@@ -1133,7 +1133,7 @@ function SecuritySection() {
             </h3>
             <p className="text-sm text-t-phos-dim mt-0.5">
               {creating
-                ? "Set a password so you can sign in instantly -- no waiting for an email link."
+                ? "Set a password so you can sign in instantly without waiting for an email link."
                 : updatedAt
                   ? `Last changed ${fmtWhen(updatedAt)}.`
                   : "Sign in with your email and password."}
@@ -1282,7 +1282,7 @@ function ActiveDevicesCard() {
         <div>
           <h3 className="font-semibold text-t-white">Active devices</h3>
           <p className="text-sm text-t-phos-dim mt-0.5">
-            Where you&apos;re signed in. Revoke anything you don&apos;t recognize -- it&apos;s
+            Where you&apos;re signed in. Revoke anything you don&apos;t recognize. It gets
             signed out right away.
           </p>
         </div>
@@ -1316,7 +1316,7 @@ function ActiveDevicesCard() {
                   )}
                 </div>
                 <div className="text-xs text-t-phos-dim">
-                  {s.location ? `${s.location} -- ` : ""}last active {fmtWhen(s.lastSeenAt)}
+                  {s.location ? `${s.location} · ` : ""}last active {fmtWhen(s.lastSeenAt)}
                 </div>
               </div>
               {!s.current && (
@@ -1498,7 +1498,7 @@ function TwoFactorCard({
       {mode === "backup" && (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-t-phos">
-            Two-step is on. Save these backup codes somewhere safe -- each works once if you
+            Two-step is on. Save these backup codes somewhere safe. Each one works once if you
             ever lose your phone. You won&apos;t see them again.
           </p>
           <div className="grid grid-cols-2 gap-2 bg-t-panel-2 border border-t-line p-3 font-mono text-sm text-t-white">
@@ -1605,7 +1605,7 @@ function AccountSection() {
         <div className="flex items-center justify-between pb-3 border-b border-t-line mb-3">
           <div>
             <p className="text-xs text-t-phos-dim uppercase">Signed in as</p>
-            <p className="text-sm font-medium text-t-white">{session?.user?.email || "—"}</p>
+            <p className="text-sm font-medium text-t-white">{session?.user?.email || "Unknown"}</p>
           </div>
           <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
             {(session?.user as any)?.tier || "client"}
@@ -1626,10 +1626,10 @@ function AccountSection() {
             </div>
             {contact ? (
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-t-phos-dim">Name:</span> <span className="text-t-white">{contact.name || "—"}</span></div>
-                <div><span className="text-t-phos-dim">Phone:</span> <span className="text-t-white">{contact.phone || "—"}</span></div>
-                <div><span className="text-t-phos-dim">Email:</span> <span className="text-t-white">{contact.email || "—"}</span></div>
-                <div><span className="text-t-phos-dim">Location:</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || "—"}</span></div>
+                <div><span className="text-t-phos-dim">Name:</span> <span className="text-t-white">{contact.name || "Not set"}</span></div>
+                <div><span className="text-t-phos-dim">Phone:</span> <span className="text-t-white">{contact.phone || "Not set"}</span></div>
+                <div><span className="text-t-phos-dim">Email:</span> <span className="text-t-white">{contact.email || "Not set"}</span></div>
+                <div><span className="text-t-phos-dim">Location:</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || "Not set"}</span></div>
               </div>
             ) : (
               <p className="text-sm text-t-phos-dim">No contact info set. Complete your profile on the dashboard.</p>

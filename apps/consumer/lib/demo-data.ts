@@ -18,14 +18,14 @@ Milwaukee, WI | (414) 555-0192
 WORK EXPERIENCE
 
 Warehouse Associate | Regional Distribution Co. | Milwaukee, WI
-June 2021 – Present (3 years)
+June 2021 - Present (3 years)
 • Operate forklifts and pallet jacks to move inventory across 200,000 sq ft facility
 • Trained 4 new hires on safety protocols and inventory management systems
 • Maintained 99.2% order accuracy rate over 18-month period
 • Promoted to informal team lead for night shift (8-person crew)
 
 Maintenance Helper | Kenosha County Parks | Kenosha, WI
-March 2020 – May 2021
+March 2020 - May 2021
 • Performed grounds maintenance, equipment repair, and facility upkeep
 • Coordinated with full-time staff on seasonal project schedules
 
@@ -98,7 +98,7 @@ export const DEMO_OUTPUT = {
     summary:
       "Jordan brings three years of consistent warehouse operations experience with a track record that speaks louder than any title. He has trained new hires, maintained 99.2% accuracy, and led an 8-person night crew, all without the formal promotion. The pattern is clear: Jordan doesn't wait to be told to lead. He steps up, solves problems, and makes people around him better. The gap in his timeline is simply context. What came after it is what matters: a GED, certifications, steady work, and upward trajectory.",
     reflection:
-      "Jordan's story follows what researchers call a 'redemption sequence' — a narrative arc where difficult experiences become the foundation for positive change. His goals aren't about escaping his past; they're about building on what he's already proven he can do.",
+      "Jordan's story follows what researchers call a 'redemption sequence,' a narrative arc where difficult experiences become the foundation for positive change. His goals aren't about escaping his past; they're about building on what he's already proven he can do.",
     strengths: [
       {
         title: "Natural Team Leader",
@@ -167,7 +167,7 @@ export const DEMO_OUTPUT = {
             "Wisconsin restricts when employers can ask about criminal history. Milwaukee County has additional ban-the-box protections for county positions.",
         },
         {
-          name: "Careeronestop.org — Reentry Resources",
+          name: "Careeronestop.org Reentry Resources",
           type: "federal",
           description:
             "U.S. DOL resource for justice-impacted job seekers with state-specific information.",
@@ -231,7 +231,7 @@ export const DEMO_OUTPUT = {
       next_steps: [
         "Research Lean Six Sigma Yellow Belt certification (many free courses)",
         "Apply to operations associate roles at mid-size manufacturers",
-        "Build on equipment maintenance skills — cross-training adds value",
+        "Build on equipment maintenance skills, since cross-training adds value",
       ],
     },
   ],

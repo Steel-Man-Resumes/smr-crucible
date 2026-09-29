@@ -48,7 +48,7 @@ const GOAL_OPTIONS = [
   {
     id: "community",
     label: "Give back to my community",
-    description: "I've been through it — I want to help others who are too.",
+    description: "I've been through it. I want to help others who are going through it too.",
   },
   {
     id: "flexibility",
@@ -164,7 +164,7 @@ export default function GoalsPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode — sample goals pre-selected
+            Demo mode: sample goals pre-selected
           </p>
         </div>
       )}
@@ -305,7 +305,7 @@ export default function GoalsPage() {
               )}
             </div>
             <p className="text-xs text-t-phos-dim">
-              A mentor, a mission, using your story to help others — anything that would make getting up worth it.
+              A mentor, a mission, using your story to help others. Anything that would make getting up worth it.
             </p>
             <textarea
               id="hook-narrative"

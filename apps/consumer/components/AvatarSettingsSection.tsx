@@ -398,7 +398,7 @@ export function AvatarSettingsSection() {
                     </button>
                     <span className="text-[11px] text-t-phos-dim">
                       {a.kind === "generated_headshot" ? "Generated" : "Uploaded"}
-                      {active ? " -- in use" : ""}
+                      {active ? " (in use)" : ""}
                     </span>
                     <button
                       type="button"

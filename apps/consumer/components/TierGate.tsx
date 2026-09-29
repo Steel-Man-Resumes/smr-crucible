@@ -25,7 +25,7 @@ function DefaultFallback() {
         Full access requires a partner code
       </p>
       <p className="font-body text-sm text-t-bone-dim mb-4">
-        This tool is available to clients and partners. Try The Forge first — it&apos;s free and shows you what we do.
+        This tool is available to clients and partners. Try The Forge first. It&apos;s free and shows you what we do.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <a

@@ -26,7 +26,7 @@ const CLIENT_WORKFLOW = [
   {
     step: "2",
     title: "They get their output",
-    detail: "Career narrative, strengths, skills, career paths, and resources -- all in plain language. Downloadable resume and cover letter. No scores, no grades.",
+    detail: "Career narrative, strengths, skills, career paths, and resources, written in plain language. Downloadable resume and cover letter. No scores, no grades.",
   },
   {
     step: "3",
@@ -52,7 +52,7 @@ const DASHBOARD_FEATURES = [
   },
   {
     feature: "CSV export",
-    detail: "One-click export of your full cohort for program reporting. Stage data, completion rates, artifact counts -- what your funders ask for.",
+    detail: "One-click export of your full cohort for program reporting. It includes stage data, completion rates, and artifact counts, the numbers your funders ask for.",
   },
   {
     feature: "Consent transparency",
@@ -65,13 +65,13 @@ const DASHBOARD_FEATURES = [
 ];
 
 const WHAT_CLIENTS_GET = [
-  { tool: "The Forge", desc: "Career intake -- resume, cover letter, strengths analysis, career paths, resources" },
+  { tool: "The Forge", desc: "Career intake that builds a resume, cover letter, strengths analysis, career paths, and resources" },
   { tool: "Job Board", desc: "Real listings; employers with dated, local evidence of hiring people with records are marked" },
   { tool: "Application Tailor", desc: "Targeted resume, cover letter, and disclosure for a specific job, with AI guidance at each step" },
   { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },
   { tool: "Interview Practice", desc: "Text or voice mock interviews, including disclosure-specific questions" },
-  { tool: "Applications Tracker", desc: "Track every application -- company, status, which resume version, follow-up emails" },
-  { tool: "My Materials", desc: "Vault of all generated documents -- resumes, cover letters, disclosure plans, follow-ups" },
+  { tool: "Applications Tracker", desc: "Track every application by company, status, resume version used, and follow-up emails" },
+  { tool: "My Materials", desc: "Vault of all generated documents, including resumes, cover letters, disclosure plans, and follow-ups" },
   { tool: "t.ROY (AI coach)", desc: "Available on every page. Research-grounded, 10 behavioral rules, never prescriptive" },
 ];
 
@@ -86,7 +86,7 @@ const PARTNER_FAQ = [
   },
   {
     q: "What data do you collect on my clients?",
-    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing shared with third parties. No advertising layer. AGPL-3.0 open source -- the code is public.",
+    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing shared with third parties. No advertising layer. AGPL-3.0 open source, and the code is public.",
   },
   {
     q: "Can I self-host it for my program?",
@@ -124,7 +124,7 @@ export default function PartnerPage() {
           <p className="text-lg text-t-phos leading-relaxed mb-3">
             Steel Man Resumes is built to plug into reentry programs, workforce
             development orgs, AJC offices, and legal aid societies. Your clients
-            use the tools. You see their progress -- with their consent.
+            use the tools. With their consent, you see their progress.
           </p>
           <p className="text-sm text-t-phos-dim leading-relaxed">
             This page covers the operational picture: how your workflow looks,
@@ -162,7 +162,7 @@ export default function PartnerPage() {
                 <div className="flex-shrink-0 w-2 h-2 bg-t-amber mt-1.5" />
                 <div>
                   <span className="font-semibold text-t-white text-sm">{item.tool}</span>
-                  <span className="text-sm text-t-phos-dim"> -- {item.desc}</span>
+                  <span className="text-sm text-t-phos-dim">: {item.desc}</span>
                 </div>
               </div>
             ))}

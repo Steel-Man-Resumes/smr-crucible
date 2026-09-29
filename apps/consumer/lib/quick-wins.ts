@@ -94,7 +94,7 @@ const RULES: WinRule[] = [
     priority: 4,
     win: {
       id: "crisis-988",
-      title: "Talk to someone — 988 Lifeline",
+      title: "Talk to someone at the 988 Lifeline",
       description:
         "Free, confidential support anytime. Call or text 988. Trained counselors help with emotional distress, substance use, and more.",
       action: { type: "phone", label: "Call or text 988", phone: "988" },
@@ -132,7 +132,7 @@ const RULES: WinRule[] = [
       id: "build-first-resume",
       title: "Build your first resume",
       description:
-        "Your Forge data is already loaded — skills, experience, and a professional summary are ready. You refine it, not start from scratch.",
+        "Your Forge data is already loaded. Skills, experience, and a professional summary are ready. You refine it, not start from scratch.",
       action: {
         type: "link",
         label: "Open Application Tailor",
@@ -172,7 +172,7 @@ const RULES: WinRule[] = [
       id: "disclosure-plan",
       title: "Create a disclosure plan",
       description:
-        "You've practiced interviews — now prep the record conversation. Get a script, timing advice, and legal context for your area.",
+        "You've practiced interviews. Now prep the record conversation. Get a script, timing advice, and legal context for your area.",
       action: {
         type: "link",
         label: "Open Disclosure Planner",
@@ -216,7 +216,7 @@ const RULES: WinRule[] = [
       id: "another-interview",
       title: "Practice another interview",
       description:
-        "Each time you practice, you get more comfortable. Try a different interview type — behavioral, industry-specific, or disclosure-focused.",
+        "Each time you practice, you get more comfortable. Try a different interview type, like behavioral, industry-specific, or disclosure-focused.",
       action: {
         type: "link",
         label: "Practice Again",
@@ -258,7 +258,7 @@ const RULES: WinRule[] = [
       id: "search-more-jobs",
       title: "Search for 3 more jobs",
       description:
-        "You've started looking — keep the momentum. Try different roles or expand your search area.",
+        "You've started looking. Keep the momentum going. Try different roles or expand your search area.",
       action: {
         type: "link",
         label: "Search Jobs",

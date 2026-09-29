@@ -362,8 +362,8 @@ function InterviewPracticePage() {
     const openingMessage = isDisclosure
       ? "Thanks for coming in today. We appreciate your interest in this position. Why don't you start by telling me a little about yourself?"
       : config.interviewType === "behavioral"
-        ? "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start — tell me about yourself and what brought you here today."
-        : "Hi there, thanks for taking the time to interview with us today. Let's get started — can you tell me a bit about yourself and why you're interested in this role?";
+        ? "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start. Tell me about yourself and what brought you here today."
+        : "Hi there, thanks for taking the time to interview with us today. Let's get started. Can you tell me a bit about yourself and why you're interested in this role?";
 
     setMessages([{ role: "assistant", content: openingMessage }]);
     setStep("practice");
@@ -591,7 +591,7 @@ function InterviewPracticePage() {
   // --- Phase 3 deliverable: analysis only, never a transcript ---
   function buildSummaryText(): string {
     const fb = feedback || {};
-    const out: string[] = ["INTERVIEW PRACTICE SUMMARY (analysis only -- no transcript)"];
+    const out: string[] = ["INTERVIEW PRACTICE SUMMARY (analysis only, no transcript)"];
     if (config.targetRole) out.push(`Role: ${config.targetRole}`);
     out.push(`Practice type: ${config.interviewType || "general"}`);
     if (fb.frame) out.push(`\nFrame to carry: ${fb.frame}`);
@@ -634,7 +634,7 @@ function InterviewPracticePage() {
   .footer { margin-top: 32pt; border-top: 0.5pt solid #ddd; padding-top: 8pt; font-size: 8pt; color: #aaa; text-align: center; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
-<h1>Interview Analysis${config.targetRole ? ` -- ${esc(config.targetRole)}` : ""}</h1>
+<h1>Interview Analysis${config.targetRole ? `: ${esc(config.targetRole)}` : ""}</h1>
 <p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Practice frames only, no transcript</p>
 ${fb.frame ? `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>` : ""}
 ${Array.isArray(fb.strengths) && fb.strengths.length ? `<h2>What You Did Well</h2><ul>${list(fb.strengths)}</ul>` : ""}
@@ -642,7 +642,7 @@ ${Array.isArray(fb.improvements) && fb.improvements.length ? `<h2>Areas to Work 
 ${Array.isArray(fb.better_answers) && fb.better_answers.length ? `<h2>Stronger Answers to Model</h2>${fb.better_answers.map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`).join("")}` : ""}
 ${fb.overall ? `<h2>Overall</h2><p>${esc(fb.overall)}</p>` : ""}
 ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br/>")}</p>` : ""}
-<div class="footer">This analysis is yours. We never store your interview words or recordings -- only the frames you practiced.</div>
+<div class="footer">This analysis is yours. We only keep the frames you practiced. We never store your interview words or recordings.</div>
 </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;
@@ -773,7 +773,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </select>
               {selectedResumeId && (
                 <p className="text-xs text-t-amber-bright mt-1">
-                  Questions will be based on this resume -- the real jobs, tools, and results on it.
+                  Questions will be based on the real jobs, tools, and results on this resume.
                 </p>
               )}
             </div>
@@ -784,7 +784,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             <label className="text-sm font-medium text-t-white block mb-1">
               Paste the job posting{" "}
               <span className="font-normal text-t-phos-dim">
-                (optional -- makes questions match the real role)
+                (optional, helps the questions match the real role)
               </span>
             </label>
             <textarea
@@ -887,7 +887,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           Interview Feedback
         </h1>
         <p className="text-base text-t-phos-dim mb-6">
-          Here&apos;s how you did. Remember — this is about practice, not
+          Here&apos;s how you did. Remember, this is about practice, not
           perfection.
         </p>
 
@@ -976,7 +976,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="bg-t-panel p-5 border border-t-line mb-4">
           <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
           <p className="text-xs text-t-phos-dim mb-2">
-            Jot what you want to remember. These stay on your device -- we never store your words.
+            Jot what you want to remember. These stay on your device. We never store your words.
           </p>
           <textarea
             value={userNotes}
