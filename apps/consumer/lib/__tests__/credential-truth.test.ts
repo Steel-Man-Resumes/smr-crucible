@@ -107,12 +107,43 @@ describe("held, wanted and never mentioned", () => {
   it("wanting a CDL is not having one", () => assert.equal(claimsMoreThanGiven("You have a CDL, so driving jobs are open to you.", wanted), true));
   it("advice to get it is kept", () => assert.equal(claimsMoreThanGiven("Get your CDL through a trucking school.", wanted), false));
 
-  it("claiming one the person never mentioned is caught", () =>
-    assert.equal(claimsMoreThanGiven("Your OSHA 10 card shows you know the safety basics.", none), true));
+  it("a credential the person never mentioned is left to the truth check", () =>
+    assert.equal(claimsMoreThanGiven("Your OSHA 10 card shows you know the safety basics.", none), false));
   it("advice to get one the person never mentioned is kept", () =>
     assert.equal(claimsMoreThanGiven("Get your OSHA 10 card online for about $60.", none), false));
-  it("an invented forklift certification is caught", () =>
-    assert.equal(claimsMoreThanGiven("You are a certified forklift operator.", credentialStatuses("Forklift operator, 2019 - 2021")), true));
+  it("a skill word with no certification status is left to the truth check", () =>
+    assert.equal(claimsMoreThanGiven("You are a certified forklift operator.", credentialStatuses("Forklift operator, 2019 - 2021")), false));
+});
+
+describe("held credentials read as held (review cases)", () => {
+  it("OSHA 10 training is the card", () => assert.equal(credentialStatuses("Completed OSHA 10 training in 2021").get("OSHA 10"), "held"));
+  it("10-hour OSHA is OSHA 10", () => assert.equal(credentialStatuses("10 hour OSHA, 2021").get("OSHA 10"), "held"));
+  it("CPR class is the card", () => assert.equal(credentialStatuses("CPR and first aid class, 2024").get("CPR"), "held"));
+  it("never lost is not lost", () => assert.equal(credentialStatuses("Class A CDL, never had it suspended").get("CDL"), "held"));
+  it("a bare 'lost' is not a status", () => assert.equal(credentialStatuses("Lost my job but kept my CDL").get("CDL"), "held"));
+  it("got it back is held", () => assert.equal(credentialStatuses("CDL was suspended in 2019, got it back in 2023").get("CDL"), "held"));
+  it("a line under a certifications heading is held", () =>
+    assert.equal(credentialStatuses("CERTIFICATIONS\nForklift\nFlagger").get("forklift"), "held"));
+  it("a forklift cert is held", () => assert.equal(credentialStatuses("Forklift cert through Goodwill, 2022").get("forklift"), "held"));
+  it("ServSafe Food Handler is one credential", () => {
+    const s = credentialStatuses("ServSafe Food Handler, 2023");
+    assert.equal(s.get("ServSafe"), "held");
+    assert.equal(s.get("food handler"), undefined);
+  });
+  it("'no accidents' does not make a CDL wanted", () => assert.equal(credentialStatuses("CDL driver, no accidents in six years").get("CDL"), "held"));
+  it("'no CDL' is not having one", () => assert.equal(credentialStatuses("No CDL yet").get("CDL"), "wanted"));
+  it("welders count as welding", () => assert.equal(credentialStatuses("Took a welding class at the college").get("welding"), "course"));
+
+  const held = credentialStatuses("OSHA 10 training, 2021\nServSafe Food Handler, 2023");
+  it("a held completion card is never flagged", () =>
+    assert.deepEqual(findOverstatedCredentials("Your OSHA 10 card and ServSafe Food Handler certification help.", held), []));
+});
+
+describe("'you are certified' has to be about the credential", () => {
+  it("certified in something else next to a course credential is kept", () =>
+    assert.equal(claimsMoreThanGiven("You are certified in CPR, and you finished the EPA 608 Type I and II course last spring.", courseOnly), false));
+  it("certified right next to the course credential is caught", () =>
+    assert.equal(claimsMoreThanGiven("You are certified for EPA 608 refrigerant work.", courseOnly), true));
 });
 
 describe("finding claims to check (nothing is removed)", () => {

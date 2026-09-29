@@ -73,3 +73,41 @@ describe("employer blocks and states", () => {
     assert.equal(r.text, "DRIVER | Heartland Freight | 2018 - 2022");
   });
 });
+
+describe("employer cities, review cases", () => {
+  it("a lowercase word after the city is not a state", () => {
+    const src = "Driver, Heartland Freight, Kansas City to Omaha routes, 2018 - 2022";
+    const line = "DRIVER | Heartland Freight | Kansas City, MO | 2018 - 2022";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+
+  it("a two-letter word that is not a state code is not a state", () => {
+    const src = "Cook, Harbor Street Grill, Kansas City, KC area, 2019 - present";
+    const line = "COOK | Harbor Street Grill | Kansas City, MO | 2019 - Present";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+
+  it("finds the city on a bullet under the job's dates", () => {
+    const src = "Acme Fabrication\n2016 - 2020\n- Welded trailer frames at the St. Louis MO plant";
+    const line = "WELDER | Acme Fabrication | Saint Louis, MO | 2016 - 2020";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+
+  it("finds the city on the line before the employer", () => {
+    const src = "Kansas City MO\nHeartland Freight\n2018 - 2022";
+    const line = "DRIVER | Heartland Freight | Kansas City, MO | 2018 - 2022";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+
+  it("matches a company with an apostrophe", () => {
+    const src = "Crew member, McDonald's, Racine WI, 2010 - 2012";
+    const line = "CREW MEMBER | McDonalds | Racine, WI | 2010 - 2012";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+
+  it("keeps the city when the employer is not in the person's words at all", () => {
+    const src = "I worked at a stamping plant for three years.";
+    const line = "MACHINE OPERATOR | Badger Stamping | Waukesha, WI | 2014 - 2017";
+    assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  });
+});

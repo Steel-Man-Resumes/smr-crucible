@@ -191,13 +191,15 @@ async function handlePost(request: Request) {
       ...accounting.outcomes,
       // Cities the backstop took out are real removals.
       ...cityCheck.removedCities.map((claim) => ({ claim: clean(claim), doc: "resume" as const, status: "removed" as const })),
-      // Credential lines are left in place and listed for the person to check.
+      // Credential lines are left in place and listed for the person to check,
+      // under their own label: they are not something the truth check tried to cut.
       ...credentialChecks
         .filter((c) => !known.has(`${c.doc}|${clean(c.claim).toLowerCase()}`))
-        .map((c) => ({ claim: clean(c.claim), doc: c.doc, status: "still_there" as const })),
+        .map((c) => ({ claim: clean(c.claim), doc: c.doc, status: "credential" as const })),
     ];
     const removedCount = accounting.removed + cityCheck.removed;
-    // Reworded, still-there, also-in and credential-check items all ask the person to look.
+    // Reworded, still-there and also-in items: what the truth check flagged that
+    // may still be there. Credential items are counted by the page on their own.
     const residualCount = outcomes.filter((o) => o.status === "still_there" || o.status === "changed" || o.status === "also_in").length;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
