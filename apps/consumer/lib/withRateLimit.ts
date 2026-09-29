@@ -21,6 +21,12 @@ import {
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
+import {
+  LIVE_TEST_BUCKET,
+  LIVE_TEST_DAILY_LIMIT,
+  LIVE_TEST_HEADER,
+  liveTestKeyAllowed,
+} from "./live-test-key";
 
 /**
  * Tier ranking — lower number = higher privilege.
@@ -117,6 +123,20 @@ export function withRateLimit(
         void logPartnerUsage({ code: authedCode, userId, endpoint: opts.endpoint });
       }
 
+      return handler(request);
+    }
+
+    // Live test calls from the team draw from their own bounded bucket, never
+    // from a job seeker's IP allowance. See lib/live-test-key.ts.
+    if (liveTestKeyAllowed(request.headers.get(LIVE_TEST_HEADER), process.env.FORGE_TEST_KEY)) {
+      const testCount = await incrementIpUsage(LIVE_TEST_BUCKET, opts.endpoint);
+      if (testCount > LIVE_TEST_DAILY_LIMIT) {
+        return NextResponse.json(
+          { error: "Live test limit reached for today on this endpoint." },
+          { status: 429 }
+        );
+      }
+      console.info(`[live-test] ${opts.endpoint} call ${testCount}/${LIVE_TEST_DAILY_LIMIT}`);
       return handler(request);
     }
 
