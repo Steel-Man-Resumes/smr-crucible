@@ -200,6 +200,8 @@ section("live test key");
   check("the key plus extra is refused", liveTestKeyAllowed(key + "x", key) === false);
   check("the exact key is accepted", liveTestKeyAllowed(key, key) === true);
   check("the bucket is bounded", LIVE_TEST_DAILY_LIMIT > 0 && LIVE_TEST_DAILY_LIMIT <= 100);
+}
+
 // ── Truth-check accounting: count what the text shows, not the flags ─────────
 section("truth check accounting");
 {
