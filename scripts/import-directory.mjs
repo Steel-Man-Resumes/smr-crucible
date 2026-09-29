@@ -30,6 +30,14 @@
  *   - Contacts: only unnamed role contacts are imported. Named people stay in
  *     connections-intel; each becomes a review proposal instead.
  *   - Open research questions become review proposals.
+ *   - Reported hires (064): a `reported_hire` row, or a `corroborated_report`
+ *     assessment carrying its sources as evidence rows, lands as one
+ *     `reported_hire` item per source, with the publisher's normalized name as
+ *     its independent organization. The database, not this script, decides
+ *     whether two of them corroborate (different publishers, both Likely,
+ *     within 365 days); the report below counts the places where they do. A
+ *     corroborated_report is never written as its own item: the database
+ *     refuses one.
  */
 
 import { neon } from "@neondatabase/serverless";
@@ -164,8 +172,23 @@ statements.length = 0;
 
 // ---- Evidence ----------------------------------------------------------------------
 const CLAIM = { confirmed_corporate: "confirmed_corporate", direct_role_signal: "direct_role_signal",
-                candidate_unverified: "candidate_unverified", ecosystem_partner: "ecosystem_partner" };
+                candidate_unverified: "candidate_unverified", ecosystem_partner: "ecosystem_partner",
+                reported_hire: "reported_hire", corroborated_report: "reported_hire" };
 const asmById = new Map(data.assessments.map((a) => [a.id, a]));
+// A corroborated_report needs two sources from different publishers. Count the
+// ones that arrive short, so the report says so instead of hiding it.
+const publishersByAsm = new Map();
+for (const e of data.evidence) {
+  if (asmById.get(e.assessment_id)?.classification !== "corroborated_report") continue;
+  if (!publishersByAsm.has(e.assessment_id)) publishersByAsm.set(e.assessment_id, new Set());
+  const key = normalizeEmployerName(e.publisher ?? "");
+  if (key.length >= 2) publishersByAsm.get(e.assessment_id).add(key);
+}
+for (const a of data.assessments) {
+  if (a.classification !== "corroborated_report") continue;
+  if ((publishersByAsm.get(a.id)?.size ?? 0) < 2) bump("corroborated_report with fewer than two publishers (lands as single reports)");
+  if (!a.location_id) bump("corroborated_report with no location (company-wide reports never corroborate)");
+}
 for (const e of data.evidence) {
   if (seen.has(`evidence:${e.id}`)) { bump("evidence already imported"); continue; }
   const a = asmById.get(e.assessment_id);
@@ -200,14 +223,20 @@ for (const e of data.evidence) {
   if (observed > today) { bump("evidence skipped: future date"); continue; }
   const grade = ["A", "B", "C", "D"].includes(e.evidence_grade) ? e.evidence_grade : "D";
   const likely = ["A", "B"].includes(grade) && e.source_url && e.accessed_on;
-  const kinds = ["official_policy", "job_posting", "official_program", "official_location", "news", "aggregator", "directory", "legacy_import"];
+  const kinds = ["official_policy", "job_posting", "official_program", "official_location", "news", "aggregator", "directory",
+                 "partner_list", "legacy_import"];
   const kind = kinds.includes(e.source_kind) ? e.source_kind : "legacy_import";
   if (!e.source_url) { bump("evidence skipped: no link"); continue; }
+  // A reported hire names the independent organization behind it: the
+  // publisher, normalized, so the same outlet under two spellings is one source.
+  const publisherKey = normalizeEmployerName(e.publisher ?? "");
+  const sourceOrgs = claim === "reported_hire" && publisherKey.length >= 2 ? [publisherKey] : [];
+  if (claim === "reported_hire" && !sourceOrgs.length) bump("reported_hire with no publisher (cannot corroborate)");
   statements.push(sql`INSERT INTO employer_evidence (org_id, place_id, scope, claim_type, role_title, source_kind, source_url, source_title,
-      publisher, excerpt, source_grade, confidence, confidence_score, observed_on, accessed_on, found_by, limitations)
+      publisher, source_orgs, excerpt, source_grade, confidence, confidence_score, observed_on, accessed_on, found_by, limitations)
     VALUES (${rec.id}, ${scope === "company" ? null : placeId}, ${scope}, ${claim},
             ${scope === "role" ? roleTitle : null},
-            ${kind}, ${e.source_url}, ${cap(e.source_title, 300)}, ${cap(e.publisher, 200)}, ${cap(e.claim_supported, 500)},
+            ${kind}, ${e.source_url}, ${cap(e.source_title, 300)}, ${cap(e.publisher, 200)}, ${sourceOrgs}, ${cap(e.claim_supported, 500)},
             ${grade}, ${likely ? "likely" : "guessing"}, ${a.confidence ?? null}, ${observed}, ${date(e.accessed_on)},
             ${FOUND_BY}, ${cap(a.limitations, 2000)})`);
   statements.push(sql`INSERT INTO directory_import (source_system, source_table, external_id, org_id, raw)
@@ -295,6 +324,8 @@ const pilot = await sql`
    GROUP BY st.standing ORDER BY n DESC`;
 console.log("\nNW Montana pilot area (Lincoln, Flathead, Sanders), employers by standing:");
 for (const r of pilot) console.log(`  ${String(r.n).padStart(3)}  ${r.standing}: ${r.names}`);
+const [corr] = await sql`SELECT count(*)::int n FROM employer_standing_v WHERE standing = 'corroborated_here' AND earns_mark`;
+console.log(`\nPlaces marked by two independent public reports (064, Likely): ${corr.n}`);
 const roleMarks = await sql`SELECT count(DISTINCT name_key)::int n FROM directory_mark_v WHERE basis = 'role'`;
 console.log(`\nEmployers with a role-only mark (a live posting for one role): ${roleMarks[0].n}`);
 const [h] = await sql`SELECT count(*) FILTER (WHERE status = 'active' AND expires_on < current_date)::int expired,

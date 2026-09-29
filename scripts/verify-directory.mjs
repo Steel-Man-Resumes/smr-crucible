@@ -12,6 +12,8 @@
  * rows on a throwaway branch and reads them back, as the owner and as smr_app.
  *
  * Revised with the missing tests from the Codex review of 061 (2026-09-24).
+ * 064 adds the corroboration rule: two public reports of hiring from different
+ * publishers, within 365 days, earn the mark as Likely and never Certain.
  *
  * SAFETY: needs ISOLATION_TEST_DATABASE_URL and SMR_APP_DATABASE_URL (never
  * DATABASE_URL); refuses the production endpoint; both must point at the same
@@ -133,7 +135,7 @@ async function liveRelationship(orgId, confirmedDaysAgo = 10, extra = {}) {
   return { rel: r.id, contact: c.id };
 }
 
-console.log("\nEmployer directory rules (061)\n");
+console.log("\nEmployer directory rules (061-064)\n");
 try {
   await cleanup();
   const [admin] = await owner`SELECT user_id FROM platform_admin LIMIT 1`;
@@ -273,6 +275,109 @@ try {
     s = await standing(z.p);
     check(`${positive} plus a written no stays 'mixed' (a yes never hides a no)`, s?.standing === "mixed" && !s?.earns_mark, JSON.stringify(s));
   }
+
+  // ---- Two independent public reports (064) --------------------------------
+  const report = (t, extra) => evidence({ org: t.o.id, place: t.p, claim: "reported_hire", kind: "news", ...extra });
+  const ymd = (v) => (v == null ? null : new Date(v).toISOString().slice(0, 10));
+
+  const c1 = await fresh("Corroborated Two Publishers");
+  await report(c1, { publisher: "Paper One", sourceOrgs: ["paper one"], observed: daysAgo(40) });
+  await report(c1, { kind: "partner_list", publisher: "Program Two", sourceOrgs: ["program two"], observed: daysAgo(10) });
+  s = await standing(c1.p);
+  check("two reports from different publishers read 'corroborated_here' and earn the mark", s?.standing === "corroborated_here" && s?.earns_mark === true, JSON.stringify(s));
+  check("a corroboration is 'likely'", s?.confidence === "likely", JSON.stringify(s));
+  check("a corroboration runs out 180 days after the later report", ymd(s?.soonest_local_expiry) === daysAgo(10 - 180), `${ymd(s?.soonest_local_expiry)} vs ${daysAgo(-170)}`);
+  const [cMarks] = await asApp(nobody, (q) => [q`SELECT basis FROM directory_mark_v WHERE name_key = ${c1.o.name_key}`]);
+  check("the app's mark list carries the corroborated employer", cMarks.length === 1 && cMarks[0].basis === "employer", JSON.stringify(cMarks));
+
+  const cCert = await fresh("Corroborated Never Certain");
+  const cRel = await liveRelationship(cCert.o.id, 5);
+  await report(cCert, { publisher: "Paper One", sourceOrgs: ["paper one"], confidence: "certain", rel: cRel.rel });
+  await report(cCert, { publisher: "Paper Two", sourceOrgs: ["paper two"], confidence: "certain", rel: cRel.rel });
+  s = await standing(cCert.p);
+  check("a corroboration is never 'certain', even from two Certain reports", s?.standing === "corroborated_here" && s?.confidence === "likely", JSON.stringify(s));
+
+  const cSame = await fresh("Corroborated Same Publisher");
+  await report(cSame, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await report(cSame, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  s = await standing(cSame.p);
+  check("the same publisher twice is one source: 'reported_here', no mark", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cAlias = await fresh("Corroborated Same Publisher Two Keys");
+  await report(cAlias, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await report(cAlias, { publisher: "PAPER ONE, Inc.", sourceOrgs: ["paper-one-inc"] });
+  s = await standing(cAlias.p);
+  check("the same publisher under two source keys is still one source", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cNoKey = await fresh("Corroborated No Source Keys");
+  await report(cNoKey, { publisher: "Paper One" });
+  await report(cNoKey, { publisher: "Paper Two" });
+  s = await standing(cNoKey.p);
+  check("reports that name no independent organization never corroborate", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cOne = await fresh("Corroborated One Source");
+  await report(cOne, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  s = await standing(cOne.p);
+  check("one report alone reads 'reported_here' with no mark", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cFar = await fresh("Corroborated Far Apart");
+  await report(cFar, { publisher: "Paper One", sourceOrgs: ["paper one"], observed: daysAgo(370) });
+  await report(cFar, { publisher: "Paper Two", sourceOrgs: ["paper two"] });
+  s = await standing(cFar.p);
+  check("two reports more than 365 days apart earn no mark", !s?.earns_mark && s?.standing !== "corroborated_here", JSON.stringify(s));
+  // Under today's 365-day expiry of reported_hire, two LIVE reports are never
+  // more than 365 days apart, so the window is proven on the rule itself too.
+  const [win] = await owner`
+    SELECT directory_reports_corroborate('{a}', 'Paper One', DATE '2026-01-01', '{b}', 'Paper Two', DATE '2026-12-31') AS inside,
+           directory_reports_corroborate('{a}', 'Paper One', DATE '2026-01-01', '{b}', 'Paper Two', DATE '2027-01-02') AS outside,
+           directory_reports_corroborate('{a}', 'Paper One', DATE '2026-01-01', '{a}', 'Paper Two', DATE '2026-02-01') AS shared_org,
+           directory_reports_corroborate('{a}', NULL,        DATE '2026-01-01', '{b}', 'Paper Two', DATE '2026-02-01') AS no_publisher`;
+  check("the pair rule: 365 days apart counts, 366 does not, a shared organization or a missing publisher does not",
+        win?.inside === true && win?.outside === false && win?.shared_org === false && win?.no_publisher === false, JSON.stringify(win));
+
+  const cOld = await fresh("Corroborated Stale Pair");
+  await report(cOld, { publisher: "Paper One", sourceOrgs: ["paper one"], observed: daysAgo(200) });
+  await report(cOld, { publisher: "Paper Two", sourceOrgs: ["paper two"], observed: daysAgo(190) });
+  s = await standing(cOld.p);
+  check("a pair whose later report is over 180 days old no longer earns the mark", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cWeak = await fresh("Corroborated Weak Source");
+  await report(cWeak, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await report(cWeak, { publisher: "Blog Two", sourceOrgs: ["blog two"], grade: "C", confidence: "guessing" });
+  s = await standing(cWeak.p);
+  check("a report below Likely cannot corroborate", s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cWd = await fresh("Corroborated Withdrawn Source");
+  await report(cWd, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  const cWdRow = await report(cWd, { publisher: "Paper Two", sourceOrgs: ["paper two"] });
+  const before = (await standing(cWd.p))?.earns_mark;
+  await owner`UPDATE employer_evidence SET status = 'withdrawn' WHERE id = ${cWdRow.id}`;
+  s = await standing(cWd.p);
+  check("withdrawing one report ends the corroboration", before === true && s?.standing === "reported_here" && !s?.earns_mark, JSON.stringify(s));
+
+  const cNo = await fresh("Corroborated With Written No");
+  await report(cNo, { publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await report(cNo, { publisher: "Paper Two", sourceOrgs: ["paper two"] });
+  await evidence({ org: cNo.o.id, place: cNo.p, claim: "negative_written", kind: "job_posting" });
+  s = await standing(cNo.p);
+  check("a corroboration plus a written no is 'mixed' (a yes never hides a no)", s?.standing === "mixed" && !s?.earns_mark, JSON.stringify(s));
+
+  const cGeo = await fresh("Corroborated County");
+  const cCounty = await place(cGeo.o.id, "county", "Flathead", "MT");
+  const cOther = await place(cGeo.o.id, "site", "Lincoln", "MT");
+  await evidence({ org: cGeo.o.id, place: cCounty, scope: "county", claim: "reported_hire", kind: "news", publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await report(cGeo, { publisher: "Program Two", sourceOrgs: ["program two"], kind: "partner_list" });
+  check("a county report and a site report corroborate at a site in that county", (await standing(cGeo.p))?.standing === "corroborated_here");
+  check("a corroboration does not reach another county", (await standing(cOther))?.earns_mark === false);
+
+  const cCo = await fresh("Corroborated Company Wide");
+  await evidence({ org: cCo.o.id, claim: "reported_hire", kind: "news", publisher: "Paper One", sourceOrgs: ["paper one"] });
+  await evidence({ org: cCo.o.id, claim: "reported_hire", kind: "news", publisher: "Paper Two", sourceOrgs: ["paper two"] });
+  s = await standing(cCo.p);
+  check("company-wide reports never corroborate a local place", !s?.earns_mark, JSON.stringify(s));
+
+  await refused("a corroborated_report item cannot be written directly", () =>
+    evidence({ org: c1.o.id, place: c1.p, claim: "corroborated_report", kind: "news", publisher: "Paper Three", sourceOrgs: ["paper three", "paper four"] }));
 
   // ---- Reach: county, state, franchise, role -----------------------------
   const geo = await fresh("Geography");
