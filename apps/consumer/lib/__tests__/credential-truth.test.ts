@@ -13,10 +13,10 @@ import assert from "node:assert/strict";
 import {
   claimsMoreThanGiven,
   credentialStatuses,
+  findOverstatedCredentialLines,
+  findOverstatedCredentials,
+  findOverstatedCredentialsDeep,
   itemClaimsMoreThanGiven,
-  stripOverstatedCredentialLines,
-  stripOverstatedCredentials,
-  stripOverstatedCredentialsDeep,
 } from "../credential-truth";
 
 const courseOnly = credentialStatuses(
@@ -115,22 +115,23 @@ describe("held, wanted and never mentioned", () => {
     assert.equal(claimsMoreThanGiven("You are a certified forklift operator.", credentialStatuses("Forklift operator, 2019 - 2021")), true));
 });
 
-describe("sweeping text, resume lines and the report object", () => {
-  it("removes only the overstated sentence and keeps line breaks", () => {
+describe("finding claims to check (nothing is removed)", () => {
+  it("finds the overstated sentence in a letter", () => {
     const letter = "I finished the EPA 608 course.\n\nMy EPA 608 certification covers refrigerants. I like fixing things.";
-    const r = stripOverstatedCredentials(letter, courseOnly);
-    assert.equal(r.removed.length, 1);
-    assert.equal(r.text, "I finished the EPA 608 course.\n\nI like fixing things.");
+    assert.deepEqual(findOverstatedCredentials(letter, courseOnly), ["My EPA 608 certification covers refrigerants."]);
   });
 
-  it("drops a resume certification line whole and leaves the rest", () => {
-    const resume = "CERTIFICATIONS\n- EPA 608 Certification, Type I and II (2026)\n- OSHA 10 General Industry (2021)";
-    const r = stripOverstatedCredentialLines(resume, courseOnly);
-    assert.deepEqual(r.removed, ["- EPA 608 Certification, Type I and II (2026)"]);
-    assert.equal(r.text, "CERTIFICATIONS\n- OSHA 10 General Industry (2021)");
+  it("finds a resume certification line and skips job header lines", () => {
+    const resume = [
+      "LINE COOK | Harbor Street Grill | 2019 - Present",
+      "CERTIFICATIONS",
+      "- EPA 608 Certification, Type I and II (2026)",
+      "- OSHA 10 General Industry (2021)",
+    ].join("\n");
+    assert.deepEqual(findOverstatedCredentialLines(resume, courseOnly), ["- EPA 608 Certification, Type I and II (2026)"]);
   });
 
-  it("drops a skill named as the claim and an emptied next step, never a career path", () => {
+  it("finds a skill named as the claim and a next step, never a career-path title", () => {
     const report = {
       skills: [{ name: "EPA 608 Certification (Type I and II)", category: "hard" }, { name: "Grill station", category: "hard" }],
       career_paths: [
@@ -141,18 +142,14 @@ describe("sweeping text, resume lines and the report object", () => {
         },
       ],
     };
-    const r = stripOverstatedCredentialsDeep(report, courseOnly);
-    assert.equal(r.removed.length, 2);
-    assert.deepEqual(r.value.skills.map((s) => s.name), ["Grill station"]);
-    assert.equal(r.value.career_paths.length, 1);
-    assert.equal(r.value.career_paths[0].title, "Certified HVAC Helper");
-    assert.deepEqual(r.value.career_paths[0].next_steps, ["Call the Job Center Monday."]);
+    assert.deepEqual(findOverstatedCredentialsDeep(report, courseOnly), [
+      "EPA 608 Certification (Type I and II)",
+      "Tell them you have EPA 608 and want HVAC.",
+    ]);
   });
 
-  it("changes nothing when no credential is involved", () => {
+  it("finds nothing when no credential is involved", () => {
     const report = { summary: "Line cook with nine years on the grill.", skills: [{ name: "Grill station" }] };
-    const r = stripOverstatedCredentialsDeep(report, none);
-    assert.equal(r.removed.length, 0);
-    assert.deepEqual(r.value, report);
+    assert.deepEqual(findOverstatedCredentialsDeep(report, none), []);
   });
 });

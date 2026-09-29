@@ -16,7 +16,7 @@ import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
 import { plainPunctuation, plainPunctuationText, logDashSwaps } from "@/lib/legal-sanitize";
-import { credentialStatuses, stripOverstatedCredentialLines, stripOverstatedCredentials } from "@/lib/credential-truth";
+import { credentialStatuses, findOverstatedCredentialLines, findOverstatedCredentials } from "@/lib/credential-truth";
 import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
@@ -156,28 +156,25 @@ async function handlePost(request: Request) {
     // finished resume. That document gets sent to an employer without being
     // re-read. Deterministic sweep, belt-and-braces like plainPunctuation.
     const swapLog = logDashSwaps("generate-docs");
-    // Deterministic backstops on what the model added: an employer city the
-    // person never gave, and a credential stated as more than they said it is.
+    // Deterministic backstops on what the model added. An employer city the
+    // person never gave is removed (a missing city harms no one). A sentence or
+    // line that may overstate a credential is flagged for the person to check,
+    // never deleted.
     const statuses = credentialStatuses(groundingSource);
     const cityCheck = stripUnsupportedJobCities(
       plainPunctuation(stripContactPlaceholders(resumeCheck.text), swapLog),
       groundingSource
     );
-    const resumeCredentials = stripOverstatedCredentialLines(cityCheck.text, statuses);
-    const resume = resumeCredentials.text;
-    const letterCredentials = stripOverstatedCredentials(
-      plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog),
-      statuses
-    );
-    const coverLetter = letterCredentials.text;
-    // Everything the deterministic backstops took out, by document, for the page.
-    const backstopRemovals = [
-      ...cityCheck.removedCities.map((claim) => ({ claim, doc: "resume" as const })),
-      ...resumeCredentials.removed.map((claim) => ({ claim, doc: "resume" as const })),
-      ...letterCredentials.removed.map((claim) => ({ claim, doc: "cover_letter" as const })),
+    const resume = cityCheck.text;
+    const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    const credentialChecks = [
+      ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
+      ...findOverstatedCredentials(coverLetter, statuses).map((claim) => ({ claim, doc: "cover_letter" as const })),
     ];
-    if (backstopRemovals.length) {
-      console.warn(`[added-facts] generate-docs: removed ${backstopRemovals.length} unsupported city or credential claim(s)`);
+    if (cityCheck.removed || credentialChecks.length) {
+      console.warn(
+        `[added-facts] generate-docs: removed ${cityCheck.removed} unsupported employer city(ies); flagged ${credentialChecks.length} possible credential overstatement(s)`
+      );
     }
     // Count what the check actually did, from the text itself: a flag is "removed"
     // only if its phrase was in the original and is gone from what the person
@@ -188,18 +185,20 @@ async function handlePost(request: Request) {
       { doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume },
       { doc: "cover_letter", flags: coverCheck.flags, original: coverLetterRaw, final: coverLetter },
     ]);
-    // The backstops' removals are real removals: counted and listed with the rest.
+    const clean = (claim: string) => plainPunctuationText(claim).text.slice(0, 200);
+    const known = new Set(accounting.outcomes.map((o) => `${o.doc}|${o.claim.toLowerCase()}`));
     const outcomes = [
       ...accounting.outcomes,
-      ...backstopRemovals.map((r) => ({
-        claim: plainPunctuationText(r.claim).text.slice(0, 200),
-        doc: r.doc,
-        status: "removed" as const,
-      })),
+      // Cities the backstop took out are real removals.
+      ...cityCheck.removedCities.map((claim) => ({ claim: clean(claim), doc: "resume" as const, status: "removed" as const })),
+      // Credential lines are left in place and listed for the person to check.
+      ...credentialChecks
+        .filter((c) => !known.has(`${c.doc}|${clean(c.claim).toLowerCase()}`))
+        .map((c) => ({ claim: clean(c.claim), doc: c.doc, status: "still_there" as const })),
     ];
-    const removedCount = accounting.removed + backstopRemovals.length;
-    // Reworded and still-there flags both ask the person to look.
-    const residualCount = accounting.residual + accounting.changed + accounting.alsoIn;
+    const removedCount = accounting.removed + cityCheck.removed;
+    // Reworded, still-there, also-in and credential-check items all ask the person to look.
+    const residualCount = outcomes.filter((o) => o.status === "still_there" || o.status === "changed" || o.status === "also_in").length;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;

@@ -10,6 +10,7 @@
  */
 
 const CITY_SEG = /^[A-Z][A-Za-z .'-]+,\s*[A-Z]{2}$/;
+const YEAR = /\b(19|20)\d\d\b/;
 const COMPANY_NOISE = new Set(["inc", "llc", "co", "corp", "corporation", "company", "ltd", "the", "of", "and"]);
 
 function norm(s: string): string {
@@ -40,6 +41,7 @@ export function stripUnsupportedJobCities(
     if (idx < 0 || !company) return line;
     const words = mainWords(company);
     const city = norm(segs[idx].split(",")[0]).trim();
+    const state = (segs[idx].split(",")[1] || "").trim().toLowerCase();
     if (!words.length || !city) return line;
     // The employer's block in the person's words: each line naming it, plus the
     // lines right after it until a blank line.
@@ -48,13 +50,25 @@ export function stripUnsupportedJobCities(
       if (supported) return;
       const nl = norm(l);
       if (!words.every((w) => nl.includes(` ${w} `))) return;
+      // The block ends at this job's own date line, so the next job's city is
+      // never borrowed. An employer line that already has a year is its own block.
       const block: string[] = [l];
-      for (let j = i + 1; j < Math.min(sourceLines.length, i + 4) && sourceLines[j].trim(); j++) block.push(sourceLines[j]);
+      if (!YEAR.test(l)) {
+        for (let j = i + 1; j < Math.min(sourceLines.length, i + 4) && sourceLines[j].trim(); j++) {
+          if (sourceLines[j].includes(" | ")) break;
+          block.push(sourceLines[j]);
+          if (YEAR.test(sourceLines[j])) break;
+        }
+      }
       // A city that is only part of the company name does not count: take the
       // company name out as a whole phrase, then look for the city.
       let text = norm(block.join(" "));
       for (const phrase of [norm(company), ` ${words.join(" ")} `]) text = text.split(phrase).join(" ");
-      if (text.includes(` ${city} `)) supported = true;
+      if (!text.includes(` ${city} `)) return;
+      // If the person wrote a state right after the city, it has to match.
+      const given = text.match(new RegExp(` ${city} ([a-z]{2}) `));
+      if (given && state && given[1] !== state) return;
+      supported = true;
     });
     if (supported) return line;
     removedCities.push(`${company}: ${segs[idx].trim()}`);

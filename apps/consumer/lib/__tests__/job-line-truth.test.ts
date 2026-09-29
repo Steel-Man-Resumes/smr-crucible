@@ -59,3 +59,17 @@ describe("employer cities, harder layouts", () => {
     assert.deepEqual(r.removedCities, ["Waukesha Metal Products: Waukesha, WI"]);
   });
 });
+
+describe("employer blocks and states", () => {
+  it("does not borrow the next job's city", () => {
+    const src = "Picker, Lakeshore Distribution, 2011 - 2013\nForklift operator, Midwest Pallet Supply, Grand Rapids MI, 2013 - 2018";
+    const r = stripUnsupportedJobCities("PICKER | Lakeshore Distribution | Grand Rapids, MI | 2011 - 2013", src);
+    assert.equal(r.text, "PICKER | Lakeshore Distribution | 2011 - 2013");
+  });
+
+  it("a different state is not the same place", () => {
+    const src = "Driver, Heartland Freight, Kansas City MO, 2018 - 2022";
+    const r = stripUnsupportedJobCities("DRIVER | Heartland Freight | Kansas City, KS | 2018 - 2022", src);
+    assert.equal(r.text, "DRIVER | Heartland Freight | 2018 - 2022");
+  });
+});

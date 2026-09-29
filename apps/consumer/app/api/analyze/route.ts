@@ -23,7 +23,7 @@ import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
 import { WOTC_RE, stripEmployerTaxCredit, plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
-import { credentialStatuses, stripOverstatedCredentialsDeep } from "@/lib/credential-truth";
+import { credentialStatuses, findOverstatedCredentialsDeep } from "@/lib/credential-truth";
 
 export const maxDuration = 120;
 
@@ -149,13 +149,14 @@ async function handlePost(request: Request) {
     if (WOTC_RE.test(JSON.stringify(rawForge))) {
       console.warn("[analyze] Deterministic guard stripped a WOTC / Form 8850 reference the model emitted");
     }
-    // Credential backstop: every report field, including the ones the grounding
+    // Credential check: every report field, including the ones the grounding
     // check above does not cover (career paths, next steps, skills, legal notes).
     // A sentence that claims more than the person's own words give a credential
     // (a finished course called a certification, an expired card called
-    // renewable) is removed. It only ever removes text.
-    const credentialSweep = stripOverstatedCredentialsDeep(
-      plainPunctuation(stripEmployerTaxCredit(rawForge), logDashSwaps("analyze")),
+    // renewable) is flagged for the person to check. Nothing is deleted.
+    const sweptForge = plainPunctuation(stripEmployerTaxCredit(rawForge), logDashSwaps("analyze"));
+    const credentialChecks = findOverstatedCredentialsDeep(
+      sweptForge,
       credentialStatuses(
         buildTrustedSource({
           resumeText: input.resumeText,
@@ -168,11 +169,10 @@ async function handlePost(request: Request) {
         })
       )
     );
-    if (credentialSweep.removed.length) {
-      console.warn(`[credential-truth] analyze: removed ${credentialSweep.removed.length} sentence(s) that overstated a credential`);
+    if (credentialChecks.length) {
+      console.warn(`[credential-truth] analyze: flagged ${credentialChecks.length} sentence(s) that may overstate a credential`);
     }
-    // What the backstop took out travels with the report, so the page can say so.
-    const forgeOutput = { ...credentialSweep.value, credential_removals: credentialSweep.removed };
+    const forgeOutput = { ...sweptForge, credential_checks: credentialChecks };
 
     // Log decision for JBS compliance
     try {

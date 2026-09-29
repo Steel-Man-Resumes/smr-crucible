@@ -162,7 +162,7 @@ export default function OutputPage() {
     unmatched: number;
     // Documents where the checker reported something but named no phrase we could show.
     unnamed: ("resume" | "cover_letter")[];
-    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" }[];
+    outcomes: { claim: string; doc: "resume" | "cover_letter" | "report"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" }[];
   } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
   // It fails open so a person still gets their documents -- but they should be
@@ -217,13 +217,21 @@ export default function OutputPage() {
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
       const g = data.grounding;
-      const outcomes = Array.isArray(g?.outcomes) ? g.outcomes : [];
-      if (g && (g.removed || g.residual || g.unmatched || outcomes.length || g.hasFabrication)) {
+      // Report sentences that may overstate a credential are checked on the
+      // server and listed here with the documents' items.
+      const reportChecks: string[] = Array.isArray((output as { credential_checks?: unknown })?.credential_checks)
+        ? ((output as { credential_checks: unknown[] }).credential_checks.filter((c) => typeof c === "string") as string[])
+        : [];
+      const outcomes = [
+        ...(Array.isArray(g?.outcomes) ? g.outcomes : []),
+        ...reportChecks.map((claim) => ({ claim, doc: "report" as const, status: "still_there" as const })),
+      ];
+      if ((g && (g.removed || g.residual || g.unmatched || g.hasFabrication)) || outcomes.length) {
         setGroundingNote({
-          removed: g.removed || 0,
-          residual: g.residual || 0,
-          unmatched: g.unmatched || 0,
-          unnamed: (["resume", "cover_letter"] as const).filter((d) => g.unnamedByDoc?.[d] === true),
+          removed: g?.removed || 0,
+          residual: (g?.residual || 0) + reportChecks.length,
+          unmatched: g?.unmatched || 0,
+          unnamed: (["resume", "cover_letter"] as const).filter((d) => g?.unnamedByDoc?.[d] === true),
           outcomes,
         });
       }
@@ -628,8 +636,8 @@ export default function OutputPage() {
 
             {groundingNote && (() => {
               const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length;
-              const docName = (d: "resume" | "cover_letter") => (d === "resume" ? "resume" : "letter");
-              const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
+              const docName = (d: "resume" | "cover_letter" | "report") => (d === "cover_letter" ? "letter" : d);
+              const label = (o: { status: string; doc: "resume" | "cover_letter" | "report" }) =>
                 o.status === "removed"
                   ? `Taken out of your ${docName(o.doc)}: `
                   : o.status === "changed"

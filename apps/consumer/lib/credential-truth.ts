@@ -10,10 +10,11 @@
  * For common reentry-trade credentials it reads the status from the person's
  * own words, clause by clause: held, a course they took, one they want, one
  * that is no longer current (expired, suspended, revoked), or only mentioned.
- * A sentence is removed only when it plainly claims more than that status for
- * that credential. When in doubt it keeps the sentence: deleting a true line
- * about someone's real license is worse than missing an overstatement, which
- * the truth check and the prompts also guard against.
+ * A sentence that plainly claims more than that status for that credential is
+ * FLAGGED for the person to check, never deleted: two reviews showed that
+ * reading status from free text is too uncertain to delete on, and deleting a
+ * true line about someone's real license is the worst mistake here. The prompts
+ * and the truth check steer the model away from overstating in the first place.
  */
 
 type Status = "held" | "course" | "wanted" | "not_current" | "mentioned";
@@ -170,90 +171,67 @@ function sentencesOf(text: string): string[] {
   return text.split(/(?<=[.!?])\s+/);
 }
 
-/** Remove sentences that overstate a credential from prose. Keeps line breaks. */
-export function stripOverstatedCredentials(text: string, statuses: Map<string, Status>): { text: string; removed: string[] } {
-  const removed: string[] = [];
-  const lines = text.split("\n").map((line) =>
-    sentencesOf(line)
-      .filter((s) => {
-        if (claimsMoreThanGiven(s, statuses)) {
-          removed.push(s.trim());
-          return false;
-        }
-        return true;
-      })
-      .join(" ")
-  );
-  return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n"), removed };
+/** Sentences in prose that claim more than the person's words give a credential.
+ *  Nothing is removed: these are shown to the person to check. Reading status
+ *  from free text is too uncertain to delete on, and a wrong flag costs a glance. */
+export function findOverstatedCredentials(text: string, statuses: Map<string, Status>): string[] {
+  const found: string[] = [];
+  for (const line of text.split("\n")) {
+    for (const s of sentencesOf(line)) if (s.trim() && claimsMoreThanGiven(s, statuses)) found.push(s.trim());
+  }
+  return found;
 }
+
+const JOB_HEADER = /\s\|\s.*\b(19|20)\d\d\b/;
 
 /** Resume: short lines (headline, certification entries, competencies) are
- *  items and are dropped whole; longer lines are prose and lose only the
- *  overstated sentence. Lines are never merged. */
-export function stripOverstatedCredentialLines(text: string, statuses: Map<string, Status>): { text: string; removed: string[] } {
-  const removed: string[] = [];
-  const out: string[] = [];
+ *  checked as items, longer lines sentence by sentence. Job header lines are
+ *  skipped. Nothing is removed. */
+export function findOverstatedCredentialLines(text: string, statuses: Map<string, Status>): string[] {
+  const found: string[] = [];
   for (const line of text.split("\n")) {
-    const words = line.trim().split(/\s+/).filter(Boolean).length;
-    if (words > 0 && words <= 12) {
-      if (itemClaimsMoreThanGiven(line.replace(/^\s*[-•*]\s*/, ""), statuses)) {
-        removed.push(line.trim());
-        continue;
-      }
-      out.push(line);
-      continue;
+    const trimmed = line.trim();
+    if (!trimmed || JOB_HEADER.test(trimmed)) continue;
+    const words = trimmed.split(/\s+/).length;
+    if (words <= 12) {
+      if (itemClaimsMoreThanGiven(trimmed.replace(/^[-\u2022*]\s*/, ""), statuses)) found.push(trimmed);
+    } else {
+      found.push(...findOverstatedCredentials(trimmed, statuses));
     }
-    if (words > 12) {
-      const r = stripOverstatedCredentials(line, statuses);
-      removed.push(...r.removed);
-      out.push(r.text);
-      continue;
-    }
-    out.push(line);
   }
-  return { text: out.join("\n"), removed };
+  return found;
 }
 
-// Keys whose strings are names or labels, not sentences about the person.
-const LABEL_KEYS = new Set(["title", "name", "industry", "category", "type", "schema_version", "generated_at"]);
+// Labels, not claims about the person.
+const LABEL_KEYS = new Set(["industry", "category", "type", "schema_version", "generated_at"]);
 
-/** The same sweep over the Forge report object. Prose loses the overstated
- *  sentences; a list item left empty is dropped; a skill whose name is the
- *  overstated claim is dropped. Career paths and resources are never dropped,
- *  and labels are never touched. */
-export function stripOverstatedCredentialsDeep<T>(value: T, statuses: Map<string, Status>): { value: T; removed: string[] } {
-  const removed: string[] = [];
-  const walk = (v: unknown, key?: string): unknown => {
+/** The same check over the Forge report object. Skill names and strength titles
+ *  are checked as items; career-path and resource titles are labels; prose is
+ *  checked sentence by sentence. Nothing is removed. */
+export function findOverstatedCredentialsDeep(value: unknown, statuses: Map<string, Status>): string[] {
+  const found: string[] = [];
+  const ITEM_LISTS = new Set(["skills", "strengths"]);
+  // `list` is the key of the nearest array above this value.
+  const walk = (v: unknown, key: string | undefined, list: string | undefined): void => {
     if (typeof v === "string") {
-      if (key && LABEL_KEYS.has(key)) return v;
-      const r = stripOverstatedCredentials(v, statuses);
-      removed.push(...r.removed);
-      return r.text;
+      if (key && LABEL_KEYS.has(key)) return;
+      const isItem = (key === undefined || key === "name" || key === "title") && list !== undefined && ITEM_LISTS.has(list);
+      if (isItem) {
+        if (itemClaimsMoreThanGiven(v, statuses)) found.push(v);
+        return;
+      }
+      if (key === "name" || key === "title") return; // career-path and resource titles are labels
+      found.push(...findOverstatedCredentials(v, statuses));
+      return;
     }
     if (Array.isArray(v)) {
-      if (key === "skills") {
-        return v
-          .filter((item) => {
-            const name = typeof item === "string" ? item : (item as { name?: unknown })?.name;
-            if (typeof name === "string" && itemClaimsMoreThanGiven(name, statuses)) {
-              removed.push(name);
-              return false;
-            }
-            return true;
-          })
-          .map((item) => walk(item));
-      }
-      return v
-        .map((item) => ({ before: item, after: walk(item) }))
-        .filter(({ before, after }) => !(typeof after === "string" && after.trim() === "" && typeof before === "string" && before.trim() !== ""))
-        .map(({ after }) => after);
+      for (const item of v) walk(item, undefined, key ?? list);
+      return;
     }
     if (v && typeof v === "object") {
-      const out: Record<string, unknown> = {};
-      for (const [k, val] of Object.entries(v)) out[k] = walk(val, k);
-      return out;
+      for (const [k, val] of Object.entries(v)) walk(val, k, list);
     }
-    return v;
   };
-  return { value: walk(value) as T, removed };
+  walk(value, undefined, undefined);
+  return Array.from(new Set(found));
 }
