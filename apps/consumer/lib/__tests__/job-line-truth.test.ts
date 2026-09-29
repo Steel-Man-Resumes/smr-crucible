@@ -152,3 +152,22 @@ describe("employer cities, contact lines only", () => {
   it("keeps a job city with a ZIP", () =>
     keep("Forklift Driver\nUline\n2017 - 2019\nKenosha, WI 53144", "FORKLIFT DRIVER | Uline | Kenosha, WI | 2017 - 2019"));
 });
+
+describe("employer cities, where the person lives (persona run 2026-09-29)", () => {
+  const src = "MARCUS DELANEY\nMilwaukee WI\n\nWork\nDishwasher, Sunrise Diner, 2025 - present\nWashed dishes, cleaned the kitchen, took out trash\n\nStocker, corner store, a few months in 2024\nStocked shelves\n";
+  it("a name-and-city header is where they live", () =>
+    assert.equal(stripUnsupportedJobCities("DISHWASHER | Sunrise Diner | Milwaukee, WI | 2025 - Present", src).text, "DISHWASHER | Sunrise Diner | 2025 - Present"));
+  it("their location preference is where they live", () =>
+    assert.equal(
+      stripUnsupportedJobCities("STOCKER | Corner Store | Milwaukee, WI | 2024", "Stocker, corner store, 2024\nStocked shelves", { homeLocation: "Milwaukee, WI" }).text,
+      "STOCKER | Corner Store | 2024"
+    ));
+  it("a job city they gave is kept even when they live there", () => {
+    const line = "COOK | Harbor Street Grill | Milwaukee, WI | 2019 - 2021";
+    assert.equal(stripUnsupportedJobCities(line, "Cook, Harbor Street Grill, Milwaukee WI, 2019 - 2021", { homeLocation: "Milwaukee, WI" }).text, line);
+  });
+  it("a job block that starts with a title and a city is not a header", () => {
+    const line = "FORKLIFT DRIVER | Uline | Kenosha, WI | 2017 - 2019";
+    assert.equal(stripUnsupportedJobCities(line, "Forklift Driver\nKenosha, WI\n2017 - 2019\nUline").text, line);
+  });
+});
