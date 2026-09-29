@@ -162,7 +162,7 @@ export default function OutputPage() {
     unmatched: number;
     // Documents where the checker reported something but named no phrase we could show.
     unnamed: ("resume" | "cover_letter")[];
-    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" }[];
+    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" }[];
   } | null>(null);
   // False when the automated check could not run (no key, timeout, bad reply).
   // It fails open so a person still gets their documents -- but they should be
@@ -223,9 +223,7 @@ export default function OutputPage() {
           removed: g.removed || 0,
           residual: g.residual || 0,
           unmatched: g.unmatched || 0,
-          unnamed: (["resume", "cover_letter"] as const).filter(
-            (d) => g.hasFabricationByDoc?.[d] && !outcomes.some((o: { doc: string }) => o.doc === d)
-          ),
+          unnamed: (["resume", "cover_letter"] as const).filter((d) => g.unnamedByDoc?.[d] === true),
           outcomes,
         });
       }
@@ -635,7 +633,9 @@ export default function OutputPage() {
                 o.status === "removed"
                   ? `Taken out of your ${docName(o.doc)}: `
                   : o.status === "changed"
-                    ? `Reworded in your ${docName(o.doc)}, check the new words: `
+                    ? `Reworded in your ${docName(o.doc)}. Find the new wording and check it. It used to say: `
+                    : o.status === "also_in"
+                    ? `Something like this is also in your ${docName(o.doc)}, check it: `
                     : o.status === "still_there"
                       ? `Still in your ${docName(o.doc)}, check it: `
                       : `We couldn't find these exact words in your ${docName(o.doc)}. Look for anything like them: `;
@@ -648,16 +648,16 @@ export default function OutputPage() {
                     {groundingNote.removed > 0 &&
                       `We took out ${groundingNote.removed} ${groundingNote.removed === 1 ? "detail" : "details"} we couldn't match to what you told us. `}
                     {groundingNote.residual > 0 &&
-                      `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged ${groundingNote.residual === 1 ? "is" : "are"} still in there or only reworded. `}
+                      `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged may still be in there, maybe reworded. `}
                     {groundingNote.unmatched > 0 &&
-                      `${groundingNote.unmatched === 1 ? "One thing we flagged" : `${groundingNote.unmatched} things we flagged`} didn't match your wording exactly. `}
+                      `The check quoted ${groundingNote.unmatched === 1 ? "words" : "some words"} we couldn't find in your documents. `}
                     {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
                     {open > 0
                       ? "Read these closely before you send anything."
                       : "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best."}
                   </p>
                   {groundingNote.outcomes.length > 0 && (
-                    <details className="mt-2">
+                    <details className="mt-2" open={open > 0}>
                       <summary className="t-focus cursor-pointer text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2">
                         See what we flagged
                       </summary>

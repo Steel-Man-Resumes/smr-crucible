@@ -167,7 +167,7 @@ async function handlePost(request: Request) {
     ]);
     const removedCount = accounting.removed;
     // Reworded and still-there flags both ask the person to look.
-    const residualCount = accounting.residual + accounting.changed;
+    const residualCount = accounting.residual + accounting.changed + accounting.alsoIn;
     const groundingFlags = [...resumeCheck.flags, ...coverCheck.flags];
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
@@ -224,6 +224,11 @@ async function handlePost(request: Request) {
         // Per document, so the page can say which one went unchecked.
         verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
         hasFabricationByDoc: { resume: resumeCheck.hasFabrication, cover_letter: coverCheck.hasFabrication },
+        // The check reported a problem in this document but named no phrase of its own.
+        unnamedByDoc: {
+          resume: resumeCheck.hasFabrication && !resumeCheck.flags.some((f) => f.claim.trim()),
+          cover_letter: coverCheck.hasFabrication && !coverCheck.flags.some((f) => f.claim.trim()),
+        },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
       },

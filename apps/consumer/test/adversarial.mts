@@ -245,6 +245,21 @@ section("truth check accounting");
   check("a trimmed attendance claim is changed, not removed",
     flagOutcome({ claim: "Brings reliable attendance, physical stamina, and steady work under time pressure.", why: "" },
       "Brings reliable attendance, physical stamina, and steady work under time pressure.", "Reliable attendance.") === "changed");
+  // Words already elsewhere in the document never make a removed claim look reworded.
+  const letterBefore = "I run 2nd shift at Kettle Ridge. The plant manager trusts me.\nWhat I bring to [Company Name] is a supervisor who can step up when the plant manager is away.\nI am applying at [Company Name].";
+  const letterAfter = "I run 2nd shift at Kettle Ridge. The plant manager trusts me.\nI am applying at [Company Name].";
+  check("a removed claim stays removed when its words are elsewhere in the letter",
+    flagOutcome({ claim: "What I bring to [Company Name] is a supervisor who can step up when the plant manager is away.", why: "" }, letterBefore, letterAfter) === "removed");
+  check("a deleted line stays removed when its year is on a job line",
+    flagOutcome({ claim: "Forklift Certification (2013, renewable)", why: "" },
+      "Forklift Operator, Midwest Pallet Supply, 2013 to 2018\nForklift Certification (2013, renewable)",
+      "Forklift Operator, Midwest Pallet Supply, 2013 to 2018") === "removed");
+  const soft = accountFlags([
+    { doc: "resume", flags: [{ claim: "Targeting a first shift supervisory role at a larger plant", why: "" }], original: "Targeting a first shift supervisory role at a larger plant.", final: "" },
+    { doc: "cover_letter", flags: [], original: "", final: "I am applying for the First Shift Production Supervisor role." },
+  ]);
+  check("a two-word match in the other document is only 'also in'",
+    soft.outcomes.some((o) => o.doc === "cover_letter" && o.status === "also_in"), JSON.stringify(soft.outcomes));
   check("a short claim with one key word, reworded around it, is changed",
     flagOutcome({ claim: "is renewable", why: "" }, "It is renewable.", "It stays renewable.") === "changed");
   const dup = accountFlags([{ doc: "resume", flags: [{ claim: "zero accidents", why: "" }, { claim: "Zero accidents", why: "" }], original: "Zero accidents.", final: "" }]);
