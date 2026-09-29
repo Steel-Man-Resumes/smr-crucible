@@ -184,3 +184,51 @@ describe("finding claims to check (nothing is removed)", () => {
     assert.deepEqual(findOverstatedCredentialsDeep(report, none), []);
   });
 });
+
+describe("second review: held credentials are not flagged", () => {
+  const flags = (src: string, text: string) => claimsMoreThanGiven(text, credentialStatuses(src));
+  it("wanting a renewal is not a renewal", () =>
+    assert.equal(flags("Forklift certification expired in 2020, need to get it renewed", "Your forklift certification is current and renewable."), true));
+  it("trying to get it reinstated is not reinstated", () =>
+    assert.equal(credentialStatuses("CDL suspended in 2019, trying to get it reinstated").get("CDL"), "not_current"));
+  it("a valid CDL beats an old revocation", () =>
+    assert.equal(flags("Valid Class A CDL\n\nCDL was revoked in 2014 because of my conviction", "Your CDL is a real asset for driving jobs."), false));
+  it("suspended then now valid", () => assert.equal(flags("CDL suspended 2019 to 2021, now valid", "Your CDL is a real asset."), false));
+  it("reinstated on the next line", () =>
+    assert.equal(flags("Class A CDL (suspended 2019-2021)\nReinstated in 2022", "Your CDL is a real asset."), false));
+  it("another credential's expiry does not touch this one", () =>
+    assert.equal(flags("I have my forklift cert but my CDL expired", "Your forklift certification makes warehouse work a good fit."), false));
+  it("certified and OSHA 10 expired", () =>
+    assert.equal(credentialStatuses("Forklift certified and OSHA 10 expired in 2020").get("forklift"), "held"));
+  it("on the state registry is held", () =>
+    assert.equal(flags("Completed CNA program, on the state registry", "Your CNA certification opens doors in home health."), false));
+  it("passed on the same line is held", () =>
+    assert.equal(flags("ServSafe Manager training and exam, passed 2023", "Your ServSafe certification helps."), false));
+  it("a finished NCCER program is the credential", () =>
+    assert.equal(flags("Completed NCCER Level 1 carpentry program inside", "Your NCCER Level 1 carpentry credential shows real training."), false));
+  it("AWS certified welder on the same line", () =>
+    assert.equal(flags("Completed welding program at MATC, 2021, AWS certified", "You are a certified welder with MATC training behind you."), false));
+  for (const src of [
+    "I need my CDL for the job I have",
+    "Hoping my CDL gets me a local route",
+    "I'm going to keep my CDL current",
+    "Drove for Werner 8 years, no CDL violations",
+  ]) it(`not wanted: ${src}`, () => assert.notEqual(credentialStatuses(src).get("CDL"), "wanted"));
+  it("needs my forklift cert is not wanted", () =>
+    assert.notEqual(credentialStatuses("Looking for work that needs my forklift cert").get("forklift"), "wanted"));
+  it("I want to get my CDL is still wanted", () => assert.equal(credentialStatuses("I want to get my CDL").get("CDL"), "wanted"));
+  it("I want a CDL is wanted", () => assert.equal(credentialStatuses("I want a CDL someday").get("CDL"), "wanted"));
+  it("an all-caps item under a heading stays under it", () =>
+    assert.equal(credentialStatuses("CERTIFICATIONS\nWELDING\nFORKLIFT\n\nTook a welding class at MATC in 2019").get("welding"), "held"));
+  for (const h of ["LICENSES/CERTIFICATIONS", "Training & Certifications", "Licenses and Certifications"]) {
+    it(`heading: ${h}`, () => assert.equal(credentialStatuses(`${h}\nWelding\n\nTook a welding class in 2019`).get("welding"), "held"));
+  }
+  it("inline heading", () => assert.equal(credentialStatuses("Certifications: Welding, Forklift\nTook a welding class in 2019").get("welding"), "held"));
+  it("certified in one thing and took a course in another", () =>
+    assert.equal(flags("Forklift certified 2020\nTook the EPA 608 course at MATC", "You're forklift certified and took the EPA 608 course last spring."), false));
+});
+
+describe("'certified' with its own object", () => {
+  it("certified in food safety, then a course credential, is kept", () =>
+    assert.equal(claimsMoreThanGiven("You are certified in food safety and finished the EPA 608 course.", courseOnly), false));
+});

@@ -654,7 +654,7 @@ export default function OutputPage() {
               const docName = (d: "resume" | "cover_letter") => (d === "cover_letter" ? "letter" : d);
               const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
                 o.status === "credential"
-                  ? `In your ${docName(o.doc)}, may say more about a card, license or certification than you told us. Check it: `
+                  ? `A line in your ${docName(o.doc)} may say more about a card, license or certification than you told us. Check it: `
                   : o.status === "removed"
                   ? `Taken out of your ${docName(o.doc)}: `
                   : o.status === "changed"

@@ -20,47 +20,73 @@ const STATE_CODES = new Set(
 );
 const ABBREV: Record<string, string> = { saint: "st", fort: "ft", mount: "mt" };
 
-function norm(s: string): string {
+/** Lowercase words. Apostrophes inside a word join it ("McDonald's" is
+ *  "mcdonalds"); hyphens split it, so "Dallas-Fort Worth" still names Dallas.
+ *  `joined` also joins hyphens and periods, used only to find a company
+ *  ("Wal-Mart" as "walmart", "A.O. Smith" as "ao smith"). */
+function norm(s: string, joined = false): string {
   return ` ${s
     .toLowerCase()
     .replace(/\bst\.?\s/g, "saint ")
     .replace(/\bft\.?\s/g, "fort ")
     .replace(/\bmt\.?\s/g, "mount ")
-    // "McDonald's", "Wal-Mart", "A.O. Smith": one word each
-    .replace(/(?<=[a-z0-9])['\u2019.-](?=[a-z0-9])/g, "")
+    .replace(joined ? /(?<=[a-z0-9])['\u2019.-](?=[a-z0-9])/g : /(?<=[a-z0-9])['\u2019](?=[a-z0-9])/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()} `;
+}
+
+function namesCompany(line: string, company: string): boolean {
+  const words = mainWords(company);
+  const joinedWords = norm(company, true).trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
+  const has = (text: string, ws: string[]) => ws.length > 0 && ws.every((w) => text.includes(` ${w} `));
+  return has(norm(line), words) || has(norm(line, true), joinedWords);
 }
 
 function mainWords(company: string): string[] {
   return norm(company).trim().split(" ").filter((w) => w && !COMPANY_NOISE.has(w));
 }
 
-/** State codes the person wrote right after this city: real uppercase codes only,
- *  so "Kansas City to" or "Grand Rapids in 2013" is never read as a state. */
-function statesAfter(rawText: string, city: string): string[] {
+/** State codes the person wrote right after this city: real uppercase codes
+ *  only, so "Kansas City to" or "Grand Rapids in 2013" is never read as a state.
+ *  A line written all in capitals can't tell "IN" the word from Indiana, so its
+ *  states are not read at all (the city is then judged without one). */
+function statesAfter(lines: string[], city: string): string[] {
   const words = city.split(" ").map((w) => (ABBREV[w] ? `(?:${w}|${ABBREV[w]}\\.?)` : w));
   const re = new RegExp(String.raw`\b${words.join(String.raw`[\s.,'-]+`)}\b[\s,]+([A-Za-z]{2})\b`, "gi");
-  return Array.from(rawText.matchAll(re), (m) => m[1]).filter((c) => c === c.toUpperCase() && STATE_CODES.has(c));
+  return lines
+    .filter((l) => /[a-z]/.test(l))
+    .flatMap((l) => Array.from(l.matchAll(re), (m) => m[1]))
+    .filter((c) => c === c.toUpperCase() && STATE_CODES.has(c));
 }
 
-/** The employer's block in the person's words: the line naming it, the line
- *  before it when that is a short line with no date (a title or a place), and
- *  the lines after it until a blank line, a "|" line or the next job's dates. */
+const PLACE_LINE = /^\s*[A-Z][A-Za-z .'-]*,?\s+[A-Z]{2}\s*$/;
+
+/** The employer's block in the person's words. It holds:
+ *  - the line naming the employer;
+ *  - the line before it, only when that line opens the block (nothing or a
+ *    blank line above it), so the previous job's city line is never borrowed;
+ *  - the lines after it up to this job's own dates;
+ *  - after the dates, one "City, ST" line right below them, and bullet lines.
+ *  It stops at a blank line, a "|" line, or the first other line after the
+ *  dates (the next job's title or company). */
 function blockAround(lines: string[], i: number): string[] {
   const block: string[] = [];
   const prev = lines[i - 1];
-  if (prev && prev.trim() && !YEAR.test(prev) && !prev.includes(" | ") && prev.trim().split(/\s+/).length <= 6) block.push(prev);
+  const opensBlock = i - 2 < 0 || !lines[i - 2].trim();
+  if (prev && prev.trim() && opensBlock && !YEAR.test(prev) && !prev.includes(" | ")) block.push(prev);
   block.push(lines[i]);
   let sawYear = YEAR.test(lines[i]);
+  let justAfterDates = sawYear;
   for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
     const l = lines[j];
     if (!l.trim() || l.includes(" | ")) break;
-    if (!BULLET.test(l) && YEAR.test(l)) {
-      if (sawYear) break; // the next job's dates
-      sawYear = true;
+    if (BULLET.test(l)) { block.push(l); justAfterDates = false; continue; }
+    if (sawYear) {
+      if (justAfterDates && PLACE_LINE.test(l)) { block.push(l); justAfterDates = false; continue; }
+      break; // past this job's dates: the next job starts
     }
     block.push(l);
+    if (YEAR.test(l)) { sawYear = true; justAfterDates = true; }
   }
   return block;
 }
@@ -85,8 +111,7 @@ export function stripUnsupportedJobCities(
     let supported = false;
     sourceLines.forEach((l, i) => {
       if (supported) return;
-      const nl = norm(l);
-      if (!words.every((w) => nl.includes(` ${w} `))) return;
+      if (!namesCompany(l, company)) return;
       named = true;
       const block = blockAround(sourceLines, i);
       // A city that is only part of the company name does not count: take the
@@ -95,7 +120,7 @@ export function stripUnsupportedJobCities(
       for (const phrase of [norm(company), ` ${words.join(" ")} `]) text = text.split(phrase).join(" ");
       if (!text.includes(` ${city} `)) return;
       // If the person wrote a state right after the city, it has to match.
-      const given = statesAfter(block.join("\n"), city);
+      const given = statesAfter(block, city);
       if (given.length && state && !given.includes(state)) return;
       supported = true;
     });

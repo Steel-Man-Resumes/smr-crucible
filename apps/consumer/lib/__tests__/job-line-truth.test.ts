@@ -111,3 +111,32 @@ describe("employer cities, review cases", () => {
     assert.equal(stripUnsupportedJobCities(line, src).text, line);
   });
 });
+
+describe("employer cities, second review", () => {
+  const keep = (src: string, line: string) => assert.equal(stripUnsupportedJobCities(line, src).text, line);
+  const drop = (src: string, line: string) => assert.notEqual(stripUnsupportedJobCities(line, src).text, line);
+  it("Dallas-Fort Worth keeps Dallas", () =>
+    keep("Driver, Heartland Freight, Dallas-Fort Worth area, 2018 - 2022", "DRIVER | Heartland Freight | Dallas, TX | 2018 - 2022"));
+  it("Dallas-Fort Worth keeps Fort Worth", () =>
+    keep("Driver, Heartland Freight, Dallas-Fort Worth area, 2018 - 2022", "DRIVER | Heartland Freight | Fort Worth, TX | 2018 - 2022"));
+  it("Minneapolis-St. Paul keeps Saint Paul", () =>
+    keep("Picker at Uline in Minneapolis-St. Paul, 2018 - 2022", "PICKER | Uline | Saint Paul, MN | 2018 - 2022"));
+  it("Milwaukee-based keeps Milwaukee", () =>
+    keep("Machine Operator, Badger Stamping, a Milwaukee-based shop, 2014 - 2017", "MACHINE OPERATOR | Badger Stamping | Milwaukee, WI | 2014 - 2017"));
+  it("Winston Salem matches Winston-Salem", () =>
+    keep("Cook, Harbor Street Grill, Winston Salem NC, 2019 - 2021", "COOK | Harbor Street Grill | Winston-Salem, NC | 2019 - 2021"));
+  it("does not borrow the next job's city past this job's dates", () =>
+    drop("Machine Operator\nBadger Stamping\n2014 - 2017\nForklift Driver\nUline\nKenosha, WI\n2017 - 2019",
+      "MACHINE OPERATOR | Badger Stamping | Kenosha, WI | 2014 - 2017"));
+  it("does not borrow the next job's city in a four-line layout", () =>
+    drop("Machine Operator\nBadger Stamping\nWaukesha, WI\n2014 - 2017\nForklift Driver\nUline\nKenosha, WI\n2017 - 2019",
+      "MACHINE OPERATOR | Badger Stamping | Kenosha, WI | 2014 - 2017"));
+  it("does not borrow the previous job's city line", () =>
+    drop("Badger Stamping, 2014 - 2017\nWaukesha, WI\nUline, 2017 - 2019", "FORKLIFT DRIVER | Uline | Waukesha, WI | 2017 - 2019"));
+  it("a city line right after this job's dates is this job's", () =>
+    keep("Acme Fabrication\n2016 - 2020\nSt. Louis, MO", "WELDER | Acme Fabrication | Saint Louis, MO | 2016 - 2020"));
+  it("all caps: IN is not read as a state", () =>
+    keep("DRIVER FOR HEARTLAND FREIGHT IN KANSAS CITY IN 2018 TO 2022", "DRIVER | Heartland Freight | Kansas City, MO | 2018 - 2022"));
+  it("company hyphen still matches", () =>
+    keep("Cashier, Wal-Mart, Racine WI, 2010 - 2012", "CASHIER | Walmart | Racine, WI | 2010 - 2012"));
+});
