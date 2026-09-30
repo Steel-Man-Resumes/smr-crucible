@@ -36,6 +36,9 @@ import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformanc
 // Deep import: canonical stage vocabulary without dragging the core barrel
 // (db/pg) into the client bundle.
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
+// Pure wording for an empty staff list (tested in packages/core).
+import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
+import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import {
   DEFAULT_STAFF_PREFS,
   CASELOAD_SORTS,
@@ -116,6 +119,12 @@ interface OrgPayload {
   canManage: boolean;
   canInvite?: boolean;
   showCosts: boolean;
+  /** The viewer's list is the whole organization, not only their caseload. */
+  seesEveryone?: boolean;
+  /** Counts only. People who joined and are assigned to nobody; null = unknown. */
+  unassignedJoined?: number | null;
+  /** People assigned to the viewer, sharing or not; null = unknown. */
+  assignedToViewer?: number | null;
 }
 
 function fmtDate(s: string | null): string {
@@ -448,6 +457,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   const invites = data?.invites ?? [];
   const canInvite = data?.canInvite ?? false;
   const isStaffView = data?.org.role === "staff";
+  // A staff member limited to their own caseload (an admin has not turned on
+  // "See everyone" for them). Their empty list gets words they can act on.
+  const ownCaseloadOnly = isStaffView && data?.seesEveryone === false;
   const seatLimit = data?.org.seatLimit ?? null;
   // Invited-but-not-yet-active people hold a seat (they count in totalJoined
   // and, having no sharing consent, in pendingCount) but have not actually
@@ -478,10 +490,17 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     if (rows.length === 0) {
       return (
         <div className="text-t-phos-dim bg-t-panel border border-t-line px-5 py-8 text-center">
-          {isStaffView
-            ? "No clients are assigned to you yet, or your assigned clients have not turned on sharing."
+          {clients.length > 0
+            ? drillStaffId ? "No one here is sharing progress yet." : "No one matches that."
+            : ownCaseloadOnly
+            ? staffEmptyState({
+                ownCaseloadOnly,
+                assignedToViewer: data?.assignedToViewer ?? null,
+                unassignedJoined: data?.unassignedJoined ?? null,
+                adminNames: staff.filter((m) => m.role === "org_admin").map((m) => m.name || ""),
+              }).message
             : "No one is sharing progress here yet."}
-          {joinedNotSharing > 0 && !drillStaffId && (
+          {joinedNotSharing > 0 && !drillStaffId && !ownCaseloadOnly && clients.length === 0 && (
             <span>
               {" "}
               {joinedNotSharing} {joinedNotSharing === 1 ? "person has" : "people have"} joined with the
@@ -600,7 +619,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
             <p className="text-t-phos-dim mt-0.5 text-sm">
               {data
                 ? isStaffView
-                  ? "Staff view: the clients assigned to you who chose to share progress."
+                  ? ownCaseloadOnly
+                    ? "Staff view: the clients assigned to you who chose to share progress."
+                    : "Staff view: everyone in your organization who chose to share progress."
                   : `Your organization's mission control for team, client progress, and program reach. Code ${data.org.code}.`
                 : "Progress for the people you support who chose to share it."}
             </p>
@@ -803,6 +824,13 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 </div>
               )}
             </div>
+          )}
+
+          {/* Who sees whom. With the staff workspace off there is no Team &
+              access page in the nav, so the one switch that fixes an empty
+              staff list lives here, next to the team it changes. */}
+          {showTeam && view === "all" && !codeId && (
+            <SeeEveryonePanel unassignedJoined={data?.unassignedJoined ?? null} />
           )}
 
           {/* Add participant + pending invites */}

@@ -14,6 +14,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
+import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { SharingControls } from "@/components/SharingControls";
 import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
 import { OrgSetupGuide } from "@/components/org/OrgSetupGuide";
@@ -180,6 +181,8 @@ export default function SettingsPage() {
       if (res.ok) {
         setCodeStatus("success");
         setCodeInput("");
+        // Joined: the one-time "share your progress?" question can now be asked.
+        window.dispatchEvent(new Event(ORG_JOINED_EVENT));
         // Refresh codes and usage
         const [codesRes, usageRes] = await Promise.all([
           fetch("/api/access-code/mine"),

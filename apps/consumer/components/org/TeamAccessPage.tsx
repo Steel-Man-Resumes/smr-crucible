@@ -116,7 +116,7 @@ export function TeamAccessPage() {
           <p className="text-xs text-t-phos-dim mb-4">
             {open.role === "owner" ? "The owner can do everything, and that cannot be changed here."
               : !open.editable ? (open.role === "org_admin" ? "Only the owner can change an admin's access." : "You cannot change your own access.")
-              : "Switches marked \\u201cchanged\\u201d differ from what the role gives by default."}
+              : 'Switches marked "changed" differ from what the role gives by default.'}
           </p>
           <ul className="divide-y divide-t-line">
             {open.access.map((a) => {

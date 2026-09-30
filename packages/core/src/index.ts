@@ -68,3 +68,5 @@ export * from './authz/capabilities';
 export * from './authz/resolveOrgActor';
 export * from './orgStaffPerformance';
 export * from './orgStaffAdmin';
+export * from './joinSharingPrompt';
+export * from './orgVisibilityShared';

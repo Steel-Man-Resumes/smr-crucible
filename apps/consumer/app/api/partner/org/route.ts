@@ -31,6 +31,7 @@ import {
   getOrgContext,
   getOrgStaff,
   getPartnerCohort,
+  getOrgAssignmentCounts,
   assignClientStaff,
   addOrgStaff,
   setOrgStaffRole,
@@ -111,6 +112,13 @@ export async function GET(request: Request) {
       context: { clientCount: clients.length },
     });
 
+    // Counts only, so an empty staff list can say why and who to ask. Never
+    // blocks the page: without them the console falls back to its old wording.
+    const counts = await getOrgAssignmentCounts(org.accessCodeId, userId).catch((err) => {
+      console.error("org assignment counts failed:", err?.message || err);
+      return null;
+    });
+
     // The per-participant pages and scoped sharing, switched on per org.
     const flag = await getOne<{ crm_v2: boolean }>(
       `SELECT crm_v2 FROM access_code WHERE id = $1`,
@@ -134,6 +142,8 @@ export async function GET(request: Request) {
       canManage: managesStaff,
       canAssign: can("org.client.assign", roleIsAdmin),
       seesEveryone: isOrgAdmin,
+      unassignedJoined: counts?.unassignedJoined ?? null,
+      assignedToViewer: counts?.assignedToViewer ?? null,
       canInvite: can("org.participant.invite", true),
       showCosts: seesCosts,
       capabilities: actor ? Array.from(actor.capabilities) : [],

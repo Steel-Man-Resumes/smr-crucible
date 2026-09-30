@@ -50,45 +50,64 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
       </Section>
 
       {/* Who Can See Your Data */}
+      {/* Every line here is a promise checked against the code with the staff
+          workspace on and required sharing off. Change the product, change
+          this in the same commit. "Record plan" is what the Disclosure Planner
+          makes; the join prompt and the Settings switch use the same words. */}
       <Section title="Who Can See Your Data">
         <div className="bg-t-panel p-4 border border-t-line mb-4">
           <p className="text-sm font-bold text-t-amber-bright">
-            Your work is private from program staff unless you open sharing.
+            You decide. Program staff cannot read your work unless you share
+            it.
           </p>
         </div>
         <ul className="space-y-2">
           <BulletItem>
-            Joining a program does not by itself give staff access to your
-            resumes, cover letters or application details. Where sharing is
-            available, you see what will be shared and who can see it before
-            you turn it on. Programs can still see membership and permitted
-            program records.
+            <Lead>If you share nothing:</Lead> your name is not on their
+            caseload list. They cannot read your resume, letters, jobs or
+            anything you wrote. Staff who signed you up, or who you shared
+            with before, may still see your name, email and step.
           </BulletItem>
           <BulletItem>
-            You can stop sharing in Settings. This stops new viewing through
-            the sharing feature; it cannot erase what someone already read,
-            copied or put in their own records. You can see a log of access
-            through this feature.
+            <Lead>If you share your progress:</Lead> they see your name,
+            email, your step, how many jobs you saved and applied to, when you
+            were last on, and if you got hired. They also see how many times
+            you practiced and whether you made a record plan. They cannot read
+            either one.
           </BulletItem>
           <BulletItem>
-            Required sharing is currently limited to demo programs. A program
-            requirement must be shown separately and acknowledged before it
-            opens any items. Stopping sharing here does not decide a
-            program&apos;s rules or any outside obligations.
+            <Lead>You can share more, one item at a time,</Lead> if your
+            program offers it: your job applications, your resumes or your
+            cover letters. You see what each one shows first. Staff can read
+            them. They cannot change them.
           </BulletItem>
           <BulletItem>
-            An employer, supervising officer or law enforcement agency does
-            not get access just because of that role. Information you share
-            outside Steel Man may be kept by its recipient. We may also have
-            to disclose information when the law requires it.
+            <Lead>No program can read these through sharing:</Lead> your
+            record plan (what you make in the Disclosure Planner), your
+            interview practice, or your vault files.
+          </BulletItem>
+          <BulletItem>
+            <Lead>Stop any time in Settings.</Lead> That ends new viewing. It
+            cannot take back what someone already read or wrote down.
+          </BulletItem>
+          <BulletItem>
+            <Lead>You can see who looked.</Lead> Where your program uses the
+            full workspace, each time staff open something you shared is
+            logged, and you can see the list in Settings.
+          </BulletItem>
+          <BulletItem>
+            <Lead>If a program has its own sharing rule,</Lead> you see the
+            rule and its reason first. Nothing opens until you say you saw it,
+            and we will not call it your choice.
+          </BulletItem>
+          <BulletItem>
+            A boss, a PO or the police do not get in just because of who they
+            are. If the law makes us hand something over, we have to.
           </BulletItem>
         </ul>
         <p className="text-sm text-t-phos leading-relaxed mt-3">
-          Our own staff can open an account to help you,
-          for example when you ask for support or something breaks. Every
-          staff access is recorded in an audit log with who and when, and
-          full-access sessions require a written reason. Day to day we look
-          at usage counts, not your personal information.
+          Our own staff can open an account to help you when you ask for
+          support or something breaks. Each time is logged with who and when.
         </p>
       </Section>
 
@@ -348,6 +367,10 @@ function BulletItem({
       <span className={bold ? "font-semibold text-t-white" : ""}>{children}</span>
     </li>
   );
+}
+
+function Lead({ children }: { children: React.ReactNode }) {
+  return <span className="font-semibold text-t-white">{children}</span>;
 }
 
 function DenyItem({ children }: { children: React.ReactNode }) {

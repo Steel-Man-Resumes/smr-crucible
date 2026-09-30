@@ -56,7 +56,7 @@ const SECTIONS: Array<{ heading: string; items: Item[] }> = [
     items: [
       {
         q: "Do we see everything a participant does?",
-        a: "No, and this is the part most tools get wrong. A participant chooses whether to share progress with your organization. If they decline, you see that they joined and nothing else. They are counted, never named. That choice is theirs to change at any time.",
+        a: "No. A participant chooses whether to share progress with your organization. If they decline, they are counted on your caseload but not named. If you signed them up yourself by email, you still have the name and email you entered. That choice is theirs to change at any time.",
       },
       {
         q: "Do we see their resume, their practice sessions, their disclosure plan?",

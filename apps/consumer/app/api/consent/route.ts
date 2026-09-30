@@ -2,6 +2,9 @@
  * Consent API -- the user controls their own layered consent.
  * GET  -> the user's current consent records (for the settings toggles).
  * POST -> grant or revoke one layer { layer, action: "grant" | "revoke" }.
+ *         { layer: "sharing", action: "grant", source: "join_prompt" } is the
+ *         same grant, answered from the one-time prompt after joining an
+ *         organization. It is recorded with the prompt's own wording version.
  *
  * 'core' is not user-toggleable here (it is essential service operation).
  */
@@ -12,8 +15,10 @@ import {
   getUserConsents,
   grantConsent,
   revokeConsent,
+  getJoinSharingPrompt,
   type ConsentLayer,
 } from "@crucible/core";
+import { consentGrantRecord, settingsTextVersionFor } from "@/lib/join-sharing-prompt";
 
 export const maxDuration = 10;
 
@@ -42,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { layer?: string; action?: string };
+  let body: { layer?: string; action?: string; source?: string };
   try {
     body = await request.json();
   } catch {
@@ -75,14 +80,32 @@ export async function POST(request: Request) {
       });
     }
 
+    // Where the yes came from decides which words are on record for it. The
+    // organization is looked up here, never taken from the request, and a
+    // "join_prompt" grant is refused unless that prompt really applies.
+    let joinOrgId: string | null = null;
+    if (body.source === "join_prompt") {
+      const prompt = layer === "sharing" && action === "grant" ? await getJoinSharingPrompt(session.user.id) : { show: false as const };
+      if (!prompt.show) {
+        return NextResponse.json({ error: "There is nothing to answer. Use Settings to change sharing." }, { status: 409 });
+      }
+      joinOrgId = prompt.orgId;
+    }
+    // The sharing switch has its own wording version; the other layers keep theirs.
+    const grant = consentGrantRecord(
+      joinOrgId ? "join_prompt" : "settings",
+      settingsTextVersionFor(layer, CONSENT_TEXT_VERSION),
+      joinOrgId
+    );
+
     const record =
       action === "grant"
         ? await grantConsent(
             session.user.id,
             layer as ConsentLayer,
-            CONSENT_TEXT_VERSION,
-            { collected_from: "settings" },
-            { collectionMethod: "settings" }
+            grant.textVersion,
+            grant.context,
+            { collectionMethod: grant.collectionMethod, context: grant.eventContext }
           )
         : await revokeConsent(session.user.id, layer as ConsentLayer, {
             collectionMethod: "settings",

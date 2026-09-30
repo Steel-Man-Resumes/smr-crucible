@@ -5,11 +5,14 @@
  *
  * Lets the user grant/revoke the 'sharing' consent layer, which is what lets a
  * support partner (the org whose access code they used) see their journey
- * progress. We are explicit about what is and is not shared. Self-contained:
+ * progress. The words live in core (SETTINGS_SHARING_TEXT) with their own
+ * version, and match the one-time prompt after joining. Self-contained:
  * hydrates from GET /api/consent, toggles via POST /api/consent.
  */
 
 import { useState, useEffect } from "react";
+import { SETTINGS_SHARING_TEXT as TEXT } from "@crucible/core/src/joinSharingPromptShared";
+import { SHARING_CHANGED_EVENT } from "@/lib/join-sharing-prompt";
 
 export function SharingConsentSection() {
   const [sharing, setSharing] = useState(false);
@@ -17,16 +20,21 @@ export function SharingConsentSection() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/consent")
-      .then((r) => (r.ok ? r.json() : { consents: [] }))
-      .then((d) => {
-        const rec = (d.consents || []).find(
-          (c: any) => c.consent_layer === "sharing"
-        );
-        setSharing(rec?.status === "granted");
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = () =>
+      fetch("/api/consent")
+        .then((r) => (r.ok ? r.json() : { consents: [] }))
+        .then((d) => {
+          const rec = (d.consents || []).find(
+            (c: any) => c.consent_layer === "sharing"
+          );
+          setSharing(rec?.status === "granted");
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    load();
+    // The one-time prompt after joining sets this same consent; stay in step.
+    window.addEventListener(SHARING_CHANGED_EVENT, load);
+    return () => window.removeEventListener(SHARING_CHANGED_EVENT, load);
   }, []);
 
   async function toggle() {
@@ -38,7 +46,11 @@ export function SharingConsentSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ layer: "sharing", action: next ? "grant" : "revoke" }),
       });
-      if (res.ok) setSharing(next);
+      if (res.ok) {
+        setSharing(next);
+        // They chose here, so the one-time prompt has nothing left to ask.
+        window.dispatchEvent(new Event(SHARING_CHANGED_EVENT));
+      }
     } catch {
       // leave state as-is on failure
     } finally {
@@ -48,20 +60,13 @@ export function SharingConsentSection() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-4">Share your progress</h2>
+      <h2 className="text-lg font-bold text-t-white mb-4">{TEXT.heading}</h2>
       <div className="bg-t-panel border border-t-line p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-t-white mb-1">
-              Let your support partner see your progress
-            </h3>
+            <h3 className="font-semibold text-t-white mb-1">{TEXT.title}</h3>
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              If a partner organization gave you a code, you can let them see your
-              progress. That means your stage, how many jobs you have applied to, and
-              when you were last active. This switch never shows them your resume, your
-              disclosure plan, or anything you write while practicing. If your organization
-              offers it, sharing anything more is a separate choice you make one item at a
-              time, under &quot;Who can see what&quot; below. You can turn this off anytime.
+              {TEXT.sees} {TEXT.never} {TEXT.more} {TEXT.control}
             </p>
           </div>
           <button
@@ -70,7 +75,7 @@ export function SharingConsentSection() {
             disabled={loading || saving}
             role="switch"
             aria-checked={sharing}
-            aria-label="Share my progress with my support partner"
+            aria-label={TEXT.switchLabel}
             className={`t-focus relative inline-flex h-7 w-12 flex-shrink-0 items-center border transition-colors disabled:opacity-50 ${
               sharing ? "bg-t-amber border-t-amber" : "bg-t-panel-2 border-t-line"
             }`}
@@ -86,8 +91,8 @@ export function SharingConsentSection() {
           {loading
             ? "Loading..."
             : sharing
-              ? "On. Your partner can see your progress signals."
-              : "Off. Your progress is private to you."}
+              ? TEXT.on
+              : TEXT.off}
         </p>
       </div>
     </section>
