@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PolicyAckBanner } from "@/components/PolicyAckBanner";
+import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
+import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { AssistantDrawer } from "@crucible/consumer-ui";
@@ -366,7 +368,9 @@ export function RefineryShell({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: pendingCode }),
-      }).catch(() => {});
+      })
+        .then((r) => { if (r.ok) window.dispatchEvent(new Event(ORG_JOINED_EVENT)); })
+        .catch(() => {});
     }
 
     try {
@@ -835,6 +839,9 @@ export function RefineryShell({
             </p>
           )}
           {!isOrgPartner && <PolicyAckBanner />}
+          {/* Asked once after joining an organization. Not while an admin is
+              viewing as someone else: the answer would be recorded for the admin. */}
+          {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
           {children}
         </main>

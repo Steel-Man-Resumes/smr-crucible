@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ForgeProvider, useForgeSession } from "@/lib/forge-context";
 import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
+import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
 import { ShieldCheck, X } from "lucide-react";
 
@@ -95,7 +96,12 @@ export function ForgeShell({ children }: { children: ReactNode }) {
         </div>
         <ForgeProgress />
       </header>
-      <main id="main" className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">{children}</main>
+      <main id="main" className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">
+        {/* Signed-in people who just joined an organization are asked once
+            whether it may see their progress. Renders nothing for anyone else. */}
+        <JoinSharingPrompt />
+        {children}
+      </main>
 
       {/* AI Assistant — available on every Forge page */}
       <ForgeAssistant />

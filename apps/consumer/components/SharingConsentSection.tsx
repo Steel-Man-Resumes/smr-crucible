@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { SHARING_CHANGED_EVENT } from "@/lib/join-sharing-prompt";
 
 export function SharingConsentSection() {
   const [sharing, setSharing] = useState(false);
@@ -17,16 +18,21 @@ export function SharingConsentSection() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/consent")
-      .then((r) => (r.ok ? r.json() : { consents: [] }))
-      .then((d) => {
-        const rec = (d.consents || []).find(
-          (c: any) => c.consent_layer === "sharing"
-        );
-        setSharing(rec?.status === "granted");
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = () =>
+      fetch("/api/consent")
+        .then((r) => (r.ok ? r.json() : { consents: [] }))
+        .then((d) => {
+          const rec = (d.consents || []).find(
+            (c: any) => c.consent_layer === "sharing"
+          );
+          setSharing(rec?.status === "granted");
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    load();
+    // The one-time prompt after joining sets this same consent; stay in step.
+    window.addEventListener(SHARING_CHANGED_EVENT, load);
+    return () => window.removeEventListener(SHARING_CHANGED_EVENT, load);
   }, []);
 
   async function toggle() {
@@ -38,7 +44,11 @@ export function SharingConsentSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ layer: "sharing", action: next ? "grant" : "revoke" }),
       });
-      if (res.ok) setSharing(next);
+      if (res.ok) {
+        setSharing(next);
+        // They chose here, so the one-time prompt has nothing left to ask.
+        window.dispatchEvent(new Event(SHARING_CHANGED_EVENT));
+      }
     } catch {
       // leave state as-is on failure
     } finally {
