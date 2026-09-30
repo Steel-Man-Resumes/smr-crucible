@@ -482,6 +482,42 @@ export async function getOrgStaff(accessCodeId: string): Promise<OrgStaffMember[
   }));
 }
 
+/**
+ * Two COUNTS that explain an empty staff list, never names:
+ *   unassignedJoined  members of this org assigned to nobody (staff and the
+ *                     owner are not counted: they are not anyone's caseload)
+ *   assignedToViewer  people assigned to this staff member, sharing or not
+ *
+ * A staff member already sees how many people joined; this only lets the
+ * console say "ask your admin" instead of showing a blank list. It widens no
+ * one's view of any person.
+ */
+export async function getOrgAssignmentCounts(
+  accessCodeId: string,
+  viewerUserId: string
+): Promise<{ unassignedJoined: number; assignedToViewer: number }> {
+  const rows = await runScopedRows<{ unassigned: number; mine: number }>(
+    `SELECT
+       (SELECT COUNT(*) FROM access_code_redemption r
+         WHERE r.access_code_id = $1::uuid
+           AND NOT EXISTS (SELECT 1 FROM client_staff_assignment a
+                            WHERE a.access_code_id = r.access_code_id AND a.client_user_id = r.user_id)
+           AND NOT EXISTS (SELECT 1 FROM org_staff os
+                            WHERE os.access_code_id = r.access_code_id AND os.user_id = r.user_id)
+           AND r.user_id IS DISTINCT FROM (SELECT ac.partner_user_id FROM access_code ac WHERE ac.id = $1::uuid)
+       )::int AS unassigned,
+       (SELECT COUNT(*) FROM client_staff_assignment a
+         WHERE a.access_code_id = $1::uuid AND a.staff_user_id = $2::uuid)::int AS mine`,
+    [accessCodeId, viewerUserId],
+    accessCodeId,
+    viewerUserId
+  );
+  return {
+    unassignedJoined: Number(rows[0]?.unassigned ?? 0),
+    assignedToViewer: Number(rows[0]?.mine ?? 0),
+  };
+}
+
 /** Assign (or reassign) a cohort client to a staff member. Pass null staff to unassign. */
 export async function assignClientStaff(
   accessCodeId: string,
