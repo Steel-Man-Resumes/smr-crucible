@@ -106,7 +106,7 @@ export default function AdminEvidenceDashboard() {
             <label className="text-xs text-t-phos-dim block mb-1">Code (uppercase A-Z 0-9)</label>
             <input
               className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm uppercase focus:border-t-amber focus:outline-none"
-              placeholder="EXPOCREW"
+              placeholder="ORGCODE"
               value={mintForm.code}
               onChange={(e) => setMintForm((f) => ({ ...f, code: e.target.value }))}
               required

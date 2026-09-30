@@ -49,25 +49,11 @@ const TOOLS = [
 ] as const;
 
 /**
- * Display names for live partner codes.
- *
- * ONLY LIVE CODES BELONG HERE. This file is in a PUBLIC repository and the page
- * renders what it holds, so every entry is a working access code published to
- * anyone who reads either one. A retired code left in this map is an open seat
- * and a corrupted cohort attribution waiting to happen.
- *
- * Removed 2026-09-19 as retired (Troy): four partner/client codes (names kept out of this public repo).
- * They are also deactivated in the database -- taking a code out of this map
- * stops advertising it, it does not stop it being redeemed.
+ * Partner display names come from the database (access_code.partner_name) via
+ * /api/access-name. They used to live in a code -> name map in this file, which
+ * published every live access code in a PUBLIC repository. Never put an access
+ * code literal in this file again.
  */
-const PARTNER_NAMES: Record<string, string> = {
-  EXPO2026: "EXPO of Wisconsin",
-  EXPOCREW: "EXPO of Wisconsin",
-  GUESTHOUSE2026: "Guest House of Milwaukee",
-  GUESTHOUSECREW: "Guest House of Milwaukee",
-  OFS2026: "Operation Fresh Start",
-  MWOCREW: "My Way Out",
-};
 
 export default function AccessPage() {
   return (
@@ -86,7 +72,21 @@ function AccessPageInner() {
   const hasCode = partnerCode.length > 0;
   const orgName = (searchParams.get("name") || "").trim();
   const contactName = (searchParams.get("contact") || "").trim();
-  const displayName = orgName || PARTNER_NAMES[partnerCode] || "Your Organization";
+  const [partnerName, setPartnerName] = useState<string | null>(null);
+  useEffect(() => {
+    if (orgName || !/^[A-Z0-9]{4,20}$/.test(partnerCode)) return;
+    let cancelled = false;
+    fetch(`/api/access-name?code=${encodeURIComponent(partnerCode)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && typeof d.name === "string") setPartnerName(d.name);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [orgName, partnerCode]);
+  const displayName = orgName || partnerName || "Your Organization";
   // Pre-authorized sign-in is configured per engagement (PARTNER_PRE_AUTH), not
   // hardcoded to one partner. Without a code there is nothing to pre-authorize.
   const preAuthorized = false;

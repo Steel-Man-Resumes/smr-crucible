@@ -1,7 +1,7 @@
--- Org staff hierarchy (EXPO build-out, Troy 2026-08-02, roster confirmed).
--- An org is anchored by its access_code (e.g. EXPO2026). The code OWNER
+-- Org staff hierarchy (first partner org build-out, 2026-08-02).
+-- An org is anchored by its access_code (e.g. <ACCESS_CODE>). The code OWNER
 -- (partner_user_id) stays the top-level signal; org_staff adds the people
--- working under it: org admins (Marianne) and staff (Miranda, Kelly).
+-- working under it: org admins and staff.
 -- client_staff_assignment maps cohort clients to the staff member who works
 -- with them. Consent gating for what staff can SEE is unchanged -- these
 -- tables only model who is responsible for whom.
