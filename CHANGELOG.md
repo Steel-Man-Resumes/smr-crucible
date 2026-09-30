@@ -29,6 +29,11 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 - The organization console tells a staff member with an empty list why it is empty and who to
   ask, and gives owners and admins the per-person "See everyone" switch on the main console.
   The default is unchanged: staff see only their own caseload until an admin decides otherwise.
+- The join question, the Settings switch and the "Who Can See Your Data" section of the
+  security page now say the same thing in the same plain words: what staff see when progress
+  is shared, what can be shared one item at a time, and what no program can read. The Settings
+  switch records its own wording version with each yes.
+- Team & access: a line of help text showed raw escape codes instead of quote marks. Fixed.
 - Platform administrator rights can no longer be granted by the application. Changes to who
   can see what are recorded in an append-only trail written by the database.
 - Organization-side assistant: answers to staff are generated whole and checked against the
