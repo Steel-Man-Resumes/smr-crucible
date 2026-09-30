@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   consentGrantRecord,
+  settingsTextVersionFor,
   dismissKey,
   rememberDismissed,
   shouldShowJoinPrompt,
@@ -33,10 +34,22 @@ describe("consentGrantRecord", () => {
 
   it("a yes from the join prompt records the prompt's own words and which organization asked", () => {
     const r = consentGrantRecord("join_prompt", "2026-06-07-v1", "org-1");
-    assert.equal(r.textVersion, "2026-09-30-join-v1");
+    assert.equal(r.textVersion, "2026-09-30-join-v2");
     assert.equal(r.collectionMethod, "join_prompt");
     assert.deepEqual(r.context, { collected_from: "join_prompt", access_code_id: "org-1" });
     assert.deepEqual(r.eventContext, { access_code_id: "org-1" });
+  });
+});
+
+describe("settingsTextVersionFor", () => {
+  it("the sharing switch is recorded with its own wording version", () => {
+    assert.equal(settingsTextVersionFor("sharing", "2026-06-07-v1"), "2026-09-30-settings-v2");
+  });
+
+  it("every other layer keeps the version it had", () => {
+    for (const layer of ["enhanced", "research", "outcome_anonymous", "outcome_named"]) {
+      assert.equal(settingsTextVersionFor(layer, "2026-06-07-v1"), "2026-06-07-v1");
+    }
   });
 });
 

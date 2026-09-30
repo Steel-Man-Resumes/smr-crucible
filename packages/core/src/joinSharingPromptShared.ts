@@ -11,21 +11,45 @@
  * export). Change a word here and JOIN_SHARING_TEXT_VERSION must change too,
  * so a stored yes can always be matched to the words that were on screen.
  */
-export const JOIN_SHARING_TEXT_VERSION = "2026-09-30-join-v1";
+export const JOIN_SHARING_TEXT_VERSION = "2026-09-30-join-v2";
 
 /** How a yes from this prompt is labelled in the consent history. */
 export const JOIN_SHARING_COLLECTION_METHOD = "join_prompt";
 
 export const JOIN_SHARING_PROMPT_TEXT = {
-  title: (orgName: string) => `Want ${orgName} to see your progress?`,
+  title: (orgName: string) => `Let ${orgName} see your progress?`,
   sees:
-    "They'll see your name and email, your step, how many jobs you applied to, when you were last on and if you got hired.",
-  never: "This never shows them your resume, your record plan or your interview answers.",
-  control: "You can change this any time in Settings.",
-  yes: "Yes, share my progress",
+    "They'll see your name, email, your step, jobs applied to, when you were last on, and if you got hired.",
+  never: "Never your resume, your record plan or your interview answers.",
+  control: "Change it any time in Settings.",
+  yes: "Yes, share",
   notNow: "Not now",
-  saved: "Done. Your progress is shared. You can turn it off in Settings.",
-  failed: "That did not save. You can turn it on in Settings.",
+  saved: "Saved. Your progress is shared.",
+  failed: "That did not save. Turn it on in Settings.",
+} as const;
+
+/**
+ * The Settings switch for the same consent. Same promise, same words for the
+ * same things, and its own version: a yes given in Settings is recorded with
+ * SETTINGS_SHARING_TEXT_VERSION so it can be matched to what was on screen.
+ * Change a word here and the version must change too.
+ *
+ * "Record plan" is what the app's Disclosure Planner makes. One term, used in
+ * the prompt, here and on the security page.
+ */
+export const SETTINGS_SHARING_TEXT_VERSION = "2026-09-30-settings-v2";
+
+export const SETTINGS_SHARING_TEXT = {
+  heading: "Share your progress",
+  title: "Let your program see your progress",
+  sees:
+    "If a program gave you a code, its staff will see your name, email, your step, jobs applied to, when you were last on, and if you got hired.",
+  never: "Never your resume, your record plan or your interview answers.",
+  more: "Sharing anything more is its own choice, one item at a time, under \"Who can see what\" below, if your program offers it.",
+  control: "Turn this off any time.",
+  switchLabel: "Share my progress with my program",
+  on: "On. Your program can see your progress.",
+  off: "Off. You are not sharing your progress.",
 } as const;
 
 export interface JoinPromptMembership {

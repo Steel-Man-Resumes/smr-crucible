@@ -18,7 +18,7 @@ import {
   getJoinSharingPrompt,
   type ConsentLayer,
 } from "@crucible/core";
-import { consentGrantRecord } from "@/lib/join-sharing-prompt";
+import { consentGrantRecord, settingsTextVersionFor } from "@/lib/join-sharing-prompt";
 
 export const maxDuration = 10;
 
@@ -91,7 +91,12 @@ export async function POST(request: Request) {
       }
       joinOrgId = prompt.orgId;
     }
-    const grant = consentGrantRecord(joinOrgId ? "join_prompt" : "settings", CONSENT_TEXT_VERSION, joinOrgId);
+    // The sharing switch has its own wording version; the other layers keep theirs.
+    const grant = consentGrantRecord(
+      joinOrgId ? "join_prompt" : "settings",
+      settingsTextVersionFor(layer, CONSENT_TEXT_VERSION),
+      joinOrgId
+    );
 
     const record =
       action === "grant"

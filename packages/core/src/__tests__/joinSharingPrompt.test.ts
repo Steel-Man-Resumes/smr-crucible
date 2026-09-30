@@ -4,6 +4,8 @@ import {
   decideJoinSharingPrompt,
   JOIN_SHARING_PROMPT_TEXT,
   JOIN_SHARING_TEXT_VERSION,
+  SETTINGS_SHARING_TEXT,
+  SETTINGS_SHARING_TEXT_VERSION,
   type JoinPromptMembership,
 } from "../joinSharingPromptShared";
 
@@ -87,11 +89,11 @@ describe("join sharing prompt wording", () => {
   ];
 
   it("names the organization in the question", () => {
-    assert.equal(JOIN_SHARING_PROMPT_TEXT.title("Example Reentry Program"), "Want Example Reentry Program to see your progress?");
+    assert.equal(JOIN_SHARING_PROMPT_TEXT.title("Example Reentry Program"), "Let Example Reentry Program see your progress?");
   });
 
   it("says what staff see, including the name: the console shows it", () => {
-    for (const word of ["name", "email", "step", "jobs you applied to", "last on", "hired"]) {
+    for (const word of ["name", "email", "step", "jobs applied to", "last on", "hired"]) {
       assert.ok(JOIN_SHARING_PROMPT_TEXT.sees.includes(word), `missing "${word}"`);
     }
   });
@@ -116,10 +118,33 @@ describe("join sharing prompt wording", () => {
   });
 
   it("the version is pinned to these words: change one, change both", () => {
-    assert.equal(JOIN_SHARING_TEXT_VERSION, "2026-09-30-join-v1");
+    assert.equal(JOIN_SHARING_TEXT_VERSION, "2026-09-30-join-v2");
     assert.equal(
       all.join(" | "),
-      "Want Example Reentry Program to see your progress? | They'll see your name and email, your step, how many jobs you applied to, when you were last on and if you got hired. | This never shows them your resume, your record plan or your interview answers. | You can change this any time in Settings. | Yes, share my progress | Not now | Done. Your progress is shared. You can turn it off in Settings. | That did not save. You can turn it on in Settings."
+      "Let Example Reentry Program see your progress? | They'll see your name, email, your step, jobs applied to, when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Change it any time in Settings. | Yes, share | Not now | Saved. Your progress is shared. | That did not save. Turn it on in Settings."
+    );
+  });
+});
+
+describe("Settings sharing switch wording", () => {
+  const all = Object.values(SETTINGS_SHARING_TEXT);
+
+  it("promises the same things as the join prompt, in the same words", () => {
+    for (const word of ["name", "email", "step", "jobs applied to", "last on", "hired"]) {
+      assert.ok(SETTINGS_SHARING_TEXT.sees.includes(word), `missing "${word}"`);
+    }
+    assert.equal(SETTINGS_SHARING_TEXT.never, JOIN_SHARING_PROMPT_TEXT.never);
+  });
+
+  it("has no em dashes or double hyphens", () => {
+    for (const line of all) assert.ok(!/—|–|--/.test(line), line);
+  });
+
+  it("the version is pinned to these words: change one, change both", () => {
+    assert.equal(SETTINGS_SHARING_TEXT_VERSION, "2026-09-30-settings-v2");
+    assert.equal(
+      all.join(" | "),
+      "Share your progress | Let your program see your progress | If a program gave you a code, its staff will see your name, email, your step, jobs applied to, when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Sharing anything more is its own choice, one item at a time, under \"Who can see what\" below, if your program offers it. | Turn this off any time. | Share my progress with my program | On. Your program can see your progress. | Off. You are not sharing your progress."
     );
   });
 });

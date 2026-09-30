@@ -5,6 +5,7 @@
 import {
   JOIN_SHARING_TEXT_VERSION,
   JOIN_SHARING_COLLECTION_METHOD,
+  SETTINGS_SHARING_TEXT_VERSION,
 } from "@crucible/core/src/joinSharingPromptShared";
 
 export type ConsentSource = "settings" | "join_prompt";
@@ -28,6 +29,15 @@ export function consentGrantRecord(source: ConsentSource, settingsTextVersion: s
     context: { collected_from: "settings" } as Record<string, unknown>,
     eventContext: undefined as Record<string, unknown> | undefined,
   };
+}
+
+/**
+ * The wording version a Settings grant is recorded with. The progress-sharing
+ * switch has its own words and its own version; every other layer keeps the
+ * shared one, so rewording this switch never relabels a yes to something else.
+ */
+export function settingsTextVersionFor(layer: string, defaultVersion: string): string {
+  return layer === "sharing" ? SETTINGS_SHARING_TEXT_VERSION : defaultVersion;
 }
 
 /** "Not now" is remembered in this browser only. Nothing is sent or stored on the server. */
