@@ -95,7 +95,7 @@ Enforced by the database:
   (`scripts/verify-org-isolation.mjs`). A lint (`scripts/lint-protected-tables.mjs`) fails
   the build when application code reaches a protected table through an unscoped helper.
   `GET /api/health/rls` reports whether the rules are enabled, forced, and non-bypassable
-  for the live connection.
+  for the live connection (`ok` publicly; the per-table detail for platform admins).
 - Changes to who can see what are recorded, in an audit table written only by database
   triggers and functions.
 
