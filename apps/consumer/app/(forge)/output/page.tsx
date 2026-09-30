@@ -22,6 +22,7 @@ import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis
 import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
 import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 interface Strength {
   title: string;
@@ -1364,6 +1365,9 @@ function EmailPackageBox({
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
+  const boxRef = useRef<HTMLDivElement>(null);
+  // A Turnstile token is single-use: remount the widget after every attempt.
+  const [attempt, setAttempt] = useState(0);
 
   async function send() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -1373,6 +1377,10 @@ function EmailPackageBox({
     }
     setState("sending");
     setMessage("");
+    // Turnstile token, present only when the env-gated widget rendered.
+    const turnstileToken =
+      boxRef.current?.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value ||
+      undefined;
     try {
       const res = await fetch("/api/forge/email-package", {
         method: "POST",
@@ -1383,9 +1391,11 @@ function EmailPackageBox({
           coverLetterText,
           narrativeHeadline,
           narrativeSummary,
+          turnstileToken,
         }),
       });
       const data = await res.json().catch(() => ({}));
+      setAttempt((n) => n + 1);
       if (res.ok && data.ok) {
         setState("sent");
         setMessage("Sent. Check your inbox (and spam folder, just in case).");
@@ -1400,7 +1410,7 @@ function EmailPackageBox({
   }
 
   return (
-    <div className="mt-6 bg-t-panel border border-t-line p-5">
+    <div ref={boxRef} className="mt-6 bg-t-panel border border-t-line p-5">
       <p className="font-semibold text-t-white text-sm mb-1">
         Email me my package
       </p>
@@ -1425,6 +1435,13 @@ function EmailPackageBox({
           {state === "sending" ? "Sending..." : state === "sent" ? "Sent" : "Send it"}
         </button>
       </div>
+      {/* Bot check: renders only when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set;
+          the server checks it when TURNSTILE_SECRET_KEY is set. */}
+      {state !== "sent" && (
+        <div className="mt-3">
+          <TurnstileWidget key={attempt} />
+        </div>
+      )}
       {message && (
         <p
           className={
