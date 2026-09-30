@@ -15,7 +15,7 @@
  *
  * Version detection is automatic. The adapter looks for API_1484_11 (SCORM
  * 2004) first and falls back to API (SCORM 1.2), so the same package works in
- * either host. Until CypherWorx confirms which their LMS accepts, that is the
+ * either host. Until the LMS vendor confirms which their LMS accepts, that is the
  * cheapest possible insurance.
  *
  * If no API is found at all, the adapter runs in DETACHED mode: every call

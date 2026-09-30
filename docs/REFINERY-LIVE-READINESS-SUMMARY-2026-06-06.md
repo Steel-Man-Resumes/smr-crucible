@@ -2,7 +2,7 @@
 
 ## Executive Position
 
-The live Refinery is the Crucible app at `/home/marcu/repos/smr-crucible`, not the archived Refinery repo. The archived repo should remain archived. The live app is substantially stronger than the archive: it builds, has authenticated dashboard tooling, rate-limited AI endpoints, DB-backed artifacts/applications, decision logging, privacy settings, and real job-search integration.
+The live Refinery is the Crucible app (this repository, `smr-crucible`), not the archived Refinery repo. The archived repo should remain archived. The live app is substantially stronger than the archive: it builds, has authenticated dashboard tooling, rate-limited AI endpoints, DB-backed artifacts/applications, decision logging, privacy settings, and real job-search integration.
 
 The product direction should be: second-chance career operating system, not a generic resource directory. The old Resources tab diluted the mission. Replacing it with a Second Chance Job Board is the right move because it points users toward work, preparation, and disclosure strategy while still respecting real-world barriers.
 
@@ -10,7 +10,7 @@ Current status after this pass: improved and build-clean, but not fully "locked 
 
 ## Sweep 1: Archived Refinery
 
-Path inspected: `/home/marcu/repos/_archived/smr-refinery`.
+Path inspected: the archived `smr-refinery` repository.
 
 Assessment: archived for good reason. It is not a live target.
 

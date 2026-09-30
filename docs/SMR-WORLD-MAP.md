@@ -62,6 +62,6 @@ product doctrine as authoritative, then update this map in the same change.
 
 The standalone working copy created during the design session remains at:
 
-`/home/marcu/smr-demo-journey-map/index.html`
+a standalone `smr-demo-journey-map/index.html` on the maintainer's machine
 
 The repository copy is the version future SMR work should reference and maintain.

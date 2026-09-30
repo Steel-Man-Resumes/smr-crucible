@@ -8,14 +8,13 @@ today but no real organization can use it yet; describe it as available, not as 
 customers are using. "NOT BUILT" means do not mention it as a feature. Every LIVE row names
 the evidence: a test in `scripts/verify-org-isolation.mjs` (250 assertions, run as the
 restricted database role on every pull request) or a production check recorded in
-the private session record (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo).
+the private session record (not in this repo).
 
 **Scope.** This sheet covers what was built or verified on 2026-09-19/20: the organization
 workspace, sharing, and database enforcement. The participant tools (Forge, Refinery, job
 search, truth gate, disclosure planner, interview practice, vault, tablet package) are NOT
 re-verified here; take claims about them from
-the private session record (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo) and
-`~/todash/smr/MT-DOC-DEMO-RUN-SHEET-2026-09-22.md` section 5 (the claims check).
+the private session record (not in this repo), including its demo run sheet's claims check.
 
 **On competitors.** Nothing here says what another product does or does not do. I have not
 verified any competitor's features, and a comparison published without that is the kind of

@@ -18,9 +18,10 @@ once a package is submitted for vetting it must not change.
 
 ## Why it is built this way
 
-Montana DOC's tablet vendor is ViaPath. CypherWorx is already on those tablets.
-Third-party content reaches a tablet by being wrapped in SCORM, added to the
-CypherWorx LMS, vetted by ViaPath for security, and then added to the catalog.
+On the facility tablets this is built for, a tablet vendor runs the devices
+and an LMS vendor's catalog is already on them. Third-party content reaches a
+tablet by being wrapped in SCORM, added to the LMS, vetted by the tablet vendor
+for security, and then added to the catalog.
 
 A contact at the LMS vendor named the obstacle exactly: *"For many of the tablet
 providers, there is a very significant fear of a web app or anything that allows
@@ -31,8 +32,8 @@ That fear is the design brief. Everything below follows from it.
 ```
 INSIDE THE WALL                     |   OUTSIDE THE WALL
 ------------------------------------|---------------------------------
-This package, in the CypherWorx LMS  |   The Forge and The Refinery
-on a ViaPath tablet                  |   Full AI, live, unrestricted
+This package, in the tablet LMS      |   The Forge and The Refinery
+on a facility tablet                 |   Full AI, live, unrestricted
                                      |
 Deterministic branching intake       |   Narrative reconstruction
 Fixed questions, nothing generated   |   Resume building
@@ -135,8 +136,8 @@ Node 20. `source ~/.nvm/nvm.sh && nvm use 20`.
 ## The containment report
 
 Every build writes `dist/<package>-CONTAINMENT-REPORT.txt`. **It is a
-deliverable, not a build log.** It goes to CypherWorx and to ViaPath with the
-package.
+deliverable, not a build log.** It goes to the LMS vendor and the tablet vendor
+with the package.
 
 A normal SCORM package arrives with an assurance that it makes no network
 calls. This one arrives with a machine-generated report that proves it, run on
@@ -237,15 +238,15 @@ any document.
    design pass the build handoff asked for, which is collaborative and is the
    real centerpiece of this product.
 2. **SCORM Cloud.** Run both zips through the free tier before anything goes to
-   CypherWorx.
+   the LMS vendor.
 3. **Redemption on the outside.** The consumer app currently treats an import
    code as a pointer to a database row. A carry code is not a pointer, it is the
    payload. That is a separate, small piece of work in `apps/consumer`.
 4. ~~**The data-ownership position.**~~ **Decided 2026-09-11:** keep the strong
-   version on screen and put it in writing for the 9/22 packet. See
-   `~/todash/smr/SCORM-DATA-FLOW-ONE-PAGER-2026-09-11.md`. No code change.
+   version on screen and put it in writing for the review packet (kept in
+   the maintainer's private notes). No code change.
 5. **Accessibility audit.** Built to WCAG 2.1 AA by construction, not yet
-   audited against it. Montana's ADA Title II deadline is 2027-04-26.
+   audited against it. The ADA Title II web deadline for large public entities is 2027-04-26.
 
 ---
 

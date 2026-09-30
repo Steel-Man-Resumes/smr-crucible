@@ -36,7 +36,7 @@ Production: https://forge.steelmanresumes.com and https://refinery.steelmanresum
 - Vercel is git-connected: a push to `main` deploys production. Every push and deploy needs Troy's approval at the prompt.
 - Do not run `vercel` CLI deploys from this repo. The local `.vercel` link does not name the git-connected production project, so a CLI deploy can land on the wrong project.
 - Authorization, RLS and migration work goes branch -> PR (fill in `.github/PULL_REQUEST_TEMPLATE.md`) -> CI green -> merge.
-- Verify live: `curl https://forge.steelmanresumes.com/api/health/version` returns the running short SHA; wait for it to match. `/api/health/rls` must show role `smr_app` and `roleCanBypass: false`. `/api/health/skills` shows the coaching skills loaded.
+- Verify live: `curl https://forge.steelmanresumes.com/api/health/version` returns the running short SHA; wait for it to match. `/api/health/rls` must return 200 `{"ok":true}` (false/503 if the app role can bypass RLS or any protected table is not enforced); open it in a browser signed in as a platform admin to see the detail (role `smr_app`, `roleCanBypass: false`, per-table flags). `/api/health/skills` shows the coaching skills loaded.
 
 ## Environment
 Troy enters all keys. Names only, grouped:
@@ -64,6 +64,6 @@ Troy enters all keys. Names only, grouped:
 Current state and session notes: `~/todash/smr/crucible-handoff/HANDOFF.md` (private). Shipped changes: `CHANGELOG.md`. Design records: `docs/`. Older notes live in git history.
 
 ## Routines
-- Daily: GET the three health endpoints and the Forge and Refinery front pages; report any non-200, SHA drift or `roleCanBypass: true`.
+- Daily: GET the three health endpoints and the Forge and Refinery front pages; report any non-200, SHA drift or `/api/health/rls` `ok: false`.
 - Weekly: `npm audit` plus a gitleaks run; report only.
 - Weekly: public-repo scrub of tracked docs for names, codes or IPs; propose removals as a PR.

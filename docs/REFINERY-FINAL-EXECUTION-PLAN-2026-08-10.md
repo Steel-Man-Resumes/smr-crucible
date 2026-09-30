@@ -15,7 +15,7 @@ authoritative sequence, scope, and decision record. Where the two disagree, this
   Sonnet for well-specified implementation and mechanical sweeps. Haiku for grep-level
   recon only. Code-review every phase with a fresh-context review agent before ship.
 - One phase per session. Start every session: read this doc, the top of the private
-  handoff (`~/todash/smr/crucible-handoff/HANDOFF.md`, not in this repo), then
+  handoff (not in this repo), then
   `git status` + pull. End every session: HANDOFF entry (what shipped, what was NOT
   verified), commit, push, deploy per repo rules.
 - QUALITY MANDATE (Troy, verbatim intent): build it correctly. Do not slap code on top of

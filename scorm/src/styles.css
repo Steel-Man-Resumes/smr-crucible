@@ -17,8 +17,8 @@
     remote font reference is an automatic security rejection.
   - Minimum 48px touch targets. Resistive tablet screens are imprecise.
   - Body text 18px, nothing below 15px anywhere.
-  - WCAG 2.1 AA contrast on every pair. Montana's ADA Title II deadline is
-    2027-04-26 and retrofitting contrast costs more than getting it right now.
+  - WCAG 2.1 AA contrast on every pair. The ADA Title II web deadline for
+    large public entities is 2027-04-26 and retrofitting contrast costs more than getting it right now.
   - Focus is always visible; some tablets ship with a keyboard.
   - No color-only meaning anywhere.
 */

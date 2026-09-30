@@ -6,6 +6,8 @@
 
 **Who reads here**: Every AI, every session, before substantive work. This is a 2-minute read that prevents hours of repeated mistakes.
 
+**Where the log lives (2026-09-30)**: this repository is public, so session log entries are NOT kept here. The `log/` entries live in the maintainer's private record. Where this file says `log/`, read that private log if you have it; never recreate `log/` in this repo.
+
 ---
 
 ## Reading Protocol

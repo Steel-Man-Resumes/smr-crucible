@@ -39,6 +39,9 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // Deterministic docx build (no AI cost) -- generous cap, bounded so the
   // public route can't be used as a free compute endpoint.
   "forge-download": 100,
+  // "Email me my package" sends mail from SMR's domain to a typed address.
+  // A person needs one or two sends; the route also caps per recipient.
+  "email-package": 5,
 };
 
 export interface RateLimitResult {

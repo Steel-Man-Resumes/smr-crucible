@@ -5,7 +5,7 @@
  *
  *   node scripts/seed-demo-cohort.mjs
  *
- * Source: ~/todash/smr/MT-DOC-DEMO-COHORT-AND-STAFF-HANDOFF-2026-09-20.md.
+ * Source: the demo cohort handoff in the maintainer's private notes (2026-09-20).
  *
  * THE PEOPLE ARE INVENTED. THE EMPLOYERS ARE REAL and were chosen from a vetted
  * list, for what they are: real, local, currently hiring. Exactly ONE has

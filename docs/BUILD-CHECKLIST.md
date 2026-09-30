@@ -51,7 +51,7 @@ Legend: [x] shipped+verified -- [~] shipped, awaiting Troy's hands-on test -- [ 
 ## 8. Calendar & SMS
 - [ ] Calendar: auto-events on application save (day-5 follow-up, interview -1d, thank-you +3d), custom events, ICS (Task 10)
 - [ ] Twilio rails: sms_events + worker + opt-in + STOP + admin log, feature-flagged (Task 10)
-- [ ] **A2P:** TMG campaign approved (first ever -- the playbook works). SMR traffic does NOT ride TMG's campaign (brand/use-case mismatch = blocking risk). Troy registers SMR's own A2P w/ SMR LLC EIN (`~/todash/smr/legal/`). Rails ship ready; sending flips on at SMR approval.
+- [ ] **A2P:** TMG campaign approved (first ever -- the playbook works). SMR traffic does NOT ride TMG's campaign (brand/use-case mismatch = blocking risk). Troy registers SMR's own A2P w/ SMR LLC EIN. Rails ship ready; sending flips on at SMR approval.
 
 ## 9. Brand, Conference, Open Source
 - [ ] "Steel Man" public brand sweep for the 501(c)(3) (Task 14)
