@@ -23,7 +23,7 @@
  *      possible here: entries are named from the file list, not from a path.
  *
  * The report written alongside the zip is a deliverable, not a build log. It
- * is the thing that goes to CypherWorx and to ViaPath with the package.
+ * is the thing that goes to the LMS vendor and the tablet vendor with the package.
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, rmSync, existsSync } from "node:fs";

@@ -1,8 +1,8 @@
 /**
  * Deterministic legal-accuracy guards for the Forge Career Analysis report.
  *
- * The report is shown to justice-impacted people and, at the Aug 2026 conference,
- * in front of MDOC -- legal accuracy is the highest bar. The generation prompt and
+ * The report is shown to justice-impacted people and, in demos, to state
+ * corrections staff -- legal accuracy is the highest bar. The generation prompt and
  * context-library already forbid the retired Work Opportunity Tax Credit (WOTC),
  * but a prompt can be overridden by the model. This module is the belt-and-
  * suspenders backstop (the same doctrine as plainPunctuation): a deterministic sweep
@@ -24,7 +24,7 @@ export const WOTC_RE =
  * Recursively walk any value (mirrors plainPunctuation) and, in every string, drop the
  * sentence(s) that reference the retired WOTC / Form 8850. If a reference survives
  * sentence removal (no boundary to split on), the whole string is blanked rather
- * than leak it -- a blank legal note is safe; a WOTC claim in front of MDOC is not.
+ * than leak it -- a blank legal note is safe; a WOTC claim in front of a state DOC is not.
  */
 export function stripEmployerTaxCredit<T>(value: T): T {
   if (typeof value === "string") {

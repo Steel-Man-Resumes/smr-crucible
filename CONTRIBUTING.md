@@ -18,7 +18,7 @@ work, and contributions are welcome under that shared goal.
   Sensitive data is consent-gated and minimized.
 - **Public repository.** This repository is public. Working notes, credentials, access codes and the names of partners, leads or participants never go in it.
   Maintainer session notes are kept in a private record outside this repo
-  (`~/todash/smr/crucible-handoff/HANDOFF.md` on the maintainer's machine). Use
+  on the maintainer's machine. Use
   placeholders such as `<ACCESS_CODE>` and roles instead of names in docs, comments,
   commit messages and PR descriptions. CI runs `scripts/lint-no-secrets-in-docs.mjs`
   and fails on credential-shaped lines in docs or a root `HANDOFF.md`.

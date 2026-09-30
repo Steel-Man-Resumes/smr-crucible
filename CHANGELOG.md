@@ -30,6 +30,10 @@ A dated, high-level history of what shipped, built from the commit log. Product 
   scorecard with one-click fixes. One-or-two-page rule enforced where the resume is printed.
 - Forge Tablet: an offline SCORM package for in-facility learning systems, with a containment
   scanner, a printable resume, and a carry-out code that restores the work outside.
+- Security sweep: partner landing pages read organization names from the database (no access
+  codes in the source); the Forge package email requires a same-site request, sends only to a
+  signed-in person's own address, and is capped per address and per connection each day, with an
+  optional bot check; the public database health check returns only its verdict.
 
 ## 2026-08 -- Refinery revision, account security, hardening
 
