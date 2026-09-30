@@ -19,7 +19,7 @@ export const JOIN_SHARING_COLLECTION_METHOD = "join_prompt";
 export const JOIN_SHARING_PROMPT_TEXT = {
   title: (orgName: string) => `Let ${orgName} see your progress?`,
   sees:
-    "They'll see your name, email, your step, jobs applied to, when you were last on, and if you got hired.",
+    "They'll see your name, email, step, how much you've done (like jobs applied to and practice), when you were last on, and if you got hired.",
   never: "Never your resume, your record plan or your interview answers.",
   control: "Change it any time in Settings.",
   yes: "Yes, share",
@@ -43,7 +43,7 @@ export const SETTINGS_SHARING_TEXT = {
   heading: "Share your progress",
   title: "Let your program see your progress",
   sees:
-    "If a program gave you a code, its staff will see your name, email, your step, jobs applied to, when you were last on, and if you got hired.",
+    "If a program gave you a code, its staff will see your name, email, step, how much you've done (like jobs applied to and practice), when you were last on, and if you got hired.",
   never: "Never your resume, your record plan or your interview answers.",
   more: "Sharing anything more is its own choice, one item at a time, under \"Who can see what\" below, if your program offers it.",
   control: "Turn this off any time.",

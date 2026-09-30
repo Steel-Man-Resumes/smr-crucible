@@ -121,7 +121,7 @@ describe("join sharing prompt wording", () => {
     assert.equal(JOIN_SHARING_TEXT_VERSION, "2026-09-30-join-v2");
     assert.equal(
       all.join(" | "),
-      "Let Example Reentry Program see your progress? | They'll see your name, email, your step, jobs applied to, when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Change it any time in Settings. | Yes, share | Not now | Saved. Your progress is shared. | That did not save. Turn it on in Settings."
+      "Let Example Reentry Program see your progress? | They'll see your name, email, step, how much you've done (like jobs applied to and practice), when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Change it any time in Settings. | Yes, share | Not now | Saved. Your progress is shared. | That did not save. Turn it on in Settings."
     );
   });
 });
@@ -144,7 +144,7 @@ describe("Settings sharing switch wording", () => {
     assert.equal(SETTINGS_SHARING_TEXT_VERSION, "2026-09-30-settings-v2");
     assert.equal(
       all.join(" | "),
-      "Share your progress | Let your program see your progress | If a program gave you a code, its staff will see your name, email, your step, jobs applied to, when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Sharing anything more is its own choice, one item at a time, under \"Who can see what\" below, if your program offers it. | Turn this off any time. | Share my progress with my program | On. Your program can see your progress. | Off. You are not sharing your progress."
+      "Share your progress | Let your program see your progress | If a program gave you a code, its staff will see your name, email, step, how much you've done (like jobs applied to and practice), when you were last on, and if you got hired. | Never your resume, your record plan or your interview answers. | Sharing anything more is its own choice, one item at a time, under \"Who can see what\" below, if your program offers it. | Turn this off any time. | Share my progress with my program | On. Your program can see your progress. | Off. You are not sharing your progress."
     );
   });
 });
