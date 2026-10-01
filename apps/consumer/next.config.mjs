@@ -1,35 +1,35 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@crucible/core", "@crucible/consumer-ui"],
+  // pdfjs (used by lib/text-extraction for PDF text extraction) MUST stay
+  // external: when Next bundles it into a serverless chunk, its runtime dynamic
+  // import of pdf.worker.mjs points at a chunk path that is never emitted, so
+  // "Setting up fake worker failed: Cannot find module .../pdf.worker.mjs" and
+  // EVERY text PDF fails on Vercel (works in local dev only). Externalizing
+  // loads it from node_modules with the worker intact. (F1; Next 15 moved this
+  // key out of experimental, where it was serverComponentsExternalPackages.)
+  serverExternalPackages: ["pdfjs-dist"],
   // The assistant route reads skill/doctrine .md files at runtime via fs. They
   // are NOT imported anywhere, so Next's file tracer has no static reference and
   // will not bundle them into the serverless function -- t.ROY then silently
   // loads zero doctrine in production (it works in local dev only because cwd
   // happens to have the files). Force them into the Lambda. See lib/skills/.
-  experimental: {
-    // pdfjs (used by lib/text-extraction for PDF text extraction) MUST stay
-    // external: when Next bundles it into a serverless chunk, its runtime dynamic
-    // import of pdf.worker.mjs points at a chunk path that is never emitted, so
-    // "Setting up fake worker failed: Cannot find module .../pdf.worker.mjs" and
-    // EVERY text PDF fails on Vercel (works in local dev only). Externalizing
-    // loads it from node_modules with the worker intact. (F1, Next 14 key.)
-    serverComponentsExternalPackages: ["pdfjs-dist"],
-    outputFileTracingIncludes: {
-      // Every route that reads skill doctrine off disk needs the files traced
-      // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
-      "/api/assistant": ["./lib/skills/**/*"],
-      "/api/coach": ["./lib/skills/**/*"],
-      "/api/health/skills": ["./lib/skills/**/*"],
-      // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
-      // worker/core files in the serverless function instead of relying on CDN
-      // runtime downloads for executable assets. The pdfjs legacy build + its
-      // worker .mjs are force-included so text extraction resolves the worker.
-      "/api/parse": [
-        "../../node_modules/tesseract.js/**/*",
-        "../../node_modules/tesseract.js-core/**/*",
-        "../../node_modules/pdfjs-dist/legacy/build/**/*",
-      ],
-    },
+  // (Top-level since Next 15; it was experimental.outputFileTracingIncludes.)
+  outputFileTracingIncludes: {
+    // Every route that reads skill doctrine off disk needs the files traced
+    // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
+    "/api/assistant": ["./lib/skills/**/*"],
+    "/api/coach": ["./lib/skills/**/*"],
+    "/api/health/skills": ["./lib/skills/**/*"],
+    // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
+    // worker/core files in the serverless function instead of relying on CDN
+    // runtime downloads for executable assets. The pdfjs legacy build + its
+    // worker .mjs are force-included so text extraction resolves the worker.
+    "/api/parse": [
+      "../../node_modules/tesseract.js/**/*",
+      "../../node_modules/tesseract.js-core/**/*",
+      "../../node_modules/pdfjs-dist/legacy/build/**/*",
+    ],
   },
   async redirects() {
     return [
