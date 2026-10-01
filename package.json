@@ -16,5 +16,10 @@
     "lint:rls": "node scripts/lint-protected-tables.mjs",
     "test:core": "npm test -w packages/core",
     "persona": "TSX_TSCONFIG_PATH=apps/consumer/tsconfig.json node --import tsx scripts/run-persona.mjs"
+  },
+  "overrides": {
+    "@next/eslint-plugin-next": {
+      "glob": "^10.5.0"
+    }
   }
 }
