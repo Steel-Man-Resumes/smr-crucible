@@ -24,7 +24,7 @@ import { MiniForgeCapacityError } from "@/lib/mini-forge-budget";
 export const maxDuration = 60;
 
 export default async function ProcessingPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get(TABLET_COOKIE)?.value;
   if (!sessionId) redirect("/mini-forge/pin");
 

@@ -9,7 +9,7 @@ import { getTabletSession, TABLET_COOKIE } from "@/lib/tablet-session";
 
 export default async function MiniForgeLanding() {
   // Resume existing session if cookie present
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get(TABLET_COOKIE)?.value;
   if (sessionId) {
     const session = await getTabletSession(sessionId);

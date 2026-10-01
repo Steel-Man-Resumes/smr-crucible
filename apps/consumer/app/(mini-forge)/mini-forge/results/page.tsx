@@ -32,7 +32,7 @@ interface MiniForgeOutput {
 }
 
 export default async function ResultsPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get(TABLET_COOKIE)?.value;
   if (!sessionId) redirect("/mini-forge/pin");
 

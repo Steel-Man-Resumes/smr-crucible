@@ -13,13 +13,14 @@ import {
 } from "@/lib/tablet-session";
 import { checkAuthRateLimit, AUTH_LIMITS } from "@/lib/auth-rate-limit";
 
-export default async function PinPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function PinPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // Already have a valid session -- send them along
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const existing = cookieStore.get(TABLET_COOKIE)?.value;
   if (existing) {
     const session = await getTabletSession(existing);
@@ -43,7 +44,7 @@ export default async function PinPage({
     // Per-IP throttle on session creation -- a kiosk room behind one NAT passes
     // easily; a bot minting sessions to drain the AI budget does not. The hard
     // spend ceiling is the DB-backed daily cap enforced before the AI call.
-    const h = headers();
+    const h = await headers();
     const ip =
       h.get("x-real-ip")?.trim() ||
       h.get("x-forwarded-for")?.split(",").pop()?.trim() ||
@@ -58,7 +59,7 @@ export default async function PinPage({
 
     const session = await createTabletSession(pin);
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set(TABLET_COOKIE, session.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

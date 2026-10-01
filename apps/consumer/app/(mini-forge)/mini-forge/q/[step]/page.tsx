@@ -96,18 +96,19 @@ const SKILL_OPTIONS = [
 
 // ---- Main page ----
 
-export default async function QuestionPage({
-  params,
-}: {
-  params: { step: string };
-}) {
+export default async function QuestionPage(
+  props: {
+    params: Promise<{ step: string }>;
+  }
+) {
+  const params = await props.params;
   const step = parseInt(params.step, 10);
 
   if (isNaN(step) || step < 1 || step > TOTAL_STEPS) {
     redirect("/mini-forge");
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionId = cookieStore.get(TABLET_COOKIE)?.value;
   if (!sessionId) redirect("/mini-forge/pin");
 
@@ -124,7 +125,7 @@ export default async function QuestionPage({
   async function handleSubmit(formData: FormData) {
     "use server";
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const sid = cookieStore.get(TABLET_COOKIE)?.value;
     if (!sid) redirect("/mini-forge/pin");
 

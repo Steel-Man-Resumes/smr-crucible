@@ -19,7 +19,7 @@ export default async function ImportCompletePage() {
     redirect("/login?callbackUrl=/mini-forge/import-complete");
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const tabletSessionId = cookieStore.get(TABLET_COOKIE)?.value;
 
   if (!tabletSessionId) {
