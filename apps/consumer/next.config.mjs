@@ -89,8 +89,9 @@ const nextConfig = {
           {
             key: "Content-Security-Policy",
             // challenges.cloudflare.com = Turnstile (script + widget iframe)
+            // googletagmanager.com / google-analytics.com = GA4 thin acquisition layer (lib/ga.ts)
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.anthropic.com https://challenges.cloudflare.com; media-src 'self' blob:; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://api.openai.com https://api.anthropic.com https://challenges.cloudflare.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; media-src 'self' blob:; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'",
           },
         ],
       },
