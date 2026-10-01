@@ -20,7 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { incrementIpUsage } from "@crucible/core";
+import { incrementIpUsage, getOne } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { getClientIp } from "@/lib/auth-rate-limit";
 import { checkTurnstile, turnstileBlocks } from "@/lib/turnstile";
@@ -128,6 +128,32 @@ async function handlePost(request: Request) {
     );
   }
 
+  // Troy's letter opt-in (unchecked by default in the UI). Same list as the
+  // steelmanresumes.com signup: newsletter_subscriber, source 'forge'. Ticking
+  // the box again re-subscribes someone who had unsubscribed. A failure here
+  // never blocks the package.
+  let letterToken: string | null = null;
+  if (body.letter === true) {
+    try {
+      const row = await getOne<{ unsubscribe_token: string }>(
+        `INSERT INTO newsletter_subscriber (email, source) VALUES ($1, 'forge')
+         ON CONFLICT (email) DO UPDATE SET unsubscribed_at = NULL,
+           source = CASE WHEN newsletter_subscriber.unsubscribed_at IS NULL
+                         THEN newsletter_subscriber.source ELSE 'forge' END
+         RETURNING unsubscribe_token`,
+        [email]
+      );
+      letterToken = row?.unsubscribe_token ?? null;
+    } catch (err) {
+      console.error("email-package letter opt-in failed:", err);
+    }
+  }
+  const unsubUrl = letterToken
+    ? `https://www.steelmanresumes.com/unsubscribe?token=${letterToken}`
+    : null;
+  const mailingAddress =
+    (process.env.MAILING_ADDRESS || "").trim() || "Steel Man Resumes LLC, Libby, Montana";
+
   const html =
     `<div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;padding:24px;">` +
     `<h1 style="font-size:22px;color:#1c1e1b;">You did the work. Here it is.</h1>` +
@@ -137,12 +163,17 @@ async function handlePost(request: Request) {
     `account in The Refinery is waiting at ` +
     `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
     sections.join("") +
-    `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
-    `You received this because you asked for your Forge package at forge.steelmanresumes.com. ` +
-    `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-    `employers that hire people with records, real openings, and insights that move your search forward. ` +
-    `Asking takes one step: create your free account at ` +
-    `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
+    (unsubUrl
+      ? `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
+        `You received this because you asked for your Forge package at forge.steelmanresumes.com, ` +
+        `and you also asked for Troy's letter, so that's coming too. Changed your mind? ` +
+        `<a href="${unsubUrl}" style="color:#9b6d1d;">Unsubscribe</a> in one click.<br>${esc(mailingAddress)}</p>`
+      : `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
+        `You received this because you asked for your Forge package at forge.steelmanresumes.com. ` +
+        `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
+        `employers that hire people with records, real openings, and insights that move your search forward. ` +
+        `Asking takes one step: create your free account at ` +
+        `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>`) +
     `</div>`;
 
   const text =
@@ -152,9 +183,11 @@ async function handlePost(request: Request) {
     `=== YOUR RESUME ===\n\n${resumeText}\n\n` +
     (coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${coverLetterText}\n\n` : "") +
     `Next step: your free Refinery account at https://refinery.steelmanresumes.com/login\n\n` +
-    `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-    `employers that hire people with records, real openings, and insights that move your search forward. ` +
-    `Asking takes one step: create your free account at the link above.\n`;
+    (unsubUrl
+      ? `You also asked for Troy's letter, so that's coming too. Changed your mind? Unsubscribe: ${unsubUrl}\n${mailingAddress}\n`
+      : `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
+        `employers that hire people with records, real openings, and insights that move your search forward. ` +
+        `Asking takes one step: create your free account at the link above.\n`);
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
