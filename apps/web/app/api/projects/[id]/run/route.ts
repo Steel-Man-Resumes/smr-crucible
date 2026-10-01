@@ -8,10 +8,8 @@ const VALID_PIPELINES: Record<string, { key: string; version: string }> = {
   v2: { key: "career_intake_v2", version: "2.0" },
 };
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { ctx, error } = await getAuthContext();
   if (error) return error;
   const orgError = requireOrg(ctx);

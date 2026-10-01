@@ -8,10 +8,8 @@ interface RunRow {
   org_id: string;
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { ctx, error } = await getAuthContext();
   if (error) return error;
   const orgError = requireOrg(ctx);
