@@ -8,7 +8,7 @@ The engine behind Steel Man Resumes for people with records and the organization
 Production: https://forge.steelmanresumes.com and https://refinery.steelmanresumes.com (same app).
 
 ## Stack
-- `apps/consumer`: Next.js 14 App Router, React 18, TypeScript 5, Tailwind 3.4, Auth.js (next-auth v5 beta), Vercel AI SDK (`ai`, `@ai-sdk/anthropic`); OpenAI is called by API key as a second provider.
+- `apps/consumer`: Next.js 15 App Router, React 19, TypeScript 5, Tailwind 3.4, Auth.js (next-auth v5 beta), Vercel AI SDK (`ai`, `@ai-sdk/anthropic`); OpenAI is called by API key as a second provider.
 - `packages/core` (`@crucible/core`): database access, migrations, org scoping, storage, shared logic. `packages/consumer-ui`: shared React components.
 - Neon Postgres (`@neondatabase/serverless`), Cloudflare R2 for files, Resend for email, Vercel hosting and crons.
 - `apps/web` and `services/worker` are DORMANT (see their `DORMANT.md`). Do not deploy, build on or extend them without Troy deciding to revive them.
