@@ -408,7 +408,7 @@ export default function OverviewPage() {
             for funder reporting, compliance review, and program evaluation.
           </p>
           <div className="bg-t-panel-2 px-5 py-4 text-xs text-t-phos-dim border border-t-line mb-4">
-            <p className="text-t-phos-dim/70 mb-2">// Every AI decision logged:</p>
+            <p className="text-t-phos-dim/70 mb-2">// Most AI decisions logged:</p>
             <p>decision_log &#123;</p>
             <p className="pl-4">input_hash: sha256(user_input)[0:16]</p>
             <p className="pl-4">model_id: &quot;claude-sonnet-4-6&quot;</p>
