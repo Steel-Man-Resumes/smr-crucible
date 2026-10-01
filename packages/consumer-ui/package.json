@@ -6,11 +6,11 @@
   "types": "src/index.ts",
   "scripts": {},
   "peerDependencies": {
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/react": "^18",
+    "@types/react": "^19",
     "typescript": "^5"
   },
   "dependencies": {
