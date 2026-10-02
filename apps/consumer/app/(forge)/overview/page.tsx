@@ -474,7 +474,7 @@ export default function OverviewPage() {
           <div className="space-y-3 text-sm">
             {[
               { label: "Measurable outputs", detail: "Every Forge completion, resume built, disclosure plan, interview session, and application tracked, with user consent and without collecting PII in aggregate reports." },
-              { label: "Audit trail", detail: "The decision_log table records most AI steps: which tool ran, which model, a one-way fingerprint of the input, the time taken and tokens used, and a short note for signed-in users. Resume reading, fact checks and voice practice are not in it. Funders can request reports on AI performance, model usage, and outcome signals." },
+              { label: "Audit trail", detail: "The decision_log table records most AI steps: which tool ran, which model, a one-way fingerprint of the input, the time taken and tokens used, and a short note for signed-in users. Resume reading and fact checks are not in it. For voice practice it records that a session started, never what is said. Funders can request reports on AI performance, model usage, and outcome signals." },
               { label: "Target population", detail: "Justice-impacted adults in Wisconsin (initial), Midwest (expansion), national (AGPL self-host). Primary focus: people within 90 days of release or recently released." },
               { label: "No paywall, by design", detail: "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status." },
             ].map((item, i) => (

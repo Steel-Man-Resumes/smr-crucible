@@ -214,7 +214,7 @@ export default function EvidencePage() {
               Decision Observability Framework
             </h2>
             <p className="text-base text-t-phos leading-relaxed mb-4">
-              Most AI decisions in Steel Man Resumes are logged with the following schema. Resume parsing, fact checks and voice practice are not in this log yet.
+              Most AI decisions in Steel Man Resumes are logged with the following schema. Resume parsing and fact checks are not in this log yet. For voice practice the log records that a session started, never what is said.
               The input itself is never stored. Only a keyed fingerprint of it is kept: an
               HMAC-SHA256 made with a secret held on the server, cut to 32 characters, so a
               short input such as a job title cannot be found by guessing without that secret.
@@ -316,7 +316,7 @@ const COMPETITIVE_MATRIX = [
 const COMPLIANCE_ITEMS = [
   { requirement: "Consent management", implementation: "Explicit consent before data processing. Visible consent status. Revocable at any time." },
   { requirement: "Data minimization", implementation: "Pre-auth: localStorage only. Post-auth: minimal PII stored. Input content hashed for logging." },
-  { requirement: "Decision auditability", implementation: "Most AI decisions logged with model ID, input hash, explanation, and latency (resume parsing, fact checks and voice not yet logged)." },
+  { requirement: "Decision auditability", implementation: "Most AI decisions logged with model ID, input hash, explanation, and latency (resume parsing and fact checks not yet logged; voice practice logs only that a session started, never what is said)." },
   { requirement: "Non-discrimination", implementation: "AI behavioral rules prohibit assumptions. Cultural sensitivity enforced at prompt level." },
   { requirement: "Data portability", implementation: "Results downloadable as text file. Full data export available in Settings." },
   { requirement: "Right to deletion", implementation: "Account and all associated data deletable from Settings. Immediate effect." },
