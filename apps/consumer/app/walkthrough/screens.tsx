@@ -9,7 +9,7 @@
  * mirrors the look of the live Forge/Refinery scenes in app/demo/page.tsx.
  */
 
-import type { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 import { DEMO_SESSION, DEMO_OUTPUT } from "@/lib/demo-data";
 import type { ScreenId } from "./storyboard";
 

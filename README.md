@@ -114,7 +114,7 @@ each claim.
 Monorepo (npm workspaces):
 
 - `apps/consumer` -- the product: The Forge, The Refinery and the organization workspace.
-  Next.js 14 App Router, deployed on Vercel.
+  Next.js 15 App Router, deployed on Vercel.
 - `packages/core` -- shared library: database access and SQL migrations, row-level
   security health, the intelligence engine (`getUserProfile` + `computeNextStep`), consent,
   sharing, artifacts, the AI coach, the employer directory, and system health.
@@ -124,7 +124,7 @@ Monorepo (npm workspaces):
 - `apps/web` and `services/worker` -- an earlier pipeline, archived as inactive. See the
   `DORMANT.md` file in each.
 
-Stack: Next.js 14.2 (App Router) and React 18, TypeScript 5, Tailwind CSS 3, Neon Postgres
+Stack: Next.js 15.5 (App Router) and React 19, TypeScript 5, Tailwind CSS 3, Neon Postgres
 through the Neon serverless driver, Auth.js v5 (NextAuth) with the Postgres adapter
 (email magic link, password with optional two-factor, optional Google sign-in), Cloudflare
 R2 for files, the Vercel AI SDK with Anthropic as primary and OpenAI as fallback, Resend

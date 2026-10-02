@@ -56,7 +56,8 @@ function refusal(reason: ClientViewDenied) {
   return NextResponse.json({ error: "Not found." }, { status: 404 });
 }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireOrgCapability("org.client.view_content");
   if (!guard.ok) return guard.response;
   const { actor } = guard;
@@ -86,7 +87,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
   });
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const guard = await requireOrgCapability("org.client.view_content");
   if (!guard.ok) return guard.response;
   const { actor } = guard;

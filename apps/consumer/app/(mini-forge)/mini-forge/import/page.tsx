@@ -12,11 +12,12 @@ import { redirect } from "next/navigation";
 import { getTabletSessionByCode, markClaimed, TABLET_COOKIE } from "@/lib/tablet-session";
 import { query } from "@crucible/core";
 
-export default async function ImportPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function ImportPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const error = searchParams.error;
 
   async function handleImport(formData: FormData) {
@@ -46,7 +47,7 @@ export default async function ImportPage({
     }
 
     // Save forge_output to the session cookie so it can be used on account creation
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set(TABLET_COOKIE, tabletSession.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

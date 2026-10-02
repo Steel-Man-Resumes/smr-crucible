@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Security maintenance
+
+- Forge and Refinery moved from Next.js 14 to Next.js 15.5 and React 19. Next.js 14 no longer
+  receives security fixes; the upgrade closes the framework advisories that were only fixed in 15.
+  Request data (cookies, headers, page parameters) is now read asynchronously, as Next.js 15
+  requires. No product behavior changed.
+- Non-major dependency updates closed the high-severity advisories that had a same-major fix.
+
 ## 2026-10 -- Privacy hardening: shared computers, IP counts, AI records, analytics
 
 - The Forge has a "Clear this computer" button in the header and a "Done, clear this computer"
