@@ -360,7 +360,7 @@ export default function OverviewPage() {
               },
               {
                 title: "No data sold, ever",
-                detail: "Steel Man Resumes LLC is not funded by advertising. There is no data monetization layer. This is documented in the AGPL-3.0 license and the source code is public.",
+                detail: "Steel Man Resumes is not funded by advertising. There is no data monetization layer. This is documented in the AGPL-3.0 license and the source code is public.",
               },
               {
                 title: "Right to deletion",
@@ -449,7 +449,7 @@ export default function OverviewPage() {
               { label: "Access code", detail: "One code per program. Clients enter it at sign-in to unlock higher limits. Codes are linked to your partner account." },
               { label: "Partner dashboard", detail: "See cohort progress (stage, artifacts completed, last activity) for clients who have opted in to share. CSV export for program reporting." },
               { label: "No vendor lock-in", detail: "AGPL-3.0 license. The source code is public. You can self-host a private instance for your program." },
-              { label: "To get an access code", detail: "Email Steel Man Resumes LLC directly. Free for nonprofits and community organizations during the launch period." },
+              { label: "To get an access code", detail: "Email Steel Man Resumes directly. Free for nonprofits and community organizations during the launch period." },
             ].map((item, i) => (
               <div key={i} className="border border-t-line p-4">
                 <p className="font-semibold text-t-white mb-1">{item.label}</p>
@@ -465,7 +465,7 @@ export default function OverviewPage() {
             For funders
           </h2>
           <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
-            Steel Man Resumes LLC (WI) is currently transitioning to a nonprofit
+            Steel Man Resumes is currently transitioning to a nonprofit
             structure. The platform is AGPL-3.0 open source and free to all users.
             No revenue is generated from user data.
           </p>
@@ -506,7 +506,7 @@ export default function OverviewPage() {
             trauma in mind because Troy has lived that too.
           </p>
           <p className="text-xs text-t-phos-dim mt-4">
-            Steel Man Resumes LLC &middot; Wisconsin &middot; AGPL-3.0 open source
+            Steel Man Resumes &middot; AGPL-3.0 open source
           </p>
         </section>
 
