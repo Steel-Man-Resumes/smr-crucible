@@ -6,36 +6,20 @@ name: org-isolation
 # security. A suite that runs as the table owner passes whatever the policies
 # say, which is how "13/13" was once weaker evidence than it looked.
 #
-# PATH-FILTERED ON PURPOSE. Every run creates a Neon branch and wakes compute.
-# The org layer lives in a few places; a copy change should not pay for this.
-
-# RUNS ON PULL REQUESTS TOO, and that is the half that makes it a gate. On
-# push-to-main only, Vercel was already deploying the commit while this was
-# still creating its branch: it could report a broken boundary, never stop one.
-# Authorization work goes through a PR and merges when this is green.
+# EVERY PULL REQUEST, NO PATH FILTER (2026-10-02). The PR run is the half that
+# makes this a gate. On push-to-main only, Vercel was already deploying the
+# commit while this was still creating its branch: it could report a broken
+# boundary, never stop one. Authorization work goes through a PR and merges
+# when this is green. The PR trigger used to be path-filtered to save
+# Neon compute, but the org boundary is reached from more places than any list
+# keeps up with (a page, a lib helper, a new route), so a filtered gate could
+# skip exactly the change that breaks it. Cost: one throwaway Neon branch per
+# PR run. Fork PRs get no secrets, so this job fails there rather than passing
+# unchecked.
+#
+# The post-merge push run stays path-filtered: by then the PR run has passed.
 on:
   pull_request:
-    paths:
-      - "packages/core/src/**"
-      - "packages/core/migrations/**"
-      - "apps/consumer/auth.ts"
-      - "apps/consumer/lib/org-*.ts"
-      - "apps/consumer/lib/effective-auth.ts"
-      - "apps/consumer/app/api/org/**"
-      - "apps/consumer/app/api/partner/**"
-      - "apps/consumer/app/api/admin/**"
-      - "apps/consumer/app/api/dev/**"
-      - "apps/consumer/app/api/user/**"
-      - "apps/consumer/app/api/consent/**"
-      - "apps/consumer/app/api/hub-unlock/**"
-      - "apps/consumer/app/api/assistant/**"
-      - "scripts/verify-org-isolation.mjs"
-      - "scripts/verify-directory.mjs"
-      - "scripts/verify-directory-grants.mjs"
-      - "scripts/rls-stage1-create-role.mjs"
-      - "scripts/lib/**"
-      - "scripts/neon-branch.mjs"
-      - ".github/workflows/org-isolation.yml"
   push:
     branches: [main]
     paths:
