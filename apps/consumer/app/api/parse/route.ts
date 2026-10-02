@@ -17,6 +17,11 @@ import { coverageForProfile } from "@/components/resume/resumeParsers";
 
 export const maxDuration = 60;
 
+// Ceiling on the structured-parse AI call. With OCR's own 25 s ceiling
+// (lib/text-extraction.ts) the worst case stays under maxDuration, so the
+// person gets an answer instead of a 504.
+const AI_PARSE_TIMEOUT_MS = 20_000;
+
 async function handlePost(request: Request) {
   try {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
@@ -162,6 +167,7 @@ async function parseWithAI(
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(AI_PARSE_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -204,14 +210,25 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
       max_tokens: 2000,
       temperature: 0,
     }),
+  }).catch((err: any) => {
+    // Timeout (AbortSignal) or network failure: same fallback as a non-200.
+    console.error("OpenAI parse request failed:", err?.name || err);
+    return null;
   });
+
+  if (!response) return { raw_text: text };
 
   if (!response.ok) {
     console.error("OpenAI parse failed:", response.status);
     return { raw_text: text };
   }
 
-  const data = await response.json();
+  // The timeout also covers reading the body; a stall there falls back too.
+  const data = await response.json().catch((err: any) => {
+    console.error("OpenAI parse body failed:", err?.name || err);
+    return null;
+  });
+  if (!data) return { raw_text: text };
 
   if (data.usage) {
     recordTokenUsage(

@@ -4,14 +4,22 @@
  *
  * Run:  cd apps/consumer && npx tsx test/adversarial.mts   (or: npm run test:adversarial)
  *
- * Scope = the PURE, deterministic units. What is NOT here, by nature, and where it is
- * covered instead:
- *   - Grounding verifier fabrication-stripping (verifyGrounding / verifyResumeBullets):
- *     needs a live OPENAI_API_KEY -> exercised in the preview e2e, not a unit test.
- *   - "No individual eligibility" in legal_notes: a prompt property -> preview e2e.
+ * Scope = the PURE, deterministic units. What is NOT here, by nature, and what (if
+ * anything) covers it instead:
+ *   - Grounding verifier fabrication-stripping (verifyGrounding / verifyResumeBullets /
+ *     verifyStructuredLists): needs a live OPENAI_API_KEY, and NO automated test
+ *     covers the live model call. There is no preview e2e suite in this repo (checked
+ *     2026-10-02). What does cover it: the pure pieces below ("truth check
+ *     accounting", "source-laundering boundary", "verification aggregation"), and,
+ *     by hand only, `npm run persona` (scripts/run-persona.mjs), which reaches
+ *     verifyGrounding through /api/analyze and /api/forge/generate-docs with real
+ *     model calls. Nothing exercises verifyResumeBullets or verifyStructuredLists
+ *     against a live model. Not run in CI.
+ *   - "No individual eligibility" in legal_notes: a prompt property -> no automated
+ *     test (no preview e2e suite exists).
  *   - Unlock linkage (no title-only unlock; idempotent application create): React +
- *     route + DB (P1.3) -> preview e2e.
- * Those are honest exceptions, not gaps in coverage of the pure logic below.
+ *     route + DB (P1.3) -> no automated test (no preview e2e suite exists).
+ * These are real coverage gaps for the live paths. The pure logic below is covered.
  */
 
 import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE } from "@/lib/legal-sanitize";
@@ -665,8 +673,11 @@ section("resume content validation -- server write boundary");
 // consentDefaultFor is the pure decision: what a layer means when a user has
 // never touched the toggle (no consumer_consent row yet). isConsentGranted
 // and the enforcement wiring in the assistant/coach routes both depend on
-// this being right, but those need a live DB/session -- covered by preview
-// e2e, not here.
+// this being right, but those need a live DB/session, so they are not here.
+// There is no preview e2e suite in this repo (checked 2026-10-02). By hand
+// only: scripts/verify-1bd.mjs (manual, live DB, not run in CI) checks the
+// defaults plus revoke/re-grant of "enhanced" through isConsentGranted. No
+// automated test covers the assistant/coach enforcement wiring.
 section("consent doctrine -- default-consent per layer");
 {
   check("core defaults to granted (essential function)", consentDefaultFor("core") === "granted");
@@ -678,8 +689,10 @@ section("consent doctrine -- default-consent per layer");
   // Mutual exclusivity (outcome_anonymous <-> outcome_named force-revoking
   // each other) lives inline in apps/consumer/app/api/consent/route.ts POST,
   // not as an exported pure helper -- it calls revokeConsent/grantConsent
-  // against the live DB, so it isn't unit-testable without one. Covered by
-  // preview e2e (grant named, confirm anonymous is force-revoked, and back).
+  // against the live DB, so it isn't unit-testable without one. No automated
+  // test covers it (there is no preview e2e suite), and no verify script
+  // checks it either. Manual check: grant named, confirm anonymous is
+  // force-revoked, and back.
 }
 
 // ── 18. Voice enforcement -- server-side lease, not a browser-only cap ───────

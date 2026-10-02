@@ -8,7 +8,14 @@ const nextConfig = {
   // EVERY text PDF fails on Vercel (works in local dev only). Externalizing
   // loads it from node_modules with the worker intact. (F1; Next 15 moved this
   // key out of experimental, where it was serverComponentsExternalPackages.)
-  serverExternalPackages: ["pdfjs-dist"],
+  //
+  // tesseract.js (image OCR in the same file) must stay external for the same
+  // reason. Bundled, it computes its worker path from the CHUNK's __dirname
+  // (.next/worker-script/node/index.js, which does not exist), the worker
+  // thread dies with MODULE_NOT_FOUND, and tesseract only listens through
+  // `worker.onerror`, which Node ignores, so createWorker() never settles and
+  // every image upload hung until the 60 s limit (504, found 2026-10-02).
+  serverExternalPackages: ["pdfjs-dist", "tesseract.js"],
   // The assistant route reads skill/doctrine .md files at runtime via fs. They
   // are NOT imported anywhere, so Next's file tracer has no static reference and
   // will not bundle them into the serverless function -- t.ROY then silently
@@ -28,6 +35,12 @@ const nextConfig = {
     "/api/parse": [
       "../../node_modules/tesseract.js/**/*",
       "../../node_modules/tesseract.js-core/**/*",
+      // The OCR worker thread is started from a file path, not an import, so
+      // the tracer never sees what IT requires. Its Node-side dependencies:
+      "../../node_modules/regenerator-runtime/**/*",
+      "../../node_modules/is-url/**/*",
+      "../../node_modules/wasm-feature-detect/**/*",
+      "../../node_modules/bmp-js/**/*",
       "../../node_modules/pdfjs-dist/legacy/build/**/*",
     ],
   },

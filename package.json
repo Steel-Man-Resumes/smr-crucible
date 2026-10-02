@@ -21,6 +21,12 @@
     "@next/eslint-plugin-next": {
       "glob": "^10.5.0"
     },
-    "jsondiffpatch": "0.7.6"
+    "jsondiffpatch": "0.7.6",
+    "next": {
+      "postcss": "^8.5.28"
+    },
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }
