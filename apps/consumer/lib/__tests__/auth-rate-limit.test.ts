@@ -14,6 +14,8 @@ import assert from "node:assert/strict";
 import {
   AUTH_LIMITS,
   checkAuthRateLimit,
+  signInEmailFromBody,
+  signInPostRequiresEmail,
   signInRateLimits,
 } from "../auth-rate-limit";
 
@@ -126,5 +128,58 @@ describe("the two kinds do not share a bucket", () => {
     // And spending the password allowance did not add to the magic-link count:
     // a different email from this IP still has a magic-link request left (4 of 5 used).
     assert.equal(attempt(MAGIC_LINK_PATH, ip, `other-${ip}@example.org`), true);
+  });
+});
+
+describe("the limiter reads the email the way Auth.js does (F4)", () => {
+  const FORM = "application/x-www-form-urlencoded";
+  const JSON_CT = "application/json";
+
+  it("reads a JSON body, which used to skip every limit", () => {
+    assert.deepEqual(
+      signInEmailFromBody(JSON_CT, JSON.stringify({ email: " Victim@Example.org ", password: "x", csrfToken: "t" })),
+      { kind: "email", email: "victim@example.org" }
+    );
+    assert.deepEqual(
+      signInEmailFromBody("application/json; charset=utf-8", JSON.stringify({ email: "a@example.org" })),
+      { kind: "email", email: "a@example.org" }
+    );
+  });
+
+  it("refuses a form that repeats the email field (Auth.js keeps the last one)", () => {
+    assert.deepEqual(
+      signInEmailFromBody(FORM, "email=decoy%40example.org&email=victim%40example.org&password=x"),
+      { kind: "invalid" }
+    );
+  });
+
+  it("reads a single form email", () => {
+    assert.deepEqual(
+      signInEmailFromBody(FORM, "email=Person%40Example.org&password=x"),
+      { kind: "email", email: "person@example.org" }
+    );
+  });
+
+  it("refuses a JSON email that is not a string, and unparseable JSON", () => {
+    assert.deepEqual(signInEmailFromBody(JSON_CT, JSON.stringify({ email: ["a@example.org", "b@example.org"] })), { kind: "invalid" });
+    assert.deepEqual(signInEmailFromBody(JSON_CT, JSON.stringify({ email: { x: 1 } })), { kind: "invalid" });
+    assert.deepEqual(signInEmailFromBody(JSON_CT, "{not json"), { kind: "invalid" });
+  });
+
+  it("finds no email when there is none, or when Auth.js would read no body", () => {
+    assert.deepEqual(signInEmailFromBody(JSON_CT, JSON.stringify({ csrfToken: "t", data: {} })), { kind: "none" });
+    assert.deepEqual(signInEmailFromBody(FORM, "csrfToken=t"), { kind: "none" });
+    assert.deepEqual(signInEmailFromBody(FORM, "email="), { kind: "none" });
+    assert.deepEqual(signInEmailFromBody("text/plain", "email=a%40example.org"), { kind: "none" });
+    assert.deepEqual(signInEmailFromBody(null, "email=a%40example.org"), { kind: "none" });
+  });
+
+  it("requires an email on the password callback and the magic-link request only", () => {
+    assert.equal(signInPostRequiresEmail("/api/auth/callback/password-login"), true);
+    assert.equal(signInPostRequiresEmail("/api/auth/callback/password-login/"), true);
+    assert.equal(signInPostRequiresEmail("/api/auth/signin/resend"), true);
+    assert.equal(signInPostRequiresEmail("/api/auth/signout"), false);
+    assert.equal(signInPostRequiresEmail("/api/auth/session"), false);
+    assert.equal(signInPostRequiresEmail("/api/auth/signin/google"), false);
   });
 });

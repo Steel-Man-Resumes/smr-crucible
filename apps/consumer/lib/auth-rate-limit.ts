@@ -107,6 +107,72 @@ export function signInRateLimits(
   };
 }
 
+/** Normalize an email the way Auth.js does before it uses it (NFKC, lower, trim). */
+export function normalizeSignInEmail(raw: string): string {
+  return raw.normalize("NFKC").toLowerCase().trim();
+}
+
+/**
+ * The email a sign-in POST carries, read EXACTLY the way Auth.js will read it
+ * (@auth/core lib/utils/web.js getBody): JSON when the content-type includes
+ * application/json, form fields when it includes
+ * application/x-www-form-urlencoded, and no body at all otherwise.
+ *
+ * Why this matters: the limiter used to parse every body as a form and take the
+ * FIRST `email`. Auth.js parses JSON too, and for a form it keeps the LAST
+ * duplicate. So a JSON body, or `email=decoy&email=victim`, was limited against
+ * a different address than the one Auth.js signed in (or no address at all).
+ *
+ *  - { kind: "email" }   one usable value, normalized like Auth.js does
+ *  - { kind: "none" }    no email field (or an empty one)
+ *  - { kind: "invalid" } ambiguous or malformed: refuse the request
+ */
+export type SignInEmail =
+  | { kind: "email"; email: string }
+  | { kind: "none" }
+  | { kind: "invalid" };
+
+export function signInEmailFromBody(
+  contentType: string | null,
+  body: string
+): SignInEmail {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return { kind: "invalid" };
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { kind: "none" };
+    }
+    const value = (parsed as Record<string, unknown>).email;
+    if (value === undefined || value === null || value === "") return { kind: "none" };
+    if (typeof value !== "string") return { kind: "invalid" };
+    const email = normalizeSignInEmail(value);
+    return email ? { kind: "email", email } : { kind: "none" };
+  }
+  if (ct.includes("application/x-www-form-urlencoded")) {
+    const values = new URLSearchParams(body).getAll("email");
+    if (values.length > 1) return { kind: "invalid" };
+    const email = values.length === 1 ? normalizeSignInEmail(values[0]) : "";
+    return email ? { kind: "email", email } : { kind: "none" };
+  }
+  // Auth.js reads no body for any other content-type, so there is no email.
+  return { kind: "none" };
+}
+
+/**
+ * The two sign-in POSTs that must carry an email: the password callback and the
+ * magic-link request. A request to either with no usable email is refused
+ * outright rather than passed through unlimited.
+ */
+export function signInPostRequiresEmail(pathname: string): boolean {
+  const p = pathname.replace(/\/+$/, "");
+  return p.endsWith("/callback/password-login") || p.endsWith("/signin/resend");
+}
+
 /**
  * Extract client IP from request headers.
  * On Vercel, x-real-ip is set at the edge and cannot be spoofed.
