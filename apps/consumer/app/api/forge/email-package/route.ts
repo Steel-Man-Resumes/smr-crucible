@@ -152,7 +152,7 @@ async function handlePost(request: Request) {
     ? `https://www.steelmanresumes.com/unsubscribe?token=${letterToken}`
     : null;
   const mailingAddress =
-    (process.env.MAILING_ADDRESS || "").trim() || "Steel Man Resumes LLC, Libby, Montana";
+    (process.env.MAILING_ADDRESS || "").trim() || "Steel Man Resumes, Libby, Montana";
 
   const html =
     `<div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;padding:24px;">` +
