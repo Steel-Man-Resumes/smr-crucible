@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { verifyToken, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
+import { matchTotpStep, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
+import { consumeTotpStep } from "@/lib/second-factor";
 import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -30,9 +31,18 @@ export async function POST(req: Request) {
       );
     }
     const pendingSecret = resolveTotpSecret(r.rows[0], session.user.id);
-    if (!verifyToken(token, pendingSecret)) {
+    const step = matchTotpStep(token, pendingSecret);
+    if (step === null) {
       return NextResponse.json(
         { error: "That code didn't match. Check your authenticator app and try again." },
+        { status: 400 }
+      );
+    }
+    // Record the step (F10) so the code typed here cannot be replayed to sign
+    // in during the next minute or so.
+    if (!(await consumeTotpStep(client, session.user.id, step))) {
+      return NextResponse.json(
+        { error: "That code was already used. Wait for the next code and try again." },
         { status: 400 }
       );
     }

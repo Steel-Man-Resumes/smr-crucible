@@ -4,9 +4,13 @@ import bcrypt from "bcryptjs";
 import {
   checkAuthRateLimit,
   getClientIp,
-  AUTH_LIMITS,
   isValidEmail,
+  normalizeSignInEmail,
+  signInRateLimits,
 } from "@/lib/auth-rate-limit";
+
+/** The precheck spends the password sign-in's own counters. */
+const PASSWORD_CALLBACK_PATH = "/api/auth/callback/password-login";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -14,25 +18,31 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  * Pre-flight for the login form: verify email+password and report whether a
  * second step (2FA) is needed, so the UI knows to show the code field. The
  * actual sign-in still enforces 2FA independently in authorize() -- this is
- * UX, not the security boundary. No password oracle beyond what the login
- * callback already is; still rate-limited per IP.
+ * UX, not the security boundary.
+ *
+ * Limited by the SAME counters as the password sign-in itself (per IP and per
+ * email, F10). It used to have its own per-IP counter and no per-email one,
+ * which doubled the password guesses an IP got and let a spread-out attack
+ * test one account without limit here.
  */
 export async function POST(req: Request) {
   const ip = getClientIp(req);
-  const limit = checkAuthRateLimit(`precheck:${ip}`, AUTH_LIMITS.passwordPerIp);
-  if (!limit.allowed) {
-    return NextResponse.json(
+  const body = await req.json().catch(() => ({}));
+  const email = normalizeSignInEmail(typeof body?.email === "string" ? body.email : "");
+  const password = String(body?.password || "");
+  const limits = signInRateLimits(PASSWORD_CALLBACK_PATH, ip, email);
+
+  const tooMany = () =>
+    NextResponse.json(
       { ok: false, error: "Too many attempts. Wait a few minutes and try again." },
       { status: 429 }
     );
-  }
 
-  const body = await req.json().catch(() => ({}));
-  const email = String(body?.email || "").toLowerCase().trim();
-  const password = String(body?.password || "");
+  if (!checkAuthRateLimit(limits.ip.key, limits.ip.config).allowed) return tooMany();
   if (!isValidEmail(email) || !password) {
     return NextResponse.json({ ok: false });
   }
+  if (!checkAuthRateLimit(limits.email.key, limits.email.config).allowed) return tooMany();
 
   const client = await pool.connect();
   try {
