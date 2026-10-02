@@ -12,11 +12,12 @@
  * - Thinking. Adaptive thinking is on by default and its tokens count toward
  *   max_tokens even though the text is not returned (display "omitted").
  *   troyMaxTokens() adds headroom so a turn that thinks first is not cut off.
- * - Effort. Not set here. @ai-sdk/anthropic 1.2 accepts only
- *   `thinking: {type: "enabled" | "disabled", budgetTokens}` as provider
- *   options (both are 400s on Sonnet 5.5) and drops any other key, so it
- *   cannot send output_config.effort. These routes run at the API default
- *   effort ("high") until the SDK is upgraded.
+ * - Effort. @ai-sdk/anthropic 1.2 has no effort option: its provider options
+ *   accept only `thinking: {type: "enabled" | "disabled", budgetTokens}` (both
+ *   400s on Sonnet 5.5) and drop any other key. So the provider gets a custom
+ *   fetch, withChatEffort(), that adds output_config.effort "low" to Sonnet 5
+ *   request bodies. Without it the API default is "high", which thinks before
+ *   almost every reply, even a greeting.
  * - Declines. A safety decline is HTTP 200 with stop_reason "refusal", which
  *   AI SDK 4 reports as finishReason "unknown", usually with no text. These
  *   routes have no second provider to fall back to, so emptyReplyGuard() and
@@ -27,7 +28,7 @@
  *   never replayed across turns.
  */
 
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import { wrapLanguageModel } from "ai";
 import type {
   LanguageModelV1Middleware,
@@ -47,10 +48,48 @@ export const omitSamplingSettings: LanguageModelV1Middleware = {
   }),
 };
 
-/** The t.ROY chat model. Use this, not anthropic(MODEL_TROY). */
-export function troyChatModel() {
+/** Chat effort: short thinking, so the first words arrive sooner. */
+export const TROY_EFFORT = "low";
+
+/**
+ * A fetch for the Anthropic provider that adds `output_config.effort` to
+ * Messages request bodies whose model starts with "claude-sonnet-5". Any other
+ * request (another model, a body that is not JSON, one that already sets an
+ * effort) is passed on exactly as it came. Never logs the body or headers:
+ * they carry the prompt and the API key.
+ */
+export function withChatEffort(baseFetch?: typeof fetch): typeof fetch {
+  return (input, init) => {
+    const send = baseFetch ?? globalThis.fetch;
+    if (!init || typeof init.body !== "string") return send(input, init);
+    let body: { model?: unknown; output_config?: Record<string, unknown> } | null = null;
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      return send(input, init);
+    }
+    if (
+      !body ||
+      typeof body.model !== "string" ||
+      !body.model.startsWith("claude-sonnet-5") ||
+      body.output_config?.effort !== undefined
+    ) {
+      return send(input, init);
+    }
+    const withEffort = { ...body, output_config: { ...(body.output_config ?? {}), effort: TROY_EFFORT } };
+    return send(input, { ...init, body: JSON.stringify(withEffort) });
+  };
+}
+
+const troyAnthropic = createAnthropic({ fetch: withChatEffort() });
+
+/**
+ * The t.ROY chat model. Use this, not anthropic(MODEL_TROY). The provider
+ * argument exists for tests (a fake fetch); routes call it with none.
+ */
+export function troyChatModel(provider: AnthropicProvider = troyAnthropic) {
   return wrapLanguageModel({
-    model: anthropic(MODEL_TROY),
+    model: provider(MODEL_TROY),
     middleware: omitSamplingSettings,
   });
 }
