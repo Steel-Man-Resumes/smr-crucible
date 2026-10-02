@@ -57,6 +57,9 @@ const BANNED_PHRASES = [
   "everything is hosted in the united states",
   // sign-ins store IP, device and approximate city
   "no location tracking",
+  // 2026-10-01: the t.ROY chat and Refinery coach (AI SDK routes) have no
+  // OpenAI fallback; only the callAI writing tools do
+  "if claude fails, the same request goes to openai",
 ];
 
 function* walk(dir: string): Generator<string> {

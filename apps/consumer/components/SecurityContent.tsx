@@ -322,7 +322,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Two-factor: TOTP with an encrypted secret and bcrypt-hashed one-time backup codes</p>
           <p>Sessions: tracked per device with self-service revocation; new-device sign-ins alert the account owner</p>
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
-          <p>AI writing and coaching: Anthropic Claude. If Claude fails, the same request goes to OpenAI (gpt-4o) instead. Reading an uploaded or pasted resume uses OpenAI (gpt-4o-mini). Both are used through their business APIs, which do not train on this data by default.</p>
+          <p>AI writing and coaching: Anthropic Claude. For the writing tools (resumes, cover letters, interview practice and the other single-answer steps), when Claude fails the same request goes to OpenAI (gpt-4o) instead. The t.ROY chat and the Refinery coach run on Claude only. If Claude fails or declines there, you get an error or a short message, and nothing is sent to OpenAI. Reading an uploaded or pasted resume uses OpenAI (gpt-4o-mini). Both are used through their business APIs, which do not train on this data by default.</p>
           <p>AI fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume, your answers (including what you told us about your record) and our draft all pass through OpenAI on that check.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
