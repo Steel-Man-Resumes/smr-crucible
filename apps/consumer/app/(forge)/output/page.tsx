@@ -1366,6 +1366,9 @@ function EmailPackageBox({
   narrativeSummary: string;
 }) {
   const [email, setEmail] = useState("");
+  // Troy's letter: opt-in only, unchecked by default (SMR privacy policy:
+  // no marketing without explicit consent).
+  const [letter, setLetter] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
@@ -1395,6 +1398,7 @@ function EmailPackageBox({
           narrativeHeadline,
           narrativeSummary,
           turnstileToken,
+          letter,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1438,6 +1442,19 @@ function EmailPackageBox({
           {state === "sending" ? "Sending..." : state === "sent" ? "Sent" : "Send it"}
         </button>
       </div>
+      <label className="mt-3 flex items-start gap-2 text-xs text-t-phos-dim cursor-pointer">
+        <input
+          type="checkbox"
+          checked={letter}
+          onChange={(e) => setLetter(e.target.checked)}
+          disabled={state === "sending" || state === "sent"}
+          className="mt-0.5 accent-t-amber"
+        />
+        <span>
+          Also send me Troy&apos;s letter: new employers that hire people with
+          records, law changes, and one thing I can use. One click to stop.
+        </span>
+      </label>
       {/* Bot check: renders only when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set;
           the server checks it when TURNSTILE_SECRET_KEY is set. */}
       {state !== "sent" && (
