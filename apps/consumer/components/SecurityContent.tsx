@@ -38,13 +38,18 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             suggest next steps
           </BulletItem>
           <BulletItem>
-            Your conversations with t.ROY when you are signed in, so he can
-            remember your recent work. You can delete them anytime in
-            Settings.
+            Your chats with t.ROY, if you are signed in and turned on Better
+            help, so he can remember your recent work. You can delete them
+            anytime in Settings.
+          </BulletItem>
+          <BulletItem>
+            Some basic facts about how you connect: your IP address, your
+            device type, and the rough city it points to. We use them to stop
+            abuse and to show you where you are signed in.
           </BulletItem>
           <BulletItem bold>
-            That&apos;s it. No browsing history. No location tracking. No
-            social media.
+            We do not track what you do on other sites, and we do not look at
+            your social media.
           </BulletItem>
         </ul>
       </Section>
@@ -122,13 +127,11 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             Every connection uses HTTPS, so your data is encrypted while it
             moves between your device and our servers
           </BulletItem>
-          <BulletItem>Everything is hosted in the United States</BulletItem>
         </ul>
         <p className="text-sm text-t-phos leading-relaxed mt-3">
-          We are building a document vault that adds a second lock on top of
-          the database: each file is sealed with AES-256-GCM encryption tied to
-          your account, so it can only be opened for you. That vault is coming
-          soon and is not turned on yet.
+          Files you upload to your Vault get a second lock on top of the
+          database: each one is sealed with AES-256-GCM encryption tied to your
+          account, so it can only be opened for you.
         </p>
       </Section>
 
@@ -140,13 +143,15 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             its only job.
           </BulletItem>
           <BulletItem>
-            Every AI interaction is logged, so we can check exactly what the AI
-            said to you and why
+            Most AI steps leave a short record: which tool ran, which AI model,
+            and a short note, like the job you were aiming for. That record
+            does not keep a copy of what the AI wrote to you.
           </BulletItem>
           <BulletItem>
-            When you are signed in, t.ROY remembers your recent conversations
-            so he can pick up where you left off. You can delete that history
-            anytime. Without an account, nothing is remembered between visits.
+            When you are signed in and Better help is on, t.ROY remembers your
+            recent chats so he can pick up where you left off. You can delete
+            that history anytime. Without an account, t.ROY does not save your
+            chats.
           </BulletItem>
           <BulletItem>
             The AI never shares your information with other users
@@ -168,7 +173,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           />
           <ControlCard
             title="Delete Your Data or Account"
-            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone."
+            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. A few records that don't have your name on them stay, like abuse-prevention counts by IP address and short AI records."
             showButton={showUserControls}
             buttonLabel="Delete in Settings"
             onClick={() => {
@@ -185,7 +190,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           />
           <ControlCard
             title="No Account Required"
-            description="The Forge works without creating an account. Nothing is stored unless you choose to sign in."
+            description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, so on a shared or library computer, start over or clear the browser when you finish. We do keep your IP address and a count of your uses to stop abuse, plus short AI records that can include a job title you typed."
           />
         </div>
       </Section>
@@ -248,14 +253,15 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             <DenyItem>No ads. Ever.</DenyItem>
             <DenyItem>No selling your data. Ever.</DenyItem>
             <DenyItem>
-              No ad networks and no data brokers. We use basic visit counting
-              (Google Analytics and Vercel) to see which tools help people,
-              and we keep it off the sensitive pages: disclosure practice,
-              interview practice, and your vault.
+              No ad networks and no data brokers. We count visits with Google
+              Analytics and Vercel to see which tools help people. They see
+              which pages get used, not what you type. We try to keep them off
+              disclosure practice and interview practice, and we are still
+              fixing this for the Vault page.
             </DenyItem>
             <DenyItem>
-              We use service providers for hosting, storage, AI and visit
-              counting. Program sharing and legally required disclosures are
+              We use service providers for hosting, storage, AI, email, bot
+              checks, job listings and visit counting. Program sharing and legally required disclosures are
               described above.
             </DenyItem>
             <DenyItem>No data mining</DenyItem>
@@ -277,19 +283,23 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             staff permissions and the participant&apos;s active sharing grants
           </BulletItem>
           <BulletItem>
-            All AI decisions are logged for compliance and audit
+            Most AI steps leave a short record (tool, model, time) for review.
+            The record does not hold the AI&apos;s full reply.
           </BulletItem>
           <BulletItem>
             Voice practice audio passes through OpenAI, which may retain it
-            up to 30 days for abuse monitoring. We do not store your audio.
+            up to 30 days for abuse monitoring. We do not store the audio. If
+            the person chooses to save a practice run, we keep the written
+            words, encrypted.
           </BulletItem>
           <BulletItem>
             Users control their own data. They can export or delete it on
             their own, without going through you
           </BulletItem>
           <BulletItem>
-            Rate limiting protects against abuse without blocking legitimate
-            use
+            Rate limiting protects against abuse. Programs that share one
+            internet connection can use an access code so their group gets a
+            bigger shared limit.
           </BulletItem>
           <BulletItem>
             Partner access codes let you onboard your clients with elevated
@@ -306,17 +316,18 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
         <div className="bg-t-panel-2 p-4 border border-t-line text-xs text-t-phos-dim space-y-1.5">
           <p>Database: PostgreSQL on Neon (encrypted at rest, TLS in transit)</p>
           <p>Object Storage: Cloudflare R2 (S3-compatible, encrypted at rest)</p>
-          <p>Document encryption: AES-256-GCM envelope encryption for secure objects, bound to owner and purpose (rolling out with the vault)</p>
+          <p>Document encryption: AES-256-GCM envelope encryption for secure objects, bound to owner and purpose (Vault files)</p>
           <p>Auth: Auth.js v5, email magic link or optional password (bcrypt hash only)</p>
           <p>Two-factor: TOTP with an encrypted secret and bcrypt-hashed one-time backup codes</p>
           <p>Sessions: tracked per device with self-service revocation; new-device sign-ins alert the account owner</p>
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
-          <p>AI writing and coaching: Anthropic Claude. No training on user data.</p>
-          <p>AI fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume text and our draft both pass through OpenAI on that check. No training on user data.</p>
+          <p>AI writing and coaching: Anthropic Claude. If Claude fails, the same request goes to OpenAI (gpt-4o) instead. Reading an uploaded or pasted resume uses OpenAI (gpt-4o-mini). Both are used through their business APIs, which do not train on this data by default.</p>
+          <p>AI fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume, your answers (including what you told us about your record) and our draft all pass through OpenAI on that check.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
-          <p>Rate Limiting: Per-user daily limits with atomic enforcement</p>
-          <p>Decision Logging: Every AI call logged with input hash, model, latency</p>
+          <p>Rate Limiting: daily limits per account, and per IP address for people not signed in (IP counts stored by day), with atomic enforcement</p>
+          <p>Decision Logging: most AI calls logged with a short input hash, the model, and a plain-text note that can include a job title, company or search location the person typed. Resume parsing, fact checks and voice are not in this log.</p>
+          <p>Other providers: Resend (email), Cloudflare Turnstile (bot checks), JSearch, Adzuna, USAJOBS and CareerOneStop (job listings: role and location only), O*NET (job titles)</p>
           <p>Session: JWT-based auth cookies; audited staff-assist sessions use a separate short-lived cookie</p>
         </div>
       </Section>

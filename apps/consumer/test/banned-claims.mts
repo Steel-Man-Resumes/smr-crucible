@@ -43,6 +43,20 @@ const BANNED_PHRASES = [
   "no persistent cookies beyond auth",
   // voice practice audio flows to OpenAI, retention is theirs not ours (Phase 1B)
   "data retention policies are configurable",
+  // 2026-10-01 audit: anonymous use stores raw IPs (ai_usage), decision_log
+  // notes with job titles, and forge_session in localStorage
+  "nothing is stored unless you choose to sign in",
+  "nothing is remembered between visits",
+  // decision_log never stores the AI reply; parse, verifier and voice not logged
+  "every ai interaction is logged",
+  "all ai decisions are logged",
+  "every ai decision logged",
+  "every ai decision is logged",
+  "every ai call logged",
+  // hosting region not set in code (vercel.json, R2 region auto); unverified
+  "everything is hosted in the united states",
+  // sign-ins store IP, device and approximate city
+  "no location tracking",
 ];
 
 function* walk(dir: string): Generator<string> {

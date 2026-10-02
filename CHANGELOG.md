@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 -- Privacy page matches the code
+
+- The Security & Privacy page now says what anonymous use leaves behind (IP-based abuse counts,
+  short AI records that can include a job title, work saved in the browser), names OpenAI's role
+  in resume reading and as Claude's fallback, and drops claims the code did not support
+  ("nothing is stored", "every AI interaction is logged", a US-only hosting line). The false
+  phrases were added to the banned-claims check.
+
 ## 2026-09 -- Organization workspace, database-enforced boundaries, tablet package
 
 - Organization boundaries moved into the database: Postgres row-level security on membership,

@@ -119,7 +119,7 @@ const OBSERVER_MESSAGES: Record<string, string> = {
   preferences:
     "Constraint mapping ensures job matches are realistic, not aspirational. Transportation deserts and schedule rigidity are top reasons placements fail.",
   processing:
-    "Observability-first pipeline. Every AI decision is logged with input hash, model ID, explanation, and latency. Full audit trail for JBS compliance.",
+    "Observability-first pipeline. Most AI decisions are logged with input hash, model ID, explanation, and latency. Full audit trail for JBS compliance.",
   output:
     "Redemption sequence framing (McAdams, 2013). Narrative identity research shows bad\u2192good arcs predict higher well-being. Output is strengths-first, never deficit-focused.",
 };

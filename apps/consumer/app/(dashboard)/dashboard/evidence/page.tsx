@@ -214,7 +214,7 @@ export default function EvidencePage() {
               Decision Observability Framework
             </h2>
             <p className="text-base text-t-phos leading-relaxed mb-4">
-              Every AI decision in Steel Man Resumes is logged with the following schema.
+              Most AI decisions in Steel Man Resumes are logged with the following schema. Resume parsing, fact checks and voice practice are not in this log yet.
               Input content is hashed (SHA-256, first 16 characters) for privacy. Full
               audit trail accessible for compliance review.
             </p>
@@ -313,7 +313,7 @@ const COMPETITIVE_MATRIX = [
 const COMPLIANCE_ITEMS = [
   { requirement: "Consent management", implementation: "Explicit consent before data processing. Visible consent status. Revocable at any time." },
   { requirement: "Data minimization", implementation: "Pre-auth: localStorage only. Post-auth: minimal PII stored. Input content hashed for logging." },
-  { requirement: "Decision auditability", implementation: "Every AI decision logged with model ID, input hash, explanation, and latency." },
+  { requirement: "Decision auditability", implementation: "Most AI decisions logged with model ID, input hash, explanation, and latency (resume parsing, fact checks and voice not yet logged)." },
   { requirement: "Non-discrimination", implementation: "AI behavioral rules prohibit assumptions. Cultural sensitivity enforced at prompt level." },
   { requirement: "Data portability", implementation: "Results downloadable as text file. Full data export available in Settings." },
   { requirement: "Right to deletion", implementation: "Account and all associated data deletable from Settings. Immediate effect." },
@@ -343,7 +343,7 @@ const ADRS = [
   },
   {
     title: "Observability-first AI pipeline",
-    decision: "Every AI call logged with input hash, model version, explanation, and latency before returning results.",
+    decision: "Most AI calls logged with input hash, model version, explanation, and latency before returning results.",
     rationale: "JBS compliance requires auditability. Logging is non-optional and failure-isolated (won’t break the response).",
   },
 ];
