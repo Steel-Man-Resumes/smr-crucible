@@ -46,12 +46,17 @@ export default async function ImportPage(
       redirect("/mini-forge/import?error=not_ready");
     }
 
-    // Save forge_output to the session cookie so it can be used on account creation
+    // Save forge_output to the session cookie so it can be used on account creation.
+    // sameSite "lax", not "strict": the cookie has to survive a sign-in that
+    // starts on another site (an email magic-link click or a Google OAuth
+    // return). Browsers withhold Strict cookies on that cross-site redirect
+    // chain, so import-complete would see no cookie and silently skip the
+    // import. Lax is still only sent on top-level GET navigations.
     const cookieStore = await cookies();
     cookieStore.set(TABLET_COOKIE, tabletSession.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: 60 * 60 * 2, // 2 hours to complete account creation
       path: "/",
     });
