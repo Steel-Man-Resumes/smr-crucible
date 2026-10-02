@@ -327,7 +327,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: daily limits per account, and per IP address for people not signed in (stored as a keyed HMAC that changes daily, never the raw address; counts deleted after 30 days), with atomic enforcement</p>
-          <p>Decision Logging: most AI calls logged with a short input hash, the model, and a plain-text note about the step with no text the person typed. Rows are tied to the account when signed in, so deleting your data removes them. Resume parsing, fact checks and voice are not in this log.</p>
+          <p>Decision Logging: most AI calls logged with a keyed fingerprint of the input (an HMAC made with a server secret, never the input itself), the model, and a plain-text note about the step with no text the person typed. Rows are tied to the account when signed in, so deleting your data removes them. Resume parsing, fact checks and voice are not in this log.</p>
           <p>Other providers: Resend (email), Cloudflare Turnstile (bot checks), JSearch, Adzuna, USAJOBS and CareerOneStop (job listings: role and location only), O*NET (job titles)</p>
           <p>Session: JWT-based auth cookies; audited staff-assist sessions use a separate short-lived cookie</p>
         </div>

@@ -215,8 +215,11 @@ export default function EvidencePage() {
             </h2>
             <p className="text-base text-t-phos leading-relaxed mb-4">
               Most AI decisions in Steel Man Resumes are logged with the following schema. Resume parsing, fact checks and voice practice are not in this log yet.
-              Input content is hashed (SHA-256, first 16 characters) for privacy. Full
-              audit trail accessible for compliance review.
+              The input itself is never stored. Only a keyed fingerprint of it is kept: an
+              HMAC-SHA256 made with a secret held on the server, cut to 32 characters, so a
+              short input such as a job title cannot be found by guessing without that secret.
+              Older records keep the earlier unkeyed 16 character hash.
+              Full audit trail accessible for compliance review.
             </p>
             <div className="bg-t-panel-2 p-5 text-xs text-t-phos-dim border border-t-line">
               <pre className="whitespace-pre-wrap">{`decision_log {
@@ -227,7 +230,7 @@ export default function EvidencePage() {
   context_page: "analyze" | "assistant" | "disclosure" | ...
   model_provider: "anthropic"
   model_id: "claude-sonnet-5-5"
-  input_hash: sha256(user_input)[0:16]
+  input_hash: "h1:" + hmac_sha256(server_secret, "decision|" + user_input)[0:32]
   explanation: "why this recommendation was made"
   output_summary: { type, counts, metadata }
   token_count: number | null
