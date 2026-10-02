@@ -18,6 +18,35 @@ const MAX_PDF_OCR_PAGES = 5;
 const OCR_CACHE_PATH = "/tmp/tesseract-cache";
 
 /**
+ * Hard ceiling on OCR, well under /api/parse's maxDuration (60 s), so a stalled
+ * OCR becomes a clear 422 ("couldn't read that image") instead of the
+ * platform's 504. The AI parse after OCR has its own ceiling in the route.
+ *
+ * Why a ceiling at all: tesseract.js watches its Node worker thread through
+ * `worker.onerror`, a browser property Node's worker_threads ignores. If the
+ * worker thread fails to start (bad worker path, missing module), createWorker()
+ * never resolves or rejects. That silent hang was the 504 on image uploads
+ * (2026-10-02). next.config.mjs fixes the cause; this bounds any recurrence.
+ */
+const OCR_TIMEOUT_MS = 25_000;
+
+class OcrTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`OCR did not finish within ${ms} ms`);
+    this.name = "OcrTimeoutError";
+  }
+}
+
+function withOcrTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new OcrTimeoutError(ms)), ms);
+  });
+  // race() subscribes to `work`, so a late rejection is handled, never unhandled.
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
  * Thrown when a document genuinely can't be read (scanned/image-only PDF, a
  * photo OCR couldn't parse, an unreadable format). The parse route maps this to
  * a friendly 422 that steers the user to paste or the guided builder -- never a
@@ -199,11 +228,15 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<string> {
       const pages = rendered.pages ?? [];
       if (pages.length === 0) throw new Error("PDF rendered no pages for OCR");
 
+      // One OCR budget for the whole document, not one per page.
+      const deadline = Date.now() + OCR_TIMEOUT_MS;
       const chunks: string[] = [];
       for (const page of pages) {
         if (!page.data) continue;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
         console.log(`OCR PDF page ${page.pageNumber}/${rendered.total}`);
-        const text = await extractFromImageBuffer(Buffer.from(page.data), "image/png");
+        const text = await extractFromImageBuffer(Buffer.from(page.data), "image/png", remaining);
         if (text.trim()) chunks.push(text.trim());
       }
 
@@ -241,7 +274,8 @@ async function extractFromDOCX(buffer: Buffer): Promise<string> {
 
 async function extractFromImageBuffer(
   buffer: Buffer,
-  _mimeType: string
+  _mimeType: string,
+  timeoutMs: number = OCR_TIMEOUT_MS
 ): Promise<string> {
   if (buffer.length === 0) throw new Error("Image file is empty");
   if (buffer.length > 50 * 1024 * 1024)
@@ -250,36 +284,53 @@ async function extractFromImageBuffer(
   // OCR is intentionally loaded only when needed; most resumes are text PDFs or
   // DOCX files, but phone photos and scanned PDFs must still work.
   let worker: any = null;
+  // Set once we stop waiting. A worker that finishes starting after that is
+  // terminated on arrival instead of leaking.
+  let abandoned = false;
   try {
-    const { createWorker, PSM } = await import("tesseract.js");
-    console.log(`Starting OCR (${(buffer.length / 1024).toFixed(1)} KB)...`);
+    const run = async (): Promise<string> => {
+      const { createWorker, PSM } = await import("tesseract.js");
+      console.log(`Starting OCR (${(buffer.length / 1024).toFixed(1)} KB)...`);
 
-    worker = await createWorker("eng", 1, {
-      cachePath: OCR_CACHE_PATH,
-      logger: (m: any) => {
-        if (m.status === "recognizing text") {
-          console.log(`OCR: ${Math.round(m.progress * 100)}%`);
-        }
-      },
-    });
+      const w = await createWorker("eng", 1, {
+        cachePath: OCR_CACHE_PATH,
+        logger: (m: any) => {
+          if (m.status === "recognizing text") {
+            console.log(`OCR: ${Math.round(m.progress * 100)}%`);
+          }
+        },
+      });
+      if (abandoned) {
+        await w.terminate();
+        throw new OcrTimeoutError(timeoutMs);
+      }
+      worker = w;
 
-    await worker.setParameters({
-      preserve_interword_spaces: "1",
-      tessedit_pageseg_mode: PSM.AUTO,
-      user_defined_dpi: "300",
-    });
+      await w.setParameters({
+        preserve_interword_spaces: "1",
+        tessedit_pageseg_mode: PSM.AUTO,
+        user_defined_dpi: "300",
+      });
 
-    const { data } = await worker.recognize(buffer);
-    if (!data.text?.trim()) throw new Error("No text detected in image");
-    console.log(`OCR: ${data.text.length} chars`);
-    return data.text;
+      const { data } = await w.recognize(buffer);
+      return data.text ?? "";
+    };
+
+    const text = await withOcrTimeout(run(), timeoutMs);
+    if (!text.trim()) throw new Error("No text detected in image");
+    console.log(`OCR: ${text.length} chars`);
+    return text;
   } catch (error) {
-    console.error("OCR failed:", error);
+    console.error(
+      error instanceof OcrTimeoutError ? "OCR timed out:" : "OCR failed:",
+      error
+    );
     throw new UnreadableDocumentError(
       "We couldn't read text from that image or scan. Try a clearer photo, a PDF/Word file, or paste the text instead."
     );
   } finally {
-    if (worker) await worker.terminate();
+    abandoned = true;
+    if (worker) await worker.terminate().catch(() => {});
   }
 }
 
