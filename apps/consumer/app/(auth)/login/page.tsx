@@ -34,6 +34,22 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
+/**
+ * Same-origin relative path only: one leading "/", never "//host" or "/\host"
+ * (both mean another site), no backslashes, no control characters (a browser
+ * strips tabs/newlines, so "/\t/host" would become "//host"). Keeps an
+ * honored callbackUrl from ever becoming an open redirect. Auth.js also
+ * rejects cross-origin callback URLs on its side; this is the client half.
+ */
+function isSafeRelativePath(url: string | null): url is string {
+  return (
+    !!url &&
+    url.startsWith("/") &&
+    !url.startsWith("//") &&
+    !/[\\\u0000-\u001f\u007f]/.test(url)
+  );
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
   const isDev = process.env.NODE_ENV === "development";
@@ -97,6 +113,10 @@ function LoginForm() {
   }
 
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  // Mini Forge sends people here with callbackUrl=/mini-forge/import-complete,
+  // the step that loads their tablet plan into the new account. Account
+  // creation must honor it (see createCallback below) or the import never runs.
+  const fromMiniForge = searchParams.get("from") === "mini-forge";
 
   function resetLocalFlowState() {
     const keys = [
@@ -273,6 +293,8 @@ function LoginForm() {
       trackGA("refinery_signup", { from_forge: !!forge });
       // New accounts with no Forge data go to /intro, not /dashboard
       const createCallback = (() => {
+        const explicit = searchParams.get("callbackUrl");
+        if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
         try {
           const s = localStorage.getItem("forge_session");
           const session = s ? JSON.parse(s) : null;
