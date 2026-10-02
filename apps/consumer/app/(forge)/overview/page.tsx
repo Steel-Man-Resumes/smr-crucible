@@ -465,8 +465,7 @@ export default function OverviewPage() {
             For funders
           </h2>
           <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
-            Steel Man Resumes is currently transitioning to a nonprofit
-            structure. The platform is AGPL-3.0 open source and free to all users.
+            The platform is AGPL-3.0 open source and free to all users.
             No revenue is generated from user data.
           </p>
           <div className="space-y-3 text-sm">
