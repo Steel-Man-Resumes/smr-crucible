@@ -12,6 +12,7 @@
 
 import { createHash } from "crypto";
 import { insert, query } from "./db";
+import { decisionFieldsForStorage } from "./decisionPrivacy";
 
 export interface DecisionLogEntry {
   id: string;
@@ -56,6 +57,8 @@ export function logLabel(value: unknown, fallback = "other"): string {
  * explanation and outputSummary are stored as plain text. Never put words the
  * person typed in them (target job, company, location, role, record details):
  * counts, booleans, ids and fixed labels only. The input is stored as a hash.
+ * As a second guard, decisionFieldsForStorage strips anything a visitor could
+ * have typed from rows with no user id (the Forge's "we keep none of your words").
  */
 export async function logDecision(params: {
   userId: string | null;
@@ -69,15 +72,16 @@ export async function logDecision(params: {
   tokenCount?: number | null;
   latencyMs?: number | null;
 }): Promise<DecisionLogEntry> {
+  const stored = decisionFieldsForStorage(params);
   return insert<DecisionLogEntry>("decision_log", {
     user_id: params.userId ?? null,
-    session_id: params.sessionId ?? null,
-    context_page: params.contextPage,
+    session_id: stored.sessionId,
+    context_page: stored.contextPage,
     model_provider: params.modelProvider,
     model_id: params.modelId,
     input_hash: hashInput(params.input),
-    explanation: params.explanation,
-    output_summary: params.outputSummary ?? {},
+    explanation: stored.explanation,
+    output_summary: stored.outputSummary,
     token_count: params.tokenCount ?? null,
     latency_ms: params.latencyMs ?? null,
   });

@@ -4,7 +4,8 @@
  * Authenticated only. This is the in-Refinery, user-named coach (distinct from
  * t.ROY, which stays on the Forge/public surface). It accepts the AI SDK useChat
  * shape ({ messages }) so it is a drop-in for the existing chat drawer, builds a
- * profile-aware system prompt from getUserProfile, streams claude-sonnet-4-6,
+ * profile-aware system prompt from getUserProfile, streams Claude Sonnet 5.5
+ * (MODEL_TROY, built by lib/ai/troy-chat),
  * persists each new turn to coach_conversation, and logs for observability.
  *
  * 10x wave: hands (shared tool factory), messages pass through unstripped so
@@ -17,11 +18,17 @@
 
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
 import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
-import { MODEL_CHAT } from "@/lib/ai/models";
+import { MODEL_TROY } from "@/lib/ai/models";
+import { TROY_SERVER_MAX_STEPS, firstStepIndex } from "@/lib/ai/troy-steps";
+import {
+  troyChatModel,
+  troyMaxTokens,
+  emptyReplyGuard,
+  coachCreativityNote,
+} from "@/lib/ai/troy-chat";
 import {
   buildAssistantTools,
   buildHandsSection,
@@ -44,7 +51,7 @@ import {
 // than the old 30s ceiling.
 export const maxDuration = 60;
 
-const MODEL = MODEL_CHAT;
+const MODEL = MODEL_TROY;
 const RATE_LIMIT_MESSAGE =
   "You've used all your free coach messages for today. Come back tomorrow, or enter a partner code in Settings for more.";
 
@@ -118,6 +125,7 @@ export async function POST(request: Request) {
     skillsContext +
     buildHandsSection(toolOptions) +
     CURRENT_LAW_NOTE +
+    coachCreativityNote(profile.coachCreativity) +
     memorySection;
 
   // Persist the newest user turn for cross-session memory -- but ONLY when the
@@ -135,14 +143,16 @@ export async function POST(request: Request) {
   const startTime = Date.now();
 
   const result = streamText({
-    model: anthropic(MODEL),
+    model: troyChatModel(),
     system: systemPrompt,
     messages: messages as never,
-    maxTokens: profile.coachLength === "brief" ? 400 : 700,
-    temperature: Math.min(Math.max(profile.coachCreativity / 100, 0), 1),
+    // Reply budget by the length setting, plus room for Sonnet 5.5's thinking.
+    // The prompt's length rule still sets how long the reply is.
+    maxTokens: troyMaxTokens(profile.coachLength === "brief" ? 400 : 700),
     tools: buildAssistantTools(toolOptions),
-    maxSteps: 4,
+    maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
+    experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
       // Exact token accounting (in multi-step runs `usage` is the combined
       // total of all steps in this request)

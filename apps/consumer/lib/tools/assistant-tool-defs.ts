@@ -79,3 +79,24 @@ export function resolveAssistantPage(
   }
   return href;
 }
+
+/**
+ * The Refinery's chat drawer lives in the /dashboard layout; every other page
+ * with a drawer is in the Forge layout. A move between the two unmounts the
+ * chat, so a reply t.ROY writes after take_me_there would land nowhere.
+ */
+export function isRefineryPath(path: string): boolean {
+  const p = path.split(/[?#]/)[0];
+  return p === "/dashboard" || p.startsWith("/dashboard/");
+}
+
+/** True when going from `fromPath` to `toHref` changes layouts (Forge <-> Refinery). */
+export function crossesShell(fromPath: string, toHref: string): boolean {
+  return isRefineryPath(fromPath) !== isRefineryPath(toHref);
+}
+
+/** A tool page name as a button label: "application-tailor" -> "Application tailor". */
+export function pageLabel(page: string): string {
+  const words = page.replace(/-/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "that page";
+}

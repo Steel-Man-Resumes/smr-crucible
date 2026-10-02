@@ -13,10 +13,10 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
-import { resolveAssistantPage } from "@/lib/tools/assistant-tool-defs";
+import { resolveAssistantPage, crossesShell, pageLabel } from "@/lib/tools/assistant-tool-defs";
 import { requestHighlight } from "@/lib/highlight-bus";
 import SpeechInputButton from "@/components/SpeechInputButton";
 import { Send, Check, Loader2, Settings2 } from "lucide-react";
@@ -171,6 +171,7 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boo
 
 export function AssistantChat({ context, sessionId, coach, staff }: AssistantChatProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   // Browser-executed tools. The return value becomes the tool result the
   // model narrates over -- keep results short and honest.
@@ -181,6 +182,17 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
         const href = args.page ? resolveAssistantPage(args.page, args.jobApplicationId) : null;
         if (!href) {
           return "That page name is not valid here. Name the page for the user instead of navigating.";
+        }
+        if (crossesShell(pathname ?? "", href)) {
+          // The Forge and the Refinery have separate chat drawers. Moving now
+          // would unmount this chat before t.ROY's reply arrives, so show a
+          // "Go to" button under the reply instead and let the person move.
+          return {
+            ok: true,
+            navigated: false,
+            buttonShown: true,
+            note: "That page is in the other part of the app, where this chat does not follow. A button to open it shows under your reply. Answer first, then tell them to tap the button when they are ready.",
+          };
         }
         router.push(href);
         return { ok: true, nowOn: args.page };
@@ -193,7 +205,7 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
       }
       return "Unknown tool.";
     },
-    [router]
+    [router, pathname]
   );
 
   const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
@@ -592,6 +604,21 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
             );
           }
 
+          // A take_me_there into the other layout did not navigate: it left a
+          // "Go to" button, shown under the reply once the reply has finished.
+          const goTo = parts.flatMap((part, i) => {
+            if (part.type !== "tool-invocation") return [];
+            const inv = part.toolInvocation as
+              | { toolName?: string; state?: string; args?: unknown; result?: unknown }
+              | undefined;
+            if (inv?.toolName !== "take_me_there" || inv.state !== "result") return [];
+            if (!(inv.result as { buttonShown?: unknown } | undefined)?.buttonShown) return [];
+            const args = (inv.args ?? {}) as { page?: string; jobApplicationId?: string };
+            const href = args.page ? resolveAssistantPage(args.page, args.jobApplicationId) : null;
+            return href ? [{ key: i, href, label: pageLabel(args.page ?? "") }] : [];
+          });
+          const replyStillComing = isLoading && message.id === messages[messages.length - 1]?.id;
+
           // Assistant message with parts: text bubbles + tool activity lines
           return (
             <div key={message.id} className="space-y-2">
@@ -609,6 +636,8 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
                   const inv = part.toolInvocation as
                     | { toolName?: string; state?: string }
                     | undefined;
+                  // A deferred move shows its button below instead of "Taking you there".
+                  if (goTo.some((g) => g.key === i)) return null;
                   const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
                   const done = inv?.state === "result";
                   return (
@@ -631,6 +660,18 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
                 }
                 return null;
               })}
+              {!replyStillComing &&
+                goTo.map((g) => (
+                  <div key={`go-${g.key}`} className="flex justify-start pl-1">
+                    <button
+                      type="button"
+                      onClick={() => router.push(g.href)}
+                      className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+                    >
+                      Go to {g.label}
+                    </button>
+                  </div>
+                ))}
             </div>
           );
         })}

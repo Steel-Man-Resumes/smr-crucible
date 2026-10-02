@@ -15,13 +15,14 @@
 
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { auth } from "@/auth";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
-import { MODEL_CHAT } from "@/lib/ai/models";
+import { MODEL_TROY } from "@/lib/ai/models";
+import { TROY_SERVER_MAX_STEPS, firstStepIndex } from "@/lib/ai/troy-steps";
+import { troyChatModel, troyMaxTokens, emptyReplyGuard, replyOrFallback } from "@/lib/ai/troy-chat";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import {
   buildAssistantTools,
@@ -267,10 +268,12 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
 
   // Depth on demand: client coaching stays text-message short (the format rules
   // still cap it), but partner/observer evidence mode needs room for full
-  // citations. Client cap is 700 (was 400) so tool round-trips have headroom;
-  // exact-token accounting in ai_token_usage watches the cost.
-  const responseMaxTokens =
-    context.audience === "observer" || context.audience === "partner" ? 1200 : 700;
+  // citations. Client reply budget is 700 (was 400) so tool round-trips have
+  // headroom; exact-token accounting in ai_token_usage watches the cost.
+  // troyMaxTokens adds room for Sonnet 5.5's thinking, which counts toward the cap.
+  const responseMaxTokens = troyMaxTokens(
+    context.audience === "observer" || context.audience === "partner" ? 1200 : 700
+  );
 
   // ORG STAFF ANSWERS ARE VERIFIED BEFORE THEY ARE SENT, NOT AFTER.
   //
@@ -285,12 +288,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     const { verifyOrgOutput } = await import("@/lib/org-output-verify");
 
     const generated = await generateText({
-      model: anthropic(MODEL_CHAT),
+      model: troyChatModel(),
       system: localizedSystemPrompt,
       messages: messages as never,
       maxTokens: responseMaxTokens,
-      temperature: 0.7,
     });
+    // A safety decline comes back as finishReason "unknown" with no text. Never
+    // send a staff member an empty answer; say it plainly instead.
+    const answer = replyOrFallback(generated.text);
 
     const facts = {
       caseload: context.org.caseload,
@@ -305,10 +310,10 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,
     };
-    const verdict = await verifyOrgOutput(generated.text, facts, lastUserText(messages) ?? undefined);
+    const verdict = await verifyOrgOutput(answer, facts, lastUserText(messages) ?? undefined);
 
     // Dash sweep on the model-written answer only, before any notice is added.
-    let out = plainPunctuation(generated.text, logDashSwaps("assistant-org"));
+    let out = plainPunctuation(answer, logDashSwaps("assistant-org"));
     if (!verdict.ok) {
       // Do not silently rewrite a claim into something else true -- that hides
       // the failure and teaches nobody. Flag it where the reader will see it,
@@ -332,7 +337,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       const { recordTokenUsage } = await import("@/lib/ai-usage-log");
       recordTokenUsage(
         "anthropic",
-        MODEL_CHAT,
+        MODEL_TROY,
         { inputTokens: usage?.promptTokens || 0, outputTokens: usage?.completionTokens || 0 },
         { userId: userId ?? null, endpoint: "assistant" }
       );
@@ -343,7 +348,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           sessionId: sessionId ?? null,
           contextPage: context.currentPage,
           modelProvider: "anthropic",
-          modelId: MODEL_CHAT,
+          modelId: MODEL_TROY,
           input: lastUserText(messages),
           explanation: `Org staff assistant (${context.org.role}, reach ${context.org.reach}) on ${context.currentPage}. Verified before send: ${
             verdict.ok ? "clean" : `${verdict.problems.length} unsupported claim(s) flagged to the reader`
@@ -354,6 +359,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
             verify_ok: verdict.ok,
             verify_problem_count: verdict.problems.length,
             verify_model_checked: verdict.modelChecked,
+            finish_reason: generated.finishReason,
           },
           tokenCount: usage?.totalTokens ?? null,
           latencyMs: Date.now() - startTime,
@@ -382,14 +388,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   }
 
   const result = streamText({
-    model: anthropic(MODEL_CHAT),
+    model: troyChatModel(),
     system: localizedSystemPrompt,
     messages: messages as never,
     maxTokens: responseMaxTokens,
-    temperature: 0.7,
     tools: buildAssistantTools(toolOptions),
-    maxSteps: 4,
+    maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
+    experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
       const latencyMs = Date.now() - startTime;
 
@@ -414,7 +420,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
         const { recordTokenUsage } = await import("@/lib/ai-usage-log");
         recordTokenUsage(
           "anthropic",
-          MODEL_CHAT,
+          MODEL_TROY,
           {
             inputTokens: (usage as any).promptTokens || 0,
             outputTokens: (usage as any).completionTokens || 0,
@@ -430,7 +436,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           sessionId: sessionId ?? null,
           contextPage: context.currentPage,
           modelProvider: "anthropic",
-          modelId: MODEL_CHAT,
+          modelId: MODEL_TROY,
           input: lastUserText(messages),
           explanation: `Assistant responded on ${context.currentPage} page. ${
             context.readinessStage
@@ -440,6 +446,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           outputSummary: {
             response_length: text.length,
             word_count: text.split(/\s+/).length,
+            finish_reason: finishReason,
           },
           tokenCount: usage?.totalTokens ?? null,
           latencyMs,

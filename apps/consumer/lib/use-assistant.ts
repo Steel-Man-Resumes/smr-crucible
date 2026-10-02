@@ -15,6 +15,7 @@
 
 import { useChat } from "ai/react";
 import type { AssistantContext } from "./assistant-prompt";
+import { TROY_CLIENT_MAX_STEPS } from "./ai/troy-steps";
 
 export interface AssistantToolCall {
   toolCallId: string;
@@ -40,7 +41,8 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
       context,
       sessionId,
     },
-    maxSteps: 4,
+    // Shared with the routes, which mirror this count (lib/ai/troy-steps).
+    maxSteps: TROY_CLIENT_MAX_STEPS,
     onToolCall: onToolCall as never,
   });
 
