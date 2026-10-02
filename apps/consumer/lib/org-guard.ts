@@ -31,6 +31,7 @@ import {
   type OrgActor,
   type OrgCapability,
 } from "@crucible/core";
+import { adminSecondFactorOk } from "@/lib/session-policy";
 
 export type OrgGuardResult =
   | { ok: true; actor: OrgActor }
@@ -99,6 +100,13 @@ export async function requirePlatformAdmin(): Promise<
       ok: false;
       response: NextResponse;
     };
+  }
+  // Admin powers need a session that entered a two-step code (F1).
+  if (!adminSecondFactorOk(session?.user as any)) {
+    return fail(
+      403,
+      "Admin tools need two-step verification on this sign-in. Turn it on in Settings, or sign in again with your code."
+    ) as { ok: false; response: NextResponse };
   }
   return { ok: true, userId };
 }

@@ -10,7 +10,12 @@ import assert from "node:assert/strict";
 import {
   FRESH_SIGN_IN_SECONDS,
   SESSION_REGISTRY_CUTOFF,
+  adminSecondFactorOk,
   authRouteSkipsSessionChecks,
+  hasSecondFactor,
+  isAdminPowerPath,
+  mfaGateApplies,
+  safeCallbackPath,
   revocationVerdict,
   sessionRowRequired,
   signedInWithin,
@@ -153,5 +158,47 @@ describe("adding a first password needs a fresh sign-in (F6)", () => {
     assert.equal(signedInWithin(undefined, FRESH_SIGN_IN_SECONDS, now), false);
     assert.equal(signedInWithin(null, FRESH_SIGN_IN_SECONDS, now), false);
     assert.equal(signedInWithin(String(nowS), FRESH_SIGN_IN_SECONDS, now), false);
+  });
+});
+
+describe("second step on every sign-in method (F1)", () => {
+  it("holds a waiting session everywhere except the step-up and the sign-in plumbing", () => {
+    assert.equal(mfaGateApplies("/api/auth/mfa-verify"), false);
+    assert.equal(mfaGateApplies("/api/auth/session"), false);
+    assert.equal(mfaGateApplies("/api/auth/signout"), false);
+    assert.equal(mfaGateApplies("/api/auth/reset-password/request"), false);
+    assert.equal(mfaGateApplies("/api/user/profile"), true);
+    assert.equal(mfaGateApplies("/api/auth/set-password"), true);
+    assert.equal(mfaGateApplies("/api/auth/session-ping"), true);
+    assert.equal(mfaGateApplies("/dashboard"), true);
+    assert.equal(mfaGateApplies("/api/forge/anything"), true);
+  });
+
+  it("knows the admin-power paths", () => {
+    assert.equal(isAdminPowerPath("/api/admin/health"), true);
+    assert.equal(isAdminPowerPath("/api/dev/impersonate"), true);
+    assert.equal(isAdminPowerPath("/dashboard/admin"), true);
+    assert.equal(isAdminPowerPath("/dashboard/admin/users"), true);
+    assert.equal(isAdminPowerPath("/dashboard/administrivia"), false);
+    assert.equal(isAdminPowerPath("/api/user/role"), false);
+  });
+
+  it("gives admin powers only to a session that entered a code", () => {
+    assert.equal(hasSecondFactor(1_790_000_000), true);
+    assert.equal(hasSecondFactor(null), false);
+    assert.equal(hasSecondFactor(undefined), false);
+    assert.equal(hasSecondFactor("1790000000"), false);
+    // Tests run outside development, so the dev-login exemption is off.
+    assert.equal(adminSecondFactorOk({ mfaAt: null }), false);
+    assert.equal(adminSecondFactorOk({ mfaAt: 1_790_000_000 }), true);
+  });
+
+  it("only returns to a same-site path after the step-up", () => {
+    assert.equal(safeCallbackPath("/dashboard/settings?tab=security"), "/dashboard/settings?tab=security");
+    assert.equal(safeCallbackPath("https://evil.example"), "/dashboard");
+    assert.equal(safeCallbackPath("//evil.example"), "/dashboard");
+    assert.equal(safeCallbackPath("/\\evil.example"), "/dashboard");
+    assert.equal(safeCallbackPath("/login/verify?callbackUrl=/x"), "/dashboard");
+    assert.equal(safeCallbackPath(null), "/dashboard");
   });
 });

@@ -71,6 +71,20 @@ export async function POST(req: Request) {
       await client.query("ROLLBACK").catch(() => {});
       throw err;
     }
+
+    // This session just entered a code, so it counts as a session that
+    // presented a second factor (F1): after the page calls update(), admin
+    // tools unlock without signing in again. Best-effort.
+    const sid = ((session.user as any).sid as string | undefined) || null;
+    if (sid) {
+      await client
+        .query(
+          `UPDATE user_session SET mfa_verified_at = now()
+            WHERE jti = $1 AND user_id = $2 AND revoked_at IS NULL`,
+          [sid, session.user.id]
+        )
+        .catch((err: any) => console.error("2FA enable: could not mark session:", err?.message || err));
+    }
     await client
       .query(
         `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'two_factor_enabled', $2)`,

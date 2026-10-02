@@ -43,6 +43,7 @@ import {
   recordDataAccess,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
+import { adminSecondFactorOk } from "@/lib/session-policy";
 import {
   mintInviteMagicLink,
   buildInviteEmail,
@@ -56,15 +57,17 @@ async function resolveContext(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return { error: 401 as const };
   const tier = await getUserTier(session.user.id);
+  // The cross-org admin view needs a session that entered a two-step code (F1).
+  const adminPowers = tier === "admin" && adminSecondFactorOk(session.user as any);
   const { searchParams } = new URL(request.url);
   const overrideCodeId =
-    tier === "admin" ? searchParams.get("codeId") || undefined : undefined;
+    adminPowers ? searchParams.get("codeId") || undefined : undefined;
   const org = await getOrgContext(session.user.id, {
-    isAdmin: tier === "admin",
+    isAdmin: adminPowers,
     overrideCodeId,
   });
   if (!org) return { error: 403 as const };
-  return { org, userId: session.user.id, tier };
+  return { org, userId: session.user.id, tier, adminPowers };
 }
 
 export async function GET(request: Request) {
@@ -75,13 +78,13 @@ export async function GET(request: Request) {
       { status: ctx.error }
     );
   }
-  const { org, userId, tier } = ctx;
+  const { org, userId, adminPowers } = ctx;
   // WHAT THIS PERSON SEES IS DECIDED BY THEIR CAPABILITIES, not their role name.
   // It used to be `owner or org_admin` inline, so switching one case manager to
   // "see everyone", or an admin's AI-cost view off, changed nothing on screen.
   // The role is only the fallback when no actor can be resolved.
   const roleIsAdmin = org.role === "owner" || org.role === "org_admin";
-  const actor = await resolveOrgActor(userId, { isPlatformAdmin: tier === "admin", orgId: org.accessCodeId }).catch(() => null);
+  const actor = await resolveOrgActor(userId, { isPlatformAdmin: adminPowers, orgId: org.accessCodeId }).catch(() => null);
   const can = (cap: Parameters<NonNullable<typeof actor>["capabilities"]["has"]>[0], fallback: boolean) =>
     actor ? actor.capabilities.has(cap) : fallback;
   const isOrgAdmin = can("org.client.view_all", roleIsAdmin);

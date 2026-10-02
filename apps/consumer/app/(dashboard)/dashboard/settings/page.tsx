@@ -1353,6 +1353,7 @@ function TwoFactorCard({
   const [err, setErr] = useState("");
   const [showDisable, setShowDisable] = useState(false);
   const [disableToken, setDisableToken] = useState("");
+  const { update: updateSession } = useSession();
 
   async function startSetup() {
     setBusy(true);
@@ -1386,6 +1387,9 @@ function TwoFactorCard({
         setBackup(d.backupCodes || []);
         setCode("");
         setMode("backup");
+        // The server recorded that this session entered a code; refresh the
+        // session so it carries that (unlocks admin tools without a re-login).
+        await updateSession().catch(() => {});
         await refresh();
       } else {
         setErr(d.error || "That code didn't match.");
@@ -1432,7 +1436,7 @@ function TwoFactorCard({
           <h3 className="font-semibold text-t-white">Two-step verification</h3>
           <p className="text-sm text-t-phos-dim mt-0.5">
             {enabled
-              ? "On. You'll enter a code from your authenticator app when you sign in."
+              ? "On. You'll enter a code from your authenticator app every time you sign in, whether you use a password, an email link, or Google."
               : "Add a second step at sign-in with an authenticator app (Google Authenticator, Authy, 1Password)."}
           </p>
         </div>

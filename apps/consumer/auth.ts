@@ -6,9 +6,13 @@ import PostgresAdapter from "@auth/pg-adapter";
 import { Pool, neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import {
+  MFA_VERIFY_PAGE,
   SESSION_REGISTRY_CUTOFF,
   SESSIONS_REVOKED_EVENT,
+  adminSecondFactorOk,
   authRouteSkipsSessionChecks,
+  isAdminPowerPath,
+  mfaGateApplies,
   nowSeconds,
   revocationVerdict,
   sessionRowRequired,
@@ -319,9 +323,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Second step (F1): a session that signed in by email link or Google
+      // into a two-step account reaches nothing but the step-up until the code
+      // is entered. Pages go to the code page; API calls get 401.
+      if (session && (session.user as any)?.mfa === false && mfaGateApplies(path)) {
+        if (isApi) {
+          return Response.json(
+            { error: "Enter your two-step code to finish signing in.", mfaRequired: true },
+            { status: 401 }
+          );
+        }
+        const verify = new URL(MFA_VERIFY_PAGE, request.url);
+        verify.searchParams.set("callbackUrl", path + request.nextUrl.search);
+        return Response.redirect(verify);
+      }
+
+      // Admin powers (admin tools, impersonation) need a session that
+      // presented a second factor. This replaces the client-only "admin needs
+      // 2FA" redirect as the real gate; the banner in RefineryShell stays as
+      // the explanation. requirePlatformAdmin and effectiveAuth check the same.
+      if (session && isAdminPowerPath(path) && !adminSecondFactorOk(session.user as any)) {
+        if (isApi) {
+          return Response.json(
+            {
+              error:
+                "Admin tools need two-step verification on this sign-in. Turn it on in Settings, or sign in again with your code.",
+              secondFactorRequired: true,
+            },
+            { status: 403 }
+          );
+        }
+        return Response.redirect(new URL("/dashboard/settings", request.url));
+      }
+
       return true;
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, account }) {
       // On sign-in or when user object is available, persist tier
       if (user) {
         token.tier = (user as any).tier || "client";
@@ -411,6 +448,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (isSignIn && token.sub) {
         (token as any).sid = newSessionId(token.sub);
         (token as any).sit = nowSeconds();
+
+        // Second step (F1). Password sign-in already demanded the code inside
+        // authorize(); an email link or Google sign-in into an account with
+        // two-step starts the session waiting for it (mfa: false) and the
+        // middleware holds it at /login/verify until the code is entered.
+        const tf = await pool.query(`SELECT two_factor_enabled FROM users WHERE id = $1`, [token.sub]);
+        const twoFactor = !!tf.rows[0]?.two_factor_enabled;
+        const viaPassword = account?.provider === "password-login";
+        (token as any).mfa = viaPassword || !twoFactor;
+        if (viaPassword && twoFactor) (token as any).mfaAt = (token as any).sit;
+        else delete (token as any).mfaAt;
+
         const { recordSignIn } = await import("@/lib/session-registry");
         await recordSignIn(pool, {
           sid: (token as any).sid,
@@ -422,6 +471,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.sub && !(token as any).sid) {
         (token as any).sid = newSessionId(token.sub);
       }
+
+      // After the step-up route records the code for this session, the page
+      // calls update(). The claim flips ONLY from the database row, never from
+      // anything the client sent (the update payload is ignored).
+      if (trigger === "update" && token.sub && (token as any).sid) {
+        try {
+          const rows = (await sqlEdge`
+            SELECT mfa_verified_at FROM user_session
+             WHERE jti = ${(token as any).sid} AND user_id = ${token.sub}::uuid
+               AND revoked_at IS NULL
+             LIMIT 1`) as any[];
+          const at = rows[0]?.mfa_verified_at ? new Date(rows[0].mfa_verified_at).getTime() : NaN;
+          if (Number.isFinite(at)) {
+            (token as any).mfa = true;
+            (token as any).mfaAt = Math.floor(at / 1000);
+          }
+        } catch {
+          // Leave the claims as they were; the person can try again.
+        }
+      }
+
+      // Sessions signed in before F1 carry no `mfa` claim. One minted by an
+      // email link into a two-step account never saw a code, so an older
+      // session of a two-step account is asked for the code once. Edge-safe
+      // (HTTP query); on a DB error the claim stays unset and is retried.
+      if (token.sub && (token as any).mfa === undefined) {
+        try {
+          const rows = (await sqlEdge`SELECT two_factor_enabled FROM users WHERE id = ${token.sub}::uuid LIMIT 1`) as any[];
+          if (rows.length) (token as any).mfa = !rows[0].two_factor_enabled;
+        } catch {
+          // fail open, as the revocation check does
+        }
+      }
       return token;
     },
     async session({ session, token }) {
@@ -431,6 +513,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).sid = (token as any).sid || null;
         // Signed-in-at (epoch seconds), only on sessions registered at sign-in.
         (session.user as any).sit = typeof (token as any).sit === "number" ? (token as any).sit : null;
+        // Second step (F1): false only while the code is still owed.
+        (session.user as any).mfa = (token as any).mfa !== false;
+        (session.user as any).mfaAt = typeof (token as any).mfaAt === "number" ? (token as any).mfaAt : null;
       }
       return session;
     },

@@ -107,3 +107,61 @@ export function signedInWithin(
   const age = nowSeconds(now) - signedInAt;
   return age >= -60 && age <= maxAgeSeconds;
 }
+
+/*
+ * SECOND STEP ON EVERY SIGN-IN METHOD (F1, 2026-10-02).
+ *
+ * Token claims, set in auth.ts `jwt`:
+ *  - mfa:   false while an account with two-step verification has signed in
+ *           by email link or Google and has not entered a code yet. Password
+ *           sign-in already requires the code inside authorize(), so it starts
+ *           true. Accounts without two-step start true.
+ *  - mfaAt: epoch seconds when this session presented a second factor
+ *           (password + code, the step-up, or turning two-step on). Absent
+ *           when it never did.
+ *
+ * A session with mfa === false can reach only the step-up route, NextAuth's
+ * own routes and the pre-sign-in routes; pages send it to /login/verify.
+ * Admin powers need mfaAt.
+ */
+export const MFA_VERIFY_PATH = "/api/auth/mfa-verify";
+export const MFA_VERIFY_PAGE = "/login/verify";
+
+/** Whether a session still waiting for its second step is blocked on `path`. */
+export function mfaGateApplies(path: string): boolean {
+  if (path === MFA_VERIFY_PATH) return false;
+  return !authRouteSkipsSessionChecks(path);
+}
+
+/** Paths that exercise admin powers (cross-user tools, impersonation). */
+const ADMIN_POWER_PREFIXES = ["/api/admin/", "/api/dev/", "/dashboard/admin"];
+
+export function isAdminPowerPath(path: string): boolean {
+  return ADMIN_POWER_PREFIXES.some((p) =>
+    p.endsWith("/") ? path.startsWith(p) : path === p || path.startsWith(p + "/")
+  );
+}
+
+/** True when this session presented a second factor. */
+export function hasSecondFactor(mfaAt: unknown): boolean {
+  return typeof mfaAt === "number" && Number.isFinite(mfaAt) && mfaAt > 0;
+}
+
+/**
+ * Admin powers require a session that presented a second factor (F1): an
+ * admin without two-step, or signed in without the code, keeps their own
+ * account but not the tools that reach other people's data. Local development
+ * (dev-login, no two-step) is exempt.
+ */
+export function adminSecondFactorOk(user: { mfaAt?: unknown } | null | undefined): boolean {
+  if (process.env.NODE_ENV === "development") return true;
+  return hasSecondFactor(user?.mfaAt);
+}
+
+/** A same-site path to return to after the step-up, or the dashboard. */
+export function safeCallbackPath(raw: string | null | undefined): string {
+  if (!raw || typeof raw !== "string") return "/dashboard";
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/dashboard";
+  if (raw.startsWith(MFA_VERIFY_PAGE)) return "/dashboard";
+  return raw;
+}

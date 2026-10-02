@@ -205,9 +205,10 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             typed.
           </BulletItem>
           <BulletItem>
-            Turn on two-step verification. You add a code from an authenticator
-            app when you sign in, and you get one-time backup codes in case you
-            lose your phone. The secret behind those codes is stored encrypted.
+            Turn on two-step verification. Every sign-in then asks for a code
+            from an authenticator app, whether you use a password, an email
+            link, or Google, and you get one-time backup codes in case you lose
+            your phone. The secret behind those codes is stored encrypted.
           </BulletItem>
           <BulletItem>
             See every device signed in to your account and sign out any one you

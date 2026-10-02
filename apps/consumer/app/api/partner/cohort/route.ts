@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 // effectiveAuth: impersonation-aware, so viewing a partner shows THEIR
 // cohort, not the admin's. Read-only enforcement stays at the middleware edge.
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { adminSecondFactorOk } from "@/lib/session-policy";
 import {
   getUserTier,
   isPartnerUser,
@@ -43,8 +44,11 @@ export async function GET(request: Request) {
   // at their own org saw a list that silently was not their own org.
   //
   // Now it takes ?scope=all. Same power, deliberately reached for.
+  // Cross-org view also needs a session that entered a two-step code (F1).
   const wantsAllOrgs =
-    tier === "admin" && new URL(request.url).searchParams.get("scope") === "all";
+    tier === "admin" &&
+    adminSecondFactorOk(session.user as any) &&
+    new URL(request.url).searchParams.get("scope") === "all";
   const cohort = await getPartnerCohort(session.user.id, { isAdmin: wantsAllOrgs });
 
   const { searchParams } = new URL(request.url);
