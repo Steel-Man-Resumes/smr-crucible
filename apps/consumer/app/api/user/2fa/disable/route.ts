@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { verifyToken, resolveTotpSecret } from "@/lib/two-factor";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -76,10 +77,25 @@ export async function POST(req: Request) {
       );
     }
 
-    await client.query(`DELETE FROM user_two_factor WHERE user_id = $1`, [session.user.id]);
-    await client.query(`UPDATE users SET two_factor_enabled = false WHERE id = $1`, [
-      session.user.id,
-    ]);
+    // Turning two-step off also signs out every other session: if this is a
+    // hijacked session removing the second factor, the owner's own devices
+    // are not the ones that should keep running unchallenged.
+    await client.query("BEGIN");
+    try {
+      await client.query(`DELETE FROM user_two_factor WHERE user_id = $1`, [session.user.id]);
+      await client.query(`UPDATE users SET two_factor_enabled = false WHERE id = $1`, [
+        session.user.id,
+      ]);
+      await revokeUserSessions(client, {
+        userId: session.user.id,
+        keepSid: ((session.user as any).sid as string | undefined) || null,
+        userAgent: req.headers.get("user-agent") || null,
+      });
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    }
     await client
       .query(
         `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'two_factor_disabled', $2)`,

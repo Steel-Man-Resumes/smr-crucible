@@ -5,6 +5,13 @@ import Credentials from "next-auth/providers/credentials";
 import PostgresAdapter from "@auth/pg-adapter";
 import { Pool, neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
+import {
+  SESSION_REGISTRY_CUTOFF,
+  SESSIONS_REVOKED_EVENT,
+  nowSeconds,
+  revocationVerdict,
+  sessionRowRequired,
+} from "@/lib/session-policy";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -14,12 +21,41 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // no-store: this is the session-revocation check. Next patches fetch and can
 // cache an identical query; a cached "session is valid" would outlive a revoke.
 const sqlEdge = neon(process.env.DATABASE_URL!, { fetchOptions: { cache: "no-store" } });
-async function isSessionRevoked(jti: string): Promise<boolean> {
+
+/**
+ * Revocation check (3B, F5). A session with a row is revoked when its row says
+ * so. A session signed in by the server-side registry (`sit` claim) with no row
+ * is refused. An older token with no row is refused only once its user has
+ * swept their sessions since the registry cutoff. See lib/session-policy.ts.
+ */
+async function isSessionRevoked(
+  sid: string,
+  userId: string | undefined,
+  signedInAt: unknown
+): Promise<boolean> {
   try {
-    const rows = await sqlEdge`SELECT 1 FROM user_session WHERE jti = ${jti} AND revoked_at IS NOT NULL LIMIT 1`;
-    return (rows as any[]).length > 0;
+    const rows = (await sqlEdge`SELECT revoked_at FROM user_session WHERE jti = ${sid} LIMIT 1`) as any[];
+    const row = rows[0] ? { revoked: rows[0].revoked_at != null } : null;
+    let swept: boolean | null = null;
+    if (!row && !sessionRowRequired(signedInAt) && userId) {
+      const s = (await sqlEdge`
+        SELECT 1 FROM user_login_event
+         WHERE user_id = ${userId}::uuid AND event = ${SESSIONS_REVOKED_EVENT}
+           AND created_at >= ${SESSION_REGISTRY_CUTOFF}::timestamptz
+         LIMIT 1`) as any[];
+      swept = s.length > 0;
+    }
+    return revocationVerdict({ row, signedInAt, sweptSinceCutoff: swept });
   } catch {
     return false;
+  }
+}
+
+function newSessionId(sub: string): string {
+  try {
+    return globalThis.crypto.randomUUID();
+  } catch {
+    return `${sub}-${Date.now()}`;
   }
 }
 
@@ -316,7 +352,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // keep the DB check off the hot session-poll path.
       const sid = (session?.user as any)?.sid as string | undefined;
       if (session && sid && (isDashboard || (isApi && !path.startsWith("/api/auth/")))) {
-        if (await isSessionRevoked(sid)) {
+        if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });
           }
@@ -405,12 +441,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // exactly why an earlier attempt never matched). Minted once on sign-in,
       // then persists like `tier`; matched against user_session for the
       // active-devices list + revocation.
+      //
+      // Registered server-side at sign-in (F5): the user_session row is written
+      // here, before the token is issued, and `sit` (signed-in-at, epoch
+      // seconds) marks the token as registered. `iat` cannot serve: Auth.js
+      // re-stamps it on every re-issue, so it is never the sign-in time. If the
+      // row cannot be written the sign-in fails rather than issue a token the
+      // middleware would treat as revoked.
+      const isSignIn = trigger === "signIn" || trigger === "signUp";
+      if (isSignIn && token.sub) {
+        (token as any).sid = newSessionId(token.sub);
+        (token as any).sit = nowSeconds();
+        const { recordSignIn } = await import("@/lib/session-registry");
+        await recordSignIn(pool, {
+          sid: (token as any).sid,
+          userId: token.sub,
+          email: (token.email as string | undefined) ?? null,
+          name: (token.name as string | undefined) ?? null,
+        });
+      }
       if (token.sub && !(token as any).sid) {
-        try {
-          (token as any).sid = globalThis.crypto.randomUUID();
-        } catch {
-          (token as any).sid = `${token.sub}-${Date.now()}`;
-        }
+        (token as any).sid = newSessionId(token.sub);
       }
       return token;
     },
@@ -419,6 +470,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub || "";
         (session.user as any).tier = token.tier || "client";
         (session.user as any).sid = (token as any).sid || null;
+        // Signed-in-at (epoch seconds), only on sessions registered at sign-in.
+        (session.user as any).sit = typeof (token as any).sit === "number" ? (token as any).sit : null;
       }
       return session;
     },

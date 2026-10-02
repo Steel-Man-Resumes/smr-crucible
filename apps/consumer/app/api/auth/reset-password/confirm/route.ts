@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { isValidEmail } from "@/lib/auth-rate-limit";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
       await client.query(`DELETE FROM verification_token WHERE identifier = $1`, [
         identifier,
       ]);
+      // A reset signs out EVERY session (there is no current one to keep):
+      // whoever had the account before the reset does not keep it after.
+      if (update.rows.length > 0) {
+        await revokeUserSessions(client, {
+          userId: update.rows[0].id,
+          userAgent: request.headers.get("user-agent") || null,
+        });
+      }
       await client.query("COMMIT");
 
       if (update.rows.length === 0) {

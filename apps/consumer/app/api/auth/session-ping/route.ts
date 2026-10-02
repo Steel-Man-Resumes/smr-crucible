@@ -6,9 +6,14 @@ import { getClientIp } from "@/lib/auth-rate-limit";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 /**
- * Record this session's device against its JWT session id (jti) so it appears
- * in the active-devices list and can be revoked. Called once on dashboard mount;
- * idempotent (ON CONFLICT refreshes last_seen).
+ * Refresh this session's row in the active-devices list: last-seen time, and
+ * device/place when the row has none yet. Called once on dashboard mount;
+ * idempotent.
+ *
+ * The row is created server-side at sign-in (F5, lib/session-registry.ts), so
+ * this is no longer what makes a session revocable. It still inserts a row for
+ * an older session signed in before that change, so those become listable and
+ * revocable the first time they load the dashboard.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -27,7 +32,12 @@ export async function POST(req: Request) {
     await client.query(
       `INSERT INTO user_session (jti, user_id, user_agent, ip, approx_location, created_at, last_seen_at)
        VALUES ($1, $2, $3, $4, $5, now(), now())
-       ON CONFLICT (jti) DO UPDATE SET last_seen_at = now()`,
+       ON CONFLICT (jti) DO UPDATE
+         SET last_seen_at = now(),
+             user_agent = COALESCE(user_session.user_agent, EXCLUDED.user_agent),
+             ip = COALESCE(user_session.ip, EXCLUDED.ip),
+             approx_location = COALESCE(user_session.approx_location, EXCLUDED.approx_location)
+       WHERE user_session.user_id = EXCLUDED.user_id`,
       [jti, userId, ua, ip, location]
     );
     return NextResponse.json({ ok: true });

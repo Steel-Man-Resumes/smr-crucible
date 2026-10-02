@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { verifyToken, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -38,14 +39,28 @@ export async function POST(req: Request) {
 
     const codes = generateBackupCodes();
     const hashes = await Promise.all(codes.map((c) => bcrypt.hash(c, 10)));
-    await client.query(
-      `UPDATE user_two_factor SET backup_codes = $2::jsonb, confirmed_at = now(), updated_at = now()
-       WHERE user_id = $1`,
-      [session.user.id, JSON.stringify(hashes)]
-    );
-    await client.query(`UPDATE users SET two_factor_enabled = true WHERE id = $1`, [
-      session.user.id,
-    ]);
+    // Turning two-step on signs out every other session in the same step, so
+    // a session opened before the second factor existed cannot ride past it.
+    await client.query("BEGIN");
+    try {
+      await client.query(
+        `UPDATE user_two_factor SET backup_codes = $2::jsonb, confirmed_at = now(), updated_at = now()
+         WHERE user_id = $1`,
+        [session.user.id, JSON.stringify(hashes)]
+      );
+      await client.query(`UPDATE users SET two_factor_enabled = true WHERE id = $1`, [
+        session.user.id,
+      ]);
+      await revokeUserSessions(client, {
+        userId: session.user.id,
+        keepSid: ((session.user as any).sid as string | undefined) || null,
+        userAgent: req.headers.get("user-agent") || null,
+      });
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    }
     await client
       .query(
         `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'two_factor_enabled', $2)`,

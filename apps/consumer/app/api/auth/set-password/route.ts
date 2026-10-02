@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -77,10 +78,25 @@ export async function POST(req: Request) {
     }
 
     const hash = await bcrypt.hash(password, 12);
-    await client.query(
-      `UPDATE users SET password_hash = $1, password_updated_at = now() WHERE id = $2`,
-      [hash, session.user.id]
-    );
+    const currentSid = ((session.user as any).sid as string | undefined) || null;
+    // The new password and the sign-out of every other session land together:
+    // a password change that leaves a stolen session running fixes nothing.
+    await client.query("BEGIN");
+    try {
+      await client.query(
+        `UPDATE users SET password_hash = $1, password_updated_at = now() WHERE id = $2`,
+        [hash, session.user.id]
+      );
+      await revokeUserSessions(client, {
+        userId: session.user.id,
+        keepSid: currentSid,
+        userAgent: req.headers.get("user-agent") || null,
+      });
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    }
 
     // Security timeline (best-effort; never block the change on logging).
     try {

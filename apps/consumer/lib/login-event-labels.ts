@@ -14,6 +14,7 @@ export const LOGIN_EVENT_LABELS: Record<string, string> = {
   two_factor_disabled: "Two-step verification turned off",
   password_created: "Password created",
   password_changed: "Password changed",
+  sessions_revoked: "Signed out other devices",
 };
 
 /** Plain name for a login event key. Falls back to a readable Title Case. */

@@ -524,12 +524,11 @@ export function RefineryShell({
     }
   }, [authStatus, sessionData?.user?.id]);
 
-  // New-device sign-in alert (fingerprints this device server-side; emails the
-  // user if it's a new device on their account) + record this session's device
-  // for the active-devices list / revoke. Fire-and-forget, once.
+  // Refresh this session's last-seen time in the active-devices list. The
+  // session row itself, and the new-device email, are written server-side at
+  // sign-in (they no longer depend on this page loading). Fire-and-forget, once.
   useEffect(() => {
     if (authStatus === "authenticated") {
-      fetch("/api/auth/signin-alert", { method: "POST" }).catch(() => {});
       fetch("/api/auth/session-ping", { method: "POST" }).catch(() => {});
     }
   }, [authStatus]);
