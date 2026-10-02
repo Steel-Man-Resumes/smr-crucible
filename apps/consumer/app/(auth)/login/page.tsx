@@ -103,6 +103,10 @@ function LoginForm() {
         CredentialsSignin: "Invalid email or password.",
         OAuthAccountNotLinked:
           "You're signed in as a different account already. Sign out below, then try Google again.",
+        GoogleEmailUnverified:
+          "Google has not confirmed that email address yet. Sign in with your password or an email link instead.",
+        GoogleLinkBlocked:
+          "This account has a password or two-step verification, so Google sign-in can't be added from here. Sign in with your password or an email link instead.",
       };
       setError(msgs[urlError] || `Login error: ${urlError}`);
     }

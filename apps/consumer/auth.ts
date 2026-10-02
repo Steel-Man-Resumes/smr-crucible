@@ -95,6 +95,9 @@ const providers: any[] = [
   // Email linking to an existing same-email account is allowed: Google verifies
   // emails, and this audience frequently loses passwords -- a second sign-in
   // door to the SAME account beats a duplicate-account support mess.
+  // Limited in the signIn callback (F2): only when Google says the address is
+  // verified, and never into an account that already has a password or
+  // two-step verification unless that Google identity is already linked.
   ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
     ? [
         Google({
@@ -318,6 +321,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: "/check-email",
   },
   callbacks: {
+    // Runs before a session exists, only in the /api/auth route (Node). Return
+    // true to continue, or a URL to send the person to instead.
+    async signIn({ account, profile }) {
+      if (account?.provider === "google") {
+        // F2: Google must have verified the address, and Google is not
+        // auto-linked into an existing account that has a password or
+        // two-step verification (unless this Google identity is already
+        // linked to it). See lib/sign-in-guards.ts.
+        const { checkGoogleSignIn } = await import("@/lib/sign-in-guards");
+        return checkGoogleSignIn(pool, {
+          profile,
+          providerAccountId: String(account.providerAccountId ?? ""),
+        });
+      }
+      return true;
+    },
     async authorized({ request, auth: session }) {
       const path = request.nextUrl.pathname;
       const isApi = path.startsWith("/api/");
