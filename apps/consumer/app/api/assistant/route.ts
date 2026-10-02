@@ -21,6 +21,7 @@ import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { MODEL_TROY } from "@/lib/ai/models";
+import { TROY_SERVER_MAX_STEPS, firstStepIndex } from "@/lib/ai/troy-steps";
 import { troyChatModel, troyMaxTokens, emptyReplyGuard, replyOrFallback } from "@/lib/ai/troy-chat";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import {
@@ -392,9 +393,9 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     messages: messages as never,
     maxTokens: responseMaxTokens,
     tools: buildAssistantTools(toolOptions),
-    maxSteps: 4,
+    maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
-    experimental_transform: emptyReplyGuard(),
+    experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
       const latencyMs = Date.now() - startTime;
 

@@ -17,7 +17,9 @@ import {
   emptyReplyGuard,
   coachCreativityNote,
   TROY_EMPTY_REPLY,
+  TROY_OUT_OF_STEPS,
 } from "../ai/troy-chat";
+import { firstStepIndex, TROY_CLIENT_MAX_STEPS, TROY_SERVER_MAX_STEPS } from "../ai/troy-steps";
 import { MODEL_TROY } from "../ai/models";
 
 type Part = TextStreamPart<ToolSet>;
@@ -29,7 +31,10 @@ const toolCall = () =>
 const stepFinish = (finishReason: string) => ({ type: "step-finish", finishReason }) as unknown as Part;
 const finish = (finishReason: string) => ({ type: "finish", finishReason }) as unknown as Part;
 
-async function run(parts: Part[]): Promise<Part[]> {
+async function run(
+  parts: Part[],
+  options: { firstStep?: number; clientMaxSteps?: number } = {}
+): Promise<Part[]> {
   const source = new ReadableStream<Part>({
     start(controller) {
       for (const p of parts) controller.enqueue(p);
@@ -38,7 +43,7 @@ async function run(parts: Part[]): Promise<Part[]> {
   });
   const out: Part[] = [];
   const reader = source
-    .pipeThrough(emptyReplyGuard<ToolSet>()({ tools: {}, stopStream: () => {} }))
+    .pipeThrough(emptyReplyGuard<ToolSet>(options)({ tools: {}, stopStream: () => {} }))
     .getReader();
   for (;;) {
     const { done, value } = await reader.read();
@@ -216,5 +221,79 @@ describe("chat effort is added by the fetch wrapper", () => {
     assert.equal("top_p" in body, false);
     assert.equal("top_k" in body, false);
     assert.equal("thinking" in body, false);
+  });
+});
+
+describe("a turn that ends on a tool call never ends in silence", () => {
+  const stepStart = () => ({ type: "step-start" }) as unknown as Part;
+
+  it("leaves a browser tool alone while the browser will send its result back", async () => {
+    // First request of a turn: step 0. The browser re-sends; the next request answers.
+    const out = await run([toolCall(), stepFinish("tool-calls"), finish("tool-calls")], { firstStep: 0 });
+    assert.equal(spoken(out), "");
+  });
+
+  it("adds the out-of-steps line when the browser's budget is used up", async () => {
+    // A re-send that started at step 4 (= the client budget) and ended on a tool call.
+    const out = await run([toolCall(), stepFinish("tool-calls"), finish("tool-calls")], {
+      firstStep: TROY_CLIENT_MAX_STEPS,
+    });
+    assert.equal(spoken(out), TROY_OUT_OF_STEPS);
+    // The line lands inside the last step, before it finishes.
+    assert.deepEqual(
+      out.map((p) => p.type),
+      ["tool-call", "text-delta", "step-finish", "finish"]
+    );
+  });
+
+  it("counts steps inside one request", async () => {
+    // Starts at 2; three tool steps reach index 4, past the budget.
+    const parts = [
+      toolCall(), stepFinish("tool-calls"), stepStart(),
+      toolCall(), stepFinish("tool-calls"), stepStart(),
+      toolCall(), stepFinish("tool-calls"), finish("tool-calls"),
+    ];
+    assert.equal(spoken(await run(parts, { firstStep: 2 })), TROY_OUT_OF_STEPS);
+    assert.equal(spoken(await run(parts, { firstStep: 1 })), "");
+  });
+
+  it("still closes the turn when only a short line came before the last tool", async () => {
+    const out = await run([text("Let me check."), toolCall(), stepFinish("tool-calls"), finish("tool-calls")], {
+      firstStep: TROY_CLIENT_MAX_STEPS,
+    });
+    assert.equal(spoken(out), "Let me check." + TROY_OUT_OF_STEPS);
+  });
+
+  it("does not touch a step that is followed by another step", async () => {
+    const out = await run(
+      [toolCall(), stepFinish("tool-calls"), stepStart(), text("Found three."), stepFinish("stop"), finish("stop")],
+      { firstStep: 9 }
+    );
+    assert.equal(spoken(out), "Found three.");
+  });
+});
+
+describe("step counting mirrors the browser", () => {
+  it("a new user turn starts at 0", () => {
+    assert.equal(firstStepIndex([{ role: "user", content: "hi" }]), 0);
+    assert.equal(firstStepIndex([]), 0);
+  });
+
+  it("a re-send continues at 1 + the highest tool step", () => {
+    const msgs = [
+      { role: "user", content: "take me to jobs" },
+      { role: "assistant", content: "", toolInvocations: [{ step: 0 }, { step: 3 }] },
+    ];
+    assert.equal(firstStepIndex(msgs), 4);
+  });
+
+  it("an assistant message with no tool steps counts as 1, like useChat", () => {
+    assert.equal(firstStepIndex([{ role: "assistant", content: "x" }]), 1);
+    assert.equal(firstStepIndex([{ role: "assistant", content: "x", toolInvocations: [{ step: "9" }] }]), 1);
+  });
+
+  it("the browser budget is not smaller than one server request", () => {
+    // Otherwise a first request could end on a tool call with no re-send at all.
+    assert.ok(TROY_CLIENT_MAX_STEPS >= TROY_SERVER_MAX_STEPS);
   });
 });

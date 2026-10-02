@@ -37,6 +37,7 @@ import type {
   ToolSet,
 } from "ai";
 import { MODEL_TROY } from "./models";
+import { TROY_CLIENT_MAX_STEPS } from "./troy-steps";
 
 /** Removes the sampling settings Sonnet 5.5 rejects, including AI SDK 4's default temperature 0. */
 export const omitSamplingSettings: LanguageModelV1Middleware = {
@@ -113,27 +114,68 @@ export function replyOrFallback(text: string): string {
 }
 
 /**
- * streamText transform: if a step ends without a tool call and nothing has
- * been said in any step, add the fallback line before that step finishes. A
- * step with a tool call is skipped, because either another step follows or the
- * browser carries the turn on (client tools).
+ * Shown when a turn ends on a tool call and the browser will not send the
+ * result back for another step (its step budget is used up), so the model
+ * never gets to answer after the tool.
  */
-export function emptyReplyGuard<TOOLS extends ToolSet>(): StreamTextTransform<TOOLS> {
+export const TROY_OUT_OF_STEPS =
+  "That took more steps than I get in one go. Ask me again and I'll pick up from here.";
+
+/**
+ * streamText transform that makes sure a turn never ends in silence. It holds
+ * each step-finish until it knows whether another step follows, then, at the
+ * last step only:
+ * - no tool call and nothing said in any step (a decline, or a turn that ran
+ *   out while thinking): add TROY_EMPTY_REPLY.
+ * - a tool call, and the browser will not re-send (that step's index, counted
+ *   the way useChat counts it, has reached clientMaxSteps): add
+ *   TROY_OUT_OF_STEPS. This applies even if a short line came before the tool,
+ *   because the real answer was meant to come after it.
+ * A last step with a tool call inside the budget is left alone: the browser
+ * sends the result back and the next request answers.
+ */
+export function emptyReplyGuard<TOOLS extends ToolSet>(
+  options: { firstStep?: number; clientMaxSteps?: number } = {}
+): StreamTextTransform<TOOLS> {
+  const clientMaxSteps = options.clientMaxSteps ?? TROY_CLIENT_MAX_STEPS;
   return () => {
+    let step = options.firstStep ?? 0;
     let spoke = false;
     let calledTool = false;
+    let lastStepCalledTool = false;
+    let lastStepIndex = step;
+    let heldStepFinish: TextStreamPart<TOOLS> | null = null;
+
+    const closingLine = (): string | null => {
+      if (!lastStepCalledTool && !spoke) return TROY_EMPTY_REPLY;
+      if (lastStepCalledTool && lastStepIndex >= clientMaxSteps) return TROY_OUT_OF_STEPS;
+      return null;
+    };
+
     return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
       transform(part, controller) {
+        if (heldStepFinish) {
+          if (part.type === "finish") {
+            const line = closingLine();
+            if (line) controller.enqueue({ type: "text-delta", textDelta: line });
+          }
+          controller.enqueue(heldStepFinish);
+          heldStepFinish = null;
+        }
         if (part.type === "text-delta" && part.textDelta.trim()) spoke = true;
         if (part.type === "tool-call") calledTool = true;
         if (part.type === "step-finish") {
-          if (!spoke && !calledTool) {
-            controller.enqueue({ type: "text-delta", textDelta: TROY_EMPTY_REPLY });
-            spoke = true;
-          }
+          lastStepCalledTool = calledTool;
+          lastStepIndex = step;
+          step += 1;
           calledTool = false;
+          heldStepFinish = part;
+          return;
         }
         controller.enqueue(part);
+      },
+      flush(controller) {
+        if (heldStepFinish) controller.enqueue(heldStepFinish);
       },
     });
   };

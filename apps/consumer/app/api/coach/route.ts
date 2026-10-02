@@ -22,6 +22,7 @@ import { auth } from "@/auth";
 import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_TROY } from "@/lib/ai/models";
+import { TROY_SERVER_MAX_STEPS, firstStepIndex } from "@/lib/ai/troy-steps";
 import {
   troyChatModel,
   troyMaxTokens,
@@ -149,9 +150,9 @@ export async function POST(request: Request) {
     // The prompt's length rule still sets how long the reply is.
     maxTokens: troyMaxTokens(profile.coachLength === "brief" ? 400 : 700),
     tools: buildAssistantTools(toolOptions),
-    maxSteps: 4,
+    maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
-    experimental_transform: emptyReplyGuard(),
+    experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
       // Exact token accounting (in multi-step runs `usage` is the combined
       // total of all steps in this request)
