@@ -4,6 +4,7 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { verifySecondFactor } from "@/lib/second-factor";
 import { revokeUserSessions } from "@/lib/session-registry";
+import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -16,6 +17,16 @@ export async function POST(req: Request) {
   }
   const body = await req.json().catch(() => ({}));
   const token = String(body?.token || "");
+  const userId = session.user.id;
+  // Password re-check is rate limited (F7): it was a free password oracle
+  // for anyone holding a session.
+  const reauthLimit = await checkAuthRateLimits(reauthRateLimits(getClientIp(req), userId));
+  if (!reauthLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Wait a few minutes and try again." },
+      { status: 429 }
+    );
+  }
   const password = typeof body?.password === "string" ? body.password : "";
 
   const client = await pool.connect();

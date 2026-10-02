@@ -60,6 +60,7 @@
 
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
 import { query, getOne, queryAsUser, getUserConsents, exportUserConversations } from "@crucible/core";
 
@@ -84,6 +85,16 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Set confirm: true to acknowledge this exports all your stored data." },
       { status: 400, headers: NO_STORE_HEADERS }
+    );
+  }
+
+  // Password re-check is rate limited (F7): it was a free password oracle
+  // for anyone holding a session.
+  const reauthLimit = await checkAuthRateLimits(reauthRateLimits(getClientIp(req), userId));
+  if (!reauthLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Wait a few minutes and try again." },
+      { status: 429, headers: NO_STORE_HEADERS }
     );
   }
 

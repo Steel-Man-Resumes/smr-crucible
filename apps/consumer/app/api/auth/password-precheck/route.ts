@@ -38,11 +38,11 @@ export async function POST(req: Request) {
       { status: 429 }
     );
 
-  if (!checkAuthRateLimit(limits.ip.key, limits.ip.config).allowed) return tooMany();
+  if (!(await checkAuthRateLimit(limits.ip.key, limits.ip.config)).allowed) return tooMany();
   if (!isValidEmail(email) || !password) {
     return NextResponse.json({ ok: false });
   }
-  if (!checkAuthRateLimit(limits.email.key, limits.email.config).allowed) return tooMany();
+  if (!(await checkAuthRateLimit(limits.email.key, limits.email.config)).allowed) return tooMany();
 
   const client = await pool.connect();
   try {

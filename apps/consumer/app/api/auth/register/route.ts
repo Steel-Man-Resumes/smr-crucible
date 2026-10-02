@@ -124,11 +124,11 @@ export async function POST(request: Request) {
     // Abuse limiting -- generous on purpose (see AUTH_LIMITS.registerPerIp):
     // a whole room signing up at once must pass; a bot flood must not.
     const ip = getClientIp(request);
-    const ipCheck = checkAuthRateLimit(
+    const ipCheck = await checkAuthRateLimit(
       `register:ip:${ip}`,
       AUTH_LIMITS.registerPerIp
     );
-    const emailCheck = checkAuthRateLimit(
+    const emailCheck = await checkAuthRateLimit(
       `register:email:${trimmedEmail}`,
       AUTH_LIMITS.registerPerEmail
     );

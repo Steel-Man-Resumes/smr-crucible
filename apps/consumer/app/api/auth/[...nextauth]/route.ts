@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   const limits = signInRateLimits(pathname, ip, email);
 
   // Rate limit by IP
-  const ipCheck = checkAuthRateLimit(limits.ip.key, limits.ip.config);
+  const ipCheck = await checkAuthRateLimit(limits.ip.key, limits.ip.config);
   if (!ipCheck.allowed) {
     return NextResponse.json(
       { error: "Too many sign-in attempts. Please try again later." },
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limit by email (prevents spamming a single address)
-  const emailCheck = checkAuthRateLimit(limits.email.key, limits.email.config);
+  const emailCheck = await checkAuthRateLimit(limits.email.key, limits.email.config);
   if (!emailCheck.allowed) {
     return NextResponse.json(
       { error: "Too many sign-in attempts for this email. Please try again later." },

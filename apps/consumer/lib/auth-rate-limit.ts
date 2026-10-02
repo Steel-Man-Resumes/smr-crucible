@@ -1,11 +1,29 @@
 /**
- * In-memory sliding window rate limiter for auth endpoints.
- * Separate from withRateLimit.ts (which is DB-based and requires auth).
- * This protects unauthenticated endpoints like magic link and password login.
+ * Rate limiter for the auth endpoints (sign-in, magic link, reset, register,
+ * the two-step check, and the password re-checks before export/delete).
+ * Separate from withRateLimit.ts (daily AI-usage counters).
  *
- * Resets on cold start (Vercel serverless), which is acceptable --
- * the goal is stopping sustained bot abuse, not perfect persistence.
+ * DURABLE (F7, 2026-10-02). Counters live in Postgres (auth_rate_limit,
+ * migration 066), shared by every serverless instance. The old in-memory Map
+ * reset on every cold start and was not shared between concurrent instances,
+ * so an attacker spreading requests across instances got a fresh allowance on
+ * each one.
+ *
+ * Shape: a sliding window approximated from two fixed windows (the current
+ * one, plus the previous one weighted by how much of it still overlaps). Each
+ * hit is one atomic upsert-increment. Keys are stored only as an HMAC (the raw
+ * key holds an email or IP address).
+ *
+ * On any database error the check falls back to the in-memory limiter for
+ * that request: never unlimited, never everyone locked out.
+ *
+ * Swappable: everything goes through checkAuthRateLimit -> the active
+ * RateLimitStore. setAuthRateLimitStore() replaces it (tests use the memory
+ * store; an Upstash/Redis store would plug in the same way).
  */
+import { createHmac } from "crypto";
+import { neon } from "@neondatabase/serverless";
+import { serverHashSecret } from "@crucible/core/dist/serverHashSecret";
 
 interface RateLimitEntry {
   timestamps: number[];
@@ -28,9 +46,14 @@ function cleanup() {
   });
 }
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  resetIn: number;
 }
 
 // 5 magic link requests per IP per hour, 3 per email per hour
@@ -48,15 +71,19 @@ export const AUTH_LIMITS = {
   // Mini Forge kiosk session creation. A facility tablet room signs many people
   // up behind one NAT IP, so this is deliberately generous -- enough to clear a
   // busy kiosk day, low enough that a bot minting thousands of sessions is cut
-  // off. Best-effort (in-memory); the real spend ceiling is the DB-backed
+  // off. Durable (auth_rate_limit table); the real spend ceiling is the DB-backed
   // rolling-24h cap in mini-forge-budget (assertMiniForgeBudget).
   miniForgeSessionPerIp: { maxRequests: 40, windowMs: 3_600_000 } as RateLimitConfig,
+  // Password/code re-checks inside a session (2FA off, export, delete).
+  reauthPerUser: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
+  reauthPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
 };
 
-export function checkAuthRateLimit(
-  key: string,
-  config: RateLimitConfig
-): { allowed: boolean; resetIn: number } {
+/**
+ * In-memory sliding window, per instance. The fallback when the database is
+ * unreachable, and the store when there is no database (unit tests).
+ */
+export function checkMemoryRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
   cleanup();
 
   const now = Date.now();
@@ -77,6 +104,160 @@ export function checkAuthRateLimit(
 
   entry.timestamps.push(now);
   return { allowed: true, resetIn: config.windowMs };
+}
+
+/** Where counters are kept. */
+export interface RateLimitStore {
+  hit(key: string, config: RateLimitConfig): Promise<RateLimitResult>;
+}
+
+export const memoryRateLimitStore: RateLimitStore = {
+  async hit(key, config) {
+    return checkMemoryRateLimit(key, config);
+  },
+};
+
+/** Start of the fixed window containing `now`. */
+export function windowStartFor(now: number, windowMs: number): number {
+  return Math.floor(now / windowMs) * windowMs;
+}
+
+/**
+ * Sliding-window decision from two fixed-window counts. `cur` already includes
+ * this request. The previous window counts for the share of it that still
+ * falls inside a full window ending now.
+ */
+export function slidingWindowDecision(input: {
+  prev: number;
+  cur: number;
+  now: number;
+  config: RateLimitConfig;
+}): RateLimitResult {
+  const { prev, cur, now, config } = input;
+  const start = windowStartFor(now, config.windowMs);
+  const overlap = 1 - (now - start) / config.windowMs;
+  const estimate = prev * overlap + cur;
+  if (estimate <= config.maxRequests) return { allowed: true, resetIn: config.windowMs };
+  return { allowed: false, resetIn: Math.max(1000, start + config.windowMs - now) };
+}
+
+/**
+ * The value stored in auth_rate_limit.key: an HMAC of the raw key (which holds
+ * an email or IP address) and its window length, never the key itself.
+ */
+export function hashRateLimitKey(key: string, windowMs: number, secret: string): string {
+  return "h1:" + createHmac("sha256", secret).update(`auth_rate_limit|${windowMs}|${key}`).digest("hex").slice(0, 40);
+}
+
+let sqlClient: ReturnType<typeof neon> | null = null;
+function sql() {
+  // no-store: Next patches fetch; a cached counter read would be wrong.
+  if (!sqlClient) sqlClient = neon(process.env.DATABASE_URL!, { fetchOptions: { cache: "no-store" } });
+  return sqlClient;
+}
+
+/** Postgres-backed store (auth_rate_limit). One round trip per hit. */
+export const postgresRateLimitStore: RateLimitStore = {
+  async hit(key, config) {
+    const now = Date.now();
+    const start = windowStartFor(now, config.windowMs);
+    const hashed = hashRateLimitKey(key, config.windowMs, serverHashSecret("count sign-in attempts"));
+    // The count is capped at max+1: past the limit the exact number no longer
+    // matters, and the cap lets a person back in as the window slides instead
+    // of punishing every retry made while blocked.
+    const rows = (await sql()(
+      `WITH cur AS (
+         INSERT INTO auth_rate_limit (key, window_start, count)
+         VALUES ($1, $2::timestamptz, 1)
+         ON CONFLICT (key, window_start)
+         DO UPDATE SET count = LEAST(auth_rate_limit.count + 1, $4::int)
+         RETURNING count
+       )
+       SELECT (SELECT count FROM cur) AS cur,
+              COALESCE((SELECT count FROM auth_rate_limit
+                         WHERE key = $1 AND window_start = $3::timestamptz), 0) AS prev`,
+      [
+        hashed,
+        new Date(start).toISOString(),
+        new Date(start - config.windowMs).toISOString(),
+        config.maxRequests + 1,
+      ]
+    )) as any[];
+    const row = rows[0] || {};
+    return slidingWindowDecision({
+      prev: Number(row.prev) || 0,
+      cur: Number(row.cur) || 1,
+      now,
+      config,
+    });
+  },
+};
+
+let activeStore: RateLimitStore | null = null;
+
+/** Replace the store (tests, or a future Redis store). null restores the default. */
+export function setAuthRateLimitStore(next: RateLimitStore | null): void {
+  activeStore = next;
+}
+
+function defaultStore(): RateLimitStore {
+  return process.env.DATABASE_URL ? postgresRateLimitStore : memoryRateLimitStore;
+}
+
+/**
+ * Count one attempt against `key` and say whether it is allowed. Durable when
+ * a database is configured; falls back to the in-memory limiter on any error.
+ */
+export async function checkAuthRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const s = activeStore ?? defaultStore();
+  if (s === memoryRateLimitStore) return checkMemoryRateLimit(key, config);
+  try {
+    return await s.hit(key, config);
+  } catch (err: any) {
+    console.error("[auth-rate-limit] durable store failed, using in-memory:", err?.message || err);
+    return checkMemoryRateLimit(key, config);
+  }
+}
+
+/** Check several limits in order; the first refusal wins. Each one counts the attempt. */
+export async function checkAuthRateLimits(
+  checks: { key: string; config: RateLimitConfig }[]
+): Promise<RateLimitResult> {
+  for (const c of checks) {
+    const r = await checkAuthRateLimit(c.key, c.config);
+    if (!r.allowed) return r;
+  }
+  return { allowed: true, resetIn: 0 };
+}
+
+/** Rows older than this are never read (the longest window is an hour). */
+export const AUTH_RATE_LIMIT_RETENTION_HOURS = 24;
+
+/** Delete expired counters. Called by the daily purge cron. */
+export async function purgeOldAuthRateLimits(): Promise<number> {
+  const rows = (await sql()(
+    `DELETE FROM auth_rate_limit
+      WHERE window_start < now() - ($1::int * interval '1 hour')
+      RETURNING 1`,
+    [AUTH_RATE_LIMIT_RETENTION_HOURS]
+  )) as any[];
+  return rows.length;
+}
+
+/**
+ * Re-authentication checks inside a signed-in session: the password or code
+ * asked for before turning two-step off, exporting, or deleting. Without a
+ * limit these were a free password and code oracle for anyone holding a
+ * session.
+ */
+export function reauthRateLimits(ip: string, userId: string) {
+  return [
+    { key: `auth:reauth:user:${userId}`, config: AUTH_LIMITS.reauthPerUser },
+    { key: `auth:reauth:ip:${ip}`, config: AUTH_LIMITS.reauthPerIp },
+  ];
 }
 
 /**

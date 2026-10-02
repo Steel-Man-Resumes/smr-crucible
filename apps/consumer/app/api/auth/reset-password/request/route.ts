@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     }
 
     const ip = getClientIp(request);
-    const ipCheck = checkAuthRateLimit(
+    const ipCheck = await checkAuthRateLimit(
       `password-reset:ip:${ip}`,
       AUTH_LIMITS.magicLinkPerIp
     );
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const emailCheck = checkAuthRateLimit(
+    const emailCheck = await checkAuthRateLimit(
       `password-reset:email:${normalizedEmail}`,
       AUTH_LIMITS.magicLinkPerEmail
     );

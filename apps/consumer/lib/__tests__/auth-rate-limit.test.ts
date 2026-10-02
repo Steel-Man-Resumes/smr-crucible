@@ -14,6 +14,11 @@ import assert from "node:assert/strict";
 import {
   AUTH_LIMITS,
   checkAuthRateLimit,
+  checkMemoryRateLimit,
+  hashRateLimitKey,
+  setAuthRateLimitStore,
+  slidingWindowDecision,
+  windowStartFor,
   signInEmailFromBody,
   signInPostRequiresEmail,
   signInRateLimits,
@@ -25,11 +30,15 @@ const MAGIC_LINK_PATH = "/api/auth/signin/resend";
 const realNow = Date.now;
 let clock = 0;
 
-/** What the route does for one sign-in POST: IP check, then email check. */
+/**
+ * What the route does for one sign-in POST: IP check, then email check. Uses
+ * the in-memory limiter (the fallback store) so the limits themselves are
+ * tested without a database.
+ */
 function attempt(pathname: string, ip: string, email: string): boolean {
   const limits = signInRateLimits(pathname, ip, email);
-  if (!checkAuthRateLimit(limits.ip.key, limits.ip.config).allowed) return false;
-  return checkAuthRateLimit(limits.email.key, limits.email.config).allowed;
+  if (!checkMemoryRateLimit(limits.ip.key, limits.ip.config).allowed) return false;
+  return checkMemoryRateLimit(limits.email.key, limits.email.config).allowed;
 }
 
 let run = 0;
@@ -181,5 +190,48 @@ describe("the limiter reads the email the way Auth.js does (F4)", () => {
     assert.equal(signInPostRequiresEmail("/api/auth/signout"), false);
     assert.equal(signInPostRequiresEmail("/api/auth/session"), false);
     assert.equal(signInPostRequiresEmail("/api/auth/signin/google"), false);
+  });
+});
+
+describe("durable store (F7)", () => {
+  const cfg = { maxRequests: 10, windowMs: 900_000 };
+
+  it("allows up to the limit inside one window and refuses past it", () => {
+    const start = windowStartFor(Date.parse("2026-10-03T12:00:00Z"), cfg.windowMs);
+    assert.equal(slidingWindowDecision({ prev: 0, cur: 10, now: start + 1000, config: cfg }).allowed, true);
+    assert.equal(slidingWindowDecision({ prev: 0, cur: 11, now: start + 1000, config: cfg }).allowed, false);
+  });
+
+  it("counts the previous window for the part that still overlaps, so a boundary is no free reset", () => {
+    const start = windowStartFor(Date.parse("2026-10-03T12:00:00Z"), cfg.windowMs);
+    // Ten attempts just before the boundary, one just after: 10*~1 + 1 > 10.
+    assert.equal(slidingWindowDecision({ prev: 10, cur: 1, now: start + 1000, config: cfg }).allowed, false);
+    // Halfway through the next window half of them have aged out.
+    assert.equal(slidingWindowDecision({ prev: 10, cur: 5, now: start + cfg.windowMs / 2, config: cfg }).allowed, true);
+    assert.equal(slidingWindowDecision({ prev: 10, cur: 6, now: start + cfg.windowMs / 2, config: cfg }).allowed, false);
+  });
+
+  it("stores an HMAC, never the raw email or IP", () => {
+    const h = hashRateLimitKey("auth:pw:email:person@example.org", cfg.windowMs, "secret-a");
+    assert.match(h, /^h1:[0-9a-f]{40}$/);
+    assert.ok(!h.includes("example.org"));
+    assert.notEqual(h, hashRateLimitKey("auth:pw:email:person@example.org", cfg.windowMs, "secret-b"));
+    assert.notEqual(h, hashRateLimitKey("auth:pw:email:person@example.org", 3_600_000, "secret-a"));
+  });
+
+  it("uses the active store, and falls back to in-memory (not unlimited) when it fails", async () => {
+    try {
+      setAuthRateLimitStore({ hit: async () => ({ allowed: false, resetIn: 5000 }) });
+      assert.equal((await checkAuthRateLimit("k-store", cfg)).allowed, false);
+
+      setAuthRateLimitStore({ hit: async () => { throw new Error("db down"); } });
+      const key = `k-fallback-${freshIp()}`;
+      const small = { maxRequests: 2, windowMs: 60_000 };
+      const results: boolean[] = [];
+      for (let i = 0; i < 3; i++) results.push((await checkAuthRateLimit(key, small)).allowed);
+      assert.deepEqual(results, [true, true, false]);
+    } finally {
+      setAuthRateLimitStore(null);
+    }
   });
 });
