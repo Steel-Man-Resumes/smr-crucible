@@ -133,14 +133,15 @@ Return JSON only:
     }
 
     try {
-      const { logDecision } = await import("@crucible/core");
+      const { logDecision, logLabel } = await import("@crucible/core");
       await logDecision({
+        userId: session.user.id,
         contextPage: "follow-up",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: `${app.job_title} @ ${app.company} (${app.status})`.slice(0, 500),
-        explanation: `Drafted a follow-up message for a ${app.status} application.`,
-        outputSummary: { type: "follow_up", status: app.status, days_since_applied: days },
+        explanation: `Drafted a follow-up message for a ${logLabel(app.status)} application.`,
+        outputSummary: { type: "follow_up", status: logLabel(app.status), days_since_applied: days },
       });
     } catch (err) {
       console.error("Decision log failed (follow-up):", err);

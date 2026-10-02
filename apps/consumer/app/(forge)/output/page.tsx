@@ -23,6 +23,7 @@ import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
 import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
 
 interface Strength {
   title: string;
@@ -952,6 +953,8 @@ export default function OutputPage() {
             Print / save analysis as PDF
           </button>
         </div>
+
+        <ClearThisComputerPanel />
       </section>
     </main>
   );

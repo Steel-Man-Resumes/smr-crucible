@@ -4,6 +4,7 @@
  * Stored in ai_usage table with atomic upsert.
  */
 
+import { createHmac } from "crypto";
 import { query, getOne, getOneAsUser } from "./db";
 import { HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_DAILY_CAP } from "./avatarAssetShared";
 
@@ -93,11 +94,12 @@ export async function checkIpRateLimit(
   endpoint: string
 ): Promise<RateLimitResult> {
   const limit = FORGE_IP_LIMITS[endpoint] ?? 10;
+  const day = usageDayUtc();
 
   const row = await getOne<{ call_count: number }>(
     `SELECT call_count FROM ai_usage
-     WHERE ip_address = $1 AND endpoint = $2 AND usage_date = CURRENT_DATE`,
-    [ip, endpoint]
+     WHERE ip_address = $1 AND endpoint = $2 AND usage_date = $3::date`,
+    [hashUsageKey(ip, day), endpoint, day]
   );
 
   const used = row?.call_count ?? 0;
@@ -187,22 +189,83 @@ export async function releaseEndpointSlot(
   );
 }
 
+/** Prefix on every stored key, so hashed rows are told apart from old raw IPs. */
+export const USAGE_KEY_HASH_PREFIX = "h1:";
+
+/** How long ai_usage rows are kept before the retention cron deletes them. */
+export const AI_USAGE_RETENTION_DAYS = 30;
+
+/** Today's date in UTC as YYYY-MM-DD: the usage_date and the hash's day salt. */
+export function usageDayUtc(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function usageKeySecret(): string {
+  const s = process.env.IP_HASH_SECRET || process.env.AUTH_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("IP_HASH_SECRET or AUTH_SECRET must be set to count anonymous usage");
+  }
+  return "dev-only-usage-key-secret";
+}
+
 /**
- * Atomic increment for IP-based usage. Returns the new count.
+ * The value stored in ai_usage.ip_address. Never the raw key: an HMAC keyed
+ * with a server secret (a plain hash of an IPv4 address can be reversed by
+ * trying all of them) and salted with the day, so the same address gives a
+ * different value each day and rows cannot be linked across days. Same input
+ * on the same day gives the same value, which is all a daily counter needs.
+ *
+ * Used for every key that goes through the per-IP counter (IPs, partner-code
+ * buckets, hashed email recipients, the live-test bucket).
+ */
+export function hashUsageKey(key: string, day: string, secret: string = usageKeySecret()): string {
+  const mac = createHmac("sha256", secret).update(`ai_usage|${day}|${key}`).digest("hex");
+  return USAGE_KEY_HASH_PREFIX + mac.slice(0, 40);
+}
+
+/**
+ * Atomic increment for IP-based usage. Returns the new count. The IP (or other
+ * key) is stored only as hashUsageKey(); see that function.
  */
 export async function incrementIpUsage(
   ip: string,
   endpoint: string
 ): Promise<number> {
+  const day = usageDayUtc();
   const row = await getOne<{ call_count: number }>(
     `INSERT INTO ai_usage (ip_address, endpoint, usage_date, call_count)
-     VALUES ($1, $2, CURRENT_DATE, 1)
+     VALUES ($1, $2, $3::date, 1)
      ON CONFLICT (ip_address, endpoint, usage_date)
      DO UPDATE SET call_count = ai_usage.call_count + 1, updated_at = now()
      RETURNING call_count`,
-    [ip, endpoint]
+    [hashUsageKey(ip, day), endpoint, day]
   );
   return row?.call_count ?? 1;
+}
+
+/**
+ * Retention: delete usage rows older than AI_USAGE_RETENTION_DAYS, and any
+ * per-IP row from before today still holding a raw (pre-hash) value. Daily
+ * limits only ever read today's rows, so nothing that enforces a limit is
+ * lost. Returns how many rows went.
+ */
+export async function purgeOldAiUsage(): Promise<{ expired: number; rawIp: number }> {
+  const expired = await query<{ id: string }>(
+    `DELETE FROM ai_usage
+      WHERE usage_date < CURRENT_DATE - $1::int
+      RETURNING id`,
+    [AI_USAGE_RETENTION_DAYS]
+  );
+  const rawIp = await query<{ id: string }>(
+    `DELETE FROM ai_usage
+      WHERE ip_address IS NOT NULL
+        AND ip_address NOT LIKE $1
+        AND usage_date < CURRENT_DATE
+      RETURNING id`,
+    [USAGE_KEY_HASH_PREFIX + "%"]
+  );
+  return { expired: expired.length, rawIp: rawIp.length };
 }
 
 /**

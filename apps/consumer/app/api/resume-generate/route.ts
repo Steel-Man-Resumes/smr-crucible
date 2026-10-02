@@ -100,11 +100,12 @@ NEVER mention incarceration, criminal records, or any disqualifying information.
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "resume-generate",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: JSON.stringify({ targetJob, action, skills }).slice(0, 500),
-        explanation: `Generated resume ${action === "suggest_summary" ? "summary" : "bullet point"} for ${targetJob}${targetCompany ? ` at ${targetCompany}` : ""}.`,
+        explanation: `Generated resume ${action === "suggest_summary" ? "summary" : "bullet point"} for a target job.`,
         outputSummary: {
           type: "resume_suggestion",
           action,

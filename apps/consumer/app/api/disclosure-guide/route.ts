@@ -183,6 +183,7 @@ Return JSON ONLY:
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
+          userId: userId ?? null,
           contextPage: "disclosure-guide",
           modelProvider: AI_PROVIDER,
           modelId: AI_MODEL,
@@ -213,6 +214,7 @@ Return JSON ONLY:
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
+          userId: userId ?? null,
           contextPage: "disclosure-guide",
           modelProvider: "none",
           modelId: "static-template",
@@ -341,6 +343,7 @@ ${refinementNote ? `\nREFINEMENT REQUEST (adjust the plan to address this):\n${s
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "disclosure-guide",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,

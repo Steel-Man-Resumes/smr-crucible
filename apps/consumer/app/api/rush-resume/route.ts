@@ -185,15 +185,15 @@ Return JSON:
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "rush-resume",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: input.resumeText.slice(0, 500),
-        explanation: `Rush resume rewrite for target job: ${input.targetJob}${input.targetCompany ? ` at ${input.targetCompany}` : ""}`,
+        explanation: "Rush resume rewrite for a target job.",
         outputSummary: {
           type: "rush_resume",
-          target_job: input.targetJob,
-          target_company: input.targetCompany || null,
+          has_target_company: !!input.targetCompany,
           bullets_count: result.bullets?.length ?? 0,
           skills_count: result.skills?.length ?? 0,
           grounding_flags: groundingFlags,

@@ -212,6 +212,7 @@ async function handlePost(request: Request) {
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         sessionId: input.sessionId ?? null,
         contextPage: "generate-docs",
         modelProvider: AI_PROVIDER,

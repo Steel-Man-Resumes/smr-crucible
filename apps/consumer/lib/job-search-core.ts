@@ -921,11 +921,12 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     (async () => {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: params.userId ?? null,
         contextPage: "job-search",
         modelProvider: `jsearch+${AI_PROVIDER}`,
         modelId: `jsearch-v1+${AI_MODEL}`,
         input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
-        explanation: `JSearch API: ${rawJobs.length} raw results for "${role || "general"}" in ${searchLocation}. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
+        explanation: `JSearch API: ${rawJobs.length} raw results. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
         outputSummary: {
           type: "job_search",
           source: "jsearch",
