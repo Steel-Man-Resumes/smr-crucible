@@ -60,6 +60,9 @@ const BANNED_PHRASES = [
   // 2026-10-01: the t.ROY chat and Refinery coach (AI SDK routes) have no
   // OpenAI fallback; only the callAI writing tools do
   "if claude fails, the same request goes to openai",
+  // 2026-10-02: t.ROY/coach search_jobs runs callAI (gpt-4o fallback) on the
+  // listings, and staff answers are checked by OpenAI (org-output-verify)
+  "and nothing is sent to openai",
   // 2026-10-01: decision_log skips resume parsing, fact checks and voice
   "captures every ai recommendation",
   "every ai recommendation is logged",
