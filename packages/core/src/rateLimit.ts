@@ -7,6 +7,7 @@
 import { createHmac } from "crypto";
 import { query, getOne, getOneAsUser } from "./db";
 import { HEADSHOT_GENERATE_ENDPOINT, HEADSHOT_DAILY_CAP } from "./avatarAssetShared";
+import { serverHashSecret } from "./serverHashSecret";
 
 export const DEFAULT_DAILY_LIMIT = 30;
 
@@ -200,13 +201,9 @@ export function usageDayUtc(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/** The shared server secret (see serverHashSecret) that keys the usage hash. */
 function usageKeySecret(): string {
-  const s = process.env.IP_HASH_SECRET || process.env.AUTH_SECRET;
-  if (s) return s;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("IP_HASH_SECRET or AUTH_SECRET must be set to count anonymous usage");
-  }
-  return "dev-only-usage-key-secret";
+  return serverHashSecret("count anonymous usage");
 }
 
 /**

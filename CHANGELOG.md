@@ -11,6 +11,9 @@ A dated, high-level history of what shipped, built from the commit log. Product 
   IP. A daily cron deletes usage counts older than 30 days and any leftover raw-IP rows.
 - Every AI decision record now carries the user id when signed in, so "delete my data" removes
   it, and record notes no longer include job titles, companies, locations or roles a person typed.
+- AI decision records now keep a keyed fingerprint of the input (an HMAC made with a server
+  secret, 32 characters) instead of a plain 16 character hash, so a short input such as a job
+  title cannot be recovered by guessing. Older records keep their old value.
 - Analytics stay off the Vault documents page and `/access` invitation links (which carry a code
   and names), GA's opt-out flag blocks history page views on excluded pages, and Vercel events
   drop query strings. The Security & Privacy page caveats were updated to match.

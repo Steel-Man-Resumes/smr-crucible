@@ -403,16 +403,17 @@ export default function OverviewPage() {
             Architecture and accountability
           </h2>
           <p className="text-base text-t-phos leading-relaxed mb-4">
-            Most AI steps are logged with a one-way fingerprint of the input,
-            the model, a short note and the time taken. Resume reading, fact
-            checks and voice practice are not in this log, and without an
-            account the note holds none of the words a person typed. Built
-            for funder reporting, compliance review, and program evaluation.
+            Most AI steps are logged with a keyed, one-way fingerprint of the
+            input (never the input itself), the model, a short note and the
+            time taken. Resume reading, fact checks and voice practice are not
+            in this log, and without an account the note holds none of the
+            words a person typed. Built for funder reporting, compliance
+            review, and program evaluation.
           </p>
           <div className="bg-t-panel-2 px-5 py-4 text-xs text-t-phos-dim border border-t-line mb-4">
             <p className="text-t-phos-dim/70 mb-2">// Most AI decisions logged:</p>
             <p>decision_log &#123;</p>
-            <p className="pl-4">input_hash: sha256(user_input)[0:16]</p>
+            <p className="pl-4">input_hash: &quot;h1:&quot; + hmac_sha256(server_secret, &quot;decision|&quot; + user_input)[0:32]</p>
             <p className="pl-4">model_id: &quot;claude-sonnet-5-5&quot;</p>
             <p className="pl-4">explanation: &quot;why this recommendation&quot;</p>
             <p className="pl-4">latency_ms: 1247</p>
@@ -473,7 +474,7 @@ export default function OverviewPage() {
           <div className="space-y-3 text-sm">
             {[
               { label: "Measurable outputs", detail: "Every Forge completion, resume built, disclosure plan, interview session, and application tracked, with user consent and without collecting PII in aggregate reports." },
-              { label: "Audit trail", detail: "The decision_log table records most AI steps: which tool ran, which model, a one-way fingerprint of the input, the time taken and tokens used, and a short note for signed-in users. Resume reading, fact checks and voice practice are not in it. Funders can request reports on AI performance, model usage, and outcome signals." },
+              { label: "Audit trail", detail: "The decision_log table records most AI steps: which tool ran, which model, a one-way fingerprint of the input, the time taken and tokens used, and a short note for signed-in users. Resume reading and fact checks are not in it. For voice practice it records that a session started, never what is said. Funders can request reports on AI performance, model usage, and outcome signals." },
               { label: "Target population", detail: "Justice-impacted adults in Wisconsin (initial), Midwest (expansion), national (AGPL self-host). Primary focus: people within 90 days of release or recently released." },
               { label: "No paywall, by design", detail: "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status." },
             ].map((item, i) => (
