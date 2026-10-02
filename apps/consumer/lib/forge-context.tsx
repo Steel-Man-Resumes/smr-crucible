@@ -107,11 +107,41 @@ export function useForgeSession() {
   return ctx;
 }
 
+/**
+ * An anonymous Forge run lives only in this browser. On a library or
+ * reentry-center computer the next person would otherwise open the last
+ * person's resume and record answers, so a run left alone this long is
+ * erased the next time the Forge loads. Each save restarts the clock.
+ */
+export const FORGE_SESSION_MAX_IDLE_MS = 24 * 60 * 60 * 1000;
+
+/** True when a stored run's last save is older than the idle limit. */
+export function isForgeSessionExpired(
+  savedAt: unknown,
+  now: number = Date.now()
+): boolean {
+  if (typeof savedAt !== "number" || !Number.isFinite(savedAt)) return true;
+  return now - savedAt > FORGE_SESSION_MAX_IDLE_MS;
+}
+
 function loadSession(): ForgeSessionData {
   if (typeof window === "undefined") return {};
   try {
     const stored = localStorage.getItem("forge_session");
-    return stored ? JSON.parse(stored) : {};
+    if (!stored) return {};
+    const parsed = JSON.parse(stored);
+    // Runs saved before the stamp existed (or copied in by the Refinery) have
+    // no `_savedAt`. Stamp them now rather than erase someone mid-run; the
+    // clock then applies like any other run.
+    if (typeof parsed?._savedAt !== "number") {
+      saveSession(parsed);
+      return parsed;
+    }
+    if (isForgeSessionExpired(parsed._savedAt)) {
+      localStorage.removeItem("forge_session");
+      return {};
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -120,9 +150,31 @@ function loadSession(): ForgeSessionData {
 function saveSession(data: ForgeSessionData) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem("forge_session", JSON.stringify(data));
+    localStorage.setItem(
+      "forge_session",
+      JSON.stringify({ ...data, _savedAt: Date.now() })
+    );
   } catch {
     // localStorage may be full or unavailable — fail silently
+  }
+}
+
+/**
+ * "Done, clear this computer": erase everything this site keeps in the
+ * browser (the Forge run, cached job lists, practice notes, session flags).
+ * Each Forge/Refinery host is its own origin, so this cannot touch other sites.
+ */
+export function clearThisComputer() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.clear();
+  } catch {
+    // ignore
+  }
+  try {
+    sessionStorage.clear();
+  } catch {
+    // ignore
   }
 }
 

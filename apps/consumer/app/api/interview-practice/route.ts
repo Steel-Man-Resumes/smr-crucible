@@ -189,17 +189,18 @@ RULES:
     if (shouldWrapUp) {
       // Log wrapup decision
       try {
-        const { logDecision } = await import("@crucible/core");
+        const { logDecision, logLabel } = await import("@crucible/core");
         await logDecision({
+          userId: userId ?? null,
           contextPage: "interview-practice",
           modelProvider: AI_PROVIDER,
           modelId: AI_MODEL,
           input: (messages[messages.length - 1]?.content || "").slice(0, 500),
-          explanation: `Interview practice feedback wrapup. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}. ${exchangeCount} exchanges.`,
+          explanation: `Interview practice feedback wrapup. Type: ${logLabel(config.interviewType)}. ${exchangeCount} exchanges.`,
           outputSummary: {
             type: "interview_feedback",
             exchange_count: exchangeCount,
-            interview_type: config.interviewType,
+            interview_type: logLabel(config.interviewType),
             is_wrapup: true,
           },
         });
@@ -250,17 +251,18 @@ RULES:
 
     // Log decision for JBS compliance
     try {
-      const { logDecision } = await import("@crucible/core");
+      const { logDecision, logLabel } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "interview-practice",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: (messages[messages.length - 1]?.content || "").slice(0, 500),
-        explanation: `Interview practice exchange #${exchangeCount}. Type: ${config.interviewType}. Role: ${config.targetRole || "general"}.`,
+        explanation: `Interview practice exchange #${exchangeCount}. Type: ${logLabel(config.interviewType)}.`,
         outputSummary: {
           type: "interview_exchange",
           exchange_count: exchangeCount,
-          interview_type: config.interviewType,
+          interview_type: logLabel(config.interviewType),
           is_wrapup: false,
         },
       });

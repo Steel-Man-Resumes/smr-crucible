@@ -290,11 +290,12 @@ Return this exact JSON structure (same content, re-emphasized, never expanded):
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "resume-fine-tune",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: JSON.stringify({ sourceArtifactId, jobTitle: job.title, jobCompany: job.company }).slice(0, 500),
-        explanation: `Light fine-tune of resume ${sourceArtifactId} -> fork ${forkId} for ${job.title}${job.company ? ` at ${job.company}` : ""}.`,
+        explanation: `Light fine-tune of resume ${sourceArtifactId} -> fork ${forkId} for a saved job.`,
         outputSummary: {
           type: "resume_fine_tune",
           fork_id: forkId,

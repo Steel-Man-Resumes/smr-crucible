@@ -96,6 +96,7 @@ Return JSON ONLY:
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "disclosure-takeaways",
         modelProvider: AI_PROVIDER,
         modelId: MODEL_DEEP,

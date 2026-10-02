@@ -466,11 +466,12 @@ ${contactName || "Candidate"}`;
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "career-package-generate",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: JSON.stringify({ jobTitle: job.title, jobCompany: job.company }).slice(0, 500),
-        explanation: `Generated career package (resume + cover letter + disclosure brief) for ${job.title} at ${job.company}.`,
+        explanation: "Generated career package (resume + cover letter + disclosure brief) for a saved job.",
         outputSummary: {
           type: "career_package",
           resumeExperienceCount: resume.experience.length,

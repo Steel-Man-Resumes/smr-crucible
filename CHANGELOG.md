@@ -2,6 +2,19 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 -- Privacy hardening: shared computers, IP counts, AI records, analytics
+
+- The Forge has a "Clear this computer" button in the header and a "Done, clear this computer"
+  panel on the results page. It erases the site's browser storage and signs out. A Forge run
+  left untouched for 24 hours is erased the next time the Forge loads.
+- Per-IP abuse counts store a keyed HMAC of the address that changes every day, never the raw
+  IP. A daily cron deletes usage counts older than 30 days and any leftover raw-IP rows.
+- Every AI decision record now carries the user id when signed in, so "delete my data" removes
+  it, and record notes no longer include job titles, companies, locations or roles a person typed.
+- Analytics stay off the Vault documents page and `/access` invitation links (which carry a code
+  and names), GA's opt-out flag blocks history page views on excluded pages, and Vercel events
+  drop query strings. The Security & Privacy page caveats were updated to match.
+
 ## 2026-10 -- Privacy page matches the code
 
 - The Security & Privacy page now says what anonymous use leaves behind (IP-based abuse counts,

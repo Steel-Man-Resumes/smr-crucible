@@ -7,6 +7,7 @@ import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
+import { ClearThisComputerButton } from "@/components/ClearThisComputer";
 import { ShieldCheck, X } from "lucide-react";
 
 /** Map pathname to page ID for assistant context */
@@ -84,6 +85,7 @@ export function ForgeShell({ children }: { children: ReactNode }) {
               <ShieldCheck size={14} aria-hidden="true" />
               Private by design
             </span>
+            <ClearThisComputerButton />
             <a
               href="https://steelmanresumes.com"
               className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-t-line bg-white px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"

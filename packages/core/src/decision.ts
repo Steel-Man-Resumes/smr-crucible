@@ -38,10 +38,27 @@ function hashInput(input: string): string {
 }
 
 /**
+ * A short label safe to keep in the log: a fixed-vocabulary value such as an
+ * interview type or intake topic passes through; anything else (free text a
+ * person typed or a client sent) becomes "other".
+ */
+export function logLabel(value: unknown, fallback = "other"): string {
+  return typeof value === "string" && /^[a-z0-9_-]{1,40}$/i.test(value) ? value : fallback;
+}
+
+/**
  * Log an AI decision. Required after every AI recommendation.
+ *
+ * userId is REQUIRED (null for an anonymous Forge visitor) so every call site
+ * decides it: "delete my data" removes rows by user_id, and a row logged
+ * without it would outlive the person's delete.
+ *
+ * explanation and outputSummary are stored as plain text. Never put words the
+ * person typed in them (target job, company, location, role, record details):
+ * counts, booleans, ids and fixed labels only. The input is stored as a hash.
  */
 export async function logDecision(params: {
-  userId?: string | null;
+  userId: string | null;
   sessionId?: string | null;
   contextPage: string;
   modelProvider: string;

@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import {
   getResourcesByCategory,
@@ -103,18 +104,21 @@ async function handlePost(request: Request) {
 
     // Log decision for JBS compliance
     try {
-      const { logDecision } = await import("@crucible/core");
+      const { logDecision, logLabel } = await import("@crucible/core");
+      // Signed-in visitors get the row tied to them so "delete my data" removes it.
+      const session = await auth().catch(() => null);
       await logDecision({
+        userId: session?.user?.id ?? null,
         contextPage: "resources-search",
         modelProvider: "curated-directory",
         modelId: "resource-directory-v1",
         input: JSON.stringify({ category, barriers, location }).slice(0, 500),
-        explanation: `Returned ${resources.length} curated resources for category: ${category || "all"}. Location: ${location || "default"}.`,
+        explanation: `Returned ${resources.length} curated resources for category: ${logLabel(category, "all")}.`,
         outputSummary: {
           type: "resource_search",
           source: "curated",
           resources_count: resources.length,
-          category: category || "all",
+          category: logLabel(category, "all"),
           hud_augmented: category === "housing",
         },
       });

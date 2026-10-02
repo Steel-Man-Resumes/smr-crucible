@@ -79,10 +79,16 @@ async function aiSuggestTools(title: string, userId: string | null | undefined):
   }
 }
 
-async function logShape(input: string, explanation: string, summary: Record<string, unknown>) {
+async function logShape(
+  userId: string | null,
+  input: string,
+  explanation: string,
+  summary: Record<string, unknown>
+) {
   try {
     const { logDecision } = await import("@crucible/core");
     await logDecision({
+      userId,
       contextPage: "forge-resume-assist",
       modelProvider: AI_PROVIDER,
       modelId: MODEL_DEEP,
@@ -152,7 +158,7 @@ RULES:
         (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
         logDashSwaps("forge-resume-assist")
       );
-      await logShape(`summary targetJob=${targetJob}`, `Suggested a base-resume summary${targetJob ? ` for ${targetJob}` : ""}.`, {
+      await logShape(userId ?? null, `summary targetJob=${targetJob}`, "Suggested a base-resume summary.", {
         type: "resume_summary",
         suggestion_length: suggestion.length,
       });
@@ -229,8 +235,9 @@ Write the single strongest TRUE bullet from ONLY these facts.${
       }
 
       await logShape(
+        userId ?? null,
         `bullet jobTitle=${jobTitle}`,
-        `Bullet workshop generated a truth-gated bullet for ${jobTitle || "a role"}.`,
+        "Bullet workshop generated a truth-gated bullet.",
         { type: "bullet_workshop", bullet_length: bullet.length, had_quantity: !!quantity, number_check: numberCheck }
       );
 

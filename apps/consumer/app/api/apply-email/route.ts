@@ -139,12 +139,13 @@ Return JSON only:
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
+        userId: session.user.id,
         contextPage: "apply-email",
         modelProvider: AI_PROVIDER,
         modelId: AI_MODEL,
         input: `${app.job_title} @ ${app.company}`.slice(0, 500),
         explanation: "Drafted an application email for a job with no online apply link.",
-        outputSummary: { type: "apply_email", company: app.company },
+        outputSummary: { type: "apply_email" },
       });
     } catch (err) {
       console.error("Decision log failed (apply-email):", err);

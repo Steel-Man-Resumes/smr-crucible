@@ -76,16 +76,17 @@ async function handlePost(request: Request) {
 
     // Decision log (JBS compliance) -- shape only, never the user's words.
     try {
-      const { logDecision } = await import("@crucible/core");
+      const { logDecision, logLabel } = await import("@crucible/core");
       await logDecision({
+        userId: userId ?? null,
         contextPage: "intake-followups",
         modelProvider: AI_PROVIDER,
         modelId: MODEL_DEEP,
         input: `topic=${topic} round=${round} answers=${answersSoFar.length}`,
-        explanation: `Progressive intake follow-ups for ${topic}, round ${round}.`,
+        explanation: `Progressive intake follow-ups for ${logLabel(topic)}, round ${round}.`,
         outputSummary: {
           type: "intake_followups",
-          topic,
+          topic: logLabel(topic),
           round,
           question_count: result.questions.length,
           done: result.done,

@@ -144,8 +144,9 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           </BulletItem>
           <BulletItem>
             Most AI steps leave a short record: which tool ran, which AI model,
-            and a short note, like the job you were aiming for. That record
-            does not keep a copy of what the AI wrote to you.
+            and a short note about the step. The note does not include the
+            words you typed, and the record does not keep a copy of what the AI
+            wrote to you.
           </BulletItem>
           <BulletItem>
             When you are signed in and Better help is on, t.ROY remembers your
@@ -173,7 +174,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           />
           <ControlCard
             title="Delete Your Data or Account"
-            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. A few records that don't have your name on them stay, like abuse-prevention counts by IP address and short AI records."
+            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. Short AI records from before you signed in are not tied to your account, so they stay. They hold no name and none of your words. Abuse-prevention counts are deleted after 30 days."
             showButton={showUserControls}
             buttonLabel="Delete in Settings"
             onClick={() => {
@@ -190,7 +191,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           />
           <ControlCard
             title="No Account Required"
-            description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, so on a shared or library computer, start over or clear the browser when you finish. We do keep your IP address and a count of your uses to stop abuse, plus short AI records that can include a job title you typed."
+            description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, press Clear this computer, or leave it untouched for a day. On a shared or library computer, press Clear this computer when you finish. To stop abuse we count uses per internet connection, kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed."
           />
         </div>
       </Section>
@@ -255,9 +256,9 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             <DenyItem>
               No ad networks and no data brokers. We count visits with Google
               Analytics and Vercel to see which tools help people. They see
-              which pages get used, not what you type. We try to keep them off
-              disclosure practice and interview practice, and we are still
-              fixing this for the Vault page.
+              which pages get used, not what you type. We keep them off
+              disclosure practice, interview practice, the Vault, your
+              documents, and invitation links that carry a code or a name.
             </DenyItem>
             <DenyItem>
               We use service providers for hosting, storage, AI, email, bot
@@ -325,8 +326,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>AI fact checking: OpenAI (gpt-4o-mini). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume, your answers (including what you told us about your record) and our draft all pass through OpenAI on that check.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
-          <p>Rate Limiting: daily limits per account, and per IP address for people not signed in (IP counts stored by day), with atomic enforcement</p>
-          <p>Decision Logging: most AI calls logged with a short input hash, the model, and a plain-text note that can include a job title, company or search location the person typed. Resume parsing, fact checks and voice are not in this log.</p>
+          <p>Rate Limiting: daily limits per account, and per IP address for people not signed in (stored as a keyed HMAC that changes daily, never the raw address; counts deleted after 30 days), with atomic enforcement</p>
+          <p>Decision Logging: most AI calls logged with a short input hash, the model, and a plain-text note about the step with no text the person typed. Rows are tied to the account when signed in, so deleting your data removes them. Resume parsing, fact checks and voice are not in this log.</p>
           <p>Other providers: Resend (email), Cloudflare Turnstile (bot checks), JSearch, Adzuna, USAJOBS and CareerOneStop (job listings: role and location only), O*NET (job titles)</p>
           <p>Session: JWT-based auth cookies; audited staff-assist sessions use a separate short-lived cookie</p>
         </div>
