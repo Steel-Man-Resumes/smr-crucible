@@ -17,6 +17,7 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
+import { passwordProblem } from "@/lib/password-policy";
 import {
   checkAuthRateLimit,
   getClientIp,
@@ -138,11 +139,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
-        { status: 400 }
-      );
+    const problem = passwordProblem(password);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
     }
 
     const cName = typeof name === "string" ? name.trim() : "";

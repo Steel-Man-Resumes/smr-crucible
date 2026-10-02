@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
+import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 
 export default function ResetPasswordPage() {
   return (
@@ -32,8 +33,9 @@ function ResetPasswordForm() {
       setError("Passwords don't match.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
       return;
     }
 
@@ -126,7 +128,7 @@ function ResetPasswordForm() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="New password (8+ characters)"
+              placeholder={`New password (${PASSWORD_HINT})`}
               required
               autoComplete="new-password"
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"

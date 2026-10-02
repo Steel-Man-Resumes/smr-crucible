@@ -17,6 +17,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
+import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -252,7 +253,7 @@ function LoginForm() {
     e.preventDefault();
     if (!email.trim() || !password || !confirmPassword) return;
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    { const problem = passwordProblem(password); if (problem) { setError(problem); return; } }
     if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
@@ -493,7 +494,7 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "create" ? "Create a password (8+ characters)" : "Your password"}
+                placeholder={mode === "create" ? `Create a password (${PASSWORD_HINT})` : "Your password"}
                 required
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"

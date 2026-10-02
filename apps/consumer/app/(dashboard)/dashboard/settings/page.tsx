@@ -29,6 +29,7 @@ import { useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { passwordProblem } from "@/lib/password-policy";
 
 interface UsageData {
   used: number;
@@ -1073,13 +1074,9 @@ function SecuritySection() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (pw.length < 10) {
-      setErrorMsg("Use at least 10 characters.");
-      setStatus("error");
-      return;
-    }
-    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw)) {
-      setErrorMsg("Include at least one letter and one number.");
+    const problem = passwordProblem(pw);
+    if (problem) {
+      setErrorMsg(problem);
       setStatus("error");
       return;
     }

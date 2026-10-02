@@ -7,6 +7,7 @@ import {
   getClientIp,
   isValidEmail,
 } from "@/lib/auth-rate-limit";
+import { runAfterResponse } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const RESET_TTL_MINUTES = 60;
@@ -31,6 +32,74 @@ function buildResetEmail(resetUrl: string): { subject: string; html: string; tex
     </div>
   `;
   return { subject, html, text };
+}
+
+/** Look up the account and, if there is one, store a fresh token and email the link. */
+async function issueResetLink(normalizedEmail: string, origin: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    const existing = await client.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [normalizedEmail]
+    );
+    // Do not reveal whether an account exists: nothing is sent, and the
+    // caller already got the same answer it gets for a real account.
+    if (existing.rows.length === 0) return;
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashToken(rawToken);
+    const identifier = `password-reset:${normalizedEmail}`;
+    const resetUrl = new URL("/reset-password", origin);
+    resetUrl.searchParams.set("email", normalizedEmail);
+    resetUrl.searchParams.set("token", rawToken);
+
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM verification_token WHERE identifier = $1`, [
+        identifier,
+      ]);
+      await client.query(
+        `INSERT INTO verification_token (identifier, token, expires)
+         VALUES ($1, $2, NOW() + ($3::text || ' minutes')::interval)`,
+        [identifier, tokenHash, String(RESET_TTL_MINUTES)]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    }
+
+    const resendKey = process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      console.error("Password reset email not sent: AUTH_RESEND_KEY missing");
+      return;
+    }
+
+    const emailContent = buildResetEmail(resetUrl.toString());
+    const emailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from:
+          process.env.AUTH_EMAIL_FROM ||
+          "Steel Man Resumes <noreply@steelmanresumes.com>",
+        to: normalizedEmail,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+      }),
+    });
+
+    if (!emailRes.ok) {
+      const text = await emailRes.text();
+      console.error("Password reset email failed:", emailRes.status, text.slice(0, 500));
+    }
+  } finally {
+    client.release();
+  }
 }
 
 export async function POST(request: Request) {
@@ -82,72 +151,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const client = await pool.connect();
-    try {
-      const existing = await client.query(
-        `SELECT id FROM users WHERE email = $1`,
-        [normalizedEmail]
-      );
+    // F9: answer now, do the work after. The lookup, token write and email
+    // send used to run before the response only when the account existed, so
+    // the response time said whether an email had an account. Every valid
+    // request now gets the same immediate answer; the work runs after it.
+    const origin = new URL(request.url).origin;
+    runAfterResponse(() => issueResetLink(normalizedEmail, origin));
 
-      // Do not reveal whether an account exists.
-      if (existing.rows.length === 0) {
-        return NextResponse.json({ success: true });
-      }
-
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = hashToken(rawToken);
-      const identifier = `password-reset:${normalizedEmail}`;
-      const resetUrl = new URL("/reset-password", request.url);
-      resetUrl.searchParams.set("email", normalizedEmail);
-      resetUrl.searchParams.set("token", rawToken);
-
-      await client.query("BEGIN");
-      await client.query(`DELETE FROM verification_token WHERE identifier = $1`, [
-        identifier,
-      ]);
-      await client.query(
-        `INSERT INTO verification_token (identifier, token, expires)
-         VALUES ($1, $2, NOW() + ($3::text || ' minutes')::interval)`,
-        [identifier, tokenHash, String(RESET_TTL_MINUTES)]
-      );
-      await client.query("COMMIT");
-
-      const resendKey = process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY;
-      if (!resendKey) {
-        console.error("Password reset email not sent: AUTH_RESEND_KEY missing");
-        return NextResponse.json({ success: true });
-      }
-
-      const emailContent = buildResetEmail(resetUrl.toString());
-      const emailRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from:
-            process.env.AUTH_EMAIL_FROM ||
-            "Steel Man Resumes <noreply@steelmanresumes.com>",
-          to: normalizedEmail,
-          subject: emailContent.subject,
-          html: emailContent.html,
-          text: emailContent.text,
-        }),
-      });
-
-      if (!emailRes.ok) {
-        const text = await emailRes.text();
-        console.error("Password reset email failed:", emailRes.status, text.slice(0, 500));
-      }
-
-      return NextResponse.json({ success: true });
-    } catch (err) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("Password reset request error:", err?.message || err);
     return NextResponse.json(

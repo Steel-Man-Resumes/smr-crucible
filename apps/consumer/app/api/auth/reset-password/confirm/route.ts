@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { isValidEmail } from "@/lib/auth-rate-limit";
-import { revokeUserSessions } from "@/lib/session-registry";
+import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
+import { passwordProblem } from "@/lib/password-policy";
+import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -29,11 +31,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
-        { status: 400 }
-      );
+    const problem = passwordProblem(newPassword);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
     }
 
     const identifier = `password-reset:${normalizedEmail}`;
@@ -59,9 +59,10 @@ export async function POST(request: Request) {
 
       const update = await client.query(
         `UPDATE users
-         SET password_hash = $1, "emailVerified" = COALESCE("emailVerified", NOW())
+         SET password_hash = $1, password_updated_at = now(),
+             "emailVerified" = COALESCE("emailVerified", NOW())
          WHERE email = $2
-         RETURNING id`,
+         RETURNING id, name`,
         [passwordHash, normalizedEmail]
       );
       await client.query(`DELETE FROM verification_token WHERE identifier = $1`, [
@@ -83,6 +84,25 @@ export async function POST(request: Request) {
           { status: 404 }
         );
       }
+
+      // F9: a reset used to leave no trace. Record it on the security
+      // timeline (best-effort) and tell the inbox after the response.
+      const userId: string = update.rows[0].id;
+      const userAgent = request.headers.get("user-agent") || null;
+      await client
+        .query(
+          `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'password_reset', $2)`,
+          [userId, userAgent]
+        )
+        .catch(() => {});
+      const origin = new URL(request.url).origin;
+      const name: string | null = update.rows[0].name || null;
+      runAfterResponse(() =>
+        sendSecurityEmail(
+          normalizedEmail,
+          buildPasswordChangedEmail({ name, kind: "reset", whenISO: new Date().toISOString(), origin })
+        )
+      );
 
       return NextResponse.json({ success: true });
     } catch (err) {

@@ -5,26 +5,9 @@ import bcrypt from "bcryptjs";
 import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
 import { FRESH_SIGN_IN_SECONDS, signedInWithin } from "@/lib/session-policy";
 import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
+import { passwordProblem } from "@/lib/password-policy";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-// Length beats composition rules for real security (NIST), but a floor + one
-// number keeps out the truly weak. A short blocklist stops the obvious ones.
-const MIN_LEN = 10;
-const COMMON = new Set([
-  "password", "password1", "password123", "12345678", "123456789", "1234567890",
-  "qwertyuiop", "letmein123", "iloveyou1", "welcome123", "steelman1", "changeme1",
-]);
-
-function passwordProblem(pw: string): string | null {
-  if (typeof pw !== "string" || pw.length < MIN_LEN)
-    return `Use at least ${MIN_LEN} characters.`;
-  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw))
-    return "Include at least one letter and one number.";
-  if (COMMON.has(pw.toLowerCase()))
-    return "That password is too common. Pick something only you would know.";
-  return null;
-}
 
 export async function POST(req: Request) {
   const session = await auth();
