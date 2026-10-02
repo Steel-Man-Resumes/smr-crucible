@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import {
   SESSION_REGISTRY_CUTOFF,
   SESSIONS_REVOKED_EVENT,
+  authRouteSkipsSessionChecks,
   nowSeconds,
   revocationVerdict,
   sessionRowRequired,
@@ -348,10 +349,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Device revocation (3B): a signed-in request whose session was revoked
       // from the active-devices list is turned away here -- the real gate for
-      // every page + data call. Skip auth-internal polling (/api/auth/*) to
-      // keep the DB check off the hot session-poll path.
+      // every page + data call. Custom /api/auth/* routes (set-password,
+      // session-ping) are checked too (F6): set-password used to be exempt, so
+      // a revoked session could mint a password and sign in fresh. Only
+      // NextAuth's own actions (which keep /api/auth/session polling off the
+      // DB) and the pre-sign-in routes skip it; see authRouteSkipsSessionChecks.
       const sid = (session?.user as any)?.sid as string | undefined;
-      if (session && sid && (isDashboard || (isApi && !path.startsWith("/api/auth/")))) {
+      if (session && sid && (isDashboard || (isApi && !authRouteSkipsSessionChecks(path)))) {
         if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });

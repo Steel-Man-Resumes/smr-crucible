@@ -1,6 +1,7 @@
 /**
- * Security notifications (new-device sign-in). Send-only, Node runtime.
- * Mirrors the org-invite Resend sender; never imported from edge.
+ * Security notifications (new-device sign-in, password changed). Send-only.
+ * Mirrors the org-invite Resend sender. Fetch-only (no Node APIs), so it is safe
+ * in the sign-in callbacks that share a module graph with the Edge middleware.
  */
 
 export async function sendSecurityEmail(
@@ -84,6 +85,48 @@ export function buildNewDeviceEmail(opts: {
     `<p>If this was you, no action is needed.</p>` +
     `<p>If it wasn't you, <a href="${settingsUrl}">change your password right away</a>.</p>` +
     `<p>-- Steel Man Resumes</p>`;
+  return { subject, html, text };
+}
+
+/**
+ * "Your password changed" notice: sent when a password is created, changed, or
+ * reset by email link. The person who did it already knows; this is for the
+ * case where it was not them.
+ */
+export function buildPasswordChangedEmail(opts: {
+  name: string | null;
+  kind: "created" | "changed" | "reset";
+  whenISO: string;
+  origin: string;
+}): { subject: string; html: string; text: string } {
+  const hello = (opts.name || "").trim().split(/\s+/)[0] || "there";
+  const when = (() => {
+    const d = new Date(opts.whenISO);
+    return isNaN(d.getTime()) ? opts.whenISO : d.toUTCString();
+  })();
+  const resetUrl = `${opts.origin}/forgot-password`;
+  const subject =
+    opts.kind === "created"
+      ? "A password was added to your Steel Man Resumes account"
+      : "Your Steel Man Resumes password was changed";
+  const what =
+    opts.kind === "created"
+      ? "A password was added to your account"
+      : opts.kind === "reset"
+        ? "Your password was reset with an email link"
+        : "Your password was changed";
+  const text =
+    `Hi ${hello},\n\n` +
+    `${what} on ${when}. Your other devices were signed out.\n\n` +
+    `If this was you, no action is needed.\n\n` +
+    `If it wasn't you, reset your password right away:\n${resetUrl}\n\n` +
+    `Steel Man Resumes`;
+  const html =
+    `<p>Hi ${escapeHtml(hello)},</p>` +
+    `<p>${escapeHtml(what)} on ${escapeHtml(when)}. Your other devices were signed out.</p>` +
+    `<p>If this was you, no action is needed.</p>` +
+    `<p>If it wasn't you, <a href="${resetUrl}">reset your password right away</a>.</p>` +
+    `<p>Steel Man Resumes</p>`;
   return { subject, html, text };
 }
 

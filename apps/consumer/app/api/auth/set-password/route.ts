@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { revokeUserSessions } from "@/lib/session-registry";
+import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
+import { FRESH_SIGN_IN_SECONDS, signedInWithin } from "@/lib/session-policy";
+import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: problem }, { status: 400 });
   }
 
+  let existingHashForEmail = false;
   const client = await pool.connect();
   try {
     const cur = await client.query(
@@ -52,6 +55,7 @@ export async function POST(req: Request) {
       );
     }
     const existingHash: string | null = cur.rows[0].password_hash;
+    existingHashForEmail = !!existingHash;
 
     // Changing an existing password requires proving you know the current one --
     // a live session alone must not be able to silently rotate it.
@@ -73,6 +77,22 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: "That is already your password. Choose a new one." },
           { status: 400 }
+        );
+      }
+    } else {
+      // Adding the FIRST password to an email-link or Google account (F6).
+      // There is no current password to prove, so the proof is a fresh
+      // sign-in: a session older than 10 minutes (or one from before sign-ins
+      // were stamped) could be a stolen or long-forgotten one, and a password
+      // would let it come back as a brand-new session.
+      if (!signedInWithin((session.user as any).sit, FRESH_SIGN_IN_SECONDS)) {
+        return NextResponse.json(
+          {
+            error:
+              "For your safety, sign out and sign back in, then add your password within 10 minutes.",
+            needsFreshSignIn: true,
+          },
+          { status: 403 }
         );
       }
     }
@@ -111,6 +131,20 @@ export async function POST(req: Request) {
     }
   } finally {
     client.release();
+  }
+
+  // Tell the account's inbox (best-effort, after the response).
+  const to = session.user.email;
+  if (to) {
+    const origin = new URL(req.url).origin;
+    const name = session.user.name || null;
+    const kind = existingHashForEmail ? "changed" : "created";
+    runAfterResponse(() =>
+      sendSecurityEmail(
+        to,
+        buildPasswordChangedEmail({ name, kind, whenISO: new Date().toISOString(), origin })
+      )
+    );
   }
 
   return NextResponse.json({ success: true });

@@ -61,3 +61,49 @@ export function revocationVerdict(input: {
 export function nowSeconds(now: number = Date.now()): number {
   return Math.floor(now / 1000);
 }
+
+/**
+ * /api/auth/* routes that skip the per-session checks in the middleware
+ * (revocation, F6; pending second step, F1).
+ *
+ *  - NextAuth's own actions: they are how a session is created, read and
+ *    ended, so a revoked session must still reach signout and the sign-in
+ *    callbacks.
+ *  - The pre-sign-in routes: they never read the session. A device whose
+ *    session was revoked still carries the cookie, and must still be able to
+ *    sign in again or reset a password.
+ *
+ * Every other /api/auth/* route (set-password, session-ping, and any custom
+ * route added later) gets the checks by default.
+ */
+const NEXTAUTH_ACTIONS = new Set([
+  "session",
+  "csrf",
+  "providers",
+  "signin",
+  "callback",
+  "signout",
+  "verify-request",
+  "error",
+]);
+const PRE_SIGN_IN_ROUTES = new Set(["password-precheck", "register", "reset-password"]);
+
+export function authRouteSkipsSessionChecks(path: string): boolean {
+  if (!path.startsWith("/api/auth/")) return false;
+  const first = path.slice("/api/auth/".length).split("/")[0];
+  return NEXTAUTH_ACTIONS.has(first) || PRE_SIGN_IN_ROUTES.has(first);
+}
+
+/** How recent a sign-in must be to add a first password to an account (F6). */
+export const FRESH_SIGN_IN_SECONDS = 10 * 60;
+
+/** True when the session was signed in (registry `sit`) within `maxAge` seconds. */
+export function signedInWithin(
+  signedInAt: unknown,
+  maxAgeSeconds: number,
+  now: number = Date.now()
+): boolean {
+  if (typeof signedInAt !== "number" || !Number.isFinite(signedInAt)) return false;
+  const age = nowSeconds(now) - signedInAt;
+  return age >= -60 && age <= maxAgeSeconds;
+}

@@ -8,9 +8,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  FRESH_SIGN_IN_SECONDS,
   SESSION_REGISTRY_CUTOFF,
+  authRouteSkipsSessionChecks,
   revocationVerdict,
   sessionRowRequired,
+  signedInWithin,
 } from "../session-policy";
 import {
   contextFromHeaders,
@@ -98,5 +101,57 @@ describe("session registry writes", () => {
     assert.equal(calls.length, 2);
     assert.match(calls[0].text, /UPDATE user_session/);
     assert.deepEqual(calls[0].params, ["user-2", null]);
+  });
+});
+
+describe("which /api/auth routes get the session checks (F6)", () => {
+  it("checks set-password, session-ping, and any custom route added later", () => {
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/set-password"), false);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/session-ping"), false);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/some-new-route"), false);
+  });
+
+  it("skips NextAuth's own actions, so a revoked device can still sign out or back in", () => {
+    for (const p of [
+      "/api/auth/session",
+      "/api/auth/csrf",
+      "/api/auth/providers",
+      "/api/auth/signin/resend",
+      "/api/auth/callback/password-login",
+      "/api/auth/callback/google",
+      "/api/auth/signout",
+      "/api/auth/verify-request",
+      "/api/auth/error",
+    ]) {
+      assert.equal(authRouteSkipsSessionChecks(p), true, p);
+    }
+  });
+
+  it("skips the pre-sign-in routes that never read the session", () => {
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/password-precheck"), true);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/register"), true);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/reset-password/request"), true);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/reset-password/confirm"), true);
+  });
+
+  it("is not fooled by a lookalike prefix", () => {
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/sessionx"), false);
+    assert.equal(authRouteSkipsSessionChecks("/api/auth/set-password/../session"), false);
+    assert.equal(authRouteSkipsSessionChecks("/api/user/sessions"), false);
+  });
+});
+
+describe("adding a first password needs a fresh sign-in (F6)", () => {
+  const now = Date.parse("2026-10-03T12:00:00Z");
+  const nowS = now / 1000;
+  it("accepts a sign-in inside 10 minutes", () => {
+    assert.equal(signedInWithin(nowS - 60, FRESH_SIGN_IN_SECONDS, now), true);
+    assert.equal(signedInWithin(nowS - FRESH_SIGN_IN_SECONDS, FRESH_SIGN_IN_SECONDS, now), true);
+  });
+  it("refuses an older sign-in, and a session with no sign-in stamp", () => {
+    assert.equal(signedInWithin(nowS - FRESH_SIGN_IN_SECONDS - 1, FRESH_SIGN_IN_SECONDS, now), false);
+    assert.equal(signedInWithin(undefined, FRESH_SIGN_IN_SECONDS, now), false);
+    assert.equal(signedInWithin(null, FRESH_SIGN_IN_SECONDS, now), false);
+    assert.equal(signedInWithin(String(nowS), FRESH_SIGN_IN_SECONDS, now), false);
   });
 });
