@@ -130,6 +130,33 @@ export function buildPasswordChangedEmail(opts: {
   return { subject, html, text };
 }
 
+/**
+ * Sent when proving the inbox removed a password or two-step that had been set
+ * without proving it (F3). The reader is the person who just signed in.
+ */
+export function buildCredentialsClearedEmail(opts: { origin: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const settingsUrl = `${opts.origin}/dashboard/settings`;
+  const subject = "We removed a password from your Steel Man Resumes account";
+  const body =
+    "You just confirmed this email address by signing in. This account had a password or " +
+    "two-step verification that was set before anyone confirmed the address, so we removed " +
+    "it and signed out every other device. Your work is still there.";
+  const text =
+    `Hi there,\n\n${body}\n\n` +
+    `To sign in with a password from now on, set one in Settings:\n${settingsUrl}\n\n` +
+    `Steel Man Resumes`;
+  const html =
+    `<p>Hi there,</p>` +
+    `<p>${escapeHtml(body)}</p>` +
+    `<p>To sign in with a password from now on, <a href="${settingsUrl}">set one in Settings</a>.</p>` +
+    `<p>Steel Man Resumes</p>`;
+  return { subject, html, text };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (ch) =>
     ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : ch === '"' ? "&quot;" : "&#39;"

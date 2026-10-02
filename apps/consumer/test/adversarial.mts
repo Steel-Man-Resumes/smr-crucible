@@ -1664,7 +1664,7 @@ section("ai usage labels + governance");
   check("labels: no emojis in any endpoint label", allLabelCopy.every((s) => !EMOJI_RE_L.test(s)));
 
   // Login-event labels: every written event value maps to a plain sentence.
-  const knownEvents = ["sign_in", "two_factor_enabled", "two_factor_disabled", "password_created", "password_changed", "password_reset", "sessions_revoked"];
+  const knownEvents = ["sign_in", "two_factor_enabled", "two_factor_disabled", "password_created", "password_changed", "password_reset", "sessions_revoked", "credentials_cleared"];
   check("login-events: every written event value has a plain label",
     knownEvents.every((k) => typeof LOGIN_EVENT_LABELS[k] === "string" && LOGIN_EVENT_LABELS[k].length > 0),
     knownEvents.find((k) => !LOGIN_EVENT_LABELS[k]));

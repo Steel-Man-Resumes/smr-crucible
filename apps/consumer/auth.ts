@@ -263,16 +263,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Runs before a session exists, only in the /api/auth route (Node). Return
     // true to continue, or a URL to send the person to instead.
-    async signIn({ account, profile }) {
-      if (account?.provider === "google") {
-        // F2: Google must have verified the address, and Google is not
-        // auto-linked into an existing account that has a password or
-        // two-step verification (unless this Google identity is already
-        // linked to it). See lib/sign-in-guards.ts.
-        const { checkGoogleSignIn } = await import("@/lib/sign-in-guards");
-        return checkGoogleSignIn(pool, {
+    async signIn({ user, account, profile, email }) {
+      const provider = account?.provider;
+      const isGoogle = provider === "google";
+      // An email-link CLICK (not the request to send one) proves the inbox.
+      const isEmailLink = provider === "resend" && !email?.verificationRequest;
+      if (!isGoogle && !isEmailLink) return true;
+
+      const guards = await import("@/lib/sign-in-guards");
+      // F2: Google must have verified the address. An unverified Google
+      // address proves nothing, so it is refused before anything else.
+      if (isGoogle && (profile as any)?.email_verified !== true) {
+        return guards.SIGN_IN_REFUSED.googleEmailUnverified;
+      }
+
+      // F3: the first proof of the inbox wipes a password or two-step that
+      // was set without proving it (lib/email-proof.ts).
+      const proofEmail = String((isGoogle ? (profile as any)?.email : user?.email) || "").trim();
+      const { applyInboxProof } = await import("@/lib/email-proof");
+      const { currentRequestContext, runAfterResponse } = await import("@/lib/session-registry");
+      const ctx = await currentRequestContext();
+      const outcome = await applyInboxProof(pool as any, proofEmail, {
+        clearPassword: true,
+        revokeSessions: true,
+        userAgent: ctx.userAgent,
+      });
+      if (outcome === "wiped" && proofEmail) {
+        const { buildCredentialsClearedEmail, sendSecurityEmail } = await import("@/lib/security-email");
+        const origin = ctx.origin || "https://refinery.steelmanresumes.com";
+        runAfterResponse(() => sendSecurityEmail(proofEmail, buildCredentialsClearedEmail({ origin })));
+      }
+
+      // F2: Google is not auto-linked into an existing account that has a
+      // password or two-step verification (unless this Google identity is
+      // already linked to it). Runs after F3, so an unproven account was just
+      // wiped and links normally.
+      if (isGoogle) {
+        return guards.checkGoogleSignIn(pool, {
           profile,
-          providerAccountId: String(account.providerAccountId ?? ""),
+          providerAccountId: String(account?.providerAccountId ?? ""),
         });
       }
       return true;
@@ -453,6 +482,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // authorize(); an email link or Google sign-in into an account with
         // two-step starts the session waiting for it (mfa: false) and the
         // middleware holds it at /login/verify until the code is entered.
+        // F3: an email-link or Google sign-in (including a brand-new account
+        // the adapter just created) proves the inbox.
+        if (account?.provider === "resend" || account?.provider === "google") {
+          const { markEmailProven } = await import("@/lib/email-proof");
+          await markEmailProven(pool, token.sub);
+        }
+
         const tf = await pool.query(`SELECT two_factor_enabled FROM users WHERE id = $1`, [token.sub]);
         const twoFactor = !!tf.rows[0]?.two_factor_enabled;
         const viaPassword = account?.provider === "password-login";

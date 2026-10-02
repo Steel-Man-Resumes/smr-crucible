@@ -16,6 +16,7 @@ export const LOGIN_EVENT_LABELS: Record<string, string> = {
   password_changed: "Password changed",
   password_reset: "Password reset by email link",
   sessions_revoked: "Signed out other devices",
+  credentials_cleared: "Password and two-step removed when this email was confirmed",
 };
 
 /** Plain name for a login event key. Falls back to a readable Title Case. */

@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
 import { passwordProblem } from "@/lib/password-policy";
+import { applyInboxProof } from "@/lib/email-proof";
 import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -95,6 +96,20 @@ export async function POST(request: Request) {
           [userId, userAgent]
         )
         .catch(() => {});
+      // F3: a reset by email link proves the inbox. On an account that was
+      // never proven, two-step set by whoever registered it is removed too
+      // (the password was just replaced by the owner's). Best-effort: the
+      // reset itself already succeeded.
+      try {
+        await applyInboxProof(pool, normalizedEmail, {
+          clearPassword: false,
+          revokeSessions: false, // already done above, inside the reset
+          userAgent,
+        });
+      } catch (err: any) {
+        console.error("Password reset: inbox proof step failed:", err?.message || err);
+      }
+
       const origin = new URL(request.url).origin;
       const name: string | null = update.rows[0].name || null;
       runAfterResponse(() =>
