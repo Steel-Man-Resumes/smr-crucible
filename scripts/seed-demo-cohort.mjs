@@ -125,18 +125,18 @@ const wesResume = await artifact(wes, "resume", { targetJob: "Road and Bridge Ma
 const wesLetter = await artifact(wes, "cover_letter", { targetJob: "Road and Bridge Maintenance Worker", targetCompany: "Flathead County Government" },
   { targetJob: "Road and Bridge Maintenance Worker", targetCompany: "Flathead County Government", text: "Dear Hiring Manager,\n\nI am applying for the Road and Bridge Maintenance Worker opening. For four years I worked a production line feeding about 300 people three times a day, and before that I worked a supply yard loading contractor orders. Both taught me to work safe, work clean, and keep going when the day runs long.\n\nI am available for early starts and seasonal overtime, and I would welcome the chance to talk.\n\nThank you for your time.\n\nWes Duvall" }, 2);
 await application(wes, { title: "Road and Bridge Maintenance Worker", company: "Flathead County Government", location: "Kalispell, MT", status: "applied", applied: 2, followUp: 5, resume: wesResume, letter: wesLetter, notes: "Ask Russ about a ride to Kalispell if they call." });
-await application(wes, { title: "Production Assembler", company: "Nomad GCS", location: "Libby, MT", status: "saved", touched: 1, notes: "Not sure I qualify. Think about it." });
+await application(wes, { title: "Custodian", company: "Libby Public Schools", location: "Libby, MT", status: "saved", touched: 1, notes: "Not sure I qualify. Think about it." });
 
-// 5. Interview scheduled. Nomad GCS: real, growing, local. NOT presented as fair-chance.
+// 5. Interview scheduled. Lincoln County Government: real, local, lists openings on its HR page. NOT presented as fair-chance.
 const marisol = await person("Marisol Vance", 5, 1, alma);
-const marisolResume = await artifact(marisol, "resume", { targetJob: "Production Assembler" }, resumeBody("Marisol Vance", "Production Assembler",
+const marisolResume = await artifact(marisol, "resume", { targetJob: "Maintenance Worker" }, resumeBody("Marisol Vance", "Maintenance Worker",
   "Detail-minded assembler with three years of bench work to written spec. Reads a work order, checks her own work, and asks before guessing.",
   ["Hand and power tools", "Reading work orders and drawings", "Quality checks to spec", "Crimping and basic wiring", "5S workstation upkeep"],
   [{ id: "e1", title: "Assembly and Upholstery Worker", company: "Vocational Production Shop", startDate: "2022", endDate: "2025", bullets: ["Built and inspected assemblies to written spec on a daily quota.", "Caught and logged defects before they left the bench."] }],
   [{ id: "ed1", credential: "OSHA 10-Hour General Industry", institution: "OSHA Outreach", year: "2025" }]), 6, true);
-await application(marisol, { title: "Production Assembler", company: "Nomad GCS", location: "Libby, MT", status: "interviewing", applied: 8, followUp: toThursday, resume: marisolResume, notes: "Interview Thursday 10am. Wear the boots." });
+await application(marisol, { title: "Maintenance Worker", company: "Lincoln County Government", location: "Libby, MT", status: "interviewing", applied: 8, followUp: toThursday, resume: marisolResume, notes: "Interview Thursday 10am. Wear the boots." });
 await share(marisol, "resume", 7); await share(marisol, "applications", 7);
-await note(marisol, alma, "meeting", "Interview at Nomad GCS set for Thursday 10am. Sent her the Job Service Montana interview-prep link and we walked through the availability question.", 1, true);
+await note(marisol, alma, "meeting", "Interview with Lincoln County set for Thursday 10am. Sent her the Job Service Montana interview-prep link and we walked through the availability question.", 1, true);
 
 // 6. Placed. Northwest Community Health Center: a real employer and a real referral partner.
 const terrell = await person("Terrell Judd", 6, 5, russ);
@@ -165,5 +165,5 @@ console.log(`Montana demo cohort: ${n} fictional participants.
   2 Colton Reese    resume drafted 33 days ago, NOT shared, quiet (Russ)
   3 Priya Raines    resume shared + reviewed; saved Cabinet Peaks Medical Center (Alma)
   4 Wes Duvall      tailored + applied to Flathead County Government; shares NOTHING yet -> live story (Russ)
-  5 Marisol Vance   interviewing at Nomad GCS; resume + applications shared; visible note (Alma)
+  5 Marisol Vance   interviewing at Lincoln County Government; resume + applications shared; visible note (Alma)
   6 Terrell Judd    placed at Northwest Community Health Center; applications shared (Russ)`);
