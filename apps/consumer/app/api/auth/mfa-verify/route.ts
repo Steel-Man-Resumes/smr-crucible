@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import { auth } from "@/auth";
 import { verifySecondFactor } from "@/lib/second-factor";
+import { markEmailProven } from "@/lib/email-proof";
 import { checkAuthRateLimits, getClientIp, stepUpRateLimits } from "@/lib/auth-rate-limit";
 
 export const runtime = "nodejs";
@@ -89,6 +90,12 @@ export async function POST(req: Request) {
     }
     if ((upd.rowCount ?? 0) !== 1) {
       return NextResponse.json({ error: "This session has ended. Sign in again." }, { status: 401 });
+    }
+    // F3: on an account whose address was never proven, a correct code after
+    // an email-link or Google sign-in shows this person set up the two-step
+    // AND has the inbox, so the address is now proven and everything stays.
+    if ((session?.user as any)?.claim === "2fa") {
+      await markEmailProven(client, userId);
     }
     return NextResponse.json({ ok: true, method: result.method });
   } finally {

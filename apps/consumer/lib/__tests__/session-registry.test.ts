@@ -15,6 +15,7 @@ import {
   hasSecondFactor,
   isAdminPowerPath,
   mfaGateApplies,
+  sessionPending,
   revocationVerdict,
   sessionRowRequired,
   signedInWithin,
@@ -193,4 +194,21 @@ describe("second step on every sign-in method (F1)", () => {
   });
 
   // safeCallbackPath has its own suite: lib/__tests__/safe-path.test.ts
+});
+
+describe("first-proof choice holds the session like the step-up (F3)", () => {
+  it("counts a session as pending while a code or the choice is owed", () => {
+    assert.equal(sessionPending({ mfa: false, claim: null }), true);
+    assert.equal(sessionPending({ mfa: false, claim: "2fa" }), true);
+    assert.equal(sessionPending({ mfa: true, claim: "password" }), true);
+    assert.equal(sessionPending({ mfa: true, claim: null }), false);
+    assert.equal(sessionPending(null), false);
+  });
+  it("lets a held session reach only the step-up, the choice routes and the sign-in plumbing", () => {
+    assert.equal(mfaGateApplies("/api/auth/claim-password"), false);
+    assert.equal(mfaGateApplies("/api/auth/claim-reset"), false);
+    assert.equal(mfaGateApplies("/api/auth/mfa-verify"), false);
+    assert.equal(mfaGateApplies("/api/user/2fa/disable"), true);
+    assert.equal(mfaGateApplies("/api/auth/set-password"), true);
+  });
 });

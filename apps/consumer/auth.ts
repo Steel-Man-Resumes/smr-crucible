@@ -14,6 +14,7 @@ import {
   isAdminPowerPath,
   mfaGateApplies,
   nowSeconds,
+  sessionPending,
   revocationVerdict,
   sessionRowRequired,
 } from "@/lib/session-policy";
@@ -270,46 +271,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Runs before a session exists, only in the /api/auth route (Node). Return
     // true to continue, or a URL to send the person to instead.
-    async signIn({ user, account, profile, email }) {
-      const provider = account?.provider;
-      const isGoogle = provider === "google";
-      // An email-link CLICK (not the request to send one) proves the inbox.
-      const isEmailLink = provider === "resend" && !email?.verificationRequest;
-      if (!isGoogle && !isEmailLink) return true;
-
-      const guards = await import("@/lib/sign-in-guards");
-      // F2: Google must have verified the address. An unverified Google
-      // address proves nothing, so it is refused before anything else.
-      if (isGoogle && (profile as any)?.email_verified !== true) {
-        return guards.SIGN_IN_REFUSED.googleEmailUnverified;
-      }
-
-      // F3: the first proof of the inbox wipes a password or two-step that
-      // was set without proving it (lib/email-proof.ts).
-      const proofEmail = String((isGoogle ? (profile as any)?.email : user?.email) || "").trim();
-      const { applyInboxProof } = await import("@/lib/email-proof");
-      const { currentRequestContext, runAfterResponse } = await import("@/lib/session-registry");
-      const ctx = await currentRequestContext();
-      const outcome = await applyInboxProof(pool as any, proofEmail, {
-        clearPassword: true,
-        revokeSessions: true,
-        userAgent: ctx.userAgent,
-      });
-      if (outcome === "wiped" && proofEmail) {
-        const { buildCredentialsClearedEmail, sendSecurityEmail } = await import("@/lib/security-email");
-        const origin = ctx.origin || "https://refinery.steelmanresumes.com";
-        runAfterResponse(() => sendSecurityEmail(proofEmail, buildCredentialsClearedEmail({ origin })));
-      }
-
-      // F2: Google is not auto-linked into an existing account that has a
-      // password or two-step verification (unless this Google identity is
-      // already linked to it). Runs after F3, so an unproven account was just
-      // wiped and links normally.
-      if (isGoogle) {
-        return guards.checkGoogleSignIn(pool, {
-          profile,
-          providerAccountId: String(account?.providerAccountId ?? ""),
-        });
+    async signIn({ account, profile }) {
+      // F2: Google must say it verified the address. An unverified Google
+      // address proves nothing about the inbox, so it is refused. A verified
+      // one is treated like an email link (F1 step-up, F3 first-proof choice;
+      // see the jwt callback), and still auto-links by email as designed.
+      if (account?.provider === "google") {
+        const { googleEmailVerified, SIGN_IN_REFUSED } = await import("@/lib/sign-in-guards");
+        if (!googleEmailVerified(profile)) return SIGN_IN_REFUSED.googleEmailUnverified;
       }
       return true;
     },
@@ -362,10 +331,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Second step (F1): a session that signed in by email link or Google
       // into a two-step account reaches nothing but the step-up until the code
       // is entered. Pages go to the code page; API calls get 401.
-      if (session && (session.user as any)?.mfa === false && mfaGateApplies(path)) {
+      // F3: the same hold covers the first-proof choice (claim).
+      if (session && sessionPending(session.user as any) && mfaGateApplies(path)) {
         if (isApi) {
+          const passwordOwed = (session.user as any)?.claim === "password";
           return Response.json(
-            { error: "Enter your two-step code to finish signing in.", mfaRequired: true },
+            {
+              error: passwordOwed
+                ? "Confirm your password to finish signing in."
+                : "Enter your two-step code to finish signing in.",
+              mfaRequired: true,
+            },
             { status: 401 }
           );
         }
@@ -489,11 +465,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // authorize(); an email link or Google sign-in into an account with
         // two-step starts the session waiting for it (mfa: false) and the
         // middleware holds it at /login/verify until the code is entered.
-        // F3: an email-link or Google sign-in (including a brand-new account
-        // the adapter just created) proves the inbox.
+        // F3: an email-link or verified Google sign-in proves the inbox. On an
+        // account whose address was never proven, the person is asked first
+        // (claim): keep the two-step or password by entering it, or say "I
+        // didn't set this" to remove it. Nothing is removed here.
+        delete (token as any).claim;
         if (account?.provider === "resend" || account?.provider === "google") {
-          const { markEmailProven } = await import("@/lib/email-proof");
-          await markEmailProven(pool, token.sub);
+          const { readProofState, claimForInboxProof, markEmailProven } = await import("@/lib/email-proof");
+          const state = await readProofState(pool, token.sub);
+          if (state) {
+            const owed = claimForInboxProof(state);
+            if (owed === "prove") await markEmailProven(pool, token.sub);
+            else if (owed === "2fa" || owed === "password") (token as any).claim = owed;
+          }
         }
 
         const tf = await pool.query(`SELECT two_factor_enabled FROM users WHERE id = $1`, [token.sub]);
@@ -533,6 +517,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } catch {
           // Leave the claims as they were; the person can try again.
         }
+        // F3: the first-proof choice is settled only by the account itself:
+        // proven address clears the claim, and a code is no longer owed once
+        // the account has no two-step ("I didn't set this" removed it).
+        if ((token as any).claim || (token as any).mfa === false) {
+          try {
+            const u = (await sqlEdge`
+              SELECT two_factor_enabled, email_proven_at FROM users
+               WHERE id = ${token.sub}::uuid LIMIT 1`) as any[];
+            if (u.length) {
+              if (u[0].email_proven_at) delete (token as any).claim;
+              if (!u[0].two_factor_enabled && (token as any).mfa === false) (token as any).mfa = true;
+            }
+          } catch {
+            // Before migration 068 there is no claim to clear; otherwise retry later.
+          }
+        }
       }
 
       // Sessions signed in before F1 carry no `mfa` claim. One minted by an
@@ -559,6 +559,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Second step (F1): false only while the code is still owed.
         (session.user as any).mfa = (token as any).mfa !== false;
         (session.user as any).mfaAt = typeof (token as any).mfaAt === "number" ? (token as any).mfaAt : null;
+        // F3: "2fa" or "password" while the first-proof choice is owed.
+        (session.user as any).claim = (token as any).claim ?? null;
       }
       return session;
     },

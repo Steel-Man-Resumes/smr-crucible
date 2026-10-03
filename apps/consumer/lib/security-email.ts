@@ -131,8 +131,8 @@ export function buildPasswordChangedEmail(opts: {
 }
 
 /**
- * Sent when proving the inbox removed a password or two-step that had been set
- * without proving it (F3). The reader is the person who just signed in.
+ * Sent when someone signing in through the inbox chose "I didn't set this" and
+ * the password and two-step on a never-proven account were removed (F3).
  */
 export function buildCredentialsClearedEmail(opts: { origin: string }): {
   subject: string;
@@ -142,9 +142,9 @@ export function buildCredentialsClearedEmail(opts: { origin: string }): {
   const settingsUrl = `${opts.origin}/dashboard/settings`;
   const subject = "We removed a password from your Steel Man Resumes account";
   const body =
-    "You just confirmed this email address by signing in. This account had a password or " +
-    "two-step verification that was set before anyone confirmed the address, so we removed " +
-    "it and signed out every other device. Your work is still there.";
+    "You signed in with this email address and told us you did not set the password or " +
+    "two-step verification on this account. We removed them and signed out every other " +
+    "device. Your work is still there.";
   const text =
     `Hi there,\n\n${body}\n\n` +
     `To sign in with a password from now on, set one in Settings:\n${settingsUrl}\n\n` +

@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
 import { passwordProblem } from "@/lib/password-policy";
-import { applyInboxProof } from "@/lib/email-proof";
+import { UNDEFINED_COLUMN } from "@/lib/email-proof";
 import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -76,6 +76,26 @@ export async function POST(request: Request) {
           userId: update.rows[0].id,
           userAgent: request.headers.get("user-agent") || null,
         });
+        // F3: a reset by email link proves the inbox, and the password is now
+        // the owner's own. Marked proven in the same transaction (so a later
+        // email-link sign-in never asks about a password they just chose),
+        // but only when the account has no two-step: two-step on an unproven
+        // account is left for the owner to keep (by entering a code) or
+        // remove ("I didn't set up two-step") at their next email-link or
+        // Google sign-in. Nothing is removed silently. The savepoint keeps
+        // the reset working before migration 068 adds the column.
+        await client.query("SAVEPOINT inbox_proof");
+        try {
+          await client.query(
+            `UPDATE users SET email_proven_at = now()
+              WHERE id = $1 AND email_proven_at IS NULL AND NOT two_factor_enabled`,
+            [update.rows[0].id]
+          );
+          await client.query("RELEASE SAVEPOINT inbox_proof");
+        } catch (err: any) {
+          if (err?.code !== UNDEFINED_COLUMN) throw err;
+          await client.query("ROLLBACK TO SAVEPOINT inbox_proof");
+        }
       }
       await client.query("COMMIT");
 
@@ -96,20 +116,6 @@ export async function POST(request: Request) {
           [userId, userAgent]
         )
         .catch(() => {});
-      // F3: a reset by email link proves the inbox. On an account that was
-      // never proven, two-step set by whoever registered it is removed too
-      // (the password was just replaced by the owner's). Best-effort: the
-      // reset itself already succeeded.
-      try {
-        await applyInboxProof(pool, normalizedEmail, {
-          clearPassword: false,
-          revokeSessions: false, // already done above, inside the reset
-          userAgent,
-        });
-      } catch (err: any) {
-        console.error("Password reset: inbox proof step failed:", err?.message || err);
-      }
-
       const origin = new URL(request.url).origin;
       const name: string | null = update.rows[0].name || null;
       runAfterResponse(() =>

@@ -127,11 +127,25 @@ export function signedInWithin(
  */
 export const MFA_VERIFY_PATH = "/api/auth/mfa-verify";
 export const MFA_VERIFY_PAGE = "/login/verify";
+/** F3: keep the password / "I didn't set this" on a first inbox proof. */
+export const CLAIM_PASSWORD_PATH = "/api/auth/claim-password";
+export const CLAIM_RESET_PATH = "/api/auth/claim-reset";
 
-/** Whether a session still waiting for its second step is blocked on `path`. */
+const PENDING_STEP_ROUTES = new Set([MFA_VERIFY_PATH, CLAIM_PASSWORD_PATH, CLAIM_RESET_PATH]);
+
+/** Whether a session still waiting for its second step (or F3 choice) is blocked on `path`. */
 export function mfaGateApplies(path: string): boolean {
-  if (path === MFA_VERIFY_PATH) return false;
+  if (PENDING_STEP_ROUTES.has(path)) return false;
   return !authRouteSkipsSessionChecks(path);
+}
+
+/**
+ * True while a session owes a step before it can use the account: a two-step
+ * code (mfa === false), or the F3 choice on an account whose address was never
+ * proven (claim "2fa" or "password", see lib/email-proof.ts).
+ */
+export function sessionPending(user: { mfa?: unknown; claim?: unknown } | null | undefined): boolean {
+  return user?.mfa === false || user?.claim === "2fa" || user?.claim === "password";
 }
 
 /** Paths that exercise admin powers (cross-user tools, impersonation). */
