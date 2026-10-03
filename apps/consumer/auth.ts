@@ -33,8 +33,9 @@ const sqlEdge = neon(process.env.DATABASE_URL!, { fetchOptions: { cache: "no-sto
  * so. A session signed in by the server-side registry (`sit` claim) with no row
  * is refused. An older token with no row is refused only once its user has
  * swept their sessions since the registry cutoff. See lib/session-policy.ts.
+ * Exported for routes the middleware does not cover (Mini Forge import).
  */
-async function isSessionRevoked(
+export async function isSessionRevoked(
   sid: string,
   userId: string | undefined,
   signedInAt: unknown
