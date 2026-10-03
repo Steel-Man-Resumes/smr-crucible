@@ -78,6 +78,27 @@ export async function readProofState(db: Db, userId: string): Promise<ProofState
   }
 }
 
+/**
+ * Whether the account's email address has been proven (S1: two-step can only
+ * be turned on once it has). True before migration 068 runs, so nothing is
+ * blocked by a deploy that goes out ahead of it.
+ */
+export async function isEmailProven(db: Db, userId: string): Promise<boolean> {
+  try {
+    const r = await db.query(`SELECT email_proven_at FROM users WHERE id = $1`, [userId]);
+    return !!r.rows[0]?.email_proven_at;
+  } catch (err: any) {
+    if (err?.code === UNDEFINED_COLUMN) return true;
+    throw err;
+  }
+}
+
+/** The answer setup/enable give while the email is not proven yet. */
+export const EMAIL_PROOF_NEEDED = {
+  error: "Confirm your email address before you turn on two-step verification.",
+  needsEmailProof: true,
+} as const;
+
 /** Mark an account's email proven. Ignores a missing column. */
 export async function markEmailProven(db: Db, userId: string): Promise<void> {
   try {

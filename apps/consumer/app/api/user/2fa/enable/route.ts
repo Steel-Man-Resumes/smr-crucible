@@ -4,6 +4,7 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { matchTotpStep, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
 import { consumeTotpStep } from "@/lib/second-factor";
+import { EMAIL_PROOF_NEEDED, isEmailProven } from "@/lib/email-proof";
 import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -20,6 +21,11 @@ export async function POST(req: Request) {
 
   const client = await pool.connect();
   try {
+    // S1: same rule as setup (an account whose email was never proven cannot
+    // turn two-step on).
+    if (!(await isEmailProven(client, session.user.id))) {
+      return NextResponse.json(EMAIL_PROOF_NEEDED, { status: 409 });
+    }
     const r = await client.query(
       `SELECT secret, secret_iv, secret_tag, secret_key_version FROM user_two_factor WHERE user_id = $1`,
       [session.user.id]

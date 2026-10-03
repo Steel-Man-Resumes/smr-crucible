@@ -13,7 +13,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  EMAIL_PROOF_NEEDED,
   claimForInboxProof,
+  isEmailProven,
   markEmailProven,
   readProofState,
   wipeUnprovenCredentials,
@@ -93,5 +95,27 @@ describe("wipeUnprovenCredentials (\"I didn't set this\")", () => {
     assert.equal(await wipeUnprovenCredentials(db, { userId: "u1", keepSid: "mine" }), "already-proven");
     assert.ok(!calls.some((c) => /DELETE|user_session/.test(c.text))); // no OAuth rows removed either
     assert.equal(calls[calls.length - 1].text, "ROLLBACK");
+  });
+});
+
+describe("two-step needs a proven email (S1)", () => {
+  function db(row: { email_proven_at: unknown } | null, missingColumn = false): Db {
+    return {
+      async query() {
+        if (missingColumn) throw Object.assign(new Error("column does not exist"), { code: "42703" });
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      },
+    };
+  }
+  it("blocks turning two-step on until the address is proven", async () => {
+    assert.equal(await isEmailProven(db({ email_proven_at: null }), "u1"), false);
+    assert.equal(await isEmailProven(db({ email_proven_at: new Date() }), "u1"), true);
+  });
+  it("blocks nothing before migration 068 runs", async () => {
+    assert.equal(await isEmailProven(db(null, true), "u1"), true);
+  });
+  it("tells the settings page why, in plain words", () => {
+    assert.equal(EMAIL_PROOF_NEEDED.needsEmailProof, true);
+    assert.ok(!/\u2014| -- /.test(EMAIL_PROOF_NEEDED.error));
   });
 });

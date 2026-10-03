@@ -25,7 +25,7 @@ import { DecisionLogViewer } from "@/components/DecisionLogViewer";
 import { LoginHistoryCard } from "@/components/LoginHistoryCard";
 import { AccessibilitySettingsSection } from "@/components/AccessibilitySettingsSection";
 import { AvatarSettingsSection } from "@/components/AvatarSettingsSection";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
@@ -1353,7 +1353,11 @@ function TwoFactorCard({
   const [err, setErr] = useState("");
   const [showDisable, setShowDisable] = useState(false);
   const [disableToken, setDisableToken] = useState("");
-  const { update: updateSession } = useSession();
+  const { data: sessionData, update: updateSession } = useSession();
+  // S1: two-step needs a confirmed email; the server says so with a 409.
+  const [needsEmailProof, setNeedsEmailProof] = useState(false);
+  const [proofLink, setProofLink] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const accountEmail = sessionData?.user?.email || "";
 
   async function startSetup() {
     setBusy(true);
@@ -1365,11 +1369,29 @@ function TwoFactorCard({
         setQr(d.qr);
         setSecret(d.secret);
         setMode("setup");
+      } else if (r.status === 409 && d.needsEmailProof) {
+        setNeedsEmailProof(true);
       } else {
         setErr(d.error || "Could not start setup.");
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  // An email-link sign-in to the account's own address is the proof.
+  async function sendProofLink() {
+    if (!accountEmail) return;
+    setProofLink("sending");
+    try {
+      const res = await signIn("resend", {
+        email: accountEmail,
+        redirect: false,
+        callbackUrl: "/dashboard/settings",
+      });
+      setProofLink(res?.error ? "failed" : "sent");
+    } catch {
+      setProofLink("failed");
     }
   }
 
@@ -1452,11 +1474,33 @@ function TwoFactorCard({
       {err && <p className="text-sm text-t-red mt-3">{err}</p>}
 
       {/* Off, idle -> offer to turn on */}
-      {!enabled && mode === "idle" && (
+      {!enabled && mode === "idle" && !needsEmailProof && (
         <div className="mt-4">
           <TBtn onClick={startSetup} disabled={busy}>
             {busy ? "starting..." : "turn on two-step"}
           </TBtn>
+        </div>
+      )}
+
+      {/* S1: email not confirmed yet -> send a sign-in link to the account's own address */}
+      {!enabled && needsEmailProof && (
+        <div className="mt-4 space-y-3 border border-t-line p-4">
+          <p className="font-semibold text-t-white">Confirm your email first</p>
+          <p className="text-sm text-t-phos-dim">
+            Two-step verification needs a confirmed email address. We&apos;ll send a sign-in
+            link to {accountEmail || "your email address"}. Open it, and then you can turn on
+            two-step here.
+          </p>
+          {proofLink === "sent" ? (
+            <p className="text-sm text-t-phos">Check your email for the link.</p>
+          ) : (
+            <TBtn onClick={sendProofLink} disabled={proofLink === "sending" || !accountEmail}>
+              {proofLink === "sending" ? "sending..." : "Email me a link"}
+            </TBtn>
+          )}
+          {proofLink === "failed" && (
+            <p className="text-sm text-t-red">We couldn&apos;t send the link. Try again in a few minutes.</p>
+          )}
         </div>
       )}
 
