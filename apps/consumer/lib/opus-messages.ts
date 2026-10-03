@@ -13,7 +13,7 @@ const CLIENT_MESSAGES: Record<string, string> = {
   dashboard:
     "Your Forge results are loaded. Find a job you like and I'll build your resume for it.",
   "dashboard-no-forge":
-    "I'm t.ROY. Start with The Forge. Give me 10 minutes and I'll have everything I need to build you a great resume.",
+    "I'm t.ROY. Start with The Forge. It's one sitting, and then I'll have everything I need to build you a great resume.",
   "application-tailor":
     "Numbers make a bullet stronger. Use one only if it's true. Say what you did and how it turned out. I'll help.",
   jobs:
