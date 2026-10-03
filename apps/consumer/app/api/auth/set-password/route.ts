@@ -6,6 +6,7 @@ import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
 import { FRESH_SIGN_IN_SECONDS, signedInWithin } from "@/lib/session-policy";
 import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 import { passwordProblem } from "@/lib/password-policy";
+import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -47,6 +48,19 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: "Enter your current password to change it.", needsCurrent: true },
           { status: 400 }
+        );
+      }
+      // The current-password check is rate limited like the other re-checks
+      // (2FA off, export, delete): without it a held session could guess the
+      // current password without limit, and the first right guess also
+      // rotates it.
+      const reauthLimit = await checkAuthRateLimits(
+        reauthRateLimits(getClientIp(req), session.user.id)
+      );
+      if (!reauthLimit.allowed) {
+        return NextResponse.json(
+          { error: "Too many attempts. Wait a few minutes and try again." },
+          { status: 429 }
         );
       }
       const ok = await bcrypt.compare(currentPassword, existingHash);
