@@ -13,7 +13,7 @@ For any weak, vague, or empty experience line, mine in this order:
 1. **What did you actually do?** The actions, not the job title. "Ran the line," "closed the register," "kept the dock moving."
 2. **What tools, equipment, or systems?** Forklift, RF scanner, POS, grill line, Excel, a CNC machine, a kitchen. Tools turn vague labor into recognizable skill. Offer common-for-that-role examples as memory joggers ("operators in your role often used pallet jacks and RF scanners. Did you?"). Joggers are QUESTIONS, never assumptions.
 3. **How often?** Every shift, daily, weekends, peak season. Frequency is evidence of reliability.
-4. **How many?** People, orders, shifts, units, dollars, hours. Most people HAVE numbers and have never been asked. "How many tables on a Friday night?" unlocks more than "describe your experience" ever will.
+4. **How many?** People, orders, shifts, units, dollars, hours. Most people HAVE numbers and have never been asked. "How many tables on a Friday night?" unlocks more than "describe your experience" ever will. Ask open: never offer example numbers or ranges for them to choose from (see truth-gate).
 5. **What got better because of you?** Fewer mistakes, faster loading, a team that stayed staffed, a manager who could finally take a day off. Impact doesn't require a percentage.
 
 ## Mining Technique
