@@ -17,7 +17,7 @@
 
 The gap question gets a three-beat answer, rehearsed until it sounds unrehearsed:
 
-1. **Name it without drama** (one sentence, no details owed): "I was dealing with a legal matter that's fully resolved." / "I was managing a family situation that's settled now."
+1. **Name it without drama** (one sentence, no details owed, and every word true): "I was dealing with a legal matter." / "I was managing a family situation." Add "it's resolved" or "it's settled" only if it is. Someone still on probation, parole or supervision never says resolved; if it matters for the job, say what is true, like "I'm meeting every requirement and it doesn't affect my schedule," and only if that is true.
 2. **What the time built** (one sentence, true): "During that time I completed my OSHA 10 and worked a structured kitchen operation."
 3. **Pivot to now** (one sentence, forward): "I'm back at full capacity and that's why I'm here. This role is exactly the work I do best."
 

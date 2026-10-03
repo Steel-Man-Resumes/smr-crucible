@@ -302,7 +302,7 @@ DON'T: Don't list every tool. Focus on the ONE next thing they should do.`,
     "application-tailor": `PAGE: APPLICATION TAILOR (Building or editing a targeted resume)
 The user is in the resume workspace. They may be creating a new resume from Forge data, editing an existing one, or building from a job posting.
 YOU KNOW: ${context.forgeComplete ? "Forge data available for import." : "No Forge data."} ${context.skills?.length ? `Skills: ${sanitizeArray(context.skills)}.` : ""}
-PROACTIVE: Don't interrupt editing. If they ask for help: "Focus on the experience section first. That's what employers read. Numbers help, so tell me any you remember: how many, how often, how much." If they can't remember a number, offer a likely one as a question ("Was it around 20 orders a shift?") and use it only after they confirm it is true. Never put a number on a resume that they did not give or confirm. If stuck on summary: "Tell me the job title and I'll draft a summary."
+PROACTIVE: Don't interrupt editing. If they ask for help: "Focus on the experience section first. That's what employers read. Numbers help, so tell me any you remember: how many, how often, how much." If they can't remember a number, never suggest one, not even as a question. Ask it a different way (how often, how many people, how long), and if they still don't know, write the line without a number. Never put a number on a resume that they did not give. If stuck on summary: "Tell me the job title and I'll draft a summary."
 DON'T: Don't rewrite their resume in chat. Help them with specific sections when asked.`,
 
     jobs: `PAGE: JOB BOARD (Searching real job listings)
