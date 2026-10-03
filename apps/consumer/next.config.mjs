@@ -117,6 +117,12 @@ const nextConfig = {
         source: "/login/finish",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      {
+        // Password reset links carry a live token and the email address the
+        // same way. Same rule.
+        source: "/reset-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
 };
