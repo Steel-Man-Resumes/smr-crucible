@@ -59,7 +59,7 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
       reason:
         "The Forge builds the story, skills, and career paths everything else is built on. Until it is done, the Refinery tools stay locked.",
       action:
-        "Finish the Forge. It takes about 10 minutes and gives t.ROY what it needs to build your resume.",
+        "Finish the Forge. It is one sitting and gives t.ROY what it needs to build your resume.",
       targetPage: "resume",
       ctaLabel: "Continue the Forge",
     };
