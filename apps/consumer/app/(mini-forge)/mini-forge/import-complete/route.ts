@@ -17,6 +17,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { getTabletSessionForImport, TABLET_COOKIE } from "@/lib/tablet-session";
 import { saveForgeSession } from "@crucible/core";
+import { sessionPending } from "@/lib/session-policy";
 
 // Reads the session and a cookie, writes to the DB: never static, never cached.
 export const dynamic = "force-dynamic";
@@ -56,6 +57,17 @@ export async function GET(request: NextRequest) {
       request,
       "/login?from=mini-forge&callbackUrl=" +
         encodeURIComponent("/mini-forge/import-complete"),
+      false
+    );
+  }
+
+  // A session that still owes its two-step code or the first-proof choice
+  // (F1/F3) must finish that before anything is written to the account. The
+  // cookie is kept, so the import runs when they come back here.
+  if (sessionPending(session.user as any)) {
+    return go(
+      request,
+      "/login/verify?callbackUrl=" + encodeURIComponent("/mini-forge/import-complete"),
       false
     );
   }
