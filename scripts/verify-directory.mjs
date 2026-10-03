@@ -231,6 +231,33 @@ try {
   s = await standing(e3.p);
   check("when the contact opts out, the relationship is no longer live", s?.confidence === "likely", JSON.stringify(s));
 
+  // 070: a relationship through a named outside partner (a workforce office vouching for an employer).
+  const viaPartner = await org(`${P} Foxtrot Workforce Board`, { kind: "ecosystem_partner" });
+  const vp = await fresh("Foxtrot Vouched");
+  const [vRel] = await owner`INSERT INTO employer_relationship (org_id, avenue, via_org_id, started_on, cadence_days)
+                             VALUES (${vp.o.id}, 'workforce_office', ${viaPartner.id}, ${daysAgo(20)}, 90) RETURNING id`;
+  await owner`INSERT INTO employer_relationship_confirmation (org_id, relationship_id, confirmed_on, method, confirmed_by)
+              VALUES (${vp.o.id}, ${vRel.id}, ${daysAgo(10)}, 'in_person', 'verify-directory')`;
+  await evidence({ org: vp.o.id, place: vp.p, claim: "staff_attestation", kind: "staff_attestation", url: null, confidence: "certain", rel: vRel.id });
+  s = await standing(vp.p);
+  check("070: a partner's vouch on a live relationship reads 'vouched_here', certain, and earns the mark",
+        s?.standing === "vouched_here" && s?.confidence === "certain" && s?.earns_mark === true, JSON.stringify(s));
+  const vStale = await fresh("Foxtrot Lapsed");
+  const [vsRel] = await owner`INSERT INTO employer_relationship (org_id, avenue, via_org_id, started_on, cadence_days)
+                              VALUES (${vStale.o.id}, 'job_developer', ${viaPartner.id}, ${daysAgo(300)}, 90) RETURNING id`;
+  await owner`INSERT INTO employer_relationship_confirmation (org_id, relationship_id, confirmed_on, method, confirmed_by)
+              VALUES (${vStale.o.id}, ${vsRel.id}, ${daysAgo(200)}, 'partner_report', 'verify-directory')`;
+  await evidence({ org: vStale.o.id, place: vStale.p, claim: "staff_attestation", kind: "staff_attestation", url: null, confidence: "certain", rel: vsRel.id, observed: daysAgo(100) });
+  s = await standing(vStale.p);
+  check("070: a lapsed partner relationship drops the vouch to 'likely'", s?.confidence === "likely", JSON.stringify(s));
+  await refused("070: a relationship cannot run through another employer", () =>
+    owner`INSERT INTO employer_relationship (org_id, avenue, via_org_id, started_on) VALUES (${vp.o.id}, 'workforce_office', ${d.o.id}, ${daysAgo(5)})`);
+  const govPartner = await org(`${P} Foxtrot County`, { kind: "government" });
+  await refused("070: a relationship cannot run through the employer itself", () =>
+    owner`INSERT INTO employer_relationship (org_id, avenue, via_org_id, started_on) VALUES (${govPartner.id}, 'workforce_office', ${govPartner.id}, ${daysAgo(5)})`);
+  await refused("070: a workforce-office relationship still has to name who it runs through", () =>
+    owner`INSERT INTO employer_relationship (org_id, avenue, started_on) VALUES (${vp.o.id}, 'workforce_office', ${daysAgo(5)})`);
+
   const pooled = await fresh("Pooled Confidence");
   const pr = await liveRelationship(pooled.o.id, 5);
   await evidence({ org: pooled.o.id, claim: "confirmed_corporate", confidence: "certain", rel: pr.rel });
