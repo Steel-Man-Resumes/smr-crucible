@@ -104,9 +104,13 @@ export type CurrentSessionRead =
  *  - A cookie that reads as a session: its email, whether it is revoked
  *    (a failed revocation lookup counts as not revoked, the same fail-open
  *    rule the middleware uses), and whether it still owes a step.
- *  - A cookie that does not read as a session (garbled, signed with an old
- *    secret) or a read that throws: "unreadable", which the caller refuses
- *    (the person can sign out, which clears it, and try again).
+ *  - A cookie that reads as NO session (expired, signed with an old secret,
+ *    garbled): "none". Auth.js links an OAuth identity only to a session it
+ *    can decode (handle-login decodes the same cookie), so there is no
+ *    account to link into and no cross-account risk; refusing would trap
+ *    everyone whose 30-day session simply expired.
+ *  - A read that THROWS: "unreadable" (state unknown), which the caller
+ *    refuses; the person can sign out, which clears the cookie, and retry.
  */
 export async function readCurrentSessionForLink(deps: {
   hasSessionCookie: () => Promise<boolean>;
@@ -128,7 +132,8 @@ export async function readCurrentSessionForLink(deps: {
   } catch {
     return { state: "unreadable" };
   }
-  if (!user?.id) return { state: "unreadable" };
+  // Present but not a session (expired, old secret, garbled): nothing to link into.
+  if (!user?.id) return { state: "none" };
 
   let revoked = false;
   if (user.sid) {

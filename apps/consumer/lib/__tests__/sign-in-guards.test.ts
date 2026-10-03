@@ -175,10 +175,22 @@ describe("reading the browser's session inside the Google sign-in (R3 G-1)", () 
     assert.equal(await gate({ getSession: async () => sessionUser({ mfa: false }) }), SIGN_IN_REFUSED.sessionNotUsable);
   });
 
-  it("a garbled cookie (reads as no session): refused, without throwing", async () => {
+  it("a cookie that reads as no session (expired, old secret, garbled): allowed through", async () => {
+    // Auth.js decodes the same cookie to decide what to link to; null means
+    // nothing to link into, so this is an ordinary signed-out Google sign-in.
+    for (const getSession of [async () => null, async () => ({}), async () => ({ user: {} })]) {
+      const read = await readCurrentSessionForLink(deps({ getSession }));
+      assert.deepEqual(read, { state: "none" });
+      assert.equal(googleSignInGate({ profile, linkedAccountEmail: null, current: read }), true);
+    }
+  });
+
+  it("an expired-session cookie still cannot sign into an account with another email", async () => {
     const read = await readCurrentSessionForLink(deps({ getSession: async () => null }));
-    assert.deepEqual(read, { state: "unreadable" });
-    assert.equal(googleSignInGate({ profile, linkedAccountEmail: null, current: read }), SIGN_IN_REFUSED.sessionNotUsable);
+    assert.equal(
+      googleSignInGate({ profile, linkedAccountEmail: "other@example.org", current: read }),
+      SIGN_IN_REFUSED.googleEmailMismatch
+    );
   });
 
   it("a session read that throws: refused, without throwing", async () => {
