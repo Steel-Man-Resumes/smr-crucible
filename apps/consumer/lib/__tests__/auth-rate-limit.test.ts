@@ -16,6 +16,8 @@ import {
   checkAuthRateLimit,
   checkMemoryRateLimit,
   hashRateLimitKey,
+  refundMemoryRateLimit,
+  signInResponseFailed,
   setAuthRateLimitStore,
   slidingWindowDecision,
   windowStartFor,
@@ -114,30 +116,30 @@ describe("password sign-ins", () => {
   });
 });
 
-describe("magic-link requests are unchanged", () => {
-  it("still uses the original keys and the original hourly limits", () => {
+describe("email-link requests (R2 S3: 30 per IP, 5 per email, per hour)", () => {
+  it("keeps the original keys with the new hourly limits", () => {
     const limits = signInRateLimits(MAGIC_LINK_PATH, "198.51.100.7", "a@example.org");
     assert.equal(limits.ip.key, "auth:ip:198.51.100.7");
     assert.equal(limits.email.key, "auth:email:a@example.org");
-    assert.deepEqual(limits.ip.config, { maxRequests: 5, windowMs: 3_600_000 });
-    assert.deepEqual(limits.email.config, { maxRequests: 3, windowMs: 3_600_000 });
+    assert.deepEqual(limits.ip.config, { maxRequests: 30, windowMs: 3_600_000 });
+    assert.deepEqual(limits.email.config, { maxRequests: 5, windowMs: 3_600_000 });
   });
 
-  it("refuses the 6th request from one IP within the hour", () => {
+  it("refuses the 31st request from one IP within the hour", () => {
     const ip = freshIp();
     const results: boolean[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 31; i++) {
       clock += 60_000;
       results.push(attempt(MAGIC_LINK_PATH, ip, `link${i}-${ip}@example.org`));
     }
-    assert.deepEqual(results, [...Array(5).fill(true), false]);
+    assert.deepEqual(results, [...Array(30).fill(true), false]);
   });
 
-  it("refuses the 4th request for one email within the hour", () => {
+  it("refuses the 6th request for one email within the hour", () => {
     const email = `inbox-${freshIp()}@example.org`;
     const results: boolean[] = [];
-    for (let i = 0; i < 4; i++) results.push(attempt(MAGIC_LINK_PATH, freshIp(), email));
-    assert.deepEqual(results, [true, true, true, false]);
+    for (let i = 0; i < 6; i++) results.push(attempt(MAGIC_LINK_PATH, freshIp(), email));
+    assert.deepEqual(results, [true, true, true, true, true, false]);
   });
 
   it("treats any email-bearing POST that is not the password callback as a magic link", () => {
@@ -151,18 +153,90 @@ describe("the two kinds do not share a bucket", () => {
     const ip = freshIp();
     const email = `both-${ip}@example.org`;
 
-    // Exhaust the magic-link allowance for this email (3) from this IP.
-    for (let i = 0; i < 3; i++) assert.equal(attempt(MAGIC_LINK_PATH, ip, email), true);
+    // Exhaust the magic-link allowance for this email (5) from this IP.
+    for (let i = 0; i < 5; i++) assert.equal(attempt(MAGIC_LINK_PATH, ip, email), true);
     assert.equal(attempt(MAGIC_LINK_PATH, ip, email), false);
 
     // Password sign-in for the same person from the same IP is untouched
-    // (10 per email per 15 minutes is the binding limit here).
+    // (10 failures per email per 15 minutes is the binding limit here).
     for (let i = 0; i < 10; i++) assert.equal(attempt(PASSWORD_PATH, ip, email), true);
     assert.equal(attempt(PASSWORD_PATH, ip, email), false);
 
     // And spending the password allowance did not add to the magic-link count:
-    // a different email from this IP still has a magic-link request left (4 of 5 used).
+    // a different email from this IP still has magic-link requests left.
     assert.equal(attempt(MAGIC_LINK_PATH, ip, `other-${ip}@example.org`), true);
+  });
+});
+
+/**
+ * What the sign-in route does for one password POST under R2 S3: count on
+ * both keys, run the sign-in, hand both counts back if it succeeded.
+ */
+function passwordSignIn(ip: string, email: string, succeeds: boolean): boolean {
+  const limits = signInRateLimits(PASSWORD_PATH, ip, email);
+  const a = checkMemoryRateLimit(limits.ip.key, limits.ip.config);
+  if (!a.allowed) return false;
+  const b = checkMemoryRateLimit(limits.email.key, limits.email.config);
+  if (!b.allowed) {
+    refundMemoryRateLimit(a.ticket as any);
+    return false;
+  }
+  if (succeeds) {
+    refundMemoryRateLimit(a.ticket as any);
+    refundMemoryRateLimit(b.ticket as any);
+  }
+  return true;
+}
+
+describe("password limits count failed attempts only (R2 S3)", () => {
+  it("never refuses successful sign-ins, however many come from one IP", () => {
+    const ip = freshIp();
+    const results: boolean[] = [];
+    for (let i = 0; i < 100; i++) {
+      clock += 1_000;
+      results.push(passwordSignIn(ip, `learner${i}-${ip}@example.org`, true));
+    }
+    assert.deepEqual(results, Array(100).fill(true));
+  });
+
+  it("refuses the 31st failure from one IP within 15 minutes", () => {
+    const ip = freshIp();
+    const results: boolean[] = [];
+    for (let i = 0; i < 31; i++) results.push(passwordSignIn(ip, `p${i}-${ip}@example.org`, false));
+    assert.deepEqual(results, [...Array(30).fill(true), false]);
+  });
+
+  it("refuses the 11th failure on one account, from any number of IPs", () => {
+    const email = `target-${freshIp()}@example.org`;
+    const results: boolean[] = [];
+    for (let i = 0; i < 11; i++) results.push(passwordSignIn(freshIp(), email, false));
+    assert.deepEqual(results, [...Array(10).fill(true), false]);
+  });
+
+  it("a success in between does not use up the allowance", () => {
+    const email = `mixed-${freshIp()}@example.org`;
+    for (let i = 0; i < 9; i++) assert.equal(passwordSignIn(freshIp(), email, false), true);
+    for (let i = 0; i < 5; i++) assert.equal(passwordSignIn(freshIp(), email, true), true);
+    assert.equal(passwordSignIn(freshIp(), email, false), true); // 10th failure
+    assert.equal(passwordSignIn(freshIp(), email, false), false); // 11th refused
+  });
+});
+
+describe("signInResponseFailed", () => {
+  it("reads a failed credentials sign-in (JSON url or redirect with error=)", async () => {
+    assert.equal(await signInResponseFailed(Response.json({ url: "https://x.example/login?error=CredentialsSignin&code=credentials" })), true);
+    assert.equal(
+      await signInResponseFailed(new Response(null, { status: 302, headers: { location: "/login?error=CredentialsSignin" } })),
+      true
+    );
+  });
+  it("reads a successful one", async () => {
+    assert.equal(await signInResponseFailed(Response.json({ url: "https://x.example/dashboard" })), false);
+    assert.equal(await signInResponseFailed(new Response(null, { status: 302, headers: { location: "/dashboard" } })), false);
+  });
+  it("counts anything unreadable as a failure", async () => {
+    assert.equal(await signInResponseFailed(new Response("oops", { status: 500 })), true);
+    assert.equal(await signInResponseFailed(new Response("not json", { status: 200 })), true);
   });
 });
 
@@ -247,10 +321,10 @@ describe("durable store (F7)", () => {
 
   it("uses the active store, and falls back to in-memory (not unlimited) when it fails", async () => {
     try {
-      setAuthRateLimitStore({ hit: async () => ({ allowed: false, resetIn: 5000 }) });
+      setAuthRateLimitStore({ hit: async () => ({ allowed: false, resetIn: 5000 }), refund: async () => {} });
       assert.equal((await checkAuthRateLimit("k-store", cfg)).allowed, false);
 
-      setAuthRateLimitStore({ hit: async () => { throw new Error("db down"); } });
+      setAuthRateLimitStore({ hit: async () => { throw new Error("db down"); }, refund: async () => {} });
       const key = `k-fallback-${freshIp()}`;
       const small = { maxRequests: 2, windowMs: 60_000 };
       const results: boolean[] = [];

@@ -17,7 +17,12 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { markEmailProven } from "@/lib/email-proof";
-import { checkAuthRateLimits, getClientIp, stepUpRateLimits } from "@/lib/auth-rate-limit";
+import {
+  checkAuthRateLimits,
+  getClientIp,
+  refundAuthRateLimits,
+  stepUpRateLimits,
+} from "@/lib/auth-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -61,6 +66,7 @@ export async function POST(req: Request) {
       );
     }
     await markEmailProven(client, userId);
+    await refundAuthRateLimits(limit.tickets); // only wrong passwords count
     return NextResponse.json({ ok: true });
   } finally {
     client.release();

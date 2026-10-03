@@ -19,7 +19,12 @@ import { Pool } from "@neondatabase/serverless";
 import { auth } from "@/auth";
 import { verifySecondFactor } from "@/lib/second-factor";
 import { markEmailProven } from "@/lib/email-proof";
-import { checkAuthRateLimits, getClientIp, stepUpRateLimits } from "@/lib/auth-rate-limit";
+import {
+  checkAuthRateLimits,
+  getClientIp,
+  refundAuthRateLimits,
+  stepUpRateLimits,
+} from "@/lib/auth-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -97,6 +102,8 @@ export async function POST(req: Request) {
     if ((session?.user as any)?.claim === "2fa") {
       await markEmailProven(client, userId);
     }
+    // Only failed codes count toward the 5 per 15 minutes.
+    await refundAuthRateLimits(limit.tickets);
     return NextResponse.json({ ok: true, method: result.method });
   } finally {
     client.release();

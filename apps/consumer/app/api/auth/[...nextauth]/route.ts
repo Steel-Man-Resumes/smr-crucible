@@ -4,9 +4,11 @@ import {
   checkAuthRateLimit,
   getClientIp,
   isValidEmail,
+  refundAuthRateLimits,
   signInEmailFromBody,
   signInPostRequiresEmail,
   signInRateLimits,
+  signInResponseFailed,
 } from "@/lib/auth-rate-limit";
 
 export const { GET } = handlers;
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
   // Rate limit by email (prevents spamming a single address)
   const emailCheck = await checkAuthRateLimit(limits.email.key, limits.email.config);
   if (!emailCheck.allowed) {
+    await refundAuthRateLimits([ipCheck.ticket]); // this attempt never ran
     return NextResponse.json(
       { error: "Too many sign-in attempts for this email. Please try again later." },
       {
@@ -92,5 +95,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return handlers.POST!(request);
+  const res = await handlers.POST!(request);
+
+  // Password sign-ins count FAILED attempts only (30 per IP, 10 per email per
+  // 15 minutes): a successful sign-in, including one with a correct two-step
+  // code, hands both counts back. Email-link requests keep counting every
+  // send.
+  if (pathname.replace(/\/+$/, "").endsWith("/callback/password-login")) {
+    if (!(await signInResponseFailed(res))) {
+      await refundAuthRateLimits([ipCheck.ticket, emailCheck.ticket]);
+    }
+  }
+  return res;
 }

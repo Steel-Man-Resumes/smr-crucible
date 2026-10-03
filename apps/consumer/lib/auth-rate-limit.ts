@@ -51,25 +51,40 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
+/**
+ * One counted attempt, so it can be handed back (refunded) when the attempt
+ * turns out to be a success: the password limits count FAILED attempts only.
+ * Counting first and refunding on success (instead of checking, then counting
+ * failures afterwards) keeps the limit atomic under a burst of parallel tries.
+ */
+export type RateLimitTicket =
+  | { store: "memory"; key: string; at: number }
+  | { store: "postgres"; hashedKey: string; windowStart: number };
+
 export interface RateLimitResult {
   allowed: boolean;
   resetIn: number;
+  /** Present when this attempt was counted (allowed). */
+  ticket?: RateLimitTicket;
 }
 
-// 5 magic link requests per IP per hour, 3 per email per hour
+// Email links (sign-in and reset): 30 per IP per hour, 5 per email per hour.
+// Per IP fits a lab or library sending links from one address; per email
+// keeps any one inbox from being flooded.
 export const AUTH_LIMITS = {
-  magicLinkPerIp: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
-  magicLinkPerEmail: { maxRequests: 3, windowMs: 3_600_000 } as RateLimitConfig,
+  magicLinkPerIp: { maxRequests: 30, windowMs: 3_600_000 } as RateLimitConfig,
+  magicLinkPerEmail: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
   // Password sign-ins per IP. A program computer lab, a library or a
   // workforce center puts a whole room behind one address, and these counters
   // are shared by every instance, so this has to fit a room signing in at once.
   // The per-email limit below is the brute-force guard on any one account.
-  passwordPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
+  // FAILED password sign-ins only: a successful sign-in hands its count back.
+  passwordPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30 failures/15min
   // The login form's precheck has its OWN per-IP counter, so one sign-in
   // (precheck, then the real sign-in) spends the per-IP password budget once.
   precheckPerIp: { maxRequests: 60, windowMs: 900_000 } as RateLimitConfig, // 60/15min
   // Brute-force ceiling on one account; a real person retyping a password fits well inside it.
-  passwordPerEmail: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
+  passwordPerEmail: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10 failures/15min
   // Registration: deliberately generous per-IP -- a classroom or conference
   // room signs up behind one NAT, and real people must never be choked.
   // 120/hr/IP passes any human burst; sustained bot floods do not look human.
@@ -87,8 +102,7 @@ export const AUTH_LIMITS = {
   // Second step after an email link or Google sign-in. Keyed by the signed-in
   // user, which only a session holder can spend: keyed by email, anyone who
   // knows the address could burn it with wrong passwords and lock the person
-  // out of every sign-in method. A successful code ends the step, so 5
-  // attempts is 5 failures.
+  // out of every sign-in method. Failures only: a correct code is handed back.
   stepUpPerUser: { maxRequests: 5, windowMs: 900_000 } as RateLimitConfig, // 5/15min
   stepUpPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
 };
@@ -117,17 +131,29 @@ export function checkMemoryRateLimit(key: string, config: RateLimitConfig): Rate
   }
 
   entry.timestamps.push(now);
-  return { allowed: true, resetIn: config.windowMs };
+  return { allowed: true, resetIn: config.windowMs, ticket: { store: "memory", key, at: now } };
+}
+
+/** Hand back one in-memory count (the attempt succeeded). */
+export function refundMemoryRateLimit(ticket: { key: string; at: number }): void {
+  const entry = store.get(ticket.key);
+  if (!entry) return;
+  const i = entry.timestamps.lastIndexOf(ticket.at);
+  if (i >= 0) entry.timestamps.splice(i, 1);
 }
 
 /** Where counters are kept. */
 export interface RateLimitStore {
   hit(key: string, config: RateLimitConfig): Promise<RateLimitResult>;
+  refund(ticket: RateLimitTicket): Promise<void>;
 }
 
 export const memoryRateLimitStore: RateLimitStore = {
   async hit(key, config) {
     return checkMemoryRateLimit(key, config);
+  },
+  async refund(ticket) {
+    if (ticket.store === "memory") refundMemoryRateLimit(ticket);
   },
 };
 
@@ -198,12 +224,23 @@ export const postgresRateLimitStore: RateLimitStore = {
       ]
     )) as any[];
     const row = rows[0] || {};
-    return slidingWindowDecision({
+    const decision = slidingWindowDecision({
       prev: Number(row.prev) || 0,
       cur: Number(row.cur) || 1,
       now,
       config,
     });
+    return decision.allowed
+      ? { ...decision, ticket: { store: "postgres", hashedKey: hashed, windowStart: start } }
+      : decision;
+  },
+  async refund(ticket) {
+    if (ticket.store !== "postgres") return;
+    await sql()(
+      `UPDATE auth_rate_limit SET count = GREATEST(count - 1, 0)
+        WHERE key = $1 AND window_start = $2::timestamptz`,
+      [ticket.hashedKey, new Date(ticket.windowStart).toISOString()]
+    );
   },
 };
 
@@ -236,15 +273,68 @@ export async function checkAuthRateLimit(
   }
 }
 
-/** Check several limits in order; the first refusal wins. Each one counts the attempt. */
+/**
+ * Hand back a counted attempt because it succeeded (password and two-step
+ * limits count failures only). Best-effort: a failed refund only means one
+ * extra count until the window passes.
+ */
+export async function refundAuthRateLimit(ticket: RateLimitTicket | undefined): Promise<void> {
+  if (!ticket) return;
+  try {
+    if (ticket.store === "memory") refundMemoryRateLimit(ticket);
+    else await (activeStore ?? postgresRateLimitStore).refund(ticket);
+  } catch (err: any) {
+    console.error("[auth-rate-limit] refund failed:", err?.message || err);
+  }
+}
+
+export async function refundAuthRateLimits(tickets: (RateLimitTicket | undefined)[]): Promise<void> {
+  for (const t of tickets) await refundAuthRateLimit(t);
+}
+
+/**
+ * Check several limits in order; the first refusal wins. Each one counts the
+ * attempt; if a later one refuses, the earlier counts are handed back (the
+ * attempt never ran). `tickets` lets the caller refund on success.
+ */
 export async function checkAuthRateLimits(
   checks: { key: string; config: RateLimitConfig }[]
-): Promise<RateLimitResult> {
+): Promise<RateLimitResult & { tickets: RateLimitTicket[] }> {
+  const tickets: RateLimitTicket[] = [];
   for (const c of checks) {
     const r = await checkAuthRateLimit(c.key, c.config);
-    if (!r.allowed) return r;
+    if (!r.allowed) {
+      await refundAuthRateLimits(tickets);
+      return { ...r, tickets: [] };
+    }
+    if (r.ticket) tickets.push(r.ticket);
   }
-  return { allowed: true, resetIn: 0 };
+  return { allowed: true, resetIn: 0, tickets };
+}
+
+/**
+ * Did an Auth.js sign-in POST fail? Auth.js answers a credentials sign-in
+ * with a redirect (Location) or, for next-auth/react, JSON { url }; a failed
+ * one carries `error=` (CredentialsSignin and friends). Anything unreadable
+ * counts as a failure, so the limit never leaks.
+ */
+export async function signInResponseFailed(res: Response): Promise<boolean> {
+  if (res.status >= 400) return true;
+  let url: string | null = res.headers.get("location");
+  if (!url && (res.headers.get("content-type") || "").includes("application/json")) {
+    try {
+      const body = await res.clone().json();
+      url = typeof body?.url === "string" ? body.url : null;
+    } catch {
+      url = null;
+    }
+  }
+  if (!url) return true;
+  try {
+    return new URL(url, "http://localhost").searchParams.has("error");
+  } catch {
+    return true;
+  }
 }
 
 /** Rows older than this are never read (the longest window is an hour). */

@@ -7,6 +7,7 @@ import {
   isValidEmail,
   normalizeSignInEmail,
   precheckRateLimits,
+  refundAuthRateLimits,
 } from "@/lib/auth-rate-limit";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -36,11 +37,17 @@ export async function POST(req: Request) {
       { status: 429 }
     );
 
-  if (!(await checkAuthRateLimit(limits.ip.key, limits.ip.config)).allowed) return tooMany();
+  // Counts FAILED checks only: a correct password hands both counts back.
+  const ipCheck = await checkAuthRateLimit(limits.ip.key, limits.ip.config);
+  if (!ipCheck.allowed) return tooMany();
   if (!isValidEmail(email) || !password) {
     return NextResponse.json({ ok: false });
   }
-  if (!(await checkAuthRateLimit(limits.email.key, limits.email.config)).allowed) return tooMany();
+  const emailCheck = await checkAuthRateLimit(limits.email.key, limits.email.config);
+  if (!emailCheck.allowed) {
+    await refundAuthRateLimits([ipCheck.ticket]);
+    return tooMany();
+  }
 
   const client = await pool.connect();
   try {
@@ -53,6 +60,7 @@ export async function POST(req: Request) {
     }
     const ok = await bcrypt.compare(password, r.rows[0].password_hash);
     if (!ok) return NextResponse.json({ ok: false });
+    await refundAuthRateLimits([ipCheck.ticket, emailCheck.ticket]);
     return NextResponse.json({
       ok: true,
       twoFactorRequired: !!r.rows[0].two_factor_enabled,
