@@ -18,7 +18,7 @@ The correct move is always translation.
 - Facility kitchen -> "High-volume institutional kitchen": "Prepared meals for 600+ residents daily as part of a 12-person crew, holding sanitation standards under inspection."
 - Prison industries (Badger State Industries and similar) -> industrial manufacturing: "Operated production equipment in an industrial textile operation, meeting daily quotas."
 - Work-release or program job -> the job itself, plainly: the employer name and the work, no program framing.
-- Education inside -> the credential, cleanly: "GED, 2021." "OSHA 10 Certification." Institution named only when it reads neutral; never named when it reads carceral.
+- Education inside -> the credential, cleanly: "GED, 2021." "OSHA 10-Hour card." (OSHA says the 10-hour card is training, not a certification: never call it one.) Institution named only when it reads neutral; never named when it reads carceral.
 - Peer roles inside (tutor, mentor, suicide-watch companion) -> "Peer educator / mentor supporting adult learners" (real and deeply transferable; among the strongest material a person may have).
 - Dates: years only, never months. Employer field for inside work: the operation type ("Institutional Food Service Operation") when no neutral employer name exists.
 
