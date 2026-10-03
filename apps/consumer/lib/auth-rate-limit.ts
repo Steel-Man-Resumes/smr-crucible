@@ -84,6 +84,13 @@ export const AUTH_LIMITS = {
   // Password/code re-checks inside a session (2FA off, export, delete).
   reauthPerUser: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
   reauthPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
+  // Second step after an email link or Google sign-in. Keyed by the signed-in
+  // user, which only a session holder can spend: keyed by email, anyone who
+  // knows the address could burn it with wrong passwords and lock the person
+  // out of every sign-in method. A successful code ends the step, so 5
+  // attempts is 5 failures.
+  stepUpPerUser: { maxRequests: 5, windowMs: 900_000 } as RateLimitConfig, // 5/15min
+  stepUpPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
 };
 
 /**
@@ -293,6 +300,14 @@ export function signInRateLimits(
     ip: { key: `auth:ip:${ip}`, config: AUTH_LIMITS.magicLinkPerIp },
     email: { key: `auth:email:${email}`, config: AUTH_LIMITS.magicLinkPerEmail },
   };
+}
+
+/** Limits for the second step (/api/auth/mfa-verify): per user and per IP, never per email. */
+export function stepUpRateLimits(ip: string, userId: string) {
+  return [
+    { key: `auth:stepup:user:${userId}`, config: AUTH_LIMITS.stepUpPerUser },
+    { key: `auth:stepup:ip:${ip}`, config: AUTH_LIMITS.stepUpPerIp },
+  ];
 }
 
 /**

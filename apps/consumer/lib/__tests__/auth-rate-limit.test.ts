@@ -20,6 +20,7 @@ import {
   slidingWindowDecision,
   windowStartFor,
   precheckRateLimits,
+  stepUpRateLimits,
   signInEmailFromBody,
   signInPostRequiresEmail,
   signInRateLimits,
@@ -258,5 +259,37 @@ describe("durable store (F7)", () => {
     } finally {
       setAuthRateLimitStore(null);
     }
+  });
+});
+
+describe("step-up counters (review 3)", () => {
+  it("are keyed by user and IP, never by email", () => {
+    const limits = stepUpRateLimits("198.51.100.30", "user-123");
+    assert.deepEqual(limits.map((l) => l.key), ["auth:stepup:user:user-123", "auth:stepup:ip:198.51.100.30"]);
+    for (const l of limits) assert.ok(!l.key.includes("@"));
+    assert.ok(!limits.some((l) => l.key.startsWith("auth:pw:")));
+  });
+
+  it("refuse the 6th code attempt for one user in 15 minutes, even from new IPs", () => {
+    const user = `u-${freshIp()}`;
+    const results: boolean[] = [];
+    for (let i = 0; i < 6; i++) {
+      const [perUser, perIp] = stepUpRateLimits(freshIp(), user);
+      results.push(
+        checkMemoryRateLimit(perUser.key, perUser.config).allowed &&
+          checkMemoryRateLimit(perIp.key, perIp.config).allowed
+      );
+    }
+    assert.deepEqual(results, [true, true, true, true, true, false]);
+  });
+
+  it("are untouched when someone burns the password counter for that person's email", () => {
+    const ip = freshIp();
+    const email = `target-${ip}@example.org`;
+    for (let i = 0; i < 12; i++) attempt(PASSWORD_PATH, freshIp(), email); // attacker exhausts per-email
+    assert.equal(attempt(PASSWORD_PATH, freshIp(), email), false);
+    const [perUser, perIp] = stepUpRateLimits(ip, `owner-of-${email}`);
+    assert.equal(checkMemoryRateLimit(perUser.key, perUser.config).allowed, true);
+    assert.equal(checkMemoryRateLimit(perIp.key, perIp.config).allowed, true);
   });
 });
