@@ -60,7 +60,14 @@ export interface RateLimitResult {
 export const AUTH_LIMITS = {
   magicLinkPerIp: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
   magicLinkPerEmail: { maxRequests: 3, windowMs: 3_600_000 } as RateLimitConfig,
-  passwordPerIp: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
+  // Password sign-ins per IP. A program computer lab, a library or a
+  // workforce center puts a whole room behind one address, and these counters
+  // are shared by every instance, so this has to fit a room signing in at once.
+  // The per-email limit below is the brute-force guard on any one account.
+  passwordPerIp: { maxRequests: 30, windowMs: 900_000 } as RateLimitConfig, // 30/15min
+  // The login form's precheck has its OWN per-IP counter, so one sign-in
+  // (precheck, then the real sign-in) spends the per-IP password budget once.
+  precheckPerIp: { maxRequests: 60, windowMs: 900_000 } as RateLimitConfig, // 60/15min
   // Brute-force ceiling on one account; a real person retyping a password fits well inside it.
   passwordPerEmail: { maxRequests: 10, windowMs: 900_000 } as RateLimitConfig, // 10/15min
   // Registration: deliberately generous per-IP -- a classroom or conference
@@ -285,6 +292,20 @@ export function signInRateLimits(
   return {
     ip: { key: `auth:ip:${ip}`, config: AUTH_LIMITS.magicLinkPerIp },
     email: { key: `auth:email:${email}`, config: AUTH_LIMITS.magicLinkPerEmail },
+  };
+}
+
+/**
+ * Limits for the login form's precheck (email + password, before the real
+ * sign-in). Its per-IP counter is its own and looser, so one person signing in
+ * spends the password per-IP budget once, not twice; its per-email counter is
+ * the password sign-in's own, so the precheck is never a second, separate
+ * guessing allowance against one account.
+ */
+export function precheckRateLimits(ip: string, email: string) {
+  return {
+    ip: { key: `auth:precheck:ip:${ip}`, config: AUTH_LIMITS.precheckPerIp },
+    email: { key: `auth:pw:email:${email}`, config: AUTH_LIMITS.passwordPerEmail },
   };
 }
 

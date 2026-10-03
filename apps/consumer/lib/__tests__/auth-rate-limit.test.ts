@@ -19,6 +19,7 @@ import {
   setAuthRateLimitStore,
   slidingWindowDecision,
   windowStartFor,
+  precheckRateLimits,
   signInEmailFromBody,
   signInPostRequiresEmail,
   signInRateLimits,
@@ -64,21 +65,44 @@ describe("password sign-ins", () => {
     assert.deepEqual(results, Array(8).fill(true));
   });
 
-  it("allows the 10th and refuses the 11th from one IP within 15 minutes", () => {
+  it("allows the 30th and refuses the 31st from one IP within 15 minutes", () => {
     const ip = freshIp();
     const results: boolean[] = [];
-    for (let i = 0; i < 11; i++) {
-      clock += 60_000; // one a minute: all 11 inside 15 minutes
+    for (let i = 0; i < 31; i++) {
+      clock += 20_000; // all 31 inside 15 minutes
       results.push(attempt(PASSWORD_PATH, ip, `person${i}-${ip}@example.org`));
     }
-    assert.deepEqual(results, [...Array(10).fill(true), false]);
+    assert.deepEqual(results, [...Array(30).fill(true), false]);
   });
 
   it("lets the same IP back in once the 15-minute window has passed", () => {
     const ip = freshIp();
-    for (let i = 0; i < 11; i++) attempt(PASSWORD_PATH, ip, `p${i}-${ip}@example.org`);
+    for (let i = 0; i < 31; i++) attempt(PASSWORD_PATH, ip, `p${i}-${ip}@example.org`);
     clock += AUTH_LIMITS.passwordPerIp.windowMs + 1;
     assert.equal(attempt(PASSWORD_PATH, ip, `again-${ip}@example.org`), true);
+  });
+
+  it("lets a lab of 25 people behind one IP all sign in through the login form (precheck, then sign-in)", () => {
+    const ip = freshIp();
+    const results: boolean[] = [];
+    for (let i = 0; i < 25; i++) {
+      clock += 15_000;
+      const email = `learner${i}-${ip}@example.org`;
+      const pre = precheckRateLimits(ip, email);
+      const preOk =
+        checkMemoryRateLimit(pre.ip.key, pre.ip.config).allowed &&
+        checkMemoryRateLimit(pre.email.key, pre.email.config).allowed;
+      results.push(preOk && attempt(PASSWORD_PATH, ip, email));
+    }
+    assert.deepEqual(results, Array(25).fill(true));
+  });
+
+  it("the precheck never spends the password per-IP budget, but shares the per-email one", () => {
+    const pre = precheckRateLimits("198.51.100.20", "a@example.org");
+    const pw = signInRateLimits(PASSWORD_PATH, "198.51.100.20", "a@example.org");
+    assert.notEqual(pre.ip.key, pw.ip.key);
+    assert.equal(pre.email.key, pw.email.key);
+    assert.ok(pre.ip.config.maxRequests >= pw.ip.config.maxRequests);
   });
 
   it("refuses the 11th guess at one account even when every guess comes from a new IP", () => {
@@ -130,7 +154,8 @@ describe("the two kinds do not share a bucket", () => {
     for (let i = 0; i < 3; i++) assert.equal(attempt(MAGIC_LINK_PATH, ip, email), true);
     assert.equal(attempt(MAGIC_LINK_PATH, ip, email), false);
 
-    // Password sign-in for the same person from the same IP is untouched.
+    // Password sign-in for the same person from the same IP is untouched
+    // (10 per email per 15 minutes is the binding limit here).
     for (let i = 0; i < 10; i++) assert.equal(attempt(PASSWORD_PATH, ip, email), true);
     assert.equal(attempt(PASSWORD_PATH, ip, email), false);
 

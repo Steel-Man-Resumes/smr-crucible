@@ -6,11 +6,8 @@ import {
   getClientIp,
   isValidEmail,
   normalizeSignInEmail,
-  signInRateLimits,
+  precheckRateLimits,
 } from "@/lib/auth-rate-limit";
-
-/** The precheck spends the password sign-in's own counters. */
-const PASSWORD_CALLBACK_PATH = "/api/auth/callback/password-login";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -20,17 +17,18 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  * actual sign-in still enforces 2FA independently in authorize() -- this is
  * UX, not the security boundary.
  *
- * Limited by the SAME counters as the password sign-in itself (per IP and per
- * email, F10). It used to have its own per-IP counter and no per-email one,
- * which doubled the password guesses an IP got and let a spread-out attack
- * test one account without limit here.
+ * Per email it spends the password sign-in's own counter (F10): it used to
+ * have none, so a spread-out attack could test one account here without
+ * limit. Per IP it has its own, looser counter, so a room of people behind one
+ * address (a lab, a library) is not refused after a few sign-ins: each
+ * sign-in spends the password per-IP budget once, at the real sign-in.
  */
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   const body = await req.json().catch(() => ({}));
   const email = normalizeSignInEmail(typeof body?.email === "string" ? body.email : "");
   const password = String(body?.password || "");
-  const limits = signInRateLimits(PASSWORD_CALLBACK_PATH, ip, email);
+  const limits = precheckRateLimits(ip, email);
 
   const tooMany = () =>
     NextResponse.json(
