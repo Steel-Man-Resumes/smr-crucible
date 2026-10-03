@@ -95,6 +95,10 @@ function LoginForm() {
           "You're signed in as a different account already. Sign out below, then try Google again.",
         GoogleEmailUnverified:
           "Google has not confirmed that email address yet. Sign in with your password or an email link instead.",
+        GoogleEmailMismatch:
+          "That Google account uses a different email than the account it is linked to. Sign in with your password or an email link instead.",
+        SessionNotUsable:
+          "This browser is still holding an old or unfinished sign-in. Sign out below, then try Google again.",
       };
       setError(msgs[urlError] || `Login error: ${urlError}`);
     }
@@ -622,7 +626,7 @@ function LoginForm() {
           {error && (
             <p className="text-sm text-t-red">
               {error}
-              {searchParams.get("error") === "OAuthAccountNotLinked" && (
+              {["OAuthAccountNotLinked", "SessionNotUsable"].includes(searchParams.get("error") || "") && (
                 <>
                   {" "}
                   <button

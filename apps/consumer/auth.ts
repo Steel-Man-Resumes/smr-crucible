@@ -276,9 +276,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // address proves nothing about the inbox, so it is refused. A verified
       // one is treated like an email link (F1 step-up, F3 first-proof choice;
       // see the jwt callback), and still auto-links by email as designed.
+      //
+      // B1: and it may only reach the account with that same address. A
+      // browser already signed in may use Google only for its own address and
+      // only from a live session (Auth.js would link Google to whatever the
+      // browser is signed into, and never checks revocation); a Google
+      // identity linked to an account with another address is refused. See
+      // googleSignInDecision.
       if (account?.provider === "google") {
-        const { googleEmailVerified, SIGN_IN_REFUSED } = await import("@/lib/sign-in-guards");
-        if (!googleEmailVerified(profile)) return SIGN_IN_REFUSED.googleEmailUnverified;
+        const guards = await import("@/lib/sign-in-guards");
+        if (!guards.googleEmailVerified(profile)) return guards.SIGN_IN_REFUSED.googleEmailUnverified;
+        const linked = await guards.linkedAccountEmail(pool, String(account.providerAccountId ?? ""));
+        let current: { email: string | null; revoked: boolean; pending: boolean } | null = null;
+        try {
+          const existing = await auth();
+          const u = existing?.user as any;
+          if (u?.id) {
+            const revoked = u.sid ? await isSessionRevoked(u.sid, u.id, u.sit) : false;
+            current = { email: u.email ?? null, revoked, pending: sessionPending(u) };
+          }
+        } catch {
+          // Could not read the browser's session: refuse rather than link blind.
+          return guards.SIGN_IN_REFUSED.sessionNotUsable;
+        }
+        return guards.googleSignInDecision({ profile, linkedAccountEmail: linked, session: current });
       }
       return true;
     },
@@ -370,7 +391,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return true;
     },
-    async jwt({ token, user, trigger, account }) {
+    async jwt({ token, user, trigger, account, profile }) {
       // On sign-in or when user object is available, persist tier
       if (user) {
         token.tier = (user as any).tier || "client";
@@ -457,6 +478,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // row cannot be written the sign-in fails rather than issue a token the
       // middleware would treat as revoked.
       const isSignIn = trigger === "signIn" || trigger === "signUp";
+      // B1, last check: whatever Auth.js linked or matched, a Google sign-in
+      // must land on the account whose email is the Google address. If not,
+      // the Google link just written for this account is removed and the
+      // sign-in ends on /login (the browser keeps any session it had).
+      let googleMatched = false;
+      if (isSignIn && token.sub && account?.provider === "google") {
+        const { enforceGoogleAccountMatch, GoogleLinkRefused } = await import("@/lib/sign-in-guards");
+        googleMatched = await enforceGoogleAccountMatch(pool, {
+          userId: token.sub,
+          profileEmail: (profile as any)?.email,
+          providerAccountId: String(account.providerAccountId ?? ""),
+        });
+        if (!googleMatched) throw new GoogleLinkRefused();
+      }
       if (isSignIn && token.sub) {
         (token as any).sid = newSessionId(token.sub);
         (token as any).sit = nowSeconds();
@@ -470,7 +505,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // (claim): keep the two-step or password by entering it, or say "I
         // didn't set this" to remove it. Nothing is removed here.
         delete (token as any).claim;
-        if (account?.provider === "resend" || account?.provider === "google") {
+        // Google counts as proof only for its own address (checked above).
+        if (account?.provider === "resend" || (account?.provider === "google" && googleMatched)) {
           const { readProofState, claimForInboxProof, markEmailProven } = await import("@/lib/email-proof");
           const state = await readProofState(pool, token.sub);
           if (state) {

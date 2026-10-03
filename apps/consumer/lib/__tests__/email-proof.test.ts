@@ -79,6 +79,9 @@ describe("wipeUnprovenCredentials (\"I didn't set this\")", () => {
     assert.equal(i(/^BEGIN$/), 0);
     assert.ok(i(/password_hash = NULL, two_factor_enabled = false, email_proven_at = now\(\) WHERE id = \$1 AND email_proven_at IS NULL/) > 0);
     assert.ok(i(/DELETE FROM user_two_factor/) > 0);
+    // Google (OAuth) links set up by whoever set the password go too.
+    const oauth = calls.find((c) => /^DELETE FROM accounts WHERE "userId" = \$1$/.test(c.text));
+    assert.deepEqual(oauth?.params, ["u1"]);
     const revoke = calls.find((c) => /UPDATE user_session SET revoked_at/.test(c.text));
     assert.deepEqual(revoke?.params, ["u1", "mine"]); // the caller's own session is kept
     assert.ok(i(/'credentials_cleared'/) > 0);
@@ -88,7 +91,7 @@ describe("wipeUnprovenCredentials (\"I didn't set this\")", () => {
   it("changes nothing on an account proven in the meantime", async () => {
     const { db, calls } = fakeClient({ updateRows: 0 });
     assert.equal(await wipeUnprovenCredentials(db, { userId: "u1", keepSid: "mine" }), "already-proven");
-    assert.ok(!calls.some((c) => /DELETE|user_session/.test(c.text)));
+    assert.ok(!calls.some((c) => /DELETE|user_session/.test(c.text))); // no OAuth rows removed either
     assert.equal(calls[calls.length - 1].text, "ROLLBACK");
   });
 });

@@ -19,9 +19,9 @@
  *  - a password, no two-step: "Enter your password to keep it", plus "I didn't
  *    set a password". The right password marks the address proven and keeps it.
  *  - neither: the address is just marked proven.
- * Choosing "I didn't set..." removes the password and two-step, signs out every
- * other session, marks the address proven and emails a notice, in one
- * transaction (wipeUnprovenCredentials). Nothing is removed unless the person
+ * Choosing "I didn't set..." removes the password, two-step and any Google
+ * links, signs out every other session, marks the address proven and emails a
+ * notice, in one transaction (wipeUnprovenCredentials). Nothing is removed unless the person
  * signed in through the inbox and chose it.
  *
  * The pending choice rides on the session token as `claim` ("2fa" or
@@ -115,6 +115,10 @@ export async function wipeUnprovenCredentials(
       return "already-proven";
     }
     await db.query(`DELETE FROM user_two_factor WHERE user_id = $1`, [input.userId]);
+    // Every Google (OAuth) link goes too: a link set up by whoever set the
+    // password is another way back in. The owner's own Google, if that is how
+    // they signed in now, links again by email next time.
+    await db.query(`DELETE FROM accounts WHERE "userId" = $1`, [input.userId]);
     await revokeUserSessions(db, {
       userId: input.userId,
       keepSid: input.keepSid,
