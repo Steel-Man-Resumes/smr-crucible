@@ -1,7 +1,7 @@
 /**
  * Session rules shared by the Edge middleware (auth.ts `authorized`) and the
- * Node routes. Pure: no imports, so it is safe in the Edge bundle and in unit
- * tests.
+ * Node routes. Pure (its only import is the pure safe-path helper), so it is
+ * safe in the Edge bundle and in unit tests.
  *
  * HOW A SESSION IS TRACKED (F5, 2026-10-02). Every sign-in writes its
  * user_session row on the server, inside the sign-in itself, and stamps the
@@ -16,6 +16,7 @@
  * old token that never registered a row stops working too (see
  * revocationVerdict).
  */
+import { isSafeRelativePath } from "./safe-path";
 
 /**
  * Sign-ins at or after this instant are registered server-side. Set to the
@@ -158,10 +159,13 @@ export function adminSecondFactorOk(user: { mfaAt?: unknown } | null | undefined
   return hasSecondFactor(user?.mfaAt);
 }
 
-/** A same-site path to return to after the step-up, or the dashboard. */
+/**
+ * A same-site path to return to after the step-up, or the dashboard. Uses the
+ * shared isSafeRelativePath rule (no backslash or control character anywhere:
+ * "/\t/evil.com" is "//evil.com" to a browser).
+ */
 export function safeCallbackPath(raw: string | null | undefined): string {
-  if (!raw || typeof raw !== "string") return "/dashboard";
-  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/dashboard";
+  if (!isSafeRelativePath(raw)) return "/dashboard";
   if (raw.startsWith(MFA_VERIFY_PAGE)) return "/dashboard";
   return raw;
 }

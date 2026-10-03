@@ -15,7 +15,6 @@ import {
   hasSecondFactor,
   isAdminPowerPath,
   mfaGateApplies,
-  safeCallbackPath,
   revocationVerdict,
   sessionRowRequired,
   signedInWithin,
@@ -193,12 +192,5 @@ describe("second step on every sign-in method (F1)", () => {
     assert.equal(adminSecondFactorOk({ mfaAt: 1_790_000_000 }), true);
   });
 
-  it("only returns to a same-site path after the step-up", () => {
-    assert.equal(safeCallbackPath("/dashboard/settings?tab=security"), "/dashboard/settings?tab=security");
-    assert.equal(safeCallbackPath("https://evil.example"), "/dashboard");
-    assert.equal(safeCallbackPath("//evil.example"), "/dashboard");
-    assert.equal(safeCallbackPath("/\\evil.example"), "/dashboard");
-    assert.equal(safeCallbackPath("/login/verify?callbackUrl=/x"), "/dashboard");
-    assert.equal(safeCallbackPath(null), "/dashboard");
-  });
+  // safeCallbackPath has its own suite: lib/__tests__/safe-path.test.ts
 });

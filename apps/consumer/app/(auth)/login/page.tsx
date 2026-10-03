@@ -18,6 +18,7 @@ import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { isSafeRelativePath } from "@/lib/safe-path";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -35,21 +36,9 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
-/**
- * Same-origin relative path only: one leading "/", never "//host" or "/\host"
- * (both mean another site), no backslashes, no control characters (a browser
- * strips tabs/newlines, so "/\t/host" would become "//host"). Keeps an
- * honored callbackUrl from ever becoming an open redirect. Auth.js also
- * rejects cross-origin callback URLs on its side; this is the client half.
- */
-function isSafeRelativePath(url: string | null): url is string {
-  return (
-    !!url &&
-    url.startsWith("/") &&
-    !url.startsWith("//") &&
-    !/[\\\u0000-\u001f\u007f]/.test(url)
-  );
-}
+// Same-origin relative path only (lib/safe-path.ts). Keeps an honored
+// callbackUrl from ever becoming an open redirect. Auth.js also rejects
+// cross-origin callback URLs on its side; this is the client half.
 
 function LoginForm() {
   const searchParams = useSearchParams();
