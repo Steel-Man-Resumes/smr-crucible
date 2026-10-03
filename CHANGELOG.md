@@ -2,6 +2,13 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Employer directory: weak evidence never marks
+
+- An employer now earns the "Hires people with records" mark only when the evidence behind it is at
+  least Likely (a dated A or B source). Before, an independent employer's own policy could mark its
+  place from a weaker source. Weak (Guessing) evidence is also kept out of the public evidence feed.
+  Migration 069; `verify:directory` tests both rules.
+
 ## 2026-10 Security maintenance
 
 - Forge and Refinery moved from Next.js 14 to Next.js 15.5 and React 19. Next.js 14 no longer
