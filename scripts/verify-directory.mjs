@@ -237,6 +237,17 @@ try {
   await evidence({ org: pooled.o.id, place: pooled.p, claim: "employer_statement", kind: "employer_direct", url: null, confidence: "guessing", grade: "C" });
   s = await standing(pooled.p);
   check("confidence comes from the evidence that decided the standing, not from all of it", s?.standing === "says_yes_here" && s?.confidence === "guessing", JSON.stringify(s));
+  check("069: a standing decided by Guessing evidence never earns the mark", s?.earns_mark === false, JSON.stringify(s));
+
+  // 069: a local operator's own policy at Guessing (a C source) reads as a yes but never marks or shows.
+  const gp = await fresh("Guessing Own Policy", { model: "independent" });
+  await evidence({ org: gp.o.id, claim: "confirmed_corporate", confidence: "guessing", grade: "C" });
+  s = await standing(gp.p);
+  check("069: a local operator's Guessing own policy reads 'says_yes_here' with no mark", s?.standing === "says_yes_here" && s?.confidence === "guessing" && s?.earns_mark === false, JSON.stringify(s));
+  const [gpPub] = await asApp(nobody, (q) => [q`SELECT id FROM directory_public_evidence_v WHERE org_id = ${gp.o.id}`]);
+  check("069: Guessing evidence never reaches the public evidence view", gpPub.length === 0, `${gpPub.length} rows`);
+  const [gpBoard] = await asApp(nobody, (q) => [q`SELECT earns_mark FROM directory_public_v WHERE org_id = ${gp.o.id}`]);
+  check("069: the public board does not mark it", gpBoard.every((r) => r.earns_mark === false), JSON.stringify(gpBoard));
 
   // ---- Negatives ---------------------------------------------------------
   const n1 = await fresh("Negatives One Source");
