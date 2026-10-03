@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { isValidEmail } from "@/lib/auth-rate-limit";
+import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
+import { passwordProblem } from "@/lib/password-policy";
+import { UNDEFINED_COLUMN } from "@/lib/email-proof";
+import { buildPasswordChangedEmail, sendSecurityEmail } from "@/lib/security-email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -28,11 +32,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
-        { status: 400 }
-      );
+    const problem = passwordProblem(newPassword);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
     }
 
     const identifier = `password-reset:${normalizedEmail}`;
@@ -58,14 +60,43 @@ export async function POST(request: Request) {
 
       const update = await client.query(
         `UPDATE users
-         SET password_hash = $1, "emailVerified" = COALESCE("emailVerified", NOW())
+         SET password_hash = $1, password_updated_at = now(),
+             "emailVerified" = COALESCE("emailVerified", NOW())
          WHERE email = $2
-         RETURNING id`,
+         RETURNING id, name`,
         [passwordHash, normalizedEmail]
       );
       await client.query(`DELETE FROM verification_token WHERE identifier = $1`, [
         identifier,
       ]);
+      // A reset signs out EVERY session (there is no current one to keep):
+      // whoever had the account before the reset does not keep it after.
+      if (update.rows.length > 0) {
+        await revokeUserSessions(client, {
+          userId: update.rows[0].id,
+          userAgent: request.headers.get("user-agent") || null,
+        });
+        // F3: a reset by email link proves the inbox, and the password is now
+        // the owner's own. Marked proven in the same transaction (so a later
+        // email-link sign-in never asks about a password they just chose),
+        // but only when the account has no two-step: two-step on an unproven
+        // account is left for the owner to keep (by entering a code) or
+        // remove ("I didn't set up two-step") at their next email-link or
+        // Google sign-in. Nothing is removed silently. The savepoint keeps
+        // the reset working before migration 068 adds the column.
+        await client.query("SAVEPOINT inbox_proof");
+        try {
+          await client.query(
+            `UPDATE users SET email_proven_at = now()
+              WHERE id = $1 AND email_proven_at IS NULL AND NOT two_factor_enabled`,
+            [update.rows[0].id]
+          );
+          await client.query("RELEASE SAVEPOINT inbox_proof");
+        } catch (err: any) {
+          if (err?.code !== UNDEFINED_COLUMN) throw err;
+          await client.query("ROLLBACK TO SAVEPOINT inbox_proof");
+        }
+      }
       await client.query("COMMIT");
 
       if (update.rows.length === 0) {
@@ -74,6 +105,25 @@ export async function POST(request: Request) {
           { status: 404 }
         );
       }
+
+      // F9: a reset used to leave no trace. Record it on the security
+      // timeline (best-effort) and tell the inbox after the response.
+      const userId: string = update.rows[0].id;
+      const userAgent = request.headers.get("user-agent") || null;
+      await client
+        .query(
+          `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'password_reset', $2)`,
+          [userId, userAgent]
+        )
+        .catch(() => {});
+      const origin = new URL(request.url).origin;
+      const name: string | null = update.rows[0].name || null;
+      runAfterResponse(() =>
+        sendSecurityEmail(
+          normalizedEmail,
+          buildPasswordChangedEmail({ name, kind: "reset", whenISO: new Date().toISOString(), origin })
+        )
+      );
 
       return NextResponse.json({ success: true });
     } catch (err) {

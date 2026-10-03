@@ -25,6 +25,7 @@
 
 import { auth } from "@/auth";
 import { readImpersonation } from "./impersonation";
+import { adminSecondFactorOk } from "./session-policy";
 
 export async function effectiveAuth(): Promise<any> {
   const real = await auth();
@@ -32,6 +33,10 @@ export async function effectiveAuth(): Promise<any> {
 
   const imp = await readImpersonation();
   if (!imp || imp.adminId !== real.user.id) return real;
+
+  // Impersonation is an admin power: only from a session that entered a
+  // two-step code (F1). Fails toward less access, like the checks below.
+  if (!adminSecondFactorOk(real.user as any)) return real;
 
   try {
     const { getOne, isPlatformAdmin } = await import("@crucible/core");

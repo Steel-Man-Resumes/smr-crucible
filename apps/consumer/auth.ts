@@ -5,6 +5,19 @@ import Credentials from "next-auth/providers/credentials";
 import PostgresAdapter from "@auth/pg-adapter";
 import { Pool, neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
+import {
+  MFA_VERIFY_PAGE,
+  SESSION_REGISTRY_CUTOFF,
+  SESSIONS_REVOKED_EVENT,
+  adminSecondFactorOk,
+  authRouteSkipsSessionChecks,
+  isAdminPowerPath,
+  mfaGateApplies,
+  nowSeconds,
+  sessionPending,
+  revocationVerdict,
+  sessionRowRequired,
+} from "@/lib/session-policy";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -14,12 +27,42 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // no-store: this is the session-revocation check. Next patches fetch and can
 // cache an identical query; a cached "session is valid" would outlive a revoke.
 const sqlEdge = neon(process.env.DATABASE_URL!, { fetchOptions: { cache: "no-store" } });
-async function isSessionRevoked(jti: string): Promise<boolean> {
+
+/**
+ * Revocation check (3B, F5). A session with a row is revoked when its row says
+ * so. A session signed in by the server-side registry (`sit` claim) with no row
+ * is refused. An older token with no row is refused only once its user has
+ * swept their sessions since the registry cutoff. See lib/session-policy.ts.
+ * Exported for routes the middleware does not cover (Mini Forge import).
+ */
+export async function isSessionRevoked(
+  sid: string,
+  userId: string | undefined,
+  signedInAt: unknown
+): Promise<boolean> {
   try {
-    const rows = await sqlEdge`SELECT 1 FROM user_session WHERE jti = ${jti} AND revoked_at IS NOT NULL LIMIT 1`;
-    return (rows as any[]).length > 0;
+    const rows = (await sqlEdge`SELECT revoked_at FROM user_session WHERE jti = ${sid} LIMIT 1`) as any[];
+    const row = rows[0] ? { revoked: rows[0].revoked_at != null } : null;
+    let swept: boolean | null = null;
+    if (!row && !sessionRowRequired(signedInAt) && userId) {
+      const s = (await sqlEdge`
+        SELECT 1 FROM user_login_event
+         WHERE user_id = ${userId}::uuid AND event = ${SESSIONS_REVOKED_EVENT}
+           AND created_at >= ${SESSION_REGISTRY_CUTOFF}::timestamptz
+         LIMIT 1`) as any[];
+      swept = s.length > 0;
+    }
+    return revocationVerdict({ row, signedInAt, sweptSinceCutoff: swept });
   } catch {
     return false;
+  }
+}
+
+function newSessionId(sub: string): string {
+  try {
+    return globalThis.crypto.randomUUID();
+  } catch {
+    return `${sub}-${Date.now()}`;
   }
 }
 
@@ -58,6 +101,9 @@ const providers: any[] = [
   // Email linking to an existing same-email account is allowed: Google verifies
   // emails, and this audience frequently loses passwords -- a second sign-in
   // door to the SAME account beats a duplicate-account support mess.
+  // Limited in the signIn callback (F2): only when Google says the address is
+  // verified, and never into an account that already has a password or
+  // two-step verification unless that Google identity is already linked.
   ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
     ? [
         Google({
@@ -73,6 +119,13 @@ const providers: any[] = [
     from:
       process.env.AUTH_EMAIL_FROM ||
       "Steel Man Resumes <noreply@steelmanresumes.com>",
+    // The emailed link opens /login/finish, a page with a "Finish signing in"
+    // button, instead of signing in on arrival: mail scanners open links but
+    // do not press buttons. See lib/sign-in-link.ts.
+    async sendVerificationRequest(params: any) {
+      const { sendSignInLinkEmail } = await import("@/lib/sign-in-link");
+      await sendSignInLinkEmail(params);
+    },
   }),
 
   // Password login — available in all environments
@@ -105,79 +158,15 @@ const providers: any[] = [
 
         // Second factor: if enabled, a valid TOTP code (or a one-time backup
         // code) is required. This is the real gate -- the login form's precheck
-        // is only UX. Backup codes are consumed on use.
+        // is only UX. Backup codes are consumed on use; a TOTP code is refused
+        // if its time step was already used (replay guard, F10). The check is
+        // shared with the step-up route and 2FA disable (lib/second-factor.ts).
         if (user.two_factor_enabled) {
           const totp = String((credentials as any)?.totp || "").replace(/\s/g, "");
           if (!totp) return null;
-          const tf = await client.query(
-            `SELECT secret, secret_iv, secret_tag, secret_key_version, backup_codes
-               FROM user_two_factor WHERE user_id = $1`,
-            [user.id]
-          );
-          const row = tf.rows[0];
-          let ok = false;
-          if (row?.secret) {
-            const { verifyToken, resolveTotpSecret, encryptTotpSecret } = await import(
-              "@/lib/two-factor"
-            );
-            // Guard the decrypt: a missing/rotated DOCUMENT_ENCRYPTION_KEY or a
-            // corrupt iv/tag must NOT throw out of authorize() (that 500s the
-            // whole login). Leave ok=false and fall through to the backup-code
-            // path so a user with a valid backup code can still get in. Legacy
-            // plaintext rows never enter the decrypt branch anyway.
-            let plainSecret: string | null = null;
-            try {
-              plainSecret = resolveTotpSecret(row, user.id);
-            } catch (err) {
-              console.error("TOTP secret decrypt failed at login:", err);
-            }
-            if (plainSecret) ok = verifyToken(totp, plainSecret);
-
-            // Backfill-on-next-use (Phase 1C): this row predates
-            // TOTP-secret-at-rest encryption. Having just proven possession
-            // of the secret, opportunistically re-encrypt and persist it so
-            // it's ciphertext going forward. Best-effort -- a failure here
-            // must never block a successful login.
-            if (ok && plainSecret && !row.secret_iv) {
-              try {
-                const enc = encryptTotpSecret(plainSecret, user.id);
-                await client.query(
-                  `UPDATE user_two_factor
-                      SET secret = $2, secret_iv = $3, secret_tag = $4, secret_key_version = $5, updated_at = now()
-                    WHERE user_id = $1`,
-                  [user.id, enc.ciphertext, enc.iv, enc.tag, enc.keyVersion]
-                );
-              } catch (err) {
-                console.error("TOTP secret backfill-encrypt failed:", err);
-              }
-            }
-
-            // Backup-code fallback -- consumption must be atomic. A plain
-            // SELECT-then-UPDATE lets two concurrent requests both read the
-            // same array, both pass bcrypt.compare on the same code, and
-            // both succeed (the code gets used twice). Instead this does
-            // optimistic concurrency: the UPDATE's WHERE clause repeats the
-            // exact snapshot just read, so only the first writer's UPDATE
-            // matches a row and the second gets rowCount 0 and is rejected
-            // as already-used, rather than silently double-spending.
-            if (!ok && Array.isArray(row.backup_codes)) {
-              const snapshot = row.backup_codes as string[];
-              for (let i = 0; i < snapshot.length; i++) {
-                if (await bcrypt.compare(totp, snapshot[i])) {
-                  const remaining = snapshot.filter((_, j) => j !== i);
-                  const upd = await client.query(
-                    `UPDATE user_two_factor
-                        SET backup_codes = $3::jsonb
-                      WHERE user_id = $1 AND backup_codes = $2::jsonb`,
-                    [user.id, JSON.stringify(snapshot), JSON.stringify(remaining)]
-                  );
-                  ok = upd.rowCount === 1;
-                  break;
-                }
-              }
-            }
-          }
-          if (!ok) return null;
+          const { verifySecondFactor } = await import("@/lib/second-factor");
+          const result = await verifySecondFactor(client, user.id, totp);
+          if (!result.ok) return null;
         }
 
         return {
@@ -281,6 +270,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verifyRequest: "/check-email",
   },
   callbacks: {
+    // Runs before a session exists, only in the /api/auth route (Node). Return
+    // true to continue, or a URL to send the person to instead.
+    async signIn({ account, profile }) {
+      // F2: Google must say it verified the address. An unverified Google
+      // address proves nothing about the inbox, so it is refused. A verified
+      // one is treated like an email link (F1 step-up, F3 first-proof choice;
+      // see the jwt callback), and still auto-links by email as designed.
+      //
+      // B1: and it may only reach the account with that same address. A
+      // browser already signed in may use Google only for its own address and
+      // only from a live session (Auth.js would link Google to whatever the
+      // browser is signed into, and never checks revocation); a Google
+      // identity linked to an account with another address is refused. See
+      // googleSignInDecision.
+      if (account?.provider === "google") {
+        const guards = await import("@/lib/sign-in-guards");
+        if (!guards.googleEmailVerified(profile)) return guards.SIGN_IN_REFUSED.googleEmailUnverified;
+        const linked = await guards.linkedAccountEmail(pool, String(account.providerAccountId ?? ""));
+        // Never throws; with no session cookie it does not read anything.
+        const current = await guards.readCurrentSessionForLink({
+          hasSessionCookie: async () => {
+            const { cookies } = await import("next/headers");
+            return (await cookies()).getAll().some((c) => guards.isSessionCookieName(c.name));
+          },
+          getSession: () => auth(),
+          isRevoked: (sid, userId, sit) => isSessionRevoked(sid, userId, sit),
+          isPending: (u) => sessionPending(u as any),
+        });
+        return guards.googleSignInGate({ profile, linkedAccountEmail: linked, current });
+      }
+      return true;
+    },
     async authorized({ request, auth: session }) {
       const path = request.nextUrl.pathname;
       const isApi = path.startsWith("/api/");
@@ -312,11 +333,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Device revocation (3B): a signed-in request whose session was revoked
       // from the active-devices list is turned away here -- the real gate for
-      // every page + data call. Skip auth-internal polling (/api/auth/*) to
-      // keep the DB check off the hot session-poll path.
+      // every page + data call. Custom /api/auth/* routes (set-password,
+      // session-ping) are checked too (F6): set-password used to be exempt, so
+      // a revoked session could mint a password and sign in fresh. Only
+      // NextAuth's own actions (which keep /api/auth/session polling off the
+      // DB) and the pre-sign-in routes skip it; see authRouteSkipsSessionChecks.
       const sid = (session?.user as any)?.sid as string | undefined;
-      if (session && sid && (isDashboard || (isApi && !path.startsWith("/api/auth/")))) {
-        if (await isSessionRevoked(sid)) {
+      if (session && sid && (isDashboard || (isApi && !authRouteSkipsSessionChecks(path)))) {
+        if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });
           }
@@ -324,9 +348,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Second step (F1): a session that signed in by email link or Google
+      // into a two-step account reaches nothing but the step-up until the code
+      // is entered. Pages go to the code page; API calls get 401.
+      // F3: the same hold covers the first-proof choice (claim).
+      if (session && sessionPending(session.user as any) && mfaGateApplies(path)) {
+        if (isApi) {
+          const passwordOwed = (session.user as any)?.claim === "password";
+          return Response.json(
+            {
+              error: passwordOwed
+                ? "Confirm your password to finish signing in."
+                : "Enter your two-step code to finish signing in.",
+              mfaRequired: true,
+            },
+            { status: 401 }
+          );
+        }
+        const verify = new URL(MFA_VERIFY_PAGE, request.url);
+        verify.searchParams.set("callbackUrl", path + request.nextUrl.search);
+        return Response.redirect(verify);
+      }
+
+      // Admin powers (admin tools, impersonation) need a session that
+      // presented a second factor. This replaces the client-only "admin needs
+      // 2FA" redirect as the real gate; the banner in RefineryShell stays as
+      // the explanation. requirePlatformAdmin and effectiveAuth check the same.
+      if (session && isAdminPowerPath(path) && !adminSecondFactorOk(session.user as any)) {
+        if (isApi) {
+          return Response.json(
+            {
+              error:
+                "Admin tools need two-step verification on this sign-in. Turn it on in Settings, or sign in again with your code.",
+              secondFactorRequired: true,
+            },
+            { status: 403 }
+          );
+        }
+        return Response.redirect(new URL("/dashboard/settings", request.url));
+      }
+
       return true;
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, account, profile }) {
       // On sign-in or when user object is available, persist tier
       if (user) {
         token.tier = (user as any).tier || "client";
@@ -405,11 +469,117 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // exactly why an earlier attempt never matched). Minted once on sign-in,
       // then persists like `tier`; matched against user_session for the
       // active-devices list + revocation.
+      //
+      // Registered server-side at sign-in (F5): the user_session row is written
+      // here, before the token is issued, and `sit` (signed-in-at, epoch
+      // seconds) marks the token as registered. `iat` cannot serve: Auth.js
+      // re-stamps it on every re-issue, so it is never the sign-in time. If the
+      // row cannot be written the sign-in fails rather than issue a token the
+      // middleware would treat as revoked.
+      const isSignIn = trigger === "signIn" || trigger === "signUp";
+      // B1, last check: whatever Auth.js linked or matched, a Google sign-in
+      // must land on the account whose email is the Google address. If not,
+      // the Google link just written for this account is removed and the
+      // sign-in ends on /login (the browser keeps any session it had).
+      let googleMatched = false;
+      if (isSignIn && token.sub && account?.provider === "google") {
+        const { enforceGoogleAccountMatch, GoogleLinkRefused } = await import("@/lib/sign-in-guards");
+        googleMatched = await enforceGoogleAccountMatch(pool, {
+          userId: token.sub,
+          profileEmail: (profile as any)?.email,
+          providerAccountId: String(account.providerAccountId ?? ""),
+        });
+        if (!googleMatched) throw new GoogleLinkRefused();
+      }
+      if (isSignIn && token.sub) {
+        (token as any).sid = newSessionId(token.sub);
+        (token as any).sit = nowSeconds();
+
+        // Second step (F1). Password sign-in already demanded the code inside
+        // authorize(); an email link or Google sign-in into an account with
+        // two-step starts the session waiting for it (mfa: false) and the
+        // middleware holds it at /login/verify until the code is entered.
+        // F3: an email-link or verified Google sign-in proves the inbox. On an
+        // account whose address was never proven, the person is asked first
+        // (claim): keep the two-step or password by entering it, or say "I
+        // didn't set this" to remove it. Nothing is removed here.
+        delete (token as any).claim;
+        // Google counts as proof only for its own address (checked above).
+        if (account?.provider === "resend" || (account?.provider === "google" && googleMatched)) {
+          const { readProofState, claimForInboxProof, markEmailProven } = await import("@/lib/email-proof");
+          const state = await readProofState(pool, token.sub);
+          if (state) {
+            const owed = claimForInboxProof(state);
+            if (owed === "prove") await markEmailProven(pool, token.sub);
+            else if (owed === "2fa" || owed === "password") (token as any).claim = owed;
+          }
+        }
+
+        const tf = await pool.query(`SELECT two_factor_enabled FROM users WHERE id = $1`, [token.sub]);
+        const twoFactor = !!tf.rows[0]?.two_factor_enabled;
+        const viaPassword = account?.provider === "password-login";
+        (token as any).mfa = viaPassword || !twoFactor;
+        if (viaPassword && twoFactor) (token as any).mfaAt = (token as any).sit;
+        else delete (token as any).mfaAt;
+
+        const { recordSignIn } = await import("@/lib/session-registry");
+        await recordSignIn(pool, {
+          sid: (token as any).sid,
+          userId: token.sub,
+          email: (token.email as string | undefined) ?? null,
+          name: (token.name as string | undefined) ?? null,
+        });
+      }
       if (token.sub && !(token as any).sid) {
+        (token as any).sid = newSessionId(token.sub);
+      }
+
+      // After the step-up route records the code for this session, the page
+      // calls update(). The claim flips ONLY from the database row, never from
+      // anything the client sent (the update payload is ignored).
+      if (trigger === "update" && token.sub && (token as any).sid) {
         try {
-          (token as any).sid = globalThis.crypto.randomUUID();
+          const rows = (await sqlEdge`
+            SELECT mfa_verified_at FROM user_session
+             WHERE jti = ${(token as any).sid} AND user_id = ${token.sub}::uuid
+               AND revoked_at IS NULL
+             LIMIT 1`) as any[];
+          const at = rows[0]?.mfa_verified_at ? new Date(rows[0].mfa_verified_at).getTime() : NaN;
+          if (Number.isFinite(at)) {
+            (token as any).mfa = true;
+            (token as any).mfaAt = Math.floor(at / 1000);
+          }
         } catch {
-          (token as any).sid = `${token.sub}-${Date.now()}`;
+          // Leave the claims as they were; the person can try again.
+        }
+        // F3: the first-proof choice is settled only by the account itself:
+        // proven address clears the claim, and a code is no longer owed once
+        // the account has no two-step ("I didn't set this" removed it).
+        if ((token as any).claim || (token as any).mfa === false) {
+          try {
+            const u = (await sqlEdge`
+              SELECT two_factor_enabled, email_proven_at FROM users
+               WHERE id = ${token.sub}::uuid LIMIT 1`) as any[];
+            if (u.length) {
+              if (u[0].email_proven_at) delete (token as any).claim;
+              if (!u[0].two_factor_enabled && (token as any).mfa === false) (token as any).mfa = true;
+            }
+          } catch {
+            // Before migration 068 there is no claim to clear; otherwise retry later.
+          }
+        }
+      }
+
+      // Sessions signed in before F1 carry no `mfa` claim. One minted by an
+      // email link into a two-step account never saw a code, so an older
+      // session of a two-step account is asked for the code once. Edge-safe
+      // (HTTP query); on a DB error the claim stays unset and is retried.
+      if (token.sub && (token as any).mfa === undefined) {
+        try {
+          const rows = (await sqlEdge`SELECT two_factor_enabled FROM users WHERE id = ${token.sub}::uuid LIMIT 1`) as any[];
+          if (rows.length) (token as any).mfa = !rows[0].two_factor_enabled;
+        } catch {
+          // fail open, as the revocation check does
         }
       }
       return token;
@@ -419,6 +589,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub || "";
         (session.user as any).tier = token.tier || "client";
         (session.user as any).sid = (token as any).sid || null;
+        // Signed-in-at (epoch seconds), only on sessions registered at sign-in.
+        (session.user as any).sit = typeof (token as any).sit === "number" ? (token as any).sit : null;
+        // Second step (F1): false only while the code is still owed.
+        (session.user as any).mfa = (token as any).mfa !== false;
+        (session.user as any).mfaAt = typeof (token as any).mfaAt === "number" ? (token as any).mfaAt : null;
+        // F3: "2fa" or "password" while the first-proof choice is owed.
+        (session.user as any).claim = (token as any).claim ?? null;
       }
       return session;
     },

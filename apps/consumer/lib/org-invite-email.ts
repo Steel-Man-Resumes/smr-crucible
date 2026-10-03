@@ -17,6 +17,7 @@
 
 import crypto from "crypto";
 import { query } from "@crucible/core";
+import { EMAIL_LINK_PAGE } from "@/lib/sign-in-link";
 
 const INVITE_TTL_DAYS = 7;
 
@@ -42,7 +43,10 @@ export async function mintInviteMagicLink(
     token: raw,
     email,
   });
-  return `${origin}/api/auth/callback/resend?${params}`;
+  // The invitee lands on the "Finish signing in" page, which then goes to
+  // /api/auth/callback/resend with these same parameters. A mail scanner that
+  // opens the link does not use up the invitation (lib/sign-in-link.ts).
+  return `${origin}${EMAIL_LINK_PAGE}?${params}`;
 }
 
 function firstName(name: string | null | undefined): string {

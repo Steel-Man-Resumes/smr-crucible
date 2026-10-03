@@ -31,6 +31,7 @@ import {
   type OrgActor,
   type OrgCapability,
 } from "@crucible/core";
+import { adminSecondFactorOk } from "@/lib/session-policy";
 
 export type OrgGuardResult =
   | { ok: true; actor: OrgActor }
@@ -56,7 +57,11 @@ export async function requireOrgCapability(
   if (!userId) return fail(401, "Not signed in.");
 
   const tier = await getUserTier(userId);
-  const isPlatformAdmin = tier === "admin";
+  // Acting on ANOTHER org (staff, roles, assignments, invites) is an admin
+  // power, so it needs a session that entered a two-step code, like every
+  // other admin tool (F1). Without one, an admin is treated as a member of
+  // their own orgs only.
+  const isPlatformAdmin = tier === "admin" && adminSecondFactorOk(session?.user as any);
 
   const actor = await resolveOrgActor(userId, {
     isPlatformAdmin,
@@ -99,6 +104,13 @@ export async function requirePlatformAdmin(): Promise<
       ok: false;
       response: NextResponse;
     };
+  }
+  // Admin powers need a session that entered a two-step code (F1).
+  if (!adminSecondFactorOk(session?.user as any)) {
+    return fail(
+      403,
+      "Admin tools need two-step verification on this sign-in. Turn it on in Settings, or sign in again with your code."
+    ) as { ok: false; response: NextResponse };
   }
   return { ok: true, userId };
 }

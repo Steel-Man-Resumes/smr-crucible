@@ -19,6 +19,7 @@
 
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
 import {
   getOne,
@@ -56,6 +57,16 @@ export async function POST(req: Request) {
   }
 
   // Reauth gate -- same contract as export-data / delete-data.
+  // Password re-check is rate limited (F7): it was a free password oracle
+  // for anyone holding a session.
+  const reauthLimit = await checkAuthRateLimits(reauthRateLimits(getClientIp(req), userId));
+  if (!reauthLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Wait a few minutes and try again." },
+      { status: 429, headers: NO_STORE_HEADERS }
+    );
+  }
+
   const account = await getOne<{ password_hash: string | null }>(
     "SELECT password_hash FROM users WHERE id = $1",
     [userId]

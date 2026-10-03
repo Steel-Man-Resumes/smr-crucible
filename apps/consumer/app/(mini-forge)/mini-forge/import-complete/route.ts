@@ -14,9 +14,10 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { auth, isSessionRevoked } from "@/auth";
 import { getTabletSessionForImport, TABLET_COOKIE } from "@/lib/tablet-session";
 import { saveForgeSession } from "@crucible/core";
+import { sessionPending } from "@/lib/session-policy";
 
 // Reads the session and a cookie, writes to the DB: never static, never cached.
 export const dynamic = "force-dynamic";
@@ -56,6 +57,29 @@ export async function GET(request: NextRequest) {
       request,
       "/login?from=mini-forge&callbackUrl=" +
         encodeURIComponent("/mini-forge/import-complete"),
+      false
+    );
+  }
+
+  // This route is outside the middleware matcher, so it makes the same
+  // revocation check itself: a session signed out from the device list does
+  // not get to write here. The cookie is kept for after a fresh sign-in.
+  const u = session.user as any;
+  if (u.sid && (await isSessionRevoked(u.sid, u.id, u.sit))) {
+    return go(
+      request,
+      "/login?from=mini-forge&callbackUrl=" + encodeURIComponent("/mini-forge/import-complete"),
+      false
+    );
+  }
+
+  // A session that still owes its two-step code or the first-proof choice
+  // (F1/F3) must finish that before anything is written to the account. The
+  // cookie is kept, so the import runs when they come back here.
+  if (sessionPending(session.user as any)) {
+    return go(
+      request,
+      "/login/verify?callbackUrl=" + encodeURIComponent("/mini-forge/import-complete"),
       false
     );
   }

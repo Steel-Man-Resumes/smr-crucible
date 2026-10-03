@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import { deviceLabel } from "@/lib/security-email";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -48,11 +49,13 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     if (action === "revoke_others") {
-      await client.query(
-        `UPDATE user_session SET revoked_at = now()
-          WHERE user_id = $1 AND revoked_at IS NULL AND jti <> $2`,
-        [userId, currentJti || ""]
-      );
+      // Also ends older sessions that never registered a row (see
+      // revocationVerdict in lib/session-policy.ts), not just the listed ones.
+      await revokeUserSessions(client, {
+        userId,
+        keepSid: currentJti || null,
+        userAgent: req.headers.get("user-agent") || null,
+      });
       return NextResponse.json({ ok: true });
     }
     if (action === "revoke") {

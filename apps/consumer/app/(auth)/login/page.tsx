@@ -17,6 +17,8 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
+import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { isSafeRelativePath } from "@/lib/safe-path";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -34,21 +36,9 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
-/**
- * Same-origin relative path only: one leading "/", never "//host" or "/\host"
- * (both mean another site), no backslashes, no control characters (a browser
- * strips tabs/newlines, so "/\t/host" would become "//host"). Keeps an
- * honored callbackUrl from ever becoming an open redirect. Auth.js also
- * rejects cross-origin callback URLs on its side; this is the client half.
- */
-function isSafeRelativePath(url: string | null): url is string {
-  return (
-    !!url &&
-    url.startsWith("/") &&
-    !url.startsWith("//") &&
-    !/[\\\u0000-\u001f\u007f]/.test(url)
-  );
-}
+// Same-origin relative path only (lib/safe-path.ts). Keeps an honored
+// callbackUrl from ever becoming an open redirect. Auth.js also rejects
+// cross-origin callback URLs on its side; this is the client half.
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -103,6 +93,12 @@ function LoginForm() {
         CredentialsSignin: "Invalid email or password.",
         OAuthAccountNotLinked:
           "You're signed in as a different account already. Sign out below, then try Google again.",
+        GoogleEmailUnverified:
+          "Google has not confirmed that email address yet. Sign in with your password or an email link instead.",
+        GoogleEmailMismatch:
+          "That Google account uses a different email than the account it is linked to. Sign in with your password or an email link instead.",
+        SessionNotUsable:
+          "This browser is still holding an old or unfinished sign-in. Sign out below, then try Google again.",
       };
       setError(msgs[urlError] || `Login error: ${urlError}`);
     }
@@ -248,7 +244,7 @@ function LoginForm() {
     e.preventDefault();
     if (!email.trim() || !password || !confirmPassword) return;
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    { const problem = passwordProblem(password); if (problem) { setError(problem); return; } }
     if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
@@ -489,7 +485,7 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "create" ? "Create a password (8+ characters)" : "Your password"}
+                placeholder={mode === "create" ? `Create a password (${PASSWORD_HINT})` : "Your password"}
                 required
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
@@ -630,7 +626,7 @@ function LoginForm() {
           {error && (
             <p className="text-sm text-t-red">
               {error}
-              {searchParams.get("error") === "OAuthAccountNotLinked" && (
+              {["OAuthAccountNotLinked", "SessionNotUsable"].includes(searchParams.get("error") || "") && (
                 <>
                   {" "}
                   <button

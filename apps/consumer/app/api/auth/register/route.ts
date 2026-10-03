@@ -17,6 +17,7 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
+import { passwordProblem } from "@/lib/password-policy";
 import {
   checkAuthRateLimit,
   getClientIp,
@@ -123,11 +124,11 @@ export async function POST(request: Request) {
     // Abuse limiting -- generous on purpose (see AUTH_LIMITS.registerPerIp):
     // a whole room signing up at once must pass; a bot flood must not.
     const ip = getClientIp(request);
-    const ipCheck = checkAuthRateLimit(
+    const ipCheck = await checkAuthRateLimit(
       `register:ip:${ip}`,
       AUTH_LIMITS.registerPerIp
     );
-    const emailCheck = checkAuthRateLimit(
+    const emailCheck = await checkAuthRateLimit(
       `register:email:${trimmedEmail}`,
       AUTH_LIMITS.registerPerEmail
     );
@@ -138,11 +139,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
-        { status: 400 }
-      );
+    const problem = passwordProblem(password);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
     }
 
     const cName = typeof name === "string" ? name.trim() : "";

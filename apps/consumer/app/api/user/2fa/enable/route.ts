@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { verifyToken, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
+import { matchTotpStep, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
+import { consumeTotpStep } from "@/lib/second-factor";
+import { EMAIL_PROOF_NEEDED, isEmailProven } from "@/lib/email-proof";
+import { revokeUserSessions } from "@/lib/session-registry";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -18,6 +21,11 @@ export async function POST(req: Request) {
 
   const client = await pool.connect();
   try {
+    // S1: same rule as setup (an account whose email was never proven cannot
+    // turn two-step on).
+    if (!(await isEmailProven(client, session.user.id))) {
+      return NextResponse.json(EMAIL_PROOF_NEEDED, { status: 409 });
+    }
     const r = await client.query(
       `SELECT secret, secret_iv, secret_tag, secret_key_version FROM user_two_factor WHERE user_id = $1`,
       [session.user.id]
@@ -29,23 +37,60 @@ export async function POST(req: Request) {
       );
     }
     const pendingSecret = resolveTotpSecret(r.rows[0], session.user.id);
-    if (!verifyToken(token, pendingSecret)) {
+    const step = matchTotpStep(token, pendingSecret);
+    if (step === null) {
       return NextResponse.json(
         { error: "That code didn't match. Check your authenticator app and try again." },
+        { status: 400 }
+      );
+    }
+    // Record the step (F10) so the code typed here cannot be replayed to sign
+    // in during the next minute or so.
+    if (!(await consumeTotpStep(client, session.user.id, step))) {
+      return NextResponse.json(
+        { error: "That code was already used. Wait for the next code and try again." },
         { status: 400 }
       );
     }
 
     const codes = generateBackupCodes();
     const hashes = await Promise.all(codes.map((c) => bcrypt.hash(c, 10)));
-    await client.query(
-      `UPDATE user_two_factor SET backup_codes = $2::jsonb, confirmed_at = now(), updated_at = now()
-       WHERE user_id = $1`,
-      [session.user.id, JSON.stringify(hashes)]
-    );
-    await client.query(`UPDATE users SET two_factor_enabled = true WHERE id = $1`, [
-      session.user.id,
-    ]);
+    // Turning two-step on signs out every other session in the same step, so
+    // a session opened before the second factor existed cannot ride past it.
+    await client.query("BEGIN");
+    try {
+      await client.query(
+        `UPDATE user_two_factor SET backup_codes = $2::jsonb, confirmed_at = now(), updated_at = now()
+         WHERE user_id = $1`,
+        [session.user.id, JSON.stringify(hashes)]
+      );
+      await client.query(`UPDATE users SET two_factor_enabled = true WHERE id = $1`, [
+        session.user.id,
+      ]);
+      await revokeUserSessions(client, {
+        userId: session.user.id,
+        keepSid: ((session.user as any).sid as string | undefined) || null,
+        userAgent: req.headers.get("user-agent") || null,
+      });
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    }
+
+    // This session just entered a code, so it counts as a session that
+    // presented a second factor (F1): after the page calls update(), admin
+    // tools unlock without signing in again. Best-effort.
+    const sid = ((session.user as any).sid as string | undefined) || null;
+    if (sid) {
+      await client
+        .query(
+          `UPDATE user_session SET mfa_verified_at = now()
+            WHERE jti = $1 AND user_id = $2 AND revoked_at IS NULL`,
+          [sid, session.user.id]
+        )
+        .catch((err: any) => console.error("2FA enable: could not mark session:", err?.message || err));
+    }
     await client
       .query(
         `INSERT INTO user_login_event (user_id, event, user_agent) VALUES ($1, 'two_factor_enabled', $2)`,

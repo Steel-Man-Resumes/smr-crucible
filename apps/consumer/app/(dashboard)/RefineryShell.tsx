@@ -524,18 +524,19 @@ export function RefineryShell({
     }
   }, [authStatus, sessionData?.user?.id]);
 
-  // New-device sign-in alert (fingerprints this device server-side; emails the
-  // user if it's a new device on their account) + record this session's device
-  // for the active-devices list / revoke. Fire-and-forget, once.
+  // Refresh this session's last-seen time in the active-devices list. The
+  // session row itself, and the new-device email, are written server-side at
+  // sign-in (they no longer depend on this page loading). Fire-and-forget, once.
   useEffect(() => {
     if (authStatus === "authenticated") {
-      fetch("/api/auth/signin-alert", { method: "POST" }).catch(() => {});
       fetch("/api/auth/session-ping", { method: "POST" }).catch(() => {});
     }
   }, [authStatus]);
 
-  // Admin 2FA enforcement: an admin account without two-step verification is
-  // guided (not locked) to Settings to turn it on. Only in a real admin session
+  // Admin 2FA: an admin account without two-step verification is guided to
+  // Settings to turn it on. The real gate is server-side (auth.ts authorized,
+  // requirePlatformAdmin, effectiveAuth): admin tools need a session that
+  // entered a code. Only in a real admin session
   // (not view-as, so QA impersonation isn't disrupted).
   const realTier = useRealTier();
   const [adminNeeds2fa, setAdminNeeds2fa] = useState(false);
@@ -824,7 +825,7 @@ export function RefineryShell({
           {adminNeeds2fa && (
             <div className="mb-6 border border-t-amber bg-t-panel px-4 py-3 text-sm text-t-amber-bright">
               <span className="font-semibold">Two-step verification is required for admin accounts.</span>{" "}
-              Set it up under <span className="font-semibold">Security</span> below to secure your account.
+              Admin tools stay locked until you turn it on under <span className="font-semibold">Security</span> below.
             </div>
           )}
           {/* The client journey banner is participant chrome -- org leaders run

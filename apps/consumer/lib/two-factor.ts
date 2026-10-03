@@ -64,18 +64,44 @@ export function generateToken(secret: string, when = Date.now()): string {
   return hotp(secret, Math.floor(when / 1000 / STEP));
 }
 
-/** Verify a token with a +/- 1 step window for clock drift. */
-export function verifyToken(token: string, secret: string, when = Date.now()): boolean {
+/** A 6-digit authenticator code (spaces ignored). */
+export function isTotpFormat(input: string): boolean {
+  return /^\d{6}$/.test((input || "").replace(/\s/g, ""));
+}
+
+/**
+ * The time step a token matches, within +/- 1 step for clock drift, or null.
+ * The step is what the replay guard stores (user_two_factor.last_totp_step):
+ * a code is accepted only for a step later than the last one accepted.
+ */
+export function matchTotpStep(token: string, secret: string, when = Date.now()): number | null {
   const t = (token || "").replace(/\s/g, "");
-  if (!/^\d{6}$/.test(t) || !secret) return false;
+  if (!/^\d{6}$/.test(t) || !secret) return null;
   const counter = Math.floor(when / 1000 / STEP);
   for (const w of [-1, 0, 1]) {
     const candidate = hotp(secret, counter + w);
     const a = Buffer.from(candidate);
     const b = Buffer.from(t);
-    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return counter + w;
   }
-  return false;
+  return null;
+}
+
+/** Verify a token with a +/- 1 step window for clock drift. */
+export function verifyToken(token: string, secret: string, when = Date.now()): boolean {
+  return matchTotpStep(token, secret, when) !== null;
+}
+
+/**
+ * A backup code in its stored form (xxxxx-xxxxx, lowercase hex), or null when
+ * the input is not shaped like one. Spaces, case and a missing dash are
+ * forgiven. Backup codes are bcrypt-hashed, so checking one costs up to ten
+ * bcrypt compares; only input in this shape is ever checked (F10).
+ */
+export function normalizeBackupCode(input: string): string | null {
+  const c = (input || "").replace(/\s/g, "").toLowerCase();
+  const m = /^([0-9a-f]{5})-?([0-9a-f]{5})$/.exec(c);
+  return m ? `${m[1]}-${m[2]}` : null;
 }
 
 export function otpauthUrl(secret: string, account: string, issuer = ISSUER): string {

@@ -24,21 +24,9 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { GoogleAnalytics } from "./GoogleAnalytics";
 import { GA_ID } from "@/lib/ga";
+import { isAnalyticsExcluded } from "@/lib/analytics-exclusions";
 
-const EXCLUDED_PREFIXES = [
-  "/mini-forge",
-  "/dashboard/disclosure",
-  "/dashboard/interview",
-  "/dashboard/vault",
-  "/dashboard/documents",
-  "/access",
-];
-
-export function isAnalyticsExcluded(pathname: string): boolean {
-  return EXCLUDED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "?")
-  );
-}
+export { isAnalyticsExcluded };
 
 /** Vercel beforeSend: drop excluded pages, never send a query string. */
 export function scrubVercelEvent<T extends { url: string }>(event: T): T | null {

@@ -4,15 +4,26 @@ import {
   checkAuthRateLimit,
   getClientIp,
   isValidEmail,
+  refundAuthRateLimits,
+  signInEmailFromBody,
+  signInPostRequiresEmail,
   signInRateLimits,
+  signInResponseFailed,
 } from "@/lib/auth-rate-limit";
 
 export const { GET } = handlers;
+
+const INVALID_EMAIL = () =>
+  NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 });
 
 /**
  * Wrap NextAuth POST handler with rate limiting and email validation.
  * Magic link requests burn a Resend send per attempt -- bots were
  * hammering this endpoint with garbage addresses (Mar 2026).
+ *
+ * The email is read from the body exactly the way Auth.js will read it (see
+ * signInEmailFromBody). A JSON body, or a form with the email field repeated,
+ * used to slip past every limit here while Auth.js still acted on it.
  */
 export async function POST(request: NextRequest) {
   if (
@@ -22,66 +33,78 @@ export async function POST(request: NextRequest) {
     return handlers.POST!(request);
   }
 
+  const pathname = request.nextUrl.pathname;
   const ip = getClientIp(request);
 
   // Clone the request so we can read the body without consuming it
-  const cloned = request.clone();
-
+  let body = "";
   try {
-    const body = await cloned.text();
-    const params = new URLSearchParams(body);
-    const email = params.get("email")?.toLowerCase().trim();
-    const csrfToken = params.get("csrfToken");
-
-    // Only rate-limit sign-in actions (not signout, callback, etc.)
-    // Magic link and password sign-in both POST with an email field, but they
-    // are limited separately: a magic link burns an email send (strict hourly
-    // limits), a password sign-in does not (brute-force limits).
-    if (email) {
-      const limits = signInRateLimits(request.nextUrl.pathname, ip, email);
-
-      // Email format validation -- reject garbage before burning a send
-      if (!isValidEmail(email)) {
-        return NextResponse.json(
-          { error: "Please enter a valid email address." },
-          { status: 400 }
-        );
-      }
-
-      // Rate limit by IP
-      const ipCheck = checkAuthRateLimit(limits.ip.key, limits.ip.config);
-      if (!ipCheck.allowed) {
-        return NextResponse.json(
-          { error: "Too many sign-in attempts. Please try again later." },
-          {
-            status: 429,
-            headers: {
-              "Retry-After": Math.ceil(ipCheck.resetIn / 1000).toString(),
-            },
-          }
-        );
-      }
-
-      // Rate limit by email (prevents spamming a single address)
-      const emailCheck = checkAuthRateLimit(
-        limits.email.key,
-        limits.email.config
-      );
-      if (!emailCheck.allowed) {
-        return NextResponse.json(
-          { error: "Too many sign-in attempts for this email. Please try again later." },
-          {
-            status: 429,
-            headers: {
-              "Retry-After": Math.ceil(emailCheck.resetIn / 1000).toString(),
-            },
-          }
-        );
-      }
-    }
+    body = await request.clone().text();
   } catch {
-    // If body parsing fails, let NextAuth handle it (might be a callback)
+    body = "";
+  }
+  const parsed = signInEmailFromBody(request.headers.get("content-type"), body);
+
+  if (parsed.kind === "invalid") return INVALID_EMAIL();
+
+  if (parsed.kind === "none") {
+    // The password callback and the magic-link request always carry an email.
+    // Without one there is nothing to limit against, so refuse instead of
+    // letting the request through unthrottled.
+    if (signInPostRequiresEmail(pathname)) return INVALID_EMAIL();
+    // Everything else (signout, session update, an OAuth start) has no email.
+    return handlers.POST!(request);
   }
 
-  return handlers.POST!(request);
+  const email = parsed.email;
+
+  // Email format validation -- reject garbage before burning a send
+  if (!isValidEmail(email)) return INVALID_EMAIL();
+
+  // Magic link and password sign-in are limited separately: a magic link burns
+  // an email send (strict hourly limits), a password sign-in does not
+  // (brute-force limits).
+  const limits = signInRateLimits(pathname, ip, email);
+
+  // Rate limit by IP
+  const ipCheck = await checkAuthRateLimit(limits.ip.key, limits.ip.config);
+  if (!ipCheck.allowed) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": Math.ceil(ipCheck.resetIn / 1000).toString(),
+        },
+      }
+    );
+  }
+
+  // Rate limit by email (prevents spamming a single address)
+  const emailCheck = await checkAuthRateLimit(limits.email.key, limits.email.config);
+  if (!emailCheck.allowed) {
+    await refundAuthRateLimits([ipCheck.ticket]); // this attempt never ran
+    return NextResponse.json(
+      { error: "Too many sign-in attempts for this email. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": Math.ceil(emailCheck.resetIn / 1000).toString(),
+        },
+      }
+    );
+  }
+
+  const res = await handlers.POST!(request);
+
+  // Password sign-ins count FAILED attempts only (30 per IP, 10 per email per
+  // 15 minutes): a successful sign-in, including one with a correct two-step
+  // code, hands both counts back. Email-link requests keep counting every
+  // send.
+  if (pathname.replace(/\/+$/, "").endsWith("/callback/password-login")) {
+    if (!(await signInResponseFailed(res))) {
+      await refundAuthRateLimits([ipCheck.ticket, emailCheck.ticket]);
+    }
+  }
+  return res;
 }

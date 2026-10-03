@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { Pool } from "@neondatabase/serverless";
 import { generateSecret, otpauthUrl, qrDataUrl, encryptTotpSecret } from "@/lib/two-factor";
+import { EMAIL_PROOF_NEEDED, isEmailProven } from "@/lib/email-proof";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -26,6 +27,13 @@ export async function POST() {
         { error: "Two-step verification is already on." },
         { status: 400 }
       );
+    }
+    // S1: two-step only on an account whose email has been proven (by an
+    // email-link or verified Google sign-in, or a reset). Otherwise someone
+    // who registered another person's address could add two-step to it, and
+    // the owner's first email-link sign-in would face a code they never had.
+    if (!(await isEmailProven(client, session.user.id))) {
+      return NextResponse.json(EMAIL_PROOF_NEEDED, { status: 409 });
     }
 
     const secret = generateSecret();

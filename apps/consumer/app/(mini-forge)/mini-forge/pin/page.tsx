@@ -49,7 +49,7 @@ export default async function PinPage(
       h.get("x-real-ip")?.trim() ||
       h.get("x-forwarded-for")?.split(",").pop()?.trim() ||
       "unknown";
-    const ipCheck = checkAuthRateLimit(
+    const ipCheck = await checkAuthRateLimit(
       `miniforge:ip:${ip}`,
       AUTH_LIMITS.miniForgeSessionPerIp
     );

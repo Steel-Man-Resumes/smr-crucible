@@ -1,6 +1,7 @@
 /**
- * Security notifications (new-device sign-in). Send-only, Node runtime.
- * Mirrors the org-invite Resend sender; never imported from edge.
+ * Security notifications (new-device sign-in, password changed). Send-only.
+ * Mirrors the org-invite Resend sender. Fetch-only (no Node APIs), so it is safe
+ * in the sign-in callbacks that share a module graph with the Edge middleware.
  */
 
 export async function sendSecurityEmail(
@@ -84,6 +85,75 @@ export function buildNewDeviceEmail(opts: {
     `<p>If this was you, no action is needed.</p>` +
     `<p>If it wasn't you, <a href="${settingsUrl}">change your password right away</a>.</p>` +
     `<p>-- Steel Man Resumes</p>`;
+  return { subject, html, text };
+}
+
+/**
+ * "Your password changed" notice: sent when a password is created, changed, or
+ * reset by email link. The person who did it already knows; this is for the
+ * case where it was not them.
+ */
+export function buildPasswordChangedEmail(opts: {
+  name: string | null;
+  kind: "created" | "changed" | "reset";
+  whenISO: string;
+  origin: string;
+}): { subject: string; html: string; text: string } {
+  const hello = (opts.name || "").trim().split(/\s+/)[0] || "there";
+  const when = (() => {
+    const d = new Date(opts.whenISO);
+    return isNaN(d.getTime()) ? opts.whenISO : d.toUTCString();
+  })();
+  const resetUrl = `${opts.origin}/forgot-password`;
+  const subject =
+    opts.kind === "created"
+      ? "A password was added to your Steel Man Resumes account"
+      : "Your Steel Man Resumes password was changed";
+  const what =
+    opts.kind === "created"
+      ? "A password was added to your account"
+      : opts.kind === "reset"
+        ? "Your password was reset with an email link"
+        : "Your password was changed";
+  const text =
+    `Hi ${hello},\n\n` +
+    `${what} on ${when}. Your other devices were signed out.\n\n` +
+    `If this was you, no action is needed.\n\n` +
+    `If it wasn't you, reset your password right away:\n${resetUrl}\n\n` +
+    `Steel Man Resumes`;
+  const html =
+    `<p>Hi ${escapeHtml(hello)},</p>` +
+    `<p>${escapeHtml(what)} on ${escapeHtml(when)}. Your other devices were signed out.</p>` +
+    `<p>If this was you, no action is needed.</p>` +
+    `<p>If it wasn't you, <a href="${resetUrl}">reset your password right away</a>.</p>` +
+    `<p>Steel Man Resumes</p>`;
+  return { subject, html, text };
+}
+
+/**
+ * Sent when someone signing in through the inbox chose "I didn't set this" and
+ * the password and two-step on a never-proven account were removed (F3).
+ */
+export function buildCredentialsClearedEmail(opts: { origin: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const settingsUrl = `${opts.origin}/dashboard/settings`;
+  const subject = "We removed a password from your Steel Man Resumes account";
+  const body =
+    "You signed in with this email address and told us you did not set the password or " +
+    "two-step verification on this account. We removed them and signed out every other " +
+    "device. Your work is still there.";
+  const text =
+    `Hi there,\n\n${body}\n\n` +
+    `To sign in with a password from now on, set one in Settings:\n${settingsUrl}\n\n` +
+    `Steel Man Resumes`;
+  const html =
+    `<p>Hi there,</p>` +
+    `<p>${escapeHtml(body)}</p>` +
+    `<p>To sign in with a password from now on, <a href="${settingsUrl}">set one in Settings</a>.</p>` +
+    `<p>Steel Man Resumes</p>`;
   return { subject, html, text };
 }
 
