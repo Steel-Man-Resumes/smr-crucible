@@ -11,11 +11,14 @@
  * (lib/sign-in-link.ts), so the page cannot be pointed anywhere else.
  */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
-import { emailCallbackTarget } from "@/lib/sign-in-link";
+import { EMAIL_LINK_PAGE, emailCallbackTarget } from "@/lib/sign-in-link";
+
+/** This tab's copy of the validated sign-in target, after the URL is cleaned. */
+const TARGET_KEY = "smr_finish_sign_in";
 
 export default function FinishSignInPage() {
   return (
@@ -30,8 +33,38 @@ function FinishSignIn() {
   const [going, setGoing] = useState(false);
   // undefined while checking (first render), null when the link is not valid.
   const [target, setTarget] = useState<string | null | undefined>(undefined);
+  // Next updates useSearchParams after replaceState, so the effect runs again
+  // with no parameters; this keeps the target read the first time.
+  const readOnce = useRef<string | null>(null);
   useEffect(() => {
-    setTarget(emailCallbackTarget(window.location.origin, new URLSearchParams(searchParams.toString())));
+    const fromLink = emailCallbackTarget(window.location.origin, new URLSearchParams(searchParams.toString()));
+    if (fromLink) {
+      // Take the token and email out of the address bar and history as soon
+      // as they are read. The target is kept for this tab only, so a refresh
+      // still works.
+      try {
+        sessionStorage.setItem(TARGET_KEY, fromLink);
+      } catch {
+        // storage blocked: the button still works from memory
+      }
+      readOnce.current = fromLink;
+      window.history.replaceState(null, "", EMAIL_LINK_PAGE);
+      setTarget(fromLink);
+      return;
+    }
+    if (readOnce.current) {
+      setTarget(readOnce.current);
+      return;
+    }
+    // After a refresh: this tab's saved target, re-checked with the same rule.
+    let savedOk: string | null = null;
+    try {
+      const saved = sessionStorage.getItem(TARGET_KEY);
+      savedOk = saved ? emailCallbackTarget(window.location.origin, new URL(saved).searchParams) : null;
+    } catch {
+      savedOk = null;
+    }
+    setTarget(savedOk);
   }, [searchParams]);
 
   return (
@@ -50,6 +83,11 @@ function FinishSignIn() {
               onClick={() => {
                 if (!target) return;
                 setGoing(true);
+                try {
+                  sessionStorage.removeItem(TARGET_KEY);
+                } catch {
+                  // ignore
+                }
                 window.location.assign(target);
               }}
               className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]"

@@ -108,6 +108,15 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Emailed sign-in links open this page with a one-time token and the
+        // email address in the query string. Never send its URL on as a
+        // referrer (same-origin pages would otherwise see the full URL, and
+        // analytics would collect it). Listed after the global rule so this
+        // value wins for this path.
+        source: "/login/finish",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
 };
