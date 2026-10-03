@@ -81,6 +81,87 @@ export function googleSignInDecision(input: {
   return true;
 }
 
+/** Auth.js session cookie names (plain or __Secure-, possibly chunked .0, .1, ...). */
+const SESSION_COOKIE_RE = /^(__Secure-)?authjs\.session-token(\.\d+)?$/;
+
+export function isSessionCookieName(name: string): boolean {
+  return SESSION_COOKIE_RE.test(name);
+}
+
+/** What the browser brought to a Google sign-in, as far as linking is concerned. */
+export type CurrentSessionRead =
+  | { state: "none" }
+  | { state: "session"; session: { email: string | null; revoked: boolean; pending: boolean } }
+  | { state: "unreadable" };
+
+/**
+ * Read the browser's current session for the Google link check (B1), without
+ * ever throwing out of the signIn callback.
+ *
+ *  - No session cookie: "none". The session is not read at all, so a failing
+ *    read can never block an ordinary signed-out Google sign-in (almost all
+ *    of them).
+ *  - A cookie that reads as a session: its email, whether it is revoked
+ *    (a failed revocation lookup counts as not revoked, the same fail-open
+ *    rule the middleware uses), and whether it still owes a step.
+ *  - A cookie that does not read as a session (garbled, signed with an old
+ *    secret) or a read that throws: "unreadable", which the caller refuses
+ *    (the person can sign out, which clears it, and try again).
+ */
+export async function readCurrentSessionForLink(deps: {
+  hasSessionCookie: () => Promise<boolean>;
+  getSession: () => Promise<{ user?: unknown } | null | undefined>;
+  isRevoked: (sid: string, userId: string, signedInAt: unknown) => Promise<boolean>;
+  isPending: (user: unknown) => boolean;
+}): Promise<CurrentSessionRead> {
+  let hasCookie = true;
+  try {
+    hasCookie = await deps.hasSessionCookie();
+  } catch {
+    hasCookie = true; // cannot tell: read the session to find out
+  }
+  if (!hasCookie) return { state: "none" };
+
+  let user: any = null;
+  try {
+    user = (await deps.getSession())?.user ?? null;
+  } catch {
+    return { state: "unreadable" };
+  }
+  if (!user?.id) return { state: "unreadable" };
+
+  let revoked = false;
+  if (user.sid) {
+    try {
+      revoked = await deps.isRevoked(user.sid, user.id, user.sit);
+    } catch {
+      revoked = false;
+    }
+  }
+  return {
+    state: "session",
+    session: { email: user.email ?? null, revoked, pending: deps.isPending(user) },
+  };
+}
+
+/** The Google sign-in decision from a session read (see googleSignInDecision). */
+export function googleSignInGate(input: {
+  profile: unknown;
+  linkedAccountEmail: string | null;
+  current: CurrentSessionRead;
+}): true | string {
+  if (input.current.state === "unreadable") {
+    // Still refuse an unverified address first, so that reason is the one shown.
+    if (!googleEmailVerified(input.profile)) return SIGN_IN_REFUSED.googleEmailUnverified;
+    return SIGN_IN_REFUSED.sessionNotUsable;
+  }
+  return googleSignInDecision({
+    profile: input.profile,
+    linkedAccountEmail: input.linkedAccountEmail,
+    session: input.current.state === "session" ? input.current.session : null,
+  });
+}
+
 /** Email of the account a Google identity is linked to, or null when it is not linked. */
 export async function linkedAccountEmail(db: Db, providerAccountId: string): Promise<string | null> {
   const r = await db.query(

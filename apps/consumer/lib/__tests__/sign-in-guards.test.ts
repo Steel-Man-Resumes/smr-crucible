@@ -16,7 +16,10 @@ import {
   enforceGoogleAccountMatch,
   googleEmailVerified,
   googleSignInDecision,
+  googleSignInGate,
+  isSessionCookieName,
   linkedAccountEmail,
+  readCurrentSessionForLink,
 } from "../sign-in-guards";
 import type { Db } from "../session-registry";
 
@@ -124,5 +127,87 @@ describe("GoogleLinkRefused", () => {
     const e = new GoogleLinkRefused();
     assert.equal(e.type, "OAuthAccountNotLinked");
     assert.equal((e as any).kind, "signIn");
+  });
+});
+
+describe("reading the browser's session inside the Google sign-in (R3 G-1)", () => {
+  const profile = verified("person@example.org");
+  const sessionUser = (over: Record<string, unknown> = {}) => ({
+    user: { id: "u1", email: "person@example.org", sid: "s1", sit: 1_790_000_000, mfa: true, claim: null, ...over },
+  });
+  const deps = (over: Partial<Parameters<typeof readCurrentSessionForLink>[0]> = {}) => ({
+    hasSessionCookie: async () => true,
+    getSession: async () => sessionUser(),
+    isRevoked: async () => false,
+    isPending: (u: any) => u?.mfa === false || !!u?.claim,
+    ...over,
+  });
+  const gate = async (over: Partial<Parameters<typeof readCurrentSessionForLink>[0]> = {}) =>
+    googleSignInGate({ profile, linkedAccountEmail: null, current: await readCurrentSessionForLink(deps(over)) });
+
+  it("no session cookie: allowed through, and the session is not even read", async () => {
+    let reads = 0;
+    const result = await gate({
+      hasSessionCookie: async () => false,
+      getSession: async () => {
+        reads++;
+        throw new Error("would break every Google sign-in");
+      },
+    });
+    assert.equal(result, true);
+    assert.equal(reads, 0);
+  });
+
+  it("a live session with the same email: allowed", async () => {
+    assert.equal(await gate(), true);
+    assert.equal(await gate({ getSession: async () => sessionUser({ email: " Person@Example.org " }) }), true);
+  });
+
+  it("a session with a different email: refused", async () => {
+    assert.equal(await gate({ getSession: async () => sessionUser({ email: "someone-else@example.org" }) }), SIGN_IN_REFUSED.sessionLinkRefused);
+  });
+
+  it("a revoked session: refused", async () => {
+    assert.equal(await gate({ isRevoked: async () => true }), SIGN_IN_REFUSED.sessionNotUsable);
+  });
+
+  it("a session still owing a step: refused", async () => {
+    assert.equal(await gate({ getSession: async () => sessionUser({ mfa: false }) }), SIGN_IN_REFUSED.sessionNotUsable);
+  });
+
+  it("a garbled cookie (reads as no session): refused, without throwing", async () => {
+    const read = await readCurrentSessionForLink(deps({ getSession: async () => null }));
+    assert.deepEqual(read, { state: "unreadable" });
+    assert.equal(googleSignInGate({ profile, linkedAccountEmail: null, current: read }), SIGN_IN_REFUSED.sessionNotUsable);
+  });
+
+  it("a session read that throws: refused, without throwing", async () => {
+    const read = await readCurrentSessionForLink(deps({ getSession: async () => { throw new Error("decrypt failed"); } }));
+    assert.deepEqual(read, { state: "unreadable" });
+    assert.equal(googleSignInGate({ profile, linkedAccountEmail: null, current: read }), SIGN_IN_REFUSED.sessionNotUsable);
+  });
+
+  it("a cookie check that throws falls back to reading the session", async () => {
+    assert.equal(await gate({ hasSessionCookie: async () => { throw new Error("no request scope"); } }), true);
+  });
+
+  it("a failed revocation lookup counts as not revoked (same fail-open rule as the middleware)", async () => {
+    assert.equal(await gate({ isRevoked: async () => { throw new Error("db down"); } }), true);
+  });
+
+  it("an unverified address is refused for that reason even with an unreadable cookie", () => {
+    assert.equal(
+      googleSignInGate({ profile: { email: "a@example.org", email_verified: false }, linkedAccountEmail: null, current: { state: "unreadable" } }),
+      SIGN_IN_REFUSED.googleEmailUnverified
+    );
+  });
+
+  it("recognizes the Auth.js session cookie names", () => {
+    for (const n of ["authjs.session-token", "__Secure-authjs.session-token", "__Secure-authjs.session-token.0", "authjs.session-token.1"]) {
+      assert.equal(isSessionCookieName(n), true, n);
+    }
+    for (const n of ["authjs.csrf-token", "__Host-authjs.csrf-token", "authjs.callback-url", "smr_impersonate", "authjs.session-tokenx"]) {
+      assert.equal(isSessionCookieName(n), false, n);
+    }
   });
 });

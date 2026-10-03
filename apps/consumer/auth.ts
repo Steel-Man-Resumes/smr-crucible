@@ -288,19 +288,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const guards = await import("@/lib/sign-in-guards");
         if (!guards.googleEmailVerified(profile)) return guards.SIGN_IN_REFUSED.googleEmailUnverified;
         const linked = await guards.linkedAccountEmail(pool, String(account.providerAccountId ?? ""));
-        let current: { email: string | null; revoked: boolean; pending: boolean } | null = null;
-        try {
-          const existing = await auth();
-          const u = existing?.user as any;
-          if (u?.id) {
-            const revoked = u.sid ? await isSessionRevoked(u.sid, u.id, u.sit) : false;
-            current = { email: u.email ?? null, revoked, pending: sessionPending(u) };
-          }
-        } catch {
-          // Could not read the browser's session: refuse rather than link blind.
-          return guards.SIGN_IN_REFUSED.sessionNotUsable;
-        }
-        return guards.googleSignInDecision({ profile, linkedAccountEmail: linked, session: current });
+        // Never throws; with no session cookie it does not read anything.
+        const current = await guards.readCurrentSessionForLink({
+          hasSessionCookie: async () => {
+            const { cookies } = await import("next/headers");
+            return (await cookies()).getAll().some((c) => guards.isSessionCookieName(c.name));
+          },
+          getSession: () => auth(),
+          isRevoked: (sid, userId, sit) => isSessionRevoked(sid, userId, sit),
+          isPending: (u) => sessionPending(u as any),
+        });
+        return guards.googleSignInGate({ profile, linkedAccountEmail: linked, current });
       }
       return true;
     },
