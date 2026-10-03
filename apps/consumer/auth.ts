@@ -117,6 +117,13 @@ const providers: any[] = [
     from:
       process.env.AUTH_EMAIL_FROM ||
       "Steel Man Resumes <noreply@steelmanresumes.com>",
+    // The emailed link opens /login/finish, a page with a "Finish signing in"
+    // button, instead of signing in on arrival: mail scanners open links but
+    // do not press buttons. See lib/sign-in-link.ts.
+    async sendVerificationRequest(params: any) {
+      const { sendSignInLinkEmail } = await import("@/lib/sign-in-link");
+      await sendSignInLinkEmail(params);
+    },
   }),
 
   // Password login — available in all environments
