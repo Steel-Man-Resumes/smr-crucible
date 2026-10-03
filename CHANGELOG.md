@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Employer directory: vouches through a partner
+
+- A relationship with an employer can now run through a named outside partner, such as a workforce
+  office or a reentry job developer. When that partner confirms it places people with the employer, the
+  mark becomes Certain while the relationship is confirmed on schedule, and drops back by itself when it
+  lapses. The partner must be a partner organization or a government body, never another employer.
+  Migration 070; `verify:directory` tests it.
+
 ## 2026-10 Employer directory: weak evidence never marks
 
 - An employer now earns the "Hires people with records" mark only when the evidence behind it is at
