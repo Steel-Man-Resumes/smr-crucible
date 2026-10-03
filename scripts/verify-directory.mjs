@@ -81,6 +81,8 @@ async function asApp(userId, build) {
 async function cleanup() {
   const ids = (await owner`SELECT id FROM employer_org WHERE canonical_name LIKE ${P + "%"}`).map((r) => r.id);
   if (!ids.length) return;
+  await owner`DELETE FROM employer_agreement_activity WHERE org_id = ANY(${ids})`;
+  await owner`DELETE FROM employer_working_agreement WHERE org_id = ANY(${ids})`;
   await owner`DELETE FROM employer_reply WHERE org_id = ANY(${ids})`;
   await owner`DELETE FROM employer_requirement WHERE org_id = ANY(${ids})`;
   await owner`DELETE FROM employer_evidence WHERE org_id = ANY(${ids})`;
@@ -257,6 +259,53 @@ try {
     owner`INSERT INTO employer_relationship (org_id, avenue, via_org_id, started_on) VALUES (${govPartner.id}, 'workforce_office', ${govPartner.id}, ${daysAgo(5)})`);
   await refused("070: a workforce-office relationship still has to name who it runs through", () =>
     owner`INSERT INTO employer_relationship (org_id, avenue, started_on) VALUES (${vp.o.id}, 'workforce_office', ${daysAgo(5)})`);
+
+  // 071: Tier 3, a working agreement on top of a live Tier 2 relationship.
+  const tier = async (placeId) => (await owner`SELECT tier, tier_due::text FROM directory_tier_v WHERE place_id = ${placeId}`)[0];
+  async function agreement(f, rel, extra = {}) {
+    const [a] = await owner`INSERT INTO employer_working_agreement (org_id, place_id, relationship_id, receiving_contact_id, started_on, cadence_days, terms_version)
+                            VALUES (${f.o.id}, ${f.p}, ${rel.rel}, ${rel.contact}, ${daysAgo(30)}, 90, 'test-v1') RETURNING id`;
+    if (extra.activityDaysAgo !== undefined)
+      await owner`INSERT INTO employer_agreement_activity (org_id, agreement_id, occurred_on, kind, logged_by)
+                  VALUES (${f.o.id}, ${a.id}, ${daysAgo(extra.activityDaysAgo)}, 'referral_sent', 'verify-directory')`;
+    return a.id;
+  }
+  const t3 = await fresh("Golf Agreement");
+  const t3rel = await liveRelationship(t3.o.id, 5);
+  await evidence({ org: t3.o.id, place: t3.p, claim: "employer_statement", kind: "employer_direct", url: null, confidence: "certain", rel: t3rel.rel });
+  const t3a = await agreement(t3, t3rel, { activityDaysAgo: 5 });
+  let tr = await tier(t3.p);
+  check("071: a live agreement with recent activity reads tier 3, due cadence after the last activity",
+        tr?.tier === 3 && tr?.tier_due === daysAgo(5 - 90), JSON.stringify(tr));
+  await refused("071: agreement activity is never edited", () =>
+    owner`UPDATE employer_agreement_activity SET item_count = 2 WHERE agreement_id = ${t3a}`);
+  await refused("071: activity cannot be dated in the future", () =>
+    owner`INSERT INTO employer_agreement_activity (org_id, agreement_id, occurred_on, kind, logged_by)
+          VALUES (${t3.o.id}, ${t3a}, ${daysAgo(-3)}, 'hire', 'verify-directory')`);
+  await refused("071: an agreement cannot borrow another employer's relationship", () =>
+    owner`INSERT INTO employer_working_agreement (org_id, place_id, relationship_id, receiving_contact_id, started_on, terms_version)
+          VALUES (${t3.o.id}, ${t3.p}, ${live.rel}, ${t3rel.contact}, ${daysAgo(1)}, 'test-v1')`);
+  const t3quiet = await fresh("Golf Quiet");
+  const t3qrel = await liveRelationship(t3quiet.o.id, 5);
+  await evidence({ org: t3quiet.o.id, place: t3quiet.p, claim: "employer_statement", kind: "employer_direct", url: null, confidence: "certain", rel: t3qrel.rel });
+  await agreement(t3quiet, t3qrel);
+  tr = await tier(t3quiet.p);
+  check("071: an agreement with no activity yet stays tier 2", tr?.tier === 2, JSON.stringify(tr));
+  const t3old = await fresh("Golf Stale Activity");
+  const t3orel = await liveRelationship(t3old.o.id, 5);
+  await evidence({ org: t3old.o.id, place: t3old.p, claim: "employer_statement", kind: "employer_direct", url: null, confidence: "certain", rel: t3orel.rel });
+  await agreement(t3old, t3orel, { activityDaysAgo: 120 });
+  tr = await tier(t3old.p);
+  check("071: activity older than cadence + 14 days drops tier 3 to tier 2", tr?.tier === 2, JSON.stringify(tr));
+  const t3lapse = await fresh("Golf Lapsed Relationship");
+  const t3lrel = await liveRelationship(t3lapse.o.id, 200);
+  await evidence({ org: t3lapse.o.id, place: t3lapse.p, claim: "employer_statement", kind: "employer_direct", url: null, confidence: "certain", rel: t3lrel.rel });
+  await agreement(t3lapse, t3lrel, { activityDaysAgo: 5 });
+  tr = await tier(t3lapse.p);
+  check("071: a lapsed relationship under the agreement drops it to tier 1", tr?.tier === 1, JSON.stringify(tr));
+  await owner`UPDATE employer_contact SET can_contact = false, opted_out_at = now() WHERE id = ${t3rel.contact}`;
+  tr = await tier(t3.p);
+  check("071: when the receiving contact opts out, tier 3 is gone", tr === undefined || tr.tier !== 3, JSON.stringify(tr));
 
   const pooled = await fresh("Pooled Confidence");
   const pr = await liveRelationship(pooled.o.id, 5);
@@ -558,7 +607,8 @@ try {
   // ---- The app role ------------------------------------------------------
   for (const table of ["employer_org", "employer_alias", "employer_place", "employer_contact", "employer_relationship",
                        "employer_relationship_confirmation", "employer_evidence", "employer_signup", "employer_requirement",
-                       "employer_reply", "directory_proposal", "directory_import"]) {
+                       "employer_reply", "directory_proposal", "directory_import",
+                       "employer_working_agreement", "employer_agreement_activity"]) {
     for (const who of ["", nobody]) {
       const [rows] = await asApp(who, (q) => [q(`SELECT 1 FROM public.${table} LIMIT 1`)]);
       check(`${table}: nothing visible to a non-admin (${who ? "signed in" : "no user"})`, rows.length === 0, `${rows.length} rows`);
