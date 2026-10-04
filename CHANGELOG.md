@@ -2,6 +2,15 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Employer directory: Tier 3 working agreements
+
+- An employer that works with Steel Man to get people hired can now be recorded as Tier 3: a working
+  agreement on top of a confirmed relationship, with a receiving contact at the employer and dated
+  activity (referrals, applications, hires, check-ins, counts only, never anything about a person).
+  Tier 3 holds only while there is activity on schedule, the relationship is confirmed and the contact
+  is reachable; otherwise it drops back by itself. A new internal view gives each marked place its tier
+  and the day it falls due. Migration 071; `verify:directory` tests it.
+
 ## 2026-10 Employer directory: vouches through a partner
 
 - A relationship with an employer can now run through a named outside partner, such as a workforce
