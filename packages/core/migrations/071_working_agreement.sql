@@ -55,24 +55,33 @@ CREATE INDEX IF NOT EXISTS employer_agreement_activity_agreement ON employer_agr
 -- may not depend on today's date), and an activity is written once. The
 -- composite foreign keys already tie the relationship and the receiving
 -- contact to the same employer as the place.
-CREATE OR REPLACE FUNCTION public.employer_agreement_dates_guard() RETURNS TRIGGER
+-- One function per table: PL/pgSQL resolves NEW.<field> even inside a branch
+-- that does not run, so a shared function would fail on the other table.
+CREATE OR REPLACE FUNCTION public.employer_working_agreement_date_guard() RETURNS TRIGGER
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
-  IF TG_TABLE_NAME = 'employer_working_agreement' AND NEW.started_on > current_date THEN
+  IF NEW.started_on > current_date THEN
     RAISE EXCEPTION 'an agreement cannot start in the future' USING ERRCODE = 'check_violation';
-  END IF;
-  IF TG_TABLE_NAME = 'employer_agreement_activity' AND NEW.occurred_on > current_date THEN
-    RAISE EXCEPTION 'activity cannot be dated in the future' USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
 END;
 $$;
 DROP TRIGGER IF EXISTS employer_working_agreement_dates ON employer_working_agreement;
 CREATE TRIGGER employer_working_agreement_dates BEFORE INSERT OR UPDATE OF started_on ON employer_working_agreement
-  FOR EACH ROW EXECUTE FUNCTION public.employer_agreement_dates_guard();
+  FOR EACH ROW EXECUTE FUNCTION public.employer_working_agreement_date_guard();
+
+CREATE OR REPLACE FUNCTION public.employer_agreement_activity_date_guard() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.occurred_on > current_date THEN
+    RAISE EXCEPTION 'activity cannot be dated in the future' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
 DROP TRIGGER IF EXISTS employer_agreement_activity_dates ON employer_agreement_activity;
 CREATE TRIGGER employer_agreement_activity_dates BEFORE INSERT ON employer_agreement_activity
-  FOR EACH ROW EXECUTE FUNCTION public.employer_agreement_dates_guard();
+  FOR EACH ROW EXECUTE FUNCTION public.employer_agreement_activity_date_guard();
 
 CREATE OR REPLACE FUNCTION public.employer_agreement_activity_guard() RETURNS TRIGGER
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
