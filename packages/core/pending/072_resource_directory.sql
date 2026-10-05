@@ -1,4 +1,10 @@
--- 072_resource_directory.sql  (v3.3, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.4, drafted 2026-10-05, NOT APPLIED)
+-- v3.4: fourth-review fixes. Reviewer identity on every PASS (M2). A superseded prerequisite holds
+-- its dependents (M3). CERTIFIED needs depth facts (L1). A contact on a suppressed address is
+-- do-not-contact at insert (L5). ASSUMPTION, stated: protection against the table owner rests on
+-- the owner's discipline and on the post-apply counts (triggers, view definitions). The app role
+-- has no base-table grants and no EXECUTE on these functions; an owner who disables triggers or
+-- replaces a view leaves no row trace, so record the counts after each change.
 -- v3.3: third review fixes (F1-F3, F5, F6, F8, F10-F14, F21-F22). Hash is jsonb-based (no delimiter
 -- collisions). Barrier tags and urgency are hidden from the public view until each has a source.
 -- v3.2: adversary re-review fixes (2026-10-05): H1 transitive chain dependencies, H2 org name
@@ -148,6 +154,8 @@ CREATE TABLE resource_check (
   volatile_fields text[] NOT NULL DEFAULT '{}',
   review_tier     text CHECK (review_tier IN ('T1','T4')),
   review_result   text CHECK (review_result IN ('PASS','PARTIAL','FAIL','UNVERIFIABLE')),
+  review_by       text,                          -- M2: who reviewed; required when a result is set
+  review_on       date,
   status          text NOT NULL DEFAULT 'live' CHECK (status IN ('live','superseded','withdrawn')),
   status_reason   text,
   lane            text,
@@ -159,7 +167,8 @@ CREATE TABLE resource_check (
   CHECK ((verify_method = 'dataset') = (source_type IN ('federal_dataset','state_dataset'))),
   -- BLOCK-1: a non-dataset row cannot show without a recorded review. Blank is not a pass.
   CHECK (verify_method = 'dataset' OR review_result IS NOT NULL),
-  CHECK (review_result IS DISTINCT FROM 'PASS' OR review_tier IS NOT NULL)
+  CHECK (review_result IS DISTINCT FROM 'PASS' OR review_tier IS NOT NULL),
+  CHECK (review_result IS NULL OR review_by IS NOT NULL)
 );
 CREATE UNIQUE INDEX resource_check_one_live ON resource_check (service_id) WHERE status = 'live';
 
@@ -305,7 +314,8 @@ CREATE TABLE resource_chain_step_review (
   reviewed_on     date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
   created_at      timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (chain_id, n) REFERENCES resource_chain_step (chain_id, n),
-  CHECK (review_verdict NOT IN ('CONFIRMED','CERTIFIED') OR review_depth IS NOT NULL)
+  CHECK (review_verdict NOT IN ('CONFIRMED','CERTIFIED') OR review_depth IS NOT NULL),
+  CHECK (review_verdict <> 'CERTIFIED' OR review_depth = 'facts')  -- L1
 );
 CREATE INDEX resource_chain_step_review_latest ON resource_chain_step_review (chain_id, n, seq DESC);
 
@@ -334,6 +344,14 @@ BEGIN
   END IF;
   IF NEW.status IS DISTINCT FROM OLD.status AND OLD.status <> 'live' THEN
     RAISE EXCEPTION 'a chain cannot leave %', OLD.status USING ERRCODE = 'check_violation';
+  END IF;
+  -- M3: a new version of a prerequisite may mean something else; every live dependent is held
+  -- until someone re-reviews its steps against the new version.
+  IF NEW.status = 'superseded' AND OLD.status = 'live' THEN
+    UPDATE resource_chain SET use_status = 'hold'
+     WHERE status = 'live' AND id IN (
+       SELECT d.chain_id FROM resource_chain_step_dep d
+        WHERE d.dep_kind = 'chain' AND d.dep_chain_key = OLD.chain_key);
   END IF;
   RETURN NEW;
 END $$;
@@ -387,6 +405,18 @@ CREATE TRIGGER resource_chain_step_dep_no_truncate BEFORE TRUNCATE ON resource_c
   FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
 CREATE TRIGGER resource_chain_step_review_no_truncate BEFORE TRUNCATE ON resource_chain_step_review
   FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+
+-- L5: an address on the suppression list starts do-not-contact, whatever the importer says.
+CREATE OR REPLACE FUNCTION public.resource_contact_suppressed() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.email IS NOT NULL AND EXISTS (SELECT 1 FROM resource_suppression x WHERE x.email_lower = lower(NEW.email)) THEN
+    NEW.send_status := 'do_not_contact';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_contact_suppressed BEFORE INSERT ON resource_contact
+  FOR EACH ROW EXECUTE FUNCTION public.resource_contact_suppressed();
 
 -- F1 / F11: the do-not-contact list and the area rules cannot be rewritten.
 CREATE TRIGGER resource_suppression_fixed BEFORE UPDATE ON resource_suppression
@@ -557,8 +587,7 @@ own_ok AS (
       LEFT JOIN latest lr ON lr.chain_id = st.chain_id AND lr.n = st.n
       WHERE st.chain_id = ch.id
         AND (st.law_conflict IS NOT NULL
-          OR coalesce(NOT (lr.review_verdict = 'CERTIFIED'
-               OR (lr.review_verdict = 'CONFIRMED' AND lr.review_depth = 'facts')), true)))
+          OR coalesce(NOT ((lr.review_verdict IN ('CONFIRMED','CERTIFIED') AND lr.review_depth = 'facts')), true)))
     AND NOT EXISTS (
       SELECT 1 FROM resource_chain_step s2
       WHERE s2.chain_id = ch.id
@@ -647,4 +676,5 @@ REVOKE EXECUTE ON FUNCTION public.resource_check_insert(), public.resource_check
                            public.resource_chain_guard(), public.resource_step_insert_guard(),
                            public.resource_no_change(), public.resource_no_delete(),
                            public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
-                           public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard() FROM PUBLIC;
+                           public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard(),
+                           public.resource_contact_suppressed() FROM PUBLIC;
