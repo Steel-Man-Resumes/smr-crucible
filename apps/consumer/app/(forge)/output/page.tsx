@@ -161,6 +161,10 @@ export default function OutputPage() {
   // Document generation state
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
+  // Lines about time inside that the writer held back (never silently), and
+  // whether the person chose to put them back as written.
+  const [withheldLines, setWithheldLines] = useState<string[]>([]);
+  const [keepInsideLines, setKeepInsideLines] = useState(false);
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   // Grounding gate result (F2): claims removed vs. residual (found but not
   // auto-removed -- the user must review those). Codex 8: never conflate them.
@@ -195,6 +199,7 @@ export default function OutputPage() {
     hasStarted.current = true;
     setDocState("generating");
     setDocError("");
+    setGroundingNote(null);
 
     try {
       const response = await fetch("/api/forge/generate-docs", {
@@ -213,6 +218,7 @@ export default function OutputPage() {
           readinessStage: session.readinessStage,
           resumeConfidence: session.resumeConfidence,
           resumeWorries: session.resumeWorries,
+          keepInsideLines,
         }),
       });
 
@@ -224,6 +230,7 @@ export default function OutputPage() {
       const data = await response.json();
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
+      setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
       const g = data.grounding;
       const outcomes = Array.isArray(g?.outcomes) ? g.outcomes : [];
       if ((g && (g.removed || g.residual || g.unmatched || g.hasFabrication)) || outcomes.length) {
@@ -250,7 +257,7 @@ export default function OutputPage() {
       setDocState("error");
       hasStarted.current = false;
     }
-  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences]);
+  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences, keepInsideLines]);
 
   // Auto-trigger document generation when output page loads
   useEffect(() => {
@@ -646,6 +653,40 @@ export default function OutputPage() {
                   {uncheckedDoc
                     ? `The second check that traces every line back to what you told us did not run on your ${uncheckedDoc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.`
                     : "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification."}
+                </p>
+              </div>
+            )}
+
+            {withheldLines.length > 0 && !keepInsideLines && (
+              <div className="border border-t-line bg-t-panel px-4 py-3">
+                <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">
+                  What we left off your resume, and why
+                </p>
+                <p className="text-xs leading-relaxed text-t-phos">
+                  These lines mention a record or time inside, so we kept them off your resume and letter. That is the usual Steel Man move: you talk about it in person, at the right time. But if a line is real work you want on the page, it is your call.
+                </p>
+                <ul className="mt-1.5 space-y-1">
+                  {withheldLines.map((line, i) => (
+                    <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{line}&rdquo;</li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => {
+                    setKeepInsideLines(true);
+                    hasStarted.current = false;
+                    setDocState("idle");
+                  }}
+                  className="t-focus mt-2 px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
+                >
+                  Put them back and rebuild
+                </button>
+              </div>
+            )}
+
+            {keepInsideLines && (
+              <div className="border border-t-line bg-t-panel px-4 py-3">
+                <p className="text-xs leading-relaxed text-t-phos">
+                  Your resume keeps your own lines about work, training or credentials from inside, the way you wrote them. Nothing about a record was added. Your cover letter talks about the work and leaves the record for you to bring up in person.
                 </p>
               </div>
             )}

@@ -74,7 +74,7 @@ const PARTNER_MESSAGES: Record<string, string> = {
   jobs:
     "Real job listings from JSearch API. Fair-chance employers highlighted via known employer list + AI enrichment. 6-hour cache prevents API abuse.",
   disclosure:
-    "Two-tier system: basic guidance from public data, personalized strategy after consent gate. Research-backed (Bushway & Apel, 2012; Maruna, 2001).",
+    "Two-tier system: basic guidance from public data, personalized strategy after consent gate. Draws on Maruna's (2001) research on agency.",
   interview:
     "AI mock interviews adapted to role, industry, and disclosure needs. Built on Bandura's mastery experience framework: practice builds genuine confidence.",
   rush:
@@ -103,7 +103,7 @@ const OBSERVER_MESSAGES: Record<string, string> = {
   jobs:
     "Fair-chance employer matching uses JSearch API with AI enrichment. Ban-the-box compliance checking, WOTC tax credit awareness, and second-chance employer database.",
   disclosure:
-    "Two-tier disclosure coaching. Tier 1: public data only. Tier 2: consent-gated private info. Grounded in Bushway & Apel (2012) timing research and Maruna's agency framework.",
+    "Two-tier disclosure coaching. Tier 1: public data only. Tier 2: consent-gated private info. Grounded in Maruna's agency framework.",
   interview:
     "Mock interviews implement Bandura's self-efficacy (1977) via mastery experience. Disclosure rehearsal integrated at exchange 3-4. Process praise feedback (Dweck, 2006).",
   rush:

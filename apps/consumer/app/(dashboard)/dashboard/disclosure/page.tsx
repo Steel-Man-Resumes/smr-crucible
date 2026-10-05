@@ -715,9 +715,9 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
 
               <div className="bg-t-panel-2 p-4 border border-t-line">
                 <p className="text-xs text-t-phos leading-relaxed">
-                  Research shows candidates who prepare their disclosure are significantly
-                  more likely to receive a job offer compared to those who don&apos;t address
-                  it or improvise in the moment. (Bushway & Apel, 2012; Maruna, 2001)
+                  Prepare your answer and practice it out loud before the interview, so you
+                  are not making it up in the moment. Keep it short: what happened, what you
+                  learned, what you bring to this job.
                 </p>
               </div>
             </div>

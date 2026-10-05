@@ -134,7 +134,7 @@ YOUR TASK: Generate the content for each employer across all three tiers. Return
       "website": "url or null",
       "application_channel": "How to apply",
       "fit_statement": "2-3 sentences on why this company is worth applying to. Be specific to the candidate.",
-      "second_chance_friendly": true/false/null
+      "second_chance_friendly": null (always null: never guess whether an employer hires people with records; only Steel Man's published, dated employer marks may say that)
     }
   ],
   "tier3": [

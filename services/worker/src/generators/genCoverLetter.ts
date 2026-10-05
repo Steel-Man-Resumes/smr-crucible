@@ -120,7 +120,6 @@ TARGET EMPLOYER:
 - Why they're a fit: {{EMPLOYER_WHY_GOOD_FIT}}
 - Contact name (if available): {{EMPLOYER_CONTACT_NAME}}
 - Approach strategy: {{EMPLOYER_APPROACH}}
-- Company intel: {{EMPLOYER_INTEL}}
 
 {{BARRIER_CONTEXT}}
 

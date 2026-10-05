@@ -18,6 +18,7 @@ import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
 import { plainPunctuation, plainPunctuationText, logDashSwaps } from "@/lib/legal-sanitize";
 import { credentialStatuses, findOverstatedCredentialLines, findOverstatedCredentials } from "@/lib/credential-truth";
 import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
+import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 
@@ -56,6 +57,8 @@ interface GenerateDocsInput {
   // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
   resumeConfidence?: "none" | "rough" | "decent" | "strong";
   resumeWorries?: string[];
+  // The person tapped "put them back": keep their own lines about time inside.
+  keepInsideLines?: boolean;
   sessionId?: string;
 }
 
@@ -67,7 +70,7 @@ function selfDisclosureDirective(input: GenerateDocsInput): string {
   const conf = input.resumeConfidence;
   if (conf === "none" || conf === "rough") {
     bits.push(
-      "The person rates their own history as thin/rough. Lead with a functional, skills-forward structure and narrative scaffolding built from real transferable skills. A shorter, sparser, TRUE resume is correct here. Never pad with invented detail to make it look fuller."
+      "The person rates their own history as thin/rough. Keep the familiar layout: dated history in reverse order, never a dateless functional page (employers expect dates, and a page without them reads as hiding something). Put real transferable skills in the core competencies and a strong summary. A shorter, sparser, TRUE resume is correct here. Never pad with invented detail to make it look fuller."
     );
   } else if (conf === "strong") {
     bits.push(
@@ -77,7 +80,7 @@ function selfDisclosureDirective(input: GenerateDocsInput): string {
   const worries = new Set(input.resumeWorries || []);
   if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
   if (worries.has("job_changes")) bits.push("They worry about job changes: frame varied roles as range and adaptability, not instability.");
-  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, and any real accomplishments; a functional layout is fine.");
+  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, programs and volunteer work with their dates, and any real accomplishments. Keep dated entries; never a dateless functional page.");
   return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
 }
 
@@ -103,6 +106,9 @@ function stripContactPlaceholders(text: string): string {
     })
     .join("\n");
 }
+
+const WITHHOLD_RULE = `NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing. (Lines about this were held back from the source on purpose; the person has been told exactly which ones and can put them back.)`;
+const KEEP_INSIDE_RULE = `THE PERSON CHOSE TO KEEP THEIR OWN LINES: keep every job, course and credential the person listed, including work done in a correctional facility, named the way they named it (employer, title, years, real duties). Never ADD, infer or hint at anything about a record, supervision or justice involvement beyond what they wrote. Never state charges, a conviction, a sentence or supervision status, and never add growth, redemption or "second chance" framing.`;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -238,9 +244,16 @@ async function handlePost(request: Request) {
       console.error("Decision log failed (generate-docs):", err);
     }
 
+    // What was held back from the source (never silently): the page lists it and
+    // offers to put it back.
+    const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
+    const keptInsideLines = input.keepInsideLines === true;
+
     return NextResponse.json({
       resume,
       coverLetter,
+      withheldLines,
+      keptInsideLines,
       grounding: {
         hasFabrication,
         applied: groundingApplied,
@@ -319,7 +332,7 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 5. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
 6. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
 7. Past roles = past tense. Current role = present tense. No exceptions.
-8. NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing.
+8. ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
 9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
 10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance. Never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
 11. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Hyphens inside words (first-piece, part-time) are fine.
@@ -327,8 +340,8 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 13. NO CHARACTER CLAIMS: no "dependable", "reliable", "shows up ready", "consistent" or anything like them in the headline, summary or bullets unless the person said it about themselves.
 
 DATA CLEANING (FIX INPUT ERRORS):
-- If a job title doesn't match the company (e.g., retail cashier work attributed to a printing company), repair the pairing using context clues. Never invent a new employer or role.
-- If dates look wrong or overlapping, use the most logical interpretation.
+- If a job title doesn't seem to match the company, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role. The person checks it on the next screen.
+- If dates look wrong or overlapping, keep the dates exactly as the person gave them. Never change, merge, shift or guess a date. A date that is off by even a month reads as a discrepancy on a background check, so the person settles it, not you.
 - If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
 
 ${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
@@ -373,11 +386,7 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
   }
 
   if (input.resumeText) {
-    const cleanedResume = input.resumeText
-      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi, '')
-      .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
     parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
   }
 
@@ -470,7 +479,7 @@ RULES:
 - Use [Company Name] and [Hiring Manager] as placeholders ONLY for the employer name and contact.
 - Everything else must use REAL data from the person's profile.
 - 250-350 words. Professional tone with warmth.
-- NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation, or any disqualifying information in the cover letter. Disclosure happens in person during interviews, never on paper.
+- Do not raise a record, incarceration, supervision or any justice involvement in the letter, and never add or hint at it. That conversation is the person's to have in person. If the work history includes work done inside, you may describe the work itself (the duties and skills) without naming the facility.
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
@@ -507,11 +516,7 @@ RULES:
 
   if (input.resumeText) {
     // Strip incarceration-related content before sending to AI
-    const cleanedResume = input.resumeText
-      .replace(/(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi, '')
-      .replace(/[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?)\b[^.\n]*/gi, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
     parts.push(
       `WORK HISTORY EXCERPT:\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.coverLetter.resumeText")}`
     );

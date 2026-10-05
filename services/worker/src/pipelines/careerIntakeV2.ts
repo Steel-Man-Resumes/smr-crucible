@@ -562,7 +562,7 @@ For each employer return:
   "tier": 1 or 2 or 3,
   "score": 0-100,
   "job_count": number,
-  "second_chance_friendly": true/false/null,
+  "second_chance_friendly": null (always null: never guess whether an employer hires people with records; only Steel Man's published, dated employer marks may say that),
   "why_good_fit": "specific 1-sentence reason this employer fits THIS candidate"
 }
 
@@ -570,7 +570,7 @@ For Tier 1 ALSO include:
   "approach_strategy": "How to approach this employer (walk-in, online, staffing agency, etc.)",
   "talking_points": ["3 specific things to mention in an interview"],
   "application_channel": "best way to apply",
-  "company_intel": "1-2 sentences of useful info about this company",
+  "company_intel": "" (always empty: no unsourced company claims)",
   "contact_name": null
 
 For Tier 2 ALSO include:

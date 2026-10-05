@@ -117,6 +117,9 @@ export function ResumeWorkspace() {
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [tailoringNotes, setTailoringNotes] = useState<string[]>([]);
+  // The tailor's truth check result. It used to be computed and then
+  // dropped here, so the person never saw a warning the server raised.
+  const [truthCheck, setTruthCheck] = useState<{ blocked: boolean; notice: string; flags: string[] } | null>(null);
 
   // The saved job application this resume is being tailored for, if any. When
   // set, the saved resume artifact is linked to it (Stage 3 journey gate).
@@ -576,7 +579,15 @@ export function ResumeWorkspace() {
           throw new Error(errData.error || "Generation failed");
         }
 
-        const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes } = await res.json();
+        const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes, grounding, finalizationBlocked, verificationNotice } = await res.json();
+        const flagClaims: string[] = Array.isArray(grounding?.flags)
+          ? grounding.flags.map((f: any) => (typeof f?.claim === "string" ? f.claim.trim() : "")).filter(Boolean).slice(0, 8)
+          : [];
+        setTruthCheck(
+          finalizationBlocked || flagClaims.length || grounding?.hasFabrication
+            ? { blocked: !!finalizationBlocked, notice: typeof verificationNotice === "string" ? verificationNotice : "", flags: flagClaims }
+            : null
+        );
         const finalResume = resume as ResumeDocument;
         // Keep the typed job-listing URL on the tailored doc (the generator
         // response doesn't echo it back).
@@ -1284,6 +1295,36 @@ export function ResumeWorkspace() {
           </button>
         </div>
       </div>
+
+      {/* What the truth check found in this tailored version */}
+      {truthCheck && (
+        <div className="mb-4 bg-t-panel border border-t-amber px-4 py-3">
+          <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
+            Check these before you send
+          </p>
+          {truthCheck.blocked && truthCheck.notice && (
+            <p className="text-xs text-t-phos leading-relaxed mb-1">{truthCheck.notice}</p>
+          )}
+          {truthCheck.flags.length > 0 ? (
+            <>
+              <p className="text-xs text-t-phos leading-relaxed">
+                The truth check found {truthCheck.flags.length === 1 ? "something" : "some things"} we could not match to what you told us. Look for each one and make sure it is true before you send this:
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {truthCheck.flags.map((claim, i) => (
+                  <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{claim}&rdquo;</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            !truthCheck.blocked && (
+              <p className="text-xs text-t-phos leading-relaxed">
+                The truth check found something in this version it could not match to what you told us, but could not point to the exact words. Read every line before you send it.
+              </p>
+            )
+          )}
+        </div>
+      )}
 
       {/* What we tailored for this job */}
       {tailoringNotes.length > 0 && (
