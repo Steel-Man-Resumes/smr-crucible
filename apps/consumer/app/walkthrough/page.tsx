@@ -1,53 +1,64 @@
 "use client";
 
 /**
- * Walkthrough -- "/walkthrough"
+ * Walkthrough -- "/walkthrough" (also "/demo", via next.config redirect)
  *
- * A self-running interactive slideshow with a virtual camera that zooms and
- * pans across crisp DOM screens (see screens.tsx) to guide the viewer's
- * attention through Forge + Refinery. Built for partner shares (Mary Ann /
- * Expo Wisconsin); shareable as a plain link, no login, works on laptop or phone.
+ * A self-running guided tour on real screenshots of the live product, from
+ * the Mini Forge inside a facility to the staff workspace a program uses.
+ * Every person on screen is a fictional demo persona. A virtual camera zooms
+ * toward the part of each screen the caption is about.
  *
  * Controls: Space = pause/resume, Left/Right = navigate, R = restart,
- *           click middle = pause, click edges = prev/next, dots = jump.
+ *           dots = jump. Plays on its own; pauses on any manual step.
  *
- * Fully static (Jordan demo data) -- no API, no auth, no DB.
+ * Fully static -- no API, no auth, no DB. Frames live in /public/walkthrough.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  BEATS,
-  FULL,
-  regionTransform,
-  STAGE_W,
-  STAGE_H,
-  type ScreenId,
-} from "./storyboard";
-import { SCREENS } from "./screens";
-import { ArrowLeft, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
 
-const SCREEN_IDS = Object.keys(SCREENS) as ScreenId[];
+type Step = {
+  img: string | null;
+  act: string;
+  title: string;
+  body: string;
+  /** Camera focus as a percentage of the frame, and zoom. */
+  x: number;
+  y: number;
+  zoom: number;
+};
+
+const STEPS: Step[] = [
+  { img: "t01", act: "Inside", title: "It starts inside", body: "The Mini Forge runs on a facility tablet. Seven questions, a PIN, no name and no chat. The person leaves with a career plan and a six-letter code.", x: 50, y: 45, zoom: 1.12 },
+  { img: "t02", act: "The Forge", title: "t.ROY says hello", body: "Home now, they type in the code or start fresh. t.ROY, the coach, asks one thing first: who are you?", x: 50, y: 42, zoom: 1.5 },
+  { img: "t03", act: "The Forge", title: "Five minutes of honest answers", body: "Experience, goals, the story in their own words, and what makes a job workable. Upload an old resume, snap a photo, or start from nothing.", x: 50, y: 50, zoom: 1.05 },
+  { img: "t04", act: "The Forge", title: "Four analyses at once", body: "Skills, the narrative, career matches with real pay ranges, and every barrier mapped to a resource.", x: 50, y: 50, zoom: 1.05 },
+  { img: "t05", act: "The Forge", title: "A story, not a score", body: "A headline they can stand behind, and strengths taken from their own history.", x: 0, y: 0, zoom: 1.4 },
+  { img: "t05", act: "The Forge", title: "Hurdles, and what helps", body: "The record is handled in the open: the state's hiring law, the lookback windows, and where to get help.", x: 100, y: 55, zoom: 1.35 },
+  { img: "t06", act: "The Refinery", title: "The resume becomes a job search", body: "A free account. The dashboard shows how far along they are and the one next step.", x: 55, y: 30, zoom: 1.3 },
+  { img: "t07", act: "The Refinery", title: "Employers who hire people with records, first", body: "Live job listings, with employers we checked marked and moved to the top.", x: 32, y: 52, zoom: 1.45 },
+  { img: "t08", act: "The Refinery", title: "A plan for the record", body: "What to say, when, and how much. They pick the hurdle, and t.ROY helps them find the words.", x: 40, y: 70, zoom: 1.4 },
+  { img: "t09", act: "The Refinery", title: "Practice for the real job", body: "Interview questions built from the actual posting and their actual resume, in writing and out loud by voice.", x: 45, y: 62, zoom: 1.35 },
+  { img: "t10", act: "The Refinery", title: "Track every application", body: "Saved to offered, with t.ROY drafting the application email for each one.", x: 45, y: 68, zoom: 1.35 },
+  { img: "t11", act: "Employers", title: "Every state, checked", body: "All 50 states and DC. Each employer mark rests on dated public evidence, and it expires unless someone checks it again.", x: 50, y: 50, zoom: 1 },
+  { img: "t12", act: "Employers", title: "One state, up close", body: "The law in plain words with a link to the statute, local help, and verified employers. Every page shows when it was last checked.", x: 35, y: 42, zoom: 1.2 },
+  { img: "t13", act: "For programs", title: "Staff see today's work", body: "Interviews coming up, people gone quiet, people who never started. Sorted by why, so a case manager knows where to start.", x: 50, y: 55, zoom: 1.3 },
+  { img: "t14", act: "For programs", title: "Consent first", body: "Staff see only what each person chose to share, one item at a time. Disclosure plans and interview answers stay private.", x: 60, y: 62, zoom: 1.2 },
+  { img: "t15", act: "For programs", title: "Record the outcome", body: "A placement goes on file with the date and the employer, and the person can see it too.", x: 60, y: 62, zoom: 1.35 },
+  { img: "t16", act: "For programs", title: "Proof for funders", body: "Counts and dates, ready to download for a funder. Never anyone's records.", x: 40, y: 60, zoom: 1.3 },
+  { img: null, act: "And then what?", title: "Here's the whole road.", body: "The resume, the plan for the record, the practice, the employers who hire, the local help, the next step. Free to the person, always.", x: 50, y: 50, zoom: 1 },
+];
+
+const DWELL_MS = 7000;
 
 export default function WalkthroughPage() {
-  const [beatIndex, setBeatIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [i, setI] = useState(0);
+  const [playing, setPlaying] = useState(true);
   const [reduced, setReduced] = useState(false);
-  const [fit, setFit] = useState(1);
+  const [zoomed, setZoomed] = useState(false);
+  const step = STEPS[i];
+  const last = i === STEPS.length - 1;
 
-  const elapsedRef = useRef(0);
-  const lastRef = useRef(0);
-  const pausedRef = useRef(false);
-  const rafRef = useRef<number | null>(null);
-
-  const beat = BEATS[beatIndex];
-  const isLast = beatIndex === BEATS.length - 1;
-
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  // Honor reduced-motion: no camera moves, just calm cross-fades.
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const apply = () => setReduced(mq.matches);
@@ -56,243 +67,179 @@ export default function WalkthroughPage() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Fit the 1280x800 stage to any viewport (letterboxed).
+  // Warm the cache so each frame is ready before the camera gets there.
   useEffect(() => {
-    const onResize = () =>
-      setFit(
-        Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H)
-      );
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  // Reset the dwell timer whenever the beat changes.
-  useEffect(() => {
-    elapsedRef.current = 0;
-    setProgress(0);
-  }, [beatIndex]);
-
-  const goTo = useCallback((i: number) => {
-    const next = Math.max(0, Math.min(BEATS.length - 1, i));
-    elapsedRef.current = 0;
-    setProgress(0);
-    setBeatIndex(next);
-  }, []);
-
-  // Drive the auto-advance. pausedRef keeps this loop stable across pauses.
-  useEffect(() => {
-    lastRef.current = performance.now();
-    function tick(now: number) {
-      const dt = now - lastRef.current;
-      lastRef.current = now;
-      if (!pausedRef.current) {
-        elapsedRef.current += dt;
-        const p = Math.min(elapsedRef.current / beat.duration, 1);
-        setProgress(p);
-        if (p >= 1 && !isLast) {
-          setBeatIndex((prev) => prev + 1);
-        }
+    STEPS.forEach((s) => {
+      if (s.img) {
+        const im = new Image();
+        im.src = `/walkthrough/${s.img}.webp`;
       }
-      rafRef.current = requestAnimationFrame(tick);
-    }
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [beat.duration, isLast]);
+    });
+  }, []);
 
-  // Keyboard controls.
+  // Ease into the zoom shortly after each step lands.
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === " " || e.key === "Spacebar") {
+    setZoomed(false);
+    const t = setTimeout(() => setZoomed(true), 250);
+    return () => clearTimeout(t);
+  }, [i]);
+
+  useEffect(() => {
+    if (!playing || last) return;
+    const t = setTimeout(() => setI((n) => Math.min(n + 1, STEPS.length - 1)), DWELL_MS);
+    return () => clearTimeout(t);
+  }, [i, playing, last]);
+
+  const go = useCallback((n: number) => {
+    setPlaying(false);
+    setI(Math.max(0, Math.min(STEPS.length - 1, n)));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") go(i + 1);
+      else if (e.key === "ArrowLeft") go(i - 1);
+      else if (e.key === " ") {
         e.preventDefault();
-        setPaused((p) => !p);
-      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setPaused(false);
-        goTo(beatIndex + 1);
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setPaused(false);
-        goTo(beatIndex - 1);
+        setPlaying((p) => !p);
       } else if (e.key === "r" || e.key === "R") {
-        setPaused(false);
-        goTo(0);
+        setI(0);
+        setPlaying(true);
       }
-    }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [beatIndex, goTo]);
+  }, [i, go]);
 
-  // Click: edges navigate, middle pauses.
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      const x = e.clientX / window.innerWidth;
-      if (x < 0.18) {
-        setPaused(false);
-        goTo(beatIndex - 1);
-      } else if (x > 0.82) {
-        setPaused(false);
-        goTo(beatIndex + 1);
-      } else {
-        setPaused((p) => !p);
-      }
-    },
-    [beatIndex, goTo]
-  );
-
-  const focus = reduced ? FULL : beat.focus;
-  const transform = regionTransform(focus);
-  const activeScreen = beat.screen;
-  const ended = isLast && progress >= 1;
+  const scale = reduced || !zoomed ? 1 : step.zoom;
 
   return (
-    <div
-      onClick={handleClick}
-      className="fixed inset-0 bg-black overflow-hidden select-none cursor-pointer"
-    >
-      {/* Frame: the 1280x800 stage, scaled to fit the viewport */}
-      <div
-        className="absolute left-1/2 top-1/2"
-        style={{
-          width: STAGE_W,
-          height: STAGE_H,
-          transform: `translate(-50%, -50%) scale(${fit})`,
-          transformOrigin: "center",
-        }}
-      >
+    <div className="fixed inset-0 flex flex-col bg-[#121110] text-[#ece7d9]">
+      {/* Progress */}
+      <div className="h-1 w-full bg-white/10">
         <div
-          className="absolute inset-0 overflow-hidden rounded-[7px]"
-          style={{ boxShadow: "0 30px 90px rgba(0,0,0,0.5)" }}
-        >
-          {/* Stage: the camera transform lives here */}
-          <div
-            className="absolute inset-0"
-            style={{
-              width: STAGE_W,
-              height: STAGE_H,
-              transform,
-              transformOrigin: "0 0",
-              transition: reduced
-                ? "none"
-                : "transform 1200ms cubic-bezier(0.4, 0, 0.2, 1)",
-              willChange: "transform",
-            }}
-          >
-            {SCREEN_IDS.map((id) => {
-              const ScreenComponent = SCREENS[id];
-              return (
-                <div
-                  key={id}
-                  className="absolute inset-0"
-                  style={{
-                    opacity: id === activeScreen ? 1 : 0,
-                    transition: "opacity 600ms ease",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <ScreenComponent />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Top progress bar */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-white/10 z-20">
-        <div
-          className="h-full bg-emerald-400"
-          style={{ width: `${progress * 100}%`, transition: "width 120ms linear" }}
+          className="h-full bg-[#dbc173] transition-[width] duration-500"
+          style={{ width: `${((i + 1) / STEPS.length) * 100}%` }}
         />
       </div>
 
-      {/* Caption */}
-      {beat.caption && (
-        <div className="absolute bottom-0 left-0 right-0 z-10 border-t border-white/15 bg-black/90 px-8 pb-14 pt-6 pointer-events-none">
-          <div key={beatIndex} className="max-w-3xl mx-auto text-center wt-fade">
-            {beat.caption.title && (
-              <p className="text-emerald-300 text-xs sm:text-sm font-semibold uppercase mb-2">
-                {beat.caption.title}
-              </p>
-            )}
-            <p className="text-white text-xl sm:text-2xl md:text-3xl font-medium leading-snug">
-              {beat.caption.body}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Beat dots */}
-      <div
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-30"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {BEATS.map((b, i) => (
-          <button
-            key={b.id}
-            onClick={() => {
-              setPaused(false);
-              goTo(i);
-            }}
-            aria-label={`Go to step ${i + 1}`}
-            className="rounded-full transition-all duration-300"
-            style={{
-              width: i === beatIndex ? 22 : 8,
-              height: 8,
-              background:
-                i === beatIndex
-                  ? "#34d399"
-                  : i < beatIndex
-                    ? "rgba(52,211,153,0.45)"
-                    : "rgba(255,255,255,0.3)",
-            }}
-          />
-        ))}
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
+        <a
+          href="https://www.steelmanresumes.com/how-it-works"
+          className="inline-flex items-center gap-2 rounded-[5px] border border-white/20 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white hover:text-black"
+        >
+          <ArrowLeft size={14} aria-hidden="true" /> Back to Steel Man
+        </a>
+        <span className="ml-auto font-mono text-[11px] uppercase tracking-[0.12em] text-[#b0aa98]">
+          {step.act} · {String(i + 1).padStart(2, "0")} / {STEPS.length}
+        </span>
       </div>
 
-      {/* Pause / replay pill */}
-      {paused && !ended && (
-        <div className="absolute right-5 top-5 z-30 rounded-[5px] border border-white/20 bg-black/80 px-3 py-1.5 text-xs text-white backdrop-blur">
-          Paused
+      {/* Stage */}
+      <div className="relative min-h-0 flex-1 px-3 sm:px-6">
+        <div className="relative h-full w-full overflow-hidden rounded-lg border border-white/10 bg-[#1a1815]">
+          {step.img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${step.img}-${i}`}
+              src={`/walkthrough/${step.img}.webp`}
+              alt={`${step.title}. ${step.body}`}
+              className="wt-fade absolute inset-0 h-full w-full object-contain"
+              style={{
+                transformOrigin: `${step.x}% ${step.y}%`,
+                transform: `scale(${scale})`,
+                transition: reduced ? "none" : "transform 1400ms cubic-bezier(.3,.1,.2,1)",
+              }}
+            />
+          ) : (
+            <div className="wt-fade flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
+              <p className="text-3xl font-bold text-[#dbc173] sm:text-5xl">And then what?</p>
+              <p className="text-2xl font-semibold sm:text-4xl">Here&apos;s the whole road.</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-3">
+                <a
+                  href="/"
+                  className="rounded-[5px] bg-[#dbc173] px-5 py-2.5 text-sm font-semibold text-[#121110] hover:bg-[#f0dda0]"
+                >
+                  Start free in the Forge
+                </a>
+                <a
+                  href="https://www.steelmanresumes.com/organizations"
+                  className="rounded-[5px] border border-white/30 px-5 py-2.5 text-sm font-semibold hover:bg-white hover:text-black"
+                >
+                  For organizations
+                </a>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-      {ended && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setPaused(false);
-            goTo(0);
-          }}
-          className="absolute right-5 top-5 z-30 inline-flex items-center gap-2 rounded-[5px] bg-[#4f6b57] px-4 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-[#3d5745]"
-        >
-          <RotateCcw size={15} aria-hidden="true" /> Replay
-        </button>
-      )}
+      </div>
 
-      <a
-        href="https://www.steelmanresumes.com/how-it-works"
-        onClick={(event) => event.stopPropagation()}
-        className="absolute left-4 top-5 z-30 inline-flex items-center gap-2 rounded-[5px] border border-white/20 bg-black/80 px-3 py-2 text-xs font-medium text-white backdrop-blur transition-colors hover:bg-white hover:text-black"
-      >
-        <ArrowLeft size={14} aria-hidden="true" /> Back to Steel Man
-      </a>
+      {/* Caption + controls */}
+      <div className="px-4 pb-4 pt-4 sm:px-6">
+        <div key={i} className="wt-fade mx-auto min-h-[5.5rem] max-w-3xl text-center">
+          <p className="text-lg font-semibold sm:text-2xl">{step.title}</p>
+          <p className="mt-1 text-sm leading-relaxed text-[#b0aa98] sm:text-base">{step.body}</p>
+        </div>
+        <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => go(i - 1)}
+            disabled={i === 0}
+            aria-label="Previous step"
+            className="rounded-[5px] border border-white/20 p-2 disabled:opacity-30 hover:bg-white/10"
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+          <button
+            onClick={() => {
+              if (last) {
+                setI(0);
+                setPlaying(true);
+              } else setPlaying((p) => !p);
+            }}
+            aria-label={last ? "Replay" : playing ? "Pause" : "Play"}
+            className="inline-flex items-center gap-2 rounded-[5px] bg-[#31586f] px-4 py-2 text-sm font-medium text-white hover:bg-[#3d6a85]"
+          >
+            {last ? <RotateCcw size={15} aria-hidden="true" /> : playing ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+            {last ? "Replay" : playing ? "Pause" : "Play"}
+          </button>
+          <button
+            onClick={() => go(i + 1)}
+            disabled={last}
+            aria-label="Next step"
+            className="rounded-[5px] border border-white/20 p-2 disabled:opacity-30 hover:bg-white/10"
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+          <div className="flex w-full justify-center gap-1.5 sm:w-auto">
+            {STEPS.map((s, n) => (
+              <button
+                key={n}
+                onClick={() => go(n)}
+                aria-label={`Go to step ${n + 1}: ${s.title}`}
+                aria-current={n === i ? "step" : undefined}
+                className="block shrink-0 rounded-full p-0 transition-all duration-300"
+                style={{
+                  height: 8,
+                  minHeight: 0,
+                  width: n === i ? 20 : 8,
+                  background: n === i ? "#dbc173" : n < i ? "rgba(219,193,115,0.45)" : "rgba(255,255,255,0.25)",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <p className="mt-3 text-center text-[11px] text-[#b0aa98]/80">
+          Real screens from the live product. Every person shown is fictional.
+        </p>
+      </div>
 
       <style jsx global>{`
         @keyframes wtFade {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-        .wt-fade {
-          animation: wtFade 600ms ease forwards;
-        }
+        .wt-fade { animation: wtFade 500ms ease both; }
       `}</style>
     </div>
   );

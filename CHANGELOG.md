@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Walkthrough on real screens
+
+- `/walkthrough` (and `/demo`) now plays a guided tour on real screenshots of the live product instead
+  of rebuilt mock screens. Eighteen steps follow one person from the Mini Forge on a facility tablet
+  through the Forge, the Refinery, the employer map and a state page, to the staff workspace a program
+  uses (Today, consent, outcomes, funder counts). Every person shown is a fictional demo persona. Plays
+  on its own, with pause, arrows, keyboard and step dots; honors reduced motion.
+
 ## 2026-10 Employer directory: Tier 3 working agreements
 
 - An employer that works with Steel Man to get people hired can now be recorded as Tier 3: a working
