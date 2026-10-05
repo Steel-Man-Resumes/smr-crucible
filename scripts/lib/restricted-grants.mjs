@@ -82,6 +82,7 @@ export const RESTRICTED_GRANTS = {
   resource_public_v: ["SELECT"],
   resource_chain_public_v: ["SELECT"],
   resource_recheck_queue_v: [],
+  resource_chain_recheck_queue_v: [],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
@@ -95,6 +96,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_area", "resource_org", "resource_service", "resource_check", "resource_contact",
   "resource_suppression", "resource_chain", "resource_chain_step", "resource_chain_step_review",
   "resource_chain_step_dep", "resource_public_v", "resource_chain_public_v", "resource_recheck_queue_v",
+  "resource_chain_recheck_queue_v",
 ];
 
 /**

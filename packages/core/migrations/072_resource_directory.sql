@@ -1,4 +1,9 @@
--- 072_resource_directory.sql  (v3, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.2, drafted 2026-10-05, NOT APPLIED)
+-- v3.2: adversary re-review fixes (2026-10-05): H1 transitive chain dependencies, H2 org name
+-- and website are in the hash, H3 paused services and chains are in a recheck queue, H4 review
+-- order by identity sequence, M2 one live check per service, M3 no delete or truncate on every
+-- base table, M4 step freshness, M5 stated-limits chains hidden until a limits field exists (D-3),
+-- L2 STABLE hash, L3 PASS needs a tier. Dataset and low-confidence rows still never show.
 -- v3.1: guards exclude the generated column expires_on (found by a live test, PostgreSQL 18).
 -- Local help and step-by-step document paths, built around dated checks.
 --
@@ -149,32 +154,33 @@ CREATE TABLE resource_check (
   -- FIX-7: a dataset row is a federal or state dataset, and only those are dataset rows.
   CHECK ((verify_method = 'dataset') = (source_type IN ('federal_dataset','state_dataset'))),
   -- BLOCK-1: a non-dataset row cannot show without a recorded review. Blank is not a pass.
-  CHECK (verify_method = 'dataset' OR review_result IS NOT NULL)
+  CHECK (verify_method = 'dataset' OR review_result IS NOT NULL),
+  CHECK (review_result IS DISTINCT FROM 'PASS' OR review_tier IS NOT NULL)
 );
-CREATE INDEX resource_check_live ON resource_check (service_id) WHERE status = 'live';
+CREATE UNIQUE INDEX resource_check_one_live ON resource_check (service_id) WHERE status = 'live';
 
--- The hash both sides must agree on. If a service's public fields are edited
--- after a check, the hash no longer matches and the row leaves the public view
--- until it is checked again. FIX-2: covers every column the public view shows.
--- NOT covered by this hash: barrier_tags and urgency_fit are claims. Until each
--- has a source field, the import must leave a tag only when the check's quote
--- supports it (import rule, see the import script).
-CREATE OR REPLACE FUNCTION public.resource_fields_hash(s resource_service) RETURNS text
-LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
+-- The hash both sides must agree on. Covers every service field AND the org name and
+-- website the public view shows (H2): a rename or a new website re-opens the check.
+-- barrier_tags and urgency_fit are covered too, but they are unsourced claims: each
+-- needs a source field before it can be trusted (open, see header).
+CREATE OR REPLACE FUNCTION public.resource_fields_hash(s resource_service, org_name text, org_website text) RETURNS text
+LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
   SELECT md5(concat_ws('|',
     coalesce(s.service_name,''), coalesce(s.description,''), coalesce(s.area_id,''), coalesce(s.stew_tier,''),
     coalesce(s.geo_scope,''), coalesce(s.state,''), coalesce(s.county,''), array_to_string(s.counties, ','),
     coalesce(s.city,''), coalesce(s.address,''), coalesce(s.zip,''), coalesce(s.phone,''), coalesce(s.hours,''),
     coalesce(s.eligibility,''), coalesce(s.fees,''), coalesce(s.what_to_bring,''), coalesce(s.limits,''),
-    array_to_string(s.barrier_tags, ','), coalesce(s.urgency_fit,''), s.adult_facing::text))
+    array_to_string(s.barrier_tags, ','), coalesce(s.urgency_fit,''), s.adult_facing::text,
+    coalesce(org_name,''), coalesce(org_website,'')))
 $$;
-REVOKE EXECUTE ON FUNCTION public.resource_fields_hash(resource_service) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.resource_fields_hash(resource_service, text, text) FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION public.resource_check_insert() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
-DECLARE cap int; svc resource_service%ROWTYPE; newest date;
+DECLARE cap int; svc resource_service%ROWTYPE; newest date; org_name text; org_web text;
 BEGIN
   SELECT * INTO svc FROM resource_service WHERE id = NEW.service_id;
+  SELECT o.name, o.website INTO org_name, org_web FROM resource_org o WHERE o.id = svc.org_id;
   SELECT a.default_ttl_days INTO cap FROM resource_area a WHERE a.area_id = svc.area_id;
   IF NEW.ttl_days > cap THEN
     RAISE EXCEPTION 'ttl % exceeds area cap %', NEW.ttl_days, cap USING ERRCODE = 'check_violation';
@@ -186,7 +192,7 @@ BEGIN
     RAISE EXCEPTION 'a new check starts live' USING ERRCODE = 'check_violation';
   END IF;
   -- FIX-11: the hash must be the hash of the service as it is now.
-  IF NEW.fields_hash IS DISTINCT FROM public.resource_fields_hash(svc) THEN
+  IF NEW.fields_hash IS DISTINCT FROM public.resource_fields_hash(svc, org_name, org_web) THEN
     RAISE EXCEPTION 'fields_hash does not match service %', NEW.service_id USING ERRCODE = 'check_violation';
   END IF;
   -- FIX-4: a backdated check never supersedes a newer live one.
@@ -287,6 +293,7 @@ CREATE TABLE resource_chain_step (
 
 CREATE TABLE resource_chain_step_review (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  seq             bigint GENERATED ALWAYS AS IDENTITY UNIQUE,  -- ordering: now() is the same for a whole transaction (H4)
   chain_id        uuid NOT NULL,
   n               int  NOT NULL,
   review_verdict  text NOT NULL CHECK (review_verdict IN
@@ -297,7 +304,7 @@ CREATE TABLE resource_chain_step_review (
   created_at      timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (chain_id, n) REFERENCES resource_chain_step (chain_id, n)
 );
-CREATE INDEX resource_chain_step_review_latest ON resource_chain_step_review (chain_id, n, created_at DESC);
+CREATE INDEX resource_chain_step_review_latest ON resource_chain_step_review (chain_id, n, seq DESC);
 
 CREATE TABLE resource_chain_step_dep (
   chain_id          uuid NOT NULL,
@@ -378,6 +385,28 @@ CREATE TRIGGER resource_chain_step_dep_no_truncate BEFORE TRUNCATE ON resource_c
 CREATE TRIGGER resource_chain_step_review_no_truncate BEFORE TRUNCATE ON resource_chain_step_review
   FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
 
+-- M3: nothing deleted or truncated, on every base table.
+CREATE TRIGGER resource_chain_no_delete BEFORE DELETE ON resource_chain
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_area_no_delete BEFORE DELETE ON resource_area
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_suppression_no_delete BEFORE DELETE ON resource_suppression
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_area_no_truncate BEFORE TRUNCATE ON resource_area
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_org_no_truncate BEFORE TRUNCATE ON resource_org
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_service_no_truncate BEFORE TRUNCATE ON resource_service
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_check_no_truncate BEFORE TRUNCATE ON resource_check
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_contact_no_truncate BEFORE TRUNCATE ON resource_contact
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_suppression_no_truncate BEFORE TRUNCATE ON resource_suppression
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_chain_no_truncate BEFORE TRUNCATE ON resource_chain
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+
 -- 6. Public views. The only door. Dates are pinned to UTC and the expiry day
 --    itself is hidden (strictly greater), which errs toward hiding early.
 --    Each open decision is marked OWNER.
@@ -400,36 +429,55 @@ JOIN LATERAL (
   ORDER BY k.observed_on DESC, k.created_at DESC LIMIT 1
 ) c ON c.confidence IN ('high','medium')                 -- BLOCK-1/2: low never shows
    AND c.expires_on > (now() AT TIME ZONE 'UTC')::date
-   AND c.fields_hash = public.resource_fields_hash(s)
+   AND c.fields_hash = public.resource_fields_hash(s, o.name, o.website)
    AND c.review_result = 'PASS'                          -- BLOCK-1: blank is not a pass
    AND c.verify_method <> 'dataset'                      -- OWNER D-1: dataset-only rows hidden until decided
 WHERE s.status = 'active' AND s.adult_facing;            -- OWNER D-9: school-based sites hidden
 
--- A chain shows only when it is live, unexpired, confidence high or medium,
--- marked usable, and every step's LATEST review is fact-checked clean with no
--- open law conflict. Every chain it depends on must itself show. A chain with one
--- bad step is a wrong chain, so chains hide whole, never by step.
+-- A chain shows only when it is live, unexpired, confidence high or medium, marked
+-- usable (M5 / OWNER D-3: usable_with_stated_limits stays hidden until a limits field
+-- exists), every step is fresh within the chain's ttl (M4), every step's LATEST review
+-- (highest seq) is fact-checked clean with no open law conflict, and every chain it
+-- depends on shows too, transitively (H1). A chain hides whole, never by step.
 CREATE VIEW resource_chain_public_v WITH (security_barrier = true) AS
-WITH latest AS (
+WITH RECURSIVE latest AS (
   SELECT DISTINCT ON (r.chain_id, r.n) r.chain_id, r.n, r.review_verdict, r.review_depth
   FROM resource_chain_step_review r
-  ORDER BY r.chain_id, r.n, r.created_at DESC
+  ORDER BY r.chain_id, r.n, r.seq DESC
 ),
-ok AS (
+own_ok AS (
   SELECT ch.id, ch.chain_key
   FROM resource_chain ch
   WHERE ch.status = 'live'
     AND ch.expires_on > (now() AT TIME ZONE 'UTC')::date
-    AND ch.confidence IN ('high','medium')                       -- BLOCK-2: low chains never show
-    AND ch.use_status IN ('usable','usable_with_stated_limits')  -- OWNER D-3: stated-limits chains
+    AND ch.confidence IN ('high','medium')
+    AND ch.use_status = 'usable'
     AND NOT EXISTS (
       SELECT 1 FROM resource_chain_step st
       LEFT JOIN latest lr ON lr.chain_id = st.chain_id AND lr.n = st.n
       WHERE st.chain_id = ch.id
-        AND (st.law_conflict IS NOT NULL                          -- OWNER D-3 / S-8
+        AND (st.law_conflict IS NOT NULL
           OR coalesce(NOT (lr.review_verdict = 'CERTIFIED'
-               OR (lr.review_verdict = 'CONFIRMED' AND lr.review_depth = 'facts')), true))
-    )
+               OR (lr.review_verdict = 'CONFIRMED' AND lr.review_depth = 'facts')), true)))
+    AND NOT EXISTS (
+      SELECT 1 FROM resource_chain_step s2
+      WHERE s2.chain_id = ch.id
+        AND s2.observed_on + ch.ttl_days <= (now() AT TIME ZONE 'UTC')::date)
+),
+bad(id) AS (
+  SELECT ch.id FROM resource_chain ch
+  WHERE ch.status = 'live' AND NOT EXISTS (SELECT 1 FROM own_ok o WHERE o.id = ch.id)
+  UNION
+  SELECT d.chain_id FROM resource_chain_step_dep d
+  WHERE d.dep_kind = 'chain' AND d.dep_chain_key NOT IN (SELECT o.chain_key FROM own_ok o)
+  UNION
+  SELECT d.chain_id FROM resource_chain_step_dep d
+  JOIN resource_chain t ON t.chain_key = d.dep_chain_key AND t.status = 'live'
+  JOIN bad b ON b.id = t.id
+  WHERE d.dep_kind = 'chain'
+),
+ok AS (
+  SELECT o.id, o.chain_key FROM own_ok o WHERE o.id NOT IN (SELECT b.id FROM bad b)
 )
 SELECT ch.chain_key, ch.state, ch.goal, ch.unlocks, ch.observed_on AS verified_on, ch.expires_on,
        ch.confidence, ch.use_status, st.n, st.action, st.agency, st.requires, st.cost, st.wait_time,
@@ -437,14 +485,12 @@ SELECT ch.chain_key, ch.state, ch.goal, ch.unlocks, ch.observed_on AS verified_o
        st.source_url, st.observed_on AS step_verified_on
 FROM ok
 JOIN resource_chain ch      ON ch.id = ok.id
-JOIN resource_chain_step st ON st.chain_id = ch.id
-WHERE NOT EXISTS (
-  SELECT 1 FROM resource_chain_step_dep d
-  WHERE d.chain_id = ch.id AND d.dep_kind = 'chain'
-    AND d.dep_chain_key NOT IN (SELECT chain_key FROM ok));
+JOIN resource_chain_step st ON st.chain_id = ch.id;
 
--- What needs a look: every active service that is not showing, plus any showing
--- service whose check expires within 14 days. Ids and place only. Not for the app role.
+-- What needs a look: every active or paused service that is not showing, plus any
+-- showing service whose check expires within 14 days (H3: paused is the default for a
+-- new service, so it must be in the queue). Closed and withdrawn are not queued: decide.
+-- Ids and place only. Not for the app role.
 CREATE VIEW resource_recheck_queue_v WITH (security_barrier = true) AS
 SELECT s.id AS service_id, s.state, s.county, s.area_id, s.stew_tier,
        k.expires_on AS live_until, k.confidence AS last_confidence
@@ -454,9 +500,17 @@ LEFT JOIN LATERAL (
   WHERE k2.service_id = s.id AND k2.status = 'live'
   ORDER BY k2.observed_on DESC, k2.created_at DESC LIMIT 1
 ) k ON true
-WHERE s.status = 'active'
+WHERE s.status IN ('active','paused')
   AND (NOT EXISTS (SELECT 1 FROM resource_public_v p WHERE p.service_id = s.id)
     OR k.expires_on <= (now() AT TIME ZONE 'UTC')::date + 14);
+
+-- Chains that are not showing, or whose check lapses within 14 days (H3).
+CREATE VIEW resource_chain_recheck_queue_v WITH (security_barrier = true) AS
+SELECT ch.id AS chain_id, ch.chain_key, ch.state, ch.expires_on AS live_until
+FROM resource_chain ch
+WHERE ch.status = 'live'
+  AND (NOT EXISTS (SELECT 1 FROM resource_chain_public_v p WHERE p.chain_key = ch.chain_key)
+    OR ch.expires_on <= (now() AT TIME ZONE 'UTC')::date + 14);
 
 -- 7. RLS: admin-only on base tables; select, insert, update. No delete policy.
 DO $$
@@ -479,13 +533,13 @@ END $$;
 --    for the revoke itself: PUBLIC is always revoked (FIX, restricted-grants trap).
 REVOKE ALL ON resource_area, resource_org, resource_service, resource_check, resource_contact,
               resource_suppression, resource_chain, resource_chain_step, resource_chain_step_review,
-              resource_chain_step_dep, resource_public_v, resource_chain_public_v, resource_recheck_queue_v FROM PUBLIC;
+              resource_chain_step_dep, resource_public_v, resource_chain_public_v, resource_recheck_queue_v, resource_chain_recheck_queue_v FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     REVOKE ALL ON resource_area, resource_org, resource_service, resource_check, resource_contact,
                   resource_suppression, resource_chain, resource_chain_step, resource_chain_step_review,
-                  resource_chain_step_dep, resource_public_v, resource_chain_public_v, resource_recheck_queue_v FROM smr_app;
+                  resource_chain_step_dep, resource_public_v, resource_chain_public_v, resource_recheck_queue_v, resource_chain_recheck_queue_v FROM smr_app;
     GRANT SELECT ON resource_public_v, resource_chain_public_v TO smr_app;
   END IF;
 END $$;
