@@ -61,8 +61,8 @@ For each company return:
   "phone": "main phone or null",
   "website": "company website or null",
   "contact_name": "hiring manager or HR contact name if findable, or null",
-  "company_intel": "1-2 sentences about the company's current situation, culture, or recent news",
-  "second_chance_friendly": true/false/null (true if they're known to hire people with records),
+  "company_intel": "" (always empty: unsourced company claims are not allowed)",
+  "second_chance_friendly": null (always null: never guess whether an employer hires people with records; only Steel Man's published, dated employer marks may say that),
   "approach_strategy": "Best way to approach this employer (walk-in, online application, staffing agency, etc.)"
 }
 
