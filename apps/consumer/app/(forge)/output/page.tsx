@@ -21,6 +21,8 @@ import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
 import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
+import { MintCheckPanel } from "@/components/resume/MintCheckPanel";
+import { withholdRecordLines } from "@/lib/record-lines";
 import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
@@ -809,6 +811,10 @@ export default function OutputPage() {
                       and deliberately did not resolve. Above page fit, because
                       "is this certification current" outranks "is this two
                       pages" when someone is about to hit send. */}
+                  <MintCheckPanel
+                    resumeText={resumeText}
+                    sourceText={withholdRecordLines(session.resumeText, keepInsideLines).kept}
+                  />
                   <DiscrepancyPanel
                     resumeText={resumeText}
                     sourceText={session.resumeText}
