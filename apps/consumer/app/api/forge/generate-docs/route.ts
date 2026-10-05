@@ -355,9 +355,9 @@ SECTION ORDER (exact):
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
    - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
-7. EDUCATION
+7. EDUCATION (only if the source gives any; otherwise leave the section off)
    - Institution, dates. City and state only if the source gives them. Add relevant coursework if it strengthens the resume.
-8. CERTIFICATIONS (separate section if they have any. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
+8. CERTIFICATIONS (only if the source gives any; separate section. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
 - CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
 
 OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
@@ -449,11 +449,12 @@ CERTIFICATIONS
 
 CRITICAL REMINDERS:
 - TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded: real facts, strong verbs, zero invention.
-- If a job title/company pairing doesn't make sense (retail work at a printing company), repair the pairing using context. Never invent a new employer or role.
+- If a job title/company pairing doesn't seem to match, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role.
+- SECTIONS WITH NOTHING IN THEM: leave EDUCATION or CERTIFICATIONS off entirely when the source gives none. Never print a line like "No formal education provided".
 - Transform duties into achievement language using only the source's facts and stated scale.
 - CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
 - NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: build a FUNCTIONAL resume with skill-area sections and bullets from the strengths data provided and nothing beyond it.
+- If no work history exists: a skills-led page is allowed, but list training, programs and volunteer work with the dates the person gave, and build only from what the person said.
 - Certifications get their OWN section, never buried in education.`;
 
   return await callClaude(system, prompt, userId, 4500);
