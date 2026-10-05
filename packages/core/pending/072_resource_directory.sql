@@ -1,9 +1,19 @@
--- 072_resource_directory.sql  (v3.6, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.7, drafted 2026-10-05, NOT APPLIED)
+-- v3.7: sixth-review fixes. A service that has ever had a T1 check cannot take a lower tier, and an
+-- approved T1 check cannot be withdrawn (no withdraw-then-relabel). A superseded or withdrawn
+-- prerequisite holds its dependents AND clears their approval. A suppression added later reaches
+-- existing contacts. Header assumptions now state the costs: an approver's platform_admin row cannot
+-- be deleted while it is referenced (by design), and the approver name is a process control, not a
+-- schema guarantee.
 -- v3.6: fifth-review fixes. Approval is a platform admin's user id (a real FK, never blank), can
 -- be set only on a live check, and a review change on an approved chain puts it back on hold.
 -- A T1 service cannot be downgraded by a later check. Dataset and risky contacts are held.
 -- Approver and reviewer identities are NOT verified against a login: the design relies on the owner
--- recording the real person. The post-apply counts do not detect a forged name.
+-- recording the real person. The post-apply counts do not detect a forged name. The approver name is a
+-- PROCESS control (approval is run from Troy's own session and recorded in the change log), not a
+-- schema guarantee. An approver's platform_admin row cannot be deleted while it is referenced: that is
+-- by design (the approval record must keep pointing at a real admin). Revoking an admin is a later
+-- migration (revoked_on), and Troy decides when.
 -- v3.5: human approval for the top tier (Troy 2026-10-05). A service check at review tier T1 shows
 -- only with human_approved_by set. A chain shows only with human_approved_by set. AI review is
 -- accepted below the top tier. Recorded, not inferred: the approver's name is written by a person.
@@ -223,8 +233,7 @@ BEGIN
   IF newest IS NOT NULL AND NEW.observed_on < newest THEN
     RAISE EXCEPTION 'observed_on % is older than the live check (%)', NEW.observed_on, newest USING ERRCODE = 'check_violation';
   END IF;
-  SELECT r.review_tier INTO prior_tier FROM resource_check r WHERE r.service_id = NEW.service_id AND r.status = 'live';
-  IF prior_tier = 'T1' AND NEW.review_tier IS DISTINCT FROM 'T1' THEN
+  IF NEW.review_tier IS DISTINCT FROM 'T1' AND EXISTS (SELECT 1 FROM resource_check r WHERE r.service_id = NEW.service_id AND r.review_tier = 'T1') THEN
     RAISE EXCEPTION 'a T1 service cannot be replaced by a lower tier; approve a T1 check' USING ERRCODE = 'check_violation';
   END IF;
   UPDATE resource_check SET status = 'superseded', status_reason = 'newer check'
@@ -238,6 +247,9 @@ CREATE OR REPLACE FUNCTION public.resource_check_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   -- expires_on is GENERATED: its NEW value is empty inside a BEFORE trigger, so it is excluded.
+  IF NEW.status = 'withdrawn' AND OLD.review_tier = 'T1' THEN
+    RAISE EXCEPTION 'an approved T1 check is not withdrawn; supersede it with a new T1 check' USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW.human_approved_by IS DISTINCT FROM OLD.human_approved_by AND OLD.status <> 'live' THEN
     RAISE EXCEPTION 'approval is only given on a live check' USING ERRCODE = 'check_violation';
   END IF;
@@ -373,8 +385,8 @@ BEGIN
   IF NEW.use_status IN ('usable','usable_with_stated_limits') AND NEW.human_approved_by IS NULL THEN
     RAISE EXCEPTION 'a chain needs a person to approve it before it is usable' USING ERRCODE = 'check_violation';
   END IF;
-  IF NEW.status = 'superseded' AND OLD.status = 'live' THEN
-    UPDATE resource_chain SET use_status = 'hold'
+  IF NEW.status IN ('superseded','withdrawn') AND OLD.status = 'live' THEN
+    UPDATE resource_chain SET use_status = 'hold', human_approved_by = NULL, human_approved_on = NULL
      WHERE status = 'live' AND id IN (
        SELECT d.chain_id FROM resource_chain_step_dep d
         WHERE d.dep_kind = 'chain' AND d.dep_chain_key = OLD.chain_key);
@@ -443,6 +455,17 @@ BEGIN
 END $$;
 CREATE TRIGGER resource_contact_suppressed BEFORE INSERT ON resource_contact
   FOR EACH ROW EXECUTE FUNCTION public.resource_contact_suppressed();
+
+-- F-C: a suppression added after a contact was written reaches that contact too.
+CREATE OR REPLACE FUNCTION public.resource_suppress_existing() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  UPDATE resource_contact SET send_status = 'do_not_contact'
+   WHERE lower(email) = NEW.email_lower AND send_status <> 'do_not_contact';
+  RETURN NULL;
+END $$;
+CREATE TRIGGER resource_suppress_existing AFTER INSERT ON resource_suppression
+  FOR EACH ROW EXECUTE FUNCTION public.resource_suppress_existing();
 
 -- F1 / F11: the do-not-contact list and the area rules cannot be rewritten.
 CREATE TRIGGER resource_suppression_fixed BEFORE UPDATE ON resource_suppression
@@ -716,4 +739,5 @@ REVOKE EXECUTE ON FUNCTION public.resource_check_insert(), public.resource_check
                            public.resource_no_change(), public.resource_no_delete(),
                            public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
                            public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard(),
-                           public.resource_contact_suppressed(), public.resource_review_resets_approval() FROM PUBLIC;
+                           public.resource_contact_suppressed(), public.resource_review_resets_approval(),
+                           public.resource_suppress_existing() FROM PUBLIC;
