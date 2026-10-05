@@ -1,4 +1,7 @@
--- 072_resource_directory.sql  (v3.4, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.5, drafted 2026-10-05, NOT APPLIED)
+-- v3.5: human approval for the top tier (Troy 2026-10-05). A service check at review tier T1 shows
+-- only with human_approved_by set. A chain shows only with human_approved_by set. AI review is
+-- accepted below the top tier. Recorded, not inferred: the approver's name is written by a person.
 -- v3.4: fourth-review fixes. Reviewer identity on every PASS (M2). A superseded prerequisite holds
 -- its dependents (M3). CERTIFIED needs depth facts (L1). A contact on a suppressed address is
 -- do-not-contact at insert (L5). ASSUMPTION, stated: protection against the table owner rests on
@@ -156,6 +159,8 @@ CREATE TABLE resource_check (
   review_result   text CHECK (review_result IN ('PASS','PARTIAL','FAIL','UNVERIFIABLE')),
   review_by       text,                          -- M2: who reviewed; required when a result is set
   review_on       date,
+  human_approved_by text,                        -- top tier (T1): a person signs off before it shows
+  human_approved_on date,
   status          text NOT NULL DEFAULT 'live' CHECK (status IN ('live','superseded','withdrawn')),
   status_reason   text,
   lane            text,
@@ -169,7 +174,7 @@ CREATE TABLE resource_check (
   CHECK (verify_method = 'dataset' OR review_result IS NOT NULL),
   CHECK (review_result IS DISTINCT FROM 'PASS' OR review_tier IS NOT NULL),
   CHECK (review_result IS NULL OR review_by IS NOT NULL)
-);
+);  -- top-tier approval is enforced in the public view, so an unapproved T1 row stays stored and hidden
 CREATE UNIQUE INDEX resource_check_one_live ON resource_check (service_id) WHERE status = 'live';
 
 -- The hash both sides must agree on. A jsonb array keeps NULL distinct from '' and
@@ -275,6 +280,8 @@ CREATE TABLE resource_chain (
                  ('unreviewed','hold','usable_with_stated_limits','usable')),
   status       text NOT NULL DEFAULT 'live' CHECK (status IN ('live','superseded','withdrawn')),
   status_reason text,
+  human_approved_by text,                        -- top tier: a person signs off before the chain can be usable
+  human_approved_on date,
   notes        text,
   created_at   timestamptz NOT NULL DEFAULT now()
 );
@@ -338,8 +345,8 @@ CREATE OR REPLACE FUNCTION public.resource_chain_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   -- expires_on is GENERATED: excluded (see resource_check_guard).
-  IF (to_jsonb(NEW) - 'status' - 'status_reason' - 'use_status' - 'expires_on')
-     IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'status_reason' - 'use_status' - 'expires_on') THEN
+  IF (to_jsonb(NEW) - 'status' - 'status_reason' - 'use_status' - 'expires_on' - 'human_approved_by' - 'human_approved_on')
+     IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'status_reason' - 'use_status' - 'expires_on' - 'human_approved_by' - 'human_approved_on') THEN
     RAISE EXCEPTION 'a chain is versioned, never rewritten' USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.status IS DISTINCT FROM OLD.status AND OLD.status <> 'live' THEN
@@ -347,6 +354,9 @@ BEGIN
   END IF;
   -- M3: a new version of a prerequisite may mean something else; every live dependent is held
   -- until someone re-reviews its steps against the new version.
+  IF NEW.use_status = 'usable' AND NEW.human_approved_by IS NULL THEN
+    RAISE EXCEPTION 'a chain needs a person to approve it before it is usable' USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW.status = 'superseded' AND OLD.status = 'live' THEN
     UPDATE resource_chain SET use_status = 'hold'
      WHERE status = 'live' AND id IN (
@@ -560,6 +570,7 @@ JOIN LATERAL (
    AND c.expires_on > (now() AT TIME ZONE 'UTC')::date
    AND c.fields_hash = public.resource_fields_hash(s, o.name, o.website)
    AND c.review_result = 'PASS'                          -- BLOCK-1: blank is not a pass
+   AND (c.review_tier IS DISTINCT FROM 'T1' OR c.human_approved_by IS NOT NULL)   -- top tier needs a person
    AND c.verify_method <> 'dataset'                      -- OWNER D-1: dataset-only rows hidden until decided
 WHERE s.status = 'active' AND s.adult_facing;            -- OWNER D-9: school-based sites hidden
 
@@ -581,6 +592,7 @@ own_ok AS (
     AND ch.expires_on > (now() AT TIME ZONE 'UTC')::date
     AND ch.confidence IN ('high','medium')
     AND ch.use_status = 'usable'
+    AND ch.human_approved_by IS NOT NULL
     AND EXISTS (SELECT 1 FROM resource_chain_step s0 WHERE s0.chain_id = ch.id)
     AND NOT EXISTS (
       SELECT 1 FROM resource_chain_step st
