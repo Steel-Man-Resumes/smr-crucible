@@ -1,4 +1,6 @@
--- 072_resource_directory.sql  (v3.2, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.3, drafted 2026-10-05, NOT APPLIED)
+-- v3.3: third review fixes (F1-F3, F5, F6, F8, F10-F14, F21-F22). Hash is jsonb-based (no delimiter
+-- collisions). Barrier tags and urgency are hidden from the public view until each has a source.
 -- v3.2: adversary re-review fixes (2026-10-05): H1 transitive chain dependencies, H2 org name
 -- and website are in the hash, H3 paused services and chains are in a recheck queue, H4 review
 -- order by identity sequence, M2 one live check per service, M3 no delete or truncate on every
@@ -32,16 +34,18 @@
 -- [] for every table and for resource_recheck_queue_v, ["SELECT"] for the two
 -- public views. Without that, a fresh database re-grants full DML to the app role.
 --
--- ROLLBACK (pre-import only; destroys directory rows; run as owner, by hand):
---   DROP VIEW resource_recheck_queue_v, resource_chain_public_v, resource_public_v;
+-- ROLLBACK (pre-import only; destroys directory rows; run as owner, by hand; order matters):
+--   DROP VIEW resource_chain_recheck_queue_v, resource_recheck_queue_v;
+--   DROP VIEW resource_chain_public_v, resource_public_v;
 --   DROP TABLE resource_suppression, resource_chain_step_review, resource_chain_step_dep,
 --     resource_chain_step, resource_chain, resource_contact, resource_check,
 --     resource_service, resource_org, resource_area;
 --   DROP FUNCTION public.resource_check_guard(), public.resource_check_insert(),
---     public.resource_chain_guard(), public.resource_step_insert_guard(),
---     public.resource_no_change(), public.resource_no_delete(), public.resource_fields_hash(resource_service);
+--     public.resource_chain_guard(), public.resource_step_insert_guard(), public.resource_no_change(),
+--     public.resource_no_delete(), public.resource_fields_hash(resource_service, text, text),
+--     public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
+--     public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard();
 --   and remove the resource_* rows from restricted-grants.mjs.
---   (Written as comments on purpose: a migration never drops. Run by hand only.)
 
 -- 0. Fail loudly where the views would be silently empty.
 DO $$ BEGIN
@@ -159,19 +163,17 @@ CREATE TABLE resource_check (
 );
 CREATE UNIQUE INDEX resource_check_one_live ON resource_check (service_id) WHERE status = 'live';
 
--- The hash both sides must agree on. Covers every service field AND the org name and
--- website the public view shows (H2): a rename or a new website re-opens the check.
--- barrier_tags and urgency_fit are covered too, but they are unsourced claims: each
--- needs a source field before it can be trusted (open, see header).
+-- The hash both sides must agree on. A jsonb array keeps NULL distinct from '' and
+-- escapes every delimiter, so no two different field sets share a hash (F10). Covers every
+-- service field AND the org name and website the public view shows (H2). The import
+-- mirrors this exactly (build_resource_import.py fields_hash) and the insert trigger
+-- refuses any mismatch, so a drift fails loudly rather than silently.
 CREATE OR REPLACE FUNCTION public.resource_fields_hash(s resource_service, org_name text, org_website text) RETURNS text
 LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
-  SELECT md5(concat_ws('|',
-    coalesce(s.service_name,''), coalesce(s.description,''), coalesce(s.area_id,''), coalesce(s.stew_tier,''),
-    coalesce(s.geo_scope,''), coalesce(s.state,''), coalesce(s.county,''), array_to_string(s.counties, ','),
-    coalesce(s.city,''), coalesce(s.address,''), coalesce(s.zip,''), coalesce(s.phone,''), coalesce(s.hours,''),
-    coalesce(s.eligibility,''), coalesce(s.fees,''), coalesce(s.what_to_bring,''), coalesce(s.limits,''),
-    array_to_string(s.barrier_tags, ','), coalesce(s.urgency_fit,''), s.adult_facing::text,
-    coalesce(org_name,''), coalesce(org_website,'')))
+  SELECT md5(jsonb_build_array(s.service_name, s.description, s.area_id, s.stew_tier, s.geo_scope, s.state,
+    s.county, to_jsonb(s.counties), s.city, s.address, s.zip, s.phone, s.hours, s.eligibility, s.fees,
+    s.what_to_bring, s.limits, to_jsonb(s.barrier_tags), s.urgency_fit, s.adult_facing,
+    org_name, org_website)::text)
 $$;
 REVOKE EXECUTE ON FUNCTION public.resource_fields_hash(resource_service, text, text) FROM PUBLIC;
 
@@ -196,7 +198,7 @@ BEGIN
     RAISE EXCEPTION 'fields_hash does not match service %', NEW.service_id USING ERRCODE = 'check_violation';
   END IF;
   -- FIX-4: a backdated check never supersedes a newer live one.
-  SELECT max(observed_on) INTO newest FROM resource_check WHERE service_id = NEW.service_id AND status = 'live';
+  SELECT max(observed_on) INTO newest FROM resource_check WHERE service_id = NEW.service_id;
   IF newest IS NOT NULL AND NEW.observed_on < newest THEN
     RAISE EXCEPTION 'observed_on % is older than the live check (%)', NEW.observed_on, newest USING ERRCODE = 'check_violation';
   END IF;
@@ -302,7 +304,8 @@ CREATE TABLE resource_chain_step_review (
   reviewer        text NOT NULL,
   reviewed_on     date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
   created_at      timestamptz NOT NULL DEFAULT now(),
-  FOREIGN KEY (chain_id, n) REFERENCES resource_chain_step (chain_id, n)
+  FOREIGN KEY (chain_id, n) REFERENCES resource_chain_step (chain_id, n),
+  CHECK (review_verdict NOT IN ('CONFIRMED','CERTIFIED') OR review_depth IS NOT NULL)
 );
 CREATE INDEX resource_chain_step_review_latest ON resource_chain_step_review (chain_id, n, seq DESC);
 
@@ -385,6 +388,102 @@ CREATE TRIGGER resource_chain_step_dep_no_truncate BEFORE TRUNCATE ON resource_c
 CREATE TRIGGER resource_chain_step_review_no_truncate BEFORE TRUNCATE ON resource_chain_step_review
   FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
 
+-- F1 / F11: the do-not-contact list and the area rules cannot be rewritten.
+CREATE TRIGGER resource_suppression_fixed BEFORE UPDATE ON resource_suppression
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_change();
+CREATE TRIGGER resource_area_fixed BEFORE UPDATE ON resource_area
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_change();
+
+-- F2: a do-not-contact stays; an address or trust tag never changes in place (add a new row).
+CREATE OR REPLACE FUNCTION public.resource_contact_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.send_status = 'do_not_contact' AND NEW.send_status IS DISTINCT FROM OLD.send_status THEN
+    RAISE EXCEPTION 'a do-not-contact stays do-not-contact' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.email IS DISTINCT FROM OLD.email OR NEW.email_trust IS DISTINCT FROM OLD.email_trust THEN
+    RAISE EXCEPTION 'contact address and trust are never edited in place; add a new contact row' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_contact_guard BEFORE UPDATE ON resource_contact
+  FOR EACH ROW EXECUTE FUNCTION public.resource_contact_guard();
+
+-- F3: terminal statuses stay terminal. A reactivated service or org would show on its old check.
+CREATE OR REPLACE FUNCTION public.resource_service_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.status IN ('closed','withdrawn') AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION 'a % service is terminal: add a new service row and a new check', OLD.status USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_service_guard BEFORE UPDATE ON resource_service
+  FOR EACH ROW EXECUTE FUNCTION public.resource_service_guard();
+
+CREATE OR REPLACE FUNCTION public.resource_org_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.status IN ('closed','hijacked','excluded') AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION 'a % org is terminal', OLD.status USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_org_guard BEFORE UPDATE ON resource_org
+  FOR EACH ROW EXECUTE FUNCTION public.resource_org_guard();
+
+-- F5 / F13: a chain enters the database unreviewed (or on hold) and dated no later than today.
+CREATE OR REPLACE FUNCTION public.resource_chain_insert_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.use_status NOT IN ('unreviewed','hold') THEN
+    RAISE EXCEPTION 'a chain is inserted unreviewed or on hold, then set usable' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.observed_on > (now() AT TIME ZONE 'UTC')::date THEN
+    RAISE EXCEPTION 'chain observed_on is in the future' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_chain_insert_guard BEFORE INSERT ON resource_chain
+  FOR EACH ROW EXECUTE FUNCTION public.resource_chain_insert_guard();
+
+CREATE OR REPLACE FUNCTION public.resource_step_future_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.observed_on > (now() AT TIME ZONE 'UTC')::date THEN
+    RAISE EXCEPTION 'step observed_on is in the future' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_step_future_guard BEFORE INSERT ON resource_chain_step
+  FOR EACH ROW EXECUTE FUNCTION public.resource_step_future_guard();
+
+-- F6: a dependency may not close a loop. Refused at insert, through every live link.
+CREATE OR REPLACE FUNCTION public.resource_dep_guard() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+DECLARE src_key text;
+BEGIN
+  IF NEW.dep_kind <> 'chain' THEN RETURN NEW; END IF;
+  SELECT c.chain_key INTO src_key FROM resource_chain c WHERE c.id = NEW.chain_id;
+  IF src_key = NEW.dep_chain_key THEN
+    RAISE EXCEPTION 'a chain cannot depend on itself' USING ERRCODE = 'check_violation';
+  END IF;
+  IF EXISTS (
+    WITH RECURSIVE reach(k) AS (
+      SELECT NEW.dep_chain_key
+      UNION
+      SELECT d.dep_chain_key FROM reach r
+        JOIN resource_chain c ON c.chain_key = r.k AND c.status = 'live'
+        JOIN resource_chain_step_dep d ON d.chain_id = c.id AND d.dep_kind = 'chain'
+    )
+    SELECT 1 FROM reach WHERE k = src_key) THEN
+    RAISE EXCEPTION 'dependency % would close a loop back to %', NEW.dep_chain_key, src_key USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER resource_chain_step_dep_guard BEFORE INSERT ON resource_chain_step_dep
+  FOR EACH ROW EXECUTE FUNCTION public.resource_dep_guard();
+
 -- M3: nothing deleted or truncated, on every base table.
 CREATE TRIGGER resource_chain_no_delete BEFORE DELETE ON resource_chain
   FOR EACH ROW EXECUTE FUNCTION public.resource_no_delete();
@@ -414,7 +513,7 @@ CREATE VIEW resource_public_v WITH (security_barrier = true) AS
 SELECT s.id AS service_id, o.name AS org_name, s.service_name, s.description,
        a.domain_id, s.area_id, s.stew_tier, s.geo_scope, s.state, s.county, s.counties, s.city,
        s.address, s.zip, s.phone, s.hours, s.eligibility, s.fees, s.what_to_bring, s.limits,
-       s.barrier_tags, s.urgency_fit,
+       '{}'::text[] AS barrier_tags, NULL::text AS urgency_fit,  -- F8: unsourced claims, hidden until a source field exists
        -- show the website only when the check was made on that same host
        CASE WHEN o.website IS NOT NULL
              AND split_part(split_part(c.source_url, '://', 2), '/', 1)
@@ -452,6 +551,7 @@ own_ok AS (
     AND ch.expires_on > (now() AT TIME ZONE 'UTC')::date
     AND ch.confidence IN ('high','medium')
     AND ch.use_status = 'usable'
+    AND EXISTS (SELECT 1 FROM resource_chain_step s0 WHERE s0.chain_id = ch.id)
     AND NOT EXISTS (
       SELECT 1 FROM resource_chain_step st
       LEFT JOIN latest lr ON lr.chain_id = st.chain_id AND lr.n = st.n
@@ -545,4 +645,6 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION public.resource_check_insert(), public.resource_check_guard(),
                            public.resource_chain_guard(), public.resource_step_insert_guard(),
-                           public.resource_no_change(), public.resource_no_delete() FROM PUBLIC;
+                           public.resource_no_change(), public.resource_no_delete(),
+                           public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
+                           public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard() FROM PUBLIC;
