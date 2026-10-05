@@ -1,6 +1,11 @@
--- 072_resource_directory.sql  (v3.7, drafted 2026-10-05, NOT APPLIED)
--- v3.7: sixth-review fixes. A service that has ever had a T1 check cannot take a lower tier, and an
--- approved T1 check cannot be withdrawn (no withdraw-then-relabel). A superseded or withdrawn
+-- 072_resource_directory.sql  (v3.8, drafted 2026-10-05, NOT APPLIED)
+-- v3.8: diff-review fixes. Holds and approval clear TRANSITIVELY: a dependent two links away is held
+-- too (the v3.7 closure reached only direct dependents). A review change on an approved chain holds
+-- its dependents as well. Header wording: a T1 check (approved or not) cannot be withdrawn.
+-- COST, stated: the T1 tier is a one-way ratchet. A T1 service never returns to a lower tier; the
+-- only exit is a new T1 check, which needs a person's approval before it shows.
+-- v3.7: sixth-review fixes. A service that has ever had a T1 check cannot take a lower tier, and a
+-- T1 check cannot be withdrawn (no withdraw-then-relabel). A superseded or withdrawn
 -- prerequisite holds its dependents AND clears their approval. A suppression added later reaches
 -- existing contacts. Header assumptions now state the costs: an approver's platform_admin row cannot
 -- be deleted while it is referenced (by design), and the approver name is a process control, not a
@@ -68,7 +73,8 @@
 --     public.resource_chain_guard(), public.resource_step_insert_guard(), public.resource_no_change(),
 --     public.resource_no_delete(), public.resource_fields_hash(resource_service, text, text),
 --     public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
---     public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard();
+--     public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard(),
+--     public.resource_contact_suppressed(), public.resource_review_resets_approval(), public.resource_suppress_existing();
 --   and remove the resource_* rows from restricted-grants.mjs.
 
 -- 0. Fail loudly where the views would be silently empty.
@@ -387,9 +393,14 @@ BEGIN
   END IF;
   IF NEW.status IN ('superseded','withdrawn') AND OLD.status = 'live' THEN
     UPDATE resource_chain SET use_status = 'hold', human_approved_by = NULL, human_approved_on = NULL
-     WHERE status = 'live' AND id IN (
-       SELECT d.chain_id FROM resource_chain_step_dep d
-        WHERE d.dep_kind = 'chain' AND d.dep_chain_key = OLD.chain_key);
+     WHERE status = 'live' AND chain_key IN (
+       WITH RECURSIVE down(k) AS (
+         SELECT OLD.chain_key
+         UNION
+         SELECT c.chain_key FROM down
+           JOIN resource_chain_step_dep d ON d.dep_kind = 'chain' AND d.dep_chain_key = down.k
+           JOIN resource_chain c ON c.id = d.chain_id AND c.status = 'live'
+       ) SELECT k FROM down WHERE k <> OLD.chain_key);
   END IF;
   RETURN NEW;
 END $$;
@@ -563,8 +574,16 @@ END $$;
 CREATE OR REPLACE FUNCTION public.resource_review_resets_approval() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
+  -- the approved chain and every live chain that depends on it, transitively, go back on hold
   UPDATE resource_chain SET use_status = 'hold', human_approved_by = NULL, human_approved_on = NULL
-   WHERE id = NEW.chain_id AND human_approved_by IS NOT NULL;
+   WHERE status = 'live' AND chain_key IN (
+     WITH RECURSIVE down(k) AS (
+       SELECT c0.chain_key FROM resource_chain c0 WHERE c0.id = NEW.chain_id AND c0.human_approved_by IS NOT NULL
+       UNION
+       SELECT c.chain_key FROM down
+         JOIN resource_chain_step_dep d ON d.dep_kind = 'chain' AND d.dep_chain_key = down.k
+         JOIN resource_chain c ON c.id = d.chain_id AND c.status = 'live'
+     ) SELECT k FROM down);
   RETURN NULL;
 END $$;
 CREATE TRIGGER resource_review_resets_approval AFTER INSERT ON resource_chain_step_review
