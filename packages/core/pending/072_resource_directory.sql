@@ -1,4 +1,9 @@
--- 072_resource_directory.sql  (v3.5, drafted 2026-10-05, NOT APPLIED)
+-- 072_resource_directory.sql  (v3.6, drafted 2026-10-05, NOT APPLIED)
+-- v3.6: fifth-review fixes. Approval is a platform admin's user id (a real FK, never blank), can
+-- be set only on a live check, and a review change on an approved chain puts it back on hold.
+-- A T1 service cannot be downgraded by a later check. Dataset and risky contacts are held.
+-- Approver and reviewer identities are NOT verified against a login: the design relies on the owner
+-- recording the real person. The post-apply counts do not detect a forged name.
 -- v3.5: human approval for the top tier (Troy 2026-10-05). A service check at review tier T1 shows
 -- only with human_approved_by set. A chain shows only with human_approved_by set. AI review is
 -- accepted below the top tier. Recorded, not inferred: the approver's name is written by a person.
@@ -159,7 +164,7 @@ CREATE TABLE resource_check (
   review_result   text CHECK (review_result IN ('PASS','PARTIAL','FAIL','UNVERIFIABLE')),
   review_by       text,                          -- M2: who reviewed; required when a result is set
   review_on       date,
-  human_approved_by text,                        -- top tier (T1): a person signs off before it shows
+  human_approved_by uuid REFERENCES platform_admin(user_id),  -- top tier (T1): a named person signs off
   human_approved_on date,
   status          text NOT NULL DEFAULT 'live' CHECK (status IN ('live','superseded','withdrawn')),
   status_reason   text,
@@ -173,7 +178,9 @@ CREATE TABLE resource_check (
   -- BLOCK-1: a non-dataset row cannot show without a recorded review. Blank is not a pass.
   CHECK (verify_method = 'dataset' OR review_result IS NOT NULL),
   CHECK (review_result IS DISTINCT FROM 'PASS' OR review_tier IS NOT NULL),
-  CHECK (review_result IS NULL OR review_by IS NOT NULL)
+  CHECK (review_result IS NULL OR review_by IS NOT NULL),
+  CHECK ((human_approved_by IS NULL) = (human_approved_on IS NULL)),
+  CHECK (review_by IS NULL OR length(btrim(review_by)) > 0)
 );  -- top-tier approval is enforced in the public view, so an unapproved T1 row stays stored and hidden
 CREATE UNIQUE INDEX resource_check_one_live ON resource_check (service_id) WHERE status = 'live';
 
@@ -193,7 +200,7 @@ REVOKE EXECUTE ON FUNCTION public.resource_fields_hash(resource_service, text, t
 
 CREATE OR REPLACE FUNCTION public.resource_check_insert() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
-DECLARE cap int; svc resource_service%ROWTYPE; newest date; org_name text; org_web text;
+DECLARE cap int; svc resource_service%ROWTYPE; newest date; org_name text; org_web text; prior_tier text;
 BEGIN
   SELECT * INTO svc FROM resource_service WHERE id = NEW.service_id;
   SELECT o.name, o.website INTO org_name, org_web FROM resource_org o WHERE o.id = svc.org_id;
@@ -216,6 +223,10 @@ BEGIN
   IF newest IS NOT NULL AND NEW.observed_on < newest THEN
     RAISE EXCEPTION 'observed_on % is older than the live check (%)', NEW.observed_on, newest USING ERRCODE = 'check_violation';
   END IF;
+  SELECT r.review_tier INTO prior_tier FROM resource_check r WHERE r.service_id = NEW.service_id AND r.status = 'live';
+  IF prior_tier = 'T1' AND NEW.review_tier IS DISTINCT FROM 'T1' THEN
+    RAISE EXCEPTION 'a T1 service cannot be replaced by a lower tier; approve a T1 check' USING ERRCODE = 'check_violation';
+  END IF;
   UPDATE resource_check SET status = 'superseded', status_reason = 'newer check'
    WHERE service_id = NEW.service_id AND status = 'live';
   RETURN NEW;
@@ -227,7 +238,10 @@ CREATE OR REPLACE FUNCTION public.resource_check_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   -- expires_on is GENERATED: its NEW value is empty inside a BEFORE trigger, so it is excluded.
-  IF (to_jsonb(NEW) - 'status' - 'status_reason' - 'expires_on') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'status_reason' - 'expires_on') THEN
+  IF NEW.human_approved_by IS DISTINCT FROM OLD.human_approved_by AND OLD.status <> 'live' THEN
+    RAISE EXCEPTION 'approval is only given on a live check' USING ERRCODE = 'check_violation';
+  END IF;
+  IF (to_jsonb(NEW) - 'status' - 'status_reason' - 'expires_on' - 'human_approved_by' - 'human_approved_on') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'status_reason' - 'expires_on' - 'human_approved_by' - 'human_approved_on') THEN
     RAISE EXCEPTION 'a check is superseded, never rewritten' USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.status IS DISTINCT FROM OLD.status AND OLD.status <> 'live' THEN
@@ -251,9 +265,11 @@ CREATE TABLE resource_contact (
   seen_on          date NOT NULL,                -- the check date of the row it came from
   email_trust      text NOT NULL CHECK (email_trust IN
                      ('org_site','org_site_freemail','site_confirmed','site_replaced','dataset_only','risky_domain')),
-  send_status      text NOT NULL DEFAULT 'ok' CHECK (send_status IN ('ok','bounced','do_not_contact')),
+  send_status      text NOT NULL DEFAULT 'ok' CHECK (send_status IN ('ok','bounced','do_not_contact','hold')),
   created_at       timestamptz NOT NULL DEFAULT now(),
-  CHECK (email IS NOT NULL OR contact_page_url IS NOT NULL)
+  CHECK (email IS NOT NULL OR contact_page_url IS NOT NULL),
+  -- F7: no send to a dataset or risky address without a person looking (header rule)
+  CHECK (send_status <> 'ok' OR email_trust NOT IN ('dataset_only','risky_domain'))
 );
 CREATE UNIQUE INDEX resource_contact_email ON resource_contact (org_id, lower(email)) WHERE email IS NOT NULL;
 
@@ -280,7 +296,7 @@ CREATE TABLE resource_chain (
                  ('unreviewed','hold','usable_with_stated_limits','usable')),
   status       text NOT NULL DEFAULT 'live' CHECK (status IN ('live','superseded','withdrawn')),
   status_reason text,
-  human_approved_by text,                        -- top tier: a person signs off before the chain can be usable
+  human_approved_by uuid REFERENCES platform_admin(user_id),  -- top tier: a named person signs off
   human_approved_on date,
   notes        text,
   created_at   timestamptz NOT NULL DEFAULT now()
@@ -354,7 +370,7 @@ BEGIN
   END IF;
   -- M3: a new version of a prerequisite may mean something else; every live dependent is held
   -- until someone re-reviews its steps against the new version.
-  IF NEW.use_status = 'usable' AND NEW.human_approved_by IS NULL THEN
+  IF NEW.use_status IN ('usable','usable_with_stated_limits') AND NEW.human_approved_by IS NULL THEN
     RAISE EXCEPTION 'a chain needs a person to approve it before it is usable' USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.status = 'superseded' AND OLD.status = 'live' THEN
@@ -374,7 +390,7 @@ CREATE OR REPLACE FUNCTION public.resource_step_insert_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM resource_chain WHERE id = NEW.chain_id
-                   AND status = 'live' AND use_status IN ('unreviewed','hold')) THEN
+                   AND status = 'live' AND use_status IN ('unreviewed','hold') AND human_approved_by IS NULL) THEN
     RAISE EXCEPTION 'steps can only be added to a live chain that is not yet usable' USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
@@ -521,6 +537,16 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+CREATE OR REPLACE FUNCTION public.resource_review_resets_approval() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  UPDATE resource_chain SET use_status = 'hold', human_approved_by = NULL, human_approved_on = NULL
+   WHERE id = NEW.chain_id AND human_approved_by IS NOT NULL;
+  RETURN NULL;
+END $$;
+CREATE TRIGGER resource_review_resets_approval AFTER INSERT ON resource_chain_step_review
+  FOR EACH ROW EXECUTE FUNCTION public.resource_review_resets_approval();
+
 CREATE TRIGGER resource_chain_step_dep_guard BEFORE INSERT ON resource_chain_step_dep
   FOR EACH ROW EXECUTE FUNCTION public.resource_dep_guard();
 
@@ -634,7 +660,8 @@ JOIN resource_chain_step st ON st.chain_id = ch.id;
 -- Ids and place only. Not for the app role.
 CREATE VIEW resource_recheck_queue_v WITH (security_barrier = true) AS
 SELECT s.id AS service_id, s.state, s.county, s.area_id, s.stew_tier,
-       k.expires_on AS live_until, k.confidence AS last_confidence
+       k.expires_on AS live_until, k.confidence AS last_confidence,
+       k.review_tier, k.review_result, (k.human_approved_by IS NOT NULL) AS approved
 FROM resource_service s
 LEFT JOIN LATERAL (
   SELECT k2.* FROM resource_check k2
@@ -689,4 +716,4 @@ REVOKE EXECUTE ON FUNCTION public.resource_check_insert(), public.resource_check
                            public.resource_no_change(), public.resource_no_delete(),
                            public.resource_contact_guard(), public.resource_service_guard(), public.resource_org_guard(),
                            public.resource_chain_insert_guard(), public.resource_step_future_guard(), public.resource_dep_guard(),
-                           public.resource_contact_suppressed() FROM PUBLIC;
+                           public.resource_contact_suppressed(), public.resource_review_resets_approval() FROM PUBLIC;
