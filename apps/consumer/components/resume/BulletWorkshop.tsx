@@ -385,8 +385,27 @@ export function BulletWorkshop({
               </div>
             )}
           </div>
+          {/* "How often" and "How many" are what turn a duty into proof, and they
+              were the easiest questions to scroll past: small grey labels in
+              the middle of a long form. They sit in their own labelled card,
+              marked optional, so nobody feels forced and nobody misses them. */}
+          <section
+            aria-labelledby="bw-proof-heading"
+            className="space-y-3 border border-t-amber bg-t-panel-2 p-3"
+          >
+            <div>
+              <h4 id="bw-proof-heading" className="text-sm font-semibold text-t-white">
+                Two quick ones that make this line stronger
+              </h4>
+              <p className="mt-0.5 text-xs text-t-phos">
+                Optional. Tap an answer or type one. Only say what you know is true. Skip
+                anything you are not sure about.
+              </p>
+            </div>
           <Field
             label="How often?"
+            emphasis
+            optional
             value={often}
             onChange={setOften}
             placeholder="e.g., every shift, daily, during peak season"
@@ -396,6 +415,8 @@ export function BulletWorkshop({
           <div>
             <Field
               label="How many?"
+              emphasis
+              optional
               value={quantity}
               onChange={(v) => {
                 setQuantity(v);
@@ -481,6 +502,7 @@ export function BulletWorkshop({
               </button>
             )}
           </div>
+          </section>
           {/* Hardest screen #2: the question that carries the most weight and
               gets skipped the most. He only speaks if it is still empty after
               the person has had a moment with the others. */}
@@ -568,6 +590,8 @@ function Field({
   textarea,
   chips,
   why,
+  emphasis,
+  optional,
 }: {
   label: string;
   value: string;
@@ -578,6 +602,10 @@ function Field({
   chips?: readonly string[];
   /** The rung of the knowledge ladder: why this question earns its place. */
   why?: string;
+  /** Bigger, brighter label for the questions that are easy to scroll past. */
+  emphasis?: boolean;
+  /** Says plainly the question can be skipped. */
+  optional?: boolean;
 }) {
   const [showWhy, setShowWhy] = useState(false);
   // Associate label with input (id/htmlFor) for screen readers + testability.
@@ -588,8 +616,18 @@ function Field({
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <label htmlFor={id} className="block text-xs font-medium text-t-phos-dim">
+        <label
+          htmlFor={id}
+          className={
+            emphasis
+              ? "block text-sm font-semibold text-t-white"
+              : "block text-xs font-medium text-t-phos-dim"
+          }
+        >
           {label}
+          {optional && (
+            <span className="ml-1.5 text-[11px] font-normal text-t-phos-dim">(optional)</span>
+          )}
         </label>
         {why && (
           <button

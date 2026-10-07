@@ -10,36 +10,103 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Check } from "lucide-react";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import ForgeAccumulator from "@/components/ForgeAccumulator";
+import {
+  HOURS_OPTIONS,
+  SHIFT_OPTIONS,
+  ENVIRONMENT_OPTIONS,
+  TRANSPORT_OPTIONS,
+  DISTANCE_OPTIONS,
+  type PrefOption,
+  migratePreferences,
+  readSchedule,
+  readCommute,
+  splitPref,
+  togglePreference,
+  writeSchedule,
+  writeEnvironment,
+  writeCommute,
+} from "@/lib/forge-preferences";
 
-const SCHEDULE_OPTIONS = [
-  { id: "full-time", label: "Full-time", description: "35+ hours per week" },
-  { id: "part-time", label: "Part-time", description: "Under 35 hours" },
-  {
-    id: "flexible",
-    label: "Flexible / gig work",
-    description: "Set my own hours",
-  },
-  { id: "any", label: "Open to anything", description: "Whatever gets me started" },
-];
+const idsOf = (opts: PrefOption[]) => opts.map((o) => o.id);
 
-const ENVIRONMENT_OPTIONS = [
-  { id: "physical", label: "Physical / hands-on", description: "Warehouse, construction, trades" },
-  { id: "office", label: "Office / desk work", description: "Computer, phones, admin" },
-  { id: "people", label: "Working with people", description: "Retail, food service, healthcare" },
-  { id: "remote", label: "Remote / from home", description: "If available" },
-];
+/**
+ * A wrapping row of tap targets. Finer choices (8 environments, 4 shifts, 5
+ * ways to get to work) would make a tall stack of full-width cards on a phone,
+ * so these sit side by side and wrap. Same selected look as the other Forge
+ * option cards.
+ */
+function ChoiceChips({
+  label,
+  options,
+  selected,
+  onToggle,
+  disabled,
+}: {
+  label: string;
+  options: PrefOption[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+      {options.map((o) => {
+        const on = selected.includes(o.id);
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="checkbox"
+            aria-checked={on}
+            disabled={disabled}
+            onClick={() => onToggle(o.id)}
+            className={`t-focus min-h-touch rounded-[6px] border px-4 py-2 text-left text-base transition-all ${
+              on
+                ? "border-[#4f6b57] bg-[#e3ede5] font-medium text-t-white"
+                : "border-t-line bg-t-panel text-t-white hover:border-t-line-strong hover:bg-t-panel-2"
+            } ${disabled ? "cursor-default" : ""}`}
+          >
+            <span className="flex items-center gap-2">
+              <span
+                className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-[3px] border ${
+                  on ? "border-[#4f6b57] bg-[#4f6b57]" : "border-t-line-strong bg-white"
+                }`}
+              >
+                {on && <Check size={13} strokeWidth={2.4} className="text-white" aria-hidden="true" />}
+              </span>
+              {o.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-const COMMUTE_OPTIONS = [
-  { id: "walk", label: "Walking distance" },
-  { id: "bus", label: "Bus or public transit" },
-  { id: "drive-short", label: "Short drive (under 30 min)" },
-  { id: "drive-long", label: "Willing to commute further" },
-];
+function Question({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h3 className="mb-1 font-medium text-t-white">{title}</h3>
+      {hint && <p className="mb-3 text-sm text-t-phos-dim">{hint}</p>}
+      {!hint && <div className="mb-2" />}
+      {children}
+    </div>
+  );
+}
 
 export default function PreferencesPage() {
   const router = useRouter();
@@ -54,24 +121,18 @@ export default function PreferencesPage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const demoPrefs = DEMO_SESSION.preferences || {};
-  const prefs = isDemo ? demoPrefs : (session.preferences || {});
-  // Multi-select: people are often open to more than one schedule/environment.
-  // Stored as comma-joined strings to stay compatible with existing sessions.
-  const splitPref = (v?: string) =>
-    (v || "").split(", ").map((s) => s.trim()).filter(Boolean);
-  const [schedule, setSchedule] = useState<string[]>(splitPref(prefs.schedule));
-  const [environment, setEnvironment] = useState<string[]>(
-    splitPref(prefs.environment)
-  );
-  const [commute, setCommute] = useState<string[]>(splitPref(prefs.commute));
+  // Every answer is stored as a comma-joined list of ids (lib/forge-preferences.ts).
+  // Demo sample answers and any run saved before the current choices go through
+  // the same migration the stored session does, so old ids still show as picked.
+  const prefs = migratePreferences(isDemo ? DEMO_SESSION.preferences || {} : session.preferences || {});
+  const initialSchedule = readSchedule(prefs.schedule);
+  const initialCommute = readCommute(prefs.commute);
+  const [hours, setHours] = useState<string[]>(initialSchedule.hours);
+  const [shifts, setShifts] = useState<string[]>(initialSchedule.shifts);
+  const [environment, setEnvironment] = useState<string[]>(splitPref(prefs.environment));
+  const [modes, setModes] = useState<string[]>(initialCommute.modes);
+  const [distance, setDistance] = useState<string | null>(initialCommute.distance);
   const [location, setLocation] = useState(prefs.location || "");
-
-  const toggle =
-    (setter: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) =>
-      setter((prev) =>
-        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-      );
 
   function handleContinue() {
     if (isDemo) {
@@ -81,10 +142,13 @@ export default function PreferencesPage() {
       });
     } else {
       updateSession({
+        // Spread first: keys this page does not own (for example a work type
+        // brought across from a facility tablet) must survive.
         preferences: {
-          schedule: schedule.join(", "),
-          environment: environment.join(", "),
-          commute: commute.join(", "),
+          ...(session.preferences || {}),
+          schedule: writeSchedule(hours, shifts),
+          environment: writeEnvironment(environment),
+          commute: writeCommute(modes, distance),
           location,
         },
         lastPageVisited: "preferences",
@@ -117,46 +181,91 @@ export default function PreferencesPage() {
         </div>
       )}
       <div className="space-y-8">
-        {/* Schedule */}
-        <div>
-          <h3 className="font-medium text-t-white mb-3">
-            What schedule works for you?
-          </h3>
-          <CardSelect
-            options={SCHEDULE_OPTIONS}
-            selected={schedule}
-            onSelect={isDemo ? () => {} : toggle(setSchedule)}
-            multi
-          />
-        </div>
+        {/* Schedule: hours first, then the shifts that work. Both optional. */}
+        <Question
+          title="What schedule works for you?"
+          hint="Pick every one that fits."
+        >
+          <div className="space-y-4">
+            <ChoiceChips
+              label="Hours"
+              options={HOURS_OPTIONS}
+              selected={hours}
+              disabled={isDemo}
+              onToggle={(id) =>
+                setHours((prev) =>
+                  togglePreference(prev, id, idsOf(HOURS_OPTIONS), { exclusive: ["any"] })
+                )
+              }
+            />
+            <div>
+              <p className="mb-2 text-sm text-t-phos-dim">
+                Any shifts you can or can&apos;t work? Skip this if it doesn&apos;t matter.
+              </p>
+              <ChoiceChips
+                label="Shifts"
+                options={SHIFT_OPTIONS}
+                selected={shifts}
+                disabled={isDemo}
+                onToggle={(id) =>
+                  setShifts((prev) => togglePreference(prev, id, idsOf(SHIFT_OPTIONS)))
+                }
+              />
+            </div>
+          </div>
+        </Question>
 
         {/* Environment */}
-        <div>
-          <h3 className="font-medium text-t-white mb-3">
-            What kind of work environment?
-          </h3>
-          <CardSelect
+        <Question
+          title="Where and how do you want to work?"
+          hint="Pick as many as fit. Skip it if you're open to anything."
+        >
+          <ChoiceChips
+            label="Work environment"
             options={ENVIRONMENT_OPTIONS}
             selected={environment}
-            onSelect={isDemo ? () => {} : toggle(setEnvironment)}
-            multi
+            disabled={isDemo}
+            onToggle={(id) =>
+              setEnvironment((prev) => togglePreference(prev, id, idsOf(ENVIRONMENT_OPTIONS)))
+            }
           />
-        </div>
+        </Question>
 
-        {/* Commute */}
-        <div>
-          <h3 className="font-medium text-t-white mb-3">
-            How far can you travel to work?
-          </h3>
-          <CardSelect
-            options={COMMUTE_OPTIONS}
-            selected={commute}
-            onSelect={isDemo ? () => {} : toggle(setCommute)}
-            multi
-          />
-        </div>
+        {/* Getting to work: how, then how far. */}
+        <Question
+          title="How do you get to work, and how far can you go each day?"
+          hint="Pick every way you can get there."
+        >
+          <div className="space-y-4">
+            <ChoiceChips
+              label="Ways to get to work"
+              options={TRANSPORT_OPTIONS}
+              selected={modes}
+              disabled={isDemo}
+              onToggle={(id) =>
+                setModes((prev) => togglePreference(prev, id, idsOf(TRANSPORT_OPTIONS)))
+              }
+            />
+            <div>
+              <p className="mb-2 text-sm text-t-phos-dim">
+                About how long can the trip be, one way?
+              </p>
+              <ChoiceChips
+                label="One-way travel time"
+                options={DISTANCE_OPTIONS}
+                selected={distance ? [distance] : []}
+                disabled={isDemo}
+                onToggle={(id) =>
+                  setDistance((prev) => (prev === id ? null : id))
+                }
+              />
+            </div>
+          </div>
+        </Question>
 
-        {/* Location */}
+        {/* Location. Seam for the city/state/ZIP picker (not built yet): swap this
+            input for a picker that still writes the same "City, ST" string into
+            `location`. The analyze route reads the state from the trailing ", ST". */}
         <div>
           <label
             htmlFor="location-input"
