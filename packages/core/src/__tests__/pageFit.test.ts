@@ -217,6 +217,20 @@ test("splitResumeHeader: header lines and body lines", () => {
   assert.equal(r.headerLines.length, 3);
 });
 
+test("splitResumeHeader: a header line the header does not draw goes to the body, never vanishes", () => {
+  const r = splitResumeHeader("JANE TESTER\nMilwaukee, WI\n(555) 010-0100\nCertified Welder\n\nSUMMARY\nHello.\n");
+  assert.equal(r.header.nameLine, "JANE TESTER");
+  const all = [r.header.nameLine, r.header.headlineLine, r.header.contactLine, r.header.publicNotesLine, ...r.bodyLines].join(" ");
+  assert.ok(all.includes("Certified Welder"), "fourth header line kept");
+  assert.equal(r.bodyLines.filter((l) => l === "Certified Welder").length, 1);
+  assert.ok(r.bodyLines.indexOf("Certified Welder") < r.bodyLines.indexOf("SUMMARY"));
+  // a repeated line is not doubled or lost
+  const d = splitResumeHeader("A B\nWelder\nWelder\na@b.com\n\nSUMMARY\nHi.\n");
+  const words = [d.header.nameLine, d.header.headlineLine, d.header.contactLine, d.header.publicNotesLine, ...d.bodyLines].filter(Boolean);
+  assert.equal(words.filter((w) => w === "Welder").length, 2);
+  assert.equal(words.filter((w) => w === "a@b.com").length, 1);
+});
+
 test("classify: bullets detected by all three markers", () => {
   assert.ok(isBulletLine("- did a thing"));
   assert.ok(isBulletLine("* did a thing"));
