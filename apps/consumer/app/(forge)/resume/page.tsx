@@ -370,12 +370,13 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
       >
+        {/* The question this screen asks first: are these your jobs and dates? */}
+        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading="Your jobs" />}
+
         {/* Grounding gauge -- the honest contract: how much true material we have. */}
         {parsedProfile && (
           <GroundingGauge score={computeGrounding(jobsFromParsedProfile(parsedProfile))} />
         )}
-
-        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading="Your jobs" />}
 
         {/* Full resume preview */}
         <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
