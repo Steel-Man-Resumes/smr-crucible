@@ -374,17 +374,67 @@ export function safeLoginReturn(raw: string | null | undefined): string {
 /** The account route that saves a Forge run (gated by terms with the Forge). */
 export const FORGE_SAVE_PATH = "/api/forge/save";
 
+/** Refinery pages the middleware matches (middleware.ts). */
+export const REFINERY_PAGE_PREFIXES = [
+  "/dashboard",
+  "/resume-builder",
+  "/disclosure",
+  "/interview",
+  "/jobs",
+  "/resources",
+  "/progress",
+] as const;
+
+export function isRefineryPage(path: string): boolean {
+  return REFINERY_PAGE_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
+}
+
 /**
- * Terms gate (security review 3a r1, M4), once the wall is up: a session whose
- * account has not accepted the current terms reaches no Forge screen ("page":
- * go to the one-tap page) and no walled Forge API nor the run save ("api":
- * 401). Anything but `terms === true` counts as not accepted. The signed-out
- * allowlist and every non-Forge path are untouched ("pass").
+ * API routes a signed-in account WITHOUT accepted terms may still use, each
+ * for a reason. Everything else under /api needs the terms (once the wall is
+ * up): every route that calls an AI or takes personal or record data.
+ *  - /api/auth/*: signing in and out, the second step, and accepting the terms;
+ *  - export and delete: a person can always take or remove their data;
+ *  - health and cron: no person's data, no session use;
+ *  - the free checker's reader and page fit, and the organization listing
+ *    form: open signed out, nothing stored, no AI (t.ROY's chat is NOT here:
+ *    signed in, it reaches memory and an AI).
  */
-export function termsGateVerdict(path: string, wallUp: boolean, terms: unknown): "pass" | "page" | "api" {
-  if (!wallUp || terms === true) return "pass";
-  if (isForgeSignInPage(path)) return "page";
-  if (forgeApiNeedsSession(path, true) || path === FORGE_SAVE_PATH) return "api";
+export const TERMS_EXEMPT_API: Readonly<Record<string, string>> = {
+  "/api/auth/": "sign-in, sign-out, the second step, accepting the terms",
+  "/api/user/export-data": "a person can always download their data",
+  "/api/user/export-vault": "a person can always download their documents",
+  "/api/user/delete-data": "a person can always delete their data",
+  "/api/health/": "service health, no person's data",
+  "/api/cron/": "scheduled jobs, no session",
+  "/api/check/extract": "free checker: open signed out, nothing stored, no AI",
+  "/api/resume/layout": "page fit: open signed out, nothing stored, no AI",
+  "/api/org-listing": "organization listing form: open signed out, no AI",
+};
+
+export function termsExemptApi(path: string): boolean {
+  return Object.keys(TERMS_EXEMPT_API).some((p) => (p.endsWith("/") ? path.startsWith(p) : path === p));
+}
+
+/**
+ * Are this session's terms current? The claim must be true AND for the
+ * current TERMS_VERSION (security review 3a r2, L3). The claim itself is
+ * re-read from the consent row at least daily (auth.ts).
+ */
+export function termsCurrent(user: { terms?: unknown; termsVersion?: unknown } | null | undefined, version: string): boolean {
+  return user?.terms === true && user?.termsVersion === version;
+}
+
+/**
+ * Terms gate (security review 3a r1 M4, r2 M2), once the wall is up: a session
+ * whose terms are not current reaches no Forge screen and no Refinery page
+ * ("page": the one-tap page, then back) and no API outside TERMS_EXEMPT_API
+ * ("api": 401 termsRequired).
+ */
+export function termsGateVerdict(path: string, wallUp: boolean, termsOk: unknown): "pass" | "page" | "api" {
+  if (!wallUp || termsOk === true) return "pass";
+  if (isForgeSignInPage(path) || isRefineryPage(path)) return "page";
+  if (path.startsWith("/api/") && !termsExemptApi(path)) return "api";
   return "pass";
 }
 

@@ -36,7 +36,23 @@ export const CONSENT_EVENT_SQL = `INSERT INTO consumer_consent_event
      (user_id, consent_layer, action, text_version, collection_method, context)
    VALUES ($1, 'core', 'granted', $2, $3, $4)`;
 
-/** How the account came in, as the consent ledger records it. */
+/**
+ * How the person ACCEPTED (the ledger's collection_method, security review 3a
+ * r2 L4), separate from how they signed in:
+ *  - "registration": the checkbox on the password sign-up form (register route);
+ *  - "terms_page": a tap on the one-tap page;
+ *  - "email_form_checkbox": the box ticked on the email-link form, recorded by
+ *    the terms page on the same browser.
+ */
+export const ACCEPTANCE_METHODS = ["registration", "terms_page", "email_form_checkbox"] as const;
+export type AcceptanceMethod = (typeof ACCEPTANCE_METHODS)[number];
+
+/** The acceptance method the terms page may send (never "registration"), or null. */
+export function acceptanceMethod(source: unknown): Exclude<AcceptanceMethod, "registration"> | null {
+  return source === "terms_page" || source === "email_form_checkbox" ? source : null;
+}
+
+/** How the account signed in, kept in the consent row's context. */
 export function consentMethodFor(provider: unknown): "registration" | "email_link" | "google" | "sign_in" {
   if (provider === "resend") return "email_link";
   if (provider === "google") return "google";
@@ -46,3 +62,26 @@ export function consentMethodFor(provider: unknown): "registration" | "email_lin
 
 /** The same three acceptances registration records. */
 export const CONSENT_CONTEXT = { terms: true, privacy: true, ai_processing: true } as const;
+
+/** How long a session trusts its terms answer before reading the consent row again (L3). */
+export const TERMS_RECHECK_SECONDS = 24 * 60 * 60;
+
+/**
+ * Read the consent row again? Always on update() (the terms page calls it
+ * after accepting); when the claim was never read; when it was read for an
+ * older TERMS_VERSION; and when the last read is over a day old, so a version
+ * bump or a withdrawn consent reaches every session within a day.
+ */
+export function termsNeedsReread(t: {
+  trigger?: string;
+  terms: unknown;
+  termsVersion: unknown;
+  termsAt: unknown;
+  now: number;
+}): boolean {
+  if (t.trigger === "update") return true;
+  if (t.terms === undefined) return true;
+  if (t.termsVersion !== TERMS_VERSION) return true;
+  if (typeof t.termsAt !== "number" || !Number.isFinite(t.termsAt)) return true;
+  return t.now - t.termsAt > TERMS_RECHECK_SECONDS;
+}

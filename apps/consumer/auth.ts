@@ -19,9 +19,10 @@ import {
   sessionRowRequired,
   forgeGateVerdict,
   termsGateVerdict,
+  termsCurrent,
   revocationCheck,
 } from "@/lib/session-policy";
-import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION } from "@/lib/terms";
+import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION, termsNeedsReread } from "@/lib/terms";
 import {
   FORGE_SIGN_IN_REQUIRED_MESSAGE,
   forgeSignInUrl,
@@ -415,7 +416,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // (email-link and Google accounts never saw the sign-up checkbox) does it
       // once, on a one-tap page, before any Forge screen or Forge API.
       if (session) {
-        const terms = termsGateVerdict(path, wallUp, (session.user as any)?.terms);
+        const terms = termsGateVerdict(path, wallUp, termsCurrent(session.user as any, TERMS_VERSION));
         if (terms === "api") {
           return Response.json(
             { error: "Accept the terms to keep going. It takes one tap.", termsRequired: true },
@@ -569,6 +570,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const t = await pool.query(CONSENT_LOOKUP_SQL, [token.sub, TERMS_VERSION]);
           (token as any).terms = (t.rowCount ?? 0) > 0;
+          (token as any).termsVersion = TERMS_VERSION;
+          (token as any).termsAt = nowSeconds();
         } catch {
           delete (token as any).terms; // looked up again later
         }
@@ -638,12 +641,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      // Terms: read again after the acceptance page calls update(), and once
-      // for a session signed in before the claim existed. Only ever set from
-      // the database row, never from anything the client sent.
+      // Terms: read again on update() (the terms page), when never read, when
+      // read for an older TERMS_VERSION, and at least daily (lib/terms.ts
+      // termsNeedsReread). Only ever set from the database row, never from
+      // anything the client sent.
       if (
         token.sub &&
-        ((trigger === "update" && (token as any).terms !== true) || (token as any).terms === undefined)
+        termsNeedsReread({
+          trigger,
+          terms: (token as any).terms,
+          termsVersion: (token as any).termsVersion,
+          termsAt: (token as any).termsAt,
+          now: nowSeconds(),
+        })
       ) {
         try {
           const rows = (await sqlEdge`
@@ -652,8 +662,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                AND consent_text_version = ${TERMS_VERSION}
              LIMIT 1`) as any[];
           (token as any).terms = rows.length > 0;
+          (token as any).termsVersion = TERMS_VERSION;
+          (token as any).termsAt = nowSeconds();
         } catch {
-          // leave as is; the gate treats anything but true as not accepted
+          // Left as it was. The gate needs the current version AND true, so a
+          // claim from an older version still fails closed; a daily re-read
+          // that cannot reach the database keeps the last answer.
         }
       }
 
@@ -685,6 +699,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).claim = (token as any).claim ?? null;
         // M4: true once the account accepted the current terms (lib/terms.ts).
         (session.user as any).terms = (token as any).terms === true;
+        (session.user as any).termsVersion = (token as any).termsVersion ?? null;
         (session.user as any).via = (token as any).via ?? null;
       }
       return session;

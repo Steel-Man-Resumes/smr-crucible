@@ -21,7 +21,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { TBtn } from "@crucible/consumer-ui";
 import { PRIVACY_URL, TERMS_URL, TERMS_VERSION } from "@/lib/terms";
-import { safeLoginReturn, sessionPending } from "@/lib/session-policy";
+import { safeLoginReturn, sessionPending, termsCurrent } from "@/lib/session-policy";
 import { TERMS_TICKED_KEY, tickedFor } from "@/lib/terms-ticked";
 import { signOutOfForge } from "@/components/forge/ForgeAccountBar";
 
@@ -36,11 +36,10 @@ export default function TermsPage() {
 function AcceptTerms() {
   const searchParams = useSearchParams();
   const { data, status, update } = useSession();
-  const user = data?.user as { email?: string | null; terms?: unknown; mfa?: unknown; claim?: unknown } | undefined;
-  const next = (() => {
-    const back = safeLoginReturn(searchParams.get("callbackUrl"));
-    return back === "/dashboard" ? "/welcome" : back;
-  })();
+  const user = data?.user as { email?: string | null; terms?: unknown; termsVersion?: unknown; mfa?: unknown; claim?: unknown } | undefined;
+  // Back to where they were (a Forge screen or a Refinery page); the Forge's
+  // first screen when no return address was given.
+  const next = searchParams.get("callbackUrl") ? safeLoginReturn(searchParams.get("callbackUrl")) : "/welcome";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const auto = useRef(false);
@@ -53,14 +52,15 @@ function AcceptTerms() {
     window.location.assign(next);
   }
 
-  async function accept() {
+  /** source: how the person accepted (L4): a tap here, or the box on the email-link form. */
+  async function accept(source: "terms_page" | "email_form_checkbox") {
     setSaving(true);
     setError("");
     try {
       const res = await fetch("/api/auth/accept-terms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accept: true }),
+        body: JSON.stringify({ accept: true, source }),
       });
       if (!res.ok) throw new Error(String(res.status));
       try {
@@ -78,7 +78,7 @@ function AcceptTerms() {
 
   useEffect(() => {
     if (status !== "authenticated" || !user || sessionPending(user) || auto.current || saving) return;
-    if (user.terms === true) {
+    if (termsCurrent(user, TERMS_VERSION)) {
       go();
       return;
     }
@@ -90,7 +90,7 @@ function AcceptTerms() {
     }
     if (tickedFor(ticked, user.email, TERMS_VERSION)) {
       auto.current = true;
-      void accept();
+      void accept("email_form_checkbox");
     }
   }, [status, user?.email, user?.terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -129,7 +129,7 @@ function AcceptTerms() {
             <TBtn
               type="button"
               disabled={saving || status !== "authenticated"}
-              onClick={() => void accept()}
+              onClick={() => void accept("terms_page")}
               className="mt-6 w-full !text-[#14100a]"
             >
               {saving ? "Saving..." : "I agree"}
