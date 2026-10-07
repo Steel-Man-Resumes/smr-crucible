@@ -10,7 +10,7 @@
  * 4. From Forge: defaults to "Create Account" mode
  */
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn, signOut } from "next-auth/react";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
@@ -20,10 +20,18 @@ import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
 import {
-  SAVE_FORGE_RUN_DEFAULT,
+  FORGE_RUN_CHOICE_DEFAULT,
+  FORGE_SESSION_KEY,
+  type ForgeRunChoice,
+  readLocalForgeRunRaw,
   readStoredForgeRun,
-  forgeRunName,
+  forgeRunHasWork,
+  forgeRunExpired,
+  eraseLocalForgeRun,
+  forgeChoiceComplete,
   forgeRegisterFields,
+  forgeAfterSignup,
+  markForgeRunOwned,
 } from "@/lib/forge-carry";
 import {
   AccountTypeChooser,
@@ -41,6 +49,9 @@ export default function LoginPage() {
 }
 
 type Mode = "sign-in" | "create" | "magic-link";
+
+const FORGE_CHOICE_HINT =
+  "Pick yes or no above to create your account. This keeps another person's resume out of your account.";
 
 // Same-origin relative path only (lib/safe-path.ts). Keeps an honored
 // callbackUrl from ever becoming an open redirect. Auth.js also rejects
@@ -71,10 +82,12 @@ function LoginForm() {
   // required before any account or Forge data is persisted server-side.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   // Shared-computer rule: a Forge run in this browser may be someone else's.
-  // It goes to the new account only when the person ticks this box, which
-  // starts unticked (lib/forge-carry.ts).
-  const [saveForgeRun, setSaveForgeRun] = useState(SAVE_FORGE_RUN_DEFAULT);
-  const [forgeRunOffer, setForgeRunOffer] = useState<{ name: string } | null>(null);
+  // When one is here, creating an account needs an explicit yes or no, with
+  // nothing preselected (lib/forge-carry.ts). The run asked about is kept
+  // from page load, so the one sent is the one the person answered about.
+  const [forgeChoice, setForgeChoice] = useState<ForgeRunChoice>(FORGE_RUN_CHOICE_DEFAULT);
+  const [forgeRunOffered, setForgeRunOffered] = useState(false);
+  const offeredRunRef = useRef<Record<string, any> | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -93,12 +106,21 @@ function LoginForm() {
     if (urlCode) { setCode(urlCode); setShowCode(true); }
   }, [searchParams]);
 
-  // Offer the save box only when a run with work in it is in this browser.
+  // Ask about a run only when one with work in it is in this browser. An
+  // unowned run past the Forge's 24-hour idle limit is erased, never offered.
   useEffect(() => {
-    let stored: string | null = null;
-    try { stored = localStorage.getItem("forge_session"); } catch { stored = null; }
-    const run = readStoredForgeRun(stored);
-    setForgeRunOffer(run ? { name: forgeRunName(run) } : null);
+    const raw = readLocalForgeRunRaw();
+    const run = readStoredForgeRun(raw);
+    if (!run && raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && !parsed._ownerUserId && forgeRunHasWork(parsed) && forgeRunExpired(parsed)) {
+          eraseLocalForgeRun();
+        }
+      } catch {}
+    }
+    offeredRunRef.current = run;
+    setForgeRunOffered(!!run);
   }, []);
 
   // NextAuth error from URL
@@ -157,8 +179,8 @@ function LoginForm() {
   /**
    * Clear the PREVIOUS account's derived state when creating a new account in
    * a browser that already has one, WITHOUT touching `forge_session` -- that
-   * blob is carried onto the new account below only if the person ticks the
-   * save box.
+   * blob is carried onto the new account below only if the person answers
+   * "Yes", and erased if they answer "No".
    *
    * This is the path used to give each demo persona its own clean account.
    */
@@ -267,19 +289,16 @@ function LoginForm() {
     { const problem = passwordProblem(password); if (problem) { setError(problem); return; } }
     if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
+    if (!forgeChoiceComplete(forgeRunOffered, forgeChoice)) { setError(FORGE_CHOICE_HINT); return; }
     setError(""); setSending(true); storeCode();
 
     // Carry the Forge work onto the new account server-side, ONLY when the
-    // person ticked the save box. The forge_session lives in forge.*
-    // localStorage and is lost crossing to the authed origin, so we hand it to
-    // the register call. On a shared computer it may be someone else's run,
-    // so an unticked box sends nothing.
-    let stored: string | null = null;
-    try { stored = localStorage.getItem("forge_session"); } catch { stored = null; }
-    const forgeFields = forgeRegisterFields(
-      readStoredForgeRun(stored),
-      saveForgeRun && !!forgeRunOffer
-    );
+    // person answered "Yes". The forge_session lives in forge.* localStorage
+    // and is lost crossing to the authed origin, so we hand it to the register
+    // call. On a shared computer it may be someone else's run, so "No" (or no
+    // run offered) sends nothing.
+    const offeredRun = forgeRunOffered ? offeredRunRef.current : null;
+    const forgeFields = forgeRegisterFields(offeredRun, forgeRunOffered ? forgeChoice : null);
 
     // The Forge work above carries forward only by choice. Everything else in this
     // browser belongs to whoever was signed in before and must not follow a
@@ -308,10 +327,22 @@ function LoginForm() {
         setSending(false);
         return;
       }
+      // The account exists. "No": erase the run from this computer now, before
+      // any redirect, so no later screen can pick it up. "Yes": mark it as this
+      // new account's run so the Refinery does not ask again.
+      const created = await res.json().catch(() => ({}));
+      const after = forgeAfterSignup(forgeRunOffered, forgeChoice);
+      if (after === "erase") {
+        eraseLocalForgeRun();
+      } else if (after === "mark-owned" && offeredRun && typeof created?.userId === "string") {
+        try {
+          localStorage.setItem(FORGE_SESSION_KEY, JSON.stringify(markForgeRunOwned(offeredRun, created.userId)));
+        } catch {}
+      }
       // Acquisition attribution only -- no PII, no product detail (GA doctrine).
       trackGA("refinery_signup", { from_forge: !!forgeFields.forge });
       // New accounts with no Forge data go to /intro, not /dashboard. A run
-      // left unticked is not this account's data.
+      // answered "No" is not this account's data.
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
         if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
@@ -391,7 +422,8 @@ function LoginForm() {
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
     || (twoFactorStep && !totp.trim())
-    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms));
+    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms))
+    || (mode === "create" && !forgeChoiceComplete(forgeRunOffered, forgeChoice));
 
   return (
     <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
@@ -621,6 +653,43 @@ function LoginForm() {
             )}
           </div>
 
+          {/* Shared-computer rule: a run on this computer needs a yes or a no,
+              nothing preselected. Create account stays disabled until then. */}
+          {mode === "create" && forgeRunOffered && (
+            <fieldset className="border border-t-line px-4 py-3">
+              <legend className="px-1 text-sm font-semibold text-t-white">
+                There&apos;s a resume in progress on this computer. Is it yours?
+              </legend>
+              <label className="mt-1 flex items-start gap-2 text-sm text-t-white">
+                <input
+                  type="radio"
+                  name="forge-run-choice"
+                  value="yes"
+                  checked={forgeChoice === "yes"}
+                  onChange={() => setForgeChoice("yes")}
+                  disabled={sending}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+                />
+                <span>Yes, this is my resume. Save it to my new account.</span>
+              </label>
+              <label className="mt-2 flex items-start gap-2 text-sm text-t-white">
+                <input
+                  type="radio"
+                  name="forge-run-choice"
+                  value="no"
+                  checked={forgeChoice === "no"}
+                  onChange={() => setForgeChoice("no")}
+                  disabled={sending}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+                />
+                <span>No, this isn&apos;t mine. Erase it from this computer.</span>
+              </label>
+              {forgeChoice === null && (
+                <p className="mt-2 text-sm text-t-bone-dim">{FORGE_CHOICE_HINT}</p>
+              )}
+            </fieldset>
+          )}
+
           {/* Terms / Privacy / AI-processing consent -- create mode only.
               Required before any account or Forge data persists (versioned
               acceptance recorded server-side at registration). */}
@@ -641,25 +710,6 @@ function LoginForm() {
                 and I understand my information is processed with AI to build my resume and career tools.
               </span>
             </label>
-          )}
-
-          {/* Shared-computer rule: unticked by default; only a tick sends the run. */}
-          {mode === "create" && forgeRunOffer && (
-            <div className="text-[12px] text-t-phos-dim">
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={saveForgeRun}
-                  onChange={(e) => setSaveForgeRun(e.target.checked)}
-                  disabled={sending}
-                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
-                />
-                <span>Save the resume in progress on this computer to my new account</span>
-              </label>
-              <p className="mt-1 pl-6 text-[11px] leading-relaxed text-t-bone-dim">
-                Only tick this if you started it. Not yours? Leave it unticked and use Clear this computer.
-              </p>
-            </div>
           )}
 
           {error && (

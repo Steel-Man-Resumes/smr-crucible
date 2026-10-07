@@ -9,6 +9,8 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
@@ -51,23 +53,30 @@ function SecondChanceBoardPage() {
   const [barriers, setBarriers] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Shared-computer rule: only a local run marked as this user's is read.
+  const ownerUid = useSession().data?.user?.id;
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (!stored) return;
-      const session = JSON.parse(stored) as {
-        forgeOutput?: unknown;
-        challenges?: string[];
-        preferences?: { location?: string };
-      };
-      const paths = getCareerPaths(session.forgeOutput);
-      setCareerTitles(paths.map((path) => path.title).slice(0, 4));
-      setSkills(getSkillNames(session.forgeOutput, 12));
-      setBarriers(Array.isArray(session.challenges) ? session.challenges : []);
-      setLocation(session.preferences?.location || "");
-    } catch {}
+    const load = () => {
+      try {
+        const session = readOwnForgeSession(ownerUid) as {
+          forgeOutput?: unknown;
+          challenges?: string[];
+          preferences?: { location?: string };
+        } | null;
+        const paths = getCareerPaths(session?.forgeOutput);
+        setCareerTitles(paths.map((path) => path.title).slice(0, 4));
+        setSkills(getSkillNames(session?.forgeOutput, 12));
+        setBarriers(Array.isArray(session?.challenges) ? session.challenges : []);
+        setLocation(session?.preferences?.location || "");
+      } catch {}
+    };
+    load();
+    window.addEventListener("forge-synced", load);
+    return () => window.removeEventListener("forge-synced", load);
+  }, [ownerUid]);
 
+  useEffect(() => {
     try {
       const tracker = JSON.parse(
         localStorage.getItem("consumer_progress") || "{}"

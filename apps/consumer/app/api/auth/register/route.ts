@@ -12,7 +12,7 @@
  * refinery.* origin, so the relay in the dashboard layout never sees it.
  *
  * The Forge run is saved ONLY when the body also says `saveForgeRun: true`
- * (the person ticked the unticked-by-default box). On a shared computer the
+ * (the person answered "Yes" to a required yes/no). On a shared computer the
  * run in the browser may be someone else's (lib/forge-carry.ts).
  */
 
@@ -57,13 +57,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Request too large" }, { status: 413 });
     }
     const body = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    }
     const { email, password, name, phone, turnstileToken, acceptedTerms } = body;
 
     // Shared-computer rule: a Forge run is saved only with an explicit yes.
     const forgeRun = forgeRunToPersist(body);
     if (!forgeRun.ok) {
       return NextResponse.json(
-        { error: "The resume in progress is too large to save. Untick the box to create your account without it." },
+        { error: "The resume on this computer is too large to save to a new account. Choose No to create your account without it." },
         { status: 413 }
       );
     }
@@ -230,7 +233,7 @@ export async function POST(request: Request) {
           [newUserId, TERMS_VERSION, JSON.stringify({ terms: true, privacy: true, ai_processing: true })]
         );
       } catch (e: any) {
-        console.error("[register] consent record failed:", e?.message || e);
+        console.error("[register] consent record failed:", e?.code || e?.name || "error");
       }
     }
 
@@ -278,7 +281,7 @@ export async function POST(request: Request) {
           await query(`UPDATE users SET name = $1 WHERE id = $2`, [cName, newUserId]);
         }
       } catch (e: any) {
-        console.error("[register] contact persist failed:", e?.message || e);
+        console.error("[register] contact persist failed:", e?.code || e?.name || "error");
       }
     }
 
@@ -289,13 +292,17 @@ export async function POST(request: Request) {
       try {
         await ensureUserAttribution(newUserId, orgCode);
       } catch (e: any) {
-        console.error("[register] org attribution failed:", e?.message || e);
+        console.error("[register] org attribution failed:", e?.code || e?.name || "error");
       }
     }
 
-    return NextResponse.json({ success: true, email: trimmedEmail });
+    // userId lets the form mark a run the person said "Yes" to as theirs, so
+    // the Refinery does not ask about it again.
+    return NextResponse.json({ success: true, email: trimmedEmail, userId: newUserId });
   } catch (err: any) {
-    console.error("Registration error:", err?.message || err);
+    // Name or code only: a JSON.parse error quotes the raw body (passwords,
+    // record answers).
+    console.error("Registration error:", err?.code || err?.name || "error");
     return NextResponse.json(
       { error: "Could not create account. Please try again." },
       { status: 500 }
