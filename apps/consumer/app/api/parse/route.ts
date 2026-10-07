@@ -190,7 +190,8 @@ Return a JSON object with:
   "education": [{ "institution": string, "credential": string, "field": string, "year": string }],
   "certifications": string[],
   "military": { "branch": string, "rank": string, "years": string } or null,
-  "skills_mentioned": string[]
+  "skills_mentioned": string[],
+  "summary": string or null
 }
 
 RULES (this feeds a real resume, so a dropped or altered field is a failure):
@@ -200,7 +201,8 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
 4. EDUCATION is ONLY real schools, training programs, degrees, GEDs, or credentials. NEVER create an education entry from a section header ("ADDITIONAL", "SKILLS", "SUMMARY"), a narrative sentence, or a date fragment. If a line is not clearly a school/program/credential, leave it out.
 5. Capture ALL skills, tools, and certifications mentioned. Do not omit them.
 6. NEVER carry any mention of incarceration, prison, jail, parole, probation, "release", "reentry", or justice involvement into ANY field. Omit such phrases entirely; never turn them into an education entry, title, or bullet.
-7. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
+7. SUMMARY: if the resume has its own summary, profile or objective paragraph, copy it word for word into "summary". If it has none, use null. NEVER write or rewrite one.
+8. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
         },
         {
           role: "user",

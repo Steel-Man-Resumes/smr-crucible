@@ -18,6 +18,7 @@ import { useState, useEffect, useRef } from "react";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
 import { RANGE_CHOICES, QUANTITY_UNITS, type QuantityUnit } from "@/lib/number-truth";
+import { hasChip, toggleChip, canGenerateBullet } from "@/lib/bullet-chips";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -247,15 +248,8 @@ export function BulletWorkshop({
     };
   }, [jobTitle]);
 
-  function addTool(t: string) {
-    setTools((prev) => {
-      const have = prev
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean);
-      if (have.includes(t.toLowerCase())) return prev;
-      return prev.trim() ? `${prev.replace(/,\s*$/, "")}, ${t}` : t;
-    });
+  function toggleTool(t: string) {
+    setTools((prev) => toggleChip(prev, t));
   }
 
   async function generate() {
@@ -313,7 +307,7 @@ export function BulletWorkshop({
   }
 
   const answered = [did, tools, often, quantity, improved].filter((v) => v.trim()).length;
-  const canGenerate = !!(did.trim() || tools.trim() || quantity.trim() || improved.trim());
+  const canGenerate = canGenerateBullet({ did, tools, often, quantity, improved });
 
   return (
     <div
@@ -377,10 +371,15 @@ export function BulletWorkshop({
                   <button
                     key={t}
                     type="button"
-                    onClick={() => addTool(t)}
-                    className="text-[11px] px-2 py-0.5 bg-t-panel-2 text-t-phos border border-t-line hover:border-t-amber transition-colors"
+                    onClick={() => toggleTool(t)}
+                    aria-pressed={hasChip(tools, t)}
+                    className={`text-[11px] px-2 py-0.5 border transition-colors ${
+                      hasChip(tools, t)
+                        ? "bg-t-amber text-white border-t-amber font-semibold"
+                        : "bg-t-panel-2 text-t-phos border-t-line hover:border-t-amber"
+                    }`}
                   >
-                    {t}
+                    {hasChip(tools, t) ? "\u2713 " : ""}{t}
                   </button>
                 ))}
               </div>
@@ -586,14 +585,6 @@ function Field({
   const cls =
     "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
 
-  /** Append a chip's text without clobbering what the person already typed. */
-  function addChip(chip: string) {
-    const current = value.trim();
-    if (!current) return onChange(chip);
-    if (current.toLowerCase().includes(chip.toLowerCase())) return;
-    onChange(`${current}, ${chip}`);
-  }
-
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -636,16 +627,25 @@ function Field({
       )}
       {chips && chips.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {chips.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => addChip(c)}
-              className="t-focus border border-t-line bg-t-panel-2 px-2 py-0.5 text-[11px] text-t-phos transition-colors hover:border-t-amber"
-            >
-              {c}
-            </button>
-          ))}
+          {chips.map((c) => {
+            const on = hasChip(value, c);
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onChange(toggleChip(value, c))}
+                aria-pressed={on}
+                className={`t-focus border px-2 py-0.5 text-[11px] transition-colors ${
+                  on
+                    ? "border-t-amber bg-t-amber font-semibold text-white"
+                    : "border-t-line bg-t-panel-2 text-t-phos hover:border-t-amber"
+                }`}
+              >
+                {on ? "\u2713 " : ""}
+                {c}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

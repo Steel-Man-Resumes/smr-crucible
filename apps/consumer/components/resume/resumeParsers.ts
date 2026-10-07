@@ -76,6 +76,14 @@ function buildProfileDoc(profile: any, rawText?: string): ResumeDocument {
     state: (profile?.state || "").trim(),
   };
 
+  // The person's own summary or objective, when the parse found one. Copied as
+  // written; dropped whole if it touches justice-sensitive wording (same doctrine
+  // as every other field here).
+  const summaryRaw = typeof profile?.summary === "string" ? profile.summary.trim() : "";
+  if (summaryRaw && !isJusticeSensitive(summaryRaw) && !isSectionHeaderWord(summaryRaw)) {
+    doc.summary = summaryRaw;
+  }
+
   const work = Array.isArray(profile?.work_history) ? profile.work_history : [];
   for (const w of work) {
     // Blank a justice-sensitive EMPLOYER rather than drop the whole job -- the

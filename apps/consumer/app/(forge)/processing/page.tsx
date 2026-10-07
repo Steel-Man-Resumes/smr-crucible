@@ -4,7 +4,7 @@
  * Page 6: Processing / Wait State
  *
  * Transparent about what's happening.
- * Progress animation + engagement content (fair chance facts, success stories).
+ * Progress animation with labels that match the real analysis work.
  * Pennebaker micro-dose: optional 2-minute expressive writing prompt.
  * Under the hood: narrative analysis pipeline via /api/analyze
  */
@@ -16,25 +16,17 @@ import { DEMO_OUTPUT } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide } from "@crucible/consumer-ui";
 
+// Labels describe what the analysis really does (see /api/analyze): it reads the
+// person's answers, pulls out strengths and skills, looks at career paths, matches
+// hurdles to places that can help, then checks the story against their own words.
+// The resume and cover letter are made later, on the next page.
 const PROCESSING_STEPS = [
-  "Reading your experience...",
-  "Finding your strengths...",
-  "Matching career paths...",
-  "Connecting barriers to resources...",
-  "Crafting your narrative...",
-  "Generating your resume...",
-  "Writing your cover letter...",
+  "Reading what you told us...",
+  "Finding your strengths and skills...",
+  "Looking at career paths that fit...",
+  "Matching hurdles to places that can help...",
+  "Checking the story against your own words...",
   "Almost done...",
-];
-
-const ENGAGEMENT_FACTS = [
-  "Over 70 million Americans have some kind of criminal record. You're not alone.",
-  "Ban-the-box laws now cover over 37 states. Many employers can't ask about your record on the application.",
-  "Studies show that formerly incarcerated employees have lower turnover rates than average.",
-  "The first 6 months after release are the hardest for finding work. It gets easier.",
-  "Some employers actively hire people with records. They know the value you bring.",
-  "Research shows naming your challenges out loud reduces their power over you.",
-  "Your transferable skills, like reliability, problem-solving and resilience, are what employers need most.",
 ];
 
 const REFLECTION_PROMPTS = [
@@ -49,7 +41,6 @@ export default function ProcessingPage() {
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const [currentStep, setCurrentStep] = useState(0);
-  const [currentFact, setCurrentFact] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [reflection, setReflection] = useState("");
   const hasStarted = useRef(false);
@@ -122,16 +113,15 @@ export default function ProcessingPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Rotate through facts
+  // Pick the reflection question once per visit, after mount. Choosing it in the
+  // render body re-rolled it on every keystroke and timer tick. The first render
+  // uses a fixed prompt so server and browser markup match.
+  const [reflectionPrompt, setReflectionPrompt] = useState(REFLECTION_PROMPTS[0]);
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentFact((prev) => (prev + 1) % ENGAGEMENT_FACTS.length);
-    }, 12000);
-    return () => clearInterval(interval);
+    setReflectionPrompt(
+      REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)]
+    );
   }, []);
-
-  const reflectionPrompt =
-    REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)];
 
   if (error) {
     return (
@@ -179,13 +169,6 @@ export default function ProcessingPage() {
               width: `${Math.min(95, ((currentStep + 1) / PROCESSING_STEPS.length) * 100)}%`,
             }}
           />
-        </div>
-
-        {/* Engagement content */}
-        <div className="bg-t-panel border border-t-line p-6 mb-8 min-h-[80px] flex items-center justify-center">
-          <p className="text-sm text-t-phos leading-relaxed transition-opacity duration-500">
-            {ENGAGEMENT_FACTS[currentFact]}
-          </p>
         </div>
 
         {/* Pennebaker micro-dose: optional reflection */}
