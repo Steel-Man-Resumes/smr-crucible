@@ -20,6 +20,12 @@ import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
 import {
+  SAVE_FORGE_RUN_DEFAULT,
+  readStoredForgeRun,
+  forgeRunName,
+  forgeRegisterFields,
+} from "@/lib/forge-carry";
+import {
   AccountTypeChooser,
   AccountRouteNote,
   ACCOUNT_ROUTES,
@@ -64,6 +70,11 @@ function LoginForm() {
   // Create-account only: explicit Terms/Privacy/AI-processing acceptance,
   // required before any account or Forge data is persisted server-side.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Shared-computer rule: a Forge run in this browser may be someone else's.
+  // It goes to the new account only when the person ticks this box, which
+  // starts unticked (lib/forge-carry.ts).
+  const [saveForgeRun, setSaveForgeRun] = useState(SAVE_FORGE_RUN_DEFAULT);
+  const [forgeRunOffer, setForgeRunOffer] = useState<{ name: string } | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -81,6 +92,14 @@ function LoginForm() {
     const urlCode = searchParams.get("code");
     if (urlCode) { setCode(urlCode); setShowCode(true); }
   }, [searchParams]);
+
+  // Offer the save box only when a run with work in it is in this browser.
+  useEffect(() => {
+    let stored: string | null = null;
+    try { stored = localStorage.getItem("forge_session"); } catch { stored = null; }
+    const run = readStoredForgeRun(stored);
+    setForgeRunOffer(run ? { name: forgeRunName(run) } : null);
+  }, []);
 
   // NextAuth error from URL
   useEffect(() => {
@@ -138,7 +157,8 @@ function LoginForm() {
   /**
    * Clear the PREVIOUS account's derived state when creating a new account in
    * a browser that already has one, WITHOUT touching `forge_session` -- that
-   * blob is deliberately carried onto the new account below.
+   * blob is carried onto the new account below only if the person ticks the
+   * save box.
    *
    * This is the path used to give each demo persona its own clean account.
    */
@@ -249,16 +269,19 @@ function LoginForm() {
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
 
-    // Carry the Forge work onto the new account server-side. The forge_session
-    // lives in forge.* localStorage and is lost crossing to the authed origin,
-    // so we hand it to the register call to persist against the new user.
-    let forge: unknown = null;
-    try {
-      const s = localStorage.getItem("forge_session");
-      forge = s ? JSON.parse(s) : null;
-    } catch { forge = null; }
+    // Carry the Forge work onto the new account server-side, ONLY when the
+    // person ticked the save box. The forge_session lives in forge.*
+    // localStorage and is lost crossing to the authed origin, so we hand it to
+    // the register call. On a shared computer it may be someone else's run,
+    // so an unticked box sends nothing.
+    let stored: string | null = null;
+    try { stored = localStorage.getItem("forge_session"); } catch { stored = null; }
+    const forgeFields = forgeRegisterFields(
+      readStoredForgeRun(stored),
+      saveForgeRun && !!forgeRunOffer
+    );
 
-    // The Forge work above carries forward on purpose. Everything else in this
+    // The Forge work above carries forward only by choice. Everything else in this
     // browser belongs to whoever was signed in before and must not follow a
     // brand-new account -- otherwise the previous person's saved jobs, progress
     // counters and approved-resume pointer become this account's opening state.
@@ -277,7 +300,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge, turnstileToken, acceptedTerms: true }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), ...forgeFields, turnstileToken, acceptedTerms: true }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -286,16 +309,13 @@ function LoginForm() {
         return;
       }
       // Acquisition attribution only -- no PII, no product detail (GA doctrine).
-      trackGA("refinery_signup", { from_forge: !!forge });
-      // New accounts with no Forge data go to /intro, not /dashboard
+      trackGA("refinery_signup", { from_forge: !!forgeFields.forge });
+      // New accounts with no Forge data go to /intro, not /dashboard. A run
+      // left unticked is not this account's data.
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
         if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
-        try {
-          const s = localStorage.getItem("forge_session");
-          const session = s ? JSON.parse(s) : null;
-          return session?.forgeOutput ? callbackUrl : "/intro";
-        } catch { return "/intro"; }
+        return forgeFields.forge?.forgeOutput ? callbackUrl : "/intro";
       })();
       const result = await signIn("password-login", {
         email: email.trim(), password, callbackUrl: createCallback, redirect: false,
@@ -621,6 +641,26 @@ function LoginForm() {
                 and I understand my information is processed with AI to build my resume and career tools.
               </span>
             </label>
+          )}
+
+          {/* Shared-computer rule: unticked by default; only a tick sends the run. */}
+          {mode === "create" && forgeRunOffer && (
+            <div className="text-[12px] text-t-phos-dim">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={saveForgeRun}
+                  onChange={(e) => setSaveForgeRun(e.target.checked)}
+                  disabled={sending}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+                />
+                <span>Save the resume in progress on this computer to my new account</span>
+              </label>
+              <p className="mt-1 pl-6 text-[11px] leading-relaxed text-t-bone-dim">
+                {forgeRunOffer.name ? `(started by ${forgeRunOffer.name}) ` : ""}
+                Not yours? Leave this unticked and use Clear this computer.
+              </p>
+            </div>
           )}
 
           {error && (
