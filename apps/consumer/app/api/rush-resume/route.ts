@@ -56,7 +56,7 @@ RULES:
 - If the resume is thin, work with what's there. An honest 3-bullet resume beats a fabricated 10-bullet one.
 - Do NOT add, infer, or invent any incarceration, criminal-record, or justice-involvement framing that is not already in the person's own resume. Never introduce it, and never spin a neutral fact into a justice-involved one.
 - Keep only what the person themselves wrote. If their resume states where a skill, course, or certification was earned, including a correctional setting, keep it exactly as they framed it. Their story is theirs to tell: do not editorialize, expand, explain, dramatize, or add growth/redemption language they did not write.
-- For employment gaps, simply omit or skip that period. Do NOT explain or narrate gaps. Keep the page dated, never a dateless functional page; with little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave, and never guess a year.
+- For employment gaps, simply omit or skip that period. Do NOT explain or narrate gaps. Keep the page dated, never a dateless functional page; with little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave, and never guess a year. If the source gives no dates at all, leave the years blank for the person to fill in (ask them) rather than guess.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - Output JSON only.`;
 

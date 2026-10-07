@@ -51,6 +51,7 @@ describe("no functional resume instruction", () => {
     for (const l of mentions) {
       assert.match(l, /never a dateless functional page/i, l);
       assert.match(l, /each with the years the person gave/i, l);
+      assert.match(l, /no dates at all, leave the years blank/i, l);
     }
   });
 });
