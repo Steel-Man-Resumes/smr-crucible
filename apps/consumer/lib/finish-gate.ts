@@ -560,7 +560,7 @@ export function openItemsInPlainWords(view: { openItems: Array<OpenItem & { targ
   return view.openItems.map((i) => {
     const what = i.severity === "BLOCK" ? "Fix before you send" : "Worth checking";
     const where = i.target === "letter" ? " (cover letter)" : i.target === "skill" ? " (skills)" : "";
-    return i.line ? `${what}${where}: "${stripBullet(i.line)}". ${i.question}` : `${what}${where}: ${i.question}`;
+    return i.line ? `${what}${where}: "${stripBullet(i.line)}" ${i.question}` : `${what}${where}: ${i.question}`;
   });
 }
 
