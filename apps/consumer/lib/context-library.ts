@@ -50,7 +50,7 @@ const LEVEL_DIRECTIVES: Record<UserLevel, string> = {
   foundation: `USER LEVEL: Foundation (entry-level, rebuilding, limited resume history)
 LANGUAGE: Write at a 6th grade reading level. Short sentences. No jargon.
 TONE: Warm, encouraging, patient. Explain everything. Heavy scaffolding.
-RESUME FORMAT: Functional format acceptable if chronological history is thin. Use only numbers the person gave or picked. If a line has no number, leave it without one. Never estimate.
+RESUME FORMAT: Dated history in reverse order even when it is thin; never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year or invent an entry. Use only numbers the person gave or picked. If a line has no number, leave it without one. Never estimate.
 INTERVIEW: General questions, slow pace, more encouragement. Build confidence.
 DISCLOSURE: Simple script, basic timing advice. Don't overwhelm.`,
 
