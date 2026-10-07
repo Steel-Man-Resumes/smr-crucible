@@ -28,6 +28,11 @@ const nextConfig = {
     "/api/assistant": ["./lib/skills/**/*"],
     "/api/coach": ["./lib/skills/**/*"],
     "/api/health/skills": ["./lib/skills/**/*"],
+    // The resume renderer reads its bundled fonts (Carlito, Caladea, public/fonts/resume)
+    // with fs. Nothing imports the .ttf files, so the tracer must be told to ship them
+    // with every function that renders a resume or measures its pages.
+    "/api/forge/download": ["./public/fonts/resume/**/*"],
+    "/api/resume/layout": ["./public/fonts/resume/**/*"],
     // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
     // worker/core files in the serverless function instead of relying on CDN
     // runtime downloads for executable assets. The pdfjs legacy build + its

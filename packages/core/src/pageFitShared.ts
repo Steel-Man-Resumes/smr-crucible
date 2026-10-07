@@ -110,6 +110,7 @@ export const SECTION_HEADERS: ReadonlySet<string> = new Set([
   "CERTIFICATIONS", "LICENSES & CERTIFICATIONS",
   "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
   "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
+  "TRAINING", "PROJECTS", "AWARDS", "PUBLICATIONS", "LEADERSHIP",
 ]);
 
 export function isSectionHeader(text: string): boolean {
@@ -132,16 +133,53 @@ export function stripBulletMarker(text: string): string {
 }
 
 /**
- * Competency/skills line: 4+ pipe/bullet parts, OR exactly 3 short parts. Mirrors
- * the route's isCompetencyLine so a job-title line ("TITLE | Company, Dates") is
- * NOT caught.
+ * Date text: a year range, "Present", a month and year, or a short note such as
+ * "2018 (four months)". The whole string must be dates and date filler words.
+ * Shared by the line classifiers here and by the resume renderer so both read
+ * a job header the same way.
+ */
+const MONTH_RE =
+  "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+const YEAR_RE = "(?:19|20)\\d{2}";
+export function isDateText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (!new RegExp(`\\b${YEAR_RE}\\b|\\b(?:Present|Current|Now)\\b`, "i").test(t)) return false;
+  const rest = t
+    .replace(/\([^)]*\)/g, "")
+    .replace(new RegExp(`\\b${MONTH_RE}`, "gi"), "")
+    .replace(new RegExp(YEAR_RE, "g"), "")
+    .replace(
+      /\b(?:Present|Current|Now|to|and|summer|spring|fall|winter|season|seasonal|months?|years?|weeks?|four|three|two|one)\b/gi,
+      ""
+    )
+    .replace(/[\s,;\-\u2013\u2014/]/g, "");
+  return rest === "";
+}
+
+const US_STATE_NAMES =
+  "Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia";
+const PLACE_RE = new RegExp(`^[A-Za-z][A-Za-z .'-]*,\\s*(?:[A-Z]{2}|${US_STATE_NAMES})$`);
+
+/** "City, ST" or "City, Statename" shaped text (a place, not a skill). */
+export function looksLikePlace(text: string): boolean {
+  return PLACE_RE.test(text.trim());
+}
+
+/**
+ * Competency/skills line: 4+ pipe/bullet parts, OR exactly 3 short parts.
+ * A job header is never a competency line, however many parts it has: any
+ * part that is a date ("2019 - 2021", "Present") or a place ("Milwaukee, WI")
+ * marks it as a job header, so "Shift Lead | Northgate Plastics | Milwaukee, WI" and the
+ * four-part "TITLE | Company | City, State | Years" stay job headers.
  */
 export function isCompetencyLine(text: string): boolean {
-  const pipeParts = text.split(/[|•]/).map((p) => p.trim()).filter(Boolean);
+  const pipeParts = text.split(/[|\u2022]/).map((p) => p.trim()).filter(Boolean);
+  if (!(text.includes(" | ") || text.includes(" \u2022 "))) return false;
+  if (pipeParts.some((p) => isDateText(p) || looksLikePlace(p))) return false;
   return (
-    (text.includes(" | ") || text.includes(" • ")) &&
-    (pipeParts.length >= 4 ||
-      (pipeParts.length === 3 && pipeParts.every((p) => p.length <= 22)))
+    pipeParts.length >= 4 ||
+    (pipeParts.length === 3 && pipeParts.every((p) => p.length <= 22))
   );
 }
 
@@ -218,6 +256,50 @@ export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
   const headlineLine = rest[0] || "";
   const publicNotesLine = rest[1] || "";
   return { nameLine, headlineLine, contactLine, publicNotesLine };
+}
+
+/**
+ * Split resume text into its header lines and the body lines that follow, the
+ * same way the DOCX builder and the page-fit estimator do (first up to four
+ * meaningful lines, stopping at a blank line or the first section header).
+ * Body lines keep their blank lines. The resume renderer uses this so the
+ * header it draws is the header every other builder reads.
+ */
+export function splitResumeHeader(content: string): {
+  header: ParsedResumeHeader;
+  headerLines: string[];
+  bodyLines: string[];
+} {
+  const lines = content.split("\n");
+  const headerLines: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) {
+      if (headerLines.length > 0) break;
+      continue;
+    }
+    if (isSectionHeader(t)) break;
+    if (headerLines.length < 4) headerLines.push(t);
+    else break;
+  }
+  const header = parseResumeHeader(headerLines);
+  const headerSet = new Set(headerLines);
+  const bodyLines: string[] = [];
+  let pastHeader = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!pastHeader) {
+      if (headerSet.has(trimmed) || !trimmed) {
+        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
+        if (headerSet.size === 0) pastHeader = true;
+        continue;
+      }
+      pastHeader = true;
+    }
+    if (!trimmed && bodyLines.length === 0) continue; // no leading blank lines
+    bodyLines.push(trimmed);
+  }
+  return { header, headerLines, bodyLines };
 }
 
 /**

@@ -427,7 +427,7 @@ function formatDiscipline(text: string): LensScore {
   let score = 100;
 
   const plan = computeFitPlan(text, {});
-  const { band, pageCount, finalPageFullness } = plan.result;
+  const { band, pageCount } = plan.result;
 
   if (band === "over") {
     score -= 35;
@@ -437,7 +437,7 @@ function formatDiscipline(text: string): LensScore {
   } else if (band === "under") {
     score -= 20;
     findings.push({
-      message: `The last page is only about ${Math.round(finalPageFullness * 100)}% full. Either fill it with real achievements or tighten to ${pageCount - 1} page${pageCount - 1 === 1 ? "" : "s"}. Never pad.`,
+      message: `The last page is only partly full. Either fill it with real achievements or tighten to ${pageCount - 1} page${pageCount - 1 === 1 ? "" : "s"}. Never pad.`,
     });
   }
 

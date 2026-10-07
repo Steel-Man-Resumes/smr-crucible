@@ -34,6 +34,7 @@ const FORGE_ROUTES = [
   "/api/forge/email-package",
   "/api/forge/resume-assist",
   "/api/resume/fit-check",
+  "/api/resume/layout",
   "/api/assistant",
   "/api/org-listing",
 ];
