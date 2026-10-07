@@ -78,7 +78,7 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "truth",
     std: ["STD-F01"],
     text:
-      "Dated history in reverse order, never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.",
+      "Dated history in reverse order, never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry. Every entry shows the calendar years it ran (2019 - 2023); never replace dates with how long a job lasted or a count of years worked.",
   },
   {
     id: "credential-truth",
@@ -119,7 +119,7 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "truth",
     std: ["STD-F07"],
     text:
-      "Length follows true substance. Include every true, relevant role and qualification the person gave. Never pad to fill a page and never cut real content to hit a count. Never more than two pages.",
+      "Two pages when the person's true history fills them, one page when it doesn't. Never add filler to reach a second page, and never more than two pages. Include every true, relevant role and qualification the person gave. The person can choose one page: then lead with the strongest true lines and shorten older roles to title, employer and years, never dropping a role or changing a fact to make room.",
   },
   {
     id: "skills-one-column",
@@ -127,6 +127,13 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     std: ["STD-T01", "STD-T06"],
     text:
       "Skills go in one column: either one comma-separated line, or a few short labeled lines (for example \"Equipment: forklift, pallet jack\"). Never a grid, columns or pipes between skills. Every term names something the person said they did, used or learned; no soft-skill filler they did not claim. Never invent a term to fill space, and never drop a real one.",
+  },
+  {
+    id: "dated-format",
+    scope: "page",
+    std: ["STD-F01"],
+    text:
+      "Format: reverse-chronological with years on every entry. A hybrid (a short skills block above the full dated history) fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills. Long stretches at one place or strong skills are examples of those two conditions, never extra conditions and never reasons on their own. In a hybrid every dated entry keeps its bullets and the skills block stays short labels.",
   },
   {
     id: "one-column-page",

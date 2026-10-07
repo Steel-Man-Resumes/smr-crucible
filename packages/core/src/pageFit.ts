@@ -198,12 +198,12 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
     if (result.pageCount === 1) {
       ledger.push({
         kind: "add",
-        message: `This resume fills about ${fullness}% of one page. That fits comfortably on a single page. If you want it fuller, add real achievements to your most recent role. Do not pad it.`,
+        message: `This resume fills about ${fullness}% of one page. One page is right when that is what your true history fills. Never pad it.`,
       });
     } else {
       ledger.push({
         kind: "add",
-        message: `The last page is only about ${fullness}% full. Add real achievements to your most recent role, or trim slightly so it fits on ${result.pageCount - 1} page${result.pageCount - 1 === 1 ? "" : "s"}. Never invent content to fill space.`,
+        message: `The last page is only about ${fullness}% full. Tighten it to ${result.pageCount - 1} page${result.pageCount - 1 === 1 ? "" : "s"}, or keep it if every line is true and you want the room. Never add filler to fill space.`,
       });
     }
     return { result, status: "too_short", ledger };
@@ -222,7 +222,7 @@ export function computeFitPlan(content: string, opts: PageFitOptions = {}): FitP
 
   ledger.push({
     kind: "omit",
-    message: `This resume renders about ${result.pageCount} pages. To bring it to ${targetPages} page${targetPages === 1 ? "" : "s"}, about ${twipsToBodyLines(overflowTwips)} lines of content need to come off. You choose what to cut. Nothing is removed for you. Lowest-priority items first:`,
+    message: `This resume renders about ${result.pageCount} pages.${result.pageCount > 2 ? " A resume is never more than two pages." : ""} To bring it to ${targetPages} page${targetPages === 1 ? "" : "s"}, about ${twipsToBodyLines(overflowTwips)} lines of content need to come off. You choose what to cut. Nothing is removed for you. Lowest-priority items first:`,
   });
 
   // Rank and offer lowest-priority (highest rank) removable items first. Never

@@ -563,6 +563,7 @@ function lastPageStats(layout: Layout): { lines: number; fill: number } {
 export function describeFit(pages: number, spillLines: number, lastPageFill: number): string {
   if (pages <= 1) return "Fits on 1 page";
   if (spillLines <= 8) return `Runs ${spillLines} ${spillLines === 1 ? "line" : "lines"} onto page ${pages}: cut or tighten`;
+  if (pages > 2) return `${pages} pages: two is the most, so cut or tighten to two`;
   if (lastPageFill >= 0.5) return `${pages} full pages`;
   return `${pages} pages`;
 }

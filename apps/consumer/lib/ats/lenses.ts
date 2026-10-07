@@ -443,12 +443,12 @@ function formatDiscipline(text: string): LensScore {
   if (band === "over") {
     score -= 35;
     findings.push({
-      message: `This runs about ${pageCount} pages. Two is the practical ceiling for almost every role.`,
+      message: `This runs about ${pageCount} pages. Two pages is the most: two when your true history fills them, one when it doesn't.`,
     });
   } else if (band === "under") {
     score -= 20;
     findings.push({
-      message: `The last page is only partly full. Either fill it with real achievements or tighten to ${pageCount - 1} page${pageCount - 1 === 1 ? "" : "s"}. Never pad.`,
+      message: `The last page is only partly full. Tighten to ${pageCount - 1} page${pageCount - 1 === 1 ? "" : "s"}, or keep it if every line is true. Never pad.`,
     });
   }
 
