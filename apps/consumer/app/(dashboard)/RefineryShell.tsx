@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PolicyAckBanner } from "@/components/PolicyAckBanner";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
@@ -849,7 +849,9 @@ export function RefineryShell({
       </div>
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
-      <GuidedTour />
+      <Suspense fallback={null}>
+        <GuidedTour />
+      </Suspense>
 
       {/* Developer impersonation frame (blue view / red assist) */}
       <ImpersonationChrome />

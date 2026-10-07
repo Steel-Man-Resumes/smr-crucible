@@ -55,7 +55,9 @@ function Badge({
 }
 
 export function StageProgressBar({ currentStage }: { currentStage: number }) {
-  // Orientation (0) shows Foundation as current; 7 means the arc is complete.
+  // The caller maps orientation (stage 0) onto the arc with arcStageForNextStep
+  // so Foundation is not shown as current once the Forge is done. 7 means the
+  // arc is complete.
   const current = Math.min(Math.max(currentStage, 1), 7);
   const mobileIdx = Math.min(current, 6);
   const mobileLabel = STAGES[mobileIdx - 1]?.label ?? "Keep going";

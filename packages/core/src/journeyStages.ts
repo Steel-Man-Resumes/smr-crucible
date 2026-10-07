@@ -45,3 +45,27 @@ export function stageLong(stage: number): string {
 export function stageNextStepLabel(stage: number): string {
   return JOURNEY_STAGES[stage]?.nextStepLabel ?? JOURNEY_COMPLETE_LABEL;
 }
+
+/**
+ * Where the orientation steps send the user. The dashboard reads the `tour`
+ * query value and reopens the guided tour on request, so this link always
+ * does something visible.
+ */
+export const TOUR_PARAM = "tour";
+export const TOUR_HREF = `/dashboard?${TOUR_PARAM}=1`;
+
+/**
+ * Which stage the progress arc should show as current for a given next step.
+ *
+ * Stage 0 is orientation, which is not on the arc. The arc starts at stage 1
+ * (Foundation), so showing Foundation as current while the Forge is already
+ * done contradicts the page. When orientation is pending only because the tour
+ * was not taken ("onboarding_pending", which the ladder returns after the Forge
+ * is done), the Foundation is finished and the arc points at Target. When the
+ * tour is mandatory after two deferrals ("onboarding_required"), the ladder does
+ * not say whether the Forge is done, so the arc stays at Foundation.
+ */
+export function arcStageForNextStep(next: { stage: number; reason?: string }): number {
+  if (next.stage === 0) return next.reason === "onboarding_pending" ? 2 : 1;
+  return Math.min(Math.max(next.stage, 1), 7);
+}

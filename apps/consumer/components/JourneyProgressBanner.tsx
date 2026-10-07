@@ -49,6 +49,10 @@ export function JourneyProgressBanner({ state }: Props) {
   const pathname = usePathname();
 
   if (state === "loading") return null;
+  // The overview already has the stage arc and the "Your next step" card, which
+  // say the same thing in other words ("50% complete" next to "Foundation" read
+  // as two different answers). Show this banner on the other pages only.
+  if (pathname === "/dashboard") return null;
   if (SKIP_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   const stage = STAGES[state];

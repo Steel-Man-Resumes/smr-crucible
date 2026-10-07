@@ -15,6 +15,7 @@
  */
 
 import { query } from "./db";
+import { TOUR_HREF } from "./journeyStages";
 import { getUserProfile, type UserProfile, type NextStepResult } from "./getUserProfile";
 
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour (plan Section 4)
@@ -23,7 +24,7 @@ const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour (plan Section 4)
 export function computeNextStep(p: UserProfile): NextStepResult {
   // Stage 0 -- orientation becomes mandatory after 2 deferrals
   if (!p.onboardingComplete && p.onboardingDeferrals >= 2) {
-    return { stage: 0, action: "Complete your orientation", href: "/dashboard?tour=1", reason: "onboarding_required" };
+    return { stage: 0, action: "Complete your orientation", href: TOUR_HREF, reason: "onboarding_required" };
   }
 
   // Stage 1 -- foundation must exist before anything else is useful
@@ -33,7 +34,7 @@ export function computeNextStep(p: UserProfile): NextStepResult {
 
   // Stage 0 (soft) -- foundation done but tour never taken: orient + name the coach
   if (!p.onboardingComplete) {
-    return { stage: 0, action: "Take a quick tour and name your coach", href: "/dashboard?tour=1", reason: "onboarding_pending" };
+    return { stage: 0, action: "Take a quick tour and name your coach", href: TOUR_HREF, reason: "onboarding_pending" };
   }
 
   // Stage 2 -- find a first target

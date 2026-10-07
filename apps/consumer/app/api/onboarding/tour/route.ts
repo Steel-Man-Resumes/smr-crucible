@@ -74,6 +74,9 @@ export async function POST(request: Request) {
        WHERE id = $1`,
       [userId]
     );
+    // A second deferral makes the tour mandatory (computeNextStep), so the
+    // cached next step is stale as soon as the count changes.
+    await invalidateNextStep(userId);
     return NextResponse.json({ ok: true });
   }
 

@@ -10,8 +10,17 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+import {
+  FALLBACK_TOUR_STATE,
+  NEXT_STEP_CHANGED_EVENT,
+  canCloseTour,
+  canDeferTour,
+  isTourRequested,
+  isTourVisible,
+  type TourState,
+} from "@/lib/guidedTour";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -19,12 +28,6 @@ const FOCUSABLE_SELECTOR =
 // Once deferred/closed, don't re-pop on every remount this session ("remind me
 // next login" means next session, not next page nav).
 const SUPPRESS_KEY = "guided_tour_suppressed";
-
-interface TourState {
-  tourComplete: boolean;
-  tourDeferrals: number;
-  coachName: string;
-}
 
 const SCREENS = 3;
 
@@ -40,6 +43,11 @@ const JOURNEY = [
 export function GuidedTour() {
   const tier = useUserTier();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?tour=1 is an explicit request (the "Your next step" card links here). It
+  // overrides "closed" and "deferred this session" so the button always opens it.
+  const requested = isTourRequested(searchParams);
   const [state, setState] = useState<TourState | null>(null);
   const [screen, setScreen] = useState(0);
   const [coachName, setCoachName] = useState("");
@@ -53,32 +61,48 @@ export function GuidedTour() {
 
   useEffect(() => {
     if (tier !== "client" || !onHome) return;
-    try {
-      if (sessionStorage.getItem(SUPPRESS_KEY) === "1") {
-        setClosed(true);
-        return;
-      }
-    } catch {}
+    if (requested) {
+      // Explicit request: forget any earlier close or defer and start from screen 1.
+      try {
+        sessionStorage.removeItem(SUPPRESS_KEY);
+      } catch {}
+      setClosed(false);
+      setScreen(0);
+    } else {
+      try {
+        if (sessionStorage.getItem(SUPPRESS_KEY) === "1") {
+          setClosed(true);
+          return;
+        }
+      } catch {}
+    }
     let cancelled = false;
     fetch("/api/onboarding/tour")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!cancelled && j?.data) {
+        if (cancelled) return;
+        if (j?.data) {
           setState(j.data as TourState);
           // Pre-fill only a real custom name, not the default "Guide"
           if (j.data.coachName && j.data.coachName !== "Guide") {
             setCoachName(j.data.coachName);
           }
+        } else if (requested) {
+          // Could not read the state: an explicit request still opens the tour.
+          setState(FALLBACK_TOUR_STATE);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled && requested) setState(FALLBACK_TOUR_STATE);
+      });
     return () => {
       cancelled = true;
     };
-  }, [tier, onHome]);
+  }, [tier, onHome, requested]);
 
-  const visible = tier === "client" && onHome && !closed && !!state && !state.tourComplete;
-  const canDefer = !!state && state.tourDeferrals < 2;
+  const visible = isTourVisible({ tier, onHome, closed, state, requested });
+  const canDefer = canDeferTour(state);
+  const canClose = canCloseTour(state);
 
   // Focus the panel when the tour opens (WCAG 2.4.3 focus order).
   useEffect(() => {
@@ -94,6 +118,9 @@ export function GuidedTour() {
         if (canDefer) {
           e.preventDefault();
           defer();
+        } else if (canClose) {
+          e.preventDefault();
+          close();
         }
         return;
       }
@@ -118,9 +145,21 @@ export function GuidedTour() {
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [visible, canDefer]);
+  }, [visible, canDefer, canClose]);
 
   if (!visible) return null;
+
+  // Close the modal and drop ?tour=1 so the same card link can be pressed again.
+  function close() {
+    setClosed(true);
+    if (requested) router.replace("/dashboard", { scroll: false });
+  }
+
+  function announceNextStepChanged() {
+    try {
+      window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
+    } catch {}
+  }
 
   async function complete() {
     setSaving(true);
@@ -134,7 +173,8 @@ export function GuidedTour() {
         }),
       });
     } catch {}
-    setClosed(true);
+    announceNextStepChanged();
+    close();
   }
 
   async function defer() {
@@ -148,7 +188,8 @@ export function GuidedTour() {
         body: JSON.stringify({ action: "defer" }),
       });
     } catch {}
-    setClosed(true);
+    announceNextStepChanged();
+    close();
   }
 
   return (
@@ -242,6 +283,14 @@ export function GuidedTour() {
                 className="text-sm text-muted hover:text-foreground transition-colors"
               >
                 Remind me next login
+              </button>
+            )}
+            {canClose && (
+              <button
+                onClick={close}
+                className="text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Close
               </button>
             )}
           </div>
