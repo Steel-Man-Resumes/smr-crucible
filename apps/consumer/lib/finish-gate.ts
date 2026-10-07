@@ -19,7 +19,7 @@ import { CREDENTIALS_KEY } from "./forge-path";
 import {
   answerMentions,
   answerStands,
-  CREDENTIAL_UNSAID_QUESTION,
+  credentialMemoryPrompt,
   distanceFromSource,
   getResumeStatus,
   introducedWords,
@@ -28,7 +28,7 @@ import {
   type OpenItem,
   type ResumeStatus,
 } from "@crucible/core/src/resumeStatus";
-import { linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import { hasCredentialStatus, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { checkCredentials, credentialHomes, credentialMentionsOf } from "@crucible/core/src/credentialMentions";
@@ -74,7 +74,26 @@ export interface StoredFinish {
   defendAnswers: DefendAnswer[];
   /** Skills the person added from a job posting in the keyword check. Each is asked about. */
   addedTerms?: string[];
+  /** Skills terms the person kept on the "added for you" card (decision D3). */
+  keptTerms?: string[];
+  /** Credentials the person confirmed with their own type and year or status (decision D4). */
+  confirmedCredentials?: CredentialConfirm[];
 }
+
+/** A credential the writer put on the page that the person confirmed holding, in their own words. */
+export interface CredentialConfirm {
+  /** The name as it was on the page (the memory prompt). */
+  name: string;
+  /** What kind it is, as the person picked it. */
+  type: CredentialType;
+  /** The year or status in the person's own words. */
+  when: string;
+  /** The line as rewritten to match what they typed ("Forklift card, 2021"). */
+  text: string;
+}
+
+export const CREDENTIAL_TYPES = ["license", "certification", "card", "training course"] as const;
+export type CredentialType = (typeof CREDENTIAL_TYPES)[number];
 
 /** Small stable string hash (FNV-1a), enough to tell one run from another. */
 function hash(s: string): string {
@@ -137,6 +156,18 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
           )
       : [],
     addedTerms: Array.isArray(s.addedTerms) ? s.addedTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
+    keptTerms: Array.isArray(s.keptTerms) ? s.keptTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
+    confirmedCredentials: Array.isArray(s.confirmedCredentials)
+      ? s.confirmedCredentials.filter(
+          (c): c is CredentialConfirm =>
+            !!c &&
+            typeof c.name === "string" &&
+            typeof c.when === "string" &&
+            typeof c.text === "string" &&
+            (CREDENTIAL_TYPES as readonly string[]).includes(c.type as string) &&
+            hasCredentialStatus(c.when)
+        )
+      : [],
   };
 }
 
@@ -228,6 +259,27 @@ export function rewritesOf(answers: DefendAnswer[], pages: string | string[], wr
     .map((a) => introducedWords(stripBullet(a.answer), stripBullet(a.replaced as string), writerText))
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * What the person said on the finish page itself: skills terms they kept
+ * (decision D3; their numbers are not carried, a kept term never sources a
+ * figure) and credentials they confirmed with their own type and year or
+ * status (decision D4; the writer's name alone never counts).
+ */
+export function confirmedWords(keptTerms: string[] = [], confirms: CredentialConfirm[] = []): string {
+  const kept = keptTerms.map((t) => {
+    let out = "";
+    let at = 0;
+    const text = normalizeDigits(t);
+    for (const tok of numberTokens(text)) {
+      out += text.slice(at, tok.index);
+      at = tok.index + tok.length;
+    }
+    return (out + text.slice(at)).trim();
+  });
+  const creds = confirms.filter((c) => hasCredentialStatus(c.when)).map((c) => c.text);
+  return [...kept, ...creds].filter(Boolean).join("\n");
 }
 
 /** The one source the gate and every panel check against: own words plus what rewrites introduced. */
@@ -368,9 +420,83 @@ export function cutTerm(text: string, term: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
+// ---- credentials the person confirmed (D4) ---------------------------------------
+
+const CLAIM_WORDS_RE = /\b(?:certified|certification|certificate|licensed|license|licence|card|training|course|class)\b/gi;
+
+/** The credential's name without the claim words ("Forklift Certified" is "Forklift"). */
+function bareName(name: string): string {
+  return name.replace(CLAIM_WORDS_RE, " ").replace(/\s{2,}/g, " ").replace(/[,\s]+$/, "").trim() || name.trim();
+}
+
+/** The line as the person confirmed it: the name, the kind they picked, and their own year or status. */
+export function confirmedCredentialText(name: string, type: CredentialType, when: string): string {
+  return `${bareName(name)} ${type}, ${when.trim().replace(/[.\s]+$/, "")}`;
+}
+
+/**
+ * "Yes, I hold it" (decision D4): only with a kind picked and a year or status
+ * in their own words. The credential's line is rewritten to exactly what they
+ * gave: a short line or a skills term becomes the confirmed text; inside a
+ * longer sentence only the credential's name is replaced. Returns null when
+ * the details are not enough to keep it.
+ */
+export function confirmCredential(
+  text: string,
+  line: string,
+  isTerm: boolean,
+  name: string,
+  type: CredentialType,
+  when: string
+): { text: string; confirm: CredentialConfirm } | null {
+  if (!(CREDENTIAL_TYPES as readonly string[]).includes(type) || !when.trim() || !hasCredentialStatus(when)) return null;
+  const confirmed = confirmedCredentialText(name, type, when);
+  let next = text;
+  if (isTerm) next = replaceTerm(text, line, confirmed);
+  else if (stripBullet(line).split(/\s+/).length <= 8) next = changeLine(text, line, confirmed);
+  else {
+    const re = new RegExp(escapeRe(name), "i");
+    const at = linesOf(text).find((l) => l === line);
+    if (at && re.test(at)) next = changeLine(text, line, stripBullet(at).replace(re, confirmed));
+  }
+  return { text: next, confirm: { name, type, when: when.trim(), text: confirmed } };
+}
+
+/** "No, take it off": the term, the short line, or just the name inside a longer sentence. */
+export function cutCredential(text: string, line: string, isTerm: boolean, name: string): string {
+  if (isTerm) return cutTerm(text, line);
+  if (stripBullet(line).split(/\s+/).length <= 8) return cutLine(text, line);
+  const re = new RegExp(`\\s*(?:,\\s*)?${escapeRe(name)}`, "i");
+  const at = linesOf(text).find((l) => l === line);
+  return at && re.test(at) ? changeLine(text, line, stripBullet(at).replace(re, "").replace(/\s{2,}/g, " ")) : text;
+}
+
+/** Replace one skills term in its line with new text. */
+function replaceTerm(text: string, term: string, withText: string): string {
+  const re = termRe(term);
+  let done = false;
+  return text
+    .split("\n")
+    .map((l) => {
+      if (done || !re.test(l)) return l;
+      done = true;
+      return l.replace(re, withText);
+    })
+    .join("\n");
+}
+
 // ---- the view ------------------------------------------------------------------
 
-export type GroupTarget = "resume" | "letter" | "skill";
+export type GroupTarget = "resume" | "letter" | "skill" | "skillset";
+
+/** The one keep-or-cut card for skills the person never said (D3). */
+export const SKILLS_CARD_KEY = "Skills added for you";
+export const SKILLS_CARD_TEXT = "These skills were added for you. Keep the ones that are true.";
+
+/** The credential name a memory-prompt item is about (quoted in its why). */
+function unsaidName(i: OpenItem): string {
+  return i.why.match(/"([^"]+)"/)?.[1] ?? stripBullet(i.line);
+}
 
 /** One line (or added skill) and everything open about it. */
 export interface LineGroup {
@@ -391,6 +517,10 @@ export interface LineGroup {
   /** A defend line the person already explained; nothing open on it. */
   checked: boolean;
   answer?: DefendAnswer;
+  /** On the skills card: every term to keep or cut. */
+  terms?: string[];
+  /** On a memory prompt (a credential the person never mentioned): its name. */
+  credentialName?: string;
 }
 
 /** An open item with the document it is in. */
@@ -540,11 +670,11 @@ function letterItems(letter: string, resumeText: string, source: string, answers
       kind: c.issue === "unsaid" ? "credential_unsaid" : "credential_upgrade",
       why:
         c.issue === "unsaid"
-          ? `"${c.mention.name.slice(0, 50)}" isn't in anything you told us. A credential goes in the letter only the way your card or papers say it.`
+          ? `"${c.mention.name.slice(0, 50)}" was added for you. It stays only if you hold it and tell us what kind it is and when.`
           : "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
       question:
         c.issue === "unsaid"
-          ? CREDENTIAL_UNSAID_QUESTION
+          ? credentialMemoryPrompt(c.mention.name)
           : questionForFinding({ rule: "STD-T03", line: c.mention.line, why: "" }),
     });
   }
@@ -560,6 +690,10 @@ export function buildFinishView(input: {
   written?: WrittenDocs | null;
   /** Skill terms the person added from a posting (keyword check). */
   addedTerms?: string[];
+  /** Skills terms kept on the "added for you" card (D3). */
+  keptTerms?: string[];
+  /** Credentials confirmed with the person's own type and year or status (D4). */
+  confirmedCredentials?: CredentialConfirm[];
   /** The grounding block from generate-docs, when there is one. */
   grounding?: unknown;
   /** The second check's findings, only when it ran. */
@@ -567,7 +701,9 @@ export function buildFinishView(input: {
 }): FinishView {
   const letter = input.coverLetterText ?? "";
   const answers = input.defendAnswers;
-  const source = gateSource(input.ownWords, answers, [input.resumeText, letter], input.written);
+  const confirmed = confirmedWords(input.keptTerms, input.confirmedCredentials);
+  const source = gateSource(confirmed ? `${input.ownWords}\n\n${confirmed}` : input.ownWords, answers, [input.resumeText, letter], input.written);
+  const kept = new Set((input.keptTerms ?? []).map((t) => t.trim().toLowerCase()));
   const status = getResumeStatus({
     resumeText: input.resumeText,
     sourceText: source,
@@ -579,9 +715,15 @@ export function buildFinishView(input: {
   const letterLines = pageLineSet(letter);
   const items: GateItem[] = [];
   for (const i of status.openItems) {
-    // A skills term the person never said is asked about like any other
-    // claim, one term at a time, and blocks until they explain it or it goes.
+    // Skills terms the person never said go on ONE keep-or-cut card (D3).
     if (i.kind === "grid_term") {
+      if (kept.has(i.line.trim().toLowerCase())) continue;
+      items.push({ ...i, severity: "BLOCK", target: "skillset" });
+      continue;
+    }
+    // A skills term with a scope word is a claim: its own card, settled by
+    // saying what they did.
+    if (i.kind === "grid_scope_term") {
       if (skillAnswerStands(answerFor(answers, i.line), i.line, source)) continue;
       items.push({ ...i, severity: "BLOCK", target: "skill" });
       continue;
@@ -602,18 +744,19 @@ export function buildFinishView(input: {
     items.push(...letterItems(letter, input.resumeText, source, answers));
   }
 
-  // Skills added from a posting: each one is explained in the person's words.
+  // Skills added from a posting go on the same keep-or-cut card.
   for (const term of Array.from(new Set((input.addedTerms ?? []).map((t) => t.trim()).filter(Boolean)))) {
     if (!termOnPage(input.resumeText, term)) continue;
-    if (items.some((i) => i.target === "skill" && i.line.toLowerCase() === term.toLowerCase())) continue;
-    if (skillAnswerStands(answerFor(answers, term), term, source)) continue;
+    if (kept.has(term.toLowerCase())) continue;
+    if (items.some((i) => (i.target === "skill" || i.target === "skillset") && i.line.toLowerCase() === term.toLowerCase())) continue;
     items.push({
-      rule: "STD-C04",
+      rule: "STD-T01",
       severity: "BLOCK",
       line: term,
-      target: "skill",
+      target: "skillset",
+      kind: "grid_term",
       why: "You added this from a job posting.",
-      question: `Tell me one time you did "${term}" at work, in your own words. If you can't, it comes off.`,
+      question: SKILLS_CARD_TEXT,
     });
   }
 
@@ -631,29 +774,35 @@ export function buildFinishView(input: {
 
   // An item whose line is not on its page cannot be changed or cut there.
   const onItsPage = (i: GateItem) =>
-    i.target === "skill" ? true : (i.target === "letter" ? letterLines : resumeLines).has(squash(stripBullet(i.line)));
+    i.target === "skill" || i.target === "skillset" ? true : (i.target === "letter" ? letterLines : resumeLines).has(squash(stripBullet(i.line)));
   const general = items.filter((i) => !i.line || !onItsPage(i));
   const lined = items.filter((i) => i.line && onItsPage(i));
 
   const byLine = new Map<string, GateItem[]>();
   for (const item of lined) {
-    const k = `${item.target}\u0000${item.line}`;
+    // Every added skill is one card, not one card per term.
+    const k = item.target === "skillset" ? "skillset" : `${item.target}\u0000${item.line}`;
     const list = byLine.get(k) ?? [];
     list.push(item);
     byLine.set(k, list);
   }
 
   const order = linesOf(input.resumeText);
-  const targetRank: Record<GroupTarget, number> = { resume: 0, skill: 1, letter: 2 };
-  const groups: LineGroup[] = Array.from(byLine.values()).map((its) => ({
-    line: its[0].line,
-    target: its[0].target,
-    items: its,
-    blocking: its.some((i) => i.severity === "BLOCK"),
-    answerable: its.every((i) => ANSWERABLE(i) || i.kind === "grid_term"),
-    checked: false,
-    answer: answerFor(answers, its[0].line),
-  }));
+  const targetRank: Record<GroupTarget, number> = { resume: 0, skill: 1, skillset: 2, letter: 3 };
+  const groups: LineGroup[] = Array.from(byLine.values()).map((its) => {
+    const unsaid = its.find((i) => i.kind === "credential_unsaid");
+    return {
+      line: its[0].target === "skillset" ? SKILLS_CARD_KEY : its[0].line,
+      target: its[0].target,
+      items: its,
+      blocking: its.some((i) => i.severity === "BLOCK"),
+      answerable: its[0].target !== "skillset" && !unsaid && its.every((i) => ANSWERABLE(i) || i.kind === "grid_scope_term"),
+      checked: false,
+      answer: its[0].target === "skillset" ? undefined : answerFor(answers, its[0].line),
+      ...(its[0].target === "skillset" ? { terms: its.map((i) => i.line) } : {}),
+      ...(unsaid ? { credentialName: unsaidName(unsaid) } : {}),
+    };
+  });
   groups.sort(
     (a, b) =>
       Number(b.blocking) - Number(a.blocking) ||
@@ -702,7 +851,7 @@ export function buildFinishView(input: {
 export function openItemsInPlainWords(view: { openItems: Array<OpenItem & { target?: GroupTarget }> }): string[] {
   return view.openItems.map((i) => {
     const what = i.severity === "BLOCK" ? "Fix before you send" : "Worth checking";
-    const where = i.target === "letter" ? " (cover letter)" : i.target === "skill" ? " (skills)" : "";
+    const where = i.target === "letter" ? " (cover letter)" : i.target === "skill" || i.target === "skillset" ? " (skills)" : "";
     return i.line ? `${what}${where}: "${stripBullet(i.line)}" ${i.question}` : `${what}${where}: ${i.question}`;
   });
 }

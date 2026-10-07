@@ -50,9 +50,12 @@ import {
   type DefendAnswer,
   type LineGroup,
   type WrittenDocs,
+  type CredentialConfirm,
+  confirmCredential,
+  cutCredential,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
-import { DefendPanel } from "@/components/forge/finish/DefendPanel";
+import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
 import { CheckSection } from "@/components/forge/finish/CheckSection";
@@ -131,6 +134,9 @@ export default function OutputPage() {
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
+  // Skills kept on the "added for you" card (D3), credentials confirmed in the person's own words (D4).
+  const [keptTerms, setKeptTerms] = useState<string[]>([]);
+  const [confirmedCredentials, setConfirmedCredentials] = useState<CredentialConfirm[]>([]);
   const [docError, setDocError] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -155,6 +161,8 @@ export default function OutputPage() {
     setWritten(stored.docs.written ?? null);
     setDefendAnswers(stored.defendAnswers);
     setAddedTerms(stored.addedTerms ?? []);
+    setKeptTerms(stored.keptTerms ?? []);
+    setConfirmedCredentials(stored.confirmedCredentials ?? []);
     setDocState("done");
   }, [session]);
 
@@ -168,11 +176,13 @@ export default function OutputPage() {
         docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined },
         defendAnswers,
         addedTerms,
+        keptTerms,
+        confirmedCredentials,
       },
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, updateSession]);
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -218,6 +228,8 @@ export default function OutputPage() {
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
       setAddedTerms([]);
+      setKeptTerms([]);
+      setConfirmedCredentials([]);
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -240,8 +252,8 @@ export default function OutputPage() {
   // ---- the gate ----------------------------------------------------------------
   const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
   const view = useMemo(
-    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding, written }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding, written]
+    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";
@@ -338,6 +350,29 @@ export default function OutputPage() {
     if (group.target === "letter") setCoverLetterText((t) => cutLine(t, group.line));
     else setResumeText((t) => cutLine(t, group.line));
     setDefendAnswers((a) => recordAnswer(a, group.line, "", "cut"));
+  };
+
+  const cardActions: CardActions = {
+    onKeepTerm: (term) => setKeptTerms((t) => (t.some((x) => x.toLowerCase() === term.toLowerCase()) ? t : [...t, term])),
+    onCutTerm: (term) => {
+      setResumeText((t) => cutTerm(t, term));
+      setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
+    },
+    onConfirmCredential: (group, type, when) => {
+      const isLetter = group.target === "letter";
+      const r = confirmCredential(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line, type, when);
+      if (!r) return false;
+      if (isLetter) setCoverLetterText(r.text);
+      else setResumeText(r.text);
+      setConfirmedCredentials((c) => [...c.filter((x) => x.name.toLowerCase() !== r.confirm.name.toLowerCase()), r.confirm]);
+      return true;
+    },
+    onCutCredential: (group) => {
+      const isLetter = group.target === "letter";
+      const next = cutCredential(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line);
+      if (isLetter) setCoverLetterText(next);
+      else setResumeText(next);
+    },
   };
 
   const goFix = () => {
@@ -549,7 +584,7 @@ export default function OutputPage() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
+              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} />
             </aside>
           </div>
 

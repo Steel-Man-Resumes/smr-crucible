@@ -13,6 +13,9 @@ import {
   prefillRewrite,
   progressLine,
   type GateItem,
+  CREDENTIAL_TYPES,
+  SKILLS_CARD_TEXT,
+  type CredentialType,
   type FinishView,
   type LineGroup,
   type OpenItem,
@@ -30,6 +33,127 @@ function uniqueQuestions(items: OpenItem[]): string[] {
 }
 
 export type GroupHandler<R = void> = (group: LineGroup, text: string) => R;
+
+/** The finish-page decisions that are not answers: keep or cut an added skill (D3), confirm or drop a suggested credential (D4). */
+export interface CardActions {
+  onKeepTerm: (term: string) => void;
+  onCutTerm: (term: string) => void;
+  /** Returns false when the details are not enough to keep it. */
+  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string) => boolean;
+  onCutCredential: (group: LineGroup) => void;
+}
+
+/** D3: one card for every skill the person never said. One tap each. */
+function SkillsCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const terms = group.terms ?? [];
+  return (
+    <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-target="skillset" data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="mt-1 text-sm text-t-white" data-testid="skills-card-text">{SKILLS_CARD_TEXT}</p>
+      <ul className="mt-2 space-y-1.5">
+        {terms.map((t) => (
+          <li key={t} className="flex flex-wrap items-center justify-between gap-2" data-testid="skills-card-term" data-term={t}>
+            <span className="text-sm text-t-phos">{t}</span>
+            <span className="flex gap-2">
+              <button onClick={() => actions.onKeepTerm(t)} className={BTN_MAIN} aria-label={`Keep ${t}`}>
+                Keep
+              </button>
+              <button onClick={() => actions.onCutTerm(t)} className={BTN_SOFT} aria-label={`Cut ${t}`}>
+                Cut
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+/** D4: a credential the person never mentioned, asked as a memory prompt. */
+function CredentialPromptCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const [mode, setMode] = useState<"ask" | "yes">("ask");
+  const [type, setType] = useState<CredentialType | null>(null);
+  const [when, setWhen] = useState("");
+  const [notice, setNotice] = useState("");
+  const firstType = useRef<HTMLButtonElement>(null);
+  const name = group.credentialName ?? editableLine(group.line);
+  const prompt = group.items.find((i) => i.kind === "credential_unsaid")?.question ?? "";
+  useEffect(() => {
+    if (mode === "yes") firstType.current?.focus();
+  }, [mode]);
+  return (
+    <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-target={group.target} data-blocking="true" data-credential-prompt="true" className="border border-t-amber bg-t-panel px-3 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
+      <p className="mt-1.5 text-sm text-t-phos">{prompt}</p>
+      {mode === "ask" ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={() => setMode("yes")} className={BTN_MAIN}>
+            Yes, I hold it
+          </button>
+          <button onClick={() => actions.onCutCredential(group)} className={BTN_SOFT}>
+            No, take it off
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-t-white" id={`cred-type-${index}`}>
+            What kind is it?
+          </p>
+          <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-labelledby={`cred-type-${index}`}>
+            {CREDENTIAL_TYPES.map((t, i) => (
+              <button
+                key={t}
+                ref={i === 0 ? firstType : undefined}
+                role="radio"
+                aria-checked={type === t}
+                onClick={() => setType(t)}
+                className={type === t ? BTN_MAIN : BTN_SOFT}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+          <label htmlFor={`cred-when-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
+            When did you get it, or is it current?
+          </label>
+          <input
+            id={`cred-when-${index}`}
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            placeholder="In your words: the year you got it, or current, expired, in progress"
+            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+          />
+          {notice && (
+            <p role="status" className="mt-1 text-xs text-t-amber-bright">
+              {notice}
+            </p>
+          )}
+          <p className="mt-1 text-[11px] text-t-phos-dim">We put it on your resume the way you say it here.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                if (!type) return setNotice("Pick what kind it is.");
+                if (!actions.onConfirmCredential(group, type, when)) {
+                  setNotice("Add the year you got it, or say if it's current, expired or in progress.");
+                  return;
+                }
+                setNotice("");
+              }}
+              className={BTN_MAIN}
+            >
+              Keep it on my resume
+            </button>
+            <button onClick={() => actions.onCutCredential(group)} className={BTN_SOFT}>
+              No, take it off
+            </button>
+          </div>
+        </div>
+      )}
+      {mode === "ask" && <span className="sr-only">{name}</span>}
+    </li>
+  );
+}
 
 function GroupCard({
   group,
@@ -258,6 +382,7 @@ function Groups({
   onAnswer,
   onChange,
   onCut,
+  actions,
 }: {
   groups: LineGroup[];
   offset: number;
@@ -265,10 +390,16 @@ function Groups({
   onAnswer: GroupHandler;
   onChange: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
+  actions: CardActions;
 }) {
   return (
     <ol className="space-y-2">
-      {groups.map((g, i) => (
+      {groups.map((g, i) =>
+        g.target === "skillset" ? (
+          <SkillsCard key="skillset" group={g} index={offset + i} actions={actions} />
+        ) : g.credentialName ? (
+          <CredentialPromptCard key={`cred:${g.target}:${g.line}`} group={g} index={offset + i} actions={actions} />
+        ) : (
         <GroupCard
           key={`${g.target}:${g.line}:${g.checked ? "c" : "o"}`}
           group={g}
@@ -278,7 +409,8 @@ function Groups({
           onChange={onChange}
           onCut={onCut}
         />
-      ))}
+        )
+      )}
     </ol>
   );
 }
@@ -288,19 +420,21 @@ export function DefendPanel({
   onAnswer,
   onChange,
   onCut,
+  actions,
 }: {
   view: FinishView;
   onAnswer: GroupHandler;
   /** Returns false when the line did not change. */
   onChange: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
+  actions: CardActions;
 }) {
   const progress = progressLine(view);
   const finished = view.state === "finished";
   const resume = view.groups.filter((g) => g.target === "resume");
-  const skills = view.groups.filter((g) => g.target === "skill");
+  const skills = view.groups.filter((g) => g.target === "skill" || g.target === "skillset");
   const letter = view.groups.filter((g) => g.target === "letter");
-  const common = { source: view.source, onAnswer, onChange, onCut };
+  const common = { source: view.source, onAnswer, onChange, onCut, actions };
 
   return (
     <section id="fix-list" aria-labelledby="fix-list-heading" className="scroll-mt-20" data-testid="fix-list">
@@ -339,7 +473,7 @@ export function DefendPanel({
 
       {skills.length > 0 && (
         <div className="mt-4" data-testid="fix-skills">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Skills you added from a job posting</h3>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Skills</h3>
           <Groups groups={skills} offset={resume.length + view.checkedLines.length} {...common} />
         </div>
       )}

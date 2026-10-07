@@ -124,7 +124,7 @@ test("B4: a cover letter BLOCK keeps the whole package in draft, with the letter
 
 // ---- S1 ------------------------------------------------------------------------
 
-test("S1: posting words confirmed into skills are each asked about; a generic answer does not settle them", () => {
+test("S1: posting words confirmed into skills are each on the keep-or-cut card; a generic answer does not settle them", () => {
   const resume = `${page("Ran the grill on the breakfast line.", "Prepped vegetables before open and closed the kitchen at night.", "Asked by the owner to show new cooks the grill.")}\n\nSKILLS\nGrill, Breakfast line, Vegetable prep, Kitchen closing`;
   const p = SAMPLE_POSTINGS.find((s) => s.id === "cna")!;
   const fixes = scoreResume(resume, p.text, SOURCE).lenses.flatMap((l) => l.findings).map((f) => f.fix).filter((f) => f?.kind === "confirm_then_add");
@@ -135,12 +135,15 @@ test("S1: posting words confirmed into skills are each asked about; a generic an
   for (const f of fixes) r = applyFix(r, f!);
   const v = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: answerRest(r, []) });
   assert.equal(v.state, "draft");
-  assert.ok(v.groups.some((g) => (g as { target?: string }).target === "skill" && g.blocking));
-  // One real answer about one term settles that term only.
+  // D3 (2026-10-07): every added term is on ONE keep-or-cut card; a generic answer settles none.
+  const card = v.groups.find((g) => (g as { target?: string }).target === "skillset");
+  assert.ok(card && card.blocking && !card.answerable);
+  for (const t of terms) assert.ok((card as { terms?: string[] }).terms!.includes(t), t);
+  // Keeping one term settles that term only.
   const term = terms[0];
-  const one = recordAnswer(answerRest(r, []), term, `I was the ${term} on the night shift at my aunt's care home for a year.`, "stands");
-  const v2 = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: one });
-  assert.ok(!v2.groups.some((g) => g.line === term));
+  const v2 = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: answerRest(r, []), keptTerms: [term] } as Parameters<typeof buildFinishView>[0]);
+  const card2 = v2.groups.find((g) => (g as { target?: string }).target === "skillset") as { terms?: string[] } | undefined;
+  assert.ok(card2 && !card2.terms!.includes(term) && card2.terms!.length === terms.length - 1);
 });
 
 // ---- S3 ------------------------------------------------------------------------
