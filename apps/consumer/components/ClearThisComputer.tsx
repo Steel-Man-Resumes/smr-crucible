@@ -12,7 +12,7 @@
  * memory either.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Eraser } from "lucide-react";
 import { clearThisComputer, useForgeSession } from "@/lib/forge-context";
@@ -46,8 +46,12 @@ export function ClearThisComputerButton() {
   const { status } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The saved run lives in browser storage, which the server never sees.
+  // Decide after mount so the server and first browser render match.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!hasForgeWork(session as Record<string, unknown>)) return null;
+  if (!mounted || !hasForgeWork(session as Record<string, unknown>)) return null;
 
   if (confirming) {
     return (
