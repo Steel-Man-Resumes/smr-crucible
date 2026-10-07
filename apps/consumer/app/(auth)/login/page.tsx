@@ -10,7 +10,7 @@
  * 4. From Forge: defaults to "Create Account" mode
  */
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, type CSSProperties } from "react";
 import { signIn, signOut } from "next-auth/react";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
@@ -35,6 +35,26 @@ export default function LoginPage() {
 }
 
 type Mode = "sign-in" | "create" | "magic-link";
+
+// The SMR site's workshop palette (its locked t-* values), applied to this page
+// only so the Refinery front door looks like the site that sends people here.
+// Every t-* class below picks these up; nothing else in the app changes.
+const WORKSHOP_SCOPE = {
+  "--t-bg": "#121110",
+  "--t-panel": "#1a1815",
+  "--t-panel-2": "#201d18",
+  "--t-panel-3": "#28231c",
+  "--t-line": "#3a352c",
+  "--t-line-strong": "#5a5246",
+  "--t-amber": "#b98b32",
+  "--t-amber-bright": "#dbc173",
+  "--t-phos": "#9fbf8f",
+  "--t-phos-dim": "#b9b3a0",
+  "--t-white": "#ece7d9",
+  "--t-bone-dim": "#b9b3a0",
+  "--t-red": "#d9392a",
+  "--t-red-bright": "#d9392a",
+} as CSSProperties;
 
 // Same-origin relative path only (lib/safe-path.ts). Keeps an honored
 // callbackUrl from ever becoming an open redirect. Auth.js also rejects
@@ -339,9 +359,9 @@ function LoginForm() {
   // ─── Magic link sent confirmation ─────────────────────────────────────
   if (magicLinkSent) {
     return (
-      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
-        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5]">
+      <main style={WORKSHOP_SCOPE} className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="w-full max-w-md border border-t-line bg-t-panel p-6 text-center sm:p-8">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center border border-t-amber bg-t-panel-2">
             <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-t-amber">
               <rect x="2" y="4" width="14" height="10" rx="0" stroke="currentColor" strokeWidth="1.3" />
               <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -374,11 +394,11 @@ function LoginForm() {
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms));
 
   return (
-    <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
-      <div className="app-panel w-full max-w-md p-6 sm:p-8">
+    <main style={WORKSHOP_SCOPE} className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
+      <div className="w-full max-w-md border border-t-line bg-t-panel p-6 shadow-[4px_4px_0_#000] sm:p-8">
         <div className="mb-6">
-          <p className="app-eyebrow mb-2 text-[#4f6b57]">Private career workspace</p>
-          <h1 className="text-2xl font-semibold text-t-white">
+          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">/refinery</p>
+          <h1 className="font-display text-2xl font-bold uppercase text-t-white">
             {mode === "create"
               ? "Create your Refinery account"
               : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
@@ -642,7 +662,7 @@ function LoginForm() {
           )}
 
           {/* Submit */}
-          <TBtn type="submit" disabled={submitDisabled} className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]">
+          <TBtn type="submit" disabled={submitDisabled} className="w-full !text-[#14100a]">
             {sending
               ? "Working..."
               : mode === "create"
@@ -722,7 +742,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => handleDevLogin("client", true)}
                 disabled={sending}
-                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line-strong bg-t-panel-2 px-4 py-3 text-sm font-medium text-t-white transition-colors hover:bg-t-panel-3 disabled:opacity-40"
+                className="t-focus min-h-touch w-full border border-t-line-strong bg-t-panel-2 px-4 py-3 text-sm font-medium text-t-white transition-colors hover:bg-t-panel-3 disabled:opacity-40"
               >
                 Fresh Client Run
               </button>
@@ -731,7 +751,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("client")}
                   disabled={sending}
-                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
+                  className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Client Login
                 </button>
@@ -739,7 +759,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("admin")}
                   disabled={sending}
-                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
+                  className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Admin Login
                 </button>
@@ -751,7 +771,7 @@ function LoginForm() {
                   window.location.href = "/intro";
                 }}
                 disabled={sending}
-                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white disabled:opacity-40"
+                className="t-focus min-h-touch w-full border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white disabled:opacity-40"
               >
                 Reset Local Flow Only
               </button>

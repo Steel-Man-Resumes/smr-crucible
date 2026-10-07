@@ -1,45 +1,37 @@
 "use client";
 
+/**
+ * JourneyProgressBanner -- one quiet line on the tool pages that says which of
+ * the six steps you are on and what comes next.
+ *
+ * It uses the same step names and the same next-step engine as the dashboard
+ * (StageProgressBar + NextStepCard), so the two never disagree. The old version
+ * had its own percent bar and its own four step names ("Forge, Profile, Resume,
+ * Practice"), which read as a second, different answer. The dashboard home does
+ * not show this line: it already has the full step list and the next-step card.
+ */
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { OnboardingState } from "@/lib/useOnboarding";
+import { useUserTier } from "@/lib/useUserTier";
+import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
+import {
+  JOURNEY_STAGES,
+  JOURNEY_STEP_COUNT,
+  arcStageForNextStep,
+  stepPositionLabel,
+} from "@crucible/core/src/journeyStages";
 
 const SKIP_PREFIXES = ["/dashboard/settings", "/dashboard/admin", "/dashboard/partner"];
 
-// Each stage states the path (cta/href), the payoff (why bother), and the next
-// step -- a bare percentage tells the user nothing about how to move it.
-const STAGES: Record<
-  string,
-  { progress: number; activeStep: number; next: string; cta: string; href: string; payoff: string }
-> = {
-  needs_profile: {
-    progress: 25,
-    activeStep: 1,
-    next: "Complete your profile to unlock the full Refinery.",
-    cta: "Finish my profile",
-    href: "/dashboard",
-    payoff: "Takes about 2 minutes. Unlocks the job board and your saved materials.",
-  },
-  needs_resume: {
-    progress: 50,
-    activeStep: 2,
-    next: "Find a job and build your targeted resume to unlock all tools.",
-    cta: "Open the job board",
-    href: "/dashboard/jobs",
-    payoff:
-      "Tailoring your resume to one real job unlocks interview practice, disclosure planning, and application tracking.",
-  },
-  full_access: {
-    progress: 75,
-    activeStep: 3,
-    next: "Practice your disclosure and interview prep. Every rep builds confidence.",
-    cta: "Start practicing",
-    href: "/dashboard/interview",
-    payoff: "Everything is unlocked. The last 25% is reps. Practice until it feels easy.",
-  },
-};
-
-const STEP_LABELS = ["Forge", "Profile", "Resume", "Practice"];
+interface NextStepLite {
+  stage: number;
+  action: string;
+  href: string;
+  reason?: string;
+}
 
 interface Props {
   state: OnboardingState;
@@ -47,94 +39,87 @@ interface Props {
 
 export function JourneyProgressBanner({ state }: Props) {
   const pathname = usePathname();
+  const tier = useUserTier();
+  const [next, setNext] = useState<NextStepLite | null>(null);
 
-  if (state === "loading") return null;
-  // The overview already has the stage arc and the "Your next step" card, which
-  // say the same thing in other words ("50% complete" next to "Foundation" read
-  // as two different answers). Show this banner on the other pages only.
-  if (pathname === "/dashboard") return null;
-  if (SKIP_PREFIXES.some((p) => pathname.startsWith(p))) return null;
+  const hidden =
+    state === "loading" ||
+    tier !== "client" ||
+    pathname === "/dashboard" ||
+    SKIP_PREFIXES.some((p) => pathname.startsWith(p));
 
-  const stage = STAGES[state];
-  if (!stage) return null;
+  useEffect(() => {
+    if (hidden || state === "needs_profile") return;
+    let cancelled = false;
+    function load() {
+      fetch("/api/next-step", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!cancelled && j?.data) setNext(j.data as NextStepLite);
+        })
+        .catch(() => {});
+    }
+    load();
+    window.addEventListener(NEXT_STEP_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NEXT_STEP_CHANGED_EVENT, load);
+    };
+  }, [hidden, state, pathname]);
 
+  if (hidden) return null;
+
+  // Profile not saved yet: nothing else is open, so say that plainly.
+  if (state === "needs_profile") {
+    return (
+      <Strip
+        position="Before step 1"
+        label="Save your profile"
+        href="/dashboard"
+        cta="Finish your profile"
+      />
+    );
+  }
+
+  if (!next) return null;
+
+  const arc = next.stage === 0 ? 0 : arcStageForNextStep(next);
+  const inArc = arc >= 1 && arc <= JOURNEY_STEP_COUNT;
   return (
-    <div className="mb-6 bg-t-panel border border-t-line px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold text-t-phos-dim uppercasest">
-          Your Refinery Journey
+    <Strip
+      position={stepPositionLabel(arc)}
+      label={inArc ? JOURNEY_STAGES[arc].short : next.action}
+      href={next.href}
+      cta={next.action}
+    />
+  );
+}
+
+function Strip({
+  position,
+  label,
+  href,
+  cta,
+}: {
+  position: string;
+  label: string;
+  href: string;
+  cta: string;
+}) {
+  return (
+    <div className="mb-6 flex flex-col gap-2 border border-t-line bg-t-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-t-white">
+        <span className="font-term text-[11px] font-semibold uppercase text-t-bone-dim">
+          {position}
         </span>
-        <span className="text-xs font-semibold text-t-amber-bright">
-          {stage.progress}% complete
-        </span>
-      </div>
-
-      {/* Bar */}
-      <div className="h-1.5 bg-t-line overflow-hidden mb-3">
-        <div
-          className="h-full bg-t-amber transition-all duration-700"
-          style={{ width: `${stage.progress}%` }}
-        />
-      </div>
-
-      {/* Steps */}
-      <div className="flex justify-between mb-2 px-1">
-        {STEP_LABELS.map((label, i) => {
-          const done = i < stage.activeStep;
-          const active = i === stage.activeStep;
-          return (
-            <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
-              <div
-                className={`w-5 h-5 border text-[9px] font-bold flex items-center justify-center transition-colors ${
-                  done
-                    ? "bg-t-amber border-t-amber text-white"
-                    : active
-                      ? "bg-t-panel-2 border-t-amber text-t-amber-bright"
-                      : "bg-t-panel border-t-line text-t-bone-dim"
-                }`}
-              >
-                {done ? (
-                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                    <path
-                      d="M1 3.5l2.5 2.5L8 1"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span
-                className={`text-[9px] text-center leading-tight ${
-                  done
-                    ? "text-t-amber-bright font-medium"
-                    : active
-                      ? "text-t-white font-semibold"
-                      : "text-t-bone-dim"
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="font-body text-[11px] text-t-bone-dim text-center">{stage.next}</p>
-      <div className="mt-2 flex flex-col items-center gap-1">
-        <Link
-          href={stage.href}
-          className="t-focus inline-block px-3 py-1.5 bg-t-amber text-white text-[11px] font-bold hover:bg-t-amber-bright transition-colors"
-        >
-          {stage.cta}
-        </Link>
-        <p className="font-body text-[10px] text-t-bone-dim text-center max-w-md">
-          {stage.payoff}
-        </p>
-      </div>
+        <span className="ml-2 font-semibold">{label}</span>
+      </p>
+      <Link
+        href={href}
+        className="t-focus inline-flex items-center text-sm font-semibold text-t-amber-bright hover:underline"
+      >
+        {cta === label ? "Go to this step" : `Next: ${cta}`}
+      </Link>
     </div>
   );
 }

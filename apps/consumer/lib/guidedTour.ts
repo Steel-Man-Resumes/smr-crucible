@@ -56,3 +56,45 @@ export function canDeferTour(state: TourState | null): boolean {
 export function canCloseTour(state: TourState | null): boolean {
   return !!state && state.tourComplete;
 }
+
+/**
+ * What the tour teaches. REAL tools only: each entry points at a page that
+ * exists today (a test checks the file is there). Planned tools are named once,
+ * plainly, in TOUR_NOT_BUILT_YET and never get a row of their own.
+ */
+export interface TourTool {
+  name: string;
+  line: string;
+  /** Route segment under /dashboard/ that the tool lives at. */
+  segment: string;
+}
+
+export const TOUR_TOOLS: readonly TourTool[] = [
+  { name: "Job Board", line: "Find a real job, then tap Tailor My Resume for This Job.", segment: "jobs" },
+  { name: "Application Tailor", line: "Aims your resume at one job, with a cover letter and a disclosure brief.", segment: "application-tailor" },
+  { name: "Library", line: "Every resume and letter you make, saved in one place.", segment: "vault" },
+  { name: "Disclosure Planner", line: "Plan what to say about your record, and practice it out loud.", segment: "disclosure" },
+  { name: "Interview Prep", line: "Mock interviews by text or voice, with feedback.", segment: "interview" },
+  { name: "Vault", line: "A private place for your ID, certificates and reference letters.", segment: "documents" },
+  { name: "Applications", line: "Track each job from saved to offered.", segment: "applications" },
+];
+
+/**
+ * Settings features the tour names. `proof` is text that must appear in the
+ * named source file, so a rename or removal there fails a test here.
+ */
+export interface TourSettingsPick {
+  name: string;
+  line: string;
+  proofFile: string;
+  proofText: string;
+}
+
+export const TOUR_SETTINGS_PICKS: readonly TourSettingsPick[] = [
+  { name: "Your coach", line: "Name it, and pick how warm or direct it is.", proofFile: "components/CoachSettingsSection.tsx", proofText: "Coaching style" },
+  { name: "Why t.ROY suggested things", line: "See the reason behind each suggestion it made.", proofFile: "components/DecisionLogViewer.tsx", proofText: "Why t.ROY suggested things" },
+  { name: "What a partner can see", line: "You choose what a partner organization sees of your progress.", proofFile: "components/SharingConsentSection.tsx", proofText: "SETTINGS_SHARING_TEXT" },
+];
+
+export const TOUR_NOT_BUILT_YET =
+  "On the list, not built yet: one-click apply, an employer map, a resources map.";

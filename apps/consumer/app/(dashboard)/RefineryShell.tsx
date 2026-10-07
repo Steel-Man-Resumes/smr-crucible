@@ -34,6 +34,7 @@ import { useUserContext } from "@/lib/use-user-context";
 // client bundle -- see @crucible/core/src/gateRank).
 import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 import { previewIdForHref } from "@/lib/featurePreviews";
+import { lockedToolLine } from "@crucible/core/src/journeyStages";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LockKeyhole, LogOut, Menu, Sparkles, X } from "lucide-react";
 
@@ -619,13 +620,13 @@ export function RefineryShell({
             const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
             const isActive = pathname === item.href;
 
-            // Human-readable lock reason
-            const lockReason = (() => {
-              if (onboarding.state === "needs_profile") return "Complete your profile to unlock";
-              if (onboarding.state === "needs_resume") return "Build a targeted resume to unlock";
-              if (item.requiresDisclosure && !onboarding.disclosureComplete) return "Complete the Disclosure Planner to unlock";
-              return "Keep going to unlock this";
-            })();
+            // One plain line: what is locked and what opens it (RD4). Shown under
+            // the label so it reads on a phone, not only as a hover tooltip.
+            const lockLine = lockedToolLine({
+              state: onboarding.state,
+              requiresDisclosure: item.requiresDisclosure,
+              disclosureComplete: onboarding.disclosureComplete,
+            });
 
             if (!unlocked) {
               // Phase 4.1: no dead ends. A locked tool that has a preview becomes
@@ -634,28 +635,36 @@ export function RefineryShell({
               // still enforces the gate at action depth. Tools with no preview
               // entry keep the plain locked affordance.
               const previewId = previewIdForHref(item.href);
+              const lockedLabel = (
+                <span className="min-w-0">
+                  <span className="block">{navItemLabel(item)}</span>
+                  <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">
+                    {lockLine}
+                  </span>
+                </span>
+              );
               if (previewId) {
                 return (
                   <Link
                     key={item.href}
                     href={`/dashboard/preview/${previewId}`}
                     onClick={onItemClick}
-                    title={`${lockReason}. See a preview.`}
-                    className="t-focus flex min-h-[40px] items-center justify-between rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#9ca29b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
+                    title={`${lockLine} See a preview.`}
+                    className="t-focus flex min-h-[40px] items-start justify-between gap-2 rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#6b726b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
                   >
-                    <span>{navItemLabel(item)}</span>
-                    <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
+                    {lockedLabel}
+                    <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
                   </Link>
                 );
               }
               return (
                 <div
                   key={item.href}
-                  className="flex min-h-[40px] cursor-not-allowed select-none items-center justify-between rounded-[4px] px-3 py-2 text-sm text-[#9ca29b]"
-                  title={lockReason}
+                  className="flex min-h-[40px] cursor-not-allowed select-none items-start justify-between gap-2 rounded-[4px] px-3 py-2 text-sm text-[#6b726b]"
+                  title={lockLine}
                 >
-                  <span>{navItemLabel(item)}</span>
-                  <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
+                  {lockedLabel}
+                  <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
                 </div>
               );
             }

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * JourneyHeader -- the top of the Refinery dashboard for the seven-stage journey.
+ * JourneyHeader -- the top of the Refinery dashboard: the six plain steps plus the next step.
  *
  * Owns the single /api/next-step fetch and renders the stage progress bar plus
  * the next-step card from one round trip. Renders nothing until loaded and
@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { NextStepCard, type NextStep } from "@/components/NextStepCard";
 import { StageProgressBar } from "@/components/StageProgressBar";
 import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
-import { arcStageForNextStep } from "@crucible/core/src/journeyStages";
+import { arcStageForNextStep, whyForNextStep } from "@crucible/core/src/journeyStages";
 
 export function JourneyHeader() {
   const [next, setNext] = useState<NextStep | null>(null);
@@ -64,19 +64,24 @@ export function JourneyHeader() {
 
   if (loading || !next) return null;
 
+  // The card always carries the plain reason. The AI-phrased line, when it
+  // arrives and says something different, sits under "More on this step".
+  const plainWhy = whyForNextStep(next);
+  const extraWhy = why && why.trim() !== plainWhy ? why : null;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <StageProgressBar currentStage={arcStageForNextStep(next)} />
-      <NextStepCard next={next} />
-      {why && (
-        <details className="group -mt-1 px-1">
-          <summary className="t-focus inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-t-phos-dim hover:text-t-white">
-            <span>Why this step?</span>
+      <NextStepCard next={next} why={plainWhy} />
+      {extraWhy && (
+        <details className="group px-1">
+          <summary className="t-focus inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-t-bone-dim hover:text-t-white">
+            <span>More on this step</span>
             <span className="transition-transform group-open:rotate-90" aria-hidden="true">
               &rsaquo;
             </span>
           </summary>
-          <p className="mt-2 max-w-2xl text-sm text-t-phos-dim leading-relaxed">{why}</p>
+          <p className="mt-2 max-w-2xl text-sm text-t-bone-dim leading-relaxed">{extraWhy}</p>
         </details>
       )}
     </div>
