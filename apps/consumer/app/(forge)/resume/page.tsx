@@ -23,6 +23,50 @@ import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
 import { forgeUploadErrorMessage } from "@/lib/forge-upload-error";
+import { datedJobs, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
+import type { ForgeSessionData } from "@/lib/forge-context";
+
+/**
+ * "Is this right?": the jobs and dates we read, shown back so the person
+ * confirms them instead of typing them again (lib/forge-path.ts, rule R3).
+ */
+function JobsToConfirm({ jobs, heading }: { jobs: ConfirmJob[]; heading: string }) {
+  return (
+    <section className="mb-4 border border-t-line bg-t-panel" aria-labelledby="jobs-to-confirm" data-testid="jobs-to-confirm">
+      <h2 id="jobs-to-confirm" className="border-b border-t-line bg-t-panel-2 px-4 py-2.5 text-sm font-semibold text-t-white">
+        {heading}
+      </h2>
+      <ul className="divide-y divide-t-line">
+        {jobs.map((j, i) => (
+          <li key={i} className="px-4 py-3">
+            <p className="font-medium text-t-white">
+              {j.title || j.company}
+              {j.title && j.company && <span className="font-normal text-t-phos"> at {j.company}</span>}
+            </p>
+            <p className="mt-0.5 font-term text-xs text-t-phos-dim">
+              {j.start} to {j.end || "now"}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const jobsFromProfile = (profile: any): ConfirmJob[] =>
+  datedJobs(
+    (Array.isArray(profile?.work_history) ? profile.work_history : []).map((w: any) => ({
+      title: w?.title,
+      company: w?.company,
+      start: w?.start_date,
+      end: w?.end_date,
+    }))
+  );
+
+const jobsFromDoc = (doc: ResumeDocument | undefined): ConfirmJob[] =>
+  datedJobs(
+    (doc?.experience ?? []).map((e) => ({ title: e.title, company: e.company, start: e.startDate, end: e.endDate }))
+  );
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -86,6 +130,15 @@ export default function ResumeIntakePage() {
   // Phase 7: once ingest yields material, drop the user into the structured
   // base-resume builder (the Build stage) instead of routing straight on.
   const [builderDoc, setBuilderDoc] = useState<ResumeDocument | null>(null);
+  // A saved resume is confirmed, not asked for again. "Use a different one"
+  // opens the chooser without erasing the saved one until a new one lands.
+  const [replacing, setReplacing] = useState(false);
+
+  /** Save, then go where this person's path goes next (not always goals). */
+  function continueWith(updates: Partial<ForgeSessionData>) {
+    updateSession(updates);
+    router.push(nextPath(planForgePath({ ...session, ...updates }), "resume"));
+  }
 
   // All hooks must be declared before any conditional returns (rules-of-hooks)
   const handleFile = useCallback(
@@ -190,15 +243,14 @@ export default function ResumeIntakePage() {
         title="Resume received."
         subtitle="We extracted experience, skills, and education from the sample resume."
         actionLabel="Next"
-        onAction={() => {
-          updateSession({
+        onAction={() =>
+          continueWith({
             resumeText: DEMO_SESSION.resumeText,
             resumeFileName: DEMO_SESSION.resumeFileName,
             resumeMethod: DEMO_SESSION.resumeMethod,
             lastPageVisited: "resume",
-          });
-          router.push("/goals");
-        }}
+          })
+        }
         showBack
         onBack={() => router.push("/welcome")}
       >
@@ -228,10 +280,7 @@ export default function ResumeIntakePage() {
         title="We already have your resume."
         subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis, so you don't need to enter it again."
         actionLabel="Continue"
-        onAction={() => {
-          updateSession({ lastPageVisited: "resume" });
-          router.push("/goals");
-        }}
+        onAction={() => continueWith({ lastPageVisited: "resume" })}
         showBack
         onBack={() => router.push("/welcome")}
         footer={
@@ -265,12 +314,11 @@ export default function ResumeIntakePage() {
   // Persist the finished base resume into the Forge session (structured doc +
   // a refreshed plain-text copy for the downstream analysis), then continue.
   function finishBuilder(doc: ResumeDocument) {
-    updateSession({
+    continueWith({
       resumeDoc: doc,
       resumeText: formatResumeDownload(doc),
       lastPageVisited: "resume",
     });
-    router.push("/goals");
   }
 
   // --- Skip option for "I don't have a resume" ---
@@ -304,11 +352,17 @@ export default function ResumeIntakePage() {
       );
     };
 
+    const readJobs = jobsFromProfile(parsedProfile);
+
     return (
       <FlowPage
         title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
-        subtitle="Check that we read it correctly before moving on."
-        actionLabel="Looks good, continue"
+        subtitle={
+          readJobs.length
+            ? "Is this right? These are the jobs and dates we read. You fix anything off on the next screen."
+            : "Check that we read it correctly before moving on."
+        }
+        actionLabel={readJobs.length ? "Yes, that's right" : "Looks good, continue"}
         onAction={commitAndContinue}
         showBack
         onBack={() => {
@@ -316,6 +370,9 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
       >
+        {/* The question this screen asks first: are these your jobs and dates? */}
+        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading="Your jobs" />}
+
         {/* Grounding gauge -- the honest contract: how much true material we have. */}
         {parsedProfile && (
           <GroundingGauge score={computeGrounding(jobsFromParsedProfile(parsedProfile))} />
@@ -402,6 +459,50 @@ export default function ResumeIntakePage() {
     );
   }
 
+  // --- A resume is already saved (coming back, or returning later) ---
+  if (!activePath && !replacing && resumeVariant(session) === "saved") {
+    const savedJobs = jobsFromDoc(session.resumeDoc);
+    return (
+      <FlowPage
+        title="We already have your resume."
+        subtitle={savedJobs.length ? "Is this still right?" : "No need to add it again."}
+        actionLabel="Yes, keep going"
+        onAction={() => continueWith({ lastPageVisited: "resume" })}
+        showBack
+        onBack={() => router.push("/welcome")}
+        footer={
+          <button
+            onClick={() => setReplacing(true)}
+            className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
+          >
+            Use a different resume
+          </button>
+        }
+      >
+        <GhostGuide message={getOpusMessage("resume", audience, false)} pageId="resume" />
+        {savedJobs.length > 0 ? (
+          <JobsToConfirm jobs={savedJobs} heading="Your jobs" />
+        ) : (
+          <div className="mb-4 border border-t-line bg-t-panel p-4">
+            <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-t-phos-dim">
+              {(session.resumeText || "").slice(0, 500)}
+              {(session.resumeText || "").length > 500 ? "..." : ""}
+            </p>
+          </div>
+        )}
+        {session.resumeDoc && (
+          <button
+            type="button"
+            onClick={() => setBuilderDoc(session.resumeDoc!)}
+            className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-4 py-2.5 text-sm font-medium text-t-phos transition-colors hover:border-t-phos-dim hover:text-t-white"
+          >
+            Something&apos;s off: open it in the editor
+          </button>
+        )}
+      </FlowPage>
+    );
+  }
+
   // --- Path Selection ---
   if (!activePath) {
     return (
@@ -409,7 +510,7 @@ export default function ResumeIntakePage() {
         title="Do you have a resume?"
         subtitle="Any format works, even a photo of a paper copy."
         showBack
-        onBack={() => router.push("/welcome")}
+        onBack={() => (replacing ? setReplacing(false) : router.push("/welcome"))}
       >
         <GhostGuide
           message={getOpusMessage("resume", audience, false)}

@@ -17,6 +17,15 @@ export interface ForgeSessionData {
     | "preparation"
     | "action";
 
+  /**
+   * The person's own pick between the short path and the full one (welcome
+   * screen). Unset means the default for their readiness answer. See
+   * lib/forge-path.ts, rule R1.
+   */
+  pathChoice?: "light" | "full";
+  /** Offered screens the person chose to add to a short path ("story"). */
+  pathExtras?: string[];
+
   // Page 2: Resume
   resumeText?: string;
   resumeFileName?: string;

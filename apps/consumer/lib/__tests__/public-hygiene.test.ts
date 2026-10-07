@@ -12,6 +12,9 @@ const SKIP = new Set(["node_modules", ".next", "dist", ".turbo", "coverage"]);
 const EXT = /\.(ts|tsx|md|json|js|mjs|css)$/;
 // Built from pieces so this file does not match itself.
 const BANNED = new RegExp(`\\b${"to"}${"ri"}\\b|${"san"}${"ger"}`, "i");
+// The Forge location list is the US Census place list verbatim, and real US
+// towns share names with the banned words. It is generated data, not prose.
+const GENERATED_DATA = new Set([join("apps", "consumer", "public", "forge-data", "us-places-2020.v1.json")]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -29,6 +32,7 @@ describe("public source hygiene", () => {
     const hits: string[] = [];
     for (const top of ["apps", "packages", "services"]) {
       for (const f of walk(join(ROOT, top))) {
+        if (GENERATED_DATA.has(f.slice(ROOT.length + 1))) continue;
         const lines = readFileSync(f, "utf8").split("\n");
         lines.forEach((l, i) => {
           if (BANNED.test(l)) hits.push(`${f.slice(ROOT.length + 1)}:${i + 1}`);

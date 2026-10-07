@@ -18,12 +18,24 @@ import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import ForgeAccumulator from "@/components/ForgeAccumulator";
+import { ScheduleQuestion } from "@/components/forge/PreferenceQuestions";
+import { readSchedule, writeSchedule } from "@/lib/forge-preferences";
+import {
+  CREDENTIALS_KEY,
+  nextPath,
+  planForgePath,
+  previousPath,
+  questionsFor,
+  type PlannedQuestion,
+} from "@/lib/forge-path";
 
 const CHALLENGE_OPTIONS = [
   { id: "criminal_record", label: "Criminal record" },
   { id: "employment_gap", label: "Gap in employment" },
   { id: "recovery", label: "Recovery journey" },
   { id: "transportation", label: "Transportation challenges" },
+  // Brings the shift question to the top of preferences (forge-path R5).
+  { id: "childcare", label: "Childcare or family care" },
   { id: "housing", label: "Housing instability" },
   { id: "no_degree", label: "No degree or diploma" },
   { id: "health", label: "Health challenges" },
@@ -73,6 +85,16 @@ export default function StoryPage() {
     isDemo ? (DEMO_SESSION.challengeNarratives || {}) : (session.challengeNarratives || {})
   );
 
+  // Questions the goals brought here (forge-path R4), planned from the
+  // answers so far plus what is ticked on this screen right now.
+  const plan = planForgePath({ ...session, challenges: selected });
+  const story = questionsFor(plan, "story");
+  const tone = story.find((q) => q.id === "challenges")?.variant === "open" ? "open" : "direct";
+  const goalPrompts = isDemo ? [] : story.filter((q) => q.id === "schedule" || q.id === "credentials");
+  const initialSchedule = readSchedule(session.preferences?.schedule);
+  const [hours, setHours] = useState<string[]>(initialSchedule.hours);
+  const [shifts, setShifts] = useState<string[]>(initialSchedule.shifts);
+
   function toggleChallenge(id: string) {
     if (isDemo) return;
     setSelected((prev) =>
@@ -88,29 +110,89 @@ export default function StoryPage() {
         challengeNarratives: DEMO_SESSION.challengeNarratives,
         lastPageVisited: "story",
       });
-    } else {
-      updateSession({
-        challenges: selected,
-        criminalRecord: selected.includes("criminal_record")
-          ? crimRecord
-          : undefined,
-        challengeNarratives: narratives,
-        lastPageVisited: "story",
-      });
+      router.push("/preferences");
+      return;
     }
-    router.push("/preferences");
+    const updates = saveStory();
+    router.push(nextPath(planForgePath({ ...session, ...updates }), "story"));
+  }
+
+  /** Save this screen's answers (Continue and Back both keep them). */
+  function saveStory() {
+    const updates: Partial<typeof session> = {
+      challenges: selected,
+      criminalRecord: selected.includes("criminal_record")
+        ? crimRecord
+        : undefined,
+      challengeNarratives: narratives,
+      lastPageVisited: "story",
+    };
+    // A schedule asked here is the same answer preferences would store.
+    if (goalPrompts.some((q) => q.id === "schedule")) {
+      updates.preferences = { ...(session.preferences || {}), schedule: writeSchedule(hours, shifts) };
+    }
+    updateSession(updates);
+    return updates;
+  }
+
+  function renderGoalPrompt(q: PlannedQuestion) {
+    if (q.id === "schedule") {
+      return (
+        <div key="schedule" className="mb-6 border border-t-line bg-t-panel p-5">
+          <ScheduleQuestion
+            variant={q.variant}
+            hours={hours}
+            shifts={shifts}
+            setHours={setHours}
+            setShifts={setShifts}
+          />
+        </div>
+      );
+    }
+    if (q.id === "credentials") {
+      const trade = q.variant === "trade";
+      return (
+        <div key="credentials" className="mb-6" data-testid={`q-credentials-${q.variant}`}>
+          <label htmlFor="credentials-input" className="mb-1.5 block text-sm font-medium text-t-white">
+            {trade
+              ? "Getting back into your trade: do you hold a license, certificate or card for it?"
+              : "Any training, certificate or license you have, or are working on?"}{" "}
+            <span className="font-normal text-t-phos-dim">(optional)</span>
+          </label>
+          <p className="mb-2 text-xs text-t-phos-dim">
+            Say which one and whether it&apos;s current. Not sure? Say that. Your words, never a guess.
+          </p>
+          <textarea
+            id="credentials-input"
+            value={narratives[CREDENTIALS_KEY] || ""}
+            onChange={(e) => setNarratives({ ...narratives, [CREDENTIALS_KEY]: e.target.value })}
+            placeholder={trade ? "e.g., forklift card, expired 2021" : "e.g., food handler card, working on my GED"}
+            rows={2}
+            className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
+          />
+        </div>
+      );
+    }
+    return null;
   }
 
   const hasCriminalRecord = selected.includes("criminal_record");
 
   return (
     <FlowPage
-      title="What&apos;s in your way?"
-      subtitle="Check what applies. Skip what doesn&apos;t."
-      actionLabel={isDemo ? "Next" : (selected.length > 0 ? "Continue" : "Nothing right now, skip")}
+      title={tone === "open" && !isDemo ? "Anything making this harder?" : "What's in your way?"}
+      subtitle={
+        tone === "open" && !isDemo
+          ? "Tick what's true. Skip what isn't. You don't have to explain any of it."
+          : "Check what applies. Skip what doesn't."
+      }
+      actionLabel={isDemo ? "Next" : (selected.length > 0 || goalPrompts.length > 0 ? "Continue" : "Nothing right now, skip")}
       onAction={handleContinue}
       showBack
-      onBack={() => router.push("/goals")}
+      onBack={() => {
+        if (!isDemo) saveStory();
+        router.push(isDemo ? "/goals" : previousPath(plan, "story"));
+      }}
       footer={
         <p>
           Nothing leaves your device. We use this to find resources, not to
@@ -290,6 +372,14 @@ export default function StoryPage() {
             </div>
           );
         })}
+
+      {/* What the goals brought here, in the order the goals were picked */}
+      {goalPrompts.length > 0 && (
+        <div className="mt-8" data-testid="story-goal-prompts">
+          <p className="mb-3 text-sm text-t-phos-dim">From the goals you picked:</p>
+          {goalPrompts.map((q) => renderGoalPrompt(q))}
+        </div>
+      )}
     </FlowPage>
   );
 }
