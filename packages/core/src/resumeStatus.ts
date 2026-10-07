@@ -29,9 +29,6 @@
 import { RESUME_RULES_VERSION } from "./resumeRules";
 import {
   runMintCheck,
-  checkCredentialStatus,
-  checkCredentialUpgrade,
-  credentialLinesOf,
   hasCredentialStatus,
   linesOf,
   numbersIn,
@@ -42,6 +39,17 @@ import {
   type MintFinding,
   type MintSeverity,
 } from "./resumeMintCheckShared";
+import { stemOf, acronymsOf } from "./wordStem";
+import { normalizeDigits, numberTokens } from "./numberRead";
+import {
+  answerGivesCredentialType,
+  checkCredentials,
+  credentialAlreadyKnown,
+  credentialHomes,
+  credentialMentionsOf,
+  saidAbout,
+  type CredentialMention,
+} from "./credentialMentions";
 import {
   SECOND_CHECK_RULE,
   validateSecondCheckFindings,
@@ -119,6 +127,11 @@ export interface ResumeStatus {
   fixCount: number;
   /** The lines the defend step asks about. */
   defendLines: DefendLine[];
+  /**
+   * True when the page has explainable lines and every one of them is in the
+   * person's own words, so no line was picked just to fill the minimum.
+   */
+  allLinesInOwnWords: boolean;
   rulesVersion: string;
 }
 
@@ -185,20 +198,55 @@ export function contentWords(text: string): string[] {
     .filter((w) => w.length >= 3 && !ANSWER_STOP.has(w));
 }
 
+// Words that fill a sentence without saying anything about the line.
+const FILLER = new Set([
+  "job", "jobs", "work", "worked", "working", "day", "days", "every", "time", "times", "part", "duties", "duty",
+  "place", "old", "back", "stuff", "thing", "things", "many", "year", "years", "happened", "last", "week",
+  "weeks", "regular", "always", "lot", "lots", "one", "over", "here", "there", "then", "now", "much", "some",
+  "did", "able", "make", "made", "sure", "know", "knew", "think", "say", "said", "tell", "told",
+]);
+const TIME_RE = /\b(?:morning|mornings|night|nights|evening|afternoon|overnight|shift|shifts|weekend|weekends|weekday|weekdays|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|summer|winter|spring|fall|season|holiday|holidays|hour|hours|minute|minutes|month|months|daily|weekly|monthly)\b/i;
+// A place or a tool named after a preposition ("at the diner", "with a scanner", "using the POS").
+const PLACE_TOOL_RE = /\b(?:at|in|on|from|with|using|through|inside|behind)\s+(?:the|a|an|my|our|their|his|her)\s+[a-z]{3,}/i;
+
+/** True when an answer names something concrete: a number, a proper name, a time, or a place or tool. */
+function hasConcreteDetail(answer: string): boolean {
+  if (/\d/.test(answer) || TIME_RE.test(answer) || PLACE_TOOL_RE.test(answer)) return true;
+  // A capitalized word that does not start a sentence: a place, a company, a tool name.
+  return /(?<![.!?]\s|^)\b[A-Z][a-z]{2,}/.test(answer.trim().replace(/^\s*I\b/, "i"));
+}
+
 /**
- * True when a typed answer explains something: at least three content
- * words, not a bare yes, and at least one content word that is not already
- * in the line (an answer that only pastes the line back says nothing new).
+ * True when a typed answer explains something:
+ * - at least three content words that are not filler ("job", "work", "every day"),
+ * - not a bare yes,
+ * - at least one content word that is not already in the line (an answer that
+ *   only pastes the line back says nothing new),
+ * - and it says something about the line: one of its words shares a stem with
+ *   the line's own words, or it names a concrete detail (a place, a tool, a time).
+ * "That was part of my job duties." is a yes in a longer form, and does not count.
  */
 export function answerExplains(answer: string, line: string): boolean {
   const text = (answer || "").trim();
   if (!/[a-z0-9]/i.test(text) || NO_ANSWER_RE.test(text)) return false;
   const bare = text.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
   if (BARE_YES_RE.test(bare)) return false;
-  const words = contentWords(text);
+  const words = contentWords(text).filter((w) => !FILLER.has(w));
   if (words.length < 3) return false;
-  const lineStems = new Set(contentWords(stripBullet(line)).map(stem5));
-  return words.some((w) => !lineStems.has(stem5(w)));
+  const lineStems = new Set(contentWords(stripBullet(line)).filter((w) => !FILLER.has(w)).map(stemOf));
+  if (!words.some((w) => !lineStems.has(stemOf(w)))) return false;
+  return words.some((w) => lineStems.has(stemOf(w))) || hasConcreteDetail(text);
+}
+
+/**
+ * True when an answer talks about this text: one of its words (not filler)
+ * shares a stem with one of the text's words. Used where a concrete detail
+ * alone is not enough, because the question is about these exact words: a
+ * headline, a job title, a scope word.
+ */
+export function answerMentions(answer: string, text: string): boolean {
+  const want = new Set(contentWords(text).filter((w) => !FILLER.has(w)).map(stemOf));
+  return contentWords(answer).filter((w) => !FILLER.has(w)).some((w) => want.has(stemOf(w)));
 }
 
 /**
@@ -225,31 +273,28 @@ export function answerStands(a: DefendAnswer | undefined, line?: string, sourceT
 }
 
 /**
- * What a rewrite introduced over the line it replaced: content words whose
- * five-letter start is not in the replaced line, and numbers (digits or
- * number words) that are not in it. Punctuation, a status word already there,
- * or the written number typed back introduce nothing. Returned in the order
- * typed, one string.
+ * What a rewrite introduced: content words whose stem is not in the line it
+ * replaced and not anywhere in the writer's own documents (`writerText`),
+ * and numbers whose VALUE is in neither. A number or a word the writer put
+ * anywhere on the page or in the letter is never the person's, whichever line
+ * they type it into, even after the writer's line is cut. Punctuation, a
+ * status word already there, or the written number typed back introduce
+ * nothing. Returned in the order typed, one string.
  */
-export function introducedWords(rewrite: string, replaced: string): string {
-  const oldStems = new Set((replaced.toLowerCase().match(/[a-z]+/g) ?? []).map(stem5));
-  const oldNums = numbersIn(replaced);
+export function introducedWords(rewrite: string, replaced: string, writerText = ""): string {
+  const old = `${replaced}\n${writerText}`;
+  const oldStems = new Set((old.toLowerCase().match(/[a-z]+/g) ?? []).map(stemOf));
+  const oldNums = numbersIn(old);
   const out: string[] = [];
-  for (const tok of rewrite.match(/\$?\d[\d,]*(?:\.\d+)?[%kKxX+]?|[A-Za-z][A-Za-z'’]*/g) ?? []) {
-    if (/\d/.test(tok)) {
-      const ns = Array.from(numbersIn(tok));
-      if (ns.length && ns.some((n) => !oldNums.has(n))) out.push(tok);
-      continue;
-    }
-    const w = tok.toLowerCase();
-    const asNum = numbersIn(w);
-    if (asNum.size) {
-      if (Array.from(asNum).some((n) => !oldNums.has(n))) out.push(tok);
-      continue;
-    }
-    if (!oldStems.has(stem5(w))) out.push(tok);
+  const numberSpans = numberTokens(rewrite);
+  const inNumber = (i: number) => numberSpans.some((t) => i >= t.index && i < t.index + t.length);
+  for (const t of numberSpans) if (!oldNums.has(t.value)) out.push({ i: t.index, s: normalizeDigits(rewrite).slice(t.index, t.index + t.length) } as never);
+  const words: Array<{ i: number; s: string }> = out as never;
+  for (const m of rewrite.matchAll(/[A-Za-z][A-Za-z'’]*/g)) {
+    if (inNumber(m.index!)) continue;
+    if (!oldStems.has(stemOf(m[0]))) words.push({ i: m.index!, s: m[0] });
   }
-  return out.join(" ");
+  return words.sort((a, b) => a.i - b.i).map((w) => w.s).join(" ");
 }
 
 function credentialName(line: string): string {
@@ -258,41 +303,94 @@ function credentialName(line: string): string {
 
 /**
  * Share of a line's content words the person never used (0 = all theirs,
- * 1 = none theirs). Compared on a 5-letter start so "loaded" and "loading"
- * count as the same word.
+ * 1 = none theirs). Words are compared by stem ("loaded" and "loading",
+ * "carried" and "carry" are one word), and short all-caps words (RN, GM,
+ * LPN) count, because they carry a claim.
  */
 export function distanceFromSource(line: string, sourceText: string): number {
-  const h = (w: string) => w.slice(0, 5);
-  const src = new Set((sourceText.toLowerCase().match(/[a-z]+/g) ?? []).map(h));
-  const words = (stripBullet(line).toLowerCase().match(/[a-z]+/g) ?? []).filter(
-    (w) => w.length > 3 && !DISTANCE_STOP.has(w)
-  );
+  const src = new Set((sourceText.toLowerCase().match(/[a-z]+/g) ?? []).map(stemOf));
+  const body = stripBullet(line);
+  const words = [
+    ...(body.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length > 3 && !DISTANCE_STOP.has(w)),
+    ...acronymsOf(body).filter((a) => a.length <= 3).map((a) => a.toLowerCase()),
+  ];
   if (!words.length) return 0;
-  return words.filter((w) => !src.has(h(w))).length / words.length;
+  return words.filter((w) => !src.has(stemOf(w))).length / words.length;
 }
 
-/** The job titles on the page's own entry headers ("LINE COOK | Diner | 2019 - 2023" gives "line cook"). */
+const EXPERIENCE_HEADING_RE = /^(?:(?:professional |work |relevant )?experience|employment(?: history)?|work history)$/i;
+
+/** The title part of an entry header ("LINE COOK | Diner | 2019 - 2023" gives "LINE COOK"). */
+function titleOf(header: string): string {
+  return header.split(/\s*\|\s*|\s+(?:at|@)\s+/i)[0].trim();
+}
+
+/** The job titles on the page's own entry headers, below the first heading. */
 function pageJobTitles(resumeText: string): Set<string> {
   const titles = new Set<string>();
+  let seenHeading = false;
   for (const l of linesOf(resumeText)) {
-    if (!isEntryHeader(l)) continue;
-    const t = l.split(/\s[|,@]\s|\s+(?:at|-)\s+/i)[0].trim();
+    if (isSectionEnd(l)) { seenHeading = true; continue; }
+    if (!seenHeading || !isEntryHeader(l)) continue;
+    const t = titleOf(l);
     if (t) titles.add(squash(t));
   }
   return titles;
 }
 
+/** True when every word of a title is in the person's words, in any order ("cook, line" is "Line Cook"). */
+export function titleInOwnWords(title: string, sourceText: string): boolean {
+  const src = new Set((sourceText.toLowerCase().match(/[a-z]+/g) ?? []).map(stemOf));
+  const words = [
+    ...(title.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !DISTANCE_STOP.has(w) && !/^(?:and|the|for|of)$/.test(w)),
+    ...acronymsOf(title).filter((a) => a.length <= 2).map((a) => a.toLowerCase()),
+  ];
+  return words.every((w) => src.has(stemOf(w)));
+}
+
+/** The experience entry headers whose title is not in the person's words. */
+function titlesNotTheirs(resumeText: string, sourceText: string): string[] {
+  const out: string[] = [];
+  let inExperience = false;
+  for (const l of linesOf(resumeText)) {
+    if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); continue; }
+    if (!inExperience || !isEntryHeader(l)) continue;
+    const t = titleOf(l);
+    if (t && !titleInOwnWords(t, sourceText)) out.push(l);
+  }
+  return out;
+}
+
+/** The lines above the first section heading (after the name): the header block. */
+function headerLinesOf(resumeText: string): Set<string> {
+  const out = new Set<string>();
+  const ls = linesOf(resumeText);
+  for (let i = 1; i < ls.length; i++) {
+    if (isSectionEnd(ls[i])) break;
+    out.add(ls[i]);
+  }
+  return out;
+}
+
+/** A headline part claims nothing new when it names a job title on the page or uses only the person's words. */
+function headlinePartIsTheirs(part: string, titles: Set<string>, sourceText: string): boolean {
+  if (/\d/.test(part)) return false;
+  if (titles.has(squash(part))) return true;
+  return sourceText.trim() !== "" && distanceFromSource(part, sourceText) === 0 && numbersIn(part).size === 0;
+}
+
 /**
  * Lines a person could be asked to explain: not the name, contact, headings,
- * job headers or date lines. A short headline under the name is skipped only
- * when it claims nothing new: it is not a credential line, and it either
- * names a job title on the page ("Line Cook" over a Line Cook job) or every
- * content word is already in the person's own words.
+ * job headers or date lines. Everything above the first section heading is
+ * the header block, so a line with pipes there is a headline, never a job
+ * header. A headline is skipped only when it claims nothing new: no
+ * credential in it, and every pipe part names a job title on the page or uses
+ * only the person's own words.
  */
 function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; inSkills: boolean }> {
   const ls = linesOf(resumeText);
   const out: Array<{ line: string; inSkills: boolean }> = [];
-  const creds = new Set(credentialLinesOf(resumeText));
+  const credLines = new Set(credentialMentionsOf(resumeText).filter((m) => !m.term).map((m) => m.line));
   const titles = pageJobTitles(resumeText);
   let inSkills = false;
   let seenHeading = false;
@@ -300,17 +398,15 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
     if (i === 0) return; // the name
     if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; return; }
     if (isSectionEnd(l)) { inSkills = false; seenHeading = true; return; }
-    if (i === 0 || CONTACT_LINE_RE.test(l) || isEntryHeader(l) || isDateLine(l)) return;
-    // The header block's place line ("Dayton, OH") is contact, not a claim.
-    if (!seenHeading && (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l))) return;
-    if (
-      !seenHeading &&
-      !/\d/.test(l) &&
-      l.split(/\s+/).length <= 6 &&
-      !/[.;]$/.test(l) &&
-      !creds.has(l) &&
-      (titles.has(squash(l)) || (sourceText.trim() !== "" && distanceFromSource(l, sourceText) === 0 && numbersIn(l).size === 0))
-    ) return;
+    if (CONTACT_LINE_RE.test(l) || isDateLine(l)) return;
+    if (seenHeading && isEntryHeader(l)) return;
+    if (!seenHeading) {
+      // The header block's place line ("Dayton, OH") is contact, not a claim.
+      if (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l)) return;
+      const parts = l.split(/\s*\|\s*/).filter(Boolean);
+      const short = parts.every((p) => p.split(/\s+/).length <= 6) && !/[.;]$/.test(l);
+      if (short && !credLines.has(l) && parts.every((p) => headlinePartIsTheirs(p, titles, sourceText))) return;
+    }
     out.push({ line: l, inSkills });
   });
   return out;
@@ -362,12 +458,16 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
   }
 }
 
+/** New question (round 2): a credential the person never mentioned. Only a change or a cut settles it. */
+export const CREDENTIAL_UNSAID_QUESTION =
+  "We can't find this credential in anything you told us. If you hold it, change the line to say it the way your card or papers do. If you don't, cut it.";
+
 const DESCRIBE_UNSOURCED =
   "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
 
-function questionForDefend(line: string, reasons: DefendReason[], sourceText: string): string {
+function questionForDefend(line: string, reasons: DefendReason[], sourceText: string, credName?: string): string {
   if (reasons.includes("credential")) {
-    return `Was "${credentialName(line)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+    return `Was "${clip(credName || credentialName(line), 50)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
   }
   if (reasons.includes("number")) {
     // Never ask a person to defend a number they did not give: that plants it.
@@ -395,34 +495,63 @@ export function pickDefendLines(
   sourceText: string,
   opts: { minFurthest?: number } = {}
 ): DefendLine[] {
+  return pickDefend(resumeText, sourceText, opts).lines;
+}
+
+function pickDefend(
+  resumeText: string,
+  sourceText: string,
+  opts: { minFurthest?: number } = {}
+): { lines: DefendLine[]; allOwn: boolean; header: Set<string> } {
   const minFurthest = opts.minFurthest ?? 2;
   const body = bodyLines(resumeText || "", sourceText || "");
-  const creds = new Set(credentialLinesOf(resumeText || ""));
+  const mentions = credentialMentionsOf(resumeText || "");
+  const credLines = new Set(mentions.filter((m) => !m.term).map((m) => m.line));
+  // Each credential is asked about once, by its own name, at its home line
+  // (or its skills term). Not at all when the person's words already give its
+  // type and a year or status.
+  const credHome = new Map<string, CredentialMention>();
+  for (const m of credentialHomes(mentions)) {
+    if (credentialAlreadyKnown(m, sourceText || "")) continue;
+    // Never mentioned: its BLOCK asks for a change or a cut; a type question would be noise.
+    if (!saidAbout(m, sourceText || "").length) continue;
+    if (!credHome.has(m.line)) credHome.set(m.line, m);
+  }
   const picked = new Map<string, Set<DefendReason>>();
   const add = (l: string, r: DefendReason) => {
     if (!picked.has(l)) picked.set(l, new Set());
     picked.get(l)!.add(r);
   };
 
+  for (const m of credHome.values()) add(m.line, "credential");
   for (const { line, inSkills } of body) {
-    if (creds.has(line)) add(line, "credential");
-    else if (!inSkills && numbersIn(line).size > 0) add(line, "number");
+    if (!inSkills && !credLines.has(line) && numbersIn(line).size > 0) add(line, "number");
   }
 
-  const rest = body
-    .filter(({ line, inSkills }) => !inSkills && !picked.has(line))
-    .map(({ line }, i) => ({ line, i, d: distanceFromSource(line, sourceText || "") }))
+  // The minimum fills only with lines that differ from the person's words;
+  // a line in their own words is never asked just to make up the count.
+  const candidates = body
+    .filter(({ line, inSkills }) => !inSkills && !credLines.has(line))
+    .map(({ line }, i) => ({ line, i, d: distanceFromSource(line, sourceText || "") }));
+  const rest = candidates
+    .filter((c) => !picked.has(c.line) && c.d > 0)
     .sort((a, b) => b.d - a.d || a.i - b.i)
     .slice(0, minFurthest);
   for (const r of rest) add(r.line, "far_from_your_words");
 
-  const order = body.map((b) => b.line);
-  return Array.from(picked.entries())
-    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+  const order = [...mentions.map((m) => m.line), ...body.map((b) => b.line)];
+  const pageOrder = linesOf(resumeText || "");
+  const posOf = (l: string) => {
+    const i = pageOrder.indexOf(l);
+    return i >= 0 ? i : pageOrder.findIndex((x) => x.includes(l));
+  };
+  const lines = Array.from(picked.entries())
+    .sort((a, b) => posOf(a[0]) - posOf(b[0]) || order.indexOf(a[0]) - order.indexOf(b[0]))
     .map(([line, reasons]) => {
       const rs = Array.from(reasons);
-      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "") };
+      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "", credHome.get(line)?.name) };
     });
+  return { lines, allOwn: candidates.length > 0 && candidates.every((c) => c.d === 0), header: headerLinesOf(resumeText || "") };
 }
 
 // ---- the contract ------------------------------------------------------------
@@ -454,13 +583,20 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     );
   }
 
-  const defendLines = resumeText.trim() ? pickDefendLines(resumeText, sourceText) : [];
+  const picks = resumeText.trim() ? pickDefend(resumeText, sourceText) : { lines: [] as DefendLine[], allOwn: false, header: new Set<string>() };
+  const defendLines = picks.lines;
+  const credentialLine = new Set(defendLines.filter((d) => d.reasons.includes("credential")).map((d) => squash(d.line)));
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
   const byLine = new Map(answers.map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
-    return answerStands(a, line, sourceText) ? a : undefined;
+    if (!answerStands(a, line, sourceText)) return undefined;
+    // A credential question is answered only by saying what kind it is.
+    if (credentialLine.has(squash(line)) && a!.kind !== "rewrite" && !answerGivesCredentialType(a!.answer)) return undefined;
+    // A headline is answered only by talking about what it says.
+    if (picks.header.has(line) && a!.kind !== "rewrite" && !answerMentions(a!.answer, line)) return undefined;
+    return a;
   };
 
   if (resumeText.trim() && sourceText.trim()) {
@@ -468,13 +604,59 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // A credential's missing status is settled only by that line's own
     // standing answer. A course written up as a certification is never
     // settled by an answer: the line changes, or the person's words do.
-    const status = checkCredentialStatus(resumeText, sourceText).filter((f) => {
-      const a = standingFor(f.line);
-      return !(a && hasCredentialStatus(a.answer));
-    });
-    const findings = [...mint.findings, ...checkCredentialUpgrade(resumeText, sourceText), ...status];
+    // Credentials, one at a time by name: never mentioned by the person
+    // (BLOCK, only a change or a cut), written up from a class (BLOCK), or
+    // with no year or status from anyone (FIX, settled by an answer that
+    // gives one).
+    const credentialFindings: MintFinding[] = [];
+    for (const c of checkCredentials(resumeText, sourceText)) {
+      const { mention: m } = c;
+      if (c.issue === "unsaid") {
+        credentialFindings.push({
+          rule: "STD-T03",
+          severity: "BLOCK",
+          line: m.line,
+          why: `"${clip(m.name, 50)}" isn't in anything you told us. A credential goes on the page only the way your card or papers say it.`,
+          kind: "credential_unsaid",
+        });
+      } else if (c.issue === "upgrade") {
+        credentialFindings.push({
+          rule: "STD-T03",
+          severity: "BLOCK",
+          line: m.line,
+          why: "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
+          kind: "credential_upgrade",
+        });
+      } else {
+        const a = standingFor(m.line);
+        if (a && hasCredentialStatus(a.answer)) continue;
+        credentialFindings.push({
+          rule: "STD-T03",
+          severity: "FIX",
+          line: m.line,
+          why: "We don't know this credential's type or status yet: license, certification or training, and current, expired or in progress.",
+          kind: "credential_status",
+        });
+      }
+    }
+    // A job title on the page that the person never used.
+    // Asked like a defend line, so only where there is a defend step.
+    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText) : [])
+      // Settled by an answer about the title itself ("my pay stubs say kitchen manager").
+      .filter((l) => {
+        const a = standingFor(l);
+        return !(a && answerMentions(a.answer, titleOf(l)));
+      })
+      .map((l) => ({
+        rule: "STD-C03",
+        severity: "BLOCK" as const,
+        line: l,
+        why: `"${clip(titleOf(l), 50)}" isn't a title in anything you told us. A title that doesn't match your paperwork comes up at the background check.`,
+        kind: "title_unsaid",
+      }));
+    const findings = [...mint.findings, ...credentialFindings, ...titleFindings];
     for (const f of findings) {
-      push(f.rule, f.severity, f.line, f.why, questionForFinding(f));
+      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? CREDENTIAL_UNSAID_QUESTION : questionForFinding(f));
       if (f.kind) items[items.length - 1].kind = f.kind;
     }
 
@@ -536,6 +718,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     blockCount,
     fixCount: openItems.length - blockCount,
     defendLines,
+    allLinesInOwnWords: picks.allOwn && !defendLines.some((d) => d.reasons.includes("far_from_your_words")),
     rulesVersion: RESUME_RULES_VERSION,
   };
 }
