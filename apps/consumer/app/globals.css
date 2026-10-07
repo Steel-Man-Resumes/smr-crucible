@@ -114,18 +114,20 @@
    scope. Put `forge-workshop` on any wrapper and every t-* token inside it takes
    the website's exact value, so t-panel / t-white / t-amber utilities flip
    together. Everything outside the scope keeps the light working baseline.
-   ForgeShell applies it to the front-door routes (WORKSHOP_PATHS). Values are
-   the website's locked hex; no new colors. */
+   ForgeShell applies it to the front-door routes (WORKSHOP_PATHS). This is the
+   single source for the workshop values: any page (for example the Refinery
+   login) should use the class instead of its own copy. Values are the
+   website's locked hex; no new colors. */
 .forge-workshop {
   --t-bg: #121110;
   --t-panel: #1a1815;
   --t-panel-2: #201d18;
   --t-panel-3: #28231c;
   --t-line: #3a352c;
-  --t-line-strong: #5a5244;
+  --t-line-strong: #5a5246;
   --t-amber: #b98b32;
   --t-amber-bright: #dbc173;
-  --t-phos: #ece7d9;
+  --t-phos: #9fbf8f;
   --t-phos-dim: #b9b3a0;
   --t-white: #ece7d9;
   --t-red: #d9392a;
@@ -136,6 +138,14 @@
   --foreground: #ece7d9;
   color: #ece7d9;
   background: #121110;
+}
+
+/* Pages written for the light baseline use `text-t-phos` for running body
+   text. Add this modifier next to `forge-workshop` on such a page so that text
+   reads as bone instead of CLI green. The Refinery login page uses the base
+   scope alone (green stays for its terminal fields). */
+.forge-workshop.forge-workshop--legacy-text {
+  --t-phos: #ece7d9;
 }
 
 /* Legacy light-surface utilities, remapped inside the scope so a page that
