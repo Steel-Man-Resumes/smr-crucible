@@ -170,7 +170,7 @@ export function looksLikePlace(text: string): boolean {
  * Competency/skills line: 4+ pipe/bullet parts, OR exactly 3 short parts.
  * A job header is never a competency line, however many parts it has: any
  * part that is a date ("2019 - 2021", "Present") or a place ("Milwaukee, WI")
- * marks it as a job header, so "Shift Lead | UPI | Milwaukee, WI" and the
+ * marks it as a job header, so "Shift Lead | Northgate Plastics | Milwaukee, WI" and the
  * four-part "TITLE | Company | City, State | Years" stay job headers.
  */
 export function isCompetencyLine(text: string): boolean {

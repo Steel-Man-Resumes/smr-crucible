@@ -185,13 +185,13 @@ test("classify: competency vs job-title disambiguation matches the route", () =>
 test("classify: three- and four-part job headers are never skills lines", () => {
   // The bug: three short parts counted as a skills list, so a job header with a
   // short title, employer and place was drawn like a skills line.
-  assert.equal(isCompetencyLine("Shift Lead | UPI | Milwaukee, WI"), false);
-  assert.equal(isCompetencyLine("Shift Lead | UPI | 2019 - Present"), false);
+  assert.equal(isCompetencyLine("Shift Lead | Northgate Plastics | Milwaukee, WI"), false);
+  assert.equal(isCompetencyLine("Shift Lead | Northgate Plastics | 2019 - Present"), false);
   assert.equal(isCompetencyLine("Line Cook | Coop Street | Milwaukee, Wisconsin"), false);
   // The four-part format the Forge writes: TITLE | Company | City, State | Years
   assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - Present"), false);
   assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - 2024"), false);
-  assert.equal(classifyResumeLine("Shift Lead | UPI | Milwaukee, WI"), "jobTitle");
+  assert.equal(classifyResumeLine("Shift Lead | Northgate Plastics | Milwaukee, WI"), "jobTitle");
   // Real skills lines still count as skills.
   assert.ok(isCompetencyLine("Safety | Lean | Scheduling"));
   assert.ok(isCompetencyLine("Forklift | Pallet jack | Inventory counts | Safety checks"));

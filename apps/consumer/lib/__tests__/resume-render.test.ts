@@ -112,8 +112,8 @@ test("model: every job header shape the Forge writes is read as a job", () => {
   assert.deepEqual(parseJobLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - Present", true), {
     title: "Warehouse Associate", rest: ["Acme Logistics", "Milwaukee, WI"], years: "2023 - Present",
   });
-  assert.deepEqual(parseJobLine("Shift Lead | UPI | Milwaukee, WI", true), {
-    title: "Shift Lead", rest: ["UPI", "Milwaukee, WI"], years: "",
+  assert.deepEqual(parseJobLine("Shift Lead | Northgate Plastics | Milwaukee, WI", true), {
+    title: "Shift Lead", rest: ["Northgate Plastics", "Milwaukee, WI"], years: "",
   });
   assert.deepEqual(parseJobLine("Operations Manager | Global Freight, 2016 - Present", true), {
     title: "Operations Manager", rest: ["Global Freight"], years: "2016 - Present",

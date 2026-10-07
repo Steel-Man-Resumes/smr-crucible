@@ -18,7 +18,7 @@ export const ONE_PAGE = [
   "",
   "PROFESSIONAL EXPERIENCE",
   "",
-  "Shift Lead | UPI | Milwaukee, WI",
+  "Shift Lead | Northgate Plastics | Milwaukee, WI",
   "- Ran a crew of six on second shift, assigned stations and covered breaks.",
   "- Checked item counts against the pick list and held an order for a recount instead of shipping a guess.",
   "",
