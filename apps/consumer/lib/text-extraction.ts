@@ -62,14 +62,30 @@ export class UnreadableDocumentError extends Error {
   }
 }
 
+/** Buffers already scanned and found safe, so each PDF is scanned once (hotfix F8). */
+const scannedSafe = new WeakSet<Buffer>();
+
 /** A PDF checked before any reader opens it (lib/upload-safety.ts); unsafe = unreadable. */
 function assertPdfSafe(buffer: Buffer) {
+  if (scannedSafe.has(buffer)) return;
   try {
     assertSafePdf(buffer);
+    scannedSafe.add(buffer);
   } catch (e) {
     if (e instanceof UnsafeUploadError) throw new UnreadableDocumentError(e.message);
     throw e;
   }
+}
+
+/** A zip archive (a .docx), by its first bytes. */
+function isZip(buffer: Buffer): boolean {
+  return buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
+}
+
+/** The file's extension for logs, never its name. */
+function fileKindForLog(name: string): string {
+  const m = /\.([a-z0-9]{1,5})$/.exec(name);
+  return m ? `.${m[1]}` : "(no extension)";
 }
 
 export async function extractTextFromBuffer(
@@ -79,7 +95,8 @@ export async function extractTextFromBuffer(
 ): Promise<string> {
   const name = fileName.toLowerCase();
 
-  console.log(`Extracting text from: ${name} (${mimeType})`);
+  // Never the file's name: it is usually the person's full name (hotfix F7).
+  console.log(`Extracting text: ${fileKindForLog(name)} (${mimeType}), ${buffer.length} bytes`);
 
   try {
     // PDF
@@ -104,14 +121,19 @@ export async function extractTextFromBuffer(
       name.endsWith(".docx") ||
       name.endsWith(".doc")
     ) {
-      try {
-        const text = await extractFromDOCX(buffer);
-        if (text.trim().length > MIN_EXTRACTED_CHARS) return text;
-      } catch (error) {
-        // A Word file that fails the safety check is refused, never read as
-        // loose text (security review 3a r2, H1).
-        if (error instanceof UnsafeUploadError) throw new UnreadableDocumentError(error.message);
-        console.log("DOCX extraction failed:", error);
+      // Only a zip (a real .docx) goes to mammoth. HTML or RTF saved as
+      // .doc, and .rtf files labelled msword, are read as text below, as
+      // before (hotfix F2).
+      if (isZip(buffer)) {
+        try {
+          const text = await extractFromDOCX(buffer);
+          if (text.trim().length > MIN_EXTRACTED_CHARS) return text;
+        } catch (error) {
+          // A Word file that fails the safety check is refused, never read as
+          // loose text (security review 3a r2, H1).
+          if (error instanceof UnsafeUploadError) throw new UnreadableDocumentError(error.message);
+          console.log("DOCX extraction failed:", error);
+        }
       }
       // Fallback: try as plain text
       const text = extractLikelyText(buffer);
