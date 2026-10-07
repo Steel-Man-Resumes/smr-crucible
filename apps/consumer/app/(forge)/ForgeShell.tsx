@@ -9,6 +9,7 @@ import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
 import { ClearThisComputerButton } from "@/components/ClearThisComputer";
 import { ShieldCheck, X } from "lucide-react";
+import { QuietShellProvider, useQuietShellState } from "./quiet-shell";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -24,6 +25,16 @@ const FORGE_STEPS = [
   { path: "/processing", label: "Processing" },
   { path: "/output", label: "Results" },
 ];
+
+/**
+ * Routes that wear the workshop palette (the SMR website's black, bone and
+ * brass, see `.forge-workshop` in globals.css). The working pages keep the
+ * light baseline until their owners opt in by adding their route here.
+ */
+export const WORKSHOP_PATHS = ["/intro", "/overview", "/partner", "/get-listed"];
+
+/** Routes that hide the shell chrome (quiet shell). Empty by default; a page can also call useQuietShell(). */
+export const QUIET_PATHS: string[] = [];
 
 // Pages that show the progress bar (not intro/welcome — those are entry gates)
 const PROGRESS_PATHS = FORGE_STEPS.map((s) => s.path);
@@ -68,45 +79,75 @@ function ForgeAssistant() {
   );
 }
 
-export function ForgeShell({ children }: { children: ReactNode }) {
+function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: boolean }) {
+  const pathname = usePathname();
+  const quietFromPage = useQuietShellState();
+  const quiet = quietProp || quietFromPage || QUIET_PATHS.includes(pathname);
+  const workshop = WORKSHOP_PATHS.includes(pathname);
+
   return (
-    <ForgeProvider>
+    <>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[5px] focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-xl"
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 border-b border-t-line bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6">
-          <ProductFamilyBrand product="forge" productHref="/" />
+      <header className="sticky top-0 z-30 border-b border-ws-bg/15 bg-ws-bone">
+        {/* Workshop tape: the brass strip from the SMR site */}
+        <div className="h-1 bg-ws-amber" aria-hidden="true" />
+        <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6">
+          <ProductFamilyBrand product="forge" productHref="/" className="py-1" />
           <div className="flex items-center gap-2 sm:gap-4">
-            <span className="hidden items-center gap-1.5 font-term text-[10px] text-t-bone-dim lg:flex">
-              <ShieldCheck size={14} aria-hidden="true" />
-              Private by design
-            </span>
+            {!quiet && (
+              <span className="hidden items-center gap-1.5 font-term text-[10px] text-t-bone-dim lg:flex">
+                <ShieldCheck size={14} aria-hidden="true" />
+                Private by design
+              </span>
+            )}
             <ClearThisComputerButton />
-            <a
-              href="https://steelmanresumes.com"
-              className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-t-line bg-white px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"
-              aria-label="Leave The Forge"
-            >
-              <X size={17} aria-hidden="true" />
-              <span className="hidden sm:inline">Leave</span>
-            </a>
+            {!quiet && (
+              <a
+                href="https://steelmanresumes.com"
+                className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-ws-bg/25 px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-ws-bg/60 hover:text-ws-bg"
+                aria-label="Leave The Forge"
+              >
+                <X size={17} aria-hidden="true" />
+                <span className="hidden sm:inline">Leave</span>
+              </a>
+            )}
           </div>
         </div>
-        <ForgeProgress />
+        {!quiet && <ForgeProgress />}
       </header>
-      <main id="main" className="min-h-[calc(100vh-72px)] bg-t-bg pb-32 sm:pb-8">
+      <main
+        id="main"
+        className={`min-h-[calc(100vh-72px)] bg-t-bg ${quiet ? "pb-8" : "pb-32 sm:pb-8"} ${
+          workshop ? "forge-workshop" : ""
+        }`}
+      >
         {/* Signed-in people who just joined an organization are asked once
             whether it may see their progress. Renders nothing for anyone else. */}
-        <JoinSharingPrompt />
+        {!quiet && <JoinSharingPrompt />}
         {children}
       </main>
 
-      {/* AI Assistant — available on every Forge page */}
-      <ForgeAssistant />
+      {/* AI Assistant: available on every Forge page except in quiet mode */}
+      {!quiet && <ForgeAssistant />}
+    </>
+  );
+}
+
+/**
+ * The Forge shell. `quiet` hides the chrome for the whole subtree (see
+ * quiet-shell.tsx for the per-page hook and the route list).
+ */
+export function ForgeShell({ children, quiet = false }: { children: ReactNode; quiet?: boolean }) {
+  return (
+    <ForgeProvider>
+      <QuietShellProvider>
+        <ForgeFrame quietProp={quiet}>{children}</ForgeFrame>
+      </QuietShellProvider>
     </ForgeProvider>
   );
 }

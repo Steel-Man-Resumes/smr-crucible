@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import { FlowPage, CardSelect, GhostGuide, TroyLivingIcon } from "@crucible/consumer-ui";
 
 type ReadinessStage =
   | "precontemplation"
@@ -183,21 +183,9 @@ function WelcomePageInner() {
       {/* t.ROY acknowledges the selection */}
       {acknowledged && selected && TROY_RESPONSES[selected] && (
         <div className="mt-4 bg-t-panel px-4 py-3 border border-t-line flex items-start gap-3 animate-in fade-in duration-300">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-            className="flex-shrink-0 mt-0.5 text-t-amber"
-          >
-            <path
-              d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              fill="none"
-            />
-          </svg>
+          <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center">
+            <TroyLivingIcon size={26} />
+          </span>
           <p className="text-sm text-t-phos leading-relaxed">
             {TROY_RESPONSES[selected]}
           </p>
