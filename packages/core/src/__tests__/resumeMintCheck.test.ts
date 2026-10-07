@@ -188,3 +188,14 @@ test("a number written with a thousands comma is quoted from its own line", () =
   const r = runMintCheck({ output: out, source: "picker northgate freight 2019 2023", kind: "resume" });
   assert.ok(has(r, "STD-T02", "BLOCK", /1,500 orders/), JSON.stringify(r.findings));
 });
+
+test("STD-F01: a sentence with a year under an undated job does not count as its dates", () => {
+  const out = "PROFESSIONAL EXPERIENCE\nForklift Operator | Harbor Supply\nEarned OSHA 10 in 2021 and trained crews.";
+  const r = runMintCheck({ output: out, source: "forklift operator harbor supply earned osha 10 in 2021 and trained crews", kind: "resume" });
+  assert.ok(has(r, "STD-F01", "BLOCK", /Harbor Supply/), JSON.stringify(r.findings));
+  // A real date line without a pipe still counts.
+  for (const dates of ["Riverton, OH 2015 - 2023", "Riverton, OH, Jan 2015 to Present", "2015 - 2023"]) {
+    const ok = runMintCheck({ output: `EXPERIENCE\nForklift Operator | Harbor Supply\n${dates}\n- Trained crews.`, source: "forklift harbor supply riverton oh 2015 2023 trained crews", kind: "resume" });
+    assert.deepEqual(only(ok, "STD-F01"), [], dates);
+  }
+});

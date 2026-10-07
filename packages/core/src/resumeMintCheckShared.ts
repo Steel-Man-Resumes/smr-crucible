@@ -252,9 +252,16 @@ const hasYear = (l: string) => new RegExp(YEAR_RE.source).test(l);
 // dates on the line under its title.
 const DATE_PART_RE = /^(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?$/i;
 const PLACE_PART_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
+// "Chicago, IL 2019 - 2023" or "Chicago, IL, Jan 2019 to Present" (no pipe).
+const PLACE_THEN_DATE_RE = /^([A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?)[,\s]+(.+)$/;
 function isDateLine(l: string): boolean {
   if (isBullet(l) || !hasYear(l)) return false;
-  if (!l.includes("|")) return true;
+  // A sentence with a year in it ("Earned OSHA 10 in 2021") is not a date line.
+  if (!l.includes("|")) {
+    if (DATE_PART_RE.test(l)) return true;
+    const m = l.match(PLACE_THEN_DATE_RE);
+    return !!m && PLACE_PART_RE.test(m[1].trim()) && DATE_PART_RE.test(m[2].trim());
+  }
   const parts = l.split("|").map((p) => p.trim()).filter(Boolean);
   return parts.some((p) => DATE_PART_RE.test(p)) && parts.every((p) => DATE_PART_RE.test(p) || PLACE_PART_RE.test(p));
 }
