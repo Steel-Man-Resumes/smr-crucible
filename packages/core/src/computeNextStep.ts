@@ -15,7 +15,7 @@
  */
 
 import { query } from "./db";
-import { TOUR_HREF } from "./journeyStages";
+import { TOUR_HREF, STAGE_WHY } from "./journeyStages";
 import { getUserProfile, type UserProfile, type NextStepResult } from "./getUserProfile";
 
 const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour (plan Section 4)
@@ -24,12 +24,12 @@ const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour (plan Section 4)
 export function computeNextStep(p: UserProfile): NextStepResult {
   // Stage 0 -- orientation becomes mandatory after 2 deferrals
   if (!p.onboardingComplete && p.onboardingDeferrals >= 2) {
-    return { stage: 0, action: "Complete your orientation", href: TOUR_HREF, reason: "onboarding_required" };
+    return { stage: 0, action: "Take the tour and name your coach", href: TOUR_HREF, reason: "onboarding_required" };
   }
 
   // Stage 1 -- foundation must exist before anything else is useful
   if (!p.forgeComplete) {
-    return { stage: 1, action: "Build your foundation", href: "/intro", reason: "forge_incomplete" };
+    return { stage: 1, action: "Finish your resume in the Forge", href: "/intro", reason: "forge_incomplete" };
   }
 
   // Stage 0 (soft) -- foundation done but tour never taken: orient + name the coach
@@ -39,7 +39,7 @@ export function computeNextStep(p: UserProfile): NextStepResult {
 
   // Stage 2 -- find a first target
   if (p.savedJobs.length === 0) {
-    return { stage: 2, action: "Find your first target job", href: "/dashboard/jobs", reason: "no_saved_jobs" };
+    return { stage: 2, action: "Pick a job to aim at", href: "/dashboard/jobs", reason: "no_saved_jobs" };
   }
 
   // Stage 3 -- tailor a resume to a saved target
@@ -57,7 +57,7 @@ export function computeNextStep(p: UserProfile): NextStepResult {
 
   // Stage 4 -- plan disclosure
   if (!p.hasDisclosurePlan) {
-    return { stage: 4, action: "Plan how to talk about your background", href: "/dashboard/disclosure", reason: "no_disclosure_plan" };
+    return { stage: 4, action: "Plan what to say about your background", href: "/dashboard/disclosure", reason: "no_disclosure_plan" };
   }
 
   // Stage 5 -- practice (target: at least 2 sessions)
@@ -98,15 +98,7 @@ export function computeNextStep(p: UserProfile): NextStepResult {
  * stage the ladder can return MUST have an entry here (the adversarial suite
  * asserts full coverage). 6th-grade reading level; no em dashes; no emojis.
  */
-export const NEXT_STEP_WHY: Record<number, string> = {
-  0: "A quick tour shows you where everything lives, so the rest goes faster.",
-  1: "Your foundation is the base every resume and plan is built on. It comes first.",
-  2: "Picking a target job tells us what to aim your resume and practice at.",
-  3: "A resume tailored to this job gets past filters and unlocks the rest of your tools.",
-  4: "Planning how you talk about your record means you walk in ready, not caught off guard.",
-  5: "A little practice makes the real interview feel familiar instead of scary.",
-  6: "Applying and tracking keeps your search moving and reminds you when to follow up.",
-};
+export const NEXT_STEP_WHY: Record<number, string> = STAGE_WHY;
 
 /**
  * Pure fallback WHY. No I/O, no AI. Returns the deterministic sentence for the

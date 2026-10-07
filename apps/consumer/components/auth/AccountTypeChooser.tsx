@@ -83,7 +83,7 @@ export function AccountTypeChooser({
 }) {
   return (
     <fieldset className="mb-6">
-      <legend className="app-eyebrow mb-2 text-[#4f6b57]">
+      <legend className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
         Who are you here as?
       </legend>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -97,7 +97,7 @@ export function AccountTypeChooser({
               aria-pressed={selected}
               className={`t-focus min-h-touch rounded-[2px] border p-3 text-left transition-colors ${
                 selected
-                  ? "border-[#4f6b57] bg-[#f5f6f4]"
+                  ? "border-t-amber bg-t-panel-2"
                   : "border-t-line bg-transparent hover:border-t-line-strong"
               }`}
             >
@@ -133,7 +133,7 @@ export function AccountRouteNote({
   const spec = ACCOUNT_ROUTES.find((r) => r.id === route);
   if (!spec?.needs) return null;
   return (
-    <section className="mb-6 border-l-[3px] border-[#4f6b57] bg-[#f5f6f4] py-3 pl-4 pr-3">
+    <section className="mb-6 border-l-[3px] border-t-amber bg-t-panel-2 py-3 pl-4 pr-3">
       <p className="text-xs leading-relaxed text-t-bone-dim">{spec.needs}</p>
       {children}
     </section>

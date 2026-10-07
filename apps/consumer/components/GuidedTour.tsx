@@ -3,7 +3,10 @@
 /**
  * GuidedTour -- the mandatory one-time orientation (master plan Section 3, Stage 0).
  *
- * Three screens: the promise, the journey map, and meet/name your coach.
+ * Five screens: the promise, what the Forge resume is (and what the Refinery
+ * adds), the real tools along the six steps, Settings, and meet/name your coach.
+ * Only tools that exist today are taught; planned ones are named once, plainly,
+ * as not built yet.
  * DB-persisted via /api/onboarding/tour (cannot be reset by clearing
  * localStorage). Two "remind me" deferrals are allowed; after that the defer
  * option disappears. Client tier only -- partners/observers/admin are not nagged.
@@ -12,9 +15,13 @@
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 import {
   FALLBACK_TOUR_STATE,
   NEXT_STEP_CHANGED_EVENT,
+  TOUR_SETTINGS_PICKS,
+  TOUR_TOOLS,
+  TOUR_NOT_BUILT_YET,
   canCloseTour,
   canDeferTour,
   isTourRequested,
@@ -29,16 +36,11 @@ const FOCUSABLE_SELECTOR =
 // next login" means next session, not next page nav).
 const SUPPRESS_KEY = "guided_tour_suppressed";
 
-const SCREENS = 3;
+const SCREENS = 5;
+const COACH_SCREEN = SCREENS - 1;
 
-const JOURNEY = [
-  "Build your foundation",
-  "Know your target",
-  "Prepare your materials",
-  "Plan your approach",
-  "Practice",
-  "Apply and track",
-];
+// The six plain steps, read from the one vocabulary the dashboard uses.
+const JOURNEY = JOURNEY_STAGES.filter((st) => st.stage >= 1).map((st) => st.short);
 
 export function GuidedTour() {
   const tier = useUserTier();
@@ -161,7 +163,7 @@ export function GuidedTour() {
     } catch {}
   }
 
-  async function complete() {
+  async function complete(openSettings = false) {
     setSaving(true);
     try {
       await fetch("/api/onboarding/tour", {
@@ -175,6 +177,7 @@ export function GuidedTour() {
     } catch {}
     announceNextStepChanged();
     close();
+    if (openSettings) router.push("/dashboard/settings");
   }
 
   async function defer() {
@@ -193,69 +196,109 @@ export function GuidedTour() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="guided-tour-heading"
-        className="bg-white rounded-[7px] max-w-lg w-full p-6 sm:p-8 shadow-xl"
+        className="bg-t-panel border border-t-line max-w-lg w-full max-h-[92vh] overflow-y-auto p-5 sm:p-8 shadow-xl"
       >
-        {/* progress dots */}
-        <div className="flex gap-1.5 mb-6">
+        {/* progress bars */}
+        <div className="flex gap-1.5 mb-5" aria-hidden="true">
           {Array.from({ length: SCREENS }).map((_, i) => (
             <span
               key={i}
-              className={`h-1.5 flex-1 rounded-full ${i <= screen ? "bg-sage-600" : "bg-gray-200"}`}
+              className={`h-1.5 flex-1 ${i <= screen ? "bg-t-amber" : "bg-t-line"}`}
             />
           ))}
         </div>
+        <p className="font-term text-[11px] font-semibold uppercase text-t-bone-dim mb-2">
+          {screen + 1} of {SCREENS}
+        </p>
 
         {screen === 0 && (
           <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
               Every tool. For free. If you qualify.
             </h2>
-            <p className="text-body text-muted leading-relaxed mb-3">
-              Steel Man walks you from your first day home to your first day hired. It covers
-              your story, your resume, disclosure planning, interview practice, job matching, and
-              follow-through.
+            <p className="text-base text-t-bone-dim leading-relaxed mb-3">
+              Steel Man walks you from your resume to a job offer, one step at a time.
             </p>
-            <p className="text-body text-foreground font-medium">
-              The process matters. Start here.
+            <p className="text-base text-t-white font-medium">
+              Here is how the pieces fit. It takes about a minute.
             </p>
           </div>
         )}
 
         {screen === 1 && (
           <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">
-              Your journey, one step at a time
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
+              Your Forge resume is a general one
             </h2>
+            <p className="text-base text-t-bone-dim leading-relaxed mb-4">
+              The Forge built you one strong resume that works for many jobs. The Refinery
+              makes it fit each job you go after.
+            </p>
             <ol className="space-y-2 mb-4">
-              {JOURNEY.map((s, i) => (
-                <li
-                  key={i}
-                  className="flex items-center gap-3 text-body text-foreground"
-                >
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-sage-100 text-sage-700 text-sm font-semibold flex-shrink-0">
+              {JOURNEY.map((label, i) => (
+                <li key={label} className="flex items-center gap-3 text-base text-t-white">
+                  <span className="flex items-center justify-center w-6 h-6 border border-t-line bg-t-panel-2 text-t-amber-bright text-sm font-semibold flex-shrink-0">
                     {i + 1}
                   </span>
-                  {s}
+                  {label}
                 </li>
               ))}
             </ol>
-            <p className="text-sm text-muted">
-              Skipping steps is a bad idea. The process is designed to work.
+            <p className="text-sm text-t-bone-dim">
+              Tools open as you work through these. You can look at what is locked and see what opens it.
             </p>
           </div>
         )}
 
         {screen === 2 && (
           <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-foreground mb-3">Meet your coach</h2>
-            <p className="text-body text-muted leading-relaxed mb-4">
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
+              The tools, in order
+            </h2>
+            <ul className="space-y-2.5 mb-4">
+              {TOUR_TOOLS.map((t) => (
+                <li key={t.name} className="text-sm leading-snug">
+                  <span className="font-semibold text-t-white">{t.name}.</span>{" "}
+                  <span className="text-t-bone-dim">{t.line}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-t-bone-dim leading-relaxed">
+              {TOUR_NOT_BUILT_YET}
+            </p>
+          </div>
+        )}
+
+        {screen === 3 && (
+          <div>
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
+              Settings does things other apps don&apos;t
+            </h2>
+            <ul className="space-y-3 mb-4">
+              {TOUR_SETTINGS_PICKS.map((t) => (
+                <li key={t.name} className="text-base leading-snug">
+                  <span className="font-semibold text-t-white">{t.name}.</span>{" "}
+                  <span className="text-t-bone-dim">{t.line}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-t-bone-dim">
+              Take a look early. You will find it in the menu.
+            </p>
+          </div>
+        )}
+
+        {screen === COACH_SCREEN && (
+          <div>
+            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">Meet your coach</h2>
+            <p className="text-base text-t-bone-dim leading-relaxed mb-4">
               This is your coach. They know your story and are here to help you move. What
               would you like to call them? Many people use a name from someone who believed
               in them.
@@ -266,21 +309,21 @@ export function GuidedTour() {
               maxLength={40}
               placeholder="Guide"
               aria-label="Name your coach"
-              className="w-full px-4 py-3 rounded-[6px] border-2 border-border text-body bg-white focus:border-sage-600 transition-colors min-h-touch"
+              className="w-full px-4 py-3 border border-t-line text-base min-h-touch"
             />
-            <p className="text-xs text-muted mt-2">
+            <p className="text-xs text-t-bone-dim mt-2">
               You can change this anytime in Settings.
             </p>
           </div>
         )}
 
         {/* actions */}
-        <div className="flex items-center justify-between gap-3 mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
           <div>
             {canDefer && (
               <button
                 onClick={defer}
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="t-focus text-sm text-t-bone-dim hover:text-t-white transition-colors"
               >
                 Remind me next login
               </button>
@@ -288,17 +331,17 @@ export function GuidedTour() {
             {canClose && (
               <button
                 onClick={close}
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="t-focus text-sm text-t-bone-dim hover:text-t-white transition-colors"
               >
                 Close
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {screen > 0 && (
               <button
                 onClick={() => setScreen(screen - 1)}
-                className="px-4 py-2.5 text-sm font-medium text-muted hover:text-foreground"
+                className="t-focus px-4 py-2.5 text-sm font-medium text-t-bone-dim hover:text-t-white"
               >
                 Back
               </button>
@@ -306,18 +349,27 @@ export function GuidedTour() {
             {screen < SCREENS - 1 ? (
               <button
                 onClick={() => setScreen(screen + 1)}
-                className="px-6 py-3 bg-sage-600 text-white rounded-[6px] text-sm font-medium hover:bg-sage-700 transition-colors min-h-touch"
+                className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-semibold hover:bg-t-amber-bright transition-colors min-h-touch"
               >
                 Continue
               </button>
             ) : (
-              <button
-                onClick={complete}
-                disabled={saving}
-                className="px-6 py-3 bg-sage-600 text-white rounded-[6px] text-sm font-medium hover:bg-sage-700 disabled:opacity-60 transition-colors min-h-touch"
-              >
-                {saving ? "Starting..." : "Start"}
-              </button>
+              <>
+                <button
+                  onClick={() => complete(true)}
+                  disabled={saving}
+                  className="t-focus px-4 py-3 border border-t-amber text-t-amber-bright text-sm font-semibold hover:bg-t-panel-2 disabled:opacity-60 transition-colors min-h-touch"
+                >
+                  Start, then open Settings
+                </button>
+                <button
+                  onClick={() => complete()}
+                  disabled={saving}
+                  className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-semibold hover:bg-t-amber-bright disabled:opacity-60 transition-colors min-h-touch"
+                >
+                  {saving ? "Starting..." : "Start"}
+                </button>
+              </>
             )}
           </div>
         </div>
