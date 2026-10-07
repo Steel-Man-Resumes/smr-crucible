@@ -19,11 +19,11 @@
 
 import { NextResponse } from "next/server";
 import { buildResumeFilename } from "./resume-filename";
-import { cleanOpenItems, renderDocx, renderHtml, renderPdf, type RenderRequest } from "./resume-render";
+import { MAX_RENDER_CHARS, MAX_RENDER_TOO_LARGE, cleanOpenItems, renderDocx, renderHtml, renderPdf, type RenderRequest } from "./resume-render";
 import { buildZip } from "./resume-render/zip";
 
-const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
-const MAX_DOCUMENT_CHARS = 200_000;
+const MAX_DOWNLOAD_REQUEST_BYTES = 250_000;
+const MAX_DOCUMENT_CHARS = MAX_RENDER_CHARS;
 
 type DownloadFormat = "docx" | "txt" | "pdf" | "html" | "zip";
 const FORMATS: ReadonlySet<string> = new Set(["docx", "txt", "pdf", "html", "zip"]);
@@ -94,7 +94,7 @@ export async function handleDownloadPost(request: Request) {
       contentLength &&
       parseInt(contentLength, 10) > MAX_DOWNLOAD_REQUEST_BYTES
     ) {
-      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+      return NextResponse.json({ error: MAX_RENDER_TOO_LARGE }, { status: 413 });
     }
 
     const input: DownloadInput = await request.json();
@@ -109,7 +109,7 @@ export async function handleDownloadPost(request: Request) {
       return NextResponse.json({ error: "content must be text" }, { status: 400 });
     }
     if (input.content.length > MAX_DOCUMENT_CHARS) {
-      return NextResponse.json({ error: "content is too large" }, { status: 413 });
+      return NextResponse.json({ error: MAX_RENDER_TOO_LARGE }, { status: 413 });
     }
     if (input.type !== "resume" && input.type !== "cover_letter") {
       return NextResponse.json({ error: "invalid document type" }, { status: 400 });
@@ -119,7 +119,7 @@ export async function handleDownloadPost(request: Request) {
         return NextResponse.json({ error: "text fields must be text" }, { status: 400 });
       }
       if (typeof extra === "string" && extra.length > MAX_DOCUMENT_CHARS) {
-        return NextResponse.json({ error: "content is too large" }, { status: 413 });
+        return NextResponse.json({ error: MAX_RENDER_TOO_LARGE }, { status: 413 });
       }
     }
 

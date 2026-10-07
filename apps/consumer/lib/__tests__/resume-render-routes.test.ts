@@ -89,9 +89,17 @@ test("download: the existing safety limits still hold", async () => {
   assert.equal((await post(handleDownloadPost, { content: 5, type: "resume" })).status, 400);
   assert.equal((await post(handleDownloadPost, { content: "x", type: "memo" })).status, 400);
   assert.equal((await post(handleDownloadPost, { content: "x", type: "resume", format: "exe" })).status, 400);
-  assert.equal((await post(handleDownloadPost, { content: "x".repeat(200_001), type: "resume" })).status, 413);
-  assert.equal((await post(handleDownloadPost, { content: "x", type: "resume" }, { "content-length": "600000" })).status, 413);
+  assert.equal((await post(handleDownloadPost, { content: "x".repeat(40_001), type: "resume" })).status, 413);
+  assert.equal((await post(handleDownloadPost, { content: "x", type: "resume" }, { "content-length": "300000" })).status, 413);
   assert.equal((await post(handleDownloadPost, { content: "x", type: "resume", headerText: 5 })).status, 400);
+  // every text field has the same cap, with a plain message
+  const big = "x".repeat(40_001);
+  for (const body of [{ content: "x", type: "cover_letter", headerText: big }, { content: "x", type: "resume", format: "zip", coverLetter: big }]) {
+    const r = await post(handleDownloadPost, body);
+    assert.equal(r.status, 413);
+    assert.match(((await r.json()) as { error: string }).error, /longer than a resume or letter can be/);
+  }
+  assert.equal((await post(handleDownloadPost, { content: "x".repeat(40_000), type: "resume", format: "txt" })).status, 200, "exactly at the cap is accepted");
 });
 
 test("layout: page count in plain words, and the on-screen page on request", async () => {
@@ -107,7 +115,7 @@ test("layout: page count in plain words, and the on-screen page on request", asy
   assert.doesNotMatch(sj.css, /@page/, "the app's own print layout is not touched");
   assert.match(sj.pagesHtml, /<section class="page/);
   assert.equal((await post(handleLayoutPost, { text: 5 })).status, 400);
-  assert.equal((await post(handleLayoutPost, { text: "x".repeat(200_001) })).status, 413);
+  assert.equal((await post(handleLayoutPost, { text: "x".repeat(40_001) })).status, 413);
 });
 
 test("client helper: the name for the file comes from the top of the resume", () => {

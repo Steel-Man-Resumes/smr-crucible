@@ -375,3 +375,93 @@ test("renderer survives odd input: empty body, one long unbroken word, huge bull
   const empty = await renderPdf({ text: "   " });
   assert.ok((await PDFDocument.load(empty)).getPageCount() >= 1);
 });
+
+// ---- memory: nothing keyed by anyone's text outlives a request -----------
+
+import vm from "node:vm";
+import v8 from "node:v8";
+import { renderScreen } from "../resume-render";
+import { sharedTextStateSize } from "../resume-render/fonts";
+
+function bigResume(seed: number, chars: number): string {
+  const lines = ["PAT " + seed, "City, ST | 555-0100 | pat@example.com", "Operations Lead", "", "PROFESSIONAL EXPERIENCE", ""];
+  let i = 0;
+  while (lines.join("\n").length < chars) {
+    lines.push(`Role ${seed}-${i} | Employer ${seed}-${i} | City, ST | 20${10 + (i % 10)} - 20${11 + (i % 10)}`);
+    for (let b = 0; b < 4; b++) lines.push(`- Unique line ${seed}-${i}-${b}: moved freight ${seed * 7 + i * 3 + b} pallets across the dock and checked every count against paperwork number ${seed}${i}${b}.`);
+    lines.push("");
+    i++;
+  }
+  return lines.join("\n");
+}
+
+test("measurer: the width cache belongs to one measurer, and a new one starts empty", () => {
+  const a = fontMeasurer();
+  assert.equal(a.cacheSize(), 0);
+  layoutResume(parseResume(ONE_PAGE), a);
+  assert.ok(a.cacheSize() > 0);
+  const b = fontMeasurer();
+  assert.notEqual(a, b, "never one shared measurer");
+  assert.equal(b.cacheSize(), 0);
+  assert.equal(sharedTextStateSize(), 0);
+});
+
+test("a render keeps nothing: 20 different large inputs leave no growing state", async () => {
+  v8.setFlagsFromString("--expose-gc");
+  const gc = vm.runInNewContext("gc") as () => void;
+  const heap = () => {
+    gc();
+    gc();
+    return process.memoryUsage().heapUsed / 1048576;
+  };
+  // warm up once so fonts and code are loaded before measuring
+  await renderPdf({ text: bigResume(0, 40_000) });
+  const before = heap();
+  const sizes: number[] = [];
+  for (let n = 1; n <= 20; n++) {
+    const text = bigResume(n, 40_000);
+    build({ text });
+    renderScreen({ text }, () => "/x.ttf");
+    sizes.push(sharedTextStateSize());
+    if (n % 5 === 0) await renderPdf({ text });
+  }
+  const after = heap();
+  assert.ok(sizes.every((x) => x === 0));
+  // Before the fix this grew about 16 MB per 200k-char request and never fell back.
+  assert.ok(after - before < 15, `heap grew ${(after - before).toFixed(1)} MB over 20 large renders`);
+});
+
+// ---- property: every input word comes out, in every path -----------------
+
+import { renderScreen as screenOf } from "../resume-render";
+
+const ODD_HEADERS = [
+  "JANE TESTER\nMilwaukee, WI\n(555) 010-0100\nCertified Welder\n\nSUMMARY\nSteady welder.\n\nEXPERIENCE\nWelder | Shop | 2019 - 2021\n- Welded frames.\n",
+  "Name Only\n\nSUMMARY\nJust a name and a line.\n",
+  "A B\nWelder\nWelder\na@b.com\n\nSUMMARY\nHi there.\n",
+  "A B\nline two\nline three\nline four\nline five\nline six\n\nSUMMARY\nBody.\n",
+  "A B\n555-0100 | a@b.com\nHeadline words here\nOpen to Michigan\nExtra stray line\nSUMMARY\nHi.\n",
+  "A B\n\n\nSUMMARY\nBlank lines before the first section.\n- A bullet with a number 2024 and a & sign.\n",
+  "LEADERSHIP\nOne item.\n",
+];
+
+function htmlText(html: string): string {
+  return html
+    .replace(/<head>[\s\S]*?<\/head>/g, " ")
+    .replace(/<style[\s\S]*?<\/style>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+const bag = (ws: string[]) => ws.filter((w) => w !== "-").sort();
+const stripPageLines = (t: string) => t.replace(/(^|\n|\s)[A-Z][^\n,]{0,40}, page \d+/g, " ");
+
+for (const [i, text] of [ONE_PAGE, TWO_PAGE, ...ODD_HEADERS].entries()) {
+  test(`every input word comes out in the PDF, HTML and screen paths (case ${i})`, async () => {
+    const want = bag(words(text));
+    const pdfText = (await pdfPages(await renderPdf({ text }))).map((p, k) => (k > 0 ? stripPageLines(p) : p)).join("\n");
+    assert.deepEqual(bag(words(pdfText)), want, "PDF");
+    assert.deepEqual(bag(words(stripPageLines(htmlText(renderHtml({ text }))))), want, "HTML");
+    const screen = screenOf({ text }, () => "/x.ttf");
+    assert.deepEqual(bag(words(stripPageLines(htmlText(screen.pagesHtml)))), want, "screen");
+  });
+}

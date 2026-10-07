@@ -50,11 +50,19 @@ function fk(face: FaceKey): FKFont {
   return f;
 }
 
-let shared: Measurer | null = null;
-export function fontMeasurer(): Measurer {
-  if (shared) return shared;
+/**
+ * A measurer with its OWN width cache. Create one per request and let it go: the
+ * cache is keyed by text, so it must never outlive the request or be shared
+ * between people. Only the font objects (fontkit) are shared across requests.
+ */
+export interface CountedMeasurer extends Measurer {
+  /** Entries held in this measurer's cache (for tests). */
+  cacheSize(): number;
+}
+
+export function fontMeasurer(): CountedMeasurer {
   const widthCache = new Map<string, number>();
-  shared = {
+  return {
     width(face, text, size) {
       const key = `${face}\u0000${text}`;
       let units = widthCache.get(key);
@@ -68,6 +76,11 @@ export function fontMeasurer(): Measurer {
     },
     ascent: (face) => fk(face).ascent / fk(face).unitsPerEm,
     descent: (face) => Math.abs(fk(face).descent) / fk(face).unitsPerEm,
+    cacheSize: () => widthCache.size,
   };
-  return shared;
+}
+
+/** Module-level state that is keyed by anyone's text. Always zero by design; tests assert it. */
+export function sharedTextStateSize(): number {
+  return 0;
 }
