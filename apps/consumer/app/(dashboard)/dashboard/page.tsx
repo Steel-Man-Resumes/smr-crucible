@@ -228,7 +228,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
       if (res.status === 409) {
         window.alert(
-          "This is a locked baseline. Unlock it in My Materials before deleting."
+          "This is a locked baseline. Unlock it in your Library before deleting."
         );
         return;
       }

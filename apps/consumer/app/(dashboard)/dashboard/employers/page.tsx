@@ -243,7 +243,7 @@ function EmployersList() {
                           href="/dashboard/vault"
                           className="text-sm font-medium text-t-amber-bright hover:text-t-amber underline"
                         >
-                          Open My Materials to copy or download it
+                          Open your Library to copy or download it
                         </a>
                       ) : (
                         <a
