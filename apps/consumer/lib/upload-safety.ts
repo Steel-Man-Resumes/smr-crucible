@@ -9,10 +9,13 @@
  * Self-contained on purpose (node:zlib only, no other imports) so it can be
  * lifted into a hotfix on its own.
  *
- * PDF (assertSafePdf). Every indirect object that is a stream is found by
- * reading the file the way a PDF reader does (object header, dictionary with
- * strings, names with #xx escapes, nesting and comments, then the `stream`
- * keyword), never by searching for a filter name. Then:
+ * PDF (assertSafePdf). Every object is found by its "obj" keyword in one
+ * linear pass (the numbers before it are not read, since pdf.js reads them
+ * leniently), then read the way pdf.js reads it (dictionary with strings,
+ * names with #xx escapes, nesting, PDF whitespace including NUL, comments,
+ * pdf.js's short keys, then the `stream` keyword and the data after the next
+ * end of line). All lexing in one scan shares a work budget, so the scan is
+ * linear in the file and the bytes it decodes. Then:
  *  - at most one filter per stream, with two kinds of two-step chain allowed,
  *    neither of which adds amplification: ASCII85 or ASCIIHex then FlateDecode
  *    (decoded exactly, then inflated under the cap; PDF_ALLOW_TEXT_THEN_FLATE),
@@ -33,6 +36,9 @@
  *  - an image (XObject or inline) may not claim more than PDF_MAX_IMAGE_PIXELS,
  *    and a page box (with /UserUnit) not more than PDF_MAX_PAGE_AREA, in the
  *    file's own objects and in its object streams;
+ *  - a stream inside an object stream is refused (the spec forbids it, and
+ *    pdf.js would read it past every cap here); object streams and content
+ *    streams under ASCII85 or ASCIIHex alone are decoded and checked too;
  *  - an encrypted PDF is refused (its streams cannot be checked). Most are
  *    copy-protected, not password-protected, so the message says so (F4).
  *    Follow-up: decrypt with the empty user password and scan as normal.
@@ -83,6 +89,8 @@ export class UnsafeUploadError extends Error {
       | "pdf_image_too_big"
       | "pdf_page_too_big"
       | "pdf_encrypted"
+      | "pdf_too_complex"
+      | "pdf_hidden_stream"
       | "zip_malformed"
       | "zip_too_big"
       | "zip_duplicate"
@@ -136,22 +144,103 @@ type Tok =
   | { t: "word"; v: string }
   | { t: "str" };
 
+/**
+ * "12", "-3", "+4.5", ".5": a number token, read in one pass (a regex with
+ * nested repeats backtracks quadratically on a long digit run, r4).
+ */
+function isNumberToken(w: string): boolean {
+  let i = w[0] === "+" || w[0] === "-" ? 1 : 0;
+  let digits = 0;
+  let dots = 0;
+  for (; i < w.length; i++) {
+    const c = w.charCodeAt(i);
+    if (c >= 0x30 && c <= 0x39) digits++;
+    else if (c === 0x2e && dots === 0) dots++;
+    else return false;
+  }
+  return digits > 0;
+}
+
 /** A minimal PDF lexer over latin1 text (strings, hex strings, names with #xx, comments). */
+/*
+ * WORK BUDGET (security review 3a r4). Every lexer created during one scan
+ * charges the characters it reads to one budget, sized from the file and the
+ * bytes the scan decoded. Real files use a small fraction of it; a file built
+ * so that many candidate objects re-read the same long run (a quadratic shape)
+ * is refused once the budget is spent, so the scan stays linear.
+ */
+let scanBudget: { left: number } | null = null;
+const BUDGET_PER_BYTE = 8;
+const BUDGET_BASE = 1 << 20;
+
+function charge(n: number) {
+  if (!scanBudget) return;
+  scanBudget.left -= n;
+  if (scanBudget.left < 0) {
+    throw new UnsafeUploadError("pdf_too_complex", NOT_PLAIN);
+  }
+}
+
+/**
+ * Where the next CR and the next LF are, cached per text: a comment runs to
+ * the end of its line, and many lexers in one pass would otherwise each search
+ * the same long line again (r4: "obj %" repeated). Searches move forward
+ * only, so every answer serves the starts before it.
+ */
+class LineEnds {
+  private cr = { from: -1, at: -1 };
+  private lf = { from: -1, at: -1 };
+  constructor(private readonly s: string) {}
+  private find(c: { from: number; at: number }, ch: string, q: number): number {
+    if (c.from >= 0 && q >= c.from && (c.at < 0 || q <= c.at)) return c.at;
+    c.from = q;
+    c.at = this.s.indexOf(ch, q);
+    return c.at;
+  }
+  /** Index of the first CR or LF at or after q, or the text's length. */
+  next(q: number): number {
+    const a = this.find(this.cr, "\r", q);
+    const b = this.find(this.lf, "\n", q);
+    const m = a < 0 ? b : b < 0 ? a : Math.min(a, b);
+    return m < 0 ? this.s.length : m;
+  }
+}
+
 class Lexer {
-  constructor(readonly s: string, public i: number) {}
+  /** Characters skipped as comments by cached jumps since the last charge. */
+  private jumped = 0;
+  constructor(readonly s: string, public i: number, private readonly ends: LineEnds = new LineEnds(s)) {}
   skipWsAndComments() {
+    const from = this.i;
+    this.jumped = 0;
+    this.skip();
+    charge(this.i - from - this.jumped);
+  }
+  private skip() {
     const s = this.s;
     for (;;) {
       while (this.i < s.length && isWs(s.charCodeAt(this.i))) this.i++;
       if (s[this.i] === "%") {
-        while (this.i < s.length && s[this.i] !== "\n" && s[this.i] !== "\r") this.i++;
+        // A comment is one cached jump, not a read: it is not charged.
+        const to = this.ends.next(this.i);
+        this.jumped += to - this.i;
+        this.i = to;
         continue;
       }
       return;
     }
   }
   next(): Tok | null {
-    this.skipWsAndComments();
+    const from = this.i;
+    this.jumped = 0;
+    try {
+      return this.read();
+    } finally {
+      charge(this.i - from - this.jumped);
+    }
+  }
+  private read(): Tok | null {
+    this.skip();
     const s = this.s;
     if (this.i >= s.length) return null;
     const c = s[this.i];
@@ -215,7 +304,7 @@ class Lexer {
       this.i++; // a stray delimiter (")", ">", "{", "}")
       return { t: "word", v: c };
     }
-    return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(w) ? { t: "num", v: Number(w) } : { t: "word", v: w };
+    return isNumberToken(w) ? { t: "num", v: Number(w) } : { t: "word", v: w };
   }
 }
 
@@ -237,6 +326,8 @@ function readDict(lx: Lexer): StreamDict | null {
   const out: StreamDict = { keys: new Set(), type: null, filters: [], filterKeys: 0, isImage: false, width: null, height: null, boxes: [], userUnit: null };
   let depth = 1;
   let key: string | null = null;
+  let widthShort = false;
+  let heightShort = false;
   for (;;) {
     const tok = lx.next();
     if (!tok) return null;
@@ -263,6 +354,7 @@ function readDict(lx: Lexer): StreamDict | null {
     // pdf.js reads a stream's filter as dict.get("F", "Filter") and an image's
     // size as dict.get("W", "Width") / ("H", "Height"): the short keys count
     // exactly like the long ones (security review 3a r3).
+    const raw = key;
     const k = key === "F" ? "Filter" : key === "W" ? "Width" : key === "H" ? "Height" : key;
     key = null;
     const indirect = () => {
@@ -295,8 +387,16 @@ function readDict(lx: Lexer): StreamDict | null {
     if (k === "Type" && tok.t === "name") out.type = tok.v;
     if (k === "Width" || k === "Height") {
       const v = tok.t === "num" ? (indirect() ? "indirect" : tok.v) : null;
-      if (k === "Width") out.width = v;
-      else out.height = v;
+      // L1 (r4): pdf.js reads dict.get("W", "Width"): the short key wins when
+      // both are present, whichever comes first.
+      const short = raw === "W" || raw === "H";
+      if (k === "Width") {
+        if (short || !widthShort) out.width = v;
+        if (short) widthShort = true;
+      } else {
+        if (short || !heightShort) out.height = v;
+        if (short) heightShort = true;
+      }
       continue;
     }
     if (k === "MediaBox" || k === "CropBox" || k === "BleedBox" || k === "TrimBox" || k === "ArtBox") {
@@ -382,7 +482,8 @@ function checkFilters(filters: StreamDict["filters"], filterKeys: number): Filte
 export function decodeAscii85(src: Buffer): Buffer {
   const out: number[] = [];
   let group: number[] = [];
-  for (let i = 0; i < src.length; i++) {
+  let i = 0;
+  for (; i < src.length; i++) {
     const c = src[i];
     if (c === 0x7e) break; // "~>"
     if (isWs(c)) continue;
@@ -407,14 +508,17 @@ export function decodeAscii85(src: Buffer): Buffer {
     const bytes = [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
     out.push(...bytes.slice(0, n - 1));
   }
+  charge(i); // the input read counts against the scan's work budget (r4)
   return Buffer.from(out);
 }
 
 /** ASCIIHex to bytes (half the input). Stops at ">". */
 export function decodeAsciiHex(src: Buffer): Buffer {
-  const s = src.toString("latin1");
-  const end = s.indexOf(">");
-  const hex = (end < 0 ? s : s.slice(0, end)).replace(/[^0-9a-fA-F]/g, "");
+  // Only up to the end mark, never the rest of the file (r4: linear).
+  const end = src.indexOf(0x3e);
+  const text = src.subarray(0, end < 0 ? src.length : end);
+  charge(text.length);
+  const hex = text.toString("latin1").replace(/[^0-9a-fA-F]/g, "");
   return Buffer.from(hex.length % 2 ? hex + "0" : hex, "hex");
 }
 
@@ -479,6 +583,7 @@ function inflatePdfStream(data: Buffer, cap: number): Buffer | null {
 /** Inline images in decoded content: dimensions and filters. */
 function checkInlineImages(content: Buffer) {
   const s = content.toString("latin1");
+  const ends = new LineEnds(s);
   let at = 0;
   for (;;) {
     const bi = s.indexOf("BI", at);
@@ -487,9 +592,11 @@ function checkInlineImages(content: Buffer) {
     const before = bi === 0 ? 0x20 : s.charCodeAt(bi - 1);
     const after = s.charCodeAt(bi + 2);
     if (!(isWs(before) || isDelim(before)) || !(isWs(after) || after === 0x2f)) continue;
-    const lx = new Lexer(s, bi + 2);
+    const lx = new Lexer(s, bi + 2, ends);
     let w: unknown = null;
     let h: unknown = null;
+    let wShort = false;
+    let hShort = false;
     let filters: string[] = [];
     let keys = 0;
     for (let n = 0; n < 200; n++) {
@@ -499,8 +606,15 @@ function checkInlineImages(content: Buffer) {
       if (tok.v === "W" || tok.v === "Width" || tok.v === "H" || tok.v === "Height") {
         const v = lx.next();
         const num = v && v.t === "num" ? v.v : null;
-        if (tok.v[0] === "W") w = num;
-        else h = num;
+        // L1 (r4): the short key wins when both are present, as in pdf.js.
+        const short = tok.v.length === 1;
+        if (tok.v[0] === "W") {
+          if (short || !wShort) w = num;
+          if (short) wShort = true;
+        } else {
+          if (short || !hShort) h = num;
+          if (short) hShort = true;
+        }
       } else if (tok.v === "F" || tok.v === "Filter") {
         keys++;
         const v = lx.next();
@@ -538,12 +652,17 @@ function checkPageBoxes(d: StreamDict) {
 /** Every dictionary inside decoded object-stream content (pages can live there). */
 function checkDictsIn(content: Buffer) {
   const s = content.toString("latin1");
+  const ends = new LineEnds(s);
   for (let at = s.indexOf("<<"); at >= 0; at = s.indexOf("<<", at + 2)) {
-    const lx = new Lexer(s, at + 2);
+    const lx = new Lexer(s, at + 2, ends);
     const d = readDict(lx);
     if (d) {
       checkPageBoxes(d);
       if (d.keys.has("Filter")) checkFilters(d.filters, d.filterKeys);
+      // M3 (r4): a stream inside an object stream. The spec forbids it, so no
+      // real file has one, but pdf.js would read it, past every cap here.
+      lx.skipWsAndComments();
+      if (s.startsWith("stream", lx.i)) throw new UnsafeUploadError("pdf_hidden_stream", NOT_PLAIN);
     }
   }
 }
@@ -555,41 +674,96 @@ export interface PdfScan {
 }
 
 /*
- * OBJECT HEADERS, READ THE WAY pdf.js READS THEM (security review 3a r3, M1).
- * Between "N", "G" and "obj" pdf.js accepts any run of PDF whitespace (NUL,
- * TAB, LF, FF, CR, SPACE) and "%" comments to the end of the line. A plain
- * \s regex misses NUL and comments, and an object it misses would escape
- * every per-object check. This pattern takes the same separators; the global
- * search tries every start position, so a header is found wherever pdf.js
- * could be pointed at it. "obj" must end at a delimiter, as a token does.
+ * OBJECTS ARE FOUND BY THE "obj" KEYWORD ALONE (security review 3a r3 M1, r4
+ * M1 and M2). pdf.js accepts an object at its xref offset when the third token
+ * there is the "obj" command; its number lexer is lenient, and between the
+ * tokens it allows PDF whitespace (NUL included) and comments. So the scan
+ * does not read the numbers at all: one linear pass finds every "obj" that
+ * stands as its own token (not part of a longer word such as "endobj" or a
+ * name such as "/obj", and ending at PDF whitespace, a delimiter or the end),
+ * and whatever follows each one is checked as an object. Finding too many
+ * candidates is safe: one not followed by "<<" is skipped.
  */
-const PDF_SEP = "(?:[\\x00\\t\\n\\f\\r ]|%[^\\r\\n]*[\\r\\n])+";
-export const OBJ_HEADER_RE_SOURCE = `(\\d+)${PDF_SEP}(\\d+)${PDF_SEP}obj(?![^\\x00\\t\\n\\f\\r ()<>\\[\\]{}/%])`;
+function isObjKeywordAt(s: string, i: number): boolean {
+  if (i > 0) {
+    const b = s.charCodeAt(i - 1);
+    const letter = (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a);
+    if (letter || b === 0x2f /* "/" */ || b === 0x23 /* "#" */) return false;
+  }
+  const j = i + 3;
+  if (j < s.length) {
+    const a = s.charCodeAt(j);
+    if (!isWs(a) && !isDelim(a)) return false;
+  }
+  return true;
+}
 
-/** Every object header in the file: where it starts and where its body begins. */
-export function findObjectHeaders(s: string): Array<{ at: number; body: number }> {
-  const re = new RegExp(OBJ_HEADER_RE_SOURCE, "g");
+/** Every "obj" keyword in the text: where it is, and where the object after it begins. */
+export function findObjectKeywords(s: string): Array<{ at: number; body: number }> {
   const out: Array<{ at: number; body: number }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) out.push({ at: m.index, body: m.index + m[0].length });
+  for (let i = s.indexOf("obj"); i >= 0; i = s.indexOf("obj", i + 3)) {
+    if (isObjKeywordAt(s, i)) out.push({ at: i, body: i + 3 });
+  }
   return out;
 }
 
 /** Throws UnsafeUploadError when the PDF could make a reader inflate too much. */
 export function assertSafePdf(buf: Buffer): PdfScan {
   const s = buf.toString("latin1");
+  const outer = scanBudget;
+  const outerCache = endstreamCache;
+  scanBudget = { left: BUDGET_BASE + BUDGET_PER_BYTE * s.length };
+  endstreamCache = null;
+  try {
+    return scanPdf(buf, s);
+  } finally {
+    scanBudget = outer;
+    endstreamCache = outerCache;
+  }
+}
+
+/**
+ * The first "endstream" at or after `from`. Streams are visited in file
+ * order, so one cached answer serves every start before it: each search runs
+ * over new text only, and the scan stays linear.
+ */
+let endstreamCache: { from: number; at: number } | null = null; // reset by each scan
+function nextEndstream(s: string, from: number): number {
+  const c = endstreamCache;
+  if (c && from >= c.from && (c.at < 0 || from <= c.at)) return c.at;
+  const at = s.indexOf("endstream", from);
+  endstreamCache = { from, at };
+  return at;
+}
+
+function scanPdf(buf: Buffer, s: string): PdfScan {
+  const ends = new LineEnds(s);
   const locked = () => new UnsafeUploadError("pdf_encrypted", PDF_LOCKED_MESSAGE);
   // An encryption entry in any trailer (classic cross-reference tables).
   for (let at = s.indexOf("trailer"); at >= 0; at = s.indexOf("trailer", at + 7)) {
-    const lx = new Lexer(s, at + 7);
+    const lx = new Lexer(s, at + 7, ends);
     const open = lx.next();
     if (open?.t !== "dict-open") continue;
     const d = readDict(lx);
     if (d?.keys.has("Encrypt")) throw locked();
   }
   const scan: PdfScan = { streams: 0, decodedBytes: 0, largestStream: 0 };
-  for (const header of findObjectHeaders(s)) {
-    const lx = new Lexer(s, header.body);
+  for (let at = s.indexOf("obj"); at >= 0; at = s.indexOf("obj", at + 3)) {
+    if (!isObjKeywordAt(s, at)) continue;
+    // Fast check before building a lexer: only "<<" (after whitespace and
+    // comments) can start an object worth reading.
+    let k = at + 3;
+    for (;;) {
+      while (k < s.length && isWs(s.charCodeAt(k))) k++;
+      if (s.charCodeAt(k) === 0x25 /* % */) {
+        k = ends.next(k);
+        continue;
+      }
+      break;
+    }
+    charge(1);
+    if (s.charCodeAt(k) !== 0x3c || s.charCodeAt(k + 1) !== 0x3c) continue;
+    const lx = new Lexer(s, k, ends);
     const first = lx.next();
     if (!first || first.t !== "dict-open") continue;
     const dict = readDict(lx);
@@ -627,10 +801,18 @@ export function assertSafePdf(buf: Buffer): PdfScan {
       scan.decodedBytes += n;
       scan.largestStream = Math.max(scan.largestStream, n);
       if (scan.decodedBytes > PDF_MAX_TOTAL_BYTES) throw new UnsafeUploadError("pdf_stream_too_big", TOO_BIG);
+    } else if (filter === "ASCII85Decode" || filter === "ASCIIHexDecode") {
+      // L2 (r4): a text codec alone only shrinks; decode it so the content is
+      // checked like any other stream's.
+      content = filter === "ASCII85Decode" ? decodeAscii85(buf.subarray(start)) : decodeAsciiHex(buf.subarray(start));
+      scan.decodedBytes += content.length;
+      if (scan.decodedBytes > PDF_MAX_TOTAL_BYTES) throw new UnsafeUploadError("pdf_stream_too_big", TOO_BIG);
     } else if (filter === null) {
-      const end = s.indexOf("endstream", start);
+      const end = nextEndstream(s, start);
       content = buf.subarray(start, end < 0 ? buf.length : end);
     }
+    // Decoded content gets lexed too: grow the work budget with it.
+    if (content && scanBudget && filter !== null) scanBudget.left += BUDGET_PER_BYTE * content.length;
     // A JPEG's own frame size decides what a reader allocates, whatever the
     // dictionary says: check it wherever DCTDecode runs last.
     if (plan.codec === "DCTDecode") {
@@ -659,15 +841,30 @@ export function assertSafePdf(buf: Buffer): PdfScan {
 export function mainPartName(parts: Array<{ name: string; data: Buffer }>): string {
   const rels = parts.find((p) => p.name === "_rels/.rels");
   if (rels) {
+    // Plain string search (each tag read once), no backtracking regex.
     const xml = rels.data.toString("utf8");
-    for (const m of xml.matchAll(/<Relationship\b[^>]*>/g)) {
-      const tag = m[0];
-      if (!/Type="[^"]*\/officeDocument"/.test(tag)) continue;
-      const target = /Target="([^"]+)"/.exec(tag)?.[1];
-      if (target) return target.replace(/^\.?\//, "");
+    let close = 0;
+    for (let at = xml.indexOf("<Relationship"); at >= 0; at = xml.indexOf("<Relationship", close + 1)) {
+      close = xml.indexOf(">", at);
+      if (close < 0) break;
+      const tag = xml.slice(at, close);
+      const type = attr(tag, "Type");
+      if (!type || !type.endsWith("/officeDocument")) continue;
+      const target = attr(tag, "Target");
+      if (target) return target.startsWith("./") ? target.slice(2) : target.startsWith("/") ? target.slice(1) : target;
     }
   }
   return "word/document.xml";
+}
+
+/** The value of name="..." in one XML tag, or null. */
+function attr(tag: string, name: string): string | null {
+  const key = name + '="';
+  let at = tag.indexOf(key);
+  while (at > 0 && !/\s/.test(tag[at - 1])) at = tag.indexOf(key, at + 1);
+  if (at < 0) return null;
+  const end = tag.indexOf('"', at + key.length);
+  return end < 0 ? null : tag.slice(at + key.length, end);
 }
 
 /** The parts mammoth reads for text. Everything else (pictures, fonts) is dropped unread. */
