@@ -15,7 +15,7 @@ import {
 } from "../resumeRules";
 import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
 import { checkCredentialUpgrade } from "../resumeMintCheckShared";
-import { getResumeStatus, pickDefendLines, questionForFinding, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
@@ -117,12 +117,25 @@ test("status: a clean, defended page with no numbers is finished", () => {
   assert.equal(s.state, "finished");
 });
 
-test("status: before the defend step, the same clean page is a draft with defend questions", () => {
+// The same page with two lines the writer reworded away from the person's words.
+const FAR = NO_NUMBERS.resume
+  .replace("Ran the grill on the breakfast line.", "Spearheaded the breakfast grill operation.")
+  .replace("Asked by the owner to show new cooks the grill.", "Mentored incoming culinary staff on equipment.");
+
+test("status: a page entirely in the person's own words asks nothing extra (round 2)", () => {
   const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source });
+  assert.equal(s.state, "finished", JSON.stringify(s.openItems));
+  assert.equal(s.allLinesInOwnWords, true);
+  assert.deepEqual(s.openItems.filter((i) => i.rule === "STD-C04"), []);
+});
+
+test("status: before the defend step, lines far from the person's words are draft with defend questions", () => {
+  const s = getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source });
   assert.equal(s.state, "draft");
   const defend = s.openItems.filter((i) => i.rule === "STD-C04");
-  assert.ok(defend.length >= 2);
+  assert.equal(defend.length, 2);
   for (const d of defend) assert.equal(d.question, "Tell me in one sentence how you'd describe this line.");
+  assert.equal(s.allLinesInOwnWords, false);
 });
 
 test("status: requireDefend false skips only the defend items", () => {
@@ -131,10 +144,10 @@ test("status: requireDefend false skips only the defend items", () => {
 });
 
 test("status: an answer marked cut or unsure keeps the line open", () => {
-  const answers = answerAll(NO_NUMBERS.resume, NO_NUMBERS.source);
+  const answers = answerAll(FAR, NO_NUMBERS.source);
   answers[0] = { ...answers[0], verdict: "cut" };
   answers[1] = { ...answers[1], verdict: "unsure" };
-  const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: answers });
+  const s = getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: answers });
   assert.equal(s.state, "draft");
   const open = s.openItems.filter((i) => i.rule === "STD-C04").map((i) => i.line);
   assert.deepEqual(open, [answers[0].line, answers[1].line]);
@@ -164,10 +177,10 @@ test("status: a number the model wrote stays a BLOCK even when the person's answ
 });
 
 test("status: an answer with no verdict, or 'I don't know', does not stand", () => {
-  const noVerdict = pickDefendLines(NO_NUMBERS.resume, NO_NUMBERS.source).map((d) => ({ line: d.line, answer: "I don't know" }));
-  assert.equal(getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: noVerdict }).state, "draft");
-  const dontKnow = answerAll(NO_NUMBERS.resume, NO_NUMBERS.source, "I don't know");
-  assert.equal(getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: dontKnow }).state, "draft");
+  const noVerdict = pickDefendLines(FAR, NO_NUMBERS.source).map((d) => ({ line: d.line, answer: "I don't know" }));
+  assert.equal(getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: noVerdict }).state, "draft");
+  const dontKnow = answerAll(FAR, NO_NUMBERS.source, "I don't know");
+  assert.equal(getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: dontKnow }).state, "draft");
 });
 
 test("status: an answer that contradicts its line keeps the BLOCK", () => {
@@ -333,9 +346,12 @@ test("defend: every number and every credential, plus the two lines furthest fro
   for (const l of numberLines) {
     assert.ok(lines.some((d) => d.line === l && d.reasons.includes("number")), `missing number line: ${l}`);
   }
-  assert.ok(lines.some((d) => /OSHA 10 card/.test(d.line) && d.reasons.includes("credential")));
+  // The person gave the card a type and a year ("my OSHA 10 card in 2017"): nothing to ask (round 2).
+  assert.ok(!lines.some((d) => /OSHA 10 card/.test(d.line)));
+  // The minimum fills only with lines that differ from the person's words.
   const far = lines.filter((d) => d.reasons.includes("far_from_your_words"));
-  assert.equal(far.length, 2);
+  assert.ok(far.length >= 1 && far.length <= 2);
+  for (const d of far) assert.ok(distanceFromSource(d.line, TWO_PAGE.source) > 0, d.line);
   // The summary is written by the tool, so its lines sit furthest from the person's words.
   assert.ok(far.some((d) => /Delivery driver with warehouse/.test(d.line)), JSON.stringify(far));
 });
@@ -347,10 +363,11 @@ test("defend: contact digits, years and skills terms are not defend lines", () =
   assert.ok(!lines.some((l) => /^Box truck, RF scanner/.test(l)));
 });
 
-test("defend: a page with fewer lines asks what it has", () => {
-  const lines = pickDefendLines(THIN.resume, THIN.source);
-  assert.ok(lines.length >= 2);
-  assert.ok(lines.some((d) => d.reasons.includes("credential")));
+test("defend: a thin page in the person's own words, with a dated class they named, asks nothing (round 2)", () => {
+  assert.deepEqual(pickDefendLines(THIN.resume, THIN.source), []);
+  // Reword one line away from their words and that line is asked.
+  const r = THIN.resume.replace("Did yard work and snow shoveling for neighbors.", "Delivered comprehensive grounds maintenance services.");
+  assert.ok(pickDefendLines(r, THIN.source).some((d) => /grounds maintenance/.test(d.line) && d.reasons.includes("far_from_your_words")));
 });
 
 test("two-page fixture really runs to two pages and stays finished once defended", () => {

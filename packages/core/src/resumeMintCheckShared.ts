@@ -22,6 +22,8 @@
  * Pure: no I/O, safe in the browser and on the server.
  */
 
+import { normalizeDigits, numberTokens, numberValues } from "./numberRead";
+import { stemOf } from "./wordStem";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
@@ -34,7 +36,7 @@ export interface MintFinding {
   /** Plain words for the person. */
   why: string;
   /** Which check inside a rule raised it, when a rule has more than one. */
-  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "dateless_page";
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "dateless_page";
 }
 
 export interface MintCheckInput {
@@ -89,13 +91,9 @@ function lineContaining(text: string, needle: string): string {
   const flat = (l: string) => l.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, "$1");
   const ls = linesOf(text);
   const body = ls.filter((l) => !CONTACT_LINE_RE.test(l));
-  // A number written as a word ("fifty", "a dozen") is found by its word.
-  const words = Object.keys(WORD_NUMS).filter((w) => WORD_NUMS[w] === needle);
-  const wordRe = words.length ? new RegExp(`\\b(?:${words.join("|")})\\b`) : null;
   return (
     body.find((l) => token.test(flat(l))) ??
     ls.find((l) => token.test(flat(l))) ??
-    (wordRe ? body.find((l) => wordRe.test(l.toLowerCase())) ?? ls.find((l) => wordRe.test(l.toLowerCase())) : undefined) ??
     body.find((l) => flat(l).includes(n)) ??
     ls.find((l) => flat(l).includes(n)) ??
     needle
@@ -120,38 +118,30 @@ function checkYears(out: string, src: string, f: MintFinding[]) {
   }
 }
 
-// ---- STD-T02: numbers both ways ------------------------------------------
-const WORD_NUMS: Record<string, string> = {
-  two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
-  eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17",
-  eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60",
-  seventy: "70", eighty: "80", ninety: "90", dozen: "12",
-  // Counts with no single value still claim a number: they are compared as words.
-  dozens: "dozens", hundreds: "hundreds", thousands: "thousands", millions: "millions",
-};
-// "one" and "hundred" are left out on purpose: they are ordinary prose words
-// ("no one", "one of"), and reading them as counts made false findings. So are
-// "double" and "twice" ("double-checked", "twice a week" read as claims).
+// ---- STD-T02: numbers both ways, compared by value -------------------------
+// numberRead reads digits, number words ("forty-two", "four hundred thousand",
+// "a decade", "two thousandths"), multipliers ("3x", "doubled", "in half"),
+// ranks ("ranked first") and other scripts' digits, all as values.
 
-/** The number a word stands for ("fifty" is "50", "dozens" is "dozens"), or undefined. */
-export function numberWordValue(word: string): string | undefined {
-  return Object.prototype.hasOwnProperty.call(WORD_NUMS, word.toLowerCase()) ? WORD_NUMS[word.toLowerCase()] : undefined;
+/** The values of every number claim in a text ("forty-two" and "42" are both "42"). */
+export function numbersIn(text: string): Set<string> {
+  return numberValues(text);
 }
 
-export function numbersIn(text: string): Set<string> {
-  const t = text
-    .replace(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, " ") // phone numbers
-    .replace(/\b\d{3}[\s.-]\d{4}\b/g, " ") // short phone numbers
-    .replace(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g, " ") // ZIP after a state
-    .replace(/\b[\w.+-]+@[\w-]+\.[\w.]+\b/g, " ") // emails
-    .replace(YEAR_RE, " ");
-  const out = new Set<string>();
-  for (const m of t.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) out.add(m.replace(/,/g, ""));
-  for (const w of t.toLowerCase().match(/\b[a-z]+\b/g) ?? []) {
-    const v = numberWordValue(w);
-    if (v) out.add(v);
+/** How a value reads to a person in a message ("~100s" reads as "hundreds"). */
+function sayNumber(raw: string, value: string): string {
+  return raw.trim() || value;
+}
+
+/** The first line holding a number with this value (body lines before the contact line), and how it is written there. */
+function numberLine(text: string, value: string): { line: string; raw: string } | undefined {
+  const ls = linesOf(text);
+  const body = ls.filter((l) => !CONTACT_LINE_RE.test(l));
+  for (const l of [...body, ...ls]) {
+    const t = numberTokens(l).find((x) => x.value === value);
+    if (t) return { line: l, raw: normalizeDigits(l).slice(t.index, t.index + t.length) };
   }
-  return out;
+  return undefined;
 }
 
 function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintCheckInput["kind"]) {
@@ -159,23 +149,25 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
   const outNums = numbersIn(out);
   for (const n of outNums) {
     if (srcNums.has(n)) continue;
+    const at = numberLine(out, n);
     f.push({
       rule: "STD-T02",
       severity: "BLOCK",
-      line: lineContaining(out, n),
-      why: `The number ${n} is not in anything you told us. Only numbers you gave go on the page.`,
+      line: at?.line ?? n,
+      why: `The number ${sayNumber(at?.raw ?? "", n)} is not in anything you told us. Only numbers you gave go on the page.`,
       kind: "added_number",
     });
   }
   // A letter need not carry every number; a resume must (dropping one is a FIX).
   if (kind === "cover_letter") return;
   for (const n of srcNums) {
-    if (outNums.has(n) || n.length < 2) continue;
+    if (outNums.has(n) || (/^\d$/.test(n))) continue;
+    const at = numberLine(src, n);
     f.push({
       rule: "STD-T02",
       severity: "FIX",
-      line: lineContaining(src, n),
-      why: `You gave the number ${n} and it did not make it onto the page. A number you gave belongs on the page the way you said it.`,
+      line: at?.line ?? n,
+      why: `You gave the number ${sayNumber(at?.raw ?? "", n)} and it did not make it onto the page. A number you gave belongs on the page the way you said it.`,
       kind: "dropped_number",
     });
   }
@@ -387,18 +379,36 @@ export function skillTermsOf(line: string): string[] {
   return body.split(/[|,;]/).map((t) => t.trim()).filter(Boolean);
 }
 
+// Scope words: a skills term carrying one of these claims to have run or led
+// something. It passes only when the person used that same word (the
+// true-scope rule, applied to skills).
+const SCOPE_STEMS = ["supervis", "lead", "led", "manag", "train", "schedul", "plan", "budget", "negotiat", "forecast", "direct", "oversee", "oversaw", "coordinat", "mentor"];
+const scopeOf = (w: string) => SCOPE_STEMS.find((s) => w.startsWith(s) || (s === "led" && w === "led"));
+// A credential term is checked as a credential (credentialMentions), never as a skill.
+const SKILL_CREDENTIAL_RE = /\b(?:certif\w*|licen[cs]\w*|OSHA[\s-]*\d+|CDL|CNA|STNA|LPN|EMT|ServSafe|EPA\s*608|CPR|BLS|first aid|forklift card|AWS\s+D\d)/i;
+
 function checkGrid(out: string, src: string, f: MintFinding[]) {
   const ls = linesOf(out);
   const start = ls.findIndex((l) => GRID_RE.test(l));
   if (start < 0) return;
-  const srcWords = new Set((src.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length > 2).map(head));
+  const srcWordList = (src.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length > 2);
+  const srcStems = new Set(srcWordList.map(stemOf));
+  const srcFlat = ` ${srcWordList.join(" ")} `;
   for (let i = start + 1; i < ls.length; i++) {
     const l = ls[i];
     if (isSectionEnd(l)) break;
     for (const term of skillTermsOf(l)) {
+      if (SKILL_CREDENTIAL_RE.test(term)) continue;
       const words = (term.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !STOP.has(w) && w.length > 2);
       if (!words.length) continue;
-      if (words.some((w) => srcWords.has(head(w)))) continue;
+      // The whole term as the person wrote it passes.
+      if (srcFlat.includes(` ${words.join(" ")} `)) continue;
+      // A scope word they never used never passes on another word's match.
+      const scopeUnsaid = words.some((w) => {
+        const sc = scopeOf(w);
+        return sc !== undefined && !srcWordList.some((x) => x.startsWith(sc) || (sc === "lead" && x === "led") || (sc === "led" && x.startsWith("lead")));
+      });
+      if (!scopeUnsaid && words.some((w) => srcStems.has(stemOf(w)))) continue;
       f.push({ rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.`, kind: "grid_term" });
     }
   }

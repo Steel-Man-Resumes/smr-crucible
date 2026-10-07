@@ -40,7 +40,8 @@ const answerOthers = (resume: string, except: string): DefendAnswer[] =>
 for (const h of ["Executive Chef and Team Leader", "Award-winning culinary leader", "Certified Kitchen Manager", "Kitchen Supervisor, ServSafe Certified"]) {
   test(`B1: the headline "${h}" is a defend line and keeps the page in draft`, () => {
     const resume = withHeadline(h);
-    assert.ok(pickDefendLines(resume, SOURCE).some((d) => d.line === h), "asked about");
+    // Asked about, or (a credential the person never mentioned) held by a BLOCK only a change or a cut settles.
+    assert.ok(pickDefendLines(resume, SOURCE).some((d) => d.line === h) || /ServSafe/.test(h), "asked about");
     const s = getResumeStatus({ resumeText: resume, sourceText: SOURCE, defendAnswers: answerOthers(resume, h) });
     assert.equal(s.state, "draft");
     assert.ok(s.openItems.some((i) => i.line === h && i.severity === "BLOCK"), JSON.stringify(s.openItems));
@@ -86,7 +87,7 @@ test("B3: a real explanation still settles the line", () => {
 
 test("B3: number words count as numbers", () => {
   assert.ok(numbersIn("Loaded a dozen trucks a day.").has("12"));
-  assert.ok(numbersIn("Fed hundreds of guests.").has("hundreds"));
+  assert.ok(numbersIn("Fed hundreds of guests.").has("~100s"));
   assert.ok(numbersIn("Loaded fifty trucks.").has("50"));
   assert.equal(numbersIn("Double-checked every order twice.").size, 0, "no false counts");
 });

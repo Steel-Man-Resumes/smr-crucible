@@ -316,6 +316,11 @@ export function DefendPanel({
         <p role="status" aria-live="polite" className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
           {progress}
         </p>
+        {view.allLinesInOwnWords && (
+          <p className="mt-1 text-xs text-t-phos" data-testid="all-own-words">
+            Every line here is in your own words.
+          </p>
+        )}
       </div>
 
       {view.general.length > 0 && (

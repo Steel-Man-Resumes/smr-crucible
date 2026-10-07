@@ -17,7 +17,10 @@
 
 import { CREDENTIALS_KEY } from "./forge-path";
 import {
+  answerMentions,
   answerStands,
+  CREDENTIAL_UNSAID_QUESTION,
+  distanceFromSource,
   getResumeStatus,
   introducedWords,
   questionForFinding,
@@ -26,6 +29,10 @@ import {
   type ResumeStatus,
 } from "@crucible/core/src/resumeStatus";
 import { linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
+import { stemOf } from "@crucible/core/src/wordStem";
+import { checkCredentials, credentialHomes, credentialMentionsOf } from "@crucible/core/src/credentialMentions";
+import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
 
@@ -44,6 +51,19 @@ export interface FinishDocs {
   keepInsideLines: boolean;
   /** The grounding block from /api/forge/generate-docs, as returned. */
   grounding: unknown;
+  /**
+   * The writer's documents exactly as they came back, never edited. A word
+   * or number anywhere in them is never the person's, whichever line they
+   * type it into. Missing on runs saved before it existed: then no rewrite
+   * adds to the person's words (closed by default).
+   */
+  written?: WrittenDocs;
+}
+
+/** The writer's resume and letter, as delivered. */
+export interface WrittenDocs {
+  resume: string;
+  letter: string;
 }
 
 export interface StoredFinish {
@@ -94,15 +114,23 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       withheldLines: Array.isArray(d.withheldLines) ? d.withheldLines.filter((l): l is string => typeof l === "string") : [],
       keepInsideLines: d.keepInsideLines === true,
       grounding: d.grounding ?? null,
+      written:
+        d.written && typeof d.written.resume === "string"
+          ? { resume: d.written.resume, letter: typeof d.written.letter === "string" ? d.written.letter : "" }
+          : undefined,
     },
     defendAnswers: Array.isArray(s.defendAnswers)
       ? s.defendAnswers
           .filter((a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string")
           .map((a) =>
             // A stored rewrite is trusted only when it is consistent with
-            // itself: it names the line it replaced, and its text is its line.
+            // itself: it names a real line it replaced (one the writer
+            // wrote, when the written documents are stored), and its text is
+            // its line.
             a.kind === "rewrite" &&
             typeof a.replaced === "string" &&
+            a.replaced.trim() !== "" &&
+            (!d.written || writtenHasLine(d.written as WrittenDocs, a.replaced)) &&
             squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
               ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "rewrite" as const, replaced: a.replaced }
               : { line: a.line, answer: a.answer, verdict: a.verdict }
@@ -110,6 +138,11 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       : [],
     addedTerms: Array.isArray(s.addedTerms) ? s.addedTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
   };
+}
+
+function writtenHasLine(w: WrittenDocs, line: string): boolean {
+  const k = squash(stripBullet(line));
+  return [...linesOf(w.resume || ""), ...linesOf(w.letter || "")].some((l) => squash(stripBullet(l)) === k);
 }
 
 // ---- the person's own words ------------------------------------------------------
@@ -173,46 +206,52 @@ function pageLineSet(...texts: string[]): Set<string> {
  * What the person introduced through "Change it", for the source the checker
  * reads. Only rewrites that are consistent (their text is their line, they
  * name the line they replaced) and whose line is still on the page count, and
- * from each only the words and numbers that were not in the replaced line. A
- * written number typed back, a period or a status word that was already there
- * adds nothing.
+ * from each only the words and numbers that are in neither the replaced line
+ * nor anywhere in the writer's documents (`written`). Without the written
+ * documents nothing is added: a rewrite cannot launder the writer's words
+ * when we cannot tell them apart.
  */
-export function rewritesOf(answers: DefendAnswer[], ...pageTexts: string[]): string {
-  const onPage = pageLineSet(...pageTexts);
+export function rewritesOf(answers: DefendAnswer[], pages: string | string[], written?: WrittenDocs | null): string {
+  if (!written) return "";
+  const onPage = pageLineSet(...(Array.isArray(pages) ? pages : [pages]));
+  const writerText = `${written.resume}\n${written.letter}`;
   return answers
     .filter(
       (a) =>
         a.kind === "rewrite" &&
         a.verdict === "stands" &&
         typeof a.replaced === "string" &&
+        a.replaced.trim() !== "" &&
         squash(stripBullet(a.answer)) === squash(stripBullet(a.line)) &&
         onPage.has(squash(stripBullet(a.line)))
     )
-    .map((a) => introducedWords(stripBullet(a.answer), stripBullet(a.replaced as string)))
+    .map((a) => introducedWords(stripBullet(a.answer), stripBullet(a.replaced as string), writerText))
     .filter(Boolean)
     .join("\n");
 }
 
 /** The one source the gate and every panel check against: own words plus what rewrites introduced. */
-export function gateSource(ownWords: string, answers: DefendAnswer[], ...pageTexts: string[]): string {
-  const added = rewritesOf(answers, ...pageTexts);
+export function gateSource(ownWords: string, answers: DefendAnswer[], pages: string | string[], written?: WrittenDocs | null): string {
+  const added = rewritesOf(answers, pages, written);
   return added ? `${ownWords}\n\n${added}` : ownWords;
 }
 
-const NUMBER_TOKEN_RE = /\$?\d[\d,]*(?:\.\d+)?%?|\b[A-Za-z]+\b/g;
-
 /**
- * The starting text for "Change it". A number the person never gave (digits
- * or a number word) becomes "[your number]", so the box never hands them the
- * written figure to keep. A bracket left in blocks the finish (STD-F05).
+ * The starting text for "Change it". A number whose value the person never
+ * gave (in any form: "42" for their "forty-two" is theirs) becomes "[your
+ * number]", so the box never hands them the written figure to keep. A bracket
+ * left in blocks the finish (STD-F05).
  */
 export function prefillRewrite(line: string, ownWords: string): string {
   const theirs = numbersIn(ownWords);
-  return stripBullet(line).replace(NUMBER_TOKEN_RE, (tok) => {
-    const ns = Array.from(numbersIn(tok));
-    if (!ns.length) return tok;
-    return ns.every((n) => theirs.has(n)) ? tok : "[your number]";
-  });
+  const text = normalizeDigits(stripBullet(line));
+  let out = "";
+  let at = 0;
+  for (const t of numberTokens(text)) {
+    out += text.slice(at, t.index) + (theirs.has(t.value) ? text.slice(t.index, t.index + t.length) : "[your number]");
+    at = t.index + t.length;
+  }
+  return out + text.slice(at);
 }
 
 /** The answer on file for a line (the latest one that is not a rewrite record), if any. */
@@ -298,9 +337,10 @@ const termRe = (term: string) => new RegExp(`(?<![\\w])${escapeRe(term.trim())}(
  */
 export function skillAnswerStands(a: DefendAnswer | undefined, term: string, source: string): boolean {
   if (!answerStands(a, term, source)) return false;
-  const heads = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).map((w) => w.slice(0, 4));
-  const want = new Set(heads(term));
-  return heads(a?.answer ?? "").some((h) => want.has(h));
+  // A real stem match ("bathed" for "bathing"), never just a shared four-letter start.
+  const stems = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).map(stemOf);
+  const want = new Set(stems(term));
+  return stems(a?.answer ?? "").some((h) => want.has(h));
 }
 
 /** True when the term is still on the page. */
@@ -374,50 +414,139 @@ export interface FinishView {
   defendTotal: number;
   /** The one source every panel checks against. */
   source: string;
+  /** Every explainable line on the resume is in the person's own words, so none was asked to fill a minimum. */
+  allLinesInOwnWords: boolean;
 }
 
-const ANSWERABLE = (i: OpenItem) => i.rule === "STD-C04" || (i.rule === "STD-T03" && i.severity === "FIX");
+/** Items an answer in the person's own words can settle. A second-check item is settled only by a change or a fresh check. */
+const ANSWERABLE = (i: OpenItem) =>
+  i.from !== "second_check" &&
+  (i.rule === "STD-C04" || i.rule === "STD-C03" || (i.rule === "STD-T03" && i.severity === "FIX"));
 
 type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown };
 
+/** The page line holding a claim, matched the way the claim trace matches it (number words, punctuation). */
+function lineWithClaim(text: string, claim: string): string | undefined {
+  const n = normalizeForMatch(claim);
+  if (!n) return undefined;
+  return linesOf(text).find((l) => ` ${normalizeForMatch(l)} `.includes(` ${n} `));
+}
+
 /**
  * The claim trace from generate-docs, as open items: a claim it flagged that
- * is still on the page, and a line that may say more about a credential than
- * the person did. Anything the Checks section shows as a blocker is held here.
+ * is still on the page or survives reworded, and a line that may say more
+ * about a credential than the person did. An edit settles one only when the
+ * claim is gone (flagOutcome "removed"); reordering its words does not. A
+ * claim still on the page but across lines is held in the general list.
  */
-function groundingItems(grounding: unknown, resumeText: string, letterText: string): GateItem[] {
+function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null): GateItem[] {
   const outcomes = (grounding as { outcomes?: unknown })?.outcomes;
   if (!Array.isArray(outcomes)) return [];
   const items: GateItem[] = [];
   for (const o of outcomes as GroundingOutcome[]) {
     if (typeof o?.claim !== "string" || !o.claim.trim()) continue;
-    if (o.status !== "still_there" && o.status !== "credential") continue;
+    if (o.status !== "still_there" && o.status !== "credential" && o.status !== "changed") continue;
     const target: GroupTarget = o.doc === "cover_letter" ? "letter" : "resume";
     const text = target === "letter" ? letterText : resumeText;
-    const needle = o.claim.trim().toLowerCase();
-    const line = linesOf(text).find((l) => l.toLowerCase().includes(needle));
-    if (!line) continue; // changed or cut since: settled
-    items.push(
-      o.status === "credential"
-        ? {
-            rule: "STD-T03",
-            severity: "BLOCK",
-            line,
-            target,
-            trace: true,
-            why: "Our second check says this may say more about a card, license or certification than you told us.",
-            question: "Change it to what you actually hold, the way your card or papers say it, or cut it.",
-          }
-        : {
-            rule: "STD-C04",
-            severity: "BLOCK",
-            line,
-            target,
-            trace: true,
-            why: "Our second check couldn't match this to anything you told us.",
-            question: "Tell me in one sentence how you'd describe this, in your own words. If it isn't true, change it or cut it.",
-          }
-    );
+    const original = written ? (target === "letter" ? written.letter : written.resume) : text;
+    const now = flagOutcome({ claim: o.claim, why: "" }, original || text, text);
+    if (now === "removed") continue;
+    if (now === "unmatched" && !lineWithClaim(text, o.claim)) continue;
+    const line = lineWithClaim(text, o.claim) ?? "";
+    const credential = o.status === "credential";
+    items.push({
+      rule: credential ? "STD-T03" : "STD-C04",
+      severity: "BLOCK",
+      // Not on one line (across lines, or reworded): held in the general list.
+      line: line || "",
+      target,
+      trace: true,
+      why: credential
+        ? "Our second check says this may say more about a card, license or certification than you told us."
+        : "Our second check couldn't match this to anything you told us.",
+      question: credential
+        ? "Change it to what you actually hold, the way your card or papers say it, or cut it."
+        : line
+          ? "Tell me in one sentence how you'd describe this, in your own words. If it isn't true, change it or cut it."
+          : `Our second check flagged "${o.claim.trim().slice(0, 80)}". Find it on the page and change it or cut it.`,
+    });
+  }
+  return items;
+}
+
+// ---- the cover letter ---------------------------------------------------------------
+
+// A courtesy sentence ("I would welcome the chance to talk") makes no claim.
+const COURTESY_RE = /\b(?:would|welcome|glad|talk|thank|thanks|look forward|appreciate|happy to|eager|excited|hear from|reach me|contact me|consideration|sincerely|regards|dear)\b/i;
+const SCOPE_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\w*|train(?:ed|ing)?|mentor\w*|coordinat\w*)\b/gi;
+const LETTER_FAR = 0.5;
+
+/** The claim sentences of a letter, each with the letter line it is on. */
+function letterSentences(letter: string): Array<{ line: string; sentence: string }> {
+  const out: Array<{ line: string; sentence: string }> = [];
+  for (const line of linesOf(letter)) {
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      const t = sentence.trim();
+      if (!t || t.split(/\s+/).length < 4 || COURTESY_RE.test(t)) continue;
+      out.push({ line, sentence: t });
+    }
+  }
+  return out;
+}
+
+/**
+ * The letter's own checks beyond the mint check: a sentence far from the
+ * person's words (above half its words new, against their words and the
+ * resume as it stands now), and a scope word ("supervised", "managed", "led",
+ * "trained") the person never used. Each is a BLOCK an answer settles, like a
+ * defend line. Credentials in the letter are checked by name, once, skipping
+ * any the resume already asks about.
+ */
+function letterItems(letter: string, resumeText: string, source: string, answers: DefendAnswer[]): GateItem[] {
+  const items: GateItem[] = [];
+  const against = `${source}\n${resumeText}`;
+  const srcWords = (source.toLowerCase().match(/[a-z]+/g) ?? []);
+  for (const { line, sentence } of letterSentences(letter)) {
+    const far = distanceFromSource(sentence, against) > LETTER_FAR;
+    const scope = Array.from(sentence.matchAll(SCOPE_RE)).map((m) => m[1].toLowerCase()).find((w) => {
+      const st = stemOf(w === "led" ? "lead" : w);
+      return !srcWords.some((x) => stemOf(x === "led" ? "lead" : x) === st);
+    });
+    if (!far && !scope) continue;
+    // Settled by an answer; a scope word only by an answer that talks about
+    // that scope ("I supervised the two dishwashers on Sundays").
+    const a = answerFor(answers, line);
+    if (answerStands(a, line, source) && (!scope || answerMentions(a!.answer, scope === "led" ? "lead" : scope))) continue;
+    if (items.some((i) => i.line === line && i.rule === "STD-C04")) continue;
+    items.push({
+      rule: "STD-C04",
+      severity: "BLOCK",
+      line,
+      target: "letter",
+      why: scope
+        ? `"${scope}" isn't a word you used about your work. The letter says what you did at the size you did it.`
+        : "Most of this sentence isn't in anything you told us.",
+      question: "Tell me in one sentence how you'd describe this line.",
+    });
+  }
+  const resumeKeys = new Set(credentialHomes(credentialMentionsOf(resumeText)).map((m) => m.key));
+  for (const c of checkCredentials(letter, source, resumeKeys)) {
+    if (c.issue === "status") continue; // the resume carries the credential's status question
+    items.push({
+      rule: "STD-T03",
+      severity: "BLOCK",
+      line: c.mention.line,
+      target: "letter",
+      kind: c.issue === "unsaid" ? "credential_unsaid" : "credential_upgrade",
+      why:
+        c.issue === "unsaid"
+          ? `"${c.mention.name.slice(0, 50)}" isn't in anything you told us. A credential goes in the letter only the way your card or papers say it.`
+          : "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
+      question:
+        c.issue === "unsaid"
+          ? CREDENTIAL_UNSAID_QUESTION
+          : questionForFinding({ rule: "STD-T03", line: c.mention.line, why: "" }),
+    });
   }
   return items;
 }
@@ -427,6 +556,8 @@ export function buildFinishView(input: {
   ownWords: string;
   defendAnswers: DefendAnswer[];
   coverLetterText?: string;
+  /** The writer's documents as delivered. Without them, rewrites add nothing to the person's words. */
+  written?: WrittenDocs | null;
   /** Skill terms the person added from a posting (keyword check). */
   addedTerms?: string[];
   /** The grounding block from generate-docs, when there is one. */
@@ -436,7 +567,7 @@ export function buildFinishView(input: {
 }): FinishView {
   const letter = input.coverLetterText ?? "";
   const answers = input.defendAnswers;
-  const source = gateSource(input.ownWords, answers, input.resumeText, letter);
+  const source = gateSource(input.ownWords, answers, [input.resumeText, letter], input.written);
   const status = getResumeStatus({
     resumeText: input.resumeText,
     sourceText: source,
@@ -444,6 +575,8 @@ export function buildFinishView(input: {
     secondCheckFindings: input.secondCheckFindings,
   });
 
+  const resumeLines = pageLineSet(input.resumeText);
+  const letterLines = pageLineSet(letter);
   const items: GateItem[] = [];
   for (const i of status.openItems) {
     // A skills term the person never said is asked about like any other
@@ -451,6 +584,11 @@ export function buildFinishView(input: {
     if (i.kind === "grid_term") {
       if (skillAnswerStands(answerFor(answers, i.line), i.line, source)) continue;
       items.push({ ...i, severity: "BLOCK", target: "skill" });
+      continue;
+    }
+    // A credential that is one term of a skills line is asked about as that term.
+    if (i.line && !resumeLines.has(squash(stripBullet(i.line))) && termOnPage(input.resumeText, i.line)) {
+      items.push({ ...i, target: "skill" });
       continue;
     }
     items.push({ ...i, target: "resume" });
@@ -461,6 +599,7 @@ export function buildFinishView(input: {
     for (const f of runMintCheck({ output: letter, source, kind: "cover_letter" }).findings) {
       items.push({ rule: f.rule, severity: f.severity, line: f.line, why: f.why, question: questionForFinding(f), target: "letter" });
     }
+    items.push(...letterItems(letter, input.resumeText, source, answers));
   }
 
   // Skills added from a posting: each one is explained in the person's words.
@@ -479,15 +618,18 @@ export function buildFinishView(input: {
   }
 
   // The claim trace, settled by a standing answer when it asks for one.
-  for (const g of groundingItems(input.grounding, input.resumeText, letter)) {
-    if (g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
-    if (items.some((i) => i.target === g.target && i.line === g.line && i.rule === g.rule)) continue;
+  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written)) {
+    if (g.line && g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
+    // Already held on that line under the same rule: mark it as the claim trace's too.
+    const same = g.line ? items.find((i) => i.target === g.target && i.line === g.line && i.rule === g.rule) : undefined;
+    if (same) {
+      same.trace = true;
+      continue;
+    }
     items.push(g);
   }
 
   // An item whose line is not on its page cannot be changed or cut there.
-  const resumeLines = pageLineSet(input.resumeText);
-  const letterLines = pageLineSet(letter);
   const onItsPage = (i: GateItem) =>
     i.target === "skill" ? true : (i.target === "letter" ? letterLines : resumeLines).has(squash(stripBullet(i.line)));
   const general = items.filter((i) => !i.line || !onItsPage(i));
@@ -508,7 +650,7 @@ export function buildFinishView(input: {
     target: its[0].target,
     items: its,
     blocking: its.some((i) => i.severity === "BLOCK"),
-    answerable: its[0].target === "skill" || (its[0].target !== "letter" && its.every(ANSWERABLE)),
+    answerable: its.every((i) => ANSWERABLE(i) || i.kind === "grid_term"),
     checked: false,
     answer: answerFor(answers, its[0].line),
   }));
@@ -520,13 +662,13 @@ export function buildFinishView(input: {
   );
 
   const openDefend = new Set(status.openItems.filter((i) => i.rule === "STD-C04").map((i) => squash(i.line)));
-  const groupedResume = new Set(groups.filter((g) => g.target === "resume").map((g) => g.line));
+  const grouped = new Set(groups.map((g) => g.line));
   const checkedLines: LineGroup[] = status.defendLines
     .filter((d) => !openDefend.has(squash(d.line)))
-    .filter((d) => !groupedResume.has(d.line))
+    .filter((d) => !grouped.has(d.line))
     .map((d) => ({
       line: d.line,
-      target: "resume" as const,
+      target: resumeLines.has(squash(stripBullet(d.line))) ? ("resume" as const) : ("skill" as const),
       items: [],
       blocking: false,
       answerable: true,
@@ -549,6 +691,7 @@ export function buildFinishView(input: {
     defendDone,
     defendTotal,
     source,
+    allLinesInOwnWords: status.allLinesInOwnWords,
   };
 }
 
