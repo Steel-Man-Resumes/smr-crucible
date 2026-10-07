@@ -3,6 +3,7 @@
 import { useState, createContext, useContext, useCallback } from "react";
 import type { ReactNode } from "react";
 import type { ResumeDocument } from "@/components/resume/resumeModel";
+import { migrateStoredSession, STORED_SESSION_VERSION } from "@/lib/forge-preferences";
 
 // --- Forge Session Context ---
 // Tracks user progress through the Forge flow without requiring auth.
@@ -46,6 +47,7 @@ export interface ForgeSessionData {
   challengeNarratives?: Record<string, string>;
 
   // Page 5: Preferences
+  // Comma-joined ids per question; see lib/forge-preferences.ts for the format.
   preferences?: Record<string, string>;
 
   // Page 6-7: Output
@@ -129,19 +131,31 @@ function loadSession(): ForgeSessionData {
   try {
     const stored = localStorage.getItem("forge_session");
     if (!stored) return {};
-    const parsed = JSON.parse(stored);
+    // A run saved by an older build is brought up to the current shape here,
+    // once, so somebody mid-run resumes with their answers intact. The stamp
+    // `_v` marks runs already on the current shape.
+    const { session: parsed, migrated } = migrateStoredSession(JSON.parse(stored));
+    if (migrated && typeof parsed._savedAt === "number") {
+      // Keep the original save time: migrating is not activity, so it must
+      // not extend how long a run left on a shared computer survives.
+      try {
+        localStorage.setItem("forge_session", JSON.stringify(parsed));
+      } catch {
+        // storage unavailable: the migrated copy still serves this page load
+      }
+    }
     // Runs saved before the stamp existed (or copied in by the Refinery) have
     // no `_savedAt`. Stamp them now rather than erase someone mid-run; the
     // clock then applies like any other run.
     if (typeof parsed?._savedAt !== "number") {
       saveSession(parsed);
-      return parsed;
+      return parsed as ForgeSessionData;
     }
     if (isForgeSessionExpired(parsed._savedAt)) {
       localStorage.removeItem("forge_session");
       return {};
     }
-    return parsed;
+    return parsed as ForgeSessionData;
   } catch {
     return {};
   }
@@ -152,7 +166,7 @@ function saveSession(data: ForgeSessionData) {
   try {
     localStorage.setItem(
       "forge_session",
-      JSON.stringify({ ...data, _savedAt: Date.now() })
+      JSON.stringify({ ...data, _v: STORED_SESSION_VERSION, _savedAt: Date.now() })
     );
   } catch {
     // localStorage may be full or unavailable — fail silently

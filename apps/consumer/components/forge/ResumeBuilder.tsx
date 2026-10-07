@@ -186,23 +186,29 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
               >
                 Looks good, continue
               </button>
-              {/* Downloading here is premature -- the Forge makes this resume
-                  significantly better in the next steps. One small control,
-                  explained, for people who truly need it now. */}
-              <button
-                onClick={() => setShowDownloads(!showDownloads)}
-                className="t-focus px-3 py-3 text-sm text-t-phos-dim hover:text-t-white transition-colors min-h-touch"
-              >
-                {showDownloads ? "Hide downloads" : "Need to download it now?"}
-              </button>
+              {/* Downloading here is premature: the Forge makes this resume
+                  stronger in the next steps. It stays available, as a small
+                  text link under the main button, for people who need a copy
+                  today. */}
+              <div className="w-full">
+                <button
+                  type="button"
+                  onClick={() => setShowDownloads(!showDownloads)}
+                  aria-expanded={showDownloads}
+                  className="t-focus min-h-touch text-sm text-t-phos-dim underline decoration-dotted underline-offset-4 transition-colors hover:text-t-white"
+                >
+                  {showDownloads ? "Hide the quick download" : "Need to download it now?"}
+                </button>
+                <p className="text-xs text-t-phos-dim">
+                  The full version comes after the next steps, and it is stronger.
+                </p>
+              </div>
               {showDownloads && (
                 <div className="w-full bg-t-panel-2 border border-t-line p-3 mt-1">
                   <p className="text-xs text-t-phos-dim leading-relaxed mb-2">
-                    Heads up: this is the <strong className="text-t-phos">before</strong> version.
-                    The next few steps turn it into a much stronger resume and
-                    cover letter. That&apos;s the whole point of the Forge. If
-                    you need a copy right now (an appointment today, a program
-                    requirement), grab one, then come back and finish.
+                    This is the <strong className="text-t-phos">before</strong> version. If
+                    you need a copy today (an appointment, a program requirement), grab one,
+                    then come back and finish.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -230,7 +236,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
               )}
             </>
           }
-          actionsHint="Continue when it looks right. We carry this through the rest of your Forge and make it stronger."
+          actionsHint="Continue when it looks right."
         />
 
         {/* Parser preview -- "what a machine reads", the honest ATS view. */}
