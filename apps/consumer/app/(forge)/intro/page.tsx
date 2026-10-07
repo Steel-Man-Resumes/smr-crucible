@@ -18,43 +18,13 @@
  * passes to t.ROY, and stores it for pre-auth t.ROY access.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { TroyLivingIcon } from "@crucible/consumer-ui";
 import { useForgeSession } from "@/lib/forge-context";
-
-type Audience = "client" | "partner" | "observer";
-
-interface PathOption {
-  id: Audience;
-  label: string;
-  subtitle: string;
-  route: string;
-}
-
-const CLIENT_PATH: PathOption = {
-  id: "client",
-  label: "Build my resume",
-  subtitle: "Start to finish in one sitting.",
-  route: "/welcome",
-};
-
-const OTHER_PATHS: PathOption[] = [
-  {
-    id: "partner",
-    label: "I’m from a partner organization",
-    subtitle: "See how it works with your clients",
-    route: "/partner",
-  },
-  {
-    id: "observer",
-    label: "I’m here to learn about this tool",
-    subtitle: "See the evidence and methodology",
-    route: "/overview",
-  },
-];
+import { CLIENT_PATH, OTHER_PATHS, sessionForPath, type PathOption } from "@/lib/forge-front-door";
 
 const WALKTHROUGH = [
   {
@@ -76,16 +46,14 @@ export default function IntroPage() {
   const { updateSession, clearSession } = useForgeSession();
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const tourRef = useRef<HTMLElement>(null);
 
   function handleSelect(path: PathOption) {
     // Clear any previous session data. Fresh start every time.
     clearSession();
 
-    updateSession({
-      audience: path.id,
-      pagesVisited: ["intro"],
-      isDemo: path.id !== "client",
-    });
+    updateSession(sessionForPath(path));
 
     // Persist audience for pre-auth t.ROY access
     try {
@@ -100,6 +68,14 @@ export default function IntroPage() {
   function openTour() {
     setTourStep(0);
     setTourOpen(true);
+    // Move focus into the walkthrough once it has rendered.
+    setTimeout(() => tourRef.current?.focus(), 0);
+  }
+
+  function closeTour() {
+    setTourOpen(false);
+    // Put focus back on the toggle once it is rendered again.
+    setTimeout(() => toggleRef.current?.focus(), 0);
   }
 
   const lastStep = tourStep === WALKTHROUGH.length - 1;
@@ -126,7 +102,7 @@ export default function IntroPage() {
               build a resume that tells the truth and holds up.
             </p>
             <p className="mt-3 text-base leading-relaxed text-t-bone-dim">
-              It&apos;s free. No account. Nothing stored unless you say so.
+              It&apos;s free. No account. Your work stays in this browser unless you save or send it.
             </p>
           </div>
         </div>
@@ -150,21 +126,23 @@ export default function IntroPage() {
 
         {/* Optional walkthrough: offered, easy to skip */}
         <div className="mt-6">
-          {!tourOpen ? (
-            <button
-              type="button"
-              onClick={openTour}
-              aria-expanded="false"
-              aria-controls="how-it-works"
-              className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-white underline decoration-t-line-strong underline-offset-4 transition-colors hover:text-t-amber-bright"
-            >
-              Show me what happens here
-            </button>
-          ) : (
+          <button
+            type="button"
+            ref={toggleRef}
+            onClick={tourOpen ? closeTour : openTour}
+            aria-expanded={tourOpen}
+            aria-controls="how-it-works"
+            className="t-focus mb-3 inline-flex min-h-touch items-center text-sm font-medium text-t-white underline decoration-t-line-strong underline-offset-4 transition-colors hover:text-t-amber-bright"
+          >
+            {tourOpen ? "Hide what happens here" : "Show me what happens here"}
+          </button>
+          {tourOpen && (
             <section
               id="how-it-works"
+              ref={tourRef}
+              tabIndex={-1}
               aria-label="What happens here"
-              className="rounded-[5px] border border-t-line bg-t-panel p-5"
+              className="rounded-[5px] border border-t-line bg-t-panel p-5 outline-none"
             >
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="font-term text-[11px] font-semibold uppercase tracking-[0.14em] text-t-amber-bright">
@@ -172,7 +150,7 @@ export default function IntroPage() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setTourOpen(false)}
+                  onClick={closeTour}
                   className="t-focus inline-flex min-h-touch items-center px-2 text-sm font-medium text-t-bone-dim transition-colors hover:text-t-white"
                 >
                   Skip
@@ -209,7 +187,7 @@ export default function IntroPage() {
                   )}
                   <button
                     type="button"
-                    onClick={() => (lastStep ? setTourOpen(false) : setTourStep(tourStep + 1))}
+                    onClick={() => (lastStep ? closeTour() : setTourStep(tourStep + 1))}
                     className="t-focus inline-flex min-h-touch items-center rounded-[5px] border border-t-amber px-4 text-sm font-semibold text-t-amber-bright transition-colors hover:bg-t-panel-2"
                   >
                     {lastStep ? "Got it" : "Next"}

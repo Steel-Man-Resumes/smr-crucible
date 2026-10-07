@@ -10,6 +10,7 @@ import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
 import { ClearThisComputerButton } from "@/components/ClearThisComputer";
 import { ShieldCheck, X } from "lucide-react";
 import { QuietShellProvider, useQuietShellState } from "./quiet-shell";
+import { WORKSHOP_PATHS, QUIET_PATHS, isQuiet, shellChrome } from "@/lib/forge-front-door";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -26,15 +27,7 @@ const FORGE_STEPS = [
   { path: "/output", label: "Results" },
 ];
 
-/**
- * Routes that wear the workshop palette (the SMR website's black, bone and
- * brass, see `.forge-workshop` in globals.css). The working pages keep the
- * light baseline until their owners opt in by adding their route here.
- */
-export const WORKSHOP_PATHS = ["/intro", "/overview", "/partner", "/get-listed"];
-
-/** Routes that hide the shell chrome (quiet shell). Empty by default; a page can also call useQuietShell(). */
-export const QUIET_PATHS: string[] = [];
+export { WORKSHOP_PATHS, QUIET_PATHS };
 
 // Pages that show the progress bar (not intro/welcome — those are entry gates)
 const PROGRESS_PATHS = FORGE_STEPS.map((s) => s.path);
@@ -82,7 +75,8 @@ function ForgeAssistant() {
 function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: boolean }) {
   const pathname = usePathname();
   const quietFromPage = useQuietShellState();
-  const quiet = quietProp || quietFromPage || QUIET_PATHS.includes(pathname);
+  const quiet = isQuiet({ quietProp, quietFromPage, pathname });
+  const chrome = shellChrome(quiet);
   const workshop = WORKSHOP_PATHS.includes(pathname);
 
   return (
@@ -99,14 +93,14 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
         <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6">
           <ProductFamilyBrand product="forge" productHref="/" className="py-1" />
           <div className="flex items-center gap-2 sm:gap-4">
-            {!quiet && (
+            {chrome.privateNote && (
               <span className="hidden items-center gap-1.5 font-term text-[10px] text-t-bone-dim lg:flex">
                 <ShieldCheck size={14} aria-hidden="true" />
                 Private by design
               </span>
             )}
-            <ClearThisComputerButton />
-            {!quiet && (
+            {chrome.clear && <ClearThisComputerButton />}
+            {chrome.leave && (
               <a
                 href="https://steelmanresumes.com"
                 className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-ws-bg/25 px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-ws-bg/60 hover:text-ws-bg"
@@ -118,22 +112,22 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
             )}
           </div>
         </div>
-        {!quiet && <ForgeProgress />}
+        {chrome.progress && <ForgeProgress />}
       </header>
       <main
         id="main"
         className={`min-h-[calc(100vh-72px)] bg-t-bg ${quiet ? "pb-8" : "pb-32 sm:pb-8"} ${
-          workshop ? "forge-workshop" : ""
+          workshop ? "forge-workshop forge-workshop--legacy-text" : ""
         }`}
       >
         {/* Signed-in people who just joined an organization are asked once
             whether it may see their progress. Renders nothing for anyone else. */}
-        {!quiet && <JoinSharingPrompt />}
+        {chrome.sharingPrompt && <JoinSharingPrompt />}
         {children}
       </main>
 
       {/* AI Assistant: available on every Forge page except in quiet mode */}
-      {!quiet && <ForgeAssistant />}
+      {chrome.assistant && <ForgeAssistant />}
     </>
   );
 }
