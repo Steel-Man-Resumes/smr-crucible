@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { fixPanelIntro, OWN_WORDS_LINE } from "@/lib/finish-copy";
 import {
   editableLine,
   prefillRewrite,
@@ -430,7 +431,7 @@ export function DefendPanel({
   actions: CardActions;
 }) {
   const progress = progressLine(view);
-  const finished = view.state === "finished";
+  const intro = fixPanelIntro(view);
   const resume = view.groups.filter((g) => g.target === "resume");
   const skills = view.groups.filter((g) => g.target === "skill" || g.target === "skillset");
   const letter = view.groups.filter((g) => g.target === "letter");
@@ -440,19 +441,19 @@ export function DefendPanel({
     <section id="fix-list" aria-labelledby="fix-list-heading" className="scroll-mt-20" data-testid="fix-list">
       <div className="mb-3">
         <h2 id="fix-list-heading" className="text-base font-bold text-t-white">
-          {finished ? "Every line checked" : "Fix these with t.ROY"}
+          {intro.heading}
         </h2>
-        <p className="mt-0.5 text-xs text-t-phos-dim">
-          {finished
-            ? "You can explain every line we asked about. You can still change an answer."
-            : "These are the lines only you can answer. Say it's true, change it, or cut it."}
-        </p>
+        {intro.subline && (
+          <p className="mt-0.5 text-xs text-t-phos-dim" data-testid="fix-panel-subline">
+            {intro.subline}
+          </p>
+        )}
         <p role="status" aria-live="polite" className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
           {progress}
         </p>
-        {view.allLinesInOwnWords && (
+        {intro.showOwnWords && (
           <p className="mt-1 text-xs text-t-phos" data-testid="all-own-words">
-            Every line here is in your own words.
+            {OWN_WORDS_LINE}
           </p>
         )}
       </div>
