@@ -39,6 +39,9 @@ import {
   parseResumeHeader,
   isSectionHeader,
   isCompetencyLine,
+  isDateText,
+  looksLikePlace,
+  splitResumeHeader,
   isJobTitleLine,
   isBulletLine,
   estimatePageFit,
@@ -177,6 +180,41 @@ test("classify: competency vs job-title disambiguation matches the route", () =>
   assert.ok(isJobTitleLine("Operations Manager | Global Freight, 2016 - Present"));
   // a contact line has an @ -> NOT a job title
   assert.equal(isJobTitleLine("555 | jordan@example.com | Milwaukee"), false);
+});
+
+test("classify: three- and four-part job headers are never skills lines", () => {
+  // The bug: three short parts counted as a skills list, so a job header with a
+  // short title, employer and place was drawn like a skills line.
+  assert.equal(isCompetencyLine("Shift Lead | UPI | Milwaukee, WI"), false);
+  assert.equal(isCompetencyLine("Shift Lead | UPI | 2019 - Present"), false);
+  assert.equal(isCompetencyLine("Line Cook | Coop Street | Milwaukee, Wisconsin"), false);
+  // The four-part format the Forge writes: TITLE | Company | City, State | Years
+  assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - Present"), false);
+  assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - 2024"), false);
+  assert.equal(classifyResumeLine("Shift Lead | UPI | Milwaukee, WI"), "jobTitle");
+  // Real skills lines still count as skills.
+  assert.ok(isCompetencyLine("Safety | Lean | Scheduling"));
+  assert.ok(isCompetencyLine("Forklift | Pallet jack | Inventory counts | Safety checks"));
+  assert.ok(isCompetencyLine("Sales, Marketing | Lean, Six | Budgets | Hiring"));
+});
+
+test("date and place helpers", () => {
+  assert.ok(isDateText("2019 - 2021"));
+  assert.ok(isDateText("2019 - 2021; 2026 - Present"));
+  assert.ok(isDateText("Jan 2020 - Mar 2021"));
+  assert.ok(isDateText("2018 (four months)"));
+  assert.equal(isDateText("Milwaukee, WI"), false);
+  assert.equal(isDateText("Forklift 2019 certified"), false);
+  assert.ok(looksLikePlace("Milwaukee, WI"));
+  assert.ok(looksLikePlace("Joliet, Illinois"));
+  assert.equal(looksLikePlace("Safety, Lean"), false);
+});
+
+test("splitResumeHeader: header lines and body lines", () => {
+  const r = splitResumeHeader(SHORT_RESUME);
+  assert.equal(r.header.nameLine, "JORDAN RIVERS");
+  assert.equal(r.bodyLines[0], "PROFESSIONAL SUMMARY");
+  assert.equal(r.headerLines.length, 3);
 });
 
 test("classify: bullets detected by all three markers", () => {
