@@ -1,5 +1,5 @@
 /**
- * Saving the Forge run in this browser to the account that just signed in.
+ * Saving the Forge run in this browser to the account that is signed in.
  *
  * Someone mid-Forge when the sign-in wall goes up has their whole run in this
  * browser only (localStorage "forge_session"). When they sign in, the run is
@@ -7,15 +7,20 @@
  * calls saveForgeSession: a key that is absent never wipes saved data), so
  * nothing in progress is lost.
  *
- * A browser can be shared (a library, a program's lab), so a run is never
- * silently given to whoever signs in next:
- *  - a run already saved to ANOTHER account is cleared from this browser (it
- *    is safe in that account);
- *  - a run with nobody's name on it yet, or a name that doesn't match the
- *    account, is ASKED about ("Is this yours?"), never assumed;
- *  - it is saved without asking only when it is provably this person's: the
- *    browser created this account with it (register carried it), or the name
- *    on the run matches the account's name (the same rule the Refinery uses);
+ * A browser can be shared (a library, a program's lab), and a browser can be
+ * signed in to an account its user did not choose (login CSRF), so a run is
+ * never given to an account on a guess (security review 3a r1, H1 and M1):
+ *  - THIS IS THE ONLY WAY a run in this browser enters an account. Account
+ *    creation no longer carries the run (register ignores any run it is sent),
+ *    and the Refinery's sync only saves runs already marked for its account.
+ *  - a run marked for ANOTHER account is cleared from this browser (it is safe
+ *    in that account), and so is any marked run once nobody is signed in;
+ *  - a run with answers that this tab did not watch being made while this
+ *    account was signed in is ASKED about, naming the account it would go to
+ *    ("Save it to the account for you@example.com?"). No name match, no mark
+ *    left by an earlier page, decides it;
+ *  - a run this account started in this tab (the run was empty, or already
+ *    this account's, the moment before it got answers) is this account's;
  *  - a demo run (sample data) is never saved to an account.
  *
  * Pure: the component (components/forge/ForgeImport.tsx) does the I/O.
@@ -53,16 +58,46 @@ export interface ImportUser {
   email?: string | null;
 }
 
-/** The name the run carries, if any (from the parsed resume or the built one). */
+/** The name the run carries, if any (from the parsed resume or the built one). Shown in the question, never trusted. */
 export function runOwnerName(run: Record<string, any>): string | null {
   const n = run?.forgeOutput?.contact?.name || run?.resumeDoc?.contact?.name;
   return typeof n === "string" && n.trim() ? n.trim() : null;
 }
 
+/** True when the run holds anything the person told us (beyond where they clicked in). */
+export function runHasAnswers(run: Record<string, any>): boolean {
+  if (runLevel(run) > 0) return true;
+  const filled = (v: unknown) =>
+    v !== undefined &&
+    v !== null &&
+    !(typeof v === "string" && !v.trim()) &&
+    !(Array.isArray(v) && v.length === 0) &&
+    !(typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0);
+  return [
+    "readinessStage",
+    "goals",
+    "goalNarrative",
+    "hookNarrative",
+    "challenges",
+    "criminalRecord",
+    "challengeNarratives",
+    "preferences",
+    "carriedIn",
+    "resumeWorries",
+  ].some((k) => filled(run[k]));
+}
+
 export function importDecision(
   run: unknown,
   user: ImportUser | null,
-  isSamePerson: (a: string | undefined, b: string | undefined) => boolean
+  opts: {
+    /**
+     * The run as this tab last saw it, while this same account was signed in,
+     * was empty or already this account's. A run that has answers now was
+     * then made here, by this account.
+     */
+    madeHere?: boolean;
+  } = {}
 ): ImportAction {
   if (!user || !user.id) return { action: "none" };
   if (!run || typeof run !== "object" || Array.isArray(run)) return { action: "none" };
@@ -80,15 +115,26 @@ export function importDecision(
   }
 
   // Unclaimed from here on.
-  if (level === 0) return { action: "claim" };
+  if (!runHasAnswers(r)) return { action: "claim" };
+  if (opts.madeHere === true) return { action: "claim" };
+  return { action: "ask", level, name: runOwnerName(r) };
+}
 
-  const registeredAs = typeof r._registeredAs === "string" ? r._registeredAs.trim().toLowerCase() : "";
-  const email = (user.email ?? "").trim().toLowerCase();
-  if (registeredAs && email && registeredAs === email) return { action: "save", level };
+/**
+ * What a browser with nobody signed in does with the run it holds: a run
+ * marked for an account is that account's (saved there), and the next person
+ * at this computer must not see it or carry it into another account.
+ */
+export function signedOutDecision(run: unknown): "clear" | "keep" {
+  if (!run || typeof run !== "object" || Array.isArray(run)) return "keep";
+  return typeof (run as Record<string, any>)._ownerUserId === "string" ? "clear" : "keep";
+}
 
-  const name = runOwnerName(r);
-  if (name && user.name && isSamePerson(name, user.name)) return { action: "save", level };
-  return { action: "ask", level, name };
+/** The question, naming the account the run would go to. */
+export function importQuestion(email: string | null | undefined, name: string | null): string {
+  const who = name ? ` for ${name}` : "";
+  const where = email ? ` Save it to the account for ${email}?` : " Save it to the account you are signed in to?";
+  return `This computer has a resume in progress${who}.${where}`;
 }
 
 /**

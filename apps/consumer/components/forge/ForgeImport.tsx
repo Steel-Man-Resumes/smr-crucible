@@ -2,8 +2,10 @@
 
 /**
  * Saves the Forge run in this browser to the account once someone is signed
- * in (fully: never while a second step is owed). The rules, including when to
- * ask "Is this yours?", are in lib/forge-import.ts.
+ * in (fully: never while a second step is owed), and clears a run that is
+ * marked for an account once nobody is signed in. The rules, including when to
+ * ask, are in lib/forge-import.ts. This is the only way a run in this browser
+ * enters an account.
  *
  * Renders nothing unless it has to ask, or has just saved someone's earlier
  * work (one quiet line).
@@ -18,11 +20,14 @@ import {
   afterSave,
   importDecision,
   importPayload,
+  importQuestion,
+  runHasAnswers,
   runLevel,
+  signedOutDecision,
   type RunLevel,
 } from "@/lib/forge-import";
-import { isSamePerson } from "@/lib/is-same-person";
 import { sessionPending } from "@/lib/session-policy";
+import { signOutOfForge } from "./ForgeAccountBar";
 
 const MAX_TRIES_PER_PAGE = 2;
 
@@ -40,6 +45,9 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
   const [note, setNote] = useState<"" | "saved" | "failed">("");
   const busy = useRef(false);
   const tries = useRef(0);
+  // Whether the run, the last time this tab looked while this account was
+  // signed in, was empty or already this account's (lib/forge-import.ts).
+  const madeHere = useRef<{ userId: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     tries.current = 0;
@@ -77,18 +85,31 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
     [run, updateSession, user?.id] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  const level = runLevel(run as Record<string, any>);
-  const owner = (run as Record<string, any>)._ownerUserId;
-  const synced = (run as Record<string, any>)._syncedLevel;
+  const r = run as Record<string, any>;
+  const level = runLevel(r);
+  const owner = r._ownerUserId;
+  const synced = r._syncedLevel;
+  const answered = runHasAnswers(r);
 
   useEffect(() => {
+    // Nobody signed in: a run marked for an account is that account's. Clear
+    // it before the next person at this computer can see it or sign up with it.
+    if (status === "unauthenticated") {
+      madeHere.current = null;
+      if (signedOutDecision(run) === "clear") clearSession();
+      return;
+    }
     if (!user || busy.current || asking) return;
-    const d = importDecision(run, user, isSamePerson);
+    const seen = madeHere.current;
+    const d = importDecision(run, user, { madeHere: !!seen && seen.userId === user.id && seen.ok });
     if (d.action === "claim") updateSession({ _ownerUserId: user.id });
     else if (d.action === "clear") clearSession();
     else if (d.action === "save") void save(d.level, !owner);
     else if (d.action === "ask") setAsking({ level: d.level, name: d.name });
-  }, [user?.id, pathname, level, owner, synced]); // eslint-disable-line react-hooks/exhaustive-deps
+    // What this tab saw, for the next look: anything but an open question
+    // means the run in hand is empty or this account's from here on.
+    madeHere.current = { userId: user.id, ok: d.action !== "ask" };
+  }, [status, user?.id, pathname, level, owner, synced, answered, r.startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null;
 
@@ -97,10 +118,10 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       <div className="mx-auto w-full max-w-2xl px-4 pt-4 sm:px-6" data-testid="forge-import-ask">
         <div role="dialog" aria-labelledby="forge-import-title" className="rounded-[5px] border border-t-amber bg-t-panel p-4 sm:p-5">
           <p id="forge-import-title" className="text-base font-semibold text-t-white">
-            This computer has a resume in progress{asking.name ? ` for ${asking.name}` : ""}. Is it yours?
+            {importQuestion(user.email, asking.name)}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-t-bone-dim">
-            If it is, we save it to your account so you don&apos;t lose it. If it isn&apos;t, we clear it from this computer.
+            If it&apos;s yours, we save it there so you don&apos;t lose it. If it isn&apos;t, we clear it from this computer.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
@@ -108,16 +129,18 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
               onClick={() => {
                 const level = asking.level;
                 setAsking(null);
+                madeHere.current = { userId: user.id, ok: true };
                 void save(level, true);
               }}
               className="t-focus min-h-touch rounded-[5px] border border-ws-amber bg-ws-amber px-4 text-sm font-semibold text-ws-bg hover:bg-ws-amber-bright"
             >
-              Yes, it&apos;s mine. Save it.
+              Yes, save it to my account
             </button>
             <button
               type="button"
               onClick={() => {
                 setAsking(null);
+                madeHere.current = { userId: user.id, ok: true };
                 clearSession();
               }}
               className="t-focus min-h-touch rounded-[5px] border border-t-line px-4 text-sm font-medium text-t-white hover:border-t-line-strong"
@@ -125,6 +148,17 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
               No, clear it
             </button>
           </div>
+          <p className="mt-3 text-sm text-t-bone-dim">
+            {user.email ? `Not ${user.email}? ` : "Not your account? "}
+            <button
+              type="button"
+              onClick={() => void signOutOfForge({ clearRun: true })}
+              className="t-focus min-h-touch font-medium text-t-white underline underline-offset-4"
+              data-testid="forge-import-sign-out"
+            >
+              Sign out
+            </button>
+          </p>
         </div>
       </div>
     );

@@ -370,3 +370,35 @@ export function safeLoginReturn(raw: string | null | undefined): string {
   if (path === "/login" || path.startsWith("/login/") || path.startsWith("/api/")) return "/dashboard";
   return raw;
 }
+
+/** The account route that saves a Forge run (gated by terms with the Forge). */
+export const FORGE_SAVE_PATH = "/api/forge/save";
+
+/**
+ * Terms gate (security review 3a r1, M4), once the wall is up: a session whose
+ * account has not accepted the current terms reaches no Forge screen ("page":
+ * go to the one-tap page) and no walled Forge API nor the run save ("api":
+ * 401). Anything but `terms === true` counts as not accepted. The signed-out
+ * allowlist and every non-Forge path are untouched ("pass").
+ */
+export function termsGateVerdict(path: string, wallUp: boolean, terms: unknown): "pass" | "page" | "api" {
+  if (!wallUp || terms === true) return "pass";
+  if (isForgeSignInPage(path)) return "page";
+  if (forgeApiNeedsSession(path, true) || path === FORGE_SAVE_PATH) return "api";
+  return "pass";
+}
+
+/**
+ * Where a session's revocation is checked (security review 3a r1, L2):
+ *  - "here":    in authorized(); a revoked session is refused (401 / sign-in);
+ *  - "as-open": a route on the Forge's signed-out allowlist; the middleware
+ *               checks it and, when revoked, serves the request as signed out
+ *               (the cookie is stripped), so a stale cookie in the browser
+ *               never breaks the free checker or t.ROY's public chat;
+ *  - "skip":    NextAuth's own and the pre-sign-in routes (unchanged).
+ */
+export function revocationCheck(path: string): "here" | "as-open" | "skip" {
+  if (isForgeSignedOutApi(path)) return "as-open";
+  if (path.startsWith("/api/") && authRouteSkipsSessionChecks(path)) return "skip";
+  return "here";
+}

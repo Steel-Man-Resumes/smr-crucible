@@ -4,11 +4,9 @@
  * Saves the forge_session / consumer_profile records and best-effort
  * auto-creates (or updates) the "forge" source resume artifact.
  *
- * Shared by:
- *  - /api/forge/save     (post-auth localStorage relay on the dashboard)
- *  - /api/auth/register  (so Forge work carries across the forge.* -> refinery.*
- *                         origin boundary at account creation, where the
- *                         localStorage relay can't reach it)
+ * Used by /api/forge/save only: the Forge's import (which asks the person and
+ * names the account) and the Refinery's sync of runs already marked for its
+ * account. Account creation no longer carries a run (security review 3a r1, H1).
  */
 
 import {

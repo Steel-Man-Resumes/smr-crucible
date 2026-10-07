@@ -27,7 +27,6 @@ import {
   type UserTier,
 } from "@/lib/useUserTier";
 import { useEffectiveRole } from "@/components/RoleProvider";
-import { isSamePerson } from "@/lib/is-same-person";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
@@ -407,59 +406,21 @@ export function RefineryShell({
         return;
       }
 
-      // UNCLAIMED blob (no `_ownerUserId` yet): the legitimate case is a brand
-      // new account claiming the anonymous Forge run it just did itself. The
-      // dangerous case is a stale, unrelated run left in this browser (a demo
-      // persona, a walkthrough, a different account) that the next person to
-      // sign in here would otherwise silently inherit -- and this effect would
-      // then WRITE that stranger's identity onto the signed-in account's real
-      // Forge session and base resume artifact via /api/forge/save. (Found
-      // 2026-09-22: a demo-account run persisted into Troy's own account this
-      // way and then fed a live job search.) An unclaimed blob whose own
-      // captured name plainly isn't the signed-in account's name is foreign;
-      // treat it exactly like an owner mismatch above instead of claiming it.
-      //
-      // Claiming requires a POSITIVE match, not the absence of a mismatch.
-      // The first version of this guard read `blobName && accountName &&
-      // !isSamePerson(...)`, which short-circuited before `isSamePerson` ever
-      // ran whenever either name was missing -- and then fell through to the
-      // claim. So the one case the helper is most careful about (it returns
-      // false for an absent name: "with nothing to compare, we do not get to
-      // assume") was the one case that skipped the check entirely. A named
-      // stranger's run landing in a browser where the signed-in account has no
-      // name was silently inherited.
+      // UNCLAIMED blob (no `_ownerUserId` yet): never claimed here. A run
+      // left in a shared browser, or a browser signed in to an account its
+      // user did not choose, must not land in the signed-in account on a
+      // guess. A name match used to be enough; it was a token-subset test
+      // ("Jane" matched "Jane Doe"), so it is gone (security review 3a r1,
+      // H1 and M1). The Forge asks the person, naming the account
+      // (components/forge/ForgeImport.tsx), and marks the run once it is
+      // theirs; this sync then picks it up through the owner check above.
+      // Until then: do not save it and do not destroy it, but clear what is
+      // DERIVED from it (preload, saved and hidden jobs, the last search, the
+      // approved baseline), so an unproven run never shows on this account's
+      // screens (the visible half of the 2026-09-22 bleed).
       if (!forgeData._ownerUserId) {
-        const blobName: string | undefined =
-          forgeData.forgeOutput?.contact?.name || forgeData.resumeDoc?.contact?.name;
-        const accountName = sessionData?.user?.name ?? undefined;
-
-        if (blobName && accountName) {
-          if (!isSamePerson(blobName, accountName)) {
-            // Foreign: purge so it can't sync to or surface for this account.
-            clearPersonalLocalStorage();
-            window.dispatchEvent(new Event("forge-synced"));
-            return;
-          }
-          // Names match: fall through and claim, as before.
-        } else {
-          // UNVERIFIABLE: one side has no name, so ownership can be neither
-          // established nor disproved. Do all three of these, because any one
-          // alone is wrong:
-          //   - do not claim it (no /api/forge/save, no `_ownerUserId` stamp),
-          //     so an unproven run never enters an account;
-          //   - do not DESTROY it either. It may well be this person's own
-          //     in-progress run, and a false "different" costs someone the
-          //     work they just did. `forge_session` stays put.
-          //   - clear what is DERIVED from it. `forge_preload`, saved and
-          //     hidden jobs, the last job search and the approved baseline are
-          //     all rendered from the run, so leaving them would show an
-          //     unverified stranger's material on this account's screens --
-          //     the visible half of the 2026-09-22 bleed, minus the write.
-          // Self-healing by design: once the account has a name and it matches,
-          // the next sign-in claims the run through the normal path above.
-          clearRunScopedLocalStorage();
-          return;
-        }
+        clearRunScopedLocalStorage();
+        return;
       }
 
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;

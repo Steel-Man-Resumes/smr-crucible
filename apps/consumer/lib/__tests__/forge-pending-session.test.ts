@@ -227,7 +227,7 @@ describe("lock 1: the request the middleware forwards", () => {
 
   it("middleware.ts forwards exactly those headers, and auth.ts holds only on \"hold\"", () => {
     const mw = readFileSync(join(__dirname, "..", "..", "middleware.ts"), "utf8");
-    assert.match(mw, /import \{ forgeAnonymousRequestHeaders \} from "@\/lib\/session-policy"/);
+    assert.match(mw, /import \{ forgeAnonymousRequestHeaders[^}]*\} from "@\/lib\/session-policy"/);
     // Lane 3a: the wall state is passed through (it changes which routes are served signed out).
     assert.match(
       mw,

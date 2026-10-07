@@ -48,6 +48,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   }
 
+  // A run marked for another account is never saved to this one (security
+  // review 3a r1, H1). The browser clears such a run; this is the server's half.
+  const marked = (body as Record<string, unknown>)._ownerUserId;
+  if (typeof marked === "string" && marked !== userId) {
+    return NextResponse.json({ error: "This work belongs to another account." }, { status: 409 });
+  }
+
   try {
     await persistForgeSession(userId, body as Record<string, any>);
     return NextResponse.json({ success: true });

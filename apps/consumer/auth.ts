@@ -18,7 +18,10 @@ import {
   revocationVerdict,
   sessionRowRequired,
   forgeGateVerdict,
+  termsGateVerdict,
+  revocationCheck,
 } from "@/lib/session-policy";
+import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION } from "@/lib/terms";
 import {
   FORGE_SIGN_IN_REQUIRED_MESSAGE,
   forgeSignInUrl,
@@ -370,7 +373,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // NextAuth's own actions (which keep /api/auth/session polling off the
       // DB) and the pre-sign-in routes skip it; see authRouteSkipsSessionChecks.
       const sid = (session?.user as any)?.sid as string | undefined;
-      if (session && sid && (isDashboard || isForgeScreen || (isApi && !authRouteSkipsSessionChecks(path)))) {
+      // L2: the signed-out allowlist is checked in the middleware instead, where
+      // a revoked session is served as signed out (revocationCheck).
+      if (session && sid && (isDashboard || isForgeScreen || isApi) && revocationCheck(path) === "here") {
         if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });
@@ -403,6 +408,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const verify = new URL(MFA_VERIFY_PAGE, request.url);
         verify.searchParams.set("callbackUrl", path + request.nextUrl.search);
         return Response.redirect(verify);
+      }
+
+      // Terms (security review 3a r1, M4): once the wall is up, an account that
+      // has not accepted the Terms, Privacy Policy and AI-processing notice
+      // (email-link and Google accounts never saw the sign-up checkbox) does it
+      // once, on a one-tap page, before any Forge screen or Forge API.
+      if (session) {
+        const terms = termsGateVerdict(path, wallUp, (session.user as any)?.terms);
+        if (terms === "api") {
+          return Response.json(
+            { error: "Accept the terms to keep going. It takes one tap.", termsRequired: true },
+            { status: 401 }
+          );
+        }
+        if (terms === "page") {
+          const page = new URL(TERMS_PAGE, request.url);
+          page.searchParams.set("callbackUrl", path + request.nextUrl.search);
+          return Response.redirect(page);
+        }
       }
 
       // Admin powers (admin tools, impersonation) need a session that
@@ -539,6 +563,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // (claim): keep the two-step or password by entering it, or say "I
         // didn't set this" to remove it. Nothing is removed here.
         delete (token as any).claim;
+        // How this session signed in (for the consent ledger), and whether the
+        // account has accepted the current terms (lib/terms.ts).
+        (token as any).via = account?.provider ?? null;
+        try {
+          const t = await pool.query(CONSENT_LOOKUP_SQL, [token.sub, TERMS_VERSION]);
+          (token as any).terms = (t.rowCount ?? 0) > 0;
+        } catch {
+          delete (token as any).terms; // looked up again later
+        }
         // Google counts as proof only for its own address (checked above).
         if (account?.provider === "resend" || (account?.provider === "google" && googleMatched)) {
           const { readProofState, claimForInboxProof, markEmailProven } = await import("@/lib/email-proof");
@@ -605,6 +638,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Terms: read again after the acceptance page calls update(), and once
+      // for a session signed in before the claim existed. Only ever set from
+      // the database row, never from anything the client sent.
+      if (
+        token.sub &&
+        ((trigger === "update" && (token as any).terms !== true) || (token as any).terms === undefined)
+      ) {
+        try {
+          const rows = (await sqlEdge`
+            SELECT 1 FROM consumer_consent
+             WHERE user_id = ${token.sub}::uuid AND consent_layer = 'core' AND status = 'granted'
+               AND consent_text_version = ${TERMS_VERSION}
+             LIMIT 1`) as any[];
+          (token as any).terms = rows.length > 0;
+        } catch {
+          // leave as is; the gate treats anything but true as not accepted
+        }
+      }
+
       // Sessions signed in before F1 carry no `mfa` claim. One minted by an
       // email link into a two-step account never saw a code, so an older
       // session of a two-step account is asked for the code once. Edge-safe
@@ -631,6 +683,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).mfaAt = typeof (token as any).mfaAt === "number" ? (token as any).mfaAt : null;
         // F3: "2fa" or "password" while the first-proof choice is owed.
         (session.user as any).claim = (token as any).claim ?? null;
+        // M4: true once the account accepted the current terms (lib/terms.ts).
+        (session.user as any).terms = (token as any).terms === true;
+        (session.user as any).via = (token as any).via ?? null;
       }
       return session;
     },

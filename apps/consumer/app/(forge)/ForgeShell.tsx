@@ -17,6 +17,7 @@ import { WORKSHOP_PATHS, QUIET_PATHS, isQuiet, shellChrome } from "@/lib/forge-f
 import { FORGE_PUBLIC_PAGES } from "@/lib/forge-access";
 import { ForgeImport } from "@/components/forge/ForgeImport";
 import { SignInNotice } from "@/components/forge/SignInNotice";
+import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -119,6 +120,8 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
           </div>
         </div>
         {chrome.progress && <ForgeProgress />}
+        {/* Whose account this is, with a way out (shown whenever signed in). */}
+        <ForgeAccountBar />
       </header>
       {/* The sign-in date notice: public pages only, and only while a date is set and ahead. */}
       {(FORGE_PUBLIC_PAGES as readonly string[]).includes(pathname) && <SignInNotice />}

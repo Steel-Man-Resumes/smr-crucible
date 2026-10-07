@@ -11,9 +11,11 @@ import {
   afterSave,
   importDecision,
   importPayload,
+  importQuestion,
+  runHasAnswers,
   runLevel,
+  signedOutDecision,
 } from "../forge-import";
-import { isSamePerson } from "../is-same-person";
 import { profileUpsertParams } from "@crucible/core/src/forgeSession";
 import { isSameOriginJsonPost } from "../same-origin";
 
@@ -36,57 +38,78 @@ const midRun = (extra: Record<string, unknown> = {}) => ({
 
 describe("which runs are saved, asked about, or cleared", () => {
   it("nothing happens without a signed-in user or a run", () => {
-    assert.deepEqual(importDecision(midRun(), null, isSamePerson), { action: "none" });
-    assert.deepEqual(importDecision(null, USER, isSamePerson), { action: "none" });
-    assert.deepEqual(importDecision([], USER, isSamePerson), { action: "none" });
+    assert.deepEqual(importDecision(midRun(), null), { action: "none" });
+    assert.deepEqual(importDecision(null, USER), { action: "none" });
+    assert.deepEqual(importDecision([], USER), { action: "none" });
   });
 
   it("a demo run (sample data) never enters an account", () => {
-    assert.deepEqual(importDecision(midRun({ isDemo: true }), USER, isSamePerson), { action: "none" });
+    assert.deepEqual(importDecision(midRun({ isDemo: true }), USER), { action: "none" });
   });
 
   it("a run saved to another account is cleared from this browser, never imported", () => {
-    assert.deepEqual(importDecision(midRun({ _ownerUserId: "user-b" }), USER, isSamePerson), { action: "clear" });
+    assert.deepEqual(importDecision(midRun({ _ownerUserId: "user-b" }), USER), { action: "clear" });
+    assert.deepEqual(importDecision(midRun({ _ownerUserId: "user-b" }), USER, { madeHere: true }), { action: "clear" });
   });
 
   it("a run with no name, or someone else's name, is asked about, never assumed", () => {
-    const d = importDecision(midRun(), USER, isSamePerson);
+    const d = importDecision(midRun(), USER);
     assert.equal(d.action, "ask");
-    const other = importDecision(
-      midRun({ resumeDoc: { contact: { name: "Jordan Example" } } }),
-      USER,
-      isSamePerson
-    );
+    const other = importDecision(midRun({ resumeDoc: { contact: { name: "Jordan Example" } } }), USER);
     assert.equal(other.action, "ask");
     if (other.action === "ask") assert.equal(other.name, "Jordan Example");
-    const noAccountName = importDecision(midRun({ resumeDoc: { contact: { name: "Morgan Sample" } } }), { ...USER, name: null }, isSamePerson);
-    assert.equal(noAccountName.action, "ask");
   });
 
-  it("saved without asking when the name matches, or this browser just registered with it", () => {
-    assert.deepEqual(
-      importDecision(midRun({ resumeDoc: { contact: { name: "Morgan Sample" } } }), USER, isSamePerson),
-      { action: "save", level: 1 }
-    );
-    assert.deepEqual(
-      importDecision(midRun({ _registeredAs: "morgan@example.com" }), USER, isSamePerson),
-      { action: "save", level: 1 }
-    );
-    assert.equal(importDecision(midRun({ _registeredAs: "someone@example.com" }), USER, isSamePerson).action, "ask");
+  // Security review 3a r1, M1: a name match decided ownership ("Jane" matched
+  // "Jane Doe"), so a login-CSRF account named like the victim got the run.
+  it("M1: a matching name never saves without asking (exact, partial, or case)", () => {
+    for (const accountName of ["Morgan Sample", "morgan sample", "Morgan"]) {
+      const d = importDecision(midRun({ resumeDoc: { contact: { name: "Morgan Sample" } } }), { ...USER, name: accountName });
+      assert.equal(d.action, "ask", accountName);
+    }
   });
 
-  it("a run with no resume yet is only claimed (nothing worth saving)", () => {
-    assert.deepEqual(importDecision({ audience: "client", readinessStage: "action" }, USER, isSamePerson), { action: "claim" });
+  // H1: the register path's mark was treated as proof of ownership.
+  it("H1: a mark left by account creation is not proof; the person is asked", () => {
+    assert.equal(importDecision(midRun({ _registeredAs: "morgan@example.com" }), USER).action, "ask");
+  });
+
+  it("a run this account started in this tab is this account's (no question for your own new run)", () => {
+    assert.deepEqual(importDecision(midRun(), USER, { madeHere: true }), { action: "claim" });
+  });
+
+  it("an empty run is only claimed; one with answers but no resume yet is asked about", () => {
+    assert.deepEqual(importDecision({ audience: "client", pagesVisited: ["intro"] }, USER), { action: "claim" });
+    assert.equal(importDecision({ audience: "client", readinessStage: "action" }, USER).action, "ask");
+    assert.equal(importDecision({ carriedIn: { code: "X", skills: ["a"], jobs: [] } }, USER).action, "ask");
+    assert.equal(runHasAnswers({ audience: "client", pagesVisited: ["intro"], startedAt: "t" }), false);
+    assert.equal(runHasAnswers({ goals: [] }), false);
+    assert.equal(runHasAnswers({ goals: ["x"] }), true);
   });
 
   it("an owned run saves again only when it moves up a level (resume, then finished)", () => {
     const owned = midRun({ _ownerUserId: "user-a", _syncedLevel: 1 });
-    assert.deepEqual(importDecision(owned, USER, isSamePerson), { action: "none" });
-    assert.deepEqual(
-      importDecision({ ...owned, forgeOutput: { narrative: {} } }, USER, isSamePerson),
-      { action: "save", level: 2 }
+    assert.deepEqual(importDecision(owned, USER), { action: "none" });
+    assert.deepEqual(importDecision({ ...owned, forgeOutput: { narrative: {} } }, USER), { action: "save", level: 2 });
+    assert.deepEqual(importDecision(midRun({ _ownerUserId: "user-a" }), USER), { action: "save", level: 1 });
+  });
+
+  it("H1: once nobody is signed in, a run marked for an account is cleared; an unmarked one is kept", () => {
+    assert.equal(signedOutDecision(midRun({ _ownerUserId: "user-a" })), "clear");
+    assert.equal(signedOutDecision(midRun()), "keep");
+    assert.equal(signedOutDecision(null), "keep");
+  });
+
+  it("M1: the question names the account the run would go to", () => {
+    assert.equal(
+      importQuestion("morgan@example.com", "Jordan Example"),
+      "This computer has a resume in progress for Jordan Example. Save it to the account for morgan@example.com?"
     );
-    assert.deepEqual(importDecision(midRun({ _ownerUserId: "user-a" }), USER, isSamePerson), { action: "save", level: 1 });
+    assert.equal(
+      importQuestion("morgan@example.com", null),
+      "This computer has a resume in progress. Save it to the account for morgan@example.com?"
+    );
+    assert.doesNotMatch(importQuestion("a@b.c", "X"), /[\u2013\u2014]/);
   });
 
   it("levels", () => {
@@ -145,33 +168,81 @@ describe("what is sent, and what the account keeps", () => {
     assert.match(login, /if \(forgeReturn\) return forgeReturn;/);
   });
 
-  it("the shell runs the import, and the register path marks the run it carried", () => {
+  it("the shell runs the import; the import skips pending sessions and posts same-origin JSON", () => {
     assert.match(read("app/(forge)/ForgeShell.tsx"), /<ForgeImport showPrompt=\{!quiet\} \/>/);
-    const login = read("app/(auth)/login/page.tsx");
-    assert.match(login, /run\._registeredAs = email\.trim\(\)\.toLowerCase\(\)/);
     const comp = read("components/forge/ForgeImport.tsx");
     assert.match(comp, /!sessionPending\(authUser\)/);
     assert.match(comp, /"\/api\/forge\/save"/);
     assert.match(comp, /"Content-Type": "application\/json"/);
+    assert.match(comp, /signedOutDecision\(run\) === "clear"/);
   });
 });
 
-describe("CSRF: only this origin may post a run into the account", () => {
+// Security review 3a r1, H1: account creation carried any run in the browser
+// (someone else's, already saved to their account) into the new account.
+describe("H1: no run enters an account except through the Forge's question", () => {
+  const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  it("the create-account form sends no run and leaves no ownership mark", () => {
+    const login = code(read("app/(auth)/login/page.tsx"));
+    const body = login.slice(login.indexOf('fetch("/api/auth/register"'), login.indexOf('fetch("/api/auth/register"') + 400);
+    assert.doesNotMatch(body, /\bforge\b/);
+    assert.doesNotMatch(login, /_registeredAs/);
+  });
+
+  it("register ignores any run it is sent and never saves one", () => {
+    const reg = code(read("app/api/auth/register/route.ts"));
+    assert.doesNotMatch(reg, /persistForgeSession|saveForgeSession|forge-persist/);
+    assert.doesNotMatch(reg, /\bforge\b\s*[,}]/);
+  });
+
+  it("the save route refuses a run marked for another account, before saving", () => {
+    const src = read("app/api/forge/save/route.ts");
+    assert.match(src, /typeof marked === "string" && marked !== userId/);
+    assert.ok(src.indexOf("marked !== userId") < src.indexOf("await persistForgeSession"));
+  });
+
+  it("the Refinery's sync never claims an unmarked run (no name match)", () => {
+    const shell = code(read("app/(dashboard)/RefineryShell.tsx"));
+    assert.doesNotMatch(shell, /isSamePerson/);
+    assert.match(shell, /if \(!forgeData\._ownerUserId\) \{\s*clearRunScopedLocalStorage\(\);\s*return;\s*\}/);
+  });
+
+  it("signing out from the Forge clears the run first", () => {
+    const bar = read("components/forge/ForgeAccountBar.tsx");
+    assert.ok(bar.indexOf('localStorage.removeItem(k)') < bar.indexOf("await signOut("));
+    assert.match(bar, /"forge_session"/);
+  });
+});
+
+describe("CSRF: only this app's origins may post a run into the account", () => {
   const json = { "content-type": "application/json" };
-  it("allows a same-origin fetch", () => {
-    assert.ok(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "same-origin" })));
-    assert.ok(isSameOriginJsonPost(new Headers({ ...json, origin: "https://forge.example.org", host: "forge.example.org" })));
-    assert.ok(isSameOriginJsonPost(new Headers({ ...json, origin: "https://forge.example.org", "x-forwarded-host": "forge.example.org", host: "internal" })));
-    assert.ok(isSameOriginJsonPost(new Headers(json)));
+  const env = { NODE_ENV: "production", AUTH_URL: "https://forge.example.org" };
+  it("allows a same-origin fetch, or a configured origin when Sec-Fetch-Site is absent", () => {
+    assert.ok(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "same-origin" }), env));
+    assert.ok(isSameOriginJsonPost(new Headers({ ...json, origin: "https://forge.example.org" }), env));
+    assert.ok(isSameOriginJsonPost(new Headers({ ...json, origin: "https://refinery.steelmanresumes.com" }), env));
+    assert.ok(isSameOriginJsonPost(new Headers(json), env));
   });
 
   it("refuses a sibling host on the shared cookie domain, another site, or a form post", () => {
-    assert.equal(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "same-site" })), false);
-    assert.equal(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "cross-site" })), false);
-    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "https://www.example.org", host: "forge.example.org" })), false);
-    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "null", host: "forge.example.org" })), false);
-    assert.equal(isSameOriginJsonPost(new Headers({ "content-type": "text/plain", "sec-fetch-site": "same-origin" })), false);
-    assert.equal(isSameOriginJsonPost(new Headers({ "content-type": "application/x-www-form-urlencoded" })), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "same-site" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, "sec-fetch-site": "cross-site" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "https://www.steelmanresumes.com" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "null" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ "content-type": "text/plain", "sec-fetch-site": "same-origin" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ "content-type": "application/x-www-form-urlencoded" }), env), false);
+  });
+
+  // L3: the sender controls Host and X-Forwarded-Host; they are never trusted.
+  it("L3: an origin that matches only the request's own Host or X-Forwarded-Host is refused", () => {
+    assert.equal(
+      isSameOriginJsonPost(new Headers({ ...json, origin: "https://evil.example", "x-forwarded-host": "evil.example" }), env),
+      false
+    );
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "https://evil.example", host: "evil.example" }), env), false);
+    assert.equal(isSameOriginJsonPost(new Headers({ ...json, origin: "http://localhost:3117" }), env), false);
+    assert.ok(isSameOriginJsonPost(new Headers({ ...json, origin: "http://localhost:3117" }), { NODE_ENV: "development" }));
   });
 
   it("the save route checks it before reading the session or the body", () => {

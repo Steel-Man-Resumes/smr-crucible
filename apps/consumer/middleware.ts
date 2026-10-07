@@ -1,8 +1,9 @@
-import { auth } from "./auth";
+import { auth, isSessionRevoked } from "./auth";
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { forgeAnonymousRequestHeaders } from "@/lib/session-policy";
+import { forgeAnonymousRequestHeaders, headersWithoutSessionCookie, revocationCheck } from "@/lib/session-policy";
 import { forgeWallState } from "@/lib/forge-access";
+import { emailCallbackNeedsButton, interstitialUrlFor } from "@/lib/sign-in-link";
 
 /**
  * Middleware = next-auth gate + developer-impersonation write blocking.
@@ -13,6 +14,12 @@ import { forgeWallState } from "@/lib/forge-access";
  * through. Invalid/forged cookies are ignored (effectiveAuth also re-verifies).
  */
 export default auth(async (req) => {
+  // Login CSRF: an email sign-in link reaches the callback only through our
+  // own "Finish signing in" button (lib/sign-in-link.ts).
+  if (emailCallbackNeedsButton(req.nextUrl.pathname, req.method, req.headers.get("sec-fetch-site"))) {
+    return NextResponse.redirect(interstitialUrlFor(req.nextUrl.toString()), 303);
+  }
+
   const token = req.cookies.get("smr_impersonate")?.value;
   if (
     token &&
@@ -52,6 +59,15 @@ export default auth(async (req) => {
   );
   if (anonymousHeaders) {
     return NextResponse.next({ request: { headers: anonymousHeaders } });
+  }
+
+  // A revoked session on a route that works signed out (the free checker,
+  // t.ROY's public chat): served as signed out, never refused (L2).
+  const user = req.auth?.user as { id?: string; sid?: string; sit?: unknown } | undefined;
+  if (user?.sid && revocationCheck(req.nextUrl.pathname) === "as-open") {
+    if (await isSessionRevoked(user.sid, user.id, user.sit)) {
+      return NextResponse.next({ request: { headers: headersWithoutSessionCookie(req.headers) } });
+    }
   }
 });
 
