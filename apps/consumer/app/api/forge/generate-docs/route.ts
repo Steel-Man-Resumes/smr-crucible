@@ -355,6 +355,7 @@ SECTION ORDER (exact):
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
    - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
+   - No work history at all: the page is still dated, never a dateless functional page. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.
 7. EDUCATION (only if the source gives any; otherwise leave the section off)
    - Institution, dates. City and state only if the source gives them. Add relevant coursework if it strengthens the resume.
 8. CERTIFICATIONS (only if the source gives any; separate section. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
@@ -454,7 +455,7 @@ CRITICAL REMINDERS:
 - Transform duties into achievement language using only the source's facts and stated scale.
 - CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
 - NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: a skills-led page is allowed, but list training, programs and volunteer work with the dates the person gave, and build only from what the person said.
+- If no work history exists: still a dated page, never a dateless functional one. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry; build only from what the person said.
 - Certifications get their OWN section, never buried in education.`;
 
   return await callClaude(system, prompt, userId, 4500);
