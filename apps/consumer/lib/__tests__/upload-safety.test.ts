@@ -14,7 +14,7 @@ import {
   UnsafeUploadError,
   assertSafePdf,
   decodeAscii85,
-  findObjectHeaders,
+  findObjectKeywords,
   jpegFrameSize,
   safeDocxForMammoth,
   storedZip,
@@ -401,15 +401,16 @@ describe("r3 M1: object headers and tokens are read with pdf.js's separators", (
   const OLD = /(\d+)\s+(\d+)\s+obj\b/;
   it("headers split by NUL, comments, TAB, FF or CR are found (the old \\s regex missed the first two)", () => {
     for (const h of ["5\x000\x00obj", "5%x\n0%y\nobj", "5\t0\fobj", "5\r\n0\r\nobj", "5 %a\r%b\n0 obj", "5\x00%c\n\x000\x00obj"]) {
-      const found = findObjectHeaders(h + "<<>>");
+      const found = findObjectKeywords(h + "<<>>");
       assert.equal(found.length, 1, JSON.stringify(h));
-      assert.equal(found[0].at, 0);
+      assert.equal(found[0].at, h.length - 3);
     }
     assert.equal(OLD.test("5\x000\x00obj"), false, "the gap this fixes");
     assert.equal(OLD.test("5%x\n0%y\nobj"), false, "the gap this fixes");
-    assert.deepEqual(findObjectHeaders("1 0 endobj"), []);
-    assert.deepEqual(findObjectHeaders("5 0 objx"), []);
-    assert.equal(findObjectHeaders("(a%b) 5 0 %c\nobj<<>>")[0].at, 6);
+    assert.deepEqual(findObjectKeywords("1 0 endobj"), []);
+    assert.deepEqual(findObjectKeywords("5 0 objx"), []);
+    assert.deepEqual(findObjectKeywords("/obj<<>>"), []);
+    assert.equal(findObjectKeywords("(a%b) 5 0 %c\nobj<<>>")[0].at, "(a%b) 5 0 %c\n".length);
   });
 
   it("a stream behind such a header is seen (chain refused) and capped (over the cap refused)", () => {
@@ -443,5 +444,71 @@ describe("r3 M1: object headers and tokens are read with pdf.js's separators", (
     refused(() => assertSafePdf(mini("5 0 obj<</Filter/FlateDecode/Length\x001>>stream\n", big)), "pdf_stream_too_big");
     // An unfiltered content stream behind a NUL header still has its inline images checked.
     refused(() => assertSafePdf(mini("5\x000\x00obj<<>>stream\nq BI /W 100000 /H 100000 /BPC 8 /CS /G ID x EI Q")), "pdf_image_too_big");
+  });
+});
+
+/* ------------------------------- security review 3a r4 ----------------- */
+
+describe("r4: linear object finding, lenient numbers, hidden streams, text codecs, short keys", () => {
+  const z = deflateSync(Buffer.from("BT ET"));
+
+  it("M2: headers whose numbers pdf.js reads leniently are found (the numbers are not read at all)", () => {
+    for (const h of ["+5 0 obj", "5.0 0 obj", "05 00 obj", "5 0obj", "-0 0 obj", "5\x000\x00obj"]) {
+      assert.equal(findObjectKeywords(h + "<<>>").length, 1, JSON.stringify(h));
+      refused(() => assertSafePdf(mini(`${h}<</Filter[/FlateDecode/FlateDecode]>>stream\n`, z)), "pdf_filter");
+    }
+  });
+
+  it("M3: a stream inside an object stream is refused", () => {
+    const inner = deflateSync(Buffer.from("7 0 <</Filter/FlateDecode/Length 5>>stream\nxxxxx\nendstream"));
+    refused(() => assertSafePdf(mini(`5 0 obj<</Type/ObjStm/N 1/First 4/Filter/FlateDecode>>stream\n`, inner)), "pdf_hidden_stream");
+    const fine = deflateSync(Buffer.from("7 0 <</Type/Page/MediaBox[0 0 612 792]>>"));
+    assert.doesNotThrow(() => assertSafePdf(mini(`5 0 obj<</Type/ObjStm/N 1/First 4/Filter/FlateDecode>>stream\n`, fine)));
+  });
+
+  it("L2: a stream whose only filter is ASCIIHex or ASCII85 is decoded and checked", () => {
+    const hex = Buffer.from("q BI /W 100000 /H 100000 /BPC 8 /CS /G ID x EI Q").toString("hex") + ">";
+    refused(() => assertSafePdf(mini("5 0 obj<</Filter/ASCIIHexDecode>>stream\n", hex)), "pdf_image_too_big");
+    const page = a85(Buffer.from("7 0 <</Type/Page/MediaBox[0 0 99999 99999]>>"));
+    refused(() => assertSafePdf(mini("5 0 obj<</Type/ObjStm/N 1/First 4/Filter/ASCII85Decode>>stream\n", page)), "pdf_page_too_big");
+  });
+
+  it("L1: the short size keys win when both are present, as in pdf.js", () => {
+    refused(() => assertSafePdf(mini("5 0 obj<</Subtype/Image/W 100000/Width 100/H 100000/Height 100>>stream\n", "x")), "pdf_image_too_big");
+    assert.doesNotThrow(() => assertSafePdf(mini("5 0 obj<</Subtype/Image/Width 100000/W 100/Height 100000/H 100>>stream\n", "x")));
+    refused(() => assertSafePdf(mini("5 0 obj<<>>stream\nq BI /W 100000 /Width 10 /H 100000 /Height 10 /BPC 8 /CS /G ID x EI Q")), "pdf_image_too_big");
+  });
+
+  it("M1: 1 MB benign runs scan in under 50 ms each (no quadratic shape)", () => {
+    const MB = 1024 * 1024;
+    const runs: Record<string, string> = {
+      digits: "1".repeat(MB),
+      "1 %": "1 %".repeat(MB / 3),
+      "1 1 %": "1 1 %".repeat(MB / 5),
+      "obj without delimiters": "obj".repeat(MB / 3),
+      "whitespace and comments": " \x00\t %c\n".repeat(MB / 8),
+      "obj then comment": "obj %".repeat(MB / 5),
+      "digits then letter": "1".repeat(MB) + "x",
+    };
+    for (const [name, text] of Object.entries(runs)) {
+      const b = Buffer.from("%PDF-1.7\n" + text, "latin1");
+      const t0 = performance.now();
+      try {
+        assertSafePdf(b);
+      } catch (e) {
+        assert.ok(e instanceof UnsafeUploadError, name);
+      }
+      const ms = performance.now() - t0;
+      assert.ok(ms < 50, `${name}: ${ms.toFixed(1)} ms`);
+    }
+  });
+
+  it("a shape that makes many candidates re-read one long run is refused by the work budget, quickly", () => {
+    // "obj<</A(" opens a string at every candidate; one closing run at the end.
+    const n = 20000;
+    const text = "obj<</A(".repeat(n) + ")".repeat(n) + ">>";
+    const t0 = performance.now();
+    assert.throws(() => assertSafePdf(Buffer.from(text, "latin1")), (e: any) => e instanceof UnsafeUploadError && e.reason === "pdf_too_complex");
+    assert.ok(performance.now() - t0 < 1000);
   });
 });
