@@ -47,6 +47,11 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // "Email me my package" sends mail from SMR's domain to a typed address.
   // A person needs one or two sends; the route also caps per recipient.
   "email-package": 5,
+  // The free checker's file upload: text extraction (and OCR for a scan or a
+  // photo), no AI call, nothing stored. OCR is CPU heavy, so it is bounded.
+  "check-extract": 30,
+  // The public "get listed" form for organizations (stores a request).
+  "org-listing": 5,
 };
 
 export interface RateLimitResult {

@@ -207,6 +207,6 @@ Return JSON:
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "rush-resume",
 });

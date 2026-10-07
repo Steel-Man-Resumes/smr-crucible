@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { withRateLimit } from "@/lib/withRateLimit";
 
 export const maxDuration = 10;
 
@@ -24,7 +25,7 @@ const VALID_CATEGORIES = [
   "other",
 ];
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 100_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -108,3 +109,7 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Public form (it works with no session, before and after the Forge wall), so
+// it is bounded per IP: an organization needs one or two requests, never more.
+export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "org-listing" });

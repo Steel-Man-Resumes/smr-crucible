@@ -276,4 +276,4 @@ Write the single strongest TRUE bullet from ONLY these facts.${
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "forge-resume-assist" });
+export const POST = withRateLimit(handlePost, { mode: "forge", endpoint: "forge-resume-assist" });

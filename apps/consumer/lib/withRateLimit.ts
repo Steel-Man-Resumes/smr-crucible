@@ -1,6 +1,8 @@
 /**
  * Rate limit wrapper for API route handlers.
- * Two modes: "user" (authenticated, per-user) and "ip" (Forge, per-IP).
+ * Three modes: "user" (authenticated, per-user), "ip" (per-IP), and "forge"
+ * (the Forge's routes: per-account when signed in with per-IP as the floor,
+ * per-IP when signed out; see lib/forge-rate-limit.ts).
  *
  * Security features:
  * - Atomic increment-then-check (no TOCTOU race condition)
@@ -21,6 +23,9 @@ import {
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
+import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
+import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
+import { overLimit, planForgeLimit } from "./forge-rate-limit";
 import {
   LIVE_TEST_BUCKET,
   LIVE_TEST_DAILY_LIMIT,
@@ -42,7 +47,7 @@ const TIER_RANK: Record<string, number> = {
 };
 
 interface RateLimitOptions {
-  mode: "user" | "ip";
+  mode: "user" | "ip" | "forge";
   endpoint: string;
   /** Minimum tier required to access this endpoint. */
   requiredTier?: UserTier;
@@ -124,6 +129,51 @@ export function withRateLimit(
       }
 
       return handler(request);
+    }
+
+    // The Forge, signed in: count per account, with per-IP as the floor.
+    if (opts.mode === "forge") {
+      const path = new URL(request.url).pathname;
+      const userId = forgeUserId(await auth().catch(() => null)) ?? null;
+      const perPerson = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
+      const plan = planForgeLimit({
+        userId,
+        needsSession: forgeApiNeedsSession(path, forgeWallState() === "up"),
+        perPerson,
+        tierLimit: userId ? await getUserDailyLimit(userId) : perPerson,
+      });
+      if (plan.kind === "refuse") {
+        return NextResponse.json(
+          { error: FORGE_SIGN_IN_REQUIRED_MESSAGE, signInRequired: true },
+          { status: 401 }
+        );
+      }
+      if (plan.kind === "account") {
+        // The floor first: it is the one a farm of accounts on one machine hits.
+        // Its own counter, so signed-in use never spends the signed-out
+        // allowance of the same network (the free checker, for one).
+        const ipCount = await incrementIpUsage(getClientIp(request), `signed-in:${opts.endpoint}`);
+        if (overLimit(ipCount, plan.ipCeiling)) {
+          return NextResponse.json(
+            {
+              error:
+                "This network has used today's limit for this tool. Try again tomorrow, or from another connection.",
+            },
+            { status: 429 }
+          );
+        }
+        const count = await incrementUserUsage(plan.userId, opts.endpoint);
+        if (overLimit(count, plan.perAccount)) {
+          return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+        }
+        const authedCode = getAccessCodeCookie(request);
+        if (authedCode) {
+          void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
+          void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
+        }
+        return handler(request);
+      }
+      // Signed out on an open route: the per-IP rules below, unchanged.
     }
 
     // Live test calls from the team draw from their own bounded bucket, never

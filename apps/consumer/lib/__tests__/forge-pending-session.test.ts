@@ -228,10 +228,14 @@ describe("lock 1: the request the middleware forwards", () => {
   it("middleware.ts forwards exactly those headers, and auth.ts holds only on \"hold\"", () => {
     const mw = readFileSync(join(__dirname, "..", "..", "middleware.ts"), "utf8");
     assert.match(mw, /import \{ forgeAnonymousRequestHeaders \} from "@\/lib\/session-policy"/);
-    assert.match(mw, /forgeAnonymousRequestHeaders\(req\.nextUrl\.pathname, req\.auth\?\.user as any, req\.headers\)/);
+    // Lane 3a: the wall state is passed through (it changes which routes are served signed out).
+    assert.match(
+      mw,
+      /forgeAnonymousRequestHeaders\(\s*req\.nextUrl\.pathname,\s*req\.auth\?\.user as any,\s*req\.headers,\s*forgeWallState\(\) === "up"\s*\)/
+    );
     assert.match(mw, /NextResponse\.next\(\{ request: \{ headers: anonymousHeaders \} \}\)/);
     const authTs = readFileSync(join(__dirname, "..", "..", "auth.ts"), "utf8");
-    assert.match(authTs, /pendingSessionTreatment\(path, session\.user as any\) === "hold"/);
+    assert.match(authTs, /pendingSessionTreatment\(path, session\.user as any, wallUp\) === "hold"/);
     assert.doesNotMatch(authTs, /mfaGateApplies\(path\)/);
   });
 });

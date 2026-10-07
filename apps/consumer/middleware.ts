@@ -2,6 +2,7 @@ import { auth } from "./auth";
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { forgeAnonymousRequestHeaders } from "@/lib/session-policy";
+import { forgeWallState } from "@/lib/forge-access";
 
 /**
  * Middleware = next-auth gate + developer-impersonation write blocking.
@@ -43,7 +44,12 @@ export default auth(async (req) => {
   // Forge route that works signed out: the route runs as if signed out. The
   // session cookie is removed from the request the route sees (the browser
   // keeps it), so nothing is read from or attributed to that account.
-  const anonymousHeaders = forgeAnonymousRequestHeaders(req.nextUrl.pathname, req.auth?.user as any, req.headers);
+  const anonymousHeaders = forgeAnonymousRequestHeaders(
+    req.nextUrl.pathname,
+    req.auth?.user as any,
+    req.headers,
+    forgeWallState() === "up"
+  );
   if (anonymousHeaders) {
     return NextResponse.next({ request: { headers: anonymousHeaders } });
   }
@@ -59,14 +65,27 @@ export const config = {
     "/jobs/:path*",
     "/resources/:path*",
     "/progress/:path*",
+    // The Forge question and build screens (FORGE_SIGN_IN_PAGES in
+    // lib/forge-access.ts; a test keeps the two lists equal). They need a
+    // session only once the wall is up; before that authorized() lets them
+    // through untouched. Exact paths: the public Forge pages, the free checker
+    // and every /mini-forge path are never matched.
+    "/welcome",
+    "/resume",
+    "/goals",
+    "/story",
+    "/preferences",
+    "/processing",
+    "/output",
+    "/rush",
+    "/carry",
     // All API routes pass through so view-mode write blocking is universal.
     // The authorized() callback still decides auth per-path exactly as before
     // (pre-auth Forge routes remain open -- it returns true for them).
     "/api/:path*",
   ],
-  // The Forge flow (/welcome, /resume, /goals, /story, /preferences,
-  // /processing, /output) is intentionally NOT protected.
-  // No login wall before value delivery.
+  // The Forge flow is walled by date (lib/forge-access.ts): before the date it
+  // works signed out as it always has; after it, sign-in first.
   // /api/assistant uses dual-mode: IP pre-auth, user post-auth.
   // Hostname routing (forge/refinery subdomains) handled in next.config.mjs redirects.
 };

@@ -37,6 +37,16 @@ const nextConfig = {
     // worker/core files in the serverless function instead of relying on CDN
     // runtime downloads for executable assets. The pdfjs legacy build + its
     // worker .mjs are force-included so text extraction resolves the worker.
+    // The free checker reads files with the same extractors (OCR included).
+    "/api/check/extract": [
+      "../../node_modules/tesseract.js/**/*",
+      "../../node_modules/tesseract.js-core/**/*",
+      "../../node_modules/regenerator-runtime/**/*",
+      "../../node_modules/is-url/**/*",
+      "../../node_modules/wasm-feature-detect/**/*",
+      "../../node_modules/bmp-js/**/*",
+      "../../node_modules/pdfjs-dist/legacy/build/**/*",
+    ],
     "/api/parse": [
       "../../node_modules/tesseract.js/**/*",
       "../../node_modules/tesseract.js-core/**/*",

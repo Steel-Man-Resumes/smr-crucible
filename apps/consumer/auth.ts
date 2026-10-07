@@ -17,7 +17,14 @@ import {
   sessionPending,
   revocationVerdict,
   sessionRowRequired,
+  forgeGateVerdict,
 } from "@/lib/session-policy";
+import {
+  FORGE_SIGN_IN_REQUIRED_MESSAGE,
+  forgeSignInUrl,
+  forgeWallState,
+  isForgeSignInPage,
+} from "@/lib/forge-access";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -306,10 +313,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const path = request.nextUrl.pathname;
       const isApi = path.startsWith("/api/");
       const isDashboard = path.startsWith("/dashboard");
+      // The Forge wall (lib/forge-access.ts): once it is up, the Forge question
+      // and build screens and their API calls need a signed-in session. The
+      // public pages, the free checker and the Mini Forge are never matched here.
+      const wallUp = forgeWallState() === "up";
+      const isForgeScreen = wallUp && isForgeSignInPage(path);
+      const gate = forgeGateVerdict(path, !!session, wallUp);
+      // Before the wall these screens are open to everyone, exactly as when the
+      // middleware did not match them at all: no hold, no redirect (S1).
+      if (gate === "open") return true;
 
       // Dashboard pages: redirect to login if not authenticated
       if (isDashboard && !session) {
         return Response.redirect(new URL("/login", request.url));
+      }
+
+      // A Forge screen, signed out: sign in, then straight back to this page.
+      // Only the path and query of THIS request are carried, so the return
+      // address is always on this site (the login page checks it again).
+      if (gate === "sign-in") {
+        return Response.redirect(new URL(forgeSignInUrl(path + request.nextUrl.search), request.url));
+      }
+
+      // A walled Forge API route, signed out: 401, never a redirect.
+      if (gate === "refuse") {
+        return Response.json(
+          { error: FORGE_SIGN_IN_REQUIRED_MESSAGE, signInRequired: true },
+          { status: 401 }
+        );
       }
 
       // Protected API routes: return 401 (don't redirect)
@@ -339,12 +370,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // NextAuth's own actions (which keep /api/auth/session polling off the
       // DB) and the pre-sign-in routes skip it; see authRouteSkipsSessionChecks.
       const sid = (session?.user as any)?.sid as string | undefined;
-      if (session && sid && (isDashboard || (isApi && !authRouteSkipsSessionChecks(path)))) {
+      if (session && sid && (isDashboard || isForgeScreen || (isApi && !authRouteSkipsSessionChecks(path)))) {
         if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });
           }
-          return Response.redirect(new URL("/login", request.url));
+          return Response.redirect(
+            new URL(isForgeScreen ? forgeSignInUrl(path + request.nextUrl.search) : "/login", request.url)
+          );
         }
       }
 
@@ -354,7 +387,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // F3: the same hold covers the first-proof choice (claim).
       // S1: the Forge routes that work signed out are not held; the middleware
       // serves them to a pending session as signed out (session-policy.ts).
-      if (session && pendingSessionTreatment(path, session.user as any) === "hold") {
+      if (session && pendingSessionTreatment(path, session.user as any, wallUp) === "hold") {
         if (isApi) {
           const passwordOwed = (session.user as any)?.claim === "password";
           return Response.json(

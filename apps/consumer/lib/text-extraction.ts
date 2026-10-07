@@ -144,6 +144,59 @@ export async function extractTextFromBuffer(
 }
 
 /**
+ * The free checker's reader (/api/check/extract). Same extractors as the
+ * Forge, plus the one fact the checker reports: whether the file carries real
+ * text a hiring system can read ("text"), or had to be read as a picture
+ * ("picture": a scan, a photo, or a PDF made of images). Takes the KIND, not
+ * the file name, so the person's file name is never logged.
+ */
+export type CheckFileKind = "pdf" | "word" | "image" | "text";
+
+export function checkFileKind(fileName: string, mimeType: string): CheckFileKind | null {
+  const name = fileName.toLowerCase();
+  if (mimeType === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === "application/msword" ||
+    /\.docx?$/.test(name)
+  ) return "word";
+  if (mimeType.startsWith("image/") || /\.(png|jpe?g|heic|heif|webp|bmp|gif|tiff?)$/.test(name)) return "image";
+  if (mimeType === "text/plain" || mimeType === "application/rtf" || mimeType === "text/rtf" || /\.(txt|rtf)$/.test(name)) return "text";
+  return null;
+}
+
+export async function extractTextForCheck(
+  buffer: Buffer,
+  kind: CheckFileKind,
+  mimeType: string
+): Promise<{ text: string; read: "text" | "picture" }> {
+  if (kind === "pdf") {
+    try {
+      const text = await extractFromPDF(buffer);
+      if (hasMeaningfulText(text)) return { text, read: "text" };
+    } catch {
+      // No text layer: read it as a picture below.
+    }
+    return { text: await extractFromPDFWithOCR(buffer), read: "picture" };
+  }
+  if (kind === "word") {
+    try {
+      const text = await extractFromDOCX(buffer);
+      if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
+    } catch {
+      // An old .doc or a damaged file: try the plain text in it.
+    }
+    const text = extractLikelyText(buffer);
+    if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
+    throw new UnreadableDocumentError("We couldn't read text from that file.");
+  }
+  if (kind === "image") {
+    return { text: await extractFromImageBuffer(buffer, mimeType.startsWith("image/") ? mimeType : "image/png"), read: "picture" };
+  }
+  return { text: extractLikelyText(buffer), read: "text" };
+}
+
+/**
  * DOM/runtime polyfills so pdfjs text extraction works in the Node/serverless
  * runtime. pdfjs expects browser globals (DOMMatrix, Path2D, ImageData) and
  * Promise.withResolvers -- the last of which is missing on Node < 22 (local dev
