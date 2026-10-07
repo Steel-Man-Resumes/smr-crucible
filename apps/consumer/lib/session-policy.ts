@@ -148,6 +148,131 @@ export function sessionPending(user: { mfa?: unknown; claim?: unknown } | null |
   return user?.mfa === false || user?.claim === "2fa" || user?.claim === "password";
 }
 
+/*
+ * FORGE ROUTES SERVE A PENDING SESSION AS SIGNED OUT (S1, 2026-10-06).
+ *
+ * The session cookie is shared across the steelmanresumes.com hosts, so a
+ * Refinery sign-in that still owes its code rides along to the Forge. The
+ * Forge needs no sign-in, yet the hold above turned its upload and writing
+ * calls into "Enter your two-step code" errors.
+ *
+ * These exact paths are the API routes the Forge pages call that work with no
+ * session at all (IP rate limited, or no session use). For them a pending
+ * session is treated exactly like no session, by two independent locks:
+ *  1. the hold does not apply, and the middleware removes every cookie Auth.js
+ *     would read as the session (forgeAnonymousRequestHeaders), so the route's
+ *     own auth() normally sees nobody;
+ *  2. the routes that read the session take the user through forgeUserId /
+ *     forgeSessionUser, which return nothing for a pending session, so no work
+ *     is credited to the account even if a session cookie got through.
+ * A pending session gains nothing here that a signed-out visitor does not
+ * already have.
+ *
+ * Exact match only. Account routes (/api/forge/save, /api/forge/load,
+ * /api/forge/summary, /api/consent, /api/sharing/*, /api/support-request,
+ * /api/user/*, /api/coach/*) are deliberately absent and stay held.
+ */
+const FORGE_ANONYMOUS_API_ROUTES = new Set([
+  "/api/parse",
+  "/api/analyze",
+  "/api/rush-resume",
+  "/api/forge/generate-docs",
+  "/api/forge/download",
+  "/api/forge/email-package",
+  "/api/forge/resume-assist",
+  "/api/resume/fit-check",
+  "/api/assistant",
+  "/api/org-listing",
+]);
+
+/** True for an API route the Forge calls that works with no session. */
+export function isForgeAnonymousApiRoute(path: string): boolean {
+  return FORGE_ANONYMOUS_API_ROUTES.has(path);
+}
+
+/**
+ * What the pending-session rule does on `path`:
+ *  - "none":      the session is not pending, or the path is a step-up or
+ *                 sign-in route a pending session may use as itself;
+ *  - "anonymous": a Forge route that works signed out; serve it as signed out;
+ *  - "hold":      everything else; pages go to the code page, APIs get 401.
+ */
+export function pendingSessionTreatment(
+  path: string,
+  user: { mfa?: unknown; claim?: unknown } | null | undefined
+): "none" | "anonymous" | "hold" {
+  if (!sessionPending(user)) return "none";
+  if (isForgeAnonymousApiRoute(path)) return "anonymous";
+  return mfaGateApplies(path) ? "hold" : "none";
+}
+
+/**
+ * Cookies Auth.js reads as the session. Its SessionStore takes EVERY cookie
+ * whose name starts with the configured session cookie name and joins them
+ * (chunks), so "authjs.session-token-x" or "authjs.session-tokenZ" is read as
+ * the session too. This is the same prefix rule, for both names Auth.js may be
+ * configured with (plain, and __Secure- on https without the shared domain).
+ */
+const SESSION_COOKIE_PREFIXES = ["authjs.session-token", "__Secure-authjs.session-token"];
+
+export function isSessionCookieName(name: string): boolean {
+  return SESSION_COOKIE_PREFIXES.some((p) => name.startsWith(p));
+}
+
+/**
+ * A copy of the request headers with every cookie Auth.js would read as the
+ * session removed from the Cookie header (other cookies kept). Split the way
+ * Auth.js parses it: pairs separated by ";", the name is the text before the
+ * first "=" with surrounding whitespace removed. A repeated name is removed
+ * every time. Edge-safe.
+ */
+export function headersWithoutSessionCookie(headers: Headers): Headers {
+  const out = new Headers(headers);
+  const raw = out.get("cookie");
+  if (!raw) return out;
+  const kept = raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && !isSessionCookieName(part.split("=")[0].trim()));
+  if (kept.length) out.set("cookie", kept.join("; "));
+  else out.delete("cookie");
+  return out;
+}
+
+/**
+ * Lock 1, used by the middleware: the request headers a Forge route should run
+ * with for this session, or null to leave the request as it is.
+ */
+export function forgeAnonymousRequestHeaders(
+  path: string,
+  user: { mfa?: unknown; claim?: unknown } | null | undefined,
+  headers: Headers
+): Headers | null {
+  if (pendingSessionTreatment(path, user) !== "anonymous") return null;
+  return headersWithoutSessionCookie(headers);
+}
+
+type SessionLike = { user?: { id?: string | null; email?: string | null } | null } | null | undefined;
+
+/**
+ * Lock 2, used by the Forge routes that read the session: the signed-in user,
+ * or null when there is none or it still owes its code or first-proof choice.
+ */
+export function forgeSessionUser(session: SessionLike): { id: string; email: string | null } | null {
+  const user = session?.user as
+    | { id?: string | null; email?: string | null; mfa?: unknown; claim?: unknown }
+    | null
+    | undefined;
+  if (!user || sessionPending(user)) return null;
+  if (typeof user.id !== "string" || !user.id) return null;
+  return { id: user.id, email: user.email ?? null };
+}
+
+/** The user id a Forge route may credit work to, or undefined. */
+export function forgeUserId(session: SessionLike): string | undefined {
+  return forgeSessionUser(session)?.id;
+}
+
 /** Paths that exercise admin powers (cross-user tools, impersonation). */
 const ADMIN_POWER_PREFIXES = ["/api/admin/", "/api/dev/", "/dashboard/admin"];
 

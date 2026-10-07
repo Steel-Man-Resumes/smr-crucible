@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { buildFullContext, userContextFromForge } from "@/lib/context-library";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
@@ -120,7 +121,8 @@ async function handlePost(request: Request) {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
     // login wall before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const input: GenerateDocsInput = await request.json();
 

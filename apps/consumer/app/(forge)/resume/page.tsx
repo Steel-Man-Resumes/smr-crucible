@@ -22,6 +22,7 @@ import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
+import { forgeUploadErrorMessage } from "@/lib/forge-upload-error";
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
 
@@ -104,7 +105,7 @@ export default function ResumeIntakePage() {
         const data = await res.json();
 
         if (!res.ok) {
-          setUploadError(data.error || "Something went wrong. Try again?");
+          setUploadError(forgeUploadErrorMessage(res.status, data?.error));
           return;
         }
 
