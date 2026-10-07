@@ -426,9 +426,11 @@ export type ForkResult =
  * the whole chain: COALESCE(source.origin_artifact_id, source.id), so forking
  * a fork still points straight at the original root.
  *
- * The fork starts unlocked, unpinned, and lane-less (is_locked / is_current /
- * lane are NOT copied) -- a fork is a fresh draft, not a second approved
- * baseline. iteration_number is source + 1.
+ * The fork starts unlocked, unpinned, and without the R6 lane LABEL
+ * (is_locked / is_current / lane are NOT copied) -- a fork is a fresh draft,
+ * not a second approved baseline. It does stay in its source's career lane
+ * (lane_id, migration 073): a copy tailored from the Warehouse resume is
+ * Warehouse work. iteration_number is source + 1.
  *
  * content_hash is computed in SQL with md5(content::text) as part of the same
  * INSERT..SELECT, since the copy never passes through Node -- see hashContent()'s
@@ -451,7 +453,7 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        user_id, artifact_type, target_context, content,
        iteration_number, scaffold_level,
        parent_artifact_id, origin_artifact_id, content_hash,
-       creation_reason, operation_key
+       creation_reason, operation_key, lane_id
      )
      SELECT
        src.user_id,
@@ -464,7 +466,8 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        COALESCE(src.origin_artifact_id, src.id),
        md5(src.content::text),
        $4,
-       $5
+       $5,
+       src.lane_id
      FROM refinery_artifact src
      WHERE src.id = $1 AND src.user_id = $2
      ON CONFLICT (user_id, parent_artifact_id, operation_key) WHERE operation_key IS NOT NULL
