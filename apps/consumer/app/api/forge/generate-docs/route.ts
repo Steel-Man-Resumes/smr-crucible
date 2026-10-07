@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { buildFullContext, userContextFromForge } from "@/lib/context-library";
+import { buildForgeResumePrompts, type GenerateDocsInput } from "@/lib/forge-resume-prompt";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
@@ -28,62 +28,6 @@ export const maxDuration = 120;
 // Forge resume + cover letter generation is a DEEP task (models.ts doctrine):
 // one-shot documents whose quality changes a real outcome.
 const AI_MODEL = MODEL_DEEP;
-
-interface GenerateDocsInput {
-  narrative?: {
-    headline?: string;
-    summary?: string;
-    reflection?: string;
-    strengths?: Array<{ title: string; evidence: string; source: string }>;
-  };
-  strengths?: Array<{ title: string; evidence: string; source: string }>;
-  skills?: Array<{ name: string; category: string }>;
-  career_paths?: Array<{
-    title: string;
-    industry?: string;
-    match_reason: string;
-    salary_range?: string;
-    next_steps: string[];
-  }>;
-  barriers?: Array<{
-    type: string;
-    user_narrative?: string;
-    legal_notes?: string;
-  }>;
-  resumeText?: string;
-  goals?: string[];
-  goalNarrative?: string;
-  preferences?: Record<string, string>;
-  readinessStage?: string;
-  // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
-  resumeConfidence?: "none" | "rough" | "decent" | "strong";
-  resumeWorries?: string[];
-  // The person tapped "put them back": keep their own lines about time inside.
-  keepInsideLines?: boolean;
-  sessionId?: string;
-}
-
-// Translate the self-disclosure signal into a generation-mode directive. This
-// biases sharpen-vs-scaffold and what to be sensitive to -- it never licenses
-// invention (the TRUTH GATE + verifier still bound the output).
-function selfDisclosureDirective(input: GenerateDocsInput): string {
-  const bits: string[] = [];
-  const conf = input.resumeConfidence;
-  if (conf === "none" || conf === "rough") {
-    bits.push(
-      "The person rates their own history as thin/rough. Keep the familiar layout: dated history in reverse order, never a dateless functional page (employers expect dates, and a page without them reads as hiding something). Put real transferable skills in the core competencies and a strong summary. A shorter, sparser, TRUE resume is correct here. Never pad with invented detail to make it look fuller."
-    );
-  } else if (conf === "strong") {
-    bits.push(
-      "The person rates their history as strong. Sharpen and tighten what is already there; do not over-explain or inflate."
-    );
-  }
-  const worries = new Set(input.resumeWorries || []);
-  if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
-  if (worries.has("job_changes")) bits.push("They worry about job changes: frame varied roles as range and adaptability, not instability.");
-  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, programs and volunteer work with their dates, and any real accomplishments. Keep dated entries; never a dateless functional page.");
-  return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
-}
 
 /**
  * Remove placeholder contact details, and the separator left orphaned with them.
@@ -107,9 +51,6 @@ function stripContactPlaceholders(text: string): string {
     })
     .join("\n");
 }
-
-const WITHHOLD_RULE = `NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing. (Lines about this were held back from the source on purpose; the person has been told exactly which ones and can put them back.)`;
-const KEEP_INSIDE_RULE = `THE PERSON CHOSE TO KEEP THEIR OWN LINES: keep every job, course and credential the person listed, including work done in a correctional facility, named the way they named it (employer, title, years, real duties). Never ADD, infer or hint at anything about a record, supervision or justice involvement beyond what they wrote. Never state charges, a conviction, a sentence or supervision status, and never add growth, redemption or "second chance" framing.`;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -307,160 +248,10 @@ async function callClaude(
 // --- Resume Generation ---
 
 async function generateResume(input: GenerateDocsInput, userId: string | null | undefined): Promise<string> {
-  const strengths = input.strengths || input.narrative?.strengths || [];
-  const skills = input.skills || [];
-  const careerPaths = input.career_paths || [];
-  const narrative = input.narrative || {};
-  const isExploring = input.readinessStage === "precontemplation";
-
-  // Inject research-backed context
-  const researchCtx = buildFullContext("resume", userContextFromForge({
-    forgeOutput: { narrative, strengths, skills, career_paths: careerPaths },
-    readinessStage: input.readinessStage,
-    resumeText: input.resumeText,
-  }));
-
-  const system = `${researchCtx}
-
-You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
-
-YOUR JOB: Take whatever the user gives you, even a terrible, bare-bones resume, and produce a polished, compelling, TRUE resume that gets interviews and survives them.
-
-ABSOLUTE RULES (the truth gate: violating any = failure):
-1. TRUTH GATE: use ONLY facts the source data states. NEVER invent a number, metric, tool, certification, employer, title, or result. NEVER estimate, infer, or borrow "industry typical" figures. If a detail is missing, write the bullet strong without it. This person's resume must survive a background-checked interview. A true unquantified bullet beats an impressive false one.
-2. Numbers ONLY where the source states them, kept exactly as given (ranges stay ranges). This rule runs BOTH WAYS and the second half matters as much as the first: every number the person supplied MUST survive onto the resume. Do not drop a measured detail while rewriting the line that carried it. On a real run the intake said "hauled 40 to 50 loads a week during the season" and the finished resume said only "hauls material for a 6-mile MDT overlay project". The load count had been moved to the cover letter and deleted from the resume. A number the person actually knows is the single most valuable thing their resume can carry. Losing one is as bad as inventing one, and it is harder to notice.
-3. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into achievement language built from stated facts.
-4. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
-5. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
-6. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
-7. Past roles = past tense. Current role = present tense. No exceptions.
-8. ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
-9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
-10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance. Never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
-11. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Hyphens inside words (first-piece, part-time) are fine.
-12. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give. No endings like ", freeing capacity for additional production" or ", supporting a smooth flow during busy hours", and no "high-volume", "fast-paced", "peak service" or "busy" unless they said it. A plain true bullet beats a dressed-up one. Keep every result the person did give, in their own terms ("never had an accident in 5 years", "so we didn't have to call a tech"). Dropping one is as bad as inventing one. Never add what a duty covered beyond what they said: "Trained 11 new operators" stays exactly that, never "on setup, quality and safety".
-13. NO CHARACTER CLAIMS: no "dependable", "reliable", "shows up ready", "consistent" or anything like them in the headline, summary or bullets unless the person said it about themselves.
-
-DATA CLEANING (FIX INPUT ERRORS):
-- If a job title doesn't seem to match the company, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role. The person checks it on the next screen.
-- If dates look wrong or overlapping, keep the dates exactly as the person gave them. Never change, merge, shift or guess a date. A date that is off by even a month reads as a discrepancy on a background check, so the person settles it, not you.
-- If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
-
-${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
-${selfDisclosureDirective(input)}
-SECTION ORDER (exact):
-1. FULL NAME (all caps)
-2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
-3. Branded Headline (one powerful line. NOT an objective. An identity statement.)
-4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
-5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, and never drop real ones. Every term must name something the person said they did, used or learned. No soft-skill filler (Attention to Detail, Task Prioritization, Time Management) unless they said it. Typically 9 to 15, fewer for a short history.)
-6. PROFESSIONAL EXPERIENCE (reverse chronological)
-   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
-   - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
-   - No work history at all: the page is still dated, never a dateless functional page. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.
-7. EDUCATION (only if the source gives any; otherwise leave the section off)
-   - Institution, dates. City and state only if the source gives them. Add relevant coursework if it strengthens the resume.
-8. CERTIFICATIONS (only if the source gives any; separate section. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
-- CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
-
-OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
-
-  const parts: string[] = [];
-
-  if (narrative.headline) parts.push(`NARRATIVE HEADLINE: ${narrative.headline}`);
-  if (narrative.summary) parts.push(`NARRATIVE SUMMARY: ${narrative.summary}`);
-
-  if (strengths.length > 0) {
-    parts.push(
-      `STRENGTHS:\n${strengths.map((s) => `- ${s.title}: ${s.evidence}`).join("\n")}`
-    );
-  }
-
-  if (skills.length > 0) {
-    // Flatten skills into a single list — no category labels in the resume
-    const allSkills = skills.map((s) => s.name).filter(Boolean);
-    parts.push(`SKILLS (use for Core Competencies grid, no category labels):\n${allSkills.join(", ")}`);
-  }
-
-  if (careerPaths.length > 0) {
-    parts.push(
-      `TARGET CAREER PATHS:\n${careerPaths.map((cp) => `- ${cp.title} (${cp.industry || "various"})`).join("\n")}`
-    );
-  }
-
-  if (input.resumeText) {
-    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
-    parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
-  }
-
-  if (input.goals?.length) {
-    parts.push(`GOALS: ${input.goals.join(", ")}`);
-  }
-  if (input.goalNarrative) {
-    parts.push(`GOAL NARRATIVE: ${input.goalNarrative}`);
-  }
-
-  if (input.preferences) {
-    const p = input.preferences;
-    if (p.location) parts.push(`PREFERRED LOCATION: ${p.location}`);
-  }
-
-  const prompt = `Write a world-class professional resume using the data below. Make it significantly better than the input.
-
-${parts.join("\n\n")}
-
-EXACT OUTPUT FORMAT (plain text, follow precisely):
-
-FULL NAME
-City, State | Phone | Email
-  NOTE: Use ONLY contact details the source actually provides. OMIT any you do not
-     have, along with its separator. A name and a city alone is a correct and
-     complete contact line. NEVER write a placeholder: no (XXX) XXX-XXXX, no
-     email@email.com, no [Phone], no "Your Email Here". A placeholder on a
-     finished resume goes to an employer looking like carelessness, and this is
-     a document someone sends without re-reading it.
-
-Branded headline: one powerful line. Not an objective. An identity.
-
-CAREER SUMMARY
-3-4 sentences. Position this person as a professional. What they bring, what industry they've grown through, where they're headed. NO generic filler. NO "dedicated professional" or "proven track record." Write like describing someone you're impressed by.
-
-CORE COMPETENCIES
-Term 1 | Term 2 | Term 3
-Term 4 | Term 5 | Term 6
-Term 7 | Term 8 | Term 9
-(The real competencies the source supports, typically 9 to 15. No labels. No categories. Just the skills. Pull from ACTUAL job content. Never pad to a count.)
-
-PROFESSIONAL EXPERIENCE
-
-JOB TITLE | Company Name | City, State | Start Year - End Year
-(City, State only if the source gives that job's city. Otherwise: JOB TITLE | Company Name | Start Year - End Year)
-- Strong verb + what was done + result, quantified where the source states a number.
-- Strong verb + achievement with scope (headcount, volume, percentage) when the source gives it.
-- As many bullets as the role's real achievements support (typically 3 to 6); write fewer rather than pad.
-
-(Repeat for each role, reverse chronological)
-
-EDUCATION
-Institution Name, City, State | Start Year - End Year
-(City, State only if the source gives them.)
-Relevant coursework or focus area if it adds value (only what the source states).
-
-CERTIFICATIONS
-- Cert name (year, only if the source states it)
-- Cert name (year, only if the source states it)
-
-CRITICAL REMINDERS:
-- TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded: real facts, strong verbs, zero invention.
-- If a job title/company pairing doesn't seem to match, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role.
-- SECTIONS WITH NOTHING IN THEM: leave EDUCATION or CERTIFICATIONS off entirely when the source gives none. Never print a line like "No formal education provided".
-- Transform duties into achievement language using only the source's facts and stated scale.
-- CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
-- NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: still a dated page, never a dateless functional one. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry; build only from what the person said.
-- Certifications get their OWN section, never buried in education.`;
-
-  return await callClaude(system, prompt, userId, 4500);
+  // Prompt text lives in lib/forge-resume-prompt.ts, built from the shared
+  // resume rulebook (truth rules via the context library, page rules there).
+  const { system, user } = buildForgeResumePrompts(input);
+  return await callClaude(system, user, userId, 4500);
 }
 
 // --- Cover Letter Generation ---
