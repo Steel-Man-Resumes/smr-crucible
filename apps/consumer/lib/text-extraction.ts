@@ -147,8 +147,15 @@ export async function extractTextFromBuffer(
  * The free checker's reader (/api/check/extract). Same extractors as the
  * Forge, plus the one fact the checker reports: whether the file carries real
  * text a hiring system can read ("text"), or had to be read as a picture
- * ("picture": a scan, a photo, or a PDF made of images). Takes the KIND, not
- * the file name, so the person's file name is never logged.
+ * ("picture": a scan, a photo, or a PDF made of images). Never logs the file
+ * name.
+ *
+ * The file's bytes decide everything (lib/check-file-guard.ts, security review
+ * 3a r1, M3): its kind comes from its magic bytes, never its name or declared
+ * type; a Word file must be small once unpacked, proven before mammoth opens
+ * it; a photo must say its size and be under the pixel cap; a PDF is capped by
+ * pages, text and OCR pages. checkFileKind (name and type) is kept only so the
+ * page can say early which files it takes; it decides nothing here.
  */
 export type CheckFileKind = "pdf" | "word" | "image" | "text";
 
@@ -165,35 +172,48 @@ export function checkFileKind(fileName: string, mimeType: string): CheckFileKind
   return null;
 }
 
+/** Most text the checker reads out of one file (more than any resume). */
+export const CHECK_MAX_TEXT_CHARS = 50_000;
+
 export async function extractTextForCheck(
   buffer: Buffer,
-  kind: CheckFileKind,
-  mimeType: string
+  _declaredKind?: CheckFileKind,
+  _declaredType?: string
 ): Promise<{ text: string; read: "text" | "picture" }> {
+  const guard = await import("./check-file-guard");
+  const kind = guard.sniffKind(buffer);
+  if (!kind) {
+    throw new guard.CheckFileRefused("unknown_kind", "Use a PDF, a Word file, a text file, or a photo of your resume.");
+  }
   if (kind === "pdf") {
     try {
-      const text = await extractFromPDF(buffer);
+      const text = await extractFromPDF(buffer, { maxPages: guard.CHECK_PDF_MAX_PAGES, maxChars: CHECK_MAX_TEXT_CHARS });
       if (hasMeaningfulText(text)) return { text, read: "text" };
-    } catch {
+    } catch (e) {
+      if (e instanceof PdfTooLongError) {
+        throw new guard.CheckFileRefused("too_many_pages", "That file has more pages than a resume. Check the resume on its own.");
+      }
       // No text layer: read it as a picture below.
     }
-    return { text: await extractFromPDFWithOCR(buffer), read: "picture" };
+    return { text: await extractFromPDFWithOCR(buffer, guard.CHECK_PDF_OCR_PAGES), read: "picture" };
   }
   if (kind === "word") {
-    try {
-      const text = await extractFromDOCX(buffer);
-      if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
-    } catch {
-      // An old .doc or a damaged file: try the plain text in it.
-    }
+    guard.assertSmallDocx(buffer);
+    const text = await extractFromDOCX(buffer);
+    if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
+    throw new UnreadableDocumentError("We couldn't read text from that file.");
+  }
+  if (kind === "doc") {
+    // An old Word file: only the plain text inside it, bounded by the upload cap.
     const text = extractLikelyText(buffer);
     if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
     throw new UnreadableDocumentError("We couldn't read text from that file.");
   }
-  if (kind === "image") {
-    return { text: await extractFromImageBuffer(buffer, mimeType.startsWith("image/") ? mimeType : "image/png"), read: "picture" };
+  if (kind === "text") {
+    return { text: extractLikelyText(buffer), read: "text" };
   }
-  return { text: extractLikelyText(buffer), read: "text" };
+  guard.assertSmallImage(buffer, kind);
+  return { text: await extractFromImageBuffer(buffer, `image/${kind}`), read: "picture" };
 }
 
 /**
@@ -229,7 +249,22 @@ function ensurePdfjsPolyfills() {
   }
 }
 
-async function extractFromPDF(buffer: Buffer): Promise<string> {
+/** The free checker's limits on a PDF (the Forge's own reads pass none). */
+interface PdfLimits {
+  /** Refuse a PDF with more pages than this, before reading any. */
+  maxPages?: number;
+  /** Stop reading once this much text is in hand. */
+  maxChars?: number;
+}
+
+export class PdfTooLongError extends Error {
+  constructor() {
+    super("PDF has more pages than the limit");
+    this.name = "PdfTooLongError";
+  }
+}
+
+async function extractFromPDF(buffer: Buffer, limits: PdfLimits = {}): Promise<string> {
   if (buffer.length === 0) throw new Error("PDF file is empty");
   ensurePdfjsPolyfills();
 
@@ -245,8 +280,13 @@ async function extractFromPDF(buffer: Buffer): Promise<string> {
   }).promise;
 
   const numPages = doc.numPages;
+  if (limits.maxPages !== undefined && numPages > limits.maxPages) {
+    await doc.destroy();
+    throw new PdfTooLongError();
+  }
   let out = "";
   for (let i = 1; i <= numPages; i++) {
+    if (limits.maxChars !== undefined && out.length > limits.maxChars) break;
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
     for (const item of tc.items as any[]) {
@@ -265,14 +305,14 @@ async function extractFromPDF(buffer: Buffer): Promise<string> {
   return text;
 }
 
-async function extractFromPDFWithOCR(buffer: Buffer): Promise<string> {
+async function extractFromPDFWithOCR(buffer: Buffer, ocrPages: number = MAX_PDF_OCR_PAGES): Promise<string> {
   try {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
 
     try {
       const rendered = await parser.getScreenshot({
-        first: MAX_PDF_OCR_PAGES,
+        first: ocrPages,
         scale: 2,
         imageBuffer: true,
         imageDataUrl: false,
