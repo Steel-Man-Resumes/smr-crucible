@@ -25,6 +25,7 @@ import { MODEL_DEEP } from "@/lib/ai/models";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
 import { WOTC_RE, stripEmployerTaxCredit, plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { credentialStatuses, findOverstatedCredentialsDeep } from "@/lib/credential-truth";
+import { parseStateCode } from "@/lib/location-state";
 
 export const maxDuration = 120;
 
@@ -359,10 +360,14 @@ const STATE_LEGAL_CONTEXT: Record<string, string> = {
   MI: `- Michigan: "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only: a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule. It requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific. Say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.`,
 };
 
-/** USPS state code from a "City, ST" location string, or null. */
+/**
+ * USPS state code from the saved location ("City, ST", "City, ST 12345" for a
+ * ZIP pick, "County, ST", or a state spelled out), or null. One parser,
+ * lib/location-state.ts, shared with the tests.
+ */
 function extractStateCode(location: string | undefined): string | null {
   if (!location) return null;
-  return sanitizeForPrompt(location, 200).match(/,\s*([A-Z]{2})$/)?.[1] ?? null;
+  return parseStateCode(sanitizeForPrompt(location, 200));
 }
 
 function buildContext(input: ForgeInput): string {
@@ -421,9 +426,9 @@ function buildContext(input: ForgeInput): string {
     );
     // Extract state for jurisdiction-specific barrier analysis
     if (p.location) {
-      const stateMatch = sanitizeForPrompt(p.location, 200).match(/,\s*([A-Z]{2})$/);
-      if (stateMatch) {
-        parts.push(`JURISDICTION: ${stateMatch[1]} (use for ban-the-box laws, expungement rules, and fair-chance ordinances)`);
+      const stateCode = extractStateCode(p.location);
+      if (stateCode) {
+        parts.push(`JURISDICTION: ${stateCode} (use for ban-the-box laws, expungement rules, and fair-chance ordinances)`);
       }
     }
   }
