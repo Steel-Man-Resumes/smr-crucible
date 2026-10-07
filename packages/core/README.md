@@ -52,8 +52,10 @@ getResumeStatus({
   a draft.
 - `openItems` lists BLOCKs first, then FIXes, each in page order.
 - Every item has a `question` for the person, built only from the finding. It
-  never shows a number, a year or any other fact; the person's answer is the
-  only thing that can add one.
+  never introduces a fact: it never shows a number or a year, and it never
+  suggests a value. Credential and skills questions repeat the page's own
+  words (a credential's name such as "OSHA 10", or a skills term) only so the
+  person knows which line is meant.
 - Wiring for the finish page: confetti, "download as finished", email and the
   review ask wait for `state === "finished"`. A download while
   `state === "draft"` is labeled DRAFT and lists `openItems`.
@@ -76,11 +78,29 @@ wording, in page order. Show each `question`; send the answers back as:
 interface DefendAnswer {
   line: string;     // the resume line as shown
   answer: string;   // the person's own words
-  verdict?: "stands" | "cut" | "unsure"; // omitted = "stands" when answer has words
+  verdict?: "stands" | "cut" | "unsure"; // omitted = not answered yet
 }
 ```
 
 Until each defend line has an answer that stands, it is an open BLOCK
-(`STD-C04`). Answers that stand count as the person's own words for the check,
-so a number the person states in their answer clears an added-number BLOCK.
-"cut" and "unsure" keep the line open until it is reworded or removed.
+(`STD-C04`). An answer stands only when:
+
+- its `verdict` is `"stands"` (a missing verdict means not answered yet);
+- it has words in it and is not an "I don't know";
+- it does not deny its own line ("never got certified" against "Forklift
+  Certified" keeps the line open).
+
+Answers belong to their own line only. They are never pooled into the source
+text, so an answer on one line cannot clear a finding on another, and the page
+is always checked against `sourceText` alone. The one finding a standing
+answer can settle besides its own defend item is a credential's missing
+status, when that line's answer gives a status or a year.
+
+A number the writer put on the page that is not in `sourceText` stays a BLOCK
+even if the person repeats it in a defend answer: they were shown the number,
+so repeating it does not make it theirs. The line comes off, or the person
+gives the number in their own words somewhere no number was shown (for example
+a "describe it your way" step whose text goes into `sourceText`). For a line
+like that, the defend question is the describe-it question and never mentions
+the number. "cut" and "unsure" keep the line open until it is reworded or
+removed.

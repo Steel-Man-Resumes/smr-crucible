@@ -24,7 +24,9 @@ import { RESUME_RULES_VERSION } from "./resumeRules";
 import {
   runMintCheck,
   checkCredentialStatus,
+  checkCredentialUpgrade,
   credentialLinesOf,
+  hasCredentialStatus,
   linesOf,
   numbersIn,
   isSectionEnd,
@@ -100,13 +102,46 @@ const DISTANCE_STOP = new Set([
   "with", "that", "this", "from", "into", "over", "under", "each", "they", "their", "them",
   "were", "have", "been", "also", "while", "where", "when", "which", "work", "worked",
 ]);
+const PLACE_LINE_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?(?:\s+\d{5}(?:-\d{4})?)?(?:\s*\|.*)?$/;
 const SKILLS_HEADING_RE = /^(?:core competencies|skills|key skills|competencies|core skills)$/i;
 
-/** True when a defend answer has words and the person did not cut or doubt the line. */
-function answerStands(a: DefendAnswer | undefined): boolean {
-  if (!a) return false;
-  if (a.verdict === "cut" || a.verdict === "unsure") return false;
-  return /[a-z0-9]/i.test(a.answer || "");
+// "I don't know" and friends: an answer that explains nothing.
+const NO_ANSWER_RE = /\b(?:i\s+)?(?:do\s*n['’]?t|dont|do not)\s+(?:know|remember|recall)\b|\bnot sure\b|\bno idea\b|\bidk\b|\bunsure\b|\bcan['’]?t remember\b/i;
+// Words that deny something, for the contradiction check.
+const NEGATION_RE = /^(?:never|not|no|nope|without|didn['’]?t|didnt|don['’]?t|dont|wasn['’]?t|wasnt|weren['’]?t|isn['’]?t|haven['’]?t|havent|hasn['’]?t|hadn['’]?t|can['’]?t|cant|couldn['’]?t|won['’]?t|nor)$/i;
+// Credential claims are checked by their stem, so "never got certified" hits "Certified".
+const CLAIM_STEMS = ["certi", "licen", "licenc", "train", "super", "manag", "lead"];
+
+/**
+ * True when the answer denies the line: a negation word within four words of
+ * one of the line's own key words ("never got certified" against "Forklift
+ * Certified", "I didn't run the line" against "Ran the line").
+ */
+export function answerContradictsLine(answer: string, line: string): boolean {
+  const h = (w: string) => w.slice(0, 5);
+  const lineHeads = new Set(
+    (stripBullet(line).toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length > 2 && !DISTANCE_STOP.has(w)).map(h)
+  );
+  const words = answer.toLowerCase().match(/[a-z'’]+/g) ?? [];
+  return words.some((w, i) => {
+    if (!NEGATION_RE.test(w)) return false;
+    return words.slice(i + 1, i + 5).some((x) => {
+      const hx = h(x.replace(/['’]s$/, ""));
+      return lineHeads.has(hx) || (CLAIM_STEMS.some((st) => hx.startsWith(st)) && Array.from(lineHeads).some((lh) => lh.startsWith(hx.slice(0, 4))));
+    });
+  });
+}
+
+/**
+ * An answer stands only when the person marked it "stands", it has words in
+ * it, it is not an "I don't know", and it does not deny its own line. A
+ * missing verdict is not an answer.
+ */
+export function answerStands(a: DefendAnswer | undefined, line?: string): boolean {
+  if (!a || a.verdict !== "stands") return false;
+  const text = a.answer || "";
+  if (!/[a-z0-9]/i.test(text) || NO_ANSWER_RE.test(text)) return false;
+  return !answerContradictsLine(text, line ?? a.line);
 }
 
 function credentialName(line: string): string {
@@ -133,10 +168,14 @@ function bodyLines(resumeText: string): Array<{ line: string; inSkills: boolean 
   const ls = linesOf(resumeText);
   const out: Array<{ line: string; inSkills: boolean }> = [];
   let inSkills = false;
+  let seenHeading = false;
   ls.forEach((l, i) => {
-    if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; return; }
-    if (isSectionEnd(l)) { inSkills = false; return; }
+    if (i === 0) return; // the name
+    if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; return; }
+    if (isSectionEnd(l)) { inSkills = false; seenHeading = true; return; }
     if (i === 0 || CONTACT_LINE_RE.test(l) || isEntryHeader(l) || isDateLine(l)) return;
+    // The header block's place line ("Dayton, OH") is contact, not a claim.
+    if (!seenHeading && (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l))) return;
     out.push({ line: l, inSkills });
   });
   return out;
@@ -188,11 +227,18 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
   }
 }
 
-function questionForDefend(line: string, reasons: DefendReason[]): string {
+const DESCRIBE_UNSOURCED =
+  "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
+
+function questionForDefend(line: string, reasons: DefendReason[], sourceText: string): string {
   if (reasons.includes("credential")) {
     return `Was "${credentialName(line)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
   }
   if (reasons.includes("number")) {
+    // Never ask a person to defend a number they did not give: that plants it.
+    const src = numbersIn(sourceText);
+    const unsourced = Array.from(numbersIn(line)).some((n) => !src.has(n));
+    if (unsourced) return DESCRIBE_UNSOURCED;
     return "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
   }
   return DESCRIBE;
@@ -240,7 +286,7 @@ export function pickDefendLines(
     .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
     .map(([line, reasons]) => {
       const rs = Array.from(reasons);
-      return { line, reasons: rs, question: questionForDefend(line, rs) };
+      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "") };
     });
 }
 
@@ -273,28 +319,39 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     );
   }
 
-  // Answers that stand are the person's own words.
-  const standing = answers.filter(answerStands);
-  const checkedSource = [sourceText, ...standing.map((a) => a.answer)].join("\n");
-
   const defendLines = resumeText.trim() ? pickDefendLines(resumeText, sourceText) : [];
+  // Each answer belongs to its own line only; answers are never pooled into
+  // the source. The page is always checked against the person's own words.
+  const byLine = new Map(answers.map((a) => [squash(a.line), a]));
+  const standingFor = (line: string) => {
+    const a = byLine.get(squash(line));
+    return answerStands(a, line) ? a : undefined;
+  };
 
   if (resumeText.trim() && sourceText.trim()) {
-    const mint = runMintCheck({ output: resumeText, source: checkedSource, kind: "resume" });
-    const findings = [...mint.findings, ...checkCredentialStatus(resumeText, checkedSource)];
+    const mint = runMintCheck({ output: resumeText, source: sourceText, kind: "resume" });
+    // A credential's missing status is settled only by that line's own
+    // standing answer. A course written up as a certification is never
+    // settled by an answer: the line changes, or the person's words do.
+    const status = checkCredentialStatus(resumeText, sourceText).filter((f) => {
+      const a = standingFor(f.line);
+      return !(a && hasCredentialStatus(a.answer));
+    });
+    const findings = [...mint.findings, ...checkCredentialUpgrade(resumeText, sourceText), ...status];
     for (const f of findings) push(f.rule, f.severity, f.line, f.why, questionForFinding(f));
 
     if (requireDefend) {
-      const byLine = new Map(answers.map((a) => [squash(a.line), a]));
       for (const d of defendLines) {
         const a = byLine.get(squash(d.line));
-        if (answerStands(a)) continue;
+        if (standingFor(d.line)) continue;
         const why =
           a?.verdict === "cut"
             ? "You said this line should come off. It is still on the page."
             : a?.verdict === "unsure"
               ? "You weren't sure how to explain this line yet. Reword it with your own words, or take it off."
-              : "You haven't explained this line in your own words yet. Every number, every credential and the lines furthest from your words get explained before the page is finished.";
+              : a?.verdict === "stands"
+                ? "Your answer doesn't explain this line yet, or it says something different from the line. Reword the line in your own words, or take it off."
+                : "You haven't explained this line in your own words yet. Every number, every credential and the lines furthest from your words get explained before the page is finished.";
         push("STD-C04", "BLOCK", d.line, why, a?.verdict === "cut" ? "OK to take this line off now?" : d.question);
       }
     }

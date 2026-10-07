@@ -34,7 +34,7 @@ export interface MintFinding {
   /** Plain words for the person. */
   why: string;
   /** Which check inside a rule raised it, when a rule has more than one. */
-  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status";
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "dateless_page";
 }
 
 export interface MintCheckInput {
@@ -286,6 +286,21 @@ export function isEntryHeader(l: string): boolean {
   return /[A-Za-z]{2,}/.test(first) && !first.includes(":");
 }
 
+// A page with work lines and no year anywhere is a dateless page, whatever
+// its headings say. Never finished.
+function checkDatedPage(out: string, f: MintFinding[]) {
+  const ls = linesOf(out).filter((l) => !CONTACT_LINE_RE.test(l));
+  if (!ls.some(isBullet)) return;
+  if (ls.some(hasYear)) return;
+  f.push({
+    rule: "STD-F01",
+    severity: "BLOCK",
+    line: ls.find(isBullet) ?? "",
+    why: "This page has no dates anywhere. Employers expect dates, and a page without them reads as hiding something.",
+    kind: "dateless_page",
+  });
+}
+
 function checkExperienceDates(out: string, f: MintFinding[]) {
   const ls = linesOf(out);
   const start = ls.findIndex((l) => SECTION_RE.test(l));
@@ -371,24 +386,46 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
 // names that same work on a line with no sign it was shared or supervised.
 // A hint for the person to settle, never a verdict: FIX.
 // "helped with X", "assisted in X", "helped out on X". Not "helped customers":
-// helping a customer is the person's own work, not shared work.
-const HELPED_RE = /\b(?:helped|helping|help|assisted|assisting|assist)\s+(?:out\s+)?(?:with|in|on)\s+(?:the\s+|a\s+|an\s+|some\s+)?([a-z][a-z-]{3,})/gi;
-const SHARED_RE = /\b(?:help\w*|assist\w*|with|under|alongside|together|team|crew|supported|support)\b/i;
-const SOLE_STOP = new Set(["with", "them", "they", "other", "others", "people", "anything", "everything", "whatever", "where", "when", "around", "stuff", "things", "out"]);
+// helping a customer is the person's own work, not shared work. The object is
+// the phrase after the preposition ("boiler blowdown"), and a page line is
+// flagged only when it names the phrase's head noun, its last word
+// ("blowdown"). A neighbouring duty that shares a modifier ("tested boiler
+// water", "answered customer questions") is not flagged.
+const HELPED_RE = /\b(?:helped|helping|help|assisted|assisting|assist)\s+(?:out\s+)?(?:with|in|on)\s+((?:[a-z][a-z'-]*\s*){1,5})/gi;
+const OBJECT_STOP = new Set([
+  "the", "a", "an", "some", "my", "our", "his", "her", "their", "under", "with", "for", "at", "on", "in", "and", "or",
+  "by", "when", "from", "to", "during", "while", "as", "of", "every", "each", "them", "they", "other", "others",
+  "people", "anything", "everything", "whatever", "where", "around", "stuff", "things", "out", "it",
+]);
+// Signs on the page line that the work was shared or supervised. A bare
+// "with" is not one: "with a wrench" names a tool, not a person.
+const SHARED_RE = /\b(?:help\w*|assist\w*|under|alongside|together|supported|support(?:ing)?)\b|\bwith (?:the |a |an |my |our |other |two |three )?(?:[a-z]+ )?(?:operators?|leads?|supervisors?|managers?|team|crew|foreman|mechanics?|nurses?|cooks?|chefs?|techs?|technicians?|electricians?|plumbers?|drivers?|partners?|coworkers?|others|staff)\b/i;
+const h5 = (w: string) => w.slice(0, Math.min(w.length, 5));
+
+function objectPhrase(raw: string): string[] {
+  const words: string[] = [];
+  for (const w of raw.toLowerCase().split(/\s+/).filter(Boolean)) {
+    if (OBJECT_STOP.has(w)) {
+      if (words.length) break;
+      continue;
+    }
+    words.push(w.replace(/'s$/, ""));
+  }
+  return words.filter((w) => w.length >= 3).map(h5);
+}
 
 function checkSoleActor(out: string, src: string, f: MintFinding[]) {
-  const objects = new Set<string>();
+  const phrases: string[][] = [];
   for (const m of src.matchAll(HELPED_RE)) {
-    const w = m[1].toLowerCase();
-    if (!SOLE_STOP.has(w)) objects.add(w.slice(0, Math.min(w.length, 5)));
+    const p = objectPhrase(m[1]);
+    if (p.length && p[p.length - 1].length >= 4) phrases.push(p);
   }
-  if (!objects.size) return;
+  if (!phrases.length) return;
   const seen = new Set<string>();
   for (const l of linesOf(out)) {
     if (isSectionEnd(l) || isEntryHeader(l) || CONTACT_LINE_RE.test(l) || SHARED_RE.test(l)) continue;
-    const words = l.toLowerCase().match(/[a-z][a-z-]+/g) ?? [];
-    const hit = words.find((w) => Array.from(objects).some((o) => w.startsWith(o)));
-    if (!hit || seen.has(l)) continue;
+    const heads = new Set((l.toLowerCase().match(/[a-z][a-z-]+/g) ?? []).map(h5));
+    if (!phrases.some((p) => heads.has(p[p.length - 1])) || seen.has(l)) continue;
     seen.add(l);
     f.push({
       rule: "STD-T01",
@@ -407,7 +444,16 @@ function checkSoleActor(out: string, src: string, f: MintFinding[]) {
 // a status word; otherwise it is a question for the person.
 const CRED_SECTION_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?)$/i;
 export const CREDENTIAL_WORD_RE = /\b(?:certif\w*|licen[cs]e[ds]?|OSHA[\s-]*\d+|CDL|CNA|ServSafe|EPA\s*608|CPR|first aid|forklift card)\b/i;
-const STATUS_WORD_RE = /\b(?:active|current|valid|expired|expires|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|through|until|good for)\b/i;
+// A credential by its own name: it is a credential wherever it appears.
+const NAMED_CREDENTIAL_RE = /\b(?:OSHA[\s-]*\d+|CDL|CNA|ServSafe|EPA\s*608|CPR|first aid|forklift card)\b/i;
+// Outside a credentials section, a generic word ("license", "certified")
+// makes a credential line only on a short line or next to a holding verb,
+// so "checked customer IDs and licenses at the door" is not one.
+const HOLD_VERB_RE = /\b(?:earned|obtained|got|hold|holds|held|passed|completed|received|renewed|certified|licensed)\b/i;
+const isCredentialMention = (l: string) =>
+  NAMED_CREDENTIAL_RE.test(l) ||
+  (CREDENTIAL_WORD_RE.test(l) && ((l.replace(/^[-•*]\s*/, "").match(/\S+/g) ?? []).length <= 5 || HOLD_VERB_RE.test(l)));
+export const STATUS_WORD_RE = /\b(?:active|current|valid|expired|expires|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|through|until|good for)\b/i;
 const GENERIC_CRED_WORDS = new Set(["certification", "certificate", "certified", "license", "licence", "licensed", "card", "training", "course", "class", "program", "level", "state", "issued"]);
 
 /** The credential lines on a resume: every line under a credentials heading, plus any other line naming one. */
@@ -420,9 +466,47 @@ export function credentialLinesOf(out: string): string[] {
     if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) { inCreds = true; continue; }
     if (isSectionEnd(l)) { inCreds = false; continue; }
     if (i === 0 || CONTACT_LINE_RE.test(l)) continue;
-    if (inCreds || CREDENTIAL_WORD_RE.test(l)) found.push(l);
+    if (inCreds || isCredentialMention(l)) found.push(l);
   }
   return found;
+}
+
+/** True when a text gives a credential a year or a status word. */
+export function hasCredentialStatus(text: string): boolean {
+  return new RegExp(YEAR_RE.source).test(text) || STATUS_WORD_RE.test(text);
+}
+
+const CLAIM_RE = /\b(?:certified|certification|licensed|license|licence)\b/i;
+const COURSE_RE = /\b(?:class|classes|course|courses|training|program|coursework)\b/i;
+const HOLD_RE = /\b(?:certified|certification|certificate|licensed|license|licence|passed|card|registry)\b/i;
+
+/**
+ * A credential written up as a certification or license when the person's
+ * words only describe a class or training for it: BLOCK. Deterministic and
+ * narrow: the person's sentences naming it must carry a course word and no
+ * word that says they hold it.
+ */
+export function checkCredentialUpgrade(out: string, src: string): MintFinding[] {
+  const srcUnits = src.split(/[\n.;]+/).map((u) => u.trim()).filter(Boolean);
+  const f: MintFinding[] = [];
+  for (const l of credentialLinesOf(out)) {
+    if (!CLAIM_RE.test(l)) continue;
+    const name = l.replace(/^[-•*]\s*/, "");
+    const key = (name.match(/[A-Za-z0-9]+/g) ?? []).find((w) => w.length >= 3 && !GENERIC_CRED_WORDS.has(w.toLowerCase()));
+    if (!key) continue;
+    const said = srcUnits.filter((u) => u.toLowerCase().includes(key.toLowerCase()));
+    if (!said.length) continue;
+    if (said.some((u) => HOLD_RE.test(u))) continue;
+    if (!said.some((u) => COURSE_RE.test(u))) continue;
+    f.push({
+      rule: "STD-T03",
+      severity: "BLOCK",
+      line: l,
+      why: "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
+      kind: "credential_upgrade",
+    });
+  }
+  return f;
 }
 
 export function checkCredentialStatus(out: string, src: string): MintFinding[] {
@@ -459,6 +543,7 @@ export function runMintCheck(input: MintCheckInput): MintCheckResult {
   checkPlaceholders(out, input.kind, findings);
   checkToolMarks(out, findings);
   if (input.kind !== "cover_letter") {
+    checkDatedPage(out, findings);
     checkExperienceDates(out, findings);
     checkGrid(out, src, findings);
     checkSoleActor(out, src, findings);

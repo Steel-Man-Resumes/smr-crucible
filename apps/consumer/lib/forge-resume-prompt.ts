@@ -119,7 +119,7 @@ SECTION ORDER (exact):
    - No work history at all: the page is still dated, never a dateless functional page. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.
 7. EDUCATION (only if the source gives any; otherwise leave the section off)
    - Institution, dates. City and state only if the source gives them. Add relevant coursework only if the source states it.
-8. CERTIFICATIONS (only if the source gives any; its own section. List each credential once, at its true type and status, never also under EDUCATION.)
+8. CERTIFICATIONS (only if the source gives any; its own section. List each credential once, at its true type and status, never also under EDUCATION. A finished course or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.)
 
 OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
 
