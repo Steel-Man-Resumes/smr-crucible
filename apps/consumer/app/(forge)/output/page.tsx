@@ -423,7 +423,7 @@ export default function OutputPage() {
           : "Answer them with t.ROY. You can download a draft any time.";
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl" data-testid="finish-page">
       {celebrated && <CompletionConfetti />}
       <FinishTour
         open={tourOpen}
@@ -465,7 +465,7 @@ export default function OutputPage() {
         {ready && (
           <button
             onClick={() => setTourOpen(true)}
-            className="t-focus min-h-touch shrink-0 border border-t-line px-3 py-2 text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white"
+            className="t-focus min-h-touch w-full shrink-0 border border-t-line px-3 py-2 text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white sm:w-auto"
             data-testid="tour-button"
           >
             Show me around
@@ -576,6 +576,14 @@ export default function OutputPage() {
               </div>
             ) : null}
           </div>
+
+          {/* The review ask sits where the person just downloaded: one line,
+              after a finished download only, once per visit, never a popup. */}
+          {reviewVisible && (
+            <div className="mt-4">
+              <ReviewAsk onDismiss={() => setReviewDismissed(true)} />
+            </div>
+          )}
 
           {/* 4. Checks, collapsed, one plain line each */}
           <section id="finish-checks" aria-labelledby="finish-checks-heading" className="mt-10 scroll-mt-20">
@@ -702,9 +710,8 @@ export default function OutputPage() {
           audience={audience}
           refineryCta={rc.refineryCta}
           refinerySubtext={rc.refinerySubtext}
-          reviewAsk={reviewVisible ? <ReviewAsk onDismiss={() => setReviewDismissed(true)} /> : null}
         />
       </div>
-    </main>
+    </div>
   );
 }

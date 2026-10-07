@@ -1,13 +1,12 @@
 "use client";
 
 /**
- * The last part of the finish page: where to go next. The Refinery, the
- * Google review ask (only after a finished download, once per visit, never a
- * popup), Troy's letter (a plain link, no signup here), and "clear this
- * computer".
+ * The last part of the finish page: where to go next. The Refinery, Troy's
+ * letter (a plain link, no signup here), and "clear this computer". The
+ * Google review ask (ReviewAsk) is placed by the page right under the
+ * download, after a finished download only.
  */
 
-import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
 import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
@@ -39,14 +38,11 @@ export function NextStep({
   audience,
   refineryCta,
   refinerySubtext,
-  reviewAsk,
 }: {
   isDemo: boolean;
   audience: string;
   refineryCta: string;
   refinerySubtext: string;
-  /** The review ask, already gated by the page (finished download, once). */
-  reviewAsk: ReactNode;
 }) {
   const router = useRouter();
 
@@ -55,8 +51,6 @@ export function NextStep({
       <h2 id="finish-next-heading" className="mb-3 text-xl font-bold text-t-white">
         Next step
       </h2>
-
-      {reviewAsk && <div className="mb-4">{reviewAsk}</div>}
 
       {isDemo && audience === "partner" ? (
         <div className="mb-6 border border-t-line bg-t-panel p-6">
