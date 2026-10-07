@@ -10,6 +10,7 @@
 import { useState } from "react";
 import {
   editableLine,
+  prefillRewrite,
   progressLine,
   type FinishView,
   type LineGroup,
@@ -30,19 +31,21 @@ function uniqueQuestions(items: OpenItem[]): string[] {
 function GroupCard({
   group,
   index,
+  ownWords,
   onAnswer,
   onChange,
   onCut,
 }: {
   group: LineGroup;
   index: number;
+  ownWords: string;
   onAnswer: (line: string, answer: string) => void;
   onChange: (line: string, rewrite: string) => void;
   onCut: (line: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [answer, setAnswer] = useState(group.answer?.verdict === "stands" ? group.answer.answer : "");
-  const [rewrite, setRewrite] = useState(editableLine(group.line));
+  const [rewrite, setRewrite] = useState(() => prefillRewrite(group.line, ownWords));
   const id = `fix-item-${index}`;
 
   // The checker's own reason, shown when it adds something the question
@@ -197,11 +200,13 @@ function GroupCard({
 
 export function DefendPanel({
   view,
+  ownWords,
   onAnswer,
   onChange,
   onCut,
 }: {
   view: FinishView;
+  ownWords: string;
   onAnswer: (line: string, answer: string) => void;
   onChange: (line: string, rewrite: string) => void;
   onCut: (line: string) => void;
@@ -244,6 +249,7 @@ export function DefendPanel({
             key={`${g.line}:${g.answer?.answer ?? ""}`}
             group={g}
             index={i}
+            ownWords={ownWords}
             onAnswer={onAnswer}
             onChange={onChange}
             onCut={onCut}
@@ -254,6 +260,7 @@ export function DefendPanel({
             key={`checked:${g.line}`}
             group={g}
             index={view.groups.length + i}
+            ownWords={ownWords}
             onAnswer={onAnswer}
             onChange={onChange}
             onCut={onCut}

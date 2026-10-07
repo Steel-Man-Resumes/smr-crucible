@@ -61,59 +61,34 @@ type DocGenState = "idle" | "generating" | "done" | "error";
 
 /** Readiness-aware messaging for the output page */
 const READINESS_CONFIG: Record<string, {
-  docsHeading: string;
-  docsSubtext: string;
-  refineryHeading: string;
-  refineryBody: string;
   refineryCta: string;
   refinerySubtext: string;
   careersHeading: string;
   strengthsHeading: string;
-  reflectionLabel: string;
 }> = {
   precontemplation: {
-    docsHeading: "Your Resume Draft",
-    docsSubtext: "This is a starting point. When you are ready to polish it, The Refinery has tools built for that.",
-    refineryHeading: "This is yours whenever you need it",
-    refineryBody: "Create a free account to save your results. No pressure, no timeline. When you are ready to take the next step, everything will be here.",
     refineryCta: "Save My Results",
     refinerySubtext: "Free. No credit card. Come back anytime.",
     careersHeading: "Paths Worth Knowing About",
     strengthsHeading: "What You Bring",
-    reflectionLabel: "A note from t.ROY",
   },
   contemplation: {
-    docsHeading: "Your Resume Draft",
-    docsSubtext: "A solid starting point. The Refinery can help you sharpen it for specific jobs when you are ready.",
-    refineryHeading: "Ready to keep building?",
-    refineryBody: "Save your results and get access to The Refinery, where you can target specific jobs, practice interviews, and plan your disclosure strategy.",
     refineryCta: "Save & Explore The Refinery",
     refinerySubtext: "Free. No credit card. No catch.",
     careersHeading: "Career Paths to Consider",
     strengthsHeading: "Your Strengths",
-    reflectionLabel: "A note from t.ROY",
   },
   preparation: {
-    docsHeading: "Your Documents",
-    docsSubtext: "Resume and cover letter ready to customize. Replace [Company Name] and [Hiring Manager] before sending.",
-    refineryHeading: "Take the next step",
-    refineryBody: "Save your results and unlock The Refinery: targeted resume versions, interview practice, disclosure planning, and a job board that marks employers we checked for hiring people with records.",
     refineryCta: "Continue to The Refinery",
     refinerySubtext: "Free. No credit card. Your results carry over.",
     careersHeading: "Career Paths That Fit",
     strengthsHeading: "Your Strengths",
-    reflectionLabel: "A reflection",
   },
   action: {
-    docsHeading: "Your Documents",
-    docsSubtext: "Download, customize, and send. Replace [Company Name] and [Hiring Manager] with the real employer.",
-    refineryHeading: "Get 10x more in The Refinery",
-    refineryBody: "Your Forge results are the foundation. The Refinery gives you targeted resume versions for each job, AI interview practice, disclosure strategy for your specific record, and a job board that marks employers we checked.",
     refineryCta: "Start Using The Refinery",
     refinerySubtext: "Free. No credit card. Built for exactly where you are right now.",
     careersHeading: "Career Paths That Fit",
     strengthsHeading: "Your Competitive Advantages",
-    reflectionLabel: "A reflection",
   },
 };
 
@@ -332,7 +307,7 @@ export default function OutputPage() {
     setResumeText(next);
     // The new line is in the person's own words: their rewrite is its answer.
     const newLine = next.split("\n").map((l) => l.trim()).find((l) => l.replace(/^[-•*]\s*/, "") === rewrite.replace(/\s*\n\s*/g, " ").replace(/^\s*[-•*]\s*/, "").trim());
-    setDefendAnswers((a) => (newLine ? recordAnswer(a, newLine, rewrite, "stands") : a));
+    setDefendAnswers((a) => (newLine ? recordAnswer(a, newLine, rewrite, "stands", "rewrite") : a));
   };
   const onCut = (line: string) => {
     setResumeText((t) => cutLine(t, line));
@@ -544,7 +519,7 @@ export default function OutputPage() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
+              <DefendPanel view={view} ownWords={ownWords} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
             </aside>
           </div>
 

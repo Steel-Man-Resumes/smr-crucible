@@ -22,6 +22,8 @@ import {
   progressLine,
   readStoredFinish,
   recordAnswer,
+  prefillRewrite,
+  rewritesOf,
   REVIEW_ASK_LINE,
   shouldCelebrate,
   shouldShowReviewAsk,
@@ -219,4 +221,24 @@ test("stored finish: versioned and tied to its run", () => {
   assert.equal(readStoredFinish(stored, "other"), null);
   assert.equal(readStoredFinish({ ...stored, v: FINISH_STATE_VERSION + 1 }, key), null);
   assert.equal(readStoredFinish(null, key), null);
+});
+
+test("Change it never hands over a number the person did not give", () => {
+  const own = "Line Cook | Riverside Diner | 2019 - 2023\n- Prepped for about 150 plates a day";
+  assert.equal(prefillRewrite("- Cut food waste by 30% across 150 plates", own), "Cut food waste by [your number] across 150 plates");
+  assert.equal(prefillRewrite("- Saved $1,200 a month", own), "Saved [your number] a month");
+});
+
+test("a rewrite is the person's own words; an ordinary answer is not", () => {
+  const resume = "Sam Delgado\nSpringfield, IL | sam@example.com\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Cut food waste by 30% with a new prep list";
+  const own = "Line Cook, Riverside Diner, 2019 - 2023. I made a new prep list.";
+  // Echoing the written number in an answer leaves it open.
+  const echoed = recordAnswer([], "- Cut food waste by 30% with a new prep list", "yes it was 30%", "stands");
+  assert.equal(buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: echoed }).state, "draft");
+  // The person typing the line themselves makes the figure theirs.
+  const mine = "Cut food waste by 30% with a new prep list";
+  const rewritten = recordAnswer([], mine, mine, "stands", "rewrite");
+  assert.equal(rewritesOf(rewritten), mine);
+  const view = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: rewritten });
+  assert.ok(!view.groups.some((g) => /30%/.test(g.line)), JSON.stringify(view.groups.map((g) => g.line)));
 });

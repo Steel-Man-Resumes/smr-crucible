@@ -58,10 +58,15 @@ export interface DefendAnswer {
   answer: string;
   /**
    * "stands": they explained it and it stays. "cut": they want it off.
-   * "unsure": they could not explain it yet. Omitted means "stands" when
-   * the answer has words in it.
+   * "unsure": they could not explain it yet. Only "stands" ever counts.
    */
   verdict?: "stands" | "cut" | "unsure";
+  /**
+   * "rewrite": the person typed the line itself (it replaced the written
+   * one). The caller may add rewrites to the person's own words; an ordinary
+   * answer is never added to the source (no anchoring path, DEC-45).
+   */
+  kind?: "rewrite";
 }
 
 export type DefendReason = "number" | "credential" | "far_from_your_words";
@@ -176,6 +181,10 @@ function bodyLines(resumeText: string): Array<{ line: string; inSkills: boolean 
     if (i === 0 || CONTACT_LINE_RE.test(l) || isEntryHeader(l) || isDateLine(l)) return;
     // The header block's place line ("Dayton, OH") is contact, not a claim.
     if (!seenHeading && (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l))) return;
+    // A short headline under the name ("Line Cook", "Forklift Operator") names
+    // the target job, it is not a claim to defend. A headline with a number in
+    // it ("10 years in kitchens") is a claim and stays.
+    if (!seenHeading && !/\d/.test(l) && l.split(/\s+/).length <= 6 && !/[.;]$/.test(l)) return;
     out.push({ line: l, inSkills });
   });
   return out;

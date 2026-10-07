@@ -91,6 +91,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       ? s.defendAnswers.filter(
           (a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string"
         )
+        .map((a) => (a.kind === "rewrite" ? a : { line: a.line, answer: a.answer, verdict: a.verdict }))
       : [],
   };
 }
@@ -128,10 +129,40 @@ export function recordAnswer(
   answers: DefendAnswer[],
   line: string,
   answer: string,
-  verdict: DefendChoice
+  verdict: DefendChoice,
+  kind?: "rewrite"
 ): DefendAnswer[] {
   const k = squash(line);
-  return [...answers.filter((a) => squash(a.line) !== k), { line, answer: answer.trim(), verdict }];
+  const next: DefendAnswer = { line, answer: answer.trim(), verdict };
+  if (kind) next.kind = kind;
+  return [...answers.filter((a) => squash(a.line) !== k), next];
+}
+
+/**
+ * Lines the person typed themselves through "Change it". They are the
+ * person's own claim, so they join the source the checker reads. Ordinary
+ * answers never do (an answer that repeats a written number must not make it
+ * "sourced").
+ */
+export function rewritesOf(answers: DefendAnswer[]): string {
+  return answers
+    .filter((a) => a.kind === "rewrite" && a.verdict === "stands" && a.answer.trim())
+    .map((a) => a.answer.trim())
+    .join("\n");
+}
+
+const NUMBER_TOKEN_RE = /\$?\d[\d,]*(?:\.\d+)?%?/g;
+const digitsOf = (s: string) => s.replace(/[^\d.]/g, "").replace(/\.$/, "");
+
+/**
+ * The starting text for "Change it". A number the person never gave becomes
+ * "[your number]", so the box never hands them the written figure to keep.
+ * They type their own or take that part out; a bracket left in blocks the
+ * finish (STD-F05), so nothing slips through.
+ */
+export function prefillRewrite(line: string, ownWords: string): string {
+  const theirs = new Set((ownWords.match(NUMBER_TOKEN_RE) ?? []).map(digitsOf));
+  return stripBullet(line).replace(NUMBER_TOKEN_RE, (n) => (theirs.has(digitsOf(n)) ? n : "[your number]"));
 }
 
 /** The answer on file for a line, if any. */
@@ -216,9 +247,10 @@ export function buildFinishView(input: {
   ownWords: string;
   defendAnswers: DefendAnswer[];
 }): FinishView {
+  const rewrites = rewritesOf(input.defendAnswers);
   const status = getResumeStatus({
     resumeText: input.resumeText,
-    sourceText: input.ownWords,
+    sourceText: rewrites ? `${input.ownWords}\n\n${rewrites}` : input.ownWords,
     defendAnswers: input.defendAnswers,
   });
 

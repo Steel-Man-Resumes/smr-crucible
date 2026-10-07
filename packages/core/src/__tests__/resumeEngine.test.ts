@@ -383,3 +383,11 @@ Injection molding, Quality checks`;
   assert.equal(s.state, "draft");
   assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
 });
+
+test("pickDefendLines: a short headline under the name is never a defend line", () => {
+  const resume = "Sam Delgado\nLine Cook\nSpringfield, IL | sam@example.com\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Ran the grill on weekend rushes";
+  const lines = pickDefendLines(resume, "I ran the grill at Riverside Diner.").map((d) => d.line);
+  assert.ok(!lines.includes("Line Cook"), JSON.stringify(lines));
+  const claim = "Sam Delgado\n10 years in busy kitchens\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Ran the grill";
+  assert.ok(pickDefendLines(claim, "I ran the grill.").some((d) => d.line === "10 years in busy kitchens"));
+});
