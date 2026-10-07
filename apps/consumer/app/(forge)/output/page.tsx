@@ -1,82 +1,63 @@
 "use client";
 
 /**
- * Page 7: The Forge Output
+ * The Forge finish page.
  *
- * Narrative, not report. User's life reframed through redemption lens.
- * Reflects user's own words back, reorganized, affirmed.
- * Sections: Strengths -> Skills -> Barriers (with resources) -> Career paths -> Documents -> Next steps
- * Never scored, never graded.
- * Downloadable (analysis text + resume DOCX + cover letter DOCX), saveable to dashboard.
- * Gateway to Refinery: value-based invitation, not fear-based conversion.
+ * The new resume comes first, with t.ROY's one status line and a short tour.
+ * Beside it (under it on a phone) are the lines only the person can answer:
+ * true as written, change it, or cut it. The engine (getResumeStatus, via
+ * lib/finish-gate) decides draft or finished; this page never does.
+ *
+ * Finished: confetti, the finished download, the email box, and after a
+ * finished download the review ask. Draft: the main button says what's left,
+ * and a draft can always be downloaded, marked DRAFT with its open items.
+ *
+ * Below: one main action, the checks (collapsed, one line each), the cover
+ * letter, the person's story (the narrative reconstruction) and the next step.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { getOpusMessage } from "@/lib/opus-messages";
-import { GhostGuide, TBtn, TroyAttention } from "@crucible/consumer-ui";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
-import { escapeHtml as escHtml } from "@/lib/escape-html";
-import { splitForMetricEmphasis, formatSalaryRange } from "@/lib/metric-emphasis";
-import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
 import { MintCheckPanel } from "@/components/resume/MintCheckPanel";
-import { withholdRecordLines } from "@/lib/record-lines";
-import { hasOpenMintBlock } from "@/lib/mint-blocks";
 import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
-import { TurnstileWidget } from "@/components/TurnstileWidget";
-import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
-
-interface Strength {
-  title: string;
-  evidence: string;
-  source: string;
-}
-
-interface Skill {
-  name: string;
-  category: string;
-}
-
-interface Resource {
-  name: string;
-  type: string;
-  description: string;
-  url?: string;
-}
-
-interface Barrier {
-  type: string;
-  user_narrative?: string;
-  resources: Resource[];
-  legal_notes?: string;
-}
-
-interface CareerPath {
-  title: string;
-  industry?: string;
-  match_reason: string;
-  salary_range?: string;
-  next_steps: string[];
-}
-
-interface ForgeOutput {
-  narrative?: {
-    headline?: string;
-    summary?: string;
-    reflection?: string;
-    strengths?: Strength[];
-  };
-  readiness_stage?: string;
-  strengths?: Strength[];
-  skills?: Skill[];
-  barriers?: Barrier[];
-  career_paths?: CareerPath[];
-}
+import { ResumePage } from "@/components/resume/ResumePage";
+import { PageFitLine } from "@/components/resume/PageFitLine";
+import { downloadPackage, downloadResume, type DownloadFormat } from "@/lib/resume-download";
+import { findDiscrepancies } from "@/lib/resume-discrepancies";
+import {
+  buildFinishView,
+  canEmailPackage,
+  changeLine,
+  countWord,
+  cutLine,
+  downloadMode,
+  finishKey,
+  FINISH_STATE_VERSION,
+  openItemsInPlainWords,
+  ownWordsFor,
+  readStoredFinish,
+  recordAnswer,
+  REVIEW_ASK_SHOWN_KEY,
+  shouldCelebrate,
+  shouldShowReviewAsk,
+  statusLine,
+  TOUR_SEEN_KEY,
+  type DefendAnswer,
+} from "@/lib/finish-gate";
+import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
+import { DefendPanel } from "@/components/forge/finish/DefendPanel";
+import { DownloadBox } from "@/components/forge/finish/DownloadBox";
+import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
+import { CheckSection } from "@/components/forge/finish/CheckSection";
+import { FinishTour, type TourStep } from "@/components/forge/finish/FinishTour";
+import { GroundingNote, groundingOpenCount, readGrounding } from "@/components/forge/finish/GroundingNote";
+import { NextStep, ReviewAsk } from "@/components/forge/finish/NextStep";
+import { StorySection, type ForgeOutput } from "@/components/forge/finish/StorySection";
 
 type DocGenState = "idle" | "generating" | "done" | "error";
-type ResumeViewMode = "preview" | "text";
 
 /** Readiness-aware messaging for the output page */
 const READINESS_CONFIG: Record<string, {
@@ -136,32 +117,28 @@ const READINESS_CONFIG: Record<string, {
   },
 };
 
+const thingWord = (n: number) => `${countWord(n).toLowerCase()} ${n === 1 ? "thing" : "things"}`;
+
 export default function OutputPage() {
   const router = useRouter();
-  const { session } = useForgeSession();
+  const { session, updateSession } = useForgeSession();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
 
   const readiness = output.readiness_stage || session.readinessStage || "preparation";
   const rc = READINESS_CONFIG[readiness] || READINESS_CONFIG.preparation;
-
   const narrative = output.narrative || {};
-  const strengths = output.strengths || narrative.strengths || [];
-  const skills = output.skills || [];
-  const barriers = output.barriers || [];
   const careerPaths = output.career_paths || [];
   // Report sentences that may say more about a credential than the person did.
-  // Checked on the server when the report was made; shown with the report, so
-  // they appear whether or not documents are ever made.
   const reportChecks: string[] = Array.isArray((output as { credential_checks?: unknown })?.credential_checks)
     ? ((output as { credential_checks: unknown[] }).credential_checks.filter((c) => typeof c === "string") as string[])
     : [];
 
   // Prevent double-submission on mount
   const hasStarted = useRef(false);
+  const hydrated = useRef(false);
 
-  // Document generation state
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
   // Lines about time inside that the writer held back (never silently), and
@@ -169,32 +146,47 @@ export default function OutputPage() {
   const [withheldLines, setWithheldLines] = useState<string[]>([]);
   const [keepInsideLines, setKeepInsideLines] = useState(false);
   const [coverLetterText, setCoverLetterText] = useState<string>("");
-  // Grounding gate result (F2): claims removed vs. residual (found but not
-  // auto-removed -- the user must review those). Codex 8: never conflate them.
-  const [groundingNote, setGroundingNote] = useState<{
-    removed: number;
-    residual: number;
-    unmatched: number;
-    // Documents where the checker reported something but named no phrase we could show.
-    unnamed: ("resume" | "cover_letter")[];
-    outcomes: { claim: string; doc: "resume" | "cover_letter"; status: "removed" | "changed" | "still_there" | "unmatched" | "also_in" | "credential" }[];
-  } | null>(null);
-  // False when the automated check could not run (no key, timeout, bad reply).
-  // It fails open so a person still gets their documents -- but they should be
-  // told the machine check was skipped rather than shown a silent clean pass.
-  const [verifierRan, setVerifierRan] = useState(true);
-  // Which document's check did not run, when only one of them failed.
-  const [uncheckedDoc, setUncheckedDoc] = useState<"resume" | "cover letter" | null>(null);
+  const [grounding, setGrounding] = useState<unknown>(null);
+  const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
   const [docError, setDocError] = useState<string>("");
-  const [downloading, setDownloading] = useState<string>("");
-  const [copied, setCopied] = useState<string>("");
-  const [resumeViewMode, setResumeViewMode] = useState<ResumeViewMode>("preview");
+  const [busy, setBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+  const [copied, setCopied] = useState("");
 
-  const handleCopy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 2000);
-  };
+  // Back on this page in the same run: show the same documents and answers
+  // instead of writing new ones (a new AI call, and the answers would no
+  // longer match the lines).
+  useEffect(() => {
+    if (hydrated.current || !session.forgeOutput) return;
+    hydrated.current = true;
+    const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean } } | undefined;
+    const keep = raw?.docs?.keepInsideLines === true;
+    const stored = readStoredFinish(raw, finishKey(session, keep));
+    if (!stored) return;
+    hasStarted.current = true;
+    setResumeText(stored.docs.resumeText);
+    setCoverLetterText(stored.docs.coverLetterText);
+    setWithheldLines(stored.docs.withheldLines);
+    setKeepInsideLines(stored.docs.keepInsideLines);
+    setGrounding(stored.docs.grounding);
+    setDefendAnswers(stored.defendAnswers);
+    setDocState("done");
+  }, [session]);
+
+  // Keep the documents and answers with the run (browser only).
+  useEffect(() => {
+    if (docState !== "done" || !resumeText) return;
+    updateSession({
+      forgeFinish: {
+        v: FINISH_STATE_VERSION,
+        key: finishKey(session, keepInsideLines),
+        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding },
+        defendAnswers,
+      },
+    });
+    // session is read for its key fields only; writing must not loop on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, defendAnswers, updateSession]);
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -202,7 +194,7 @@ export default function OutputPage() {
     hasStarted.current = true;
     setDocState("generating");
     setDocError("");
-    setGroundingNote(null);
+    setGrounding(null);
 
     try {
       const response = await fetch("/api/forge/generate-docs", {
@@ -226,7 +218,7 @@ export default function OutputPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || "Document generation failed");
       }
 
@@ -234,104 +226,166 @@ export default function OutputPage() {
       setResumeText(data.resume || "");
       setCoverLetterText(data.coverLetter || "");
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
-      const g = data.grounding;
-      const outcomes = Array.isArray(g?.outcomes) ? g.outcomes : [];
-      if ((g && (g.removed || g.residual || g.unmatched || g.hasFabrication)) || outcomes.length) {
-        setGroundingNote({
-          removed: g?.removed || 0,
-          residual: g?.residual || 0,
-          unmatched: g?.unmatched || 0,
-          unnamed: (["resume", "cover_letter"] as const).filter((d) => g?.unnamedByDoc?.[d] === true),
-          outcomes,
-        });
-      }
-      // Absent means an older response shape, which we treat as "ran" rather
-      // than alarming everyone during a rollout. An explicit false is the
-      // signal that matters.
-      setVerifierRan(g?.verifierRan !== false);
-      const byDoc = g?.verifierRanByDoc;
-      if (byDoc && byDoc.resume !== byDoc.cover_letter) {
-        setUncheckedDoc(byDoc.resume === false ? "resume" : "cover letter");
-      }
+      setGrounding(data.grounding ?? null);
+      // New documents: earlier answers belonged to other lines.
+      setDefendAnswers([]);
       setDocState("done");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Doc generation error:", err);
-      setDocError("Something went wrong generating your documents.");
+      setDocError("Something went wrong writing your documents.");
       setDocState("error");
       hasStarted.current = false;
     }
-  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences, keepInsideLines]);
+  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
 
-  // Auto-trigger document generation when output page loads
+  // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
-    if (session.forgeOutput && docState === "idle") {
-      generateDocs();
-    }
+    if (!session.forgeOutput || docState !== "idle") return;
+    // Let the stored-copy check run first.
+    const t = setTimeout(() => {
+      if (!hasStarted.current) generateDocs();
+    }, 0);
+    return () => clearTimeout(t);
   }, [session.forgeOutput, docState, generateDocs]);
 
-  // Celebrate once, and only when the documents exist and the mint check shows no
-  // open BLOCK. Before this the confetti fired on page load, ahead of the documents
-  // and the check, and a "Not finished yet" warning could appear right after it.
-  const mintBlocked = useMemo(
-    () =>
-      hasOpenMintBlock(
-        resumeText,
-        withholdRecordLines(session.resumeText, keepInsideLines).kept
-      ),
-    [resumeText, session.resumeText, keepInsideLines]
+  // ---- the gate ----------------------------------------------------------------
+  const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
+  const view = useMemo(
+    () => buildFinishView({ resumeText, ownWords, defendAnswers }),
+    [resumeText, ownWords, defendAnswers]
   );
+  const ready = docState === "done" && !!resumeText;
+  const finished = ready && view.state === "finished";
+
+  const groundingNote = useMemo(() => readGrounding(grounding), [grounding]);
+  const g = grounding as { verifierRan?: boolean; verifierRanByDoc?: { resume?: boolean; cover_letter?: boolean } } | null;
+  // Absent means an older response shape, treated as "ran". An explicit false matters.
+  const verifierRan = g?.verifierRan !== false;
+  const byDoc = g?.verifierRanByDoc;
+  const uncheckedDoc = byDoc && byDoc.resume !== byDoc.cover_letter ? (byDoc.resume === false ? "resume" : "cover letter") : null;
+
+  // Celebrate once, only when the engine says finished.
   const [celebrated, setCelebrated] = useState(false);
   useEffect(() => {
-    if (!isDemo && docState === "done" && !mintBlocked) setCelebrated(true);
-  }, [isDemo, docState, mintBlocked]);
+    if (shouldCelebrate({ state: view.state, isDemo, docsReady: ready, alreadyCelebrated: celebrated })) setCelebrated(true);
+  }, [view.state, isDemo, ready, celebrated]);
 
-  const handleDownload = async (type: "resume" | "cover_letter") => {
-    const content = type === "resume" ? resumeText : coverLetterText;
-    if (!content) return;
-
-    setDownloading(type);
+  // Review ask: after a finished download, once per visit.
+  const [finishedDownloadDone, setFinishedDownloadDone] = useState(false);
+  const [reviewDismissed, setReviewDismissed] = useState(false);
+  const shownEarlier = useRef<boolean | null>(null);
+  if (shownEarlier.current === null && typeof window !== "undefined") {
     try {
-      const response = await fetch("/api/forge/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, type, format: "docx" }),
-      });
-
-      if (!response.ok) throw new Error("Download failed");
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        type === "resume"
-          ? "My_Resume_SteelMan.docx"
-          : "My_CoverLetter_SteelMan.docx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download error:", err);
-    } finally {
-      setDownloading("");
+      shownEarlier.current = sessionStorage.getItem(REVIEW_ASK_SHOWN_KEY) === "1";
+    } catch {
+      shownEarlier.current = false;
     }
+  }
+  const reviewVisible = shouldShowReviewAsk({
+    state: ready ? view.state : "draft",
+    isDemo,
+    finishedDownloadDone,
+    shownEarlierThisVisit: shownEarlier.current === true,
+    dismissed: reviewDismissed,
+  });
+  useEffect(() => {
+    if (!reviewVisible) return;
+    try {
+      sessionStorage.setItem(REVIEW_ASK_SHOWN_KEY, "1");
+    } catch {
+      // storage unavailable: the ask still shows only after this download
+    }
+  }, [reviewVisible]);
+
+  // The tour: once by itself, then from the button.
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      if (localStorage.getItem(TOUR_SEEN_KEY) === "1") return;
+      localStorage.setItem(TOUR_SEEN_KEY, "1");
+    } catch {
+      return;
+    }
+    const t = setTimeout(() => setTourOpen(true), 900);
+    return () => clearTimeout(t);
+  }, [ready]);
+
+  const tourSteps: TourStep[] = [
+    { target: "finish-resume", text: "This is your new resume, built from your own words. It comes first because it's what you came for." },
+    view.state === "finished"
+      ? { target: "fix-list", text: "Every line we asked about is checked. You can still change an answer." }
+      : { target: "fix-list", text: "These are the lines only you can answer. For each one: say it's true, change it, or cut it. When they're done, your resume is finished." },
+    view.state === "finished"
+      ? { target: "finish-download", text: "Download your resume and cover letter here, or email them to yourself." }
+      : { target: "finish-download", text: "Download here. Until it's finished, every file is marked DRAFT so nobody mistakes it for the final one." },
+    { target: "finish-checks", text: "These checks read your page the way a screener would. Open one if you want the details." },
+    { target: "finish-story", text: "Your story: your strengths, skills and jobs that fit, from what you told us." },
+    { target: "finish-next", text: "When you're ready, the Refinery aims this resume at real jobs." },
+  ];
+
+  // ---- actions -------------------------------------------------------------------
+  const onAnswer = (line: string, answer: string) => setDefendAnswers((a) => recordAnswer(a, line, answer, "stands"));
+  const onChange = (line: string, rewrite: string) => {
+    const next = changeLine(resumeText, line, rewrite);
+    if (next === resumeText) return;
+    setResumeText(next);
+    // The new line is in the person's own words: their rewrite is its answer.
+    const newLine = next.split("\n").map((l) => l.trim()).find((l) => l.replace(/^[-•*]\s*/, "") === rewrite.replace(/\s*\n\s*/g, " ").replace(/^\s*[-•*]\s*/, "").trim());
+    setDefendAnswers((a) => (newLine ? recordAnswer(a, newLine, rewrite, "stands") : a));
+  };
+  const onCut = (line: string) => {
+    setResumeText((t) => cutLine(t, line));
+    setDefendAnswers((a) => recordAnswer(a, line, "", "cut"));
   };
 
-  function handlePrintResumePdf() {
-    if (!resumeText) return;
-    const html = resumeTextToStandaloneHtml(resumeText);
-    const w = window.open("", "_blank");
-    if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
-    w.document.write(html);
-    w.document.close();
+  const goFix = () => {
+    const first = document.getElementById("fix-item-0") || document.getElementById("fix-list");
+    if (!first) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    first.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+  };
+
+  const draftItems = () => (view.state === "finished" ? undefined : openItemsInPlainWords(view.status));
+
+  async function runDownload(fn: () => Promise<void>) {
+    setBusy(true);
+    setDownloadError("");
+    try {
+      await fn();
+      if (view.state === "finished") setFinishedDownloadDone(true);
+    } catch (err) {
+      console.error("Download error:", err);
+      setDownloadError(err instanceof Error && /popups/.test(err.message) ? err.message : "The download didn't work. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function handlePrintAnalysisPdf() {
-    const html = analysisToStandaloneHtml(output, narrative);
-    const w = window.open("", "_blank");
-    if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
-    w.document.write(html);
-    w.document.close();
-  }
+  const handlePackage = () =>
+    runDownload(() =>
+      downloadPackage({ resumeText, coverLetterText: coverLetterText || undefined, ...downloadMode(view.state), openItems: draftItems() })
+    );
+  const handleFormat = (format: DownloadFormat) =>
+    runDownload(() => downloadResume({ format, kind: "resume", text: resumeText, ...downloadMode(view.state), openItems: draftItems() }));
+  const handleLetter = () =>
+    runDownload(() =>
+      downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, ...downloadMode(view.state), openItems: draftItems() })
+    );
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard?.writeText(text).catch(() => undefined);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 2000);
+  };
+
+  // ---- check summaries -------------------------------------------------------------
+  const mintBlocks = view.status.openItems.filter((i) => i.rule !== "STD-C04" && i.severity === "BLOCK").length;
+  const discrepancies = useMemo(
+    () => (resumeText.trim() ? findDiscrepancies(resumeText, { sourceText: session.resumeText }) : []),
+    [resumeText, session.resumeText]
+  );
+  const samples = useMemo(() => pickSamplePostings(careerPaths.map((c) => c.title || ""), 4), [careerPaths]);
 
   // If no output, redirect back
   if (!session.forgeOutput) {
@@ -353,19 +407,40 @@ export default function OutputPage() {
     );
   }
 
+  const headline =
+    docState === "generating" || docState === "idle"
+      ? "t.ROY is writing your resume and cover letter."
+      : docState === "error"
+        ? "Your resume didn't come through."
+        : statusLine(view);
+  const subline =
+    docState === "generating" || docState === "idle"
+      ? "This usually takes 30 to 60 seconds."
+      : docState === "error"
+        ? "Nothing you entered was lost. Try again below."
+        : view.state === "finished"
+          ? "Download it below, or email it to yourself."
+          : "Answer them with t.ROY. You can download a draft any time.";
+
   return (
-    <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
+    <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl">
       {celebrated && <CompletionConfetti />}
-      <GhostGuide
-        message={getOpusMessage("output", audience, isDemo)}
-        pageId="output"
+      <FinishTour
+        open={tourOpen}
+        steps={tourSteps}
+        onClose={() => {
+          setTourOpen(false);
+          try {
+            localStorage.setItem(TOUR_SEEN_KEY, "1");
+          } catch {
+            // fine
+          }
+        }}
       />
 
       {isDemo && (
-        <div className="bg-t-panel-2 px-5 py-4 mb-8 border border-t-amber text-center">
-          <p className="text-sm text-t-amber-bright font-medium">
-            This is a sample output. Try it with your own data.
-          </p>
+        <div className="mb-6 border border-t-amber bg-t-panel-2 px-5 py-4 text-center">
+          <p className="text-sm font-medium text-t-amber-bright">This is a sample output. Try it with your own data.</p>
           <button
             onClick={() => router.push("/welcome")}
             className="mt-2 text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
@@ -375,1168 +450,261 @@ export default function OutputPage() {
         </div>
       )}
 
-      {/* Section jump nav */}
-      <nav className="flex flex-wrap gap-2 justify-center mb-10" aria-label="Jump to section">
-        {strengths.length > 0 && (
-          <a href="#strengths" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
-            {rc.strengthsHeading}
-          </a>
+      {/* 1. t.ROY's status line and the tour button */}
+      <div className="flex flex-wrap items-start gap-3 border border-t-line border-l-[3px] border-l-t-amber bg-t-panel px-4 py-3" data-testid="finish-status">
+        <img src="/images/t-roy-icon-badge.webp" alt="" aria-hidden="true" className="mt-0.5 h-8 w-8 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg font-bold leading-snug text-t-white" data-testid="status-line">{headline}</h1>
+          <p className="text-xs text-t-phos-dim">{subline}</p>
+          {ready && !verifierRan && (
+            <p className="mt-1 text-xs text-t-amber-bright">
+              Our second check didn&apos;t run this time. Read every line before you send it.
+            </p>
+          )}
+        </div>
+        {ready && (
+          <button
+            onClick={() => setTourOpen(true)}
+            className="t-focus min-h-touch shrink-0 border border-t-line px-3 py-2 text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white"
+            data-testid="tour-button"
+          >
+            Show me around
+          </button>
         )}
-        {skills.length > 0 && (
-          <a href="#skills" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
-            Skills
-          </a>
-        )}
-        {careerPaths.length > 0 && (
-          <a href="#careers" className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors">
-            {rc.careersHeading}
-          </a>
-        )}
-        <a href="#documents" className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors">
-          {rc.docsHeading}
-        </a>
-      </nav>
+      </div>
 
-      {/* Header / Narrative */}
-      <section className="mb-12 text-center">
-        <h1 className="text-3xl font-bold text-t-white mb-4">
-          {narrative.headline || "Your Story, Reforged"}
-        </h1>
-        {narrative.summary && (
-          <p className="text-base text-t-phos leading-relaxed max-w-xl mx-auto mb-4">
-            {narrative.summary}
-          </p>
-        )}
-        {narrative.reflection && (
-          <p className="text-sm text-t-amber-bright italic max-w-md mx-auto">
-            {narrative.reflection}
-          </p>
-        )}
-      </section>
-
-      {/* Report lines that may say more about a credential than the person did.
-          Flagged, never removed: the person knows what they hold. */}
-      {reportChecks.length > 0 && (
-        <section className="mb-10 border border-t-amber bg-t-panel px-4 py-3">
-          <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">Check these lines</p>
-          <p className="text-xs leading-relaxed text-t-phos">
-            {reportChecks.length === 1 ? "This line" : "These lines"} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.
-          </p>
-          <ul className="mt-1.5 space-y-1">
-            {reportChecks.map((c, i) => (
-              <li key={i} className="text-[11px] leading-relaxed text-t-phos">{`"${c}"`}</li>
-            ))}
-          </ul>
-        </section>
+      {(docState === "generating" || docState === "idle") && (
+        <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
+          <div className="relative mx-auto mb-4 h-10 w-10">
+            <div className="absolute inset-0 border-[3px] border-t-line" />
+            <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
+          </div>
+          <p className="text-sm font-medium text-t-amber-bright">Writing your resume and cover letter...</p>
+        </div>
       )}
 
-      {/* Strengths */}
-      {strengths.length > 0 && (
-        <section id="strengths" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-t-white mb-4">
-            {rc.strengthsHeading}
-          </h2>
-          <div className="space-y-3">
-            {strengths.map((s, i) => (
-              <div
-                key={i}
-                className="bg-t-panel p-5 border border-t-line"
-              >
-                <h3 className="font-semibold text-t-amber-bright">{s.title}</h3>
-                <p className="text-sm text-t-phos mt-1">{s.evidence}</p>
+      {docState === "error" && (
+        <div className="mt-6 border border-t-red bg-t-panel p-6 text-center">
+          <p className="mb-3 text-sm text-t-phos">{docError}</p>
+          <button
+            onClick={() => {
+              hasStarted.current = false;
+              setDocState("idle");
+            }}
+            className="t-focus min-h-touch bg-t-amber px-6 py-3 text-sm font-bold text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] transition-colors hover:bg-t-amber-bright"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {docState === "done" && (
+        <>
+          {/* 2. The resume, with the fix questions beside it (under it on a phone) */}
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+            <div className="min-w-0">
+              <div id="finish-resume" className="scroll-mt-20 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
+                {resumeText ? (
+                  <ResumePage text={resumeText} draft={view.state !== "finished"} />
+                ) : (
+                  <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
+                )}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
 
-      {/* Skills */}
-      {skills.length > 0 && (
-        <section id="skills" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-t-white mb-4">
-            Skills We Found
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {skills.map((s, i) => {
-              const kind =
-                s.category === "hard"
-                  ? "hard"
-                  : s.category === "soft"
-                    ? "soft"
-                    : "transfer";
-              return (
-                <span
-                  key={i}
-                  className="px-3 py-1.5 text-sm font-medium border"
-                  style={{
-                    color: `var(--t-skill-${kind})`,
-                    borderColor: `var(--t-skill-${kind})`,
-                    background: `var(--t-skill-${kind}-bg)`,
-                  }}
-                >
-                  {s.name}
-                </span>
-              );
-            })}
-          </div>
-          <div className="flex gap-4 mt-3 text-xs text-t-phos-dim">
-            <span className="flex items-center gap-1">
-              <span
-                className="w-2.5 h-2.5 border"
-                style={{
-                  background: "var(--t-skill-hard-bg)",
-                  borderColor: "var(--t-skill-hard)",
-                }}
-              />{" "}
-              Technical
-            </span>
-            <span className="flex items-center gap-1">
-              <span
-                className="w-2.5 h-2.5 border"
-                style={{
-                  background: "var(--t-skill-soft-bg)",
-                  borderColor: "var(--t-skill-soft)",
-                }}
-              />{" "}
-              People
-            </span>
-            <span className="flex items-center gap-1">
-              <span
-                className="w-2.5 h-2.5 border"
-                style={{
-                  background: "var(--t-skill-transfer-bg)",
-                  borderColor: "var(--t-skill-transfer)",
-                }}
-              />{" "}
-              Transferable
-            </span>
-          </div>
-        </section>
-      )}
-
-      {/* Barriers with Resources */}
-      {barriers.length > 0 && (
-        <section className="mb-10">
-          <h2 className="text-xl font-bold text-t-white mb-4">
-            Your Hurdles, and What Can Help
-          </h2>
-          {/* Coaching-not-legal-advice disclaimer (F6): the analysis can touch
-              expungement/ban-the-box, so it carries the same guard the disclosure
-              planner does. */}
-          <p className="text-xs text-t-phos mb-4 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
-            <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
-            Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.
-          </p>
-          <div className="space-y-4">
-            {barriers.map((b, i) => (
-              <div
-                key={i}
-                className="bg-t-panel p-5 border border-t-line"
-              >
-                <h3 className="font-semibold text-t-white capitalize">
-                  {b.type.replace(/_/g, " ")}
-                </h3>
-                {b.user_narrative && (
-                  <p className="text-sm text-t-phos-dim mt-1 italic">
-                    &ldquo;{b.user_narrative}&rdquo;
+              {withheldLines.length > 0 && !keepInsideLines && (
+                <div className="mt-3 border border-t-line bg-t-panel px-4 py-3">
+                  <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">What we left off your resume, and why</p>
+                  <p className="text-xs leading-relaxed text-t-phos">
+                    These lines mention a record or time inside, so we kept them off your resume and letter. That is the usual Steel Man move: you talk about it in person, at the right time. But if a line is real work you want on the page, it is your call.
                   </p>
-                )}
-                {b.legal_notes && (
-                  <p className="text-sm text-t-steel mt-2 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
-                    {b.legal_notes}
-                  </p>
-                )}
-                {(b.resources?.length ?? 0) > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-xs font-medium text-t-phos-dim uppercase">
-                      Resources
-                    </p>
-                    {(b.resources ?? []).map((r, j) => (
-                      <div
-                        key={j}
-                        className="bg-t-panel-2 px-4 py-3 border border-t-line"
-                      >
-                        <p className="font-medium text-sm text-t-white">{r.name}</p>
-                        <p className="text-xs text-t-phos-dim mt-0.5">
-                          {r.description}
-                        </p>
-                      </div>
+                  <ul className="mt-1.5 space-y-1">
+                    {withheldLines.map((line, i) => (
+                      <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{line}&rdquo;</li>
                     ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Career Paths */}
-      {careerPaths.length > 0 && (
-        <section id="careers" className="mb-10 scroll-mt-20">
-          <h2 className="text-xl font-bold text-t-white mb-4">
-            {rc.careersHeading}
-          </h2>
-          <div className="space-y-4">
-            {careerPaths.map((cp, i) => (
-              <div
-                key={i}
-                className="bg-t-panel p-5 border border-t-line"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="font-semibold text-t-white">
-                      {cp.title}
-                    </h3>
-                    {cp.industry && (
-                      <p className="text-sm text-t-phos-dim">{cp.industry}</p>
-                    )}
-                  </div>
-                  {cp.salary_range && (
-                    <span className="text-sm font-medium text-t-amber-bright whitespace-nowrap">
-                      {cp.salary_range}
-                    </span>
-                  )}
+                  </ul>
+                  <button
+                    onClick={() => {
+                      setKeepInsideLines(true);
+                      hasStarted.current = false;
+                      setDocState("idle");
+                    }}
+                    className="t-focus mt-2 border border-t-line bg-t-panel px-3 py-1.5 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim"
+                  >
+                    Put them back and rebuild
+                  </button>
                 </div>
-                <p className="text-sm text-t-phos mt-2">
-                  {cp.match_reason}
-                </p>
-                {(cp.next_steps?.length ?? 0) > 0 && (
-                  <div className="mt-3">
-                    <p className="text-xs font-medium text-t-phos-dim uppercase mb-1">
-                      Next Steps
-                    </p>
-                    <ol className="text-sm text-t-phos-dim space-y-1 list-decimal list-inside">
-                      {(cp.next_steps ?? []).map((step, j) => (
-                        <li key={j}>{step}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Your Documents */}
-      <section id="documents" className="mb-10 scroll-mt-20">
-        <h2 className="text-xl font-bold text-t-white mb-4">
-          {rc.docsHeading}
-        </h2>
-
-        {docState === "generating" && (
-          <div className="bg-t-panel p-8 border border-t-line text-center">
-            <div className="w-10 h-10 mx-auto mb-4 relative">
-              <div className="absolute inset-0 border-[3px] border-t-line" />
-              <div className="absolute inset-0 border-[3px] border-t-amber border-t-transparent animate-spin" />
-            </div>
-            <p className="text-sm font-medium text-t-amber-bright">
-              Generating your resume and cover letter...
-            </p>
-            <p className="text-xs text-t-phos-dim mt-1">
-              This usually takes 30-60 seconds
-            </p>
-          </div>
-        )}
-
-        {docState === "error" && (
-          <div className="bg-t-panel p-6 border border-t-red text-center">
-            <p className="text-sm text-t-phos mb-3">{docError}</p>
-            <button
-              onClick={() => {
-                setDocState("idle");
-                generateDocs();
-              }}
-              className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-
-        {docState === "done" && (
-          <div className="space-y-4">
-            {/* Grounding note (F2): honest disclosure of the truth gate. Removed
-                and residual are reported separately so we never claim a document
-                is fully clean when a fabrication couldn't be auto-removed (Codex 8). */}
-            {/* The automated check could not run. It fails open on purpose so a
-                person still gets their documents -- but silence here would let
-                an outage look exactly like a clean pass, which is the one thing
-                this panel must never do. */}
-            {!verifierRan && (
-              <div className="border border-t-amber bg-t-panel px-4 py-3">
-                <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">
-                  Automatic check did not run
-                </p>
-                <p className="text-xs leading-relaxed text-t-phos">
-                  {uncheckedDoc
-                    ? `The second check that traces every line back to what you told us did not run on your ${uncheckedDoc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.`
-                    : "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification."}
-                </p>
-              </div>
-            )}
-
-            {withheldLines.length > 0 && !keepInsideLines && (
-              <div className="border border-t-line bg-t-panel px-4 py-3">
-                <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">
-                  What we left off your resume, and why
-                </p>
-                <p className="text-xs leading-relaxed text-t-phos">
-                  These lines mention a record or time inside, so we kept them off your resume and letter. That is the usual Steel Man move: you talk about it in person, at the right time. But if a line is real work you want on the page, it is your call.
-                </p>
-                <ul className="mt-1.5 space-y-1">
-                  {withheldLines.map((line, i) => (
-                    <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{line}&rdquo;</li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => {
-                    setKeepInsideLines(true);
-                    hasStarted.current = false;
-                    setDocState("idle");
-                  }}
-                  className="t-focus mt-2 px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
-                >
-                  Put them back and rebuild
-                </button>
-              </div>
-            )}
-
-            {keepInsideLines && (
-              <div className="border border-t-line bg-t-panel px-4 py-3">
-                <p className="text-xs leading-relaxed text-t-phos">
-                  Your resume keeps your own lines about work, training or credentials from inside, the way you wrote them. Nothing about a record was added. Your cover letter talks about the work and leaves the record for you to bring up in person.
-                </p>
-              </div>
-            )}
-
-            {groundingNote && (() => {
-              const credentialCount = groundingNote.outcomes.filter((o) => o.status === "credential").length;
-              const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length + credentialCount;
-              const docName = (d: "resume" | "cover_letter") => (d === "cover_letter" ? "letter" : d);
-              const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
-                o.status === "credential"
-                  ? `A line in your ${docName(o.doc)} may say more about a card, license or certification than you told us. Check it: `
-                  : o.status === "removed"
-                  ? `Taken out of your ${docName(o.doc)}: `
-                  : o.status === "changed"
-                    ? `Reworded in your ${docName(o.doc)}. Find the new wording and check it. It used to say: `
-                    : o.status === "also_in"
-                    ? `Something like this is also in your ${docName(o.doc)}, check it: `
-                    : o.status === "still_there"
-                      ? `Still in your ${docName(o.doc)}, check it: `
-                      : `We couldn't find these exact words in your ${docName(o.doc)}. Look for anything like them: `;
-              return (
-                <div className="bg-t-panel border border-t-amber px-4 py-3">
-                  <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
-                    {open > 0 ? "Check these before you send" : "What the check found"}
+              )}
+              {keepInsideLines && (
+                <div className="mt-3 border border-t-line bg-t-panel px-4 py-3">
+                  <p className="text-xs leading-relaxed text-t-phos">
+                    Your resume keeps your own lines about work, training or credentials from inside, the way you wrote them. Nothing about a record was added. Your cover letter talks about the work and leaves the record for you to bring up in person.
                   </p>
-                  <p className="text-xs text-t-phos leading-relaxed">
-                    {groundingNote.removed > 0 &&
-                      `We took out ${groundingNote.removed} ${groundingNote.removed === 1 ? "detail" : "details"} we couldn't match to what you told us. `}
-                    {groundingNote.residual > 0 &&
-                      `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged may still be in there, maybe reworded. `}
-                    {credentialCount > 0 &&
-                      `${credentialCount === 1 ? "One line" : `${credentialCount} lines`} may say more about a card, license or certification than you told us. `}
-                    {groundingNote.unmatched > 0 &&
-                      `The check quoted ${groundingNote.unmatched === 1 ? "words" : "some words"} we couldn't find in your documents. `}
-                    {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
-                    {open > 0
-                      ? "Read these closely before you send anything."
-                      : "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best."}
-                  </p>
-                  {groundingNote.outcomes.length > 0 && (
-                    <details className="mt-2" open={open > 0}>
-                      <summary className="t-focus cursor-pointer text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2">
-                        See what we flagged
-                      </summary>
-                      <ul className="mt-1.5 space-y-1">
-                        {groundingNote.outcomes.map((o, i) => (
-                          <li key={i} className="text-[11px] leading-relaxed text-t-phos">
-                            <span className={o.status === "removed" ? "text-t-phos-dim" : "font-bold text-t-amber-bright"}>
-                              {label(o)}
-                            </span>
-                            {`"${o.claim}"`}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
                 </div>
-              );
-            })()}
-
-            {/* Resume */}
-            {resumeText && (
-              <div className="bg-t-panel border border-t-line overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-t-white text-sm">Resume</h3>
-                    <div className="flex border border-t-line overflow-hidden text-xs">
-                      <button
-                        onClick={() => setResumeViewMode("preview")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "preview" ? "bg-t-amber text-white" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
-                      >
-                        Preview
-                      </button>
-                      <button
-                        onClick={() => setResumeViewMode("text")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${resumeViewMode === "text" ? "bg-t-amber text-white" : "bg-t-panel text-t-phos hover:text-t-amber-bright"}`}
-                      >
-                        Plain text
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 flex-wrap justify-end">
-                    <button
-                      onClick={() => handleCopy(resumeText, "resume")}
-                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
-                    >
-                      {copied === "resume" ? "Copied!" : "Copy"}
-                    </button>
-                    <button
-                      onClick={handlePrintResumePdf}
-                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
-                    >
-                      Save as PDF
-                    </button>
-                    <button
-                      onClick={() => handleDownload("resume")}
-                      disabled={downloading === "resume"}
-                      className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
-                    >
-                      {downloading === "resume" ? "Downloading..." : "Download .docx"}
-                    </button>
-                  </div>
-                </div>
-                <div className={resumeViewMode === "preview" ? "p-4 overflow-y-auto max-h-[600px] bg-t-bg" : "p-5 max-h-80 overflow-y-auto"}>
-                  {resumeViewMode === "preview" ? (
-                    <ResumePreview text={resumeText} />
-                  ) : (
-                    <pre className="text-sm text-t-phos whitespace-pre-wrap font-sans leading-relaxed">
-                      {resumeText}
-                    </pre>
-                  )}
-                </div>
-                {/* The one-or-two-page rule, checked where the resume is
-                    actually printed. The engine (max 2 pages, final page at
-                    least 70% full) already existed and shipped behind an opt-in
-                    button in the Refinery only, so a Forge resume could print
-                    as a page and a third with nothing ever noticing. */}
-                <div id="truth-gate" className="space-y-3 px-5 pb-5">
-                  {/* The visible truth gate: every ambiguity the generator met
-                      and deliberately did not resolve. Above page fit, because
-                      "is this certification current" outranks "is this two
-                      pages" when someone is about to hit send. */}
-                  <MintCheckPanel
-                    resumeText={resumeText}
-                    sourceText={withholdRecordLines(session.resumeText, keepInsideLines).kept}
-                  />
-                  <DiscrepancyPanel
-                    resumeText={resumeText}
-                    sourceText={session.resumeText}
-                    readinessStage={readiness}
-                    onApply={setResumeText}
-                  />
-                  <AtsScorePanel
-                    resumeText={resumeText}
-                    sourceText={session.resumeText}
-                    onApply={setResumeText}
-                  />
-                  <PageFitCheck getContent={() => resumeText} autoCheck />
-                  {/* Hardest screen #3: not hard to DO, hard to not drift past.
-                      The documents look finished, so the natural move is to
-                      download and leave -- with the open questions unanswered. */}
-                  <TroyAttention
-                    targetSelector="#truth-gate"
-                    surfaceId="forge-output-truth-gate"
-                    delayMs={6000}
-                    message="Before you send this anywhere: a few things here only you can answer."
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Cover Letter */}
-            {coverLetterText && (
-              <div className="bg-t-panel border border-t-line overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
-                  <h3 className="font-semibold text-t-white text-sm">
-                    Cover Letter
-                  </h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleCopy(coverLetterText, "cover")}
-                      className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
-                    >
-                      {copied === "cover" ? "Copied!" : "Copy"}
-                    </button>
-                    <button
-                      onClick={() => handleDownload("cover_letter")}
-                      disabled={downloading === "cover_letter"}
-                      className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors disabled:opacity-50"
-                    >
-                      {downloading === "cover_letter"
-                        ? "Downloading..."
-                        : "Download .docx"}
-                    </button>
-                  </div>
-                </div>
-                <div className="p-5 max-h-80 overflow-y-auto">
-                  <pre className="text-sm text-t-phos whitespace-pre-wrap font-sans leading-relaxed">
-                    {coverLetterText}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-2 text-center space-y-1">
-              <p className="text-xs text-t-phos-dim">
-                <strong className="text-t-phos">Save as PDF</strong> keeps the exact formatting you see above. Best for sharing and submitting.
-                &nbsp;<strong className="text-t-phos">Download .docx</strong> opens in Word or Google Docs so you can edit if anything needs adjusting.
-              </p>
-              <p className="text-xs text-t-phos-dim">{rc.docsSubtext}</p>
+              )}
             </div>
 
-            {/* Email-me-my-package -- the user leaves with their work in
-                their inbox even if they never make an account. */}
-            {!isDemo && (
+            <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
+            </aside>
+          </div>
+
+          {/* 3. One main action, with the email box and the explainer beside it */}
+          <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:items-start">
+            <DownloadBox
+              view={view}
+              busy={busy}
+              error={downloadError}
+              onDownloadPackage={handlePackage}
+              onDownloadFormat={handleFormat}
+              onFix={goFix}
+              onCopy={() => handleCopy(resumeText, "resume")}
+              copied={copied === "resume"}
+            />
+            {canEmailPackage({ state: view.state, isDemo }) ? (
               <EmailPackageBox
                 resumeText={resumeText}
                 coverLetterText={coverLetterText}
                 narrativeHeadline={narrative.headline || ""}
                 narrativeSummary={narrative.summary || ""}
               />
-            )}
+            ) : !isDemo ? (
+              <div className="border border-t-line bg-t-panel p-4" data-testid="email-locked">
+                <p className="mb-1 text-sm font-semibold text-t-white">Email me my package</p>
+                <p className="text-xs text-t-phos-dim">
+                  This opens when your resume is finished, so the copy in your inbox is the final one.
+                </p>
+              </div>
+            ) : null}
           </div>
-        )}
 
-        {docState === "idle" && (
-          <div className="bg-t-panel p-6 border border-t-line text-center">
-            <p className="text-sm text-t-phos-dim mb-3">
-              Ready to generate your resume and cover letter from the analysis
-              above.
-            </p>
-            <button
-              onClick={generateDocs}
-              className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
-            >
-              Generate Documents
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* What's next -- journey explainer + CTA */}
-      <section className="border-t border-t-line pt-8">
-
-        {/* 3-step journey indicator */}
-        <div className="flex items-center gap-1 mb-6">
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 bg-t-amber flex items-center justify-center flex-shrink-0">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#14100a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span className="text-xs font-semibold text-t-amber-bright whitespace-nowrap">The Forge</span>
-          </div>
-          <div className="flex-1 h-px bg-t-amber/50 mx-1" />
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 border border-t-amber text-t-amber-bright flex items-center justify-center flex-shrink-0 text-xs font-bold">2</div>
-            <span className="text-xs font-semibold text-t-white whitespace-nowrap">Create account</span>
-          </div>
-          <div className="flex-1 h-px bg-t-line mx-1" />
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="w-6 h-6 border border-t-line text-t-phos-dim flex items-center justify-center flex-shrink-0 text-xs font-bold">3</div>
-            <span className="text-xs font-semibold text-t-phos-dim whitespace-nowrap">The Refinery</span>
-          </div>
-        </div>
-
-        {/* Journey explanation */}
-        <div className="bg-t-panel p-6 border border-t-line mb-4">
-          <h3 className="font-bold text-t-white text-lg mb-3 leading-snug">
-            You&apos;re done with this part. You won&apos;t come back here.
-          </h3>
-          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
-            When you create your free account, everything you just built is automatically
-            waiting in The Refinery: your resume, your career narrative, your strengths,
-            your documents. It&apos;s all pre-loaded, with nothing to re-enter.
-          </p>
-          <p className="text-sm text-t-phos-dim leading-relaxed">
-            The Refinery is where the real work happens. Target your resume for specific jobs,
-            practice interview questions, plan your disclosure strategy, and browse a job board
-            that marks employers we checked for hiring people with records. It&apos;s all built on what you just created here.
-          </p>
-        </div>
-
-        {/* Primary CTA -- partner demo viewers get a partner landing, not the
-            client sign-up wall (the demo used to dead-end into the Refinery). */}
-        {isDemo && audience === "partner" ? (
-          <div className="bg-t-panel border border-t-line p-6 mb-6">
-            <h3 className="font-bold text-t-white text-lg mb-2">
-              That&apos;s the client experience, end to end.
-            </h3>
-            <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
-              Every client who runs The Forge lands in The Refinery with all of
-              this pre-loaded. As a partner, you get an anonymous statistical
-              overview of your cohort. It never includes their resume content.
-            </p>
-            <div className="flex flex-col gap-2">
-              <TBtn onClick={() => router.push("/partner")} className="w-full">
-                back to the partner overview
-              </TBtn>
-              <a
-                href="mailto:troyrichardcarr@gmail.com?subject=Partner%20access%20request"
-                className="t-focus w-full px-4 py-3 text-center border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
+          {/* 4. Checks, collapsed, one plain line each */}
+          <section id="finish-checks" aria-labelledby="finish-checks-heading" className="mt-10 scroll-mt-20">
+            <h2 id="finish-checks-heading" className="mb-3 text-xl font-bold text-t-white">Checks</h2>
+            <div className="space-y-2">
+              <CheckSection
+                title="Hard rules"
+                summary={
+                  mintBlocks > 0
+                    ? `Not finished yet: ${thingWord(mintBlocks)} to fix before you send it. They're in your list at the top.`
+                    : "Nothing on this page broke a hard rule when we checked it against your words."
+                }
+                attention={mintBlocks > 0}
+                testId="check-mint"
               >
-                Request partner access: troyrichardcarr@gmail.com
-              </a>
-              <button
-                onClick={() => router.push("/login?callbackUrl=/dashboard/partner")}
-                className="t-focus w-full px-4 py-3 text-sm text-t-phos-dim hover:text-t-white transition-colors"
+                <MintCheckPanel resumeText={resumeText} sourceText={ownWords} />
+              </CheckSection>
+
+              <CheckSection
+                title="Dates, credentials and wording"
+                summary={
+                  discrepancies.length > 0
+                    ? `${countWord(discrepancies.length)} ${discrepancies.length === 1 ? "question" : "questions"} worth a look before you send it.`
+                    : "Nothing flagged. Still read it once yourself."
+                }
+                testId="check-discrepancy"
               >
-                Already set up? Sign in to the partner dashboard
-              </button>
+                <DiscrepancyPanel resumeText={resumeText} sourceText={session.resumeText} readinessStage={readiness} onApply={setResumeText} />
+              </CheckSection>
+
+              {(groundingNote || !verifierRan) && (
+                <CheckSection
+                  title="The second check"
+                  summary={
+                    !verifierRan
+                      ? "It didn't run this time. Read every line yourself before you send it."
+                      : groundingNote && groundingOpenCount(groundingNote) > 0
+                        ? `${countWord(groundingOpenCount(groundingNote))} ${groundingOpenCount(groundingNote) === 1 ? "thing" : "things"} to check before you send it.`
+                        : "It traced every line back to what you told us and fixed what it could."
+                  }
+                  attention={!verifierRan || (!!groundingNote && groundingOpenCount(groundingNote) > 0)}
+                  testId="check-grounding"
+                >
+                  {!verifierRan && (
+                    <p className="mb-2 text-xs leading-relaxed text-t-phos">
+                      {uncheckedDoc
+                        ? `The second check that traces every line back to what you told us did not run on your ${uncheckedDoc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.`
+                        : "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification."}
+                    </p>
+                  )}
+                  {groundingNote && <GroundingNote groundingNote={groundingNote} />}
+                </CheckSection>
+              )}
+
+              <CheckSection
+                title="ATS and keywords"
+                summary="How screening software reads your page. Try it against a job posting, or one of our samples."
+                testId="check-ats"
+              >
+                <AtsScorePanel
+                  resumeText={resumeText}
+                  sourceText={session.resumeText}
+                  onApply={setResumeText}
+                  samplePostings={samples}
+                  samplePostingLabel={SAMPLE_POSTING_LABEL}
+                />
+              </CheckSection>
+
+              <div className="flex min-h-touch flex-wrap items-center justify-between gap-2 border border-t-line bg-t-panel px-4 py-3" data-testid="check-pagefit">
+                <span className="text-sm font-semibold text-t-white">Page length</span>
+                <PageFitLine text={resumeText} />
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <TBtn onClick={() => router.push("/login?from=forge")} className="w-full text-base mb-2">
-              {rc.refineryCta.toLowerCase()}
-            </TBtn>
-            <p className="text-xs text-t-phos-dim text-center mb-6">{rc.refinerySubtext}</p>
-          </>
-        )}
+          </section>
 
-        {/* Secondary: downloads */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={handlePrintAnalysisPdf}
-            className="t-focus flex-1 px-4 py-3 bg-transparent border border-t-line text-t-phos-dim text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
-          >
-            Print / save analysis as PDF
-          </button>
-        </div>
+          {/* 5. Cover letter */}
+          {coverLetterText && (
+            <section id="finish-cover" aria-labelledby="finish-cover-heading" className="mt-10 scroll-mt-20">
+              <h2 id="finish-cover-heading" className="mb-1 text-xl font-bold text-t-white">Cover letter</h2>
+              {/\[[^\]]+\]/.test(coverLetterText) && (
+                <p className="mb-3 text-xs text-t-phos-dim">Put in the real company and hiring manager names where you see the brackets before you send it.</p>
+              )}
+              <div className="border border-t-line bg-t-panel">
+                <div className="max-h-96 overflow-y-auto p-5">
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-t-phos">{coverLetterText}</pre>
+                </div>
+                <div className="flex flex-wrap gap-2 border-t border-t-line px-5 py-3">
+                  <button
+                    onClick={handleLetter}
+                    disabled={busy}
+                    className="t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim disabled:opacity-60"
+                  >
+                    Download the letter (.docx)
+                  </button>
+                  {finished && (
+                    <button
+                      onClick={() => handleCopy(coverLetterText, "cover")}
+                      className="t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim"
+                    >
+                      {copied === "cover" ? "Copied" : "Copy the letter"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+        </>
+      )}
 
-        <ClearThisComputerPanel />
-      </section>
+      {/* 6. Your story (the narrative keeper) */}
+      <div className="mt-12">
+        <StorySection
+          output={output}
+          strengthsHeading={rc.strengthsHeading}
+          careersHeading={rc.careersHeading}
+          reportChecks={reportChecks}
+        />
+      </div>
+
+      {/* 7. Next step */}
+      <div className="mt-12">
+        <NextStep
+          isDemo={isDemo}
+          audience={audience}
+          refineryCta={rc.refineryCta}
+          refinerySubtext={rc.refinerySubtext}
+          reviewAsk={reviewVisible ? <ReviewAsk onDismiss={() => setReviewDismissed(true)} /> : null}
+        />
+      </div>
     </main>
-  );
-}
-
-// ─── Resume Preview (mirrors the SMR standard DOCX layout visually) ─────────────────
-
-const PREVIEW_SECTION_HEADERS = new Set([
-  "PROFESSIONAL SUMMARY", "CAREER SUMMARY", "SUMMARY",
-  "CORE COMPETENCIES", "CORE SKILLS", "KEY QUALIFICATIONS", "AREAS OF EXPERTISE", "TECHNICAL SKILLS",
-  "PROFESSIONAL EXPERIENCE", "EXPERIENCE", "WORK HISTORY", "RELEVANT EXPERIENCE",
-  "EDUCATION", "EDUCATION & CREDENTIALS", "EDUCATION & CERTIFICATIONS",
-  "CERTIFICATIONS", "LICENSES & CERTIFICATIONS",
-  "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
-  "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
-]);
-
-function isPreviewSectionHeader(text: string): boolean {
-  return PREVIEW_SECTION_HEADERS.has(text.toUpperCase().replace(/[^A-Z\s&]/g, "").trim());
-}
-
-function ResumePreview({ text }: { text: string }) {
-  const lines = text.split("\n");
-
-  // Parse header block (name, headline, contact)
-  const headerLines: string[] = [];
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) { if (headerLines.length > 0) break; continue; }
-    if (isPreviewSectionHeader(t)) break;
-    if (headerLines.length < 4) headerLines.push(t);
-    else break;
-  }
-
-  const nameLine = headerLines[0] || "";
-  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
-  const contactLine =
-    headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("•")) ||
-    (headerLines.length > 1 ? headerLines[1] : "");
-
-  // Parse body
-  const headerSet = new Set(headerLines.map((l) => l.trim()));
-  let pastHeader = false;
-  const bodyNodes: React.ReactNode[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-
-    if (!pastHeader) {
-      if (headerSet.has(trimmed) || !trimmed) {
-        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
-        if (headerSet.size === 0) pastHeader = true;
-        continue;
-      }
-      pastHeader = true;
-    }
-
-    if (!trimmed) {
-      bodyNodes.push(<div key={i} className="h-1.5" />);
-      continue;
-    }
-
-    // Section header
-    if (isPreviewSectionHeader(trimmed)) {
-      bodyNodes.push(
-        <div key={i} className="mt-3 mb-1 pb-0.5 border-b-2" style={{ borderColor: "#1B2A4A" }}>
-          <span className="font-bold text-xs" style={{ fontFamily: "Georgia, serif", color: "#1B2A4A" }}>
-            {trimmed.toUpperCase()}
-          </span>
-        </div>
-      );
-      continue;
-    }
-
-    // Bullet
-    if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
-      const bullet = trimmed.replace(/^[-*•]\s*/, "");
-      const parts = splitForMetricEmphasis(bullet);
-      bodyNodes.push(
-        <div key={i} className="flex gap-1.5 pl-3 mb-0.5 leading-snug">
-          <span className="flex-shrink-0 text-xs font-bold" style={{ color: "#1B2A4A" }}>&bull;</span>
-          <span className="text-xs" style={{ color: "#1a1a1a" }}>
-            {parts.map((p, j) =>
-              p.bold ? <strong key={j}>{p.text}</strong> : <React.Fragment key={j}>{p.text}</React.Fragment>
-            )}
-          </span>
-        </div>
-      );
-      continue;
-    }
-
-    // Competency line (3+ pipe/bullet separators)
-    if ((trimmed.includes(" | ") || trimmed.includes(" • ")) && trimmed.split(/[|•]/).length >= 3) {
-      bodyNodes.push(
-        <div key={i} className="text-center text-xs font-bold mb-1" style={{ color: "#333333" }}>
-          {trimmed}
-        </div>
-      );
-      continue;
-    }
-
-    // Job title line (pipe-separated, no @)
-    if (trimmed.includes("|") && !trimmed.includes("@")) {
-      const parts = trimmed.split("|").map((p) => p.trim());
-      bodyNodes.push(
-        <div key={i} className="mt-2.5 mb-0.5 text-xs leading-snug">
-          <span className="font-bold" style={{ color: "#1a1a1a" }}>{parts[0]}</span>
-          {parts.slice(1).map((p, j) => (
-            <span key={j} style={{ color: "#555555" }}>{"  |  "}{p}</span>
-          ))}
-        </div>
-      );
-      continue;
-    }
-
-    // Regular body text
-    bodyNodes.push(
-      <p key={i} className="text-xs leading-snug mb-0.5" style={{ color: "#1a1a1a" }}>
-        {trimmed}
-      </p>
-    );
-  }
-
-  return (
-    <div
-      className="bg-white rounded shadow-md overflow-hidden border border-gray-200 mx-auto"
-      style={{ maxWidth: 600, fontFamily: "Arial, sans-serif" }}
-    >
-      {/* Navy header block */}
-      <div className="px-6 py-4 text-center" style={{ backgroundColor: "#1B2A4A" }}>
-        {nameLine && (
-          <p
-            className="font-bold text-base"
-            style={{ fontFamily: "Georgia, serif", color: "#FFFFFF" }}
-          >
-            {nameLine.toUpperCase()}
-          </p>
-        )}
-        {headlineLine && headlineLine !== contactLine && (
-          <p className="text-xs mt-0.5" style={{ color: "#B8C9E0" }}>{headlineLine}</p>
-        )}
-        {contactLine && (
-          <p className="text-xs mt-0.5" style={{ color: "#FFFFFF" }}>{contactLine}</p>
-        )}
-      </div>
-      {/* Body */}
-      <div className="px-5 py-3">
-        {bodyNodes}
-      </div>
-      <div className="px-5 pb-2 text-center">
-        <p className="text-[10px] text-gray-400">Preview matches your .docx download</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Print-to-PDF helpers ─────────────────────────────────────────────────────
-
-function resumeTextToStandaloneHtml(text: string): string {
-  const lines = text.split("\n");
-
-  const headerLines: string[] = [];
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) { if (headerLines.length > 0) break; continue; }
-    if (isPreviewSectionHeader(t)) break;
-    if (headerLines.length < 4) headerLines.push(t);
-    else break;
-  }
-
-  const nameLine = headerLines[0] || "";
-  const headlineLine = headerLines.length > 2 ? headerLines[1] : "";
-  const contactLine =
-    headerLines.find((l) => l.includes("|") || l.includes("@") || l.includes("•")) ||
-    (headerLines.length > 1 ? headerLines[1] : "");
-
-  let headerHtml = `<div style="background:#1B2A4A;padding:20px 24px;text-align:center;">`;
-  if (nameLine) headerHtml += `<p style="font-family:Georgia,serif;color:#FFF;font-size:18pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;margin:0;">${escHtml(nameLine)}</p>`;
-  if (headlineLine && headlineLine !== contactLine) headerHtml += `<p style="color:#B8C9E0;font-size:11pt;margin:4px 0 0;">${escHtml(headlineLine)}</p>`;
-  if (contactLine) headerHtml += `<p style="color:#FFF;font-size:10pt;margin:4px 0 0;">${escHtml(contactLine)}</p>`;
-  headerHtml += `</div>`;
-
-  const headerSet = new Set(headerLines.map((l) => l.trim()));
-  let pastHeader = false;
-  let bodyHtml = `<div style="padding:12px 20px;">`;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!pastHeader) {
-      if (headerSet.has(trimmed) || !trimmed) {
-        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
-        if (headerSet.size === 0) pastHeader = true;
-        continue;
-      }
-      pastHeader = true;
-    }
-    if (!trimmed) { bodyHtml += `<div style="height:6px;"></div>`; continue; }
-
-    if (isPreviewSectionHeader(trimmed)) {
-      bodyHtml += `<div style="margin-top:12px;margin-bottom:4px;padding-bottom:2px;border-bottom:2px solid #1B2A4A;"><span style="font-family:Georgia,serif;color:#1B2A4A;font-size:11pt;font-weight:bold;">${escHtml(trimmed.toUpperCase())}</span></div>`;
-      continue;
-    }
-    if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
-      const bullet = trimmed.replace(/^[-*•]\s*/, "");
-      // Decide emphasis on the RAW text, then escape each segment. Escaping
-      // first meant scanning for digits across HTML entities the escape had
-      // just produced (the 39 in &#39;); splitting first removes that hazard
-      // instead of working around it.
-      const bHtml = splitForMetricEmphasis(bullet)
-        .map((p) => (p.bold ? `<strong>${escHtml(p.text)}</strong>` : escHtml(p.text)))
-        .join("");
-      bodyHtml += `<div style="display:flex;gap:6px;padding-left:12px;margin-bottom:2px;line-height:1.4;"><span style="color:#1B2A4A;font-weight:bold;font-size:10pt;flex-shrink:0;">&bull;</span><span style="font-size:10pt;color:#1a1a1a;">${bHtml}</span></div>`;
-      continue;
-    }
-    if ((trimmed.includes(" | ") || trimmed.includes(" • ")) && trimmed.split(/[|•]/).length >= 3) {
-      bodyHtml += `<div style="text-align:center;font-size:10pt;font-weight:bold;margin-bottom:4px;color:#333;">${escHtml(trimmed)}</div>`;
-      continue;
-    }
-    if (trimmed.includes("|") && !trimmed.includes("@")) {
-      const parts = trimmed.split("|").map((p) => p.trim());
-      const partsHtml = parts.map((p, i) =>
-        i === 0 ? `<strong style="color:#1a1a1a;">${escHtml(p)}</strong>` : `<span style="color:#555;">&nbsp;&nbsp;|&nbsp;&nbsp;${escHtml(p)}</span>`
-      ).join("");
-      bodyHtml += `<div style="margin-top:10px;margin-bottom:2px;font-size:10pt;line-height:1.4;">${partsHtml}</div>`;
-      continue;
-    }
-    bodyHtml += `<p style="font-size:10pt;line-height:1.4;margin-bottom:2px;color:#1a1a1a;">${escHtml(trimmed)}</p>`;
-  }
-  bodyHtml += `</div>`;
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resume (Steel Man Resumes)</title>
-<style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-@media print{@page{margin:0.5in;size:letter}body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}</style>
-</head><body><div style="max-width:7.5in;margin:0 auto;background:#fff;">
-${headerHtml}${bodyHtml}
-<div class="no-print" style="padding:12px 20px;text-align:center;border-top:1px solid #eee;margin-top:16px;">
-<p style="font-size:9pt;color:#999;">Steel Man Resumes &middot; steelmanresumes.com</p>
-<p style="font-size:9pt;color:#aaa;">File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
-</div><script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
-</body></html>`;
-}
-
-function analysisToStandaloneHtml(
-  output: ForgeOutput,
-  narrative: Record<string, unknown>
-): string {
-  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const headline = String(narrative.headline || "Your Career Profile");
-  const summary = String(narrative.summary || "");
-  // P1.6 (Codex 3, Troy decision): the downloadable report SCRUBS the private
-  // `reflection` line (it acknowledges the person's journey/record). Barriers,
-  // legal context, and resources stay -- that is this report's purpose.
-
-  let body = "";
-
-  if (summary) body += `<h2>Your Story</h2><p class="narrative">${escHtml(summary)}</p>`;
-
-  if (output.strengths?.length) {
-    body += `<h2>Your Strengths</h2>`;
-    for (const s of output.strengths) {
-      body += `<div class="strength"><p class="strength-title">${escHtml(s.title)}</p><p>${escHtml(s.evidence)}</p></div>`;
-    }
-  }
-
-  if (output.skills?.length) {
-    const grouped: Record<string, string[]> = {};
-    for (const sk of output.skills) {
-      if (!grouped[sk.category]) grouped[sk.category] = [];
-      grouped[sk.category].push(sk.name);
-    }
-    body += `<h2>Skills</h2>`;
-    for (const [cat, names] of Object.entries(grouped)) {
-      body += `<p><strong>${escHtml(cat)}:</strong> ${names.map(escHtml).join(", ")}</p>`;
-    }
-  }
-
-  if (output.career_paths?.length) {
-    body += `<h2>Career Paths</h2>`;
-    for (const cp of output.career_paths) {
-      body += `<div class="career-path">`;
-      body += `<h3>${escHtml(cp.title)}${cp.salary_range ? ` <span style="font-weight:normal;color:#666;">${escHtml(formatSalaryRange(cp.salary_range))}</span>` : ""}</h3>`;
-      body += `<p>${escHtml(cp.match_reason)}</p>`;
-      if (cp.next_steps.length) {
-        body += `<ul>${cp.next_steps.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ul>`;
-      }
-      body += `</div>`;
-    }
-  }
-
-  if (output.barriers?.length) {
-    body += `<h2>Resources for Your Situation</h2>`;
-    for (const b of output.barriers) {
-      body += `<div class="career-path">`;
-      body += `<h3>${escHtml(b.type.replace(/_/g, " "))}</h3>`;
-      if (b.legal_notes) body += `<p><em>${escHtml(b.legal_notes)}</em></p>`;
-      if (b.resources.length) {
-        body += `<ul>${b.resources.map((r) => `<li><strong>${escHtml(r.name)}:</strong> ${escHtml(r.description)}</li>`).join("")}</ul>`;
-      }
-      body += `</div>`;
-    }
-    // Coaching-not-legal-advice disclaimer (F6).
-    body += `<p style="margin-top:14px;font-size:9pt;color:#555;background:#f4f4f4;border-left:3px solid #B8C9E0;padding:8px 12px;"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.</p>`;
-  }
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis (Steel Man Resumes)</title>
-<style>
-body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.header h1{margin:0 0 4px;font-size:18pt;text-transform:uppercase;letter-spacing:2px}
-.header p{margin:0;color:#B8C9E0;font-size:11pt}
-.date{color:#B8C9E0;font-size:9pt;margin-top:6px}
-.private-banner{background:#f4f1ea;border-left:3px solid #B8860B;padding:10px 14px;margin-bottom:24px;font-size:10pt;line-height:1.5;color:#3a3a3a}
-h2{font-size:14pt;color:#1B2A4A;border-bottom:2px solid #1B2A4A;padding-bottom:4px;margin-top:28px}
-.narrative{font-size:12pt;line-height:1.8}
-.strength{margin-bottom:14px}
-.strength-title{font-weight:bold;font-size:11pt;color:#1B2A4A;margin:0 0 2px}
-.career-path{margin-bottom:18px;padding:10px 14px;border-left:3px solid #B8C9E0}
-.career-path h3{margin:0 0 4px;font-size:11pt;color:#1B2A4A}
-.career-path p{margin:0 0 4px;font-size:10pt;color:#444}
-ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
-.footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:9pt;color:#888;text-align:center}
-@media print{@page{margin:.5in;size:letter}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}
-</style></head><body>
-<div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
-<div class="private-banner"><strong>Private planning document.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself. Your resume and cover letter are the documents to share with employers.</div>
-${body}
-<div class="footer no-print"><p>Steel Man Resumes &middot; steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
-<script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
-</body></html>`;
-}
-
-function formatOutputAsText(
-  output: ForgeOutput,
-  narrative: Record<string, unknown>
-): string {
-  const lines: string[] = [
-    "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
-    "  THE FORGE: Your Story, Reforged",
-    "  Steel Man Resumes",
-    "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
-    "",
-    // P1.6 (Codex 3): this analysis is the person's private planning document --
-    // it omits the reflection line and flags itself as not-for-employers.
-    "PRIVATE PLANNING DOCUMENT. This analysis is for your own use as you plan",
-    "your next steps. Keep it for yourself; your resume and cover letter are the",
-    "documents to share with employers.",
-    "",
-  ];
-
-  if (narrative.headline) lines.push(String(narrative.headline), "");
-  if (narrative.summary) lines.push(String(narrative.summary), "");
-
-  if (output.strengths?.length) {
-    lines.push("", "YOUR STRENGTHS", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
-    for (const s of output.strengths) {
-      lines.push(`\u2022 ${s.title}: ${s.evidence}`);
-    }
-  }
-
-  if (output.skills?.length) {
-    lines.push("", "SKILLS", "\u2500\u2500\u2500\u2500\u2500\u2500");
-    lines.push(output.skills.map((s) => s.name).join(", "));
-  }
-
-  if (output.career_paths?.length) {
-    lines.push("", "CAREER PATHS", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
-    for (const cp of output.career_paths) {
-      lines.push(`\n${cp.title}${cp.salary_range ? ` (${cp.salary_range})` : ""}`);
-      lines.push(cp.match_reason);
-      if (cp.next_steps.length) {
-        lines.push("Next steps:");
-        cp.next_steps.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
-      }
-    }
-  }
-
-  if (output.barriers?.length) {
-    lines.push("", "RESOURCES FOR YOUR SITUATION", "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
-    for (const b of output.barriers) {
-      lines.push(`\n${b.type.replace(/_/g, " ").toUpperCase()}`);
-      if (b.legal_notes) lines.push(`Legal note: ${b.legal_notes}`);
-      for (const r of b.resources) {
-        lines.push(`  \u2022 ${r.name}: ${r.description}`);
-      }
-    }
-    // Coaching-not-legal-advice disclaimer (F6).
-    lines.push(
-      "",
-      "This is career coaching, not legal advice. Laws change and every situation is",
-      "different. For legal guidance, contact a reentry attorney or free legal aid in your area."
-    );
-  }
-
-  lines.push("", "", "Generated by The Forge, powered by t.ROY, at steelmanresumes.com");
-  return lines.join("\n");
-}
-
-// ─── Email-me-my-package ────────────────────────────────────────────────────
-
-function EmailPackageBox({
-  resumeText,
-  coverLetterText,
-  narrativeHeadline,
-  narrativeSummary,
-}: {
-  resumeText: string;
-  coverLetterText: string;
-  narrativeHeadline: string;
-  narrativeSummary: string;
-}) {
-  const [email, setEmail] = useState("");
-  // Troy's letter: opt-in only, unchecked by default (SMR privacy policy:
-  // no marketing without explicit consent).
-  const [letter, setLetter] = useState(false);
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [message, setMessage] = useState("");
-  const boxRef = useRef<HTMLDivElement>(null);
-  // A Turnstile token is single-use: remount the widget after every attempt.
-  const [attempt, setAttempt] = useState(0);
-
-  async function send() {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setState("error");
-      setMessage("That email doesn't look right. Check it and try again.");
-      return;
-    }
-    setState("sending");
-    setMessage("");
-    // Turnstile token, present only when the env-gated widget rendered.
-    const turnstileToken =
-      boxRef.current?.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value ||
-      undefined;
-    try {
-      const res = await fetch("/api/forge/email-package", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          resumeText,
-          coverLetterText,
-          narrativeHeadline,
-          narrativeSummary,
-          turnstileToken,
-          letter,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setAttempt((n) => n + 1);
-      if (res.ok && data.ok) {
-        setState("sent");
-        setMessage("Sent. Check your inbox (and spam folder, just in case).");
-      } else {
-        setState("error");
-        setMessage(data.error || "We couldn't send that. The downloads above still work.");
-      }
-    } catch {
-      setState("error");
-      setMessage("We couldn't reach the server. The downloads above still work.");
-    }
-  }
-
-  return (
-    <div ref={boxRef} className="mt-6 bg-t-panel border border-t-line p-5">
-      <p className="font-semibold text-t-white text-sm mb-1">
-        Email me my package
-      </p>
-      <p className="text-xs text-t-phos-dim mb-3">
-        We&apos;ll send your story, resume, and cover letter to your inbox so
-        you have them anywhere, even without an account.
-      </p>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@email.com"
-          disabled={state === "sending" || state === "sent"}
-          className="flex-1 px-4 py-2.5 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
-        />
-        <button
-          onClick={send}
-          disabled={state === "sending" || state === "sent" || !email.trim()}
-          className="t-focus px-5 py-2.5 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
-        >
-          {state === "sending" ? "Sending..." : state === "sent" ? "Sent" : "Send it"}
-        </button>
-      </div>
-      <label className="mt-3 flex items-start gap-2 text-xs text-t-phos-dim cursor-pointer">
-        <input
-          type="checkbox"
-          checked={letter}
-          onChange={(e) => setLetter(e.target.checked)}
-          disabled={state === "sending" || state === "sent"}
-          className="mt-0.5 accent-t-amber"
-        />
-        <span>
-          Also send me Troy&apos;s letter: new employers that hire people with
-          records, law changes, and one thing I can use. One click to stop.
-        </span>
-      </label>
-      {/* Bot check: renders only when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set;
-          the server checks it when TURNSTILE_SECRET_KEY is set. */}
-      {state !== "sent" && (
-        <div className="mt-3">
-          <TurnstileWidget key={attempt} />
-        </div>
-      )}
-      {message && (
-        <p
-          className={
-            state === "sent"
-              ? "text-xs mt-2 text-t-phos"
-              : "text-xs mt-2 text-t-amber-bright"
-          }
-        >
-          {message}
-        </p>
-      )}
-    </div>
   );
 }
