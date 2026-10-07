@@ -279,7 +279,7 @@ export function GuidedTour() {
         {screen === 3 && (
           <div>
             <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              Settings does things other apps don&apos;t
+              What you can do in Settings
             </h2>
             <ul className="space-y-3 mb-4">
               {TOUR_SETTINGS_PICKS.map((t) => (

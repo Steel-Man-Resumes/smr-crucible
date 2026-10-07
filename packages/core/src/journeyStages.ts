@@ -5,12 +5,14 @@
  * NextStepCard, the partner cohort table, coach prompt STAGE_NAMES). Every
  * surface that names a stage must read from here.
  *
- * PURE DATA -- no imports, no I/O. Client components in apps/consumer
+ * PURE DATA -- no I/O, and the only import is the pure gateRank map. Client components in apps/consumer
  * deep-import "@crucible/core/src/journeyStages" (safe because core has no
  * package.json exports map and next.config transpiles @crucible/core; the
  * barrel would drag db/pg into the client bundle). If an exports map is ever
  * added to core, add a "./src/journeyStages" subpath for this.
  */
+
+import { GATE_STATE_RANK } from "./gateRank";
 
 export interface JourneyStage {
   /** Engine stage number (computeNextStep), 0-6 */
@@ -125,6 +127,26 @@ export const TOUR_HREF = `/dashboard?${TOUR_PARAM}=1`;
  * not say whether the Forge is done, so the arc stays at Foundation.
  */
 export function arcStageForNextStep(next: { stage: number; reason?: string }): number {
+  // Every step is done: the engine reuses stage 2 ("check new matches") and
+  // stage 6 ("follow up") for these. Show the whole arc complete, not "Step 2".
+  if (next.reason === "default_matches" || next.reason === "follow_up_due") return 7;
   if (next.stage === 0) return next.reason === "onboarding_pending" ? 2 : 1;
   return Math.min(Math.max(next.stage, 1), 7);
+}
+
+/**
+ * The ONE answer to "is this client tool open?" for the sidebar and the
+ * dashboard cards. `minState` is the gate state the tool needs; tools that build
+ * on a disclosure plan also need `disclosureComplete`.
+ */
+export function clientToolUnlocked(args: {
+  state: string;
+  minState: string;
+  requiresDisclosure?: boolean;
+  disclosureComplete?: boolean;
+}): boolean {
+  const rank = GATE_STATE_RANK as Record<string, number>;
+  if ((rank[args.state] ?? 3) > (rank[args.minState] ?? 3)) return false;
+  if (args.requiresDisclosure && !args.disclosureComplete) return false;
+  return true;
 }

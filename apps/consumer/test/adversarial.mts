@@ -1443,7 +1443,9 @@ section("gate previews + advising");
   ];
   for (const rel of importers) {
     const src = readFileSync(join(appRoot, rel), "utf8");
-    check(`dedup: ${rel} imports GATE_STATE_RANK`, src.includes("GATE_STATE_RANK"));
+    // The rank map is shared either directly or through clientToolUnlocked
+    // (core/journeyStages), which reads GATE_STATE_RANK.
+    check(`dedup: ${rel} imports GATE_STATE_RANK`, src.includes("GATE_STATE_RANK") || src.includes("clientToolUnlocked"));
     check(`dedup: ${rel} has no local STATE_RANK const`, !/const\s+STATE_RANK\s*[:=]/.test(src), rel);
   }
 

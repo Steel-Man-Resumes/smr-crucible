@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthFrame } from "./AuthFrame";
 import { CoBrandLockup, ProductFamilyBrand } from "@/components/brand/BrandMarks";
 
 export const metadata: Metadata = {
@@ -15,14 +16,15 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="refinery-app min-h-screen bg-t-bg">
-      <header className="border-b border-t-line bg-white">
+    <AuthFrame
+      header={
         <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <ProductFamilyBrand product="refinery" productHref="/login" />
           <CoBrandLockup compact className="hidden sm:flex" />
         </div>
-      </header>
+      }
+    >
       {children}
-    </div>
+    </AuthFrame>
   );
 }
