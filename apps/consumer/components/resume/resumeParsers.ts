@@ -12,6 +12,7 @@ import {
   REVIEW_TRAY_LABEL,
 } from "./resumeModel";
 import { computeLineCoverage } from "@/lib/intake-coverage";
+import { summaryInSource } from "@/lib/summary-source";
 
 const INCARCERATION_REGEX =
   /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|waupun|penitentiary|reformatory|house of correction|detention|dept\.? of correction|department of correction/i;
@@ -76,11 +77,16 @@ function buildProfileDoc(profile: any, rawText?: string): ResumeDocument {
     state: (profile?.state || "").trim(),
   };
 
-  // The person's own summary or objective, when the parse found one. Copied as
-  // written; dropped whole if it touches justice-sensitive wording (same doctrine
+  // The person's own summary or objective, when the parse found one and it is
+  // really in the uploaded text. Copied as written; dropped whole if it touches justice-sensitive wording (same doctrine
   // as every other field here).
   const summaryRaw = typeof profile?.summary === "string" ? profile.summary.trim() : "";
-  if (summaryRaw && !isJusticeSensitive(summaryRaw) && !isSectionHeaderWord(summaryRaw)) {
+  if (
+    summaryRaw &&
+    !isJusticeSensitive(summaryRaw) &&
+    !isSectionHeaderWord(summaryRaw) &&
+    summaryInSource(summaryRaw, rawText)
+  ) {
     doc.summary = summaryRaw;
   }
 

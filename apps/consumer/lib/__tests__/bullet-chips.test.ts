@@ -30,9 +30,10 @@ test("a trailing comma does not leave a stray separator", () => {
   assert.equal(toggleChip("forklift,", "RF scanner"), "forklift, RF scanner");
 });
 
-test("an answer to How often alone is enough to generate", () => {
+test("a bullet needs what the person did; other answers alone are not enough", () => {
   const empty = { did: "", tools: "", often: "", quantity: "", improved: "" };
   assert.equal(canGenerateBullet(empty), false);
-  assert.equal(canGenerateBullet({ ...empty, often: "every shift" }), true);
+  assert.equal(canGenerateBullet({ ...empty, often: "every shift" }), false);
   assert.equal(canGenerateBullet({ ...empty, did: "  " }), false);
+  assert.equal(canGenerateBullet({ ...empty, did: "loaded trucks" }), true);
 });

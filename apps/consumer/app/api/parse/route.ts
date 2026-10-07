@@ -13,6 +13,7 @@ import { extractTextFromBuffer } from "@/lib/text-extraction";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import { summaryInSource } from "@/lib/summary-source";
 import { coverageForProfile } from "@/components/resume/resumeParsers";
 
 export const maxDuration = 60;
@@ -116,6 +117,10 @@ async function handlePost(request: Request) {
         parsedProfile.email = found || null;
       }
     }
+
+    // The summary must be the person's own words: keep it only if it is really in
+    // the uploaded text (whitespace and case ignored), otherwise drop it.
+    if (!summaryInSource(parsedProfile.summary, cleanedText)) parsedProfile.summary = null;
 
     // Lossless-intake signal (Phase 2.2): measure how much of the original
     // cleaned source the structured parse actually accounts for, and surface the

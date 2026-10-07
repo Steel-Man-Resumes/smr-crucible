@@ -9,8 +9,10 @@ const base = {
   work_history: [{ company: "Harbor Supply", title: "Forklift Operator", start_date: "2019", end_date: "2021", bullets: ["Moved 300 pallets a shift."] }],
 };
 
+const SRC = "Alex Rivera\nSUMMARY\nDependable warehouse worker   with six years\nof experience.\nLine Cook | Harbor Grill";
+
 test("a parsed summary is carried into the document", () => {
-  const doc = profileToResume({ ...base, summary: "  Dependable warehouse worker with six years of experience.  " });
+  const doc = profileToResume({ ...base, summary: "  Dependable warehouse worker with six years of experience.  " }, SRC);
   assert.equal(doc.summary, "Dependable warehouse worker with six years of experience.");
 });
 
@@ -27,4 +29,12 @@ test("a justice-sensitive summary is dropped whole", () => {
 
 test("a bare section header is not taken as a summary", () => {
   assert.equal(profileToResume({ ...base, summary: "Summary" }).summary, "");
+});
+
+test("a summary that is not in the uploaded text is dropped (whitespace and case ignored)", () => {
+  assert.equal(profileToResume({ ...base, summary: "Award-winning leader of large teams." }, SRC).summary, "");
+  assert.equal(
+    profileToResume({ ...base, summary: "DEPENDABLE warehouse worker with six years of experience." }, SRC).summary,
+    "DEPENDABLE warehouse worker with six years of experience."
+  );
 });

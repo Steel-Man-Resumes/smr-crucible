@@ -31,7 +31,7 @@ export function toggleChip(value: string, chip: string): string {
   return current ? `${current}, ${c}` : c;
 }
 
-/** The workshop can write a bullet once any one of the answers has something in it. */
+/** A bullet needs what the person did. The server refuses to write one without it. */
 export function canGenerateBullet(a: {
   did: string;
   tools: string;
@@ -39,5 +39,5 @@ export function canGenerateBullet(a: {
   quantity: string;
   improved: string;
 }): boolean {
-  return !!(a.did.trim() || a.tools.trim() || a.often.trim() || a.quantity.trim() || a.improved.trim());
+  return !!a.did.trim();
 }
