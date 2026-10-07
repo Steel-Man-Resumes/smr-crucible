@@ -18,6 +18,7 @@ import { auth, isSessionRevoked } from "@/auth";
 import { getTabletSessionForImport, TABLET_COOKIE } from "@/lib/tablet-session";
 import { saveForgeSession } from "@crucible/core";
 import { sessionPending } from "@/lib/session-policy";
+import { nonEmptyList } from "@/lib/mini-forge-import";
 
 // Reads the session and a cookie, writes to the DB: never static, never cached.
 export const dynamic = "force-dynamic";
@@ -106,8 +107,8 @@ export async function GET(request: NextRequest) {
   // If this throws, the cookie is left in place so a reload can retry.
   await saveForgeSession(session.user.id, `mini-forge-${tabletSession.id}`, {
     readinessStage: intake.readiness_stage as string | undefined,
-    goals: intake.goals as string[] | undefined,
-    challenges: intake.challenges as string[] | undefined,
+    goals: nonEmptyList(intake.goals),
+    challenges: nonEmptyList(intake.challenges),
     preferences: intake.work_type
       ? { work_type: intake.work_type as string }
       : undefined,
