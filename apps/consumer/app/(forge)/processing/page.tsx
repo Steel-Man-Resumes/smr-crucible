@@ -43,7 +43,7 @@ const DONE_PAUSE_MS = 1500;
 export default function ProcessingPage() {
   useQuietShell();
   const router = useRouter();
-  const { session, updateSession } = useForgeSession();
+  const { session, updateSession, runIsMine, mayUseRun } = useForgeSession();
   const isDemo = session.isDemo === true;
   const reduced = useReducedMotion();
 
@@ -80,6 +80,9 @@ export default function ProcessingPage() {
   // The one real call. Runs once per attempt; "Try again" starts a new attempt.
   useEffect(() => {
     if (isDemo || startedRun.current === runId) return;
+    // Never send a run that is not this account's (security review 3a r2,
+    // L1: readOwnForgeSession). The "Is it yours?" answer re-renders this page.
+    if (!runIsMine()) return;
     startedRun.current = runId;
     const t0 = Date.now();
     setFailure(null);
@@ -132,7 +135,7 @@ export default function ProcessingPage() {
         if (mounted.current) router.push("/output");
       }, DONE_PAUSE_MS);
     })();
-  }, [runId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runId, mayUseRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The real time so far, while it works.
   useEffect(() => {

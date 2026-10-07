@@ -20,7 +20,8 @@ import {
   afterSave,
   importDecision,
   importPayload,
-  importQuestion,
+  IMPORT_QUESTION,
+  importYesLabel,
   runHasAnswers,
   runLevel,
   signedOutDecision,
@@ -33,7 +34,9 @@ const MAX_TRIES_PER_PAGE = 2;
 
 export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
   const { data, status } = useSession();
-  const { session: run, updateSession, clearSession } = useForgeSession();
+  // The raw run (whoever's it is): this component is the one place that reads
+  // it, in order to ask. Every page reads the owned view instead.
+  const { rawSession: run, updateSession, clearSession } = useForgeSession();
   const pathname = usePathname();
   const authUser = data?.user as { id?: string; name?: string | null; email?: string | null; mfa?: unknown; claim?: unknown } | undefined;
   const user =
@@ -118,10 +121,10 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       <div className="mx-auto w-full max-w-2xl px-4 pt-4 sm:px-6" data-testid="forge-import-ask">
         <div role="dialog" aria-labelledby="forge-import-title" className="rounded-[5px] border border-t-amber bg-t-panel p-4 sm:p-5">
           <p id="forge-import-title" className="text-base font-semibold text-t-white">
-            {importQuestion(user.email, asking.name)}
+            {IMPORT_QUESTION}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-t-bone-dim">
-            If it&apos;s yours, we save it there so you don&apos;t lose it. If it isn&apos;t, we clear it from this computer.
+            Nothing in it is used until you answer. If it isn&apos;t yours, we erase it from this computer.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
@@ -132,9 +135,9 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
                 madeHere.current = { userId: user.id, ok: true };
                 void save(level, true);
               }}
-              className="t-focus min-h-touch rounded-[5px] border border-ws-amber bg-ws-amber px-4 text-sm font-semibold text-ws-bg hover:bg-ws-amber-bright"
+              className="t-focus min-h-touch break-all rounded-[5px] border border-ws-amber bg-ws-amber px-4 text-sm font-semibold text-ws-bg hover:bg-ws-amber-bright"
             >
-              Yes, save it to my account
+              {importYesLabel(user.email)}
             </button>
             <button
               type="button"
@@ -145,7 +148,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
               }}
               className="t-focus min-h-touch rounded-[5px] border border-t-line px-4 text-sm font-medium text-t-white hover:border-t-line-strong"
             >
-              No, clear it
+              No, erase it
             </button>
           </div>
           <p className="mt-3 text-sm text-t-bone-dim">

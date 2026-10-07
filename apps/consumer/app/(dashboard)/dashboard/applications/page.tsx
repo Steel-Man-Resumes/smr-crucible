@@ -8,6 +8,8 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
 import { ApplyActions } from "@/components/apply/ApplyActions";
@@ -115,6 +117,8 @@ export default function ApplicationsPageWrapper() {
 }
 
 function ApplicationsPage() {
+  // Shared-computer rule: only a local run marked as this user's is read.
+  const ownerUid = useSession().data?.user?.id;
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -158,7 +162,7 @@ function ApplicationsPage() {
 
   function forgeStrengths(): string[] {
     try {
-      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const s = readOwnForgeSession(ownerUid) || {};
       const raw = s?.forgeOutput?.strengths;
       if (Array.isArray(raw)) {
         return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);

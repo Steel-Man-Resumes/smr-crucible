@@ -130,11 +130,15 @@ export function signedOutDecision(run: unknown): "clear" | "keep" {
   return typeof (run as Record<string, any>)._ownerUserId === "string" ? "clear" : "keep";
 }
 
-/** The question, naming the account the run would go to. */
-export function importQuestion(email: string | null | undefined, name: string | null): string {
-  const who = name ? ` for ${name}` : "";
-  const where = email ? ` Save it to the account for ${email}?` : " Save it to the account you are signed in to?";
-  return `This computer has a resume in progress${who}.${where}`;
+/**
+ * The question, worded as the Refinery asks it (lib/forge-carry.ts hotfix):
+ * the run's own name is never shown (it may be the previous person's), and the
+ * account it would go to is named on the button.
+ */
+export const IMPORT_QUESTION = "There's a resume in progress on this computer. Is it yours?";
+
+export function importYesLabel(email: string | null | undefined): string {
+  return email ? `Yes, save it to ${email}` : "Yes, save it to my account";
 }
 
 /**
@@ -184,3 +188,64 @@ export function afterSave(run: Record<string, any>, userId: string, level: RunLe
 
 /** Same key the Refinery's sync reads (RefineryShell.tsx). */
 export const LAST_SYNCED_RUN_KEY = "forge_last_synced_run";
+
+/*
+ * NOTHING READS A RUN BEFORE ITS OWNER IS SETTLED (security review 3a r2, L1).
+ * The Forge pages read the run through the Forge provider, which shows them
+ * only this view: the run when it is this account's (or holds nothing yet),
+ * and an empty run otherwise, until the person answers "Is it yours?". The
+ * raw run is read only by the component that asks (ForgeImport). The same
+ * rule as the Refinery's readOwnForgeSession (lib/forge-carry.ts), applied to
+ * the Forge's in-memory copy.
+ */
+export type RunAuth =
+  | { status: "loading" }
+  | { status: "unauthenticated" }
+  | { status: "pending" }
+  | { status: "authenticated"; userId: string };
+
+export function forgeRunView(run: Record<string, any>, auth: RunAuth): { visible: Record<string, any>; mayUse: boolean } {
+  const empty = { visible: {}, mayUse: false };
+  const owner = typeof run?._ownerUserId === "string" ? run._ownerUserId : null;
+  if (auth.status === "authenticated") {
+    if (owner === auth.userId) return { visible: run, mayUse: true };
+    if (!owner && !runHasAnswers(run) && run?.isDemo !== true) return { visible: run, mayUse: true };
+    if (!owner && run?.isDemo === true) return { visible: run, mayUse: true }; // sample data, never saved
+    return empty;
+  }
+  if (auth.status === "unauthenticated") {
+    // Signed out (the Forge before the wall): the browser's own anonymous run.
+    // A run marked for an account is that account's, and is being cleared.
+    return owner ? empty : { visible: run, mayUse: true };
+  }
+  // Still loading, or half signed in: nothing that holds answers yet.
+  return owner || runHasAnswers(run) ? empty : { visible: run, mayUse: false };
+}
+
+/**
+ * A write made while this account is signed in, to a run that was empty or
+ * already this account's, makes the run this account's: the person started
+ * it here (the same rule as madeHere, at the moment of the write).
+ */
+export function stampOwnerOnWrite(prev: Record<string, any>, next: Record<string, any>, userId: string | null): Record<string, any> {
+  if (!userId || next._ownerUserId || next.isDemo === true) return next;
+  const prevOwner = prev?._ownerUserId;
+  if (prevOwner === userId || (!prevOwner && !runHasAnswers(prev ?? {}))) return { ...next, _ownerUserId: userId };
+  return next;
+}
+
+/**
+ * May a Forge page send the run to the server (the build, the documents)?
+ * Signed in: only when the stored run is this account's (readOwnForgeSession,
+ * lib/forge-carry.ts), or sample data. Signed out: the browser's own
+ * anonymous run (the Forge before the wall). Loading or half signed in: no.
+ */
+export function mayUseRunFor(
+  auth: RunAuth,
+  view: { mayUse: boolean; isDemo?: unknown },
+  readOwn: (userId: string) => unknown
+): boolean {
+  if (auth.status === "authenticated") return !!readOwn(auth.userId) || (view.isDemo === true && view.mayUse);
+  if (auth.status === "unauthenticated") return view.mayUse;
+  return false;
+}

@@ -27,6 +27,13 @@ import {
   type UserTier,
 } from "@/lib/useUserTier";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import {
+  FORGE_LAST_SYNCED_RUN_KEY,
+  eraseLocalForgeRun,
+  forgeRunFingerprint,
+  forgeSyncDecision,
+  readLocalForgeRunRaw,
+} from "@/lib/forge-carry";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
@@ -210,7 +217,7 @@ const RUN_SCOPED_LS_KEYS = [
  * `forge_session`: that blob is replaced on every fresh start, so a boundary
  * stored inside it disappears exactly when a new run begins.
  */
-const LAST_SYNCED_RUN_KEY = "forge_last_synced_run";
+const LAST_SYNCED_RUN_KEY = FORGE_LAST_SYNCED_RUN_KEY;
 
 function removeKeys(keys: readonly string[]) {
   for (const k of keys) {
@@ -229,6 +236,35 @@ function clearPersonalLocalStorage() {
 /** Called when a NEW Forge run arrives in a browser that already synced one. */
 function clearRunScopedLocalStorage() {
   removeKeys(RUN_SCOPED_LS_KEYS);
+}
+
+/**
+ * Save a run this account owns (or that the person just said "Yes" to) via
+ * /api/forge/save, then mark it owned and synced. Returns whether it saved.
+ */
+async function saveOwnedForgeRun(
+  stored: string,
+  forgeData: Record<string, any>,
+  uid: string
+): Promise<boolean> {
+  const res = await fetch("/api/forge/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: stored,
+  });
+  if (!res.ok) return false;
+  const runId = forgeData.startedAt || "unknown";
+  forgeData._synced = true;
+  forgeData._syncedAt = runId;
+  forgeData._ownerUserId = uid; // owned by the current account
+  try {
+    localStorage.setItem("forge_session", JSON.stringify(forgeData));
+    localStorage.setItem(LAST_SYNCED_RUN_KEY, runId);
+  } catch {
+    // Storage unavailable: the server copy is saved either way.
+  }
+  window.dispatchEvent(new Event("forge-synced"));
+  return true;
 }
 
 function isNavUnlocked(
@@ -313,6 +349,19 @@ export function RefineryShell({
   const { context: userFullContext } = useUserContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
+  // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
+  const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
+  const [forgeSyncTick, setForgeSyncTick] = useState(0);
+  // The run the card asked about. "Yes" saves only that run (another tab may
+  // replace it); a changed run is asked about again and nothing is saved.
+  const askedRunRef = useRef<string | null>(null);
+  const [forgeRunChanged, setForgeRunChanged] = useState(false);
+  const [forgeNotice, setForgeNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!forgeNotice) return;
+    const t = setTimeout(() => setForgeNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [forgeNotice]);
   const prevState = useRef<string>("loading");
   const prevDisclosure = useRef(false);
 
@@ -347,7 +396,13 @@ export function RefineryShell({
   // gate stays real.
   const effectiveRole = useEffectiveRole();
   useEffect(() => {
+    // While the "Is it yours?" card is open (or its "Yes" is still landing),
+    // stay here: bouncing to the Forge would skip the person's answer.
+    const forgeQuestionOpen =
+      forgePrompt !== "none" ||
+      forgeSyncDecision(readLocalForgeRunRaw(), sessionData?.user?.id) === "ask";
     if (
+      !forgeQuestionOpen &&
       authStatus === "authenticated" &&
       userTier === "client" &&
       getViewAs() === null &&
@@ -358,7 +413,7 @@ export function RefineryShell({
     ) {
       window.location.href = "https://forge.steelmanresumes.com";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, pathname]);
+  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, pathname, forgePrompt, sessionData?.user?.id]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
@@ -387,57 +442,64 @@ export function RefineryShell({
     } catch {
       // Silent
     }
+  }, [authStatus, sessionData?.user?.id]);
 
-    // Forge session sync -- with hard cross-user isolation. A Forge blob in
-    // localStorage belongs to exactly one account; on a shared browser it must
-    // never sync to, or render for, a different user (prevents the data bleed
-    // where account A's resume showed up under account B).
+  // Forge session sync -- with hard cross-user isolation. A Forge blob in
+  // localStorage belongs to exactly one account; on a shared browser it must
+  // never sync to, or render for, a different user.
+  //
+  // NO SILENT CLAIM (shared-computer hotfix 2026-10-07). An UNOWNED run (no
+  // `_ownerUserId`) used to be claimed here whenever its name loosely matched
+  // the account name ("Marcus" matched "Marcus Johnson"), which wrote the
+  // previous person's record answers into this account. Now an unowned run
+  // with work in it gets one "Is it yours?" card. Only "Yes" saves it
+  // (/api/forge/save) and marks it owned; "No" erases it. Until then no screen
+  // reads it: they all go through readOwnForgeSession(uid), which returns null
+  // for an unowned run. An unowned run past the Forge's 24-hour idle limit is
+  // erased, never offered. Impersonation never asks or claims: "Yes" would
+  // save into the impersonated account.
+  useEffect(() => {
+    const uid = sessionData?.user?.id;
+    if (authStatus !== "authenticated" || !uid) return; // wait for the signed-in user id
     try {
-      const stored = localStorage.getItem("forge_session");
-      if (!stored) return;
-      const forgeData = JSON.parse(stored);
-      const uid = sessionData?.user?.id;
-      if (!uid) return; // wait until the signed-in user id is known
+      const stored = readLocalForgeRunRaw();
+      const decision = forgeSyncDecision(stored, uid);
 
-      if (forgeData._ownerUserId && forgeData._ownerUserId !== uid) {
+      if (decision === "purge") {
         // Foreign blob: purge so it can't sync to or surface for this account.
         clearPersonalLocalStorage();
         window.dispatchEvent(new Event("forge-synced"));
         return;
       }
-
-      // UNCLAIMED blob (no `_ownerUserId` yet): never claimed here. A run
-      // left in a shared browser, or a browser signed in to an account its
-      // user did not choose, must not land in the signed-in account on a
-      // guess. A name match used to be enough; it was a token-subset test
-      // ("Jane" matched "Jane Doe"), so it is gone (security review 3a r1,
-      // H1 and M1). The Forge asks the person, naming the account
-      // (components/forge/ForgeImport.tsx), and marks the run once it is
-      // theirs; this sync then picks it up through the owner check above.
-      // Until then: do not save it and do not destroy it, but clear what is
-      // DERIVED from it (preload, saved and hidden jobs, the last search, the
-      // approved baseline), so an unproven run never shows on this account's
-      // screens (the visible half of the 2026-09-22 bleed).
-      if (!forgeData._ownerUserId) {
+      if (decision === "erase") {
+        eraseLocalForgeRun();
         clearRunScopedLocalStorage();
+        window.dispatchEvent(new Event("forge-synced"));
         return;
       }
+      if (decision === "ask") {
+        // Clear what is DERIVED from any earlier run, so nothing from an
+        // unverified run shows, then ask. Nothing is saved or claimed here.
+        clearRunScopedLocalStorage();
+        if (!effectiveRole?.impersonating) {
+          if (askedRunRef.current === null) askedRunRef.current = stored;
+          setForgePrompt((p) => (p === "none" ? "ask" : p));
+        }
+        return;
+      }
+      if (decision !== "owned" || !stored) return;
 
+      const forgeData = JSON.parse(stored);
       if (!forgeData.forgeOutput && !forgeData.resumeText) return;
 
       // RUN BOUNDARY. `startedAt` identifies one Forge run; `_syncedAt` records
       // the run this browser last synced. When a DIFFERENT run arrives, every
       // key derived from the previous one is stale -- the prior persona's
       // approved baseline, saved and hidden jobs, progress counters, and the
-      // last job search with its full result list. They used to survive, which
-      // is how one browser ended up showing several personas' demos stacked on
-      // one screen. Clear before rebuilding the preload below, not after.
-      // The last run we synced is remembered OUTSIDE the intake blob, because
-      // the blob is exactly what a fresh start replaces: the welcome page
-      // clears forge_session before building a new run, which takes _syncedAt
-      // with it. Reading the boundary from the thing being replaced meant the
-      // NORMAL fresh-start path skipped this cleanup entirely, which is the
-      // path that matters most. (Found in review, 2026-09-19.)
+      // last job search with its full result list. Clear before rebuilding the
+      // preload below, not after. The last run we synced is remembered OUTSIDE
+      // the intake blob, because the blob is exactly what a fresh start
+      // replaces. (Found in review, 2026-09-19.)
       const runId = forgeData.startedAt || "unknown";
       let priorSyncedAt: string | null = null;
       try {
@@ -459,33 +521,61 @@ export function RefineryShell({
         // Preload build failed — not critical
       }
 
-      const currentStartedAt = runId;
-      if (priorSyncedAt === currentStartedAt && forgeData._ownerUserId === uid) return;
-
-      fetch("/api/forge/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: stored,
-      })
-        .then((res) => {
-          if (res.ok) {
-            forgeData._synced = true;
-            forgeData._syncedAt = currentStartedAt;
-            forgeData._ownerUserId = uid; // claim this blob for the current account
-            localStorage.setItem("forge_session", JSON.stringify(forgeData));
-            try {
-              localStorage.setItem(LAST_SYNCED_RUN_KEY, currentStartedAt);
-            } catch {
-              // Storage unavailable: we fall back to the in-blob marker.
-            }
-            window.dispatchEvent(new Event("forge-synced"));
-          }
-        })
-        .catch(() => {});
+      if (priorSyncedAt === runId) return;
+      // Owned by this account but not yet synced here (for example the
+      // sign-up "Yes" path, whose server save was best-effort): save once.
+      saveOwnedForgeRun(stored, forgeData, uid).catch(() => {});
     } catch {
       // Silent
     }
-  }, [authStatus, sessionData?.user?.id]);
+  }, [authStatus, sessionData?.user?.id, effectiveRole?.impersonating, forgeSyncTick]);
+
+  // "Is it yours?" answers. Only "Yes" saves; "No" erases.
+  async function answerForgePrompt(yes: boolean) {
+    const uid = sessionData?.user?.id;
+    if (!yes) {
+      eraseLocalForgeRun();
+      clearRunScopedLocalStorage();
+      askedRunRef.current = null;
+      setForgeRunChanged(false);
+      setForgePrompt("none");
+      window.dispatchEvent(new Event("forge-synced"));
+      return;
+    }
+    if (!uid || effectiveRole?.impersonating) return;
+    const stored = readLocalForgeRunRaw();
+    const now = forgeSyncDecision(stored, uid);
+    if (now !== "ask" || forgeRunFingerprint(stored) !== forgeRunFingerprint(askedRunRef.current)) {
+      // The run changed or left since the card asked. Save nothing.
+      if (now === "ask") {
+        askedRunRef.current = stored; // ask again, about the run that is here now
+        setForgeRunChanged(true);
+        setForgePrompt("ask");
+      } else {
+        askedRunRef.current = null;
+        setForgeRunChanged(false);
+        setForgePrompt("none");
+        if (now !== "owned") setForgeNotice("Nothing was saved. That resume is no longer on this computer.");
+        setForgeSyncTick((t) => t + 1);
+      }
+      return;
+    }
+    setForgePrompt("saving");
+    try {
+      const ok = await saveOwnedForgeRun(stored as string, JSON.parse(stored as string), uid);
+      if (ok) {
+        askedRunRef.current = null;
+        setForgeRunChanged(false);
+        setForgePrompt("saved");
+        setForgeNotice("Saved to your account.");
+        setForgeSyncTick((t) => t + 1);
+      } else {
+        setForgePrompt("failed");
+      }
+    } catch {
+      setForgePrompt("failed");
+    }
+  }
 
   // Refresh this session's last-seen time in the active-devices list. The
   // session row itself, and the new-device email, are written server-side at
@@ -793,6 +883,48 @@ export function RefineryShell({
 
         {/* Main content */}
         <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+          {forgeNotice && (
+            <p role="status" className="mb-6 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white">
+              {forgeNotice}
+            </p>
+          )}
+          {(forgePrompt === "ask" || forgePrompt === "saving" || forgePrompt === "failed") && !effectiveRole?.impersonating && (
+            <div role="region" aria-label="Resume on this computer" className="mb-6 border border-t-amber bg-t-panel px-4 py-4">
+              <p className="text-base font-semibold text-t-white">
+                There&apos;s a resume in progress on this computer. Is it yours?
+              </p>
+              {forgeRunChanged && (
+                <p className="mt-1 text-sm text-t-bone-dim">
+                  The resume on this computer changed since we asked. Nothing was saved. Is this one yours?
+                </p>
+              )}
+              {forgePrompt === "failed" && (
+                <p className="mt-1 text-sm text-t-red">It did not save. Try again.</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => answerForgePrompt(true)}
+                  disabled={forgePrompt === "saving"}
+                  className="t-focus min-h-touch rounded-[4px] border border-[#4f6b57] bg-[#4f6b57] px-4 text-sm font-medium text-white hover:bg-[#3d5745] disabled:opacity-60"
+                >
+                  {forgePrompt === "saving"
+                    ? "Saving..."
+                    : sessionData?.user?.email
+                      ? `Yes, save it to ${sessionData.user.email}`
+                      : "Yes, save it to my account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => answerForgePrompt(false)}
+                  disabled={forgePrompt === "saving"}
+                  className="t-focus min-h-touch rounded-[4px] border border-t-line px-4 text-sm font-medium text-t-white hover:border-t-line-strong disabled:opacity-60"
+                >
+                  No, erase it
+                </button>
+              </div>
+            </div>
+          )}
           {adminNeeds2fa && (
             <div className="mb-6 border border-t-amber bg-t-panel px-4 py-3 text-sm text-t-amber-bright">
               <span className="font-semibold">Two-step verification is required for admin accounts.</span>{" "}

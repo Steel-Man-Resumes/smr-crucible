@@ -14,7 +14,8 @@ import { ClearThisComputerButton } from "@/components/ClearThisComputer";
 import { ShieldCheck, X } from "lucide-react";
 import { QuietShellProvider, useQuietShellState } from "./quiet-shell";
 import { WORKSHOP_PATHS, QUIET_PATHS, isQuiet, shellChrome } from "@/lib/forge-front-door";
-import { FORGE_PUBLIC_PAGES } from "@/lib/forge-access";
+import { FORGE_PUBLIC_PAGES, isForgeSignInPage } from "@/lib/forge-access";
+import { useSession } from "next-auth/react";
 import { ForgeImport } from "@/components/forge/ForgeImport";
 import { SignInNotice } from "@/components/forge/SignInNotice";
 import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
@@ -85,6 +86,8 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
   const quiet = isQuiet({ quietProp, quietFromPage, pathname });
   const chrome = shellChrome(quiet);
   const workshop = WORKSHOP_PATHS.includes(pathname);
+  const { status: authStatus } = useSession();
+  const screenWaits = isForgeSignInPage(pathname) && authStatus === "loading";
 
   return (
     <>
@@ -136,8 +139,11 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
         {chrome.sharingPrompt && <JoinSharingPrompt />}
         {/* Signed in: the run in this browser is saved to the account (and,
             when it is not provably theirs, the person is asked first). */}
-        <ForgeImport showPrompt={!quiet} />
-        {children}
+        {/* Shown on quiet screens too: a run that is not settled blocks the build. */}
+        <ForgeImport showPrompt />
+        {/* A Forge screen mounts only once the sign-in is known, so it never
+            reads (or starts from) a run before its owner is settled. */}
+        {screenWaits ? <div className="h-40" aria-busy="true" /> : children}
       </main>
 
       {/* AI Assistant: available on every Forge page except in quiet mode */}

@@ -20,6 +20,8 @@ import { MySuggestions } from "@/components/MySuggestions";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
 import { JourneyHeader } from "@/components/JourneyHeader";
@@ -181,6 +183,8 @@ export default function DashboardPage() {
   const tier = effectiveRole?.impersonating ? sessionTier : (effectiveRole?.tier ?? sessionTier);
   const isAdmin = tier === "admin";
   const onboarding = useOnboarding();
+  // Shared-computer rule: only a local run marked as this user's is read.
+  const ownerUid = useSession().data?.user?.id;
 
   // Forge data
   const [forgeData, setForgeData] = useState<DashboardData>({});
@@ -202,16 +206,18 @@ export default function DashboardPage() {
         }
       } catch {}
       try {
-        const stored = localStorage.getItem("forge_session");
-        if (stored) {
-          const session = JSON.parse(stored);
-          if (!cancelled && session.forgeOutput) setForgeData(session.forgeOutput);
-        }
+        const session = readOwnForgeSession(ownerUid);
+        if (!cancelled && session?.forgeOutput) setForgeData(session.forgeOutput);
       } catch {}
     }
     loadData();
-    return () => { cancelled = true; };
-  }, []);
+    // Refresh after the "Is it yours?" card saves a run (or erases one).
+    window.addEventListener("forge-synced", loadData);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("forge-synced", loadData);
+    };
+  }, [ownerUid]);
 
   // Load artifact counts
   useEffect(() => {

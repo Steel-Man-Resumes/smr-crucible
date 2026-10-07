@@ -96,7 +96,7 @@ const thingWord = (n: number) => `${countWord(n).toLowerCase()} ${n === 1 ? "thi
 
 export default function OutputPage() {
   const router = useRouter();
-  const { session, updateSession } = useForgeSession();
+  const { session, updateSession, runIsMine } = useForgeSession();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
@@ -216,9 +216,10 @@ export default function OutputPage() {
   // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
     if (!session.forgeOutput || docState !== "idle") return;
-    // Let the stored-copy check run first.
+    // Let the stored-copy check run first. And never send a run that is not
+    // this account's (security review 3a r2, L1: readOwnForgeSession).
     const t = setTimeout(() => {
-      if (!hasStarted.current) generateDocs();
+      if (!hasStarted.current && runIsMine()) generateDocs();
     }, 0);
     return () => clearTimeout(t);
   }, [session.forgeOutput, docState, generateDocs]);

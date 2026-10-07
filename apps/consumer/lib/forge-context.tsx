@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, createContext, useContext, useCallback } from "react";
+import { useState, createContext, useContext, useCallback, useMemo, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { forgeRunView, mayUseRunFor, stampOwnerOnWrite, type RunAuth } from "@/lib/forge-import";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 import type { ReactNode } from "react";
 import type { ResumeDocument } from "@/components/resume/resumeModel";
 import { migrateStoredSession, STORED_SESSION_VERSION } from "@/lib/forge-preferences";
@@ -126,7 +129,21 @@ export interface ForgeSessionData {
 }
 
 interface ForgeContextValue {
+  /**
+   * The run as the Forge pages may read it: this account's run (or one with
+   * nothing in it yet), or an empty run until "Is it yours?" is answered
+   * (lib/forge-import.ts forgeRunView). Never another person's answers.
+   */
   session: ForgeSessionData;
+  /** False while the run may not be used (not this account's, or the sign-in is still loading). */
+  mayUseRun: boolean;
+  /**
+   * Check right before sending the run to the server (build, documents):
+   * signed in, the STORED run must be this account's (readOwnForgeSession).
+   */
+  runIsMine: () => boolean;
+  /** The run as stored, whoever's it is. Only components/forge/ForgeImport.tsx reads this, to ask. */
+  rawSession: ForgeSessionData;
   updateSession: (updates: Partial<ForgeSessionData>) => void;
   clearSession: () => void;
 }
@@ -224,12 +241,26 @@ export function clearThisComputer() {
   }
 }
 
+/** Who is signed in, as the run rules need it (a half-finished sign-in counts as not yet). */
+function useRunAuth(): RunAuth {
+  const { data, status } = useSession();
+  const user = data?.user as { id?: string; mfa?: unknown; claim?: unknown } | undefined;
+  if (status === "loading") return { status: "loading" };
+  if (status !== "authenticated" || !user?.id) return { status: "unauthenticated" };
+  if (user.mfa === false || user.claim === "2fa" || user.claim === "password") return { status: "pending" };
+  return { status: "authenticated", userId: user.id };
+}
+
 export function ForgeProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<ForgeSessionData>(loadSession);
+  const auth = useRunAuth();
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = auth.status === "authenticated" ? auth.userId : null;
 
   const updateSession = useCallback((updates: Partial<ForgeSessionData>) => {
     setSession((prev) => {
-      const next = { ...prev, ...updates };
+      // A run started here while signed in is this account's from the first write.
+      const next = stampOwnerOnWrite(prev, { ...prev, ...updates }, userIdRef.current) as ForgeSessionData;
       saveSession(next);
       return next;
     });
@@ -242,8 +273,23 @@ export function ForgeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const authKey = auth.status === "authenticated" ? auth.userId : auth.status;
+  const view = useMemo(() => forgeRunView(session as Record<string, any>, auth), [session, authKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <ForgeContext.Provider value={{ session, updateSession, clearSession }}>
+    <ForgeContext.Provider
+      value={{
+        session: view.visible as ForgeSessionData,
+        mayUseRun: view.mayUse,
+        runIsMine: () =>
+          mayUseRunFor(auth, { mayUse: view.mayUse, isDemo: (session as Record<string, unknown>).isDemo }, (uid) =>
+            readOwnForgeSession(uid)
+          ),
+        rawSession: session,
+        updateSession,
+        clearSession,
+      }}
+    >
       {children}
     </ForgeContext.Provider>
   );

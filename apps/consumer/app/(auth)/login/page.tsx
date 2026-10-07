@@ -313,7 +313,9 @@ function LoginForm() {
           const session = s ? JSON.parse(s) : null;
           // A finished run waits on the Forge's finish page, where the person
           // is asked whether to save it to this new account.
-          return session?.forgeOutput ? "/output" : "/intro";
+          // Only an unmarked run is offered there; a run marked for another
+          // account is never this new account's.
+          return session?.forgeOutput && !session?._ownerUserId ? "/output" : "/intro";
         } catch { return "/intro"; }
       })();
       const result = await signIn("password-login", {
