@@ -17,6 +17,7 @@ import {
   getUserTier,
   incrementUserUsage,
   incrementIpUsage,
+  refundUserUsage,
   validateAccessCode,
   logPartnerUsage,
   ensureUserAttribution,
@@ -171,7 +172,11 @@ export function withRateLimit(
         }
         const verdict = await decideSignedInCall(
           { plan, endpoint: opts.endpoint, perPerson, ip: getClientIp(request), code },
-          { account: incrementUserUsage, bucket: incrementIpUsage }
+          {
+            account: incrementUserUsage,
+            refundAccount: (u, e) => refundUserUsage(u, e).catch(() => {}),
+            bucket: incrementIpUsage,
+          }
         );
         if (verdict === "account") {
           return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });

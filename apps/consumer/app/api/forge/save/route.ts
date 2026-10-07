@@ -48,8 +48,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   }
 
-  // A run marked for another account is never saved to this one (security
-  // review 3a r1, H1). The browser clears such a run; this is the server's half.
+  // BACKSTOP ONLY (security review 3a r2, L5). `_ownerUserId` is whatever the
+  // client chose to send, so this cannot prove ownership and is not the
+  // server's half of the shared-computer rule. The real rule is in the browser:
+  // a run reaches this route only after the person said it is theirs
+  // (ForgeImport, RefineryShell) or it is already marked theirs. This refusal
+  // only catches a client that sends a run plainly marked for someone else.
   const marked = (body as Record<string, unknown>)._ownerUserId;
   if (typeof marked === "string" && marked !== userId) {
     return NextResponse.json({ error: "This work belongs to another account." }, { status: 409 });

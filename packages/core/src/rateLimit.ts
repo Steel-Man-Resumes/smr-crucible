@@ -137,6 +137,19 @@ export async function incrementUserUsage(
 }
 
 /**
+ * Give back one call counted for a user today (never below zero). For a call
+ * the account allowed but a shared limit (a network, an organization's seat
+ * pool) refused: the person's own allowance is not spent on it.
+ */
+export async function refundUserUsage(userId: string, endpoint: string): Promise<void> {
+  await query(
+    `UPDATE ai_usage SET call_count = GREATEST(call_count - 1, 0), updated_at = now()
+      WHERE user_id = $1 AND endpoint = $2 AND usage_date = CURRENT_DATE`,
+    [userId, endpoint]
+  );
+}
+
+/**
  * Pure cap decision for a reserved slot: the increment RETURNING count is within
  * the cap iff it is <= cap. Extracted so the ok/count sequence is unit-testable
  * without a DB (see rateLimit.test.ts): counts 1,2,3 against cap 3 are ok, the

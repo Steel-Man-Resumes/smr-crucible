@@ -68,6 +68,8 @@ export function codeSeats(maxRedemptions: number | null | undefined): number {
 export interface ForgeCounters {
   /** Count one call for this account and endpoint today; returns the new count. */
   account(userId: string, endpoint: string): Promise<number>;
+  /** Give that one call back (the call was refused by a shared limit). */
+  refundAccount(userId: string, endpoint: string): Promise<void>;
   /** Count one call in a shared bucket (an IP, or a code's pool) today; returns the new count. */
   bucket(key: string, endpoint: string): Promise<number>;
 }
@@ -75,9 +77,16 @@ export interface ForgeCounters {
 export type SignedInVerdict = "ok" | "account" | "network" | "code";
 
 /**
- * One signed-in call: the account first, then (only if the account allows it)
- * the code's seat pool when the person came through a valid code, otherwise
- * the network ceiling. Returns which limit, if any, refused it.
+ * One signed-in call. Every limit must allow it before it counts against the
+ * person (security review 3a r2, L2):
+ *  1. the account's own limit (a call past it spends nothing shared);
+ *  2. the code's seat pool when the person came through a valid code and is
+ *     NOT on an unlimited tier (unlimited tiers never draw from an
+ *     organization's pool), otherwise the network ceiling;
+ *  3. when step 2 refuses, the account's count for this call is given back,
+ *     so a full library or a spent pool never costs the person their own
+ *     allowance at home.
+ * Returns which limit, if any, refused it.
  */
 export async function decideSignedInCall(
   input: {
@@ -93,10 +102,15 @@ export async function decideSignedInCall(
   const n = await counters.account(input.plan.userId, input.endpoint);
   if (overLimit(n, input.plan.perAccount)) return "account";
   const signedIn = `signed-in:${input.endpoint}`;
-  if (input.code) {
+  const unlimited = input.plan.perAccount === null;
+  let verdict: SignedInVerdict = "ok";
+  if (input.code && !unlimited) {
     const pooled = await counters.bucket(`code:${input.code.code}`, signedIn);
-    return overLimit(pooled, input.perPerson * input.code.seats) ? "code" : "ok";
+    if (overLimit(pooled, input.perPerson * input.code.seats)) verdict = "code";
+  } else {
+    const network = await counters.bucket(input.ip, signedIn);
+    if (overLimit(network, input.plan.ipCeiling)) verdict = "network";
   }
-  const network = await counters.bucket(input.ip, signedIn);
-  return overLimit(network, input.plan.ipCeiling) ? "network" : "ok";
+  if (verdict !== "ok") await counters.refundAccount(input.plan.userId, input.endpoint);
+  return verdict;
 }
