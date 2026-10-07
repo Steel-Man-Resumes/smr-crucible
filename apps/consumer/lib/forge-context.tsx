@@ -28,6 +28,9 @@ export interface ForgeSessionData {
 
   // Page 2: Resume
   resumeText?: string;
+  /** The resume exactly as the person gave it (upload or paste), before any
+   *  builder edits. The build screen shows THIS page and its real flaws. */
+  originalResumeText?: string;
   resumeFileName?: string;
   resumeMethod?: "upload" | "import" | "external" | "guided" | "rush" | "paste";
   /** Structured base resume built in the Forge (Phase 7). Carried into the

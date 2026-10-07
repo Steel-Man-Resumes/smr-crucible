@@ -164,6 +164,7 @@ export default function ResumeIntakePage() {
 
         updateSession({
           resumeText: data.resumeText,
+          originalResumeText: data.resumeText,
           resumeFileName: file.name,
           resumeMethod: "upload",
         });
@@ -286,7 +287,7 @@ export default function ResumeIntakePage() {
         footer={
           <button
             onClick={() => {
-              updateSession({ resumeText: undefined, resumeMethod: undefined });
+              updateSession({ resumeText: undefined, originalResumeText: undefined, resumeMethod: undefined });
             }}
             className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
@@ -1400,6 +1401,7 @@ function PasteResume({
 
     updateSession({
       resumeText: finalText,
+      originalResumeText: finalText,
       resumeMethod: "paste",
       lastPageVisited: "resume",
     });

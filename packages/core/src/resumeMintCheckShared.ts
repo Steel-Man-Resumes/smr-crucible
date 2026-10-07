@@ -261,7 +261,8 @@ const hasYear = (l: string) => new RegExp(YEAR_RE.source).test(l);
 // A line that only carries dates, or a place and dates: "2019 - 2023",
 // "Jan 2019 to Present", "Chicago, IL | 2019 - 2023". Some layouts put a job's
 // dates on the line under its title.
-const DATE_PART_RE = /^(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?$/i;
+// An optional length in brackets may follow: "June 2021 - Present (3 years)".
+const DATE_PART_RE = /^(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?(?:\s*\(\s*\d+\+?\s*(?:years?|yrs?|months?|mos?)(?:,?\s*\d+\s*(?:months?|mos?))?\s*\))?$/i;
 const PLACE_PART_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
 // "Chicago, IL 2019 - 2023" or "Chicago, IL, Jan 2019 to Present" (no pipe).
 const PLACE_THEN_DATE_RE = /^([A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?)[,\s]+(.+)$/;

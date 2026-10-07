@@ -47,7 +47,7 @@ export function sessionForPath(path: PathOption) {
 export const WORKSHOP_PATHS = ["/intro", "/overview", "/partner", "/get-listed"];
 
 /** Routes that hide the shell chrome (quiet shell). */
-export const QUIET_PATHS: string[] = [];
+export const QUIET_PATHS: string[] = ["/processing"];
 
 /** Which pieces of shell chrome are shown. "Clear this computer" is always shown. */
 export function shellChrome(quiet: boolean) {

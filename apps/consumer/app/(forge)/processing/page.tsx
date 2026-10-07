@@ -64,7 +64,10 @@ export default function ProcessingPage() {
 
   // What goes on screen while it works. A page the person typed in the
   // builder is not a "before", so it gets plain job cards instead.
-  const resumeText = isDemo ? session.resumeText || DEMO_SESSION.resumeText : session.resumeText;
+  // Show the page as the person gave it, not the builder's cleaned copy.
+  const resumeText = isDemo
+    ? session.resumeText || DEMO_SESSION.resumeText
+    : session.originalResumeText || session.resumeText;
   const tour = useMemo(
     () => (session.resumeMethod === "guided" && !isDemo ? null : buildResumeTour(resumeText)),
     [resumeText, session.resumeMethod, isDemo]

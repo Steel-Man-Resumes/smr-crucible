@@ -42,7 +42,7 @@ export interface ResumeTour {
 export const TOUR_CAP = 6;
 
 export const CLEAN_NOTE =
-  "Your page is already clean on the basics. I'm building the full version now.";
+  "Your page is already clean on the basics.";
 
 const YEAR_RE = /\b(?:19[5-9]\d|20[0-4]\d)\b/;
 

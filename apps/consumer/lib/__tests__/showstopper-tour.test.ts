@@ -29,7 +29,7 @@ test("a clean page gets the clean note and no steps", () => {
   assert.ok(tour);
   assert.equal(tour.steps.length, 0);
   assert.equal(tour.cleanNote, CLEAN_NOTE);
-  assert.equal(CLEAN_NOTE, "Your page is already clean on the basics. I'm building the full version now.");
+  assert.equal(CLEAN_NOTE, "Your page is already clean on the basics.");
 });
 
 test("real flaws become steps, anchored to the right raw line", () => {

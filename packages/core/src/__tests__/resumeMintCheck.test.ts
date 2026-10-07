@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runMintCheck } from "../resumeMintCheckShared";
+import { runMintCheck, isDateLine } from "../resumeMintCheckShared";
 
 const fx = JSON.parse(readFileSync(join(__dirname, "fixtures-mint-preview.json"), "utf8"));
 const has = (r: ReturnType<typeof runMintCheck>, rule: string, sev: string, re: RegExp) =>
@@ -198,4 +198,11 @@ test("STD-F01: a sentence with a year under an undated job does not count as its
     const ok = runMintCheck({ output: `EXPERIENCE\nForklift Operator | Harbor Supply\n${dates}\n- Trained crews.`, source: "forklift harbor supply riverton oh 2015 2023 trained crews", kind: "resume" });
     assert.deepEqual(only(ok, "STD-F01"), [], dates);
   }
+});
+
+test("STD-F01: a date line with a length in brackets counts as dates", () => {
+  for (const l of ["June 2021 - Present (3 years)", "2019 - 2023 (4 yrs)", "Jan 2020 to Mar 2021 (1 year, 2 months)"]) {
+    assert.equal(isDateLine(l), true, l);
+  }
+  assert.equal(isDateLine("Earned OSHA 10 in 2021 (2 years ago)"), false);
 });
