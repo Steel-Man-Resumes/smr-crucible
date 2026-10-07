@@ -85,7 +85,7 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "truth",
     std: ["STD-T03"],
     text:
-      "Name each credential at its true type (license, certification, training certificate, course, card) with the issuer, year and status the person gave. A finished course or training is not a certification or license unless the person says they passed or are certified. An expired, inactive or in-progress credential is never called current, active, valid or renewable, and a past credential is never written in the present tense.",
+      "Name each credential at its true type (license, certification, training certificate, course, card) with the issuer, year and status the person gave. A finished course or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential, and an inactive or in-progress one, is never called current, active, valid or renewable, and a past credential is never written in the present tense.",
   },
   {
     id: "results-as-given",

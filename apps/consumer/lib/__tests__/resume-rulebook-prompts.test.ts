@@ -85,6 +85,15 @@ describe("resume rulebook in every writer", () => {
     assert.match(system, /one column/i);
   });
 
+  it("the Forge writer names expired, suspended or revoked credentials as not current", () => {
+    assert.match(forge, /expired, suspended or revoked credential/);
+  });
+
+  it("analyze asks for plain words, not keywords", () => {
+    const analyze = read("app", "api", "analyze", "route.ts");
+    assert.doesNotMatch(analyze, /keyword-rich|industry-standard terminology|ATS-optimized language|industry keywords/i);
+  });
+
   it("the Forge writer keeps every other truth rule", () => {
     assert.match(forge, /Never invent a number/);
     assert.match(forge, /never a dateless functional page/);

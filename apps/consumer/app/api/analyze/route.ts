@@ -275,7 +275,7 @@ const READINESS_DIRECTIVES: Record<string, {
 - Full skill extraction with resume-ready language.
 - Categorize clearly (hard/soft/transferable) for resume building.
 - Flag high-value skills that should be featured prominently.
-- Include industry keywords where natural.`,
+- Use the plain names for the tools and tasks the person described.`,
     careers: `This person is PREPARING to act.
 - Suggest 3-5 paths with concrete detail.
 - For the top path, identify the specific "hook": an org, program, or employer in their area that could be both a job opportunity AND a genuine turning-point relationship.
@@ -294,14 +294,14 @@ const READINESS_DIRECTIVES: Record<string, {
   },
   action: {
     narrative: `This person is READY TO GO. They are actively looking for work.
-- Headline must be resume-ready, keyword-rich, and targeted to their strongest career path.
+- Headline must be resume-ready: plain words naming the work they have actually done, aimed at their strongest career path. Nothing they did not say.
 - Summary should read like a professional brand statement an employer would respond to.
 - Reflection can be brief. They have made the identity shift. Reinforce it with a line built from their own facts: they are matching real skills to the right employer.
 - Strengths: frame as competitive advantages with specific evidence from their own words (a number only if they gave it).`,
     skills: `This person is actively job searching.
-- Comprehensive extraction with ATS-optimized language.
+- Comprehensive extraction in the plain words a screener and a person both read.
 - Categorize precisely. Flag which skills map to which career paths.
-- Include industry-standard terminology. List a certification only if the person says they hold it.
+- Use the plain names for the tools and tasks the person described; never a term they did not show. List a certification only if the person says they hold it.
 - Prioritize the hard skills, tools and equipment they named.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.

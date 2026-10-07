@@ -13,14 +13,14 @@ import {
   rulesFor,
   rulesForStd,
 } from "../resumeRules";
-import { runMintCheck } from "../resumeMintCheckShared";
+import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
 import { getResumeStatus, pickDefendLines, questionForFinding, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
 /** Answer every defend line in the person's own words (a fixture stand-in for the defend step). */
 const answerAll = (resume: string, source: string, answer = "That is what I did, in my words."): DefendAnswer[] =>
-  pickDefendLines(resume, source).map((d) => ({ line: d.line, answer }));
+  pickDefendLines(resume, source).map((d) => ({ line: d.line, answer, verdict: "stands" as const }));
 
 // ---- rulebook --------------------------------------------------------------
 
@@ -140,7 +140,7 @@ test("status: an answer marked cut or unsure keeps the line open", () => {
   assert.equal(s.openItems.find((i) => i.line === answers[0].line)!.question, "OK to take this line off now?");
 });
 
-test("status: a number the person states in the defend step clears the added-number BLOCK", () => {
+test("status: a number the model wrote stays a BLOCK even when the person's answer repeats it", () => {
   const resume = NO_NUMBERS.resume.replace("Ran the grill on the breakfast line.", "Ran the grill for about 80 breakfasts a morning.");
   const before = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source, defendAnswers: answerAll(resume, NO_NUMBERS.source) });
   const added = before.openItems.find((i) => i.rule === "STD-T02");
@@ -148,11 +148,139 @@ test("status: a number the person states in the defend step clears the added-num
   assert.doesNotMatch(added!.question, /\d/, "the question never shows a number");
   assert.match(added!.question, /If you don't know a number, the line stays true without one/);
 
-  const answers = answerAll(resume, NO_NUMBERS.source).map((a) =>
-    /80/.test(a.line) ? { ...a, answer: "Most mornings it was about 80 breakfasts, we counted tickets." } : a
+  // Echoing the number back in the defend step does not source it (no anchoring path).
+  const echo = answerAll(resume, NO_NUMBERS.source).map((a) =>
+    /80/.test(a.line) ? { ...a, answer: "Yeah, about 80 breakfasts a morning." } : a
   );
-  const after = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source, defendAnswers: answers });
-  assert.equal(after.state, "finished", JSON.stringify(after.openItems));
+  const after = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source, defendAnswers: echo });
+  assert.equal(after.state, "draft");
+  assert.ok(after.openItems.some((i) => i.rule === "STD-T02" && i.severity === "BLOCK"));
+
+  // Only the person's own words, given where no number was shown, source it.
+  const ownWords = `${NO_NUMBERS.source}\nOn a busy morning I cooked about 80 breakfasts.`;
+  const sourced = getResumeStatus({ resumeText: resume, sourceText: ownWords, defendAnswers: answerAll(resume, ownWords) });
+  assert.equal(sourced.state, "finished", JSON.stringify(sourced.openItems));
+});
+
+test("status: an answer with no verdict, or 'I don't know', does not stand", () => {
+  const noVerdict = pickDefendLines(NO_NUMBERS.resume, NO_NUMBERS.source).map((d) => ({ line: d.line, answer: "I don't know" }));
+  assert.equal(getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: noVerdict }).state, "draft");
+  const dontKnow = answerAll(NO_NUMBERS.resume, NO_NUMBERS.source, "I don't know");
+  assert.equal(getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: dontKnow }).state, "draft");
+});
+
+test("status: an answer that contradicts its line keeps the BLOCK", () => {
+  const resume = `ALEX EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+
+CERTIFICATIONS
+- Forklift Certified`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock. I took a forklift training class.";
+  const answers = answerAll(resume, source).map((a) =>
+    /Forklift Certified/.test(a.line) ? { ...a, answer: "It was just a training class, I never got certified." } : a
+  );
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answers });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => /Forklift Certified/.test(i.line) && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});
+
+test("status: a course written up as a certification is a BLOCK", () => {
+  const resume = `ALEX EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+
+CERTIFICATIONS
+- Forklift Certified, 2019`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock. I took a forklift training class in 2019.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answerAll(resume, source) });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-T03" && i.severity === "BLOCK" && /Forklift Certified/.test(i.line)), JSON.stringify(s.openItems));
+});
+
+test("status: an answer on one line never clears a finding on another line", () => {
+  const resume = `SAM EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+- Counted stock for the monthly count.
+
+CORE COMPETENCIES
+Trailer loading, Inventory Control, Hazmat Handling`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock and counted stock for the monthly count.";
+  const answers = answerAll(resume, source, "I loaded trailers, did inventory control and hazmat handling.");
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answers });
+  const terms = s.openItems.filter((i) => i.rule === "STD-T01").map((i) => i.line);
+  assert.deepEqual(terms.sort(), ["Hazmat Handling", "Inventory Control"]);
+});
+
+test("status: a page with no dated entries at all is a BLOCK (skills-only page)", () => {
+  const resume = `JO EXAMPLE
+Erie, PA
+
+Warehouse worker
+
+CORE COMPETENCIES
+Forklift, Pallet jack, RF scanner
+
+EXPERIENCE HIGHLIGHTS
+- Loaded trailers at the dock.
+- Picked orders with an RF scanner.`;
+  const source = "I loaded trailers at the dock and picked orders with an RF scanner. I drove a forklift and a pallet jack.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, requireDefend: false });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});
+
+test("defend: a line with an unsourced number gets the describe-it question, never the number", () => {
+  const resume = NO_NUMBERS.resume.replace("Ran the grill on the breakfast line.", "Ran the grill for about 80 breakfasts a morning.");
+  const d = pickDefendLines(resume, NO_NUMBERS.source).find((x) => /80/.test(x.line));
+  assert.ok(d);
+  assert.doesNotMatch(d!.question, /\d|how you know this number/i);
+  assert.match(d!.question, /in one sentence, how would you say this line/i);
+  const s = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source });
+  for (const i of s.openItems.filter((x) => /80/.test(x.line))) assert.doesNotMatch(i.question, /\d|how you know this number/i);
+});
+
+test("defend: a city-only contact line is never a defend line", () => {
+  const lines = pickDefendLines(THIN.resume, THIN.source).map((d) => d.line);
+  assert.ok(!lines.includes("Dayton, OH"), JSON.stringify(lines));
+});
+
+test("checker: 'licenses' as an ordinary word is not a credential", () => {
+  const resume = `PAT EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+DOOR STAFF | Lakeview Hall | 2019 - 2023
+- Checked customer IDs and licenses at the door.`;
+  const source = "Door staff at Lakeview Hall from 2019 to 2023. I checked customer IDs and licenses at the door.";
+  assert.deepEqual(credentialLinesOf(resume), []);
+  assert.ok(!pickDefendLines(resume, source).some((d) => d.reasons.includes("credential")));
+});
+
+test("checker: sole-actor flags shared work written alone, not neighbouring lines", () => {
+  const source = "Maintenance helper at Lakeside Apartments from 2018 to 2022. I helped with boiler blowdown under the operator. I tested boiler water by myself. I helped with customer returns.";
+  const page = (bullet: string) => `RILEY EXAMPLE
+
+PROFESSIONAL EXPERIENCE
+MAINTENANCE HELPER | Lakeside Apartments | 2018 - 2022
+- ${bullet}`;
+  const flags = (bullet: string) => runMintCheck({ output: page(bullet), source, kind: "resume" }).findings.filter((f) => f.kind === "sole_actor");
+  assert.deepEqual(flags("Tested boiler water every morning."), []);
+  assert.deepEqual(flags("Answered customer questions at the front."), []);
+  const hit = flags("Did the blowdown with a wrench.");
+  assert.equal(hit.length, 1);
+  assert.equal(hit[0].severity, "FIX");
+  assert.deepEqual(flags("Helped with boiler blowdown under the operator."), []);
 });
 
 test("status: a credential with no type or status asks about it, without supplying one", () => {
@@ -241,4 +369,17 @@ CASHIER | Corner Market | 2016 - 2019
 - Ran the register and showed customers where to find items.`;
   const r = runMintCheck({ output: out, source: src, kind: "resume" });
   assert.ok(!r.findings.some((f) => f.kind === "sole_actor"), JSON.stringify(r.findings));
+});
+
+test("STD-F01: a skills-only page with no bullets and no dates is never finished", () => {
+  const resume = `Jane Doe
+Milwaukee, WI | 555-555-0100
+
+SKILLS
+Forklift, Pallet jack, RF scanner
+Injection molding, Quality checks`;
+  const source = "I drove a forklift and a pallet jack, used an RF scanner, ran injection molding and did quality checks.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, requireDefend: false });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
 });
