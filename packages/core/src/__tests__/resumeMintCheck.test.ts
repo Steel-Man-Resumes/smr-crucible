@@ -89,3 +89,88 @@ test("STD-A02: dash punctuation is a fix", () => {
   const r = runMintCheck({ output: CLEAN.replace("- Moved 40 pallets a shift.", "- Moved 40 pallets a shift — every shift."), source: SRC, kind: "resume" });
   assert.ok(r.findings.some((f) => f.rule === "STD-A02"));
 });
+
+// ---- Step 1 checker fixes (2026-10-06). Synthetic text only. -------------
+
+const only = (r: ReturnType<typeof runMintCheck>, rule: string) => r.findings.filter((f) => f.rule === rule);
+
+test("STD-C05: the person's own phrase passes whatever its spacing or hyphen", () => {
+  const out = "SELF-EMPLOYED | Lawn Care | 2018 - 2020\n- Mowed lawns.";
+  for (const said of ["I was self employed mowing lawns 2018 2020", "Self Employed 2018 2020", "self-employed 2018 2020", "self\nemployed 2018 2020", "self employment 2018 2020"]) {
+    const r = runMintCheck({ output: out, source: said, kind: "resume" });
+    assert.deepEqual(only(r, "STD-C05"), [], said);
+  }
+  // Still a BLOCK when the person never said it.
+  const r = runMintCheck({ output: out, source: "I mowed lawns 2018 2020", kind: "resume" });
+  assert.ok(has(r, "STD-C05", "BLOCK", /SELF-EMPLOYED/));
+  // A different euphemism is not covered by a near one.
+  const r2 = runMintCheck({ output: "Career break 2018 - 2020", source: "a break from work 2018 2020" });
+  assert.ok(has(r2, "STD-C05", "BLOCK", /Career break/));
+});
+
+test("STD-C07: a hyphen in the person's words does not block their own status line", () => {
+  const out = "Case fully resolved in 2020.";
+  const ok = runMintCheck({ output: out, source: "my case was fully-resolved in 2020" });
+  assert.deepEqual(only(ok, "STD-C07"), []);
+  const bad = runMintCheck({ output: out, source: "my case ended in 2020" });
+  assert.ok(has(bad, "STD-C07", "BLOCK", /fully resolved/));
+});
+
+test("STD-F01: pipe lines that are not job entries, and dates on the next line, do not block", () => {
+  const src = "Sample Co 2015 2023 12 90 2 Ran the floor";
+  const scope = "Work Experience\nOperations Lead | Sample Co | 2015 - 2023\nReports: 12 Direct, 90 Indirect | Two Sites\n- Ran the floor.";
+  const footer = "EXPERIENCE\nOperations Lead | Sample Co | 2015 - 2023\n555-555-0100 | Page 2\n- Ran the floor.";
+  const nextLine = "EXPERIENCE\nOperations Lead | Sample Co\n2015 - 2023\n- Ran the floor.";
+  const placeAndDates = "EXPERIENCE\nOperations Lead | Sample Co\nRiverton, OH | Jan 2015 to Present\n- Ran the floor.";
+  for (const out of [scope, footer, nextLine, placeAndDates]) {
+    const r = runMintCheck({ output: out, source: src + " Riverton OH", kind: "resume" });
+    assert.deepEqual(only(r, "STD-F01"), [], out);
+  }
+});
+
+test("STD-F01: an undated job still blocks, even when the next job's dated header follows it", () => {
+  const out = "PROFESSIONAL EXPERIENCE\nFORKLIFT OPERATOR | Northgate Freight\nCASHIER | Corner Market | 2016 - 2019";
+  const r = runMintCheck({ output: out, source: SRC, kind: "resume" });
+  assert.ok(has(r, "STD-F01", "BLOCK", /^FORKLIFT OPERATOR \| Northgate Freight$/));
+  assert.equal(only(r, "STD-F01").length, 1);
+});
+
+test("Title Case headings end the skills grid and the experience section", () => {
+  const out = `Dana Example
+
+Skills
+Forklift | Pallet Moving | Driver Training
+
+Work Experience
+Forklift Operator | Northgate Freight | 2019 - 2023
+- Moved 40 pallets a shift.
+- Trained 3 new drivers.
+
+Certifications
+Warehouse Safety Card | Riverton Learning Center`;
+  const r = runMintCheck({ output: out, source: SRC, kind: "resume" });
+  // Before the fix the grid ran on and flagged "Work Experience", "Certifications"
+  // and the certificate line as skills the person never named, and the
+  // experience check called the certificate an undated job.
+  assert.deepEqual(only(r, "STD-T01"), [], JSON.stringify(r.findings));
+  assert.deepEqual(only(r, "STD-F01"), [], JSON.stringify(r.findings));
+  // A term in the grid itself is still checked.
+  const r2 = runMintCheck({ output: out.replace("Driver Training", "Inventory Audits"), source: SRC, kind: "resume" });
+  assert.ok(has(r2, "STD-T01", "FIX", /Inventory Audits/));
+});
+
+test("STD-A02: en dash is a fix, as the standard writes it; a date range gets the hyphen fix", () => {
+  const prose = runMintCheck({ output: CLEAN.replace("- Moved 40 pallets a shift.", "- Moved 40 pallets a shift \u2013 every shift."), source: SRC, kind: "resume" });
+  const p = only(prose, "STD-A02");
+  assert.equal(p.length, 1);
+  assert.match(p[0].why, /period or a comma/);
+  const range = runMintCheck({ output: CLEAN.replace("2016 - 2019", "2016\u20132019"), source: SRC, kind: "resume" });
+  const g = only(range, "STD-A02");
+  assert.equal(g.length, 1);
+  assert.match(g[0].why, /plain hyphen/);
+  const toPresent = runMintCheck({ output: "Cook | Diner | Jan 2019 \u2013 Present", source: "cook diner 2019" });
+  assert.match(only(toPresent, "STD-A02")[0].why, /plain hyphen/);
+  // A plain-hyphen range and a divider line are fine; a double hyphen is not.
+  assert.deepEqual(only(runMintCheck({ output: CLEAN + "\n-----", source: SRC, kind: "resume" }), "STD-A02"), []);
+  assert.ok(only(runMintCheck({ output: CLEAN + "\nShows up early--every day.", source: SRC, kind: "resume" }), "STD-A02").length === 1);
+});

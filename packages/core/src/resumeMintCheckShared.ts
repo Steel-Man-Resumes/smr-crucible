@@ -46,7 +46,15 @@ export interface MintCheckResult {
   passesDeterministic: boolean;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ");
+// Spacing and hyphens are not words: "Self-Employed" on the page and
+// "self employed" in the person's words are the same phrase. Compare with
+// every space and hyphen (and the dash look-alikes) removed.
+const squash = (s: string) => s.toLowerCase().replace(/[\s\-\u2010-\u2015]+/g, "");
+
+/** True when the person's own words carry this phrase, ignoring spacing and hyphens. */
+function saidBy(src: string, phrase: string): boolean {
+  return squash(src).includes(squash(phrase));
+}
 
 function linesOf(text: string): string[] {
   return text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -125,13 +133,12 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
 const CHARACTER_RE = /\b(dependable|reliable|hard[- ]?working|trustworthy|punctual|consistent|fast[- ]paced|high[- ]volume|busy|peak)\b/gi;
 
 function checkCharacter(out: string, src: string, f: MintFinding[]) {
-  const s = norm(src);
   const seen = new Set<string>();
   for (const m of out.match(CHARACTER_RE) ?? []) {
-    const w = m.toLowerCase().replace(/[- ]/g, "");
+    const w = squash(m);
     if (seen.has(w)) continue;
     seen.add(w);
-    if (s.replace(/[- ]/g, "").includes(w)) continue;
+    if (saidBy(src, m)) continue;
     f.push({
       rule: "STD-T07",
       severity: "FIX",
@@ -144,10 +151,16 @@ function checkCharacter(out: string, src: string, f: MintFinding[]) {
 // ---- STD-C05: no euphemism a record will contradict ----------------------
 const EUPHEMISM_RE = /\b(contract (?:ended|completed|concluded)|personal (?:growth|development) period|sabbatical|career break|self[- ]employ\w*|freelanc\w*|independent contractor|family (?:responsibilities|matters)|personal (?:reasons|circumstances|matters)|time away)\b/gi;
 
+// "self-employ" and "freelanc" are word families in the rule itself: the
+// person's "self employed" covers the page's "Self-Employment".
+const familyStem = (m: string) => {
+  const s = squash(m);
+  return /^selfemploy/.test(s) ? "selfemploy" : /^freelanc/.test(s) ? "freelanc" : s;
+};
+
 function checkEuphemisms(out: string, src: string, f: MintFinding[]) {
-  const s = norm(src);
   for (const m of out.match(EUPHEMISM_RE) ?? []) {
-    if (s.includes(m.toLowerCase())) continue;
+    if (squash(src).includes(familyStem(m))) continue;
     f.push({
       rule: "STD-C05",
       severity: "BLOCK",
@@ -161,9 +174,8 @@ function checkEuphemisms(out: string, src: string, f: MintFinding[]) {
 const LEGAL_STATUS_RE = /\b(fully resolved|completed (?:all )?(?:probation|parole|supervision)|expunged|sealed|pardoned|record (?:is )?(?:clean|cleared))\b/gi;
 
 function checkLegalStatus(out: string, src: string, f: MintFinding[]) {
-  const s = norm(src);
   for (const m of out.match(LEGAL_STATUS_RE) ?? []) {
-    if (s.includes(m.toLowerCase())) continue;
+    if (saidBy(src, m)) continue;
     f.push({
       rule: "STD-C07",
       severity: "BLOCK",
@@ -207,6 +219,34 @@ function checkToolMarks(out: string, f: MintFinding[]) {
 // ---- STD-F01 / STD-F02: dated entries under experience -------------------
 const SECTION_RE = /^(?:professional experience|work experience|experience|employment(?: history)?|work history)$/i;
 const NEXT_SECTION_RE = /^[A-Z][A-Z &/]{3,}$/;
+// Standard resume headings in any case ("Work Experience", "Education:"), so a
+// Title Case page ends a section where an ALL CAPS page would.
+const KNOWN_HEADING_RE = /^(?:(?:professional |work |relevant |volunteer )?experience|employment(?: history)?|work history|education(?: (?:and|&) training)?|training|certifications?(?: (?:and|&) licenses?)?|licenses?(?: (?:and|&) certifications?)?|volunteer(?: work)?|projects|awards|references|(?:career |professional )?summary|profile|objective|(?:core |key )?(?:skills|competencies)|languages|additional information):?$/i;
+
+const isSectionEnd = (l: string) => (NEXT_SECTION_RE.test(l) && !l.includes("|")) || KNOWN_HEADING_RE.test(l);
+const isBullet = (l: string) => /^[-•*]/.test(l);
+const hasYear = (l: string) => new RegExp(YEAR_RE.source).test(l);
+
+// A line that only carries dates, or a place and dates: "2019 - 2023",
+// "Jan 2019 to Present", "Chicago, IL | 2019 - 2023". Some layouts put a job's
+// dates on the line under its title.
+const DATE_PART_RE = /^(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}(?:\s*(?:-|\u2013|\u2014|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))?$/i;
+const PLACE_PART_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
+function isDateLine(l: string): boolean {
+  if (isBullet(l) || !hasYear(l)) return false;
+  if (!l.includes("|")) return true;
+  const parts = l.split("|").map((p) => p.trim()).filter(Boolean);
+  return parts.some((p) => DATE_PART_RE.test(p)) && parts.every((p) => DATE_PART_RE.test(p) || PLACE_PART_RE.test(p));
+}
+
+// An entry header names a title or employer before its first "|". Lines that
+// only use "|" to separate other things are not job entries: a page footer
+// ("555-555-0100 | Page 2") or a scope line ("Reports: 12 Direct | Budget $4M").
+function isEntryHeader(l: string): boolean {
+  if (isBullet(l) || !l.includes("|")) return false;
+  const first = l.split("|")[0].trim();
+  return /[A-Za-z]{2,}/.test(first) && !first.includes(":");
+}
 
 function checkExperienceDates(out: string, f: MintFinding[]) {
   const ls = linesOf(out);
@@ -214,10 +254,11 @@ function checkExperienceDates(out: string, f: MintFinding[]) {
   if (start < 0) return;
   for (let i = start + 1; i < ls.length; i++) {
     const l = ls[i];
-    if (NEXT_SECTION_RE.test(l) && !l.includes("|")) break;
+    if (isSectionEnd(l)) break;
     // An entry header: "TITLE | Company | ..." (bullets start with a dash or dot).
-    if (/^[-•*]/.test(l) || !l.includes("|")) continue;
-    if (!new RegExp(YEAR_RE.source).test(l)) {
+    if (!isEntryHeader(l)) continue;
+    const next = ls[i + 1] ?? "";
+    if (!hasYear(l) && !(isDateLine(next) && !isSectionEnd(next))) {
       f.push({ rule: "STD-F01", severity: "BLOCK", line: l, why: "This job has no dates. Employers expect dates, and a job without them reads as hiding something." });
     }
     const parts = l.split("|").map((p) => p.trim());
@@ -228,11 +269,27 @@ function checkExperienceDates(out: string, f: MintFinding[]) {
 }
 
 // ---- STD-A02: no dash punctuation -----------------------------------------
+// As the standard writes it: no em dash, no en dash, no "--". An en dash in a
+// date range is still flagged: a plain hyphen ("2019 - 2023") reads the same
+// and carries no machine look. A run of three or more hyphens (a divider line)
+// is not a dash in a sentence and is left alone.
+const DASH_PUNCT_RE = /[\u2014\u2013]|(?<!-)--(?!-)/;
+// An en dash between a date and a date (or "Present").
+const EN_DASH_RANGE_RE = /(\d)\s*\u2013\s*(?=\d|[A-Za-z]{3,9}\.?\s+\d|present\b|current\b|now\b)/gi;
+
 function checkDashes(out: string, f: MintFinding[]) {
   for (const l of linesOf(out)) {
-    if (/\u2014|\s--\s|\w--\w/.test(l)) {
-      f.push({ rule: "STD-A02", severity: "FIX", line: l, why: "A long dash used as punctuation reads as machine-written. Use a period or a comma." });
-    }
+    if (!DASH_PUNCT_RE.test(l)) continue;
+    // Only date ranges carry the dash: the fix is a plain hyphen, not a period.
+    const rangeOnly = !DASH_PUNCT_RE.test(l.replace(EN_DASH_RANGE_RE, "$1-"));
+    f.push({
+      rule: "STD-A02",
+      severity: "FIX",
+      line: l,
+      why: rangeOnly
+        ? "A long dash in a date range reads as machine-written. Use a plain hyphen: 2019 - 2023."
+        : "A long dash used as punctuation reads as machine-written. Use a period or a comma.",
+    });
   }
 }
 
@@ -253,7 +310,7 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
   const srcWords = new Set((src.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length > 2).map(head));
   for (let i = start + 1; i < ls.length; i++) {
     const l = ls[i];
-    if (NEXT_SECTION_RE.test(l) && !l.includes("|")) break;
+    if (isSectionEnd(l)) break;
     for (const term of l.split("|").map((t) => t.trim()).filter(Boolean)) {
       const words = (term.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !STOP.has(w) && w.length > 2);
       if (!words.length) continue;
