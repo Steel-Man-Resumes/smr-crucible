@@ -42,10 +42,28 @@ export function dropEmpty<T extends Record<string, unknown>>(obj: T | undefined 
 }
 
 /**
+ * Drop only what was not sent: undefined and null. An explicit empty value
+ * ("", [], {}) is kept, because it is the person's own answer.
+ */
+export function dropAbsent<T extends Record<string, unknown>>(obj: T | undefined | null): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    if (v !== undefined && v !== null) out[k] = v;
+  }
+  return out as Partial<T>;
+}
+
+/**
  * The consumer_profile upsert.
  *
- * Rule for every column: an empty or missing incoming value never overwrites
- * what the account already holds, and a real new value does update it.
+ * Rule: a missing incoming value never overwrites what the account already
+ * holds, and a real new value does update it.
+ * One exception, by the person's choice (privacy first): the record-related
+ * answers (criminalRecord, challenges, challengeNarratives, goals). Absent keeps
+ * the saved value, but an explicitly emptied one in a Forge run CLEARS it, so a
+ * person can take back what they told us.
+ * For everything else (resume text, preferences, narrative text, skills, career
+ * paths) an empty value is read as "nothing sent" and never wipes.
  *  - object columns (profile_data, narrative_data, preferences) are MERGED key
  *    by key. Incoming keys are already stripped of empties (dropEmpty), so a
  *    key not sent, or sent empty, keeps its saved value. Keys other writers
@@ -80,22 +98,19 @@ export function profileUpsertParams(userId: string, data: ForgeSessionSaveData):
   return [
     userId,
     data.readinessStage || null,
-    JSON.stringify(
-      dropEmpty({
-        resumeText: data.resumeText,
-        resumeMethod: data.resumeMethod,
+    JSON.stringify({
+      ...dropEmpty({ resumeText: data.resumeText, resumeMethod: data.resumeMethod }),
+      // Record-related: explicit empty clears, absent keeps.
+      ...dropAbsent({
         challenges: data.challenges,
         criminalRecord: data.criminalRecord,
         challengeNarratives: data.challengeNarratives,
-      })
-    ),
-    JSON.stringify(
-      dropEmpty({
-        goals: data.goals,
-        goalNarrative: data.goalNarrative,
-        narrative: data.forgeOutput?.narrative,
-      })
-    ),
+      }),
+    }),
+    JSON.stringify({
+      ...dropEmpty({ goalNarrative: data.goalNarrative, narrative: data.forgeOutput?.narrative }),
+      ...dropAbsent({ goals: data.goals }),
+    }),
     JSON.stringify(dropEmpty(data.preferences)),
     JSON.stringify(Array.isArray(forgeSkills) ? forgeSkills : []),
     JSON.stringify(Array.isArray(forgePaths) ? forgePaths : []),

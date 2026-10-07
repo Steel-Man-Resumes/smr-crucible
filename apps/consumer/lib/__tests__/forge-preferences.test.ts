@@ -80,7 +80,8 @@ test("what is written is always in option order, so a saved run reads the same e
 });
 
 test("old commute ids become a way and a distance", () => {
-  assert.equal(migratePreferences({ commute: "walk" }).commute, "walk, within-15");
+  // "walk" is a current id too: it must never gain a distance the person did not pick
+  assert.equal(migratePreferences({ commute: "walk" }).commute, "walk");
   assert.equal(migratePreferences({ commute: "bus" }).commute, "bus");
   assert.equal(migratePreferences({ commute: "drive-short" }).commute, "drive, within-30");
   assert.equal(migratePreferences({ commute: "drive-long" }).commute, "drive, further");
@@ -90,6 +91,7 @@ test("old commute ids become a way and a distance", () => {
 
 test("several old commute picks keep every way and the farthest distance", () => {
   assert.equal(migratePreferences({ commute: "walk, drive-long" }).commute, "walk, drive, further");
+  assert.equal(migratePreferences({ commute: "walk, bus" }).commute, "walk, bus");
   assert.equal(migratePreferences({ commute: "bus, drive-short" }).commute, "bus, drive, within-30");
 });
 
@@ -180,4 +182,14 @@ test("something that is not a run comes back empty", () => {
     assert.deepEqual(session, {});
     assert.equal(migrated, false);
   }
+});
+
+test("a current-version answer that picked Walk and skipped distance stays exactly that, however often it is migrated", () => {
+  let prefs: Record<string, string> = { commute: "walk" };
+  for (let i = 0; i < 3; i++) prefs = migratePreferences(prefs);
+  assert.equal(prefs.commute, "walk");
+  assert.equal(readCommute(prefs.commute).distance, null);
+  // an unstamped run holding current ids (written by something that does not stamp) is not changed either
+  const { session } = migrateStoredSession({ _savedAt: 1, preferences: { commute: "walk, bus", environment: "public", schedule: "days" } });
+  assert.deepEqual(session.preferences, { commute: "walk, bus", environment: "public", schedule: "days" });
 });

@@ -47,23 +47,49 @@ function ChoiceChips({
   selected,
   onToggle,
   disabled,
+  single,
 }: {
   label: string;
   options: PrefOption[];
   selected: string[];
   onToggle: (id: string) => void;
   disabled?: boolean;
+  /** One pick at most: a radio group (arrow keys move the pick; tap the pick again to clear it). */
+  single?: boolean;
 }) {
+  // Radio group keyboard behavior: one tab stop (the pick, or the first chip
+  // when nothing is picked), arrow keys move and select.
+  const focusable = single
+    ? (options.find((o) => selected.includes(o.id)) ?? options[0]).id
+    : null;
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!single || disabled) return;
+    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const current = options.findIndex((o) => o.id === (document.activeElement as HTMLElement | null)?.dataset.id);
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1;
+    const next = options[(Math.max(current, 0) + step + options.length) % options.length];
+    if (!selected.includes(next.id)) onToggle(next.id);
+    (e.currentTarget.querySelector(`[data-id="${next.id}"]`) as HTMLElement | null)?.focus();
+  }
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+    <div
+      className="flex flex-wrap gap-2"
+      role={single ? "radiogroup" : "group"}
+      aria-label={label}
+      onKeyDown={onKeyDown}
+    >
       {options.map((o) => {
         const on = selected.includes(o.id);
         return (
           <button
             key={o.id}
             type="button"
-            role="checkbox"
+            role={single ? "radio" : "checkbox"}
             aria-checked={on}
+            data-id={o.id}
+            tabIndex={single ? (o.id === focusable ? 0 : -1) : undefined}
             disabled={disabled}
             onClick={() => onToggle(o.id)}
             className={`t-focus min-h-touch rounded-[6px] border px-4 py-2 text-left text-base transition-all ${
@@ -122,9 +148,11 @@ export default function PreferencesPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every answer is stored as a comma-joined list of ids (lib/forge-preferences.ts).
-  // Demo sample answers and any run saved before the current choices go through
-  // the same migration the stored session does, so old ids still show as picked.
-  const prefs = migratePreferences(isDemo ? DEMO_SESSION.preferences || {} : session.preferences || {});
+  // A saved run was already migrated when it loaded (forge-context), so it is
+  // read as it is. Only the demo sample, which still holds old ids, is migrated here.
+  const prefs: Record<string, string> = isDemo
+    ? migratePreferences(DEMO_SESSION.preferences || {})
+    : session.preferences || {};
   const initialSchedule = readSchedule(prefs.schedule);
   const initialCommute = readCommute(prefs.commute);
   const [hours, setHours] = useState<string[]>(initialSchedule.hours);
@@ -252,6 +280,7 @@ export default function PreferencesPage() {
               </p>
               <ChoiceChips
                 label="One-way travel time"
+                single
                 options={DISTANCE_OPTIONS}
                 selected={distance ? [distance] : []}
                 disabled={isDemo}
