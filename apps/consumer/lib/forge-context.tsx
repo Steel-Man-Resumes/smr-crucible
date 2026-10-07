@@ -126,7 +126,8 @@ export function isForgeSessionExpired(
   return now - savedAt > FORGE_SESSION_MAX_IDLE_MS;
 }
 
-function loadSession(): ForgeSessionData {
+/** Read the stored run, migrating and expiring it. Exported for tests. */
+export function loadSession(): ForgeSessionData {
   if (typeof window === "undefined") return {};
   try {
     const stored = localStorage.getItem("forge_session");

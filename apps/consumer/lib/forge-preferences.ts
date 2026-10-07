@@ -163,9 +163,17 @@ export function writeCommute(modes: string[], distance: string | null): string {
 
 const LEGACY_ENVIRONMENT: Record<string, string> = { people: "public" };
 
-/** v1 commute ids to the modes and distance they stood for. "short-drive" is the old demo spelling. */
+/**
+ * v1 commute ids to the modes and distance they stood for. "short-drive" is the
+ * old demo spelling.
+ *
+ * A distance is inferred ONLY from an id that exists in v1 alone (the drive
+ * ones). "walk" and "bus" are current ids too, so a run that already holds them
+ * cannot be told apart from an old one: they map to themselves and never gain a
+ * distance the person did not pick.
+ */
 const LEGACY_COMMUTE: Record<string, { mode: string; distance?: string }> = {
-  walk: { mode: "walk", distance: "within-15" },
+  walk: { mode: "walk" },
   bus: { mode: "bus" },
   "drive-short": { mode: "drive", distance: "within-30" },
   "short-drive": { mode: "drive", distance: "within-30" },

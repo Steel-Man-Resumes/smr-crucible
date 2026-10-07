@@ -2,13 +2,18 @@
  * Forge-to-account sync: an empty or missing incoming value must never erase
  * what the account already holds, and a real new value must still update it.
  *
- * The SQL itself is run against a real Postgres in the lane report (no database
- * in this suite); here the parameter builder is tested directly and the SQL is
- * checked for the properties that carry the rule.
+ * No database runs in this suite. The parameter builder is tested directly, and
+ * the SQL text is checked for the properties that carry the rule (merge for the
+ * object columns, NULLIF/COALESCE for the arrays). That is a pattern check, not
+ * an execution of the SQL.
+ *
+ * Exception by the person's choice: record-related answers (criminalRecord,
+ * challenges, challengeNarratives, goals). An explicit empty clears the saved
+ * value; an absent one keeps it.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dropEmpty, profileUpsertParams, PROFILE_UPSERT_SQL } from "../forgeSession";
+import { dropAbsent, dropEmpty, profileUpsertParams, PROFILE_UPSERT_SQL } from "../forgeSession";
 
 // Positions of the parameters in PROFILE_UPSERT_SQL.
 const PROFILE = 2, NARRATIVE = 3, PREFS = 4, SKILLS = 5, PATHS = 6;
@@ -22,13 +27,10 @@ test("dropEmpty removes undefined, null, blanks, empty arrays and empty objects,
   assert.deepEqual(dropEmpty(undefined), {});
 });
 
-test("existing data + empty sync = kept: nothing empty reaches the columns", () => {
+test("empty sync = kept for text, preferences, skills and career paths", () => {
   const p = profileUpsertParams("u1", {
     resumeText: "",
-    challenges: [],
-    criminalRecord: {},
     preferences: { schedule: "", environment: "", commute: "", location: "" },
-    goals: [],
     goalNarrative: "",
     forgeOutput: undefined,
   });
@@ -42,6 +44,42 @@ test("existing data + empty sync = kept: nothing empty reaches the columns", () 
   // a forge output whose narrative is null must not write {"narrative": null}
   const q = profileUpsertParams("u1", { forgeOutput: { narrative: null, skills: [], career_paths: [] } });
   assert.deepEqual(parse(q[NARRATIVE]), {});
+});
+
+test("record-related answers: ABSENT keys are kept (nothing is sent for them)", () => {
+  // The Mini Forge import and any sync that never asked sends these as undefined or null.
+  const p = profileUpsertParams("u1", {
+    challenges: undefined,
+    criminalRecord: undefined,
+    challengeNarratives: undefined,
+    goals: undefined,
+  });
+  assert.deepEqual(parse(p[PROFILE]), {});
+  assert.deepEqual(parse(p[NARRATIVE]), {});
+  const n = profileUpsertParams("u1", {
+    challenges: null as unknown as string[],
+    criminalRecord: null as unknown as Record<string, unknown>,
+    goals: null as unknown as string[],
+  });
+  assert.deepEqual(parse(n[PROFILE]), {});
+  assert.deepEqual(parse(n[NARRATIVE]), {});
+});
+
+test("record-related answers: an EXPLICIT empty clears the saved value", () => {
+  const p = profileUpsertParams("u1", {
+    challenges: [],
+    criminalRecord: {},
+    challengeNarratives: {},
+    goals: [],
+  });
+  assert.deepEqual(parse(p[PROFILE]), { challenges: [], criminalRecord: {}, challengeNarratives: {} });
+  assert.deepEqual(parse(p[NARRATIVE]), { goals: [] });
+  // and the merge writes those keys over the saved ones
+  assert.match(PROFILE_UPSERT_SQL, /profile_data = COALESCE\(consumer_profile\.profile_data, '\{\}'::jsonb\) \|\| EXCLUDED\.profile_data/);
+});
+
+test("dropAbsent keeps explicit empties and drops only undefined and null", () => {
+  assert.deepEqual(dropAbsent({ a: undefined, b: null, c: [], d: "", e: {}, f: 0 }), { c: [], d: "", e: {}, f: 0 });
 });
 
 test("existing data + new values = updated: real values are sent through", () => {
