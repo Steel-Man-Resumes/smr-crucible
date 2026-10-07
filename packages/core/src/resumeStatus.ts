@@ -12,6 +12,12 @@
  *                  notes). Never an AI-written summary.
  * - defendAnswers: what the person said in the defend step. An answer that
  *                  stands counts as the person's own words for the check.
+ * - secondCheckFindings (optional): what a model from a different family
+ *                  flagged when it read the page against the person's words.
+ *                  Validated again here (a finding must point at a line on
+ *                  this page, and its shown text may not add a fact), then
+ *                  merged as open items. Absent: the mint check alone, exactly
+ *                  as before.
  *
  * The defend step (pickDefendLines) asks about at least two lines plus every
  * number and every credential. Until each of those has an answer that stands,
@@ -36,6 +42,11 @@ import {
   type MintFinding,
   type MintSeverity,
 } from "./resumeMintCheckShared";
+import {
+  SECOND_CHECK_RULE,
+  validateSecondCheckFindings,
+  type SecondCheckFinding,
+} from "./secondCheckShared";
 
 export type ResumeState = "finished" | "draft";
 
@@ -49,6 +60,8 @@ export interface OpenItem {
   question: string;
   /** Why it is open, in plain words. */
   why: string;
+  /** Set only on items raised by the second check. Mint and defend items leave it out. */
+  from?: "second_check";
 }
 
 export interface DefendAnswer {
@@ -83,6 +96,11 @@ export interface ResumeStatusInput {
   defendAnswers?: DefendAnswer[];
   /** Default true False only for surfaces with no defend step yet. */
   requireDefend?: boolean;
+  /**
+   * Findings from the second check (a different model family), when it ran.
+   * Leave out when it did not run: the status is then the mint check alone.
+   */
+  secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
 }
 
 export interface ResumeStatus {
@@ -362,6 +380,29 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
                 ? "Your answer doesn't explain this line yet, or it says something different from the line. Reword the line in your own words, or take it off."
                 : "You haven't explained this line in your own words yet. Every number, every credential and the lines furthest from your words get explained before the page is finished.";
         push("STD-C04", "BLOCK", d.line, why, a?.verdict === "cut" ? "OK to take this line off now?" : d.question);
+      }
+    }
+
+    // The second check feeds the same open items. A line already held under
+    // the same rule at the same or a higher severity is not asked twice; a
+    // BLOCK from the second check still lands on a line the mint check only
+    // marked FIX. Its findings are settled by changing the line (a finding on
+    // a line no longer on the page is dropped) or by a fresh second check that
+    // reads the person's answer.
+    if (input.secondCheckFindings) {
+      const { findings: second } = validateSecondCheckFindings(input.secondCheckFindings, resumeText);
+      const held = new Map<string, MintSeverity>();
+      for (const i of items) {
+        const k = `${squash(i.line)}|${i.rule}`;
+        if (held.get(k) !== "BLOCK") held.set(k, i.severity);
+      }
+      for (const f of second) {
+        const rule = SECOND_CHECK_RULE[f.kind];
+        const key = `${squash(f.line)}|${rule}`;
+        const prior = held.get(key);
+        if (prior === "BLOCK" || (prior === "FIX" && f.severity === "FIX")) continue;
+        held.set(key, f.severity);
+        items.push({ rule, severity: f.severity, line: f.line, why: f.reason, question: f.question, from: "second_check" });
       }
     }
   }
