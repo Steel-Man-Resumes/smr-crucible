@@ -6,6 +6,10 @@
  *
  *  - the kind comes from the magic bytes (%PDF, a zip, an image signature,
  *    plain text); a file that is none of these is refused;
+ *  - (The extractor itself now checks every PDF and Word file, for the Forge
+ *    upload too, and rebuilds Word files before mammoth: lib/upload-safety.ts.
+ *    The zip check below is kept for the checker's own tests and walks the
+ *    directory the same strict way.)
  *  - a Word file (a zip) is checked from its central directory: no more than
  *    CHECK_ZIP_MAX_UNCOMPRESSED in all, no entry compressed more than
  *    CHECK_ZIP_MAX_RATIO to 1, no zip64, no encryption, deflate or stored only.
@@ -88,11 +92,19 @@ export function assertSmallZip(b: Buffer): string[] {
   if (entries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) throw big(); // zip64
   if (entries > CHECK_ZIP_MAX_ENTRIES) throw big();
   if (cdOffset + cdSize > b.length) throw bad("That file is not a complete Word file.");
+  // Round 2: the directory must end exactly at the end record (no gap that
+  // shifts another reader's offsets), and is walked to that end, never by the
+  // record's own count, which another reader ignores.
+  if (cdOffset + cdSize !== eocd) throw bad("That file is not a complete Word file.");
 
   const names: string[] = [];
+  const seen = new Set<string>();
   let total = 0;
   let p = cdOffset;
-  for (let i = 0; i < entries; i++) {
+  let walked = 0;
+  while (p < cdOffset + cdSize) {
+    walked++;
+    if (walked > CHECK_ZIP_MAX_ENTRIES) throw big();
     if (p + 46 > b.length || b.readUInt32LE(p) !== 0x02014b50) throw bad("That file is not a complete Word file.");
     const flags = b.readUInt16LE(p + 8);
     const method = b.readUInt16LE(p + 10);
@@ -126,9 +138,12 @@ export function assertSmallZip(b: Buffer): string[] {
       }
     }
     if (out.length !== usize) throw big();
+    if (seen.has(name.toLowerCase())) throw bad("That file has two parts with the same name.");
+    seen.add(name.toLowerCase());
     names.push(name);
     p += 46 + nlen + elen + clen;
   }
+  if (p !== cdOffset + cdSize || walked !== entries) throw bad("That file is not a complete Word file.");
   return names;
 }
 

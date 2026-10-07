@@ -18,7 +18,7 @@
 
 import { NextResponse } from "next/server";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { extractTextForCheck } from "@/lib/text-extraction";
+import { ReadAbortedError, extractTextForCheck } from "@/lib/text-extraction";
 import { CheckFileRefused, withinBudget } from "@/lib/check-file-guard";
 
 export const maxDuration = 60;
@@ -70,7 +70,9 @@ async function handlePost(request: Request): Promise<Response> {
         err.reason === "unknown_kind" || err.reason === "bad_zip" ? 415 : err.reason === "too_many_pages" ? 422 : 413;
       return NextResponse.json({ error: err.message }, { status });
     }
-    if (err instanceof Error && err.message === "check time budget") {
+    // The worker ran out of time or memory and was stopped (lib/extract-worker.ts),
+    // or the whole read passed the route's budget.
+    if (err instanceof ReadAbortedError || (err instanceof Error && err.message === "check time budget")) {
       return NextResponse.json(
         { error: "That file took too long to read. Try a PDF or Word file, or paste the text." },
         { status: 422 }
