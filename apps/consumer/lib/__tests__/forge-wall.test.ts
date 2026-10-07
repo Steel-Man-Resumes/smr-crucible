@@ -300,7 +300,7 @@ describe("limits: per account when signed in, per IP as the floor", () => {
       assert.match(src, /mode: "forge"/, r);
       assert.doesNotMatch(src, /mode: "ip"/, r);
     }
-    assert.match(read("app/api/org-listing/route.ts"), /withRateLimit\(handlePost, \{ mode: "ip", endpoint: "org-listing" \}\)/);
-    assert.match(read("lib/withRateLimit.ts"), /`signed-in:\$\{opts\.endpoint\}`/);
+    assert.match(read("app/api/org-listing/route.ts"), /withRateLimit\(handlePost, \{ mode: "ip", endpoint: "org-listing", poolable: false \}\)/);
+    assert.match(read("lib/forge-rate-limit.ts"), /`signed-in:\$\{input\.endpoint\}`/);
   });
 });

@@ -25,7 +25,7 @@ import {
 import type { UserTier } from "@crucible/core";
 import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
 import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
-import { overLimit, planForgeLimit } from "./forge-rate-limit";
+import { codeSeats, decideSignedInCall, planForgeLimit } from "./forge-rate-limit";
 import {
   LIVE_TEST_BUCKET,
   LIVE_TEST_DAILY_LIMIT,
@@ -51,6 +51,12 @@ interface RateLimitOptions {
   endpoint: string;
   /** Minimum tier required to access this endpoint. */
   requiredTier?: UserTier;
+  /**
+   * ip mode: false keeps the fixed per-IP limit even for a request carrying a
+   * valid access code (no cohort pool). For public forms that email a person,
+   * where a pool would lift the cap by the code's seats (review 3a r1, L7).
+   */
+  poolable?: boolean;
 }
 
 const RATE_LIMIT_MESSAGE =
@@ -149,11 +155,37 @@ export function withRateLimit(
         );
       }
       if (plan.kind === "account") {
-        // The floor first: it is the one a farm of accounts on one machine hits.
-        // Its own counter, so signed-in use never spends the signed-out
-        // allowance of the same network (the free checker, for one).
-        const ipCount = await incrementIpUsage(getClientIp(request), `signed-in:${opts.endpoint}`);
-        if (overLimit(ipCount, plan.ipCeiling)) {
+        // The account first, then the code's seat pool or the network ceiling
+        // (lib/forge-rate-limit.ts, decideSignedInCall).
+        const authedCode = getAccessCodeCookie(request);
+        let code: { code: string; seats: number } | null = null;
+        if (authedCode) {
+          try {
+            const v = await validateAccessCode(authedCode);
+            if (v.valid && v.accessCode) {
+              code = { code: v.accessCode.code, seats: codeSeats(v.accessCode.max_redemptions) };
+            }
+          } catch {
+            code = null; // validation hiccup: the network ceiling applies
+          }
+        }
+        const verdict = await decideSignedInCall(
+          { plan, endpoint: opts.endpoint, perPerson, ip: getClientIp(request), code },
+          { account: incrementUserUsage, bucket: incrementIpUsage }
+        );
+        if (verdict === "account") {
+          return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+        }
+        if (verdict === "code") {
+          return NextResponse.json(
+            {
+              error:
+                "Your organization's group has used today's shared calls for this tool. Try again tomorrow, or ask your coordinator to raise the code's limit.",
+            },
+            { status: 429 }
+          );
+        }
+        if (verdict === "network") {
           return NextResponse.json(
             {
               error:
@@ -162,11 +194,6 @@ export function withRateLimit(
             { status: 429 }
           );
         }
-        const count = await incrementUserUsage(plan.userId, opts.endpoint);
-        if (overLimit(count, plan.perAccount)) {
-          return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
-        }
-        const authedCode = getAccessCodeCookie(request);
         if (authedCode) {
           void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
           void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
@@ -198,14 +225,14 @@ export function withRateLimit(
     // bucket to a per-code pool sized by its seats. The code is org-shared by
     // design, so the pool is shared and bounded -- a leaked code grants a
     // bounded pool, never unlimited calls.
-    const code = getAccessCodeCookie(request);
+    const code = opts.poolable === false ? null : getAccessCodeCookie(request);
     if (code) {
       try {
         const v = await validateAccessCode(code);
         if (v.valid && v.accessCode) {
           const baseLimit = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
           // Pool = per-person limit x seats (default 10 seats, capped at 50).
-          const seats = Math.min(Math.max(v.accessCode.max_redemptions ?? 10, 1), 50);
+          const seats = codeSeats(v.accessCode.max_redemptions);
           const codeLimit = baseLimit * seats;
           const codeCount = await incrementIpUsage(`code:${v.accessCode.code}`, opts.endpoint);
           if (codeCount > codeLimit) {
