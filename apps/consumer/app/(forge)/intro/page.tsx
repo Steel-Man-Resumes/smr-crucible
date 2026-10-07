@@ -16,6 +16,12 @@
  *
  * Every path that goes through handleSelect sets the audience that ForgeShell
  * passes to t.ROY, and stores it for pre-auth t.ROY access.
+ *
+ * Sign-in (lib/forge-access.ts): once the wall is up, the one clear start goes
+ * through sign-in and comes back to /welcome. The old triage choice is not a
+ * gate any more: the job seeker's start is the only button, the partner and
+ * observer pages stay as plain "Other ways in", and the free checker is one
+ * link for anyone who wants to look before signing in.
  */
 
 import { useRef, useState } from "react";
@@ -25,6 +31,7 @@ import { ArrowRight, ChevronDown } from "lucide-react";
 import { TroyLivingIcon } from "@crucible/consumer-ui";
 import { useForgeSession } from "@/lib/forge-context";
 import { CLIENT_PATH, OTHER_PATHS, sessionForPath, type PathOption } from "@/lib/forge-front-door";
+import { useForgeWall } from "@/components/forge/useForgeWall";
 
 const WALKTHROUGH = [
   {
@@ -43,17 +50,25 @@ const WALKTHROUGH = [
 
 export default function IntroPage() {
   const router = useRouter();
-  const { updateSession, clearSession } = useForgeSession();
+  const { session, updateSession, clearSession } = useForgeSession();
+  const wall = useForgeWall();
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const tourRef = useRef<HTMLElement>(null);
 
   function handleSelect(path: PathOption) {
-    // Clear any previous session data. Fresh start every time.
-    clearSession();
-
-    updateSession(sessionForPath(path));
+    // A real run already under way is kept for the job seeker's start: the
+    // welcome screen offers "Start over" (nothing in progress is lost on the
+    // way through sign-in). Every other choice starts fresh, as before.
+    const keepRun =
+      path.id === "client" && !session.isDemo && !!session.readinessStage && !!session.startedAt;
+    if (keepRun) {
+      updateSession({ audience: "client" });
+    } else {
+      clearSession();
+      updateSession(sessionForPath(path));
+    }
 
     // Persist audience for pre-auth t.ROY access
     try {
@@ -62,6 +77,12 @@ export default function IntroPage() {
       // localStorage may be unavailable
     }
 
+    // Past the wall, the Forge screens send a signed-out visitor to sign-in
+    // and back. A full page load lets the server do that redirect cleanly.
+    if (wall === "up" && path.id === "client") {
+      window.location.assign(path.route);
+      return;
+    }
     router.push(path.route);
   }
 
@@ -101,8 +122,12 @@ export default function IntroPage() {
               I&apos;m an AI, and I do one job: your career. I&apos;ll help you
               build a resume that tells the truth and holds up.
             </p>
-            <p className="mt-3 text-base leading-relaxed text-t-bone-dim">
-              It&apos;s free. No account. Your work stays in this browser unless you save or send it.
+            <p className="mt-3 min-h-[3rem] text-base leading-relaxed text-t-bone-dim" data-testid="intro-account-line">
+              {wall === "up"
+                ? "It's free. You sign in first, so your work is saved to your account."
+                : wall
+                  ? "It's free. No account. Your work stays in this browser unless you save or send it."
+                  : null}
             </p>
           </div>
         </div>
@@ -123,6 +148,18 @@ export default function IntroPage() {
             className="flex-none transition-transform group-hover:translate-x-1"
           />
         </button>
+
+        {/* The free checker: no sign-in, for anyone who wants to look first */}
+        <p className="mt-4 text-sm leading-relaxed text-t-bone-dim">
+          Already have a resume?{" "}
+          <Link
+            href="/check"
+            className="t-focus font-medium text-t-white underline decoration-t-line-strong underline-offset-4 transition-colors hover:text-t-amber-bright"
+          >
+            Check it free
+          </Link>
+          . No sign-in, and we don&apos;t save it.
+        </p>
 
         {/* Optional walkthrough: offered, easy to skip */}
         <div className="mt-6">

@@ -112,6 +112,17 @@ export interface ForgeSessionData {
   startedAt?: string;
   lastPageVisited?: string;
   consentGranted?: boolean;
+
+  // Account marks (lib/forge-import.ts and the Refinery's sync). Set only
+  // after a save to the account succeeded, or when the run is claimed.
+  /** The account this run was saved to (or claimed by). */
+  _ownerUserId?: string;
+  /** How far the run had come at its last save (lib/forge-import.ts runLevel). */
+  _syncedLevel?: number;
+  /** The email this browser created an account with while carrying this run. */
+  _registeredAs?: string;
+  _synced?: boolean;
+  _syncedAt?: string;
 }
 
 interface ForgeContextValue {

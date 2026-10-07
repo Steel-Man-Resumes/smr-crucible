@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 import { CoBrandLockup, ProductBrand, SteelManBrand } from "@/components/brand/BrandMarks";
+import { forgeWallState } from "@/lib/forge-access";
+
+// The Forge card's wording follows the sign-in wall (lib/forge-access.ts),
+// which turns on by date: re-render hourly so the page changes with it.
+export const revalidate = 3600;
 
 const PRODUCTS = [
   {
@@ -26,6 +31,16 @@ const PRODUCTS = [
 ];
 
 export default function ProductHome() {
+  const wallUp = forgeWallState() === "up";
+  const products = PRODUCTS.map((p) =>
+    p.id === "forge" && wallUp
+      ? {
+          ...p,
+          eyebrow: "Free, with one sign-in",
+          points: ["Free, always", "One account for both tools", "Private by design"],
+        }
+      : p
+  );
   return (
     <main className="min-h-screen bg-t-bg">
       <header className="border-b border-[#30332e] bg-[#10110f] text-[#ece7d9]">
@@ -51,7 +66,7 @@ export default function ProductHome() {
       </section>
 
       <section className="mx-auto grid max-w-6xl gap-5 px-5 py-8 sm:px-7 lg:grid-cols-2 lg:py-12">
-        {PRODUCTS.map((product) => (
+        {products.map((product) => (
           <article key={product.id} className={`overflow-hidden rounded-[7px] border border-t-line border-t-[4px] bg-white shadow-[0_8px_24px_rgba(22,26,21,0.08)] ${product.accent}`}>
             <div className="p-6 sm:p-8">
               <ProductBrand product={product.id} />

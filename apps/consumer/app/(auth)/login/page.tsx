@@ -19,6 +19,9 @@ import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
+import { safeLoginReturn } from "@/lib/session-policy";
+import { isForgeSignInPage } from "@/lib/forge-access";
+import { useForgeWall } from "@/components/forge/useForgeWall";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -48,6 +51,13 @@ function LoginForm() {
   const forPartner = (searchParams.get("callbackUrl") || "").includes(
     "/dashboard/partner"
   );
+  // Sent here from a Forge screen (the sign-in wall): this page brings them
+  // straight back there, and says so.
+  const forgeReturn = (() => {
+    const back = safeLoginReturn(searchParams.get("callbackUrl"));
+    return isForgeSignInPage(back.split(/[?#]/)[0]) ? back : null;
+  })();
+  const wall = useForgeWall();
 
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   // Seeded from ?as= so an invitation email or a partner page can send someone
@@ -109,7 +119,9 @@ function LoginForm() {
     if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
   }
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  // Checked here as well as by Auth.js: a same-site path only, never another
+  // site, never the login pages or an API route (lib/session-policy.ts).
+  const callbackUrl = safeLoginReturn(searchParams.get("callbackUrl"));
   // Mini Forge sends people here with callbackUrl=/mini-forge/import-complete,
   // the step that loads their tablet plan into the new account. Account
   // creation must honor it (see createCallback below) or the import never runs.
@@ -288,10 +300,27 @@ function LoginForm() {
       }
       // Acquisition attribution only -- no PII, no product detail (GA doctrine).
       trackGA("refinery_signup", { from_forge: !!forge });
+      // The run in this browser went to the new account with the register call.
+      // Mark it, so the Forge saves it to this account on return without asking
+      // "Is this yours?" (lib/forge-import.ts).
+      if (forge) {
+        try {
+          const s = localStorage.getItem("forge_session");
+          const run = s ? JSON.parse(s) : null;
+          if (run && typeof run === "object") {
+            run._registeredAs = email.trim().toLowerCase();
+            localStorage.setItem("forge_session", JSON.stringify(run));
+          }
+        } catch {
+          // storage unavailable: the Forge asks instead
+        }
+      }
       // New accounts with no Forge data go to /intro, not /dashboard
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
         if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
+        // Came from a Forge screen: back to it.
+        if (forgeReturn) return forgeReturn;
         try {
           const s = localStorage.getItem("forge_session");
           const session = s ? JSON.parse(s) : null;
@@ -378,23 +407,33 @@ function LoginForm() {
     <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
       <div className="w-full max-w-md border border-t-line bg-t-panel p-6 shadow-[4px_4px_0_#000] sm:p-8">
         <div className="mb-6">
-          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">/refinery</p>
-          <h1 className="font-display text-2xl font-bold uppercase text-t-white">
-            {mode === "create"
-              ? "Create your Refinery account"
-              : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
-                 "Sign in to The Refinery")}
+          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
+            {forgeReturn ? "/forge" : "/refinery"}
+          </p>
+          <h1 className="font-display text-2xl font-bold uppercase text-t-white" data-testid="login-heading">
+            {forgeReturn
+              ? mode === "create"
+                ? "Make your free account"
+                : "Sign in to keep building"
+              : mode === "create"
+                ? "Create your Refinery account"
+                : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
+                   "Sign in to The Refinery")}
           </h1>
           <p className="mt-2 text-sm text-t-bone-dim">
-            {mode === "create"
-              ? "Save your Forge work and continue with the full toolset."
-              : mode === "magic-link"
-                ? "Sign in with a magic link"
-                : "Continue your career work where you left off."}
+            {forgeReturn
+              ? "It's free. One account for the Forge and the Refinery. You come right back to where you were."
+              : mode === "create"
+                ? "Save your Forge work and continue with the full toolset."
+                : mode === "magic-link"
+                  ? "Sign in with a magic link"
+                  : "Continue your career work where you left off."}
           </p>
         </div>
 
-        <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />
+        {/* Someone coming from a Forge screen is here to build their own
+            resume: the "who are you here as" choice would only slow them down. */}
+        {!forgeReturn && <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />}
 
         <AccountRouteNote route={accountRoute}>
           {accountRoute === "agency" && (
@@ -772,7 +811,7 @@ function LoginForm() {
             <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
               Try The Forge
             </a>
-            . It&apos;s free, and you don&apos;t need an account.
+            {wall === null ? "." : wall === "up" ? ". It's free." : ". It's free, and you don't need an account."}
           </p>
         </div>
       </div>
