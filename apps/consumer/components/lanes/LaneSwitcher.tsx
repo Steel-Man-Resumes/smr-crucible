@@ -59,8 +59,9 @@ export function LaneSwitcher({
 
   return (
     <section data-testid="lane-switcher" aria-label="Career lanes" className="border border-t-line bg-t-panel p-3 sm:p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={selectId} className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <label htmlFor={selectId} className="shrink-0 text-xs font-mono uppercase tracking-wide text-t-phos-dim">
           {label}
         </label>
         <select
@@ -71,7 +72,7 @@ export function LaneSwitcher({
             setPanel(null);
             onChange(e.target.value);
           }}
-          className="t-focus min-h-touch min-w-0 max-w-full flex-1 sm:flex-none bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white focus:border-t-steel focus:outline-none"
+          className="t-focus min-h-touch min-w-0 w-full flex-1 sm:max-w-xs bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white focus:border-t-steel focus:outline-none"
         >
           {includeAll && <option value="all">All lanes</option>}
           {api.lanes.map((l) => (
@@ -81,13 +82,14 @@ export function LaneSwitcher({
           ))}
           <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
         </select>
+        </div>
         <div className="flex gap-2">
           <button
             type="button"
             data-testid="lane-new"
             onClick={() => setPanel(panel === "new" ? null : "new")}
             aria-expanded={panel === "new"}
-            className="t-focus min-h-touch px-3 text-sm font-medium text-t-amber-bright hover:text-t-amber border border-t-line"
+            className="t-focus min-h-touch flex-1 sm:flex-none px-3 text-sm font-medium text-t-amber-bright hover:text-t-amber border border-t-line"
           >
             New lane
           </button>
@@ -97,7 +99,7 @@ export function LaneSwitcher({
               data-testid="lane-settings"
               onClick={() => setPanel(panel === "edit" ? null : "edit")}
               aria-expanded={panel === "edit"}
-              className="t-focus min-h-touch px-3 text-sm font-medium text-t-phos hover:text-t-white border border-t-line"
+              className="t-focus min-h-touch flex-1 sm:flex-none px-3 text-sm font-medium text-t-phos hover:text-t-white border border-t-line"
             >
               Lane settings
             </button>
