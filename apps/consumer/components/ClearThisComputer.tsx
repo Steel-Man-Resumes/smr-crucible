@@ -19,6 +19,9 @@ import { clearThisComputer, useForgeSession } from "@/lib/forge-context";
 
 const LEAVE_TO = "https://steelmanresumes.com";
 
+/** Plain hint beside the control: who it is for. */
+const CLEAR_HINT = "(if you're on a public or shared computer)";
+
 async function clearAndLeave(signedIn: boolean) {
   clearThisComputer();
   if (signedIn) {
@@ -57,7 +60,7 @@ export function ClearThisComputerButton() {
             clearSession();
             await clearAndLeave(status === "authenticated");
           }}
-          className="t-focus inline-flex min-h-touch items-center rounded-[5px] border border-t-red bg-white px-3 py-2 text-sm font-medium text-t-red transition-colors hover:bg-t-red hover:text-white disabled:opacity-60"
+          className="t-focus inline-flex min-h-touch items-center rounded-[5px] border border-t-red bg-transparent px-3 py-2 text-sm font-medium whitespace-nowrap text-t-red transition-colors hover:bg-t-red hover:text-white disabled:opacity-60"
         >
           {busy ? "Clearing..." : "Yes, erase it"}
         </button>
@@ -77,11 +80,18 @@ export function ClearThisComputerButton() {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-t-line bg-white px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"
-      aria-label="Clear this computer: erase your Forge work from this browser"
+      className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-ws-bg/25 bg-transparent px-3 py-1.5 text-left text-sm font-medium text-t-bone-dim transition-colors hover:border-ws-bg/60 hover:text-ws-bg"
+      aria-label={`Clear this computer: erase your Forge work from this browser ${CLEAR_HINT}`}
+      title={`Erase your Forge work from this browser ${CLEAR_HINT}`}
     >
-      <Eraser size={17} aria-hidden="true" />
-      <span className="hidden sm:inline">Clear this computer</span>
+      <Eraser size={17} aria-hidden="true" className="flex-none" />
+      <span className="flex flex-col leading-tight">
+        <span>
+          <span className="sm:hidden">Clear</span>
+          <span className="hidden sm:inline">Clear this computer</span>
+        </span>
+        <span className="hidden text-[11px] font-normal sm:block">{CLEAR_HINT}</span>
+      </span>
     </button>
   );
 }

@@ -13,6 +13,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -227,17 +228,16 @@ export default function RushPage() {
           {/* Disclaimer */}
           <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
             <p className="text-sm text-t-phos leading-relaxed">
-              <span className="font-semibold text-t-amber-bright">Straight up:</span> Rush Mode
-              gives you the weakest possible version of your resume. It&apos;s
-              just enough to submit an application today. It won&apos;t prepare
-              you for the interview. For that, use{" "}
-              <button
-                onClick={() => router.push("/intro")}
+              <span className="font-semibold text-t-amber-bright">What this is:</span> Rush
+              works from the resume you already have and rewrites its lines. It
+              does not build a new resume or learn your story. The full{" "}
+              <Link
+                href="/intro"
                 className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber font-medium"
               >
-                The Forge
-              </button>
-              .
+                Forge
+              </Link>{" "}
+              takes longer and builds the real thing.
             </p>
           </div>
 
@@ -500,7 +500,7 @@ export default function RushPage() {
             <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
               <p className="text-sm text-t-phos leading-relaxed">
                 <span className="font-semibold text-t-amber-bright">This gets you in the door, not through the interview.</span>{" "}
-                Rush Mode rewrites what you gave it. Nothing more. It doesn&apos;t
+                Rush rewrites what you gave it and nothing more. It doesn&apos;t
                 know your strengths, your story, or what makes you different.
                 An interviewer will ask about all of that.
               </p>
