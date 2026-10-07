@@ -15,7 +15,7 @@ const CLIENT_MESSAGES: Record<string, string> = {
   "dashboard-no-forge":
     "I'm t.ROY. Start with The Forge. It's one sitting, and then I'll have everything I need to build you a great resume.",
   "application-tailor":
-    "Numbers make a bullet stronger. Use one only if it's true. Say what you did and how it turned out. I'll help.",
+    "Say what you did and what changed because of it, in your own words. If you counted something yourself, you can add it. I'll help.",
   jobs:
     "Employers we checked for hiring people with records are marked and shown first. They know what you bring to the job. Find one that fits.",
   disclosure:
@@ -51,7 +51,7 @@ const DEMO_MESSAGES: Record<string, string> = {
   rush:
     "Rush Mode is the single-page fast track. Paste + target job → rewritten resume in under 60 seconds. Same crucible rules: only real facts, never fabricated. Quick start before the full Forge.",
   welcome:
-    "This page detects readiness using Prochaska's Stages of Change, with no clinical assessment needed. Clients self-select without realizing they're being screened.",
+    "This page detects readiness using Prochaska's Stages of Change, with no clinical assessment needed. Clients pick where they are in plain words, and the guidance adjusts to match.",
   resume:
     "We accept anything: photos, PDFs, even a list of jobs. The AI extracts skills from whatever they give us. No perfect resume required.",
   goals:
@@ -70,7 +70,7 @@ const PARTNER_MESSAGES: Record<string, string> = {
   dashboard:
     "The Refinery is where persistent career work happens. Clients build targeted resumes, practice interviews, and plan disclosure strategies. Each tool connects to the next.",
   "application-tailor":
-    "The Application Tailor scaffolds from Forge data. CAR-format bullets with quantified achievements. Fading scaffold tracks iteration number for each user.",
+    "The Application Tailor scaffolds from Forge data. Bullets are built from the person's own facts: what they did and what changed. A number appears only when the person supplies it. Fading scaffold tracks iteration number for each user.",
   jobs:
     "Real job listings from JSearch API. Fair-chance employers highlighted via known employer list + AI enrichment. 6-hour cache prevents API abuse.",
   disclosure:

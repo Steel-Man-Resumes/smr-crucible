@@ -205,7 +205,7 @@ export const BEATS: Beat[] = [
     screen: "refinery",
     focus: { x: 0.06, y: 0.30, w: 0.32, h: 0.30 },
     caption: {
-      body: "Tailor a resume to any job, with AI that turns real work into quantified achievements.",
+      body: "Tailor a resume to any job, with AI that turns real work into strong, true lines in the person's own words.",
     },
     duration: 5000,
   },
