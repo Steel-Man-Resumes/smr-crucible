@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { CREDENTIALS_KEY } from "@/lib/forge-path";
 import { useForgeSession } from "@/lib/forge-context";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
@@ -184,6 +185,7 @@ export default function OutputPage() {
           resumeText: session.resumeText,
           goals: session.goals,
           goalNarrative: session.goalNarrative,
+          credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
           preferences: session.preferences,
           readinessStage: session.readinessStage,
           resumeConfidence: session.resumeConfidence,

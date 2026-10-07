@@ -209,6 +209,9 @@ export default function ProcessingPage() {
                   </Link>
                 )}
               </div>
+              {failure.kind === "retry" && (
+                <p className="mt-2 text-xs text-t-bone-dim">Each try counts toward today&apos;s builds.</p>
+              )}
             </div>
           ) : (
             <BuildStatus phase={phase} elapsed={elapsed} />

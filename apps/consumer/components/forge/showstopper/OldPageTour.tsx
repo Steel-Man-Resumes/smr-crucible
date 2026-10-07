@@ -195,7 +195,7 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                         {i + 1}
                       </span>
                       <span className={`text-[15px] leading-snug ${isCurrent || showAll ? "" : "line-clamp-1 sm:line-clamp-none"}`}>
-                        <span className="sr-only">Note {i + 1}: </span>
+                        <span className="sr-only">Note {i + 1}, on the line &ldquo;{s.line}&rdquo;: </span>
                         {s.note}
                       </span>
                     </button>

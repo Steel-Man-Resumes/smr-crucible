@@ -38,6 +38,8 @@ export interface GenerateDocsInput {
   resumeText?: string;
   goals?: string[];
   goalNarrative?: string;
+  /** The Forge's licenses-and-training answer, in the person's own words. */
+  credentialsNote?: string;
   preferences?: Record<string, string>;
   readinessStage?: string;
   // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
@@ -155,6 +157,9 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
   }
   if (input.goalNarrative) {
     parts.push(`GOAL NARRATIVE: ${input.goalNarrative}`);
+  }
+  if (typeof input.credentialsNote === "string" && input.credentialsNote.trim()) {
+    parts.push(`CREDENTIALS IN THE PERSON'S OWN WORDS (list each one at the type and status they give; never upgrade a course to a certification or call an expired one current): ${input.credentialsNote.trim().slice(0, 1000)}`);
   }
 
   if (input.preferences) {

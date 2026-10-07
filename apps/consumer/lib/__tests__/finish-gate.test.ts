@@ -242,3 +242,8 @@ test("a rewrite is the person's own words; an ordinary answer is not", () => {
   const view = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: rewritten });
   assert.ok(!view.groups.some((g) => /30%/.test(g.line)), JSON.stringify(view.groups.map((g) => g.line)));
 });
+
+test("the credentials answer counts as the person's own words", () => {
+  const own = ownWordsFor({ resumeText: "Line Cook", challengeNarratives: { licenses_and_training: "ServSafe food handler card, current" } }, false);
+  assert.match(own, /ServSafe food handler card, current/);
+});

@@ -36,9 +36,10 @@ function ForgeProgress() {
   // path. Draw the bar after mount to keep server and client output equal.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // Mount check first: before it, server and browser must draw the same thing.
+  if (!mounted) return <div className="h-[30px]" aria-hidden="true" />;
   const steps = progressSteps(planForgePath(session), pathname);
   if (!steps) return null;
-  if (!mounted) return <div className="h-[30px]" aria-hidden="true" />;
   return <ForgePathProgress steps={steps} />;
 }
 

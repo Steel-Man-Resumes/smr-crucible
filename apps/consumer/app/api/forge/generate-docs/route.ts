@@ -91,7 +91,11 @@ async function handlePost(request: Request) {
     // never the AI-derived narrative, so invention can't launder itself as source.
     const groundingSource = buildTrustedSource({
       resumeText: input.resumeText,
-      userText: [input.goalNarrative, (input.goals || []).join(", ")],
+      userText: [
+        input.goalNarrative,
+        (input.goals || []).join(", "),
+        typeof input.credentialsNote === "string" ? input.credentialsNote.slice(0, 1000) : undefined,
+      ],
     });
 
     const [resumeCheck, coverCheck] = await Promise.all([

@@ -15,6 +15,7 @@
  * - Defend answers are stored per line, never pooled into the source.
  */
 
+import { CREDENTIALS_KEY } from "./forge-path";
 import {
   getResumeStatus,
   type DefendAnswer,
@@ -104,13 +105,20 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
  * answers they typed in the Forge. Never the AI-written analysis.
  */
 export function ownWordsFor(
-  session: { resumeText?: string; goalNarrative?: string; hookNarrative?: string },
+  session: {
+    resumeText?: string;
+    goalNarrative?: string;
+    hookNarrative?: string;
+    challengeNarratives?: Record<string, string>;
+  },
   keepInsideLines: boolean
 ): string {
   return [
     withholdRecordLines(session.resumeText, keepInsideLines).kept,
     session.goalNarrative,
     session.hookNarrative,
+    // Training, certificates and licenses they told us about (not record answers).
+    session.challengeNarratives?.[CREDENTIALS_KEY],
   ]
     .map((s) => (typeof s === "string" ? s.trim() : ""))
     .filter(Boolean)

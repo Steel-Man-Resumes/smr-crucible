@@ -166,7 +166,7 @@ export default function StoryPage() {
             id="credentials-input"
             value={narratives[CREDENTIALS_KEY] || ""}
             onChange={(e) => setNarratives({ ...narratives, [CREDENTIALS_KEY]: e.target.value })}
-            placeholder={trade ? "e.g., forklift card, expired 2021" : "e.g., food handler card, working on my GED"}
+            placeholder={trade ? "e.g., forklift card, expired a while back" : "e.g., food handler card, working on my GED"}
             rows={2}
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
           />

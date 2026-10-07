@@ -402,7 +402,14 @@ function buildContext(input: ForgeInput): string {
   }
   if (input.challengeNarratives) {
     for (const [key, value] of Object.entries(input.challengeNarratives)) {
-      if (value) parts.push(`CHALLENGE DETAIL (${sanitizeForPrompt(key, 100)}): ${sanitizeForPrompt(value, 1000)}`);
+      if (!value) continue;
+      // The licenses-and-training answer is a qualification the person holds or
+      // is working on, never a barrier. Label it so the model reads it that way.
+      if (key === "licenses_and_training") {
+        parts.push(`CREDENTIALS (the person's own words: training, certificates or licenses they hold or are working on; a qualification, not a barrier): ${sanitizeForPrompt(value, 1000)}`);
+        continue;
+      }
+      parts.push(`CHALLENGE DETAIL (${sanitizeForPrompt(key, 100)}): ${sanitizeForPrompt(value, 1000)}`);
     }
   }
 
