@@ -419,3 +419,36 @@ test("STD-T03 upgrade: a long summary line is judged by its named credential, no
   const src2 = "I took an OSHA 10 class at the community center.";
   assert.equal(checkCredentialUpgrade(page2, src2).length, 1);
 });
+
+// ---- Troy's decisions 2026-10-07 --------------------------------------------
+
+test("D8: two pages when the true history fills them, one when it doesn't, never filler, never more than two, the person can choose one", () => {
+  const truth = resumeRulesBlock("truth");
+  assert.match(truth, /Two pages when the person's true history fills them, one page when it doesn't/);
+  assert.match(truth, /Never add filler to reach a second page, and never more than two pages/);
+  assert.match(truth, /The person can choose one page/);
+  // The fit advice never asks for filler and caps at two.
+  const body = TWO_PAGE.resume.split("\n").slice(14).join("\n");
+  const long = computeFitPlan([TWO_PAGE.resume, body, body].join("\n"), {});
+  assert.ok(long.result.pageCount > 2, `pages ${long.result.pageCount}`);
+  assert.ok(long.ledger.some((e) => /never more than two pages/.test(e.message)));
+  for (const e of long.ledger) assert.doesNotMatch(e.message, /add real achievements|fill it/i);
+  const short = computeFitPlan(THIN.resume, {});
+  for (const e of short.ledger) assert.doesNotMatch(e.message, /add real achievements|fuller/i);
+});
+
+test("D9: the rules never offer years worked in place of dates", () => {
+  const all = RESUME_RULES.map((r) => r.text).join("\n");
+  assert.match(all, /never replace dates with how long a job lasted or a count of years worked/);
+  for (const sentence of all.split(/(?<=\.)\s+/)) {
+    if (/years worked|how long a job lasted/i.test(sentence)) assert.match(sentence, /\bnever\b/i, sentence);
+  }
+});
+
+test("D10: a hybrid fits only on M-26's two conditions; long stretches and strong skills are examples", () => {
+  const page = resumeRulesBlock("page");
+  assert.match(page, /fits only when both are true/);
+  assert.match(page, /work history is uneven/);
+  assert.match(page, /changing fields on the strength of their skills/);
+  assert.match(page, /examples of those two conditions, never extra conditions/);
+});

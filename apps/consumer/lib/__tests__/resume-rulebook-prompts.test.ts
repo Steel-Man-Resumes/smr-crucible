@@ -157,6 +157,45 @@ describe("resume rulebook in every writer", () => {
   });
 });
 
+describe("Troy's decisions 2026-10-07 in the writers", () => {
+  const forge = (extra = {}) => {
+    const p = buildForgeResumePrompts({ ...INPUT, ...extra });
+    return `${p.system}\n${p.user}`;
+  };
+
+  it("D8: the Forge writer and Rush carry the two-page rule; the person's one-page choice is honored", () => {
+    for (const text of [forge(), RUSH_SYSTEM_PROMPT]) {
+      assert.match(text, /Two pages when the person's true history fills them, one page when it doesn't/);
+      assert.match(text, /never more than two pages/);
+    }
+    assert.match(forge({ onePage: true }), /The person chose ONE page/);
+    assert.doesNotMatch(forge(), /The person chose ONE page/);
+  });
+
+  it("D8: the page-fit words cap at two and never ask for filler", async () => {
+    const { describeFit } = await import("../resume-render/layout");
+    assert.equal(describeFit(3, 30, 0.6), "3 pages: two is the most, so cut or tighten to two");
+    for (const f of [read("lib", "ats", "lenses.ts"), read("lib", "resume-render", "layout.ts")]) {
+      assert.doesNotMatch(f, /fill it with real achievements|practical ceiling/i);
+    }
+  });
+
+  it("D9: no writer prompt asks for years worked in place of dates", () => {
+    for (const text of [forge(), forge({ onePage: true }), RUSH_SYSTEM_PROMPT, buildFullContext("resume", { level: "foundation" })]) {
+      assert.doesNotMatch(text, /list (?:the )?years worked|years worked instead of|durations? (?:only|instead)|years-worked format/i);
+      for (const line of text.split("\n")) {
+        if (/years worked|how long a job lasted/i.test(line)) assert.match(line, /never replace dates/i, line);
+      }
+    }
+  });
+
+  it("D10: the Forge writer uses a hybrid only on the two conditions", () => {
+    const f = forge();
+    assert.match(f, /Use a hybrid only under the hybrid rule/);
+    assert.match(f, /fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills/);
+  });
+});
+
 describe("Mini Forge does not share the writer prompts", () => {
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((f) => {

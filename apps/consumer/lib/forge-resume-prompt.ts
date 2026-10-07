@@ -47,6 +47,10 @@ export interface GenerateDocsInput {
   resumeWorries?: string[];
   // The person tapped "put them back": keep their own lines about time inside.
   keepInsideLines?: boolean;
+  // The person chose one page (the length rule lets them). No screen sets this
+  // yet; the Forge preferences step or the finish page's "Page length" row is
+  // where that choice would be offered.
+  onePage?: boolean;
   sessionId?: string;
 }
 
@@ -101,6 +105,8 @@ FORGE WRITER RULES:
 1. RECORD: ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
 2. Past roles in past tense, the current role in present tense.
 3. Start each bullet with a plain action verb the person's words support, then what was done, then a result only if the person gave one.
+4. PAGE LENGTH: ${input.onePage === true ? "The person chose ONE page. Keep to one page by leading with the strongest true lines and shortening older roles to title, employer and years. Never drop a role, a date or a fact to make room." : "Two pages when the person's true history fills them, one page when it doesn't. Never add filler to reach a second page, and never more than two pages."}
+5. FORMAT: reverse-chronological, years on every entry. Use a hybrid only under the hybrid rule in the page rules above.
 
 DATA CLEANING (INPUT ERRORS):
 - If a job title doesn't seem to match the company, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role. The person checks it on the next screen.
