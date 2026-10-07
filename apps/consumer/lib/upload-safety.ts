@@ -2,8 +2,9 @@
  * Upload safety for the text extractors (lib/text-extraction.ts): checks a
  * PDF or a Word file's own bytes BEFORE pdf.js or mammoth sees them, so a
  * small upload can never make the server inflate gigabytes. Used by every
- * caller of the extractors: the Forge's upload (/api/parse) and the free
- * checker (/api/check/extract). Security review 3a, rounds 1 and 2.
+ * caller of the shared extractor (lib/text-extraction.ts), the Forge's upload
+ * (/api/parse) among them. Security review 3a, rounds 1 and 2, and the hotfix
+ * review (2026-10-07): fixes F1-F6 below keep real resumes that main reads.
  *
  * Self-contained on purpose (node:zlib only, no other imports) so it can be
  * lifted into a hotfix on its own.
@@ -12,9 +13,11 @@
  * reading the file the way a PDF reader does (object header, dictionary with
  * strings, names with #xx escapes, nesting and comments, then the `stream`
  * keyword), never by searching for a filter name. Then:
- *  - at most one filter per stream (no chains, no arrays longer than one; the
- *    one exception, ASCII85 or ASCIIHex then FlateDecode, is decoded exactly
- *    and capped like any other: see PDF_ALLOW_TEXT_THEN_FLATE);
+ *  - at most one filter per stream, with two kinds of two-step chain allowed,
+ *    neither of which adds amplification: ASCII85 or ASCIIHex then FlateDecode
+ *    (decoded exactly, then inflated under the cap; PDF_ALLOW_TEXT_THEN_FLATE),
+ *    and FlateDecode, ASCII85 or ASCIIHex then an image codec (DCT, JPX,
+ *    CCITTFax, JBIG2), as ReportLab and some scanners write (F3);
  *    the filter must be FlateDecode, an image codec (DCT, JPX, CCITTFax,
  *    JBIG2) or a shrinking text codec (ASCIIHex, ASCII85). LZW, RunLength,
  *    Crypt and anything unknown are refused, and so is a filter given by an
@@ -22,18 +25,24 @@
  *  - every FlateDecode stream is actually inflated, from its start to the end
  *    of the file (more than any reader takes), the way pdf.js does it (header
  *    checked, then raw deflate), with a hard output cap: no single stream may
- *    decode past PDF_MAX_STREAM_BYTES, and all of them together past
+ *    decode past PDF_MAX_STREAM_BYTES, except an image, which may decode to its
+ *    own declared size (width x height x 4, at most PDF_MAX_IMAGE_STREAM_BYTES;
+ *    F1: lossless photos and scans), and all of them together not past
  *    PDF_MAX_TOTAL_BYTES;
  *  - no more than PDF_MAX_STREAMS streams;
  *  - an image (XObject or inline) may not claim more than PDF_MAX_IMAGE_PIXELS,
  *    and a page box (with /UserUnit) not more than PDF_MAX_PAGE_AREA, in the
  *    file's own objects and in its object streams;
- *  - an encrypted PDF is refused (its streams cannot be checked).
+ *  - an encrypted PDF is refused (its streams cannot be checked). Most are
+ *    copy-protected, not password-protected, so the message says so (F4).
+ *    Follow-up: decrypt with the empty user password and scan as normal.
  *
  * WORD (safeDocxForMammoth). The zip is read from its central directory,
  * walked to the end the directory says it has (never trusting the record
- * count, which some readers ignore), with no gap before the end record, no
- * duplicate names, and every central header matching its local header. Only
+ * count, which some readers ignore), with no gap before the end record (a few
+ * trailing bytes after it are allowed, F6), no duplicate names, and every
+ * central header matching its local header. The main part named in
+ * _rels/.rels must be among the kept parts (F5). Only
  * the parts mammoth needs for text (.xml and .rels) are kept; each is inflated
  * under a hard cap. Then a NEW zip is built in memory from those checked bytes
  * alone (stored, no compression) and that is what mammoth gets, never the
@@ -48,6 +57,8 @@ import { constants, inflateRawSync } from "node:zlib";
 
 export const PDF_MAX_STREAMS = 5000;
 export const PDF_MAX_STREAM_BYTES = 8 * 1024 * 1024;
+/** An image stream may decode to its own declared size (up to 4 bytes a pixel), never past this (F1). */
+export const PDF_MAX_IMAGE_STREAM_BYTES = 48 * 1024 * 1024;
 export const PDF_MAX_TOTAL_BYTES = 96 * 1024 * 1024;
 export const PDF_MAX_IMAGE_PIXELS = 40_000_000;
 /**
@@ -58,6 +69,8 @@ export const PDF_MAX_IMAGE_PIXELS = 40_000_000;
 export const PDF_MAX_PAGE_AREA = 9_000_000;
 
 export const DOCX_MAX_ENTRIES = 2000;
+/** Bytes allowed after the zip's end record (a newline some download paths add, F6). */
+export const DOCX_MAX_TRAILING_BYTES = 1024;
 export const DOCX_MAX_PART_BYTES = 8 * 1024 * 1024;
 export const DOCX_MAX_TEXT_PARTS_BYTES = 24 * 1024 * 1024;
 
@@ -81,8 +94,11 @@ export class UnsafeUploadError extends Error {
   }
 }
 
-const TOO_BIG = "That file holds more than a resume. Save it again as a plain PDF or Word file.";
-const NOT_PLAIN = "That file is packed in a way we don't open. Save it again as a plain PDF or Word file.";
+const TOO_BIG = "That file holds more than a resume. Save it again as a plain PDF or Word file, or paste the text instead.";
+const NOT_PLAIN = "That file is packed in a way we don't open. Save it again as a plain PDF or Word file, or paste the text instead.";
+/** F4: almost every encrypted resume PDF is copy-protected (opens with no password); never blame a password. */
+export const PDF_LOCKED_MESSAGE =
+  "This PDF is locked against copying, so we can't read the text. Save it again as a plain PDF, or paste the text instead.";
 
 /* ------------------------------------------------------------------ PDF -- */
 
@@ -322,23 +338,39 @@ function readDict(lx: Lexer): StreamDict | null {
  */
 export const PDF_ALLOW_TEXT_THEN_FLATE = true;
 
-type FilterPlan = { decode: string | null; pre: "ASCII85Decode" | "ASCIIHexDecode" | null };
+const IMAGE_CODECS = new Set(["DCTDecode", "JPXDecode", "CCITTFaxDecode", "JBIG2Decode"]);
+
+type FilterPlan = {
+  decode: string | null;
+  pre: "ASCII85Decode" | "ASCIIHexDecode" | null;
+  /** The image codec that runs last, if any (its JPEG frame size is checked). */
+  codec: string | null;
+};
 
 function checkFilters(filters: StreamDict["filters"], filterKeys: number): FilterPlan {
   if (filterKeys > 1 || filters === "indirect" || filters === "unreadable") {
     throw new UnsafeUploadError("pdf_filter", NOT_PLAIN);
   }
   const names = filters.map((f) => INLINE_ABBR[f] ?? f);
-  if (names.length === 0) return { decode: null, pre: null };
+  if (names.length === 0) return { decode: null, pre: null, codec: null };
   for (const f of names) if (!ALLOWED_FILTERS.has(f)) throw new UnsafeUploadError("pdf_filter", NOT_PLAIN);
-  if (names.length === 1) return { decode: names[0], pre: null };
+  if (names.length === 1) return { decode: names[0], pre: null, codec: IMAGE_CODECS.has(names[0]) ? names[0] : null };
+  // F3: Flate, ASCII85 or ASCIIHex, then an image codec. The first stage is
+  // inflated under the same cap (or only shrinks); the codec is one already
+  // allowed on its own.
+  if (names.length === 2 && IMAGE_CODECS.has(names[1])) {
+    if (names[0] === "FlateDecode") return { decode: "FlateDecode", pre: null, codec: names[1] };
+    if (names[0] === "ASCII85Decode" || names[0] === "ASCIIHexDecode") {
+      return { decode: null, pre: names[0] as FilterPlan["pre"], codec: names[1] };
+    }
+  }
   if (
     PDF_ALLOW_TEXT_THEN_FLATE &&
     names.length === 2 &&
     (names[0] === "ASCII85Decode" || names[0] === "ASCIIHexDecode") &&
     names[1] === "FlateDecode"
   ) {
-    return { decode: "FlateDecode", pre: names[0] as FilterPlan["pre"] };
+    return { decode: "FlateDecode", pre: names[0] as FilterPlan["pre"], codec: null };
   }
   throw new UnsafeUploadError("pdf_filter", NOT_PLAIN);
 }
@@ -381,6 +413,33 @@ export function decodeAsciiHex(src: Buffer): Buffer {
   const end = s.indexOf(">");
   const hex = (end < 0 ? s : s.slice(0, end)).replace(/[^0-9a-fA-F]/g, "");
   return Buffer.from(hex.length % 2 ? hex + "0" : hex, "hex");
+}
+
+/** Width and height from a JPEG's frame header (SOFn), or null. */
+export function jpegFrameSize(b: Buffer): { w: number; h: number } | null {
+  if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  for (let n = 0; n < 1000 && i + 9 < b.length; n++) {
+    if (b[i] !== 0xff) return null;
+    const marker = b[i + 1];
+    if (marker === 0xff) {
+      i++;
+      continue;
+    }
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+    }
+    if (marker === 0xd9 || marker === 0xda) return null;
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
+/** F1: the inflate cap for one stream: an image's own declared size (bounded), 8 MB for anything else. */
+export function streamCap(d: { isImage: boolean; width: unknown; height: unknown }): number {
+  if (!d.isImage || typeof d.width !== "number" || typeof d.height !== "number") return PDF_MAX_STREAM_BYTES;
+  const declared = Math.ceil(d.width * d.height * 4 + d.height);
+  return Math.max(PDF_MAX_STREAM_BYTES, Math.min(PDF_MAX_IMAGE_STREAM_BYTES, declared));
 }
 
 function checkPixels(w: unknown, h: unknown) {
@@ -495,7 +554,7 @@ export interface PdfScan {
 /** Throws UnsafeUploadError when the PDF could make a reader inflate too much. */
 export function assertSafePdf(buf: Buffer): PdfScan {
   const s = buf.toString("latin1");
-  const locked = () => new UnsafeUploadError("pdf_encrypted", "That PDF is locked. Save it again without a password.");
+  const locked = () => new UnsafeUploadError("pdf_encrypted", PDF_LOCKED_MESSAGE);
   // An encryption entry in any trailer (classic cross-reference tables).
   for (let at = s.indexOf("trailer"); at >= 0; at = s.indexOf("trailer", at + 7)) {
     const lx = new Lexer(s, at + 7);
@@ -537,8 +596,9 @@ export function assertSafePdf(buf: Buffer): PdfScan {
         const text = buf.subarray(start);
         raw = plan.pre === "ASCII85Decode" ? decodeAscii85(text) : decodeAsciiHex(text);
       }
-      content = inflatePdfStream(raw, PDF_MAX_STREAM_BYTES);
-      const n = content ? content.length : PDF_MAX_STREAM_BYTES;
+      const cap = streamCap(dict);
+      content = inflatePdfStream(raw, cap);
+      const n = content ? content.length : cap;
       scan.decodedBytes += n;
       scan.largestStream = Math.max(scan.largestStream, n);
       if (scan.decodedBytes > PDF_MAX_TOTAL_BYTES) throw new UnsafeUploadError("pdf_stream_too_big", TOO_BIG);
@@ -546,7 +606,21 @@ export function assertSafePdf(buf: Buffer): PdfScan {
       const end = s.indexOf("endstream", start);
       content = buf.subarray(start, end < 0 ? buf.length : end);
     }
-    if (content && !dict.isImage && content.length) {
+    // A JPEG's own frame size decides what a reader allocates, whatever the
+    // dictionary says: check it wherever DCTDecode runs last.
+    if (plan.codec === "DCTDecode") {
+      const jpeg =
+        filter === "FlateDecode"
+          ? content
+          : plan.pre === "ASCII85Decode"
+            ? decodeAscii85(buf.subarray(start))
+            : plan.pre === "ASCIIHexDecode"
+              ? decodeAsciiHex(buf.subarray(start))
+              : buf.subarray(start);
+      const size = jpeg ? jpegFrameSize(jpeg) : null;
+      if (size) checkPixels(size.w, size.h);
+    }
+    if (content && !dict.isImage && !plan.codec && content.length) {
       checkInlineImages(content);
       if (dict.type === "ObjStm") checkDictsIn(content);
     }
@@ -555,6 +629,21 @@ export function assertSafePdf(buf: Buffer): PdfScan {
 }
 
 /* ------------------------------------------------------------------ ZIP -- */
+
+/** The Word main part: the officeDocument target in _rels/.rels, else word/document.xml. */
+export function mainPartName(parts: Array<{ name: string; data: Buffer }>): string {
+  const rels = parts.find((p) => p.name === "_rels/.rels");
+  if (rels) {
+    const xml = rels.data.toString("utf8");
+    for (const m of xml.matchAll(/<Relationship\b[^>]*>/g)) {
+      const tag = m[0];
+      if (!/Type="[^"]*\/officeDocument"/.test(tag)) continue;
+      const target = /Target="([^"]+)"/.exec(tag)?.[1];
+      if (target) return target.replace(/^\.?\//, "");
+    }
+  }
+  return "word/document.xml";
+}
 
 /** The parts mammoth reads for text. Everything else (pictures, fonts) is dropped unread. */
 function isTextPart(name: string): boolean {
@@ -650,7 +739,9 @@ export function safeDocxForMammoth(b: Buffer): DocxRebuild {
   // No gap: the directory ends exactly where the end record starts (readers
   // that shift offsets by a gap would otherwise read a different directory).
   if (cdOffset + cdSize !== eocd) throw malformed();
-  if (eocd + 22 + commentLen !== b.length) throw malformed();
+  // F6: a few bytes after the end record (a trailing newline) are allowed.
+  const tail = b.length - (eocd + 22 + commentLen);
+  if (tail < 0 || tail > DOCX_MAX_TRAILING_BYTES) throw malformed();
 
   const seen = new Set<string>();
   const kept: Array<{ name: string; data: Buffer }> = [];
@@ -726,7 +817,10 @@ export function safeDocxForMammoth(b: Buffer): DocxRebuild {
   }
   if (p !== cdOffset + cdSize) throw malformed();
   if (walked !== totalEntries) throw malformed();
-  if (!kept.some((e) => e.name === "word/document.xml")) {
+  // F5: the main part is the one _rels/.rels names (mammoth finds it the same
+  // way), not always word/document.xml.
+  const main = mainPartName(kept);
+  if (!kept.some((e) => e.name === main)) {
     throw new UnsafeUploadError("zip_malformed", "That file is not a Word document.");
   }
   return { zip: storedZip(kept), kept: kept.map((e) => e.name), dropped };

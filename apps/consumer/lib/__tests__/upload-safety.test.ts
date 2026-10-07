@@ -7,11 +7,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { deflateRawSync, deflateSync, crc32 } from "node:zlib";
 import {
+  PDF_LOCKED_MESSAGE,
+  PDF_MAX_IMAGE_STREAM_BYTES,
   PDF_MAX_STREAMS,
   PDF_MAX_STREAM_BYTES,
   UnsafeUploadError,
   assertSafePdf,
   decodeAscii85,
+  jpegFrameSize,
   safeDocxForMammoth,
   storedZip,
 } from "../upload-safety";
@@ -289,5 +292,100 @@ describe("Word: walked, matched, rebuilt; mammoth gets only the rebuilt zip", ()
   it("the Forge's upload path refuses the bomb instead of reading it as loose text", async () => {
     const b = docx(docXml("A".repeat(9 * 1024 * 1024)));
     await assert.rejects(extractTextFromBuffer(b, "r.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), UnreadableDocumentError);
+  });
+});
+
+/* ------------------------------------------- hotfix review F1-F6 -------- */
+
+/** An image XObject object for the pdf() builder. */
+function imageObj(dict: string, data: Buffer): Buffer {
+  return Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image ${dict} /Length ${data.length} >>\nstream\n`), data, Buffer.from("\nendstream")]);
+}
+/** A minimal JPEG header with a frame (SOF0) of the given size. */
+function jpegHeader(w: number, h: number): Buffer {
+  const b = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0, 0, 0, 0, 0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xff, 0xd9]);
+  b.writeUInt16BE(h, 7);
+  b.writeUInt16BE(w, 9);
+  return b;
+}
+const a85 = (b: Buffer) => {
+  let out = "";
+  for (let i = 0; i < b.length; i += 4) {
+    const n = Math.min(4, b.length - i);
+    let v = Buffer.concat([b.subarray(i, i + 4), Buffer.alloc(4)]).readUInt32BE(0);
+    const d: string[] = [];
+    for (let k = 0; k < 5; k++) {
+      d.unshift(String.fromCharCode((v % 85) + 33));
+      v = Math.floor(v / 85);
+    }
+    out += d.join("").slice(0, n + 1);
+  }
+  return Buffer.from(out + "~>");
+};
+
+describe("hotfix review: real files main reads stay accepted", () => {
+  it("F1: a lossless 2000x2000 colour photo (12 MB decoded) is accepted; an image may not decode past its own size", () => {
+    const photo = deflateSync(Buffer.alloc(2000 * 2000 * 3, 0x80));
+    const ok = pdf("", Buffer.from("q 100 0 0 100 0 0 cm /Im1 Do Q"), {
+      extraObjs: [imageObj("/Width 2000 /Height 2000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", photo)],
+    });
+    assert.doesNotThrow(() => assertSafePdf(ok));
+    // Declares 100x100 (cap stays at the 8 MB floor) but holds 20 MB.
+    const liar = pdf("", Buffer.from("BT ET"), {
+      extraObjs: [imageObj("/Width 100 /Height 100 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(spaces(20 * 1024 * 1024)))],
+    });
+    refused(() => assertSafePdf(liar), "pdf_stream_too_big");
+    // Declares 6000x6000 (under 40 MP, cap at the 48 MB ceiling) and holds more.
+    const big = pdf("", Buffer.from("BT ET"), {
+      extraObjs: [imageObj("/Width 6000 /Height 6000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(spaces(PDF_MAX_IMAGE_STREAM_BYTES + 1024)))],
+    });
+    refused(() => assertSafePdf(big), "pdf_stream_too_big");
+  });
+
+  it("F2: HTML or RTF saved as .doc, and .rtf labelled msword, are read as text as before", async () => {
+    const html = Buffer.from("<html><body><h1>JORDAN RIVERS</h1><p>Warehouse Associate, Acme Logistics, 2021 - Present</p></body></html>");
+    const rtf = Buffer.from("{\\rtf1\\ansi JORDAN RIVERS\\par Warehouse Associate, Acme Logistics\\par}");
+    for (const [buf, name] of [[html, "resume.doc"], [rtf, "resume.doc"], [rtf, "resume.rtf"]] as const) {
+      const out = await extractTextFromBuffer(buf, name, "application/msword");
+      assert.match(out, /JORDAN RIVERS/, name);
+    }
+  });
+
+  it("F3: an image codec after Flate or ASCII85 is accepted; chains that amplify are not", () => {
+    const jpeg = Buffer.concat([jpegHeader(600, 800), Buffer.alloc(2000, 7)]);
+    const img = (filter: string, data: Buffer) =>
+      pdf("", Buffer.from("BT ET"), { extraObjs: [imageObj(`/Width 600 /Height 800 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter ${filter}`, data)] });
+    assert.doesNotThrow(() => assertSafePdf(img("[/ASCII85Decode /DCTDecode]", a85(jpeg))));
+    assert.doesNotThrow(() => assertSafePdf(img("[/FlateDecode /DCTDecode]", deflateSync(jpeg))));
+    assert.doesNotThrow(() => assertSafePdf(img("/DCTDecode", jpeg)));
+    refused(() => assertSafePdf(img("[/FlateDecode /FlateDecode]", deflateSync(deflateSync(jpeg)))), "pdf_filter");
+    refused(() => assertSafePdf(img("[/LZWDecode /DCTDecode]", jpeg)), "pdf_filter");
+    refused(() => assertSafePdf(img("[/DCTDecode /FlateDecode]", jpeg)), "pdf_filter");
+    // A JPEG frame far past the pixel cap is refused whatever the dictionary claims.
+    refused(() => assertSafePdf(img("[/FlateDecode /DCTDecode]", deflateSync(jpegHeader(60000, 60000)))), "pdf_image_too_big");
+    assert.deepEqual(jpegFrameSize(jpegHeader(600, 800)), { w: 600, h: 800 });
+  });
+
+  it("F4: a copy-protected PDF is refused with words that blame no password", () => {
+    assert.throws(
+      () => assertSafePdf(pdf("", Buffer.from("BT ET"), { trailerExtra: "/Encrypt 9 0 R " })),
+      (e: any) => e instanceof UnsafeUploadError && e.message === PDF_LOCKED_MESSAGE
+    );
+    assert.doesNotMatch(PDF_LOCKED_MESSAGE, /password/i);
+    assert.match(PDF_LOCKED_MESSAGE, /paste the text/);
+  });
+
+  it("F5: the main part named in _rels/.rels is accepted under another name", () => {
+    const rels = Buffer.from(RELS.toString().replace("word/document.xml", "word/document2.xml"));
+    const b = zip([{ name: "[Content_Types].xml", data: CT }, { name: "_rels/.rels", data: rels }, { name: "word/document2.xml", data: docXml("x") }]);
+    assert.ok(safeDocxForMammoth(b).kept.includes("word/document2.xml"));
+    const missing = zip([{ name: "[Content_Types].xml", data: CT }, { name: "_rels/.rels", data: rels }, { name: "word/document.xml", data: docXml("x") }]);
+    refused(() => safeDocxForMammoth(missing), "zip_malformed");
+  });
+
+  it("F6: a trailing newline after the zip is accepted; a long tail is not", () => {
+    const b = docx(docXml("x"));
+    assert.doesNotThrow(() => safeDocxForMammoth(Buffer.concat([b, Buffer.from("\n")])));
+    refused(() => safeDocxForMammoth(Buffer.concat([b, Buffer.alloc(2048)])), "zip_malformed");
   });
 });
