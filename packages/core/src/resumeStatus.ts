@@ -80,6 +80,12 @@ export interface DefendAnswer {
    * answer is never added to the source (no anchoring path, DEC-45).
    */
   kind?: "rewrite";
+  /**
+   * For a rewrite: the line it replaced, as first written (the writer's line,
+   * never an earlier rewrite). Only words and numbers the rewrite INTRODUCED
+   * over this line may join the person's own words (see introducedWords).
+   */
+  replaced?: string;
 }
 
 export type DefendReason = "number" | "credential" | "far_from_your_words";
@@ -155,16 +161,93 @@ export function answerContradictsLine(answer: string, line: string): boolean {
   });
 }
 
+// Words that carry no meaning of their own in an answer.
+const ANSWER_STOP = new Set([
+  "the", "and", "that", "this", "these", "those", "was", "were", "are", "did", "does", "done", "doing",
+  "has", "have", "had", "for", "with", "from", "but", "you", "your", "yes", "yeah", "yep", "yup", "okay",
+  "true", "right", "correct", "sure", "its", "it's", "that's", "thats", "what", "all", "just", "very",
+  "really", "can", "will", "would", "could", "should", "also", "there", "they", "them", "then", "than",
+  "our", "who", "how", "why", "when", "where", "which", "line", "i'm", "i've", "ive", "him", "her",
+  "she", "his", "hers", "not", "too", "yes,", "absolutely", "definitely", "course", "indeed", "exactly",
+  "written", "is", "it", "me", "my", "we", "us",
+]);
+// A bare yes: an answer that agrees and explains nothing.
+const BARE_YES_RE = /^(?:y|ye|yes|yeah|yep|yup|ya|ok|okay|k|sure|correct|true|right|exactly|indeed|absolutely|definitely|of course|i did|i did it|i did that|it's true|its true|it is true|that's true|thats true|that's right|thats right|that is right|that is true|all true|true as written|yes it is|yes i did|confirmed|confirm|agreed|agree)$/;
+
+const stem5 = (w: string) => w.slice(0, 5);
+
+/** The words that carry meaning in a piece of text: lowercase, three letters or more, no filler. */
+export function contentWords(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z][a-z'’]*/g) ?? [])
+    .map((w) => w.replace(/['’]s$/, "").replace(/’/g, "'"))
+    .filter((w) => w.length >= 3 && !ANSWER_STOP.has(w));
+}
+
 /**
- * An answer stands only when the person marked it "stands", it has words in
- * it, it is not an "I don't know", and it does not deny its own line. A
- * missing verdict is not an answer.
+ * True when a typed answer explains something: at least three content
+ * words, not a bare yes, and at least one content word that is not already
+ * in the line (an answer that only pastes the line back says nothing new).
  */
-export function answerStands(a: DefendAnswer | undefined, line?: string): boolean {
-  if (!a || a.verdict !== "stands") return false;
-  const text = a.answer || "";
+export function answerExplains(answer: string, line: string): boolean {
+  const text = (answer || "").trim();
   if (!/[a-z0-9]/i.test(text) || NO_ANSWER_RE.test(text)) return false;
-  return !answerContradictsLine(text, line ?? a.line);
+  const bare = text.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (BARE_YES_RE.test(bare)) return false;
+  const words = contentWords(text);
+  if (words.length < 3) return false;
+  const lineStems = new Set(contentWords(stripBullet(line)).map(stem5));
+  return words.some((w) => !lineStems.has(stem5(w)));
+}
+
+/**
+ * An answer stands only when the person marked it "stands", it explains
+ * something (answerExplains), it is not an "I don't know", and it does not
+ * deny its own line. A missing verdict is not an answer.
+ *
+ * A rewrite (the person typed the line itself) stands when it is the line on
+ * the page and every content word of that line is now in the person's own
+ * words (`sourceText`, which the caller extends with only what the rewrite
+ * introduced). A rewrite that only adds a period to the written line leaves
+ * the written words unsourced, so it does not stand.
+ */
+export function answerStands(a: DefendAnswer | undefined, line?: string, sourceText?: string): boolean {
+  if (!a || a.verdict !== "stands") return false;
+  const target = line ?? a.line;
+  if (a.kind === "rewrite") {
+    if (typeof a.replaced !== "string" || sourceText === undefined) return false;
+    if (squash(stripBullet(a.answer)) !== squash(stripBullet(target))) return false;
+    return distanceFromSource(target, sourceText) === 0;
+  }
+  if (!answerExplains(a.answer || "", target)) return false;
+  return !answerContradictsLine(a.answer || "", target);
+}
+
+/**
+ * What a rewrite introduced over the line it replaced: content words whose
+ * five-letter start is not in the replaced line, and numbers (digits or
+ * number words) that are not in it. Punctuation, a status word already there,
+ * or the written number typed back introduce nothing. Returned in the order
+ * typed, one string.
+ */
+export function introducedWords(rewrite: string, replaced: string): string {
+  const oldStems = new Set((replaced.toLowerCase().match(/[a-z]+/g) ?? []).map(stem5));
+  const oldNums = numbersIn(replaced);
+  const out: string[] = [];
+  for (const tok of rewrite.match(/\$?\d[\d,]*(?:\.\d+)?[%kKxX+]?|[A-Za-z][A-Za-z'’]*/g) ?? []) {
+    if (/\d/.test(tok)) {
+      const ns = Array.from(numbersIn(tok));
+      if (ns.length && ns.some((n) => !oldNums.has(n))) out.push(tok);
+      continue;
+    }
+    const w = tok.toLowerCase();
+    const asNum = numbersIn(w);
+    if (asNum.size) {
+      if (Array.from(asNum).some((n) => !oldNums.has(n))) out.push(tok);
+      continue;
+    }
+    if (!oldStems.has(stem5(w))) out.push(tok);
+  }
+  return out.join(" ");
 }
 
 function credentialName(line: string): string {
@@ -186,10 +269,29 @@ export function distanceFromSource(line: string, sourceText: string): number {
   return words.filter((w) => !src.has(h(w))).length / words.length;
 }
 
-/** Lines a person could be asked to explain: not the name, contact, headings, job headers or date lines. */
-function bodyLines(resumeText: string): Array<{ line: string; inSkills: boolean }> {
+/** The job titles on the page's own entry headers ("LINE COOK | Diner | 2019 - 2023" gives "line cook"). */
+function pageJobTitles(resumeText: string): Set<string> {
+  const titles = new Set<string>();
+  for (const l of linesOf(resumeText)) {
+    if (!isEntryHeader(l)) continue;
+    const t = l.split(/\s[|,@]\s|\s+(?:at|-)\s+/i)[0].trim();
+    if (t) titles.add(squash(t));
+  }
+  return titles;
+}
+
+/**
+ * Lines a person could be asked to explain: not the name, contact, headings,
+ * job headers or date lines. A short headline under the name is skipped only
+ * when it claims nothing new: it is not a credential line, and it either
+ * names a job title on the page ("Line Cook" over a Line Cook job) or every
+ * content word is already in the person's own words.
+ */
+function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; inSkills: boolean }> {
   const ls = linesOf(resumeText);
   const out: Array<{ line: string; inSkills: boolean }> = [];
+  const creds = new Set(credentialLinesOf(resumeText));
+  const titles = pageJobTitles(resumeText);
   let inSkills = false;
   let seenHeading = false;
   ls.forEach((l, i) => {
@@ -199,10 +301,14 @@ function bodyLines(resumeText: string): Array<{ line: string; inSkills: boolean 
     if (i === 0 || CONTACT_LINE_RE.test(l) || isEntryHeader(l) || isDateLine(l)) return;
     // The header block's place line ("Dayton, OH") is contact, not a claim.
     if (!seenHeading && (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l))) return;
-    // A short headline under the name ("Line Cook", "Forklift Operator") names
-    // the target job, it is not a claim to defend. A headline with a number in
-    // it ("10 years in kitchens") is a claim and stays.
-    if (!seenHeading && !/\d/.test(l) && l.split(/\s+/).length <= 6 && !/[.;]$/.test(l)) return;
+    if (
+      !seenHeading &&
+      !/\d/.test(l) &&
+      l.split(/\s+/).length <= 6 &&
+      !/[.;]$/.test(l) &&
+      !creds.has(l) &&
+      (titles.has(squash(l)) || (sourceText.trim() !== "" && distanceFromSource(l, sourceText) === 0 && numbersIn(l).size === 0))
+    ) return;
     out.push({ line: l, inSkills });
   });
   return out;
@@ -288,7 +394,7 @@ export function pickDefendLines(
   opts: { minFurthest?: number } = {}
 ): DefendLine[] {
   const minFurthest = opts.minFurthest ?? 2;
-  const body = bodyLines(resumeText || "");
+  const body = bodyLines(resumeText || "", sourceText || "");
   const creds = new Set(credentialLinesOf(resumeText || ""));
   const picked = new Map<string, Set<DefendReason>>();
   const add = (l: string, r: DefendReason) => {
@@ -352,7 +458,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
   const byLine = new Map(answers.map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
-    return answerStands(a, line) ? a : undefined;
+    return answerStands(a, line, sourceText) ? a : undefined;
   };
 
   if (resumeText.trim() && sourceText.trim()) {

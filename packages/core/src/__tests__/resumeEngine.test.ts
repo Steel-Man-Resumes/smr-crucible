@@ -20,7 +20,7 @@ import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
 /** Answer every defend line in the person's own words (a fixture stand-in for the defend step). */
-const answerAll = (resume: string, source: string, answer = "That is what I did, in my words."): DefendAnswer[] =>
+const answerAll = (resume: string, source: string, answer = "I did this myself on most shifts there, the owner can tell you about it."): DefendAnswer[] =>
   pickDefendLines(resume, source).map((d) => ({ line: d.line, answer, verdict: "stands" as const }));
 
 // ---- rulebook --------------------------------------------------------------
