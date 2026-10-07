@@ -12,6 +12,8 @@
  * - Unknown formats (text sniff + OCR as last resort)
  */
 
+import { UnsafeUploadError, assertSafePdf, safeDocxForMammoth } from "./upload-safety";
+
 const MIN_EXTRACTED_CHARS = 10;
 const MIN_MEANINGFUL_CHARS = 20;
 const MAX_PDF_OCR_PAGES = 5;
@@ -52,6 +54,16 @@ function withOcrTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
  * a friendly 422 that steers the user to paste or the guided builder -- never a
  * generic 500 "something went wrong."
  */
+/** A PDF checked before any reader opens it (lib/upload-safety.ts); unsafe = unreadable. */
+function assertPdfSafe(buffer: Buffer) {
+  try {
+    assertSafePdf(buffer);
+  } catch (e) {
+    if (e instanceof UnsafeUploadError) throw new UnreadableDocumentError(e.message);
+    throw e;
+  }
+}
+
 export class UnreadableDocumentError extends Error {
   readonly code = "UNREADABLE_DOCUMENT";
   constructor(message: string) {
@@ -72,6 +84,8 @@ export async function extractTextFromBuffer(
   try {
     // PDF
     if (mimeType === "application/pdf" || name.endsWith(".pdf")) {
+      // Before pdf.js or the OCR renderer sees it (security review 3a r2, H1).
+      assertPdfSafe(buffer);
       try {
         const text = await extractFromPDF(buffer);
         if (hasMeaningfulText(text)) return text;
@@ -94,6 +108,9 @@ export async function extractTextFromBuffer(
         const text = await extractFromDOCX(buffer);
         if (text.trim().length > MIN_EXTRACTED_CHARS) return text;
       } catch (error) {
+        // A Word file that fails the safety check is refused, never read as
+        // loose text (security review 3a r2, H1).
+        if (error instanceof UnsafeUploadError) throw new UnreadableDocumentError(error.message);
         console.log("DOCX extraction failed:", error);
       }
       // Fallback: try as plain text
@@ -187,6 +204,12 @@ export async function extractTextForCheck(
   }
   if (kind === "pdf") {
     try {
+      assertSafePdf(buffer);
+    } catch (e) {
+      if (e instanceof UnsafeUploadError) throw new guard.CheckFileRefused("too_big_inside", e.message);
+      throw e;
+    }
+    try {
       const text = await extractFromPDF(buffer, { maxPages: guard.CHECK_PDF_MAX_PAGES, maxChars: CHECK_MAX_TEXT_CHARS });
       if (hasMeaningfulText(text)) return { text, read: "text" };
     } catch (e) {
@@ -198,8 +221,15 @@ export async function extractTextForCheck(
     return { text: await extractFromPDFWithOCR(buffer, guard.CHECK_PDF_OCR_PAGES), read: "picture" };
   }
   if (kind === "word") {
-    guard.assertSmallDocx(buffer);
-    const text = await extractFromDOCX(buffer);
+    let text: string;
+    try {
+      text = await extractFromDOCX(buffer);
+    } catch (e) {
+      if (e instanceof UnsafeUploadError) {
+        throw new guard.CheckFileRefused(e.reason === "zip_too_big" ? "too_big_inside" : "bad_zip", e.message);
+      }
+      throw e;
+    }
     if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
     throw new UnreadableDocumentError("We couldn't read text from that file.");
   }
@@ -266,6 +296,7 @@ export class PdfTooLongError extends Error {
 
 async function extractFromPDF(buffer: Buffer, limits: PdfLimits = {}): Promise<string> {
   if (buffer.length === 0) throw new Error("PDF file is empty");
+  assertPdfSafe(buffer);
   ensurePdfjsPolyfills();
 
   // Use pdfjs legacy directly (zero new dep -- pdfjs-dist is already installed).
@@ -306,6 +337,8 @@ async function extractFromPDF(buffer: Buffer, limits: PdfLimits = {}): Promise<s
 }
 
 async function extractFromPDFWithOCR(buffer: Buffer, ocrPages: number = MAX_PDF_OCR_PAGES): Promise<string> {
+  // The renderer decodes images and page boxes too: same check, every caller.
+  assertPdfSafe(buffer);
   try {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
@@ -353,9 +386,12 @@ async function extractFromPDFWithOCR(buffer: Buffer, ocrPages: number = MAX_PDF_
 async function extractFromDOCX(buffer: Buffer): Promise<string> {
   if (buffer.length === 0) throw new Error("Word document is empty");
 
+  // mammoth never sees the upload: only a new zip of its checked text parts
+  // (lib/upload-safety.ts). Throws UnsafeUploadError when the file fails.
+  const safe = safeDocxForMammoth(buffer).zip;
   const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({
-    buffer,
+    buffer: safe,
   });
 
   if (!result.value?.trim())
