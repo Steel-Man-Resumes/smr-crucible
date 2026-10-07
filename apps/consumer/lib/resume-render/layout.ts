@@ -144,7 +144,11 @@ function wordPieces(word: string): string[] {
   return out;
 }
 
-/** Greedy word wrap. A piece wider than the line is broken by characters. */
+/**
+ * Greedy word wrap, linear in the text: glyph advances add up exactly (no
+ * kerning, no ligatures), so a line's width is the running sum of its pieces.
+ * A piece wider than the line is broken by characters.
+ */
 export function wrapText(m: Measurer, text: string, face: FaceKey, size: number, width: number, firstWidth?: number): string[] {
   const atoms: { t: string; space: boolean }[] = [];
   for (const w of text.split(/\s+/).filter(Boolean)) {
@@ -152,37 +156,52 @@ export function wrapText(m: Measurer, text: string, face: FaceKey, size: number,
   }
   const lines: string[] = [];
   let cur = "";
+  let curW = 0;
   let limit = firstWidth ?? width;
   const spaceW = m.width(face, " ", size);
   const newLine = () => {
     lines.push(cur);
     cur = "";
+    curW = 0;
     limit = width;
   };
   const breakLong = (piece: string) => {
     let part = "";
+    let partW = 0;
     for (const ch of piece) {
-      if (m.width(face, part + ch, size) > limit && part) {
+      const cw = m.width(face, ch, size);
+      if (partW + cw > limit && part) {
         cur = part;
         newLine();
         part = ch;
-      } else part += ch;
+        partW = cw;
+      } else {
+        part += ch;
+        partW += cw;
+      }
     }
     cur = part;
+    curW = partW;
   };
   for (const a of atoms) {
     const aw = m.width(face, a.t, size);
     if (!cur) {
-      if (aw <= limit) cur = a.t;
-      else breakLong(a.t);
+      if (aw <= limit) {
+        cur = a.t;
+        curW = aw;
+      } else breakLong(a.t);
       continue;
     }
     const add = (a.space ? spaceW : 0) + aw;
-    if (m.width(face, cur, size) + add <= limit) cur += (a.space ? " " : "") + a.t;
-    else {
+    if (curW + add <= limit) {
+      cur += (a.space ? " " : "") + a.t;
+      curW += add;
+    } else {
       newLine();
-      if (aw <= limit) cur = a.t;
-      else breakLong(a.t);
+      if (aw <= limit) {
+        cur = a.t;
+        curW = aw;
+      } else breakLong(a.t);
     }
   }
   if (cur || !lines.length) lines.push(cur);

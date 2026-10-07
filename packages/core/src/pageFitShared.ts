@@ -272,31 +272,45 @@ export function splitResumeHeader(content: string): {
 } {
   const lines = content.split("\n");
   const headerLines: string[] = [];
-  for (const line of lines) {
-    const t = line.trim();
+  let end = lines.length; // index of the first line the header did not take
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
     if (!t) {
-      if (headerLines.length > 0) break;
+      if (headerLines.length > 0) {
+        end = i;
+        break;
+      }
       continue;
     }
-    if (isSectionHeader(t)) break;
+    if (isSectionHeader(t)) {
+      end = i;
+      break;
+    }
     if (headerLines.length < 4) headerLines.push(t);
-    else break;
+    else {
+      end = i;
+      break;
+    }
   }
   const header = parseResumeHeader(headerLines);
-  const headerSet = new Set(headerLines);
-  const bodyLines: string[] = [];
-  let pastHeader = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!pastHeader) {
-      if (headerSet.has(trimmed) || !trimmed) {
-        if (headerSet.has(trimmed)) headerSet.delete(trimmed);
-        if (headerSet.size === 0) pastHeader = true;
-        continue;
-      }
-      pastHeader = true;
-    }
-    if (!trimmed && bodyLines.length === 0) continue; // no leading blank lines
+  // parseResumeHeader keeps the name, one contact line and two more lines. A header
+  // line beyond those (for example a fourth line with no contact marker) must not
+  // vanish: it goes to the top of the body, so what goes in comes out.
+  // Count what the header will draw, and send every other line (a repeated line,
+  // a fourth line, anything) on to the body.
+  const leftover = [...headerLines];
+  for (const used of [header.nameLine, header.contactLine, header.headlineLine, header.publicNotesLine]) {
+    if (!used) continue;
+    const at = leftover.indexOf(used);
+    if (at >= 0) leftover.splice(at, 1);
+  }
+  const extra = leftover;
+  const bodyLines: string[] = [...extra];
+  let started = bodyLines.length > 0;
+  for (let i = end; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed && !started) continue; // no leading blank lines
+    started = true;
     bodyLines.push(trimmed);
   }
   return { header, headerLines, bodyLines };

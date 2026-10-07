@@ -12,11 +12,11 @@
  */
 
 import { NextResponse } from "next/server";
-import { renderScreen } from "./resume-render";
+import { MAX_RENDER_CHARS, MAX_RENDER_TOO_LARGE, renderScreen } from "./resume-render";
 import { fitFor } from "./resume-render";
 import { FACE_FILES } from "./resume-render/style";
 
-const MAX_CHARS = 200_000;
+const MAX_CHARS = MAX_RENDER_CHARS;
 
 interface Body {
   text?: unknown;
@@ -29,15 +29,15 @@ interface Body {
 export async function handleLayoutPost(request: Request) {
   try {
     const len = request.headers.get("content-length");
-    if (len && parseInt(len, 10) > 500_000) {
-      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    if (len && parseInt(len, 10) > 250_000) {
+      return NextResponse.json({ error: MAX_RENDER_TOO_LARGE }, { status: 413 });
     }
     const body = (await request.json()) as Body;
     if (typeof body.text !== "string") {
       return NextResponse.json({ error: "text must be text" }, { status: 400 });
     }
     if (body.text.length > MAX_CHARS) {
-      return NextResponse.json({ error: "text is too large" }, { status: 413 });
+      return NextResponse.json({ error: MAX_RENDER_TOO_LARGE }, { status: 413 });
     }
     const kind = body.kind === "cover_letter" ? "cover_letter" : "resume";
     const headerText = typeof body.headerText === "string" ? body.headerText.slice(0, MAX_CHARS) : undefined;

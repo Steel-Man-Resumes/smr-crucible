@@ -31,16 +31,22 @@ export interface RenderRequest {
   headerText?: string;
 }
 
+/** Longest text (resume, cover letter or header source) the renderer accepts. Several times a real two-page resume plus a letter. */
+export const MAX_RENDER_CHARS = 40_000;
+export const MAX_RENDER_TOO_LARGE = "That is longer than a resume or letter can be. Shorten it and try again.";
 export const MAX_OPEN_ITEMS = 30;
 export const MAX_OPEN_ITEM_CHARS = 300;
 
 export function cleanOpenItems(items: unknown): string[] {
   if (!Array.isArray(items)) return [];
-  return items
-    .filter((i): i is string => typeof i === "string")
-    .map((i) => plainDashes(i.replace(/\s+/g, " ").trim()).slice(0, MAX_OPEN_ITEM_CHARS))
-    .filter(Boolean)
-    .slice(0, MAX_OPEN_ITEMS);
+  const out: string[] = [];
+  for (const i of items) {
+    if (out.length >= MAX_OPEN_ITEMS) break; // stop early: never walk a huge array
+    if (typeof i !== "string") continue;
+    const t = plainDashes(i.slice(0, MAX_OPEN_ITEM_CHARS * 2).replace(/\s+/g, " ").trim()).slice(0, MAX_OPEN_ITEM_CHARS);
+    if (t) out.push(t);
+  }
+  return out;
 }
 
 interface Built {
