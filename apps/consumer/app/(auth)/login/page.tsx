@@ -25,8 +25,7 @@ import {
   type ForgeRunChoice,
   readLocalForgeRunRaw,
   readStoredForgeRun,
-  forgeRunHasWork,
-  forgeRunExpired,
+  forgeRunToEraseAtSignup,
   eraseLocalForgeRun,
   forgeChoiceComplete,
   forgeRegisterFields,
@@ -106,17 +105,16 @@ function LoginForm() {
     if (urlCode) { setCode(urlCode); setShowCode(true); }
   }, [searchParams]);
 
-  // Ask about a run only when one with work in it is in this browser. An
-  // unowned run past the Forge's 24-hour idle limit is erased, never offered.
+  // Ask about a run only when an unowned one with work in it is in this
+  // browser. An unowned run past the Forge's 24-hour idle limit is erased,
+  // never offered. A run already marked with an owner is never offered either
+  // (it is saved in that account); it is erased once a new account is created.
   useEffect(() => {
     const raw = readLocalForgeRunRaw();
     const run = readStoredForgeRun(raw);
     if (!run && raw) {
       try {
-        const parsed = JSON.parse(raw);
-        if (parsed && !parsed._ownerUserId && forgeRunHasWork(parsed) && forgeRunExpired(parsed)) {
-          eraseLocalForgeRun();
-        }
+        if (!JSON.parse(raw)?._ownerUserId && forgeRunToEraseAtSignup(raw)) eraseLocalForgeRun();
       } catch {}
     }
     offeredRunRef.current = run;
@@ -329,10 +327,11 @@ function LoginForm() {
       }
       // The account exists. "No": erase the run from this computer now, before
       // any redirect, so no later screen can pick it up. "Yes": mark it as this
-      // new account's run so the Refinery does not ask again.
+      // new account's run so the Refinery does not ask again. A run another
+      // account owns was never offered; erase it too.
       const created = await res.json().catch(() => ({}));
       const after = forgeAfterSignup(forgeRunOffered, forgeChoice);
-      if (after === "erase") {
+      if (after === "erase" || (!forgeRunOffered && forgeRunToEraseAtSignup(readLocalForgeRunRaw()))) {
         eraseLocalForgeRun();
       } else if (after === "mark-owned" && offeredRun && typeof created?.userId === "string") {
         try {

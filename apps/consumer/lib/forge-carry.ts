@@ -16,10 +16,13 @@
  *    `saveForgeRun: true`. "No" erases it from this computer.
  *  - Refinery: an unowned run gets one "Is it yours?" card. Only "Yes" saves it
  *    and marks it owned (`_ownerUserId`). "No" erases it.
- *  - Every Refinery screen reads the run through `readOwnForgeSession(uid)`,
- *    which returns null unless the run is marked as this user's. The only
- *    other readers are the Forge itself (lib/forge-context.tsx) and the two
- *    places that must see an unowned run to ask about it (`readLocalForgeRunRaw`).
+ *  - Every Refinery screen (and the Settings export) reads the run through
+ *    `readOwnForgeSession(uid)`, which returns null unless the run is marked
+ *    as this user's. The only other readers are the Forge itself
+ *    (lib/forge-context.tsx) and the two places that must see an unowned run
+ *    to ask about it (`readLocalForgeRunRaw`): the sign-up form and the
+ *    Refinery shell. A guard test fails on any new mention of the key.
+ *  - A run already marked with an owner is never offered to a new account.
  *  - An unowned run idle past the Forge's 24-hour limit is erased, never offered.
  *
  * No imports on purpose: the login page (client), the Refinery shell (client)
@@ -118,6 +121,18 @@ export function readLocalForgeRunRaw(storage: ReadStore | null = browserStorage(
   }
 }
 
+/**
+ * Settings "Export my data": the local run for the download, only when it is
+ * this user's. Spread into the export's `localDevice` block.
+ */
+export function ownForgeRunExportEntry(
+  userId: string | null | undefined,
+  storage: ReadStore | null = browserStorage()
+): Record<string, ForgeRun> {
+  const run = readOwnForgeSession(userId, storage);
+  return run ? { [FORGE_SESSION_KEY]: run } : {};
+}
+
 /** Erase the local run and its sync boundary (the "No, erase it" answer). */
 export function eraseLocalForgeRun(storage: WriteStore | null = browserStorage()): void {
   if (!storage) return;
@@ -130,14 +145,38 @@ export function eraseLocalForgeRun(storage: WriteStore | null = browserStorage()
   }
 }
 
-/** Sign-up form: the run to ask about, or null (no run, no work, or expired). */
+/** Sign-up form: the run to ask about, or null (no run, no work, expired, or already owned by an account). */
 export function readStoredForgeRun(
   stored: string | null,
   now: number = Date.now()
 ): ForgeRun | null {
   const run = parseRun(stored);
-  if (!run || !forgeRunHasWork(run) || forgeRunExpired(run, now)) return null;
+  if (!run || run._ownerUserId || !forgeRunHasWork(run) || forgeRunExpired(run, now)) return null;
   return run;
+}
+
+/**
+ * Sign-up form: should the run in storage be erased instead of offered? True
+ * for a run already marked with an owner (it is saved in that account; it is
+ * never another person's to take) and for an unowned run with work that is
+ * past the idle limit.
+ */
+export function forgeRunToEraseAtSignup(stored: string | null, now: number = Date.now()): boolean {
+  const run = parseRun(stored);
+  if (!run) return false;
+  if (run._ownerUserId) return true;
+  return forgeRunHasWork(run) && forgeRunExpired(run, now);
+}
+
+/**
+ * Identity of a run's content, ignoring bookkeeping (`_savedAt`, `_synced`,
+ * owner marks): the Refinery card saves only the run it asked about.
+ */
+export function forgeRunFingerprint(stored: string | null): string | null {
+  const run = parseRun(stored);
+  if (!run) return null;
+  const keys = Object.keys(run).filter((k) => !k.startsWith("_")).sort();
+  return JSON.stringify(keys.map((k) => [k, run[k]]));
 }
 
 /** Sign-up form: may the person submit? A run on this computer needs a yes or a no. */

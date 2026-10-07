@@ -30,6 +30,7 @@ import { useEffectiveRole } from "@/components/RoleProvider";
 import {
   FORGE_LAST_SYNCED_RUN_KEY,
   eraseLocalForgeRun,
+  forgeRunFingerprint,
   forgeSyncDecision,
   readLocalForgeRunRaw,
 } from "@/lib/forge-carry";
@@ -349,6 +350,16 @@ export function RefineryShell({
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
   const [forgeSyncTick, setForgeSyncTick] = useState(0);
+  // The run the card asked about. "Yes" saves only that run (another tab may
+  // replace it); a changed run is asked about again and nothing is saved.
+  const askedRunRef = useRef<string | null>(null);
+  const [forgeRunChanged, setForgeRunChanged] = useState(false);
+  const [forgeNotice, setForgeNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!forgeNotice) return;
+    const t = setTimeout(() => setForgeNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [forgeNotice]);
   const prevState = useRef<string>("loading");
   const prevDisclosure = useRef(false);
 
@@ -468,7 +479,10 @@ export function RefineryShell({
         // Clear what is DERIVED from any earlier run, so nothing from an
         // unverified run shows, then ask. Nothing is saved or claimed here.
         clearRunScopedLocalStorage();
-        if (!effectiveRole?.impersonating) setForgePrompt((p) => (p === "none" ? "ask" : p));
+        if (!effectiveRole?.impersonating) {
+          if (askedRunRef.current === null) askedRunRef.current = stored;
+          setForgePrompt((p) => (p === "none" ? "ask" : p));
+        }
         return;
       }
       if (decision !== "owned" || !stored) return;
@@ -520,17 +534,38 @@ export function RefineryShell({
     if (!yes) {
       eraseLocalForgeRun();
       clearRunScopedLocalStorage();
+      askedRunRef.current = null;
+      setForgeRunChanged(false);
       setForgePrompt("none");
       window.dispatchEvent(new Event("forge-synced"));
       return;
     }
+    if (!uid || effectiveRole?.impersonating) return;
     const stored = readLocalForgeRunRaw();
-    if (!uid || !stored || effectiveRole?.impersonating) return;
+    const now = forgeSyncDecision(stored, uid);
+    if (now !== "ask" || forgeRunFingerprint(stored) !== forgeRunFingerprint(askedRunRef.current)) {
+      // The run changed or left since the card asked. Save nothing.
+      if (now === "ask") {
+        askedRunRef.current = stored; // ask again, about the run that is here now
+        setForgeRunChanged(true);
+        setForgePrompt("ask");
+      } else {
+        askedRunRef.current = null;
+        setForgeRunChanged(false);
+        setForgePrompt("none");
+        if (now !== "owned") setForgeNotice("Nothing was saved. That resume is no longer on this computer.");
+        setForgeSyncTick((t) => t + 1);
+      }
+      return;
+    }
     setForgePrompt("saving");
     try {
-      const ok = await saveOwnedForgeRun(stored, JSON.parse(stored), uid);
+      const ok = await saveOwnedForgeRun(stored as string, JSON.parse(stored as string), uid);
       if (ok) {
+        askedRunRef.current = null;
+        setForgeRunChanged(false);
         setForgePrompt("saved");
+        setForgeNotice("Saved to your account.");
         setForgeSyncTick((t) => t + 1);
       } else {
         setForgePrompt("failed");
@@ -838,11 +873,21 @@ export function RefineryShell({
 
         {/* Main content */}
         <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+          {forgeNotice && (
+            <p role="status" className="mb-6 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white">
+              {forgeNotice}
+            </p>
+          )}
           {(forgePrompt === "ask" || forgePrompt === "saving" || forgePrompt === "failed") && !effectiveRole?.impersonating && (
             <div role="region" aria-label="Resume on this computer" className="mb-6 border border-t-amber bg-t-panel px-4 py-4">
               <p className="text-base font-semibold text-t-white">
                 There&apos;s a resume in progress on this computer. Is it yours?
               </p>
+              {forgeRunChanged && (
+                <p className="mt-1 text-sm text-t-bone-dim">
+                  The resume on this computer changed since we asked. Nothing was saved. Is this one yours?
+                </p>
+              )}
               {forgePrompt === "failed" && (
                 <p className="mt-1 text-sm text-t-red">It did not save. Try again.</p>
               )}

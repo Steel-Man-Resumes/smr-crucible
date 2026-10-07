@@ -197,7 +197,12 @@ export default function DashboardPage() {
       } catch {}
     }
     loadData();
-    return () => { cancelled = true; };
+    // Refresh after the "Is it yours?" card saves a run (or erases one).
+    window.addEventListener("forge-synced", loadData);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("forge-synced", loadData);
+    };
   }, [ownerUid]);
 
   // Load artifact counts

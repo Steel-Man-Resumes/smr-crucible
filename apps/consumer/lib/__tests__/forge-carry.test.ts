@@ -9,7 +9,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative } from "node:path";
 import {
   FORGE_RUN_CHOICE_DEFAULT,
   FORGE_SESSION_KEY,
@@ -23,6 +23,9 @@ import {
   forgeRunToPersist,
   forgeSyncDecision,
   markForgeRunOwned,
+  forgeRunFingerprint,
+  forgeRunToEraseAtSignup,
+  ownForgeRunExportEntry,
   readOwnForgeSession,
   readStoredForgeRun,
 } from "../forge-carry";
@@ -115,33 +118,48 @@ describe("Refinery sync: never claims silently", () => {
 });
 
 describe("every Refinery reader uses the accessor", () => {
-  // The Forge itself (lib/forge-context.tsx and app/(forge)) owns the anonymous
-  // run. lib/forge-carry.ts is the accessor. Nothing else reads it directly.
-  const ALLOWED = new Set([join("lib", "forge-carry.ts"), join("lib", "forge-context.tsx")]);
-  const DIRECT = /getItem\(\s*(["'`]forge_session["'`]|FORGE_SESSION_KEY)\s*\)|localStorage\s*(\.forge_session|\[\s*["'`]forge_session)/;
+  // Every file that mentions the Forge run's storage key, by any spelling, must
+  // be on this list with a reason. A new mention anywhere fails until someone
+  // looks at it and either routes it through readOwnForgeSession or adds it here.
+  const ALLOWED: Record<string, string> = {
+    [join("lib", "forge-carry.ts")]: "the accessor itself, plus the raw read used only to ask",
+    [join("lib", "forge-context.tsx")]: "the anonymous Forge's own run (the Forge pages)",
+    [join("app", "(auth)", "login", "page.tsx")]: "sign-up offer (asks yes/no) and the dev reset list",
+    [join("app", "(dashboard)", "RefineryShell.tsx")]: "the sync and its 'Is it yours?' card, plus the sign-out clean",
+    [join("app", "api", "user", "export-data", "route.ts")]: "server SQL on the forge_session database table, not browser storage",
+    [join("app", "api", "user", "delete-data", "route.ts")]: "server SQL on the forge_session database table, not browser storage",
+    [join("lib", "forge-persist.ts")]: "server doc comment naming the forge_session database table",
+  };
+  const SERVER_ONLY = Object.keys(ALLOWED).filter((k) => /api|forge-persist/.test(k));
+  const MENTION = /\bforge_session\b|FORGE_SESSION_KEY|FORGE_LAST_SYNCED_RUN_KEY|forge_last_synced_run/;
   function walk(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
       if (name === "node_modules" || name === "__tests__" || name === ".next") continue;
       const p = join(dir, name);
       if (statSync(p).isDirectory()) walk(p, out);
-      else if (/\.(ts|tsx|js|mjs)$/.test(name)) out.push(p);
+      else if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(name)) out.push(p);
     }
     return out;
   }
-  it("no direct forge_session read outside the accessor and the Forge", () => {
+  it("only allow-listed files mention the Forge run's storage key", () => {
     const files = [
       ...walk(join(CONSUMER, "app")),
       ...walk(join(CONSUMER, "components")),
       ...walk(join(CONSUMER, "lib")),
       ...walk(join(CONSUMER, "..", "..", "packages", "consumer-ui", "src")),
     ];
-    const offenders = files
+    const mentioning = files
+      .filter((f) => MENTION.test(readFileSync(f, "utf8")))
       .map((f) => relative(CONSUMER, f))
-      .filter((r) => !ALLOWED.has(r) && !r.startsWith(join("app", "(forge)") + sep))
-      .filter((r) => DIRECT.test(readFileSync(join(CONSUMER, r), "utf8")));
-    assert.deepEqual(offenders, []);
+      .sort();
+    assert.deepEqual(mentioning, Object.keys(ALLOWED).sort());
   });
-  it("the known readers call readOwnForgeSession", () => {
+  it("the server-side mentions never call browser storage", () => {
+    for (const f of SERVER_ONLY) {
+      assert.doesNotMatch(readFileSync(join(CONSUMER, f), "utf8"), /\b(localStorage|sessionStorage)\s*\.\s*\w+\(|\bgetItem\(/, f);
+    }
+  });
+  it("the known readers call the accessor", () => {
     for (const f of [
       ["components", "resume", "ResumeWorkspace.tsx"],
       ["app", "(dashboard)", "dashboard", "page.tsx"],
@@ -150,6 +168,36 @@ describe("every Refinery reader uses the accessor", () => {
     ]) {
       assert.match(read(...f), /readOwnForgeSession\(/, f.join("/"));
     }
+    const settings = read("app", "(dashboard)", "dashboard", "settings", "page.tsx");
+    assert.match(settings, /ownForgeRunExportEntry\(ownerUid\)/);
+    assert.match(settings, /eraseLocalForgeRun\(\)/);
+  });
+  it("the Settings export carries the run only when it is this user's", () => {
+    assert.deepEqual(ownForgeRunExportEntry("user-b", store(RUN)), {});
+    assert.deepEqual(ownForgeRunExportEntry("user-b", store({ ...RUN, _ownerUserId: "user-a" })), {});
+    const owned = { ...RUN, _ownerUserId: "user-b" };
+    assert.deepEqual(ownForgeRunExportEntry("user-b", store(owned)), { [FORGE_SESSION_KEY]: owned });
+  });
+});
+
+describe("the card saves only the run it asked about", () => {
+  it("a fingerprint ignores bookkeeping but not content", () => {
+    const a = JSON.stringify(RUN);
+    assert.equal(forgeRunFingerprint(JSON.stringify({ ...RUN, _savedAt: NOW + 5 })), forgeRunFingerprint(a));
+    assert.equal(forgeRunFingerprint(JSON.stringify({ ...RUN, _ownerUserId: "x", _synced: true })), forgeRunFingerprint(a));
+    assert.notEqual(forgeRunFingerprint(JSON.stringify({ ...RUN, resumeText: "someone else" })), forgeRunFingerprint(a));
+    assert.equal(forgeRunFingerprint(null), null);
+  });
+  it("Yes compares before it saves; a gone run closes the card; a save says so", () => {
+    const src = read(...SHELL);
+    const handler = src.slice(src.indexOf("async function answerForgePrompt"), src.indexOf("// Refresh this session's last-seen"));
+    const compare = handler.indexOf("forgeRunFingerprint(stored) !== forgeRunFingerprint(askedRunRef.current)");
+    const save = handler.indexOf("saveOwnedForgeRun(");
+    assert.ok(compare > 0 && save > compare, "fingerprint check runs before the save");
+    assert.match(handler, /Nothing was saved\. That resume is no longer on this computer\./);
+    assert.match(handler, /Saved to your account\./);
+    assert.match(src, /The resume on this computer changed since we asked\. Nothing was saved\. Is this one yours\?/);
+    assert.match(read("app", "(dashboard)", "dashboard", "page.tsx"), /addEventListener\("forge-synced", loadData\)/);
   });
 });
 
@@ -206,6 +254,15 @@ describe("create-account form: a required yes or no", () => {
     assert.equal(readStoredForgeRun(JSON.stringify({ pagesVisited: [], _savedAt: NOW }), NOW), null);
     assert.equal(readStoredForgeRun(JSON.stringify(STALE), NOW), null);
     assert.deepEqual(readStoredForgeRun(JSON.stringify(RUN), NOW), RUN);
+  });
+  it("never offers a run already marked with an owner, and erases it at sign-up", () => {
+    const owned = JSON.stringify({ ...RUN, _ownerUserId: "user-x" });
+    assert.equal(readStoredForgeRun(owned, NOW), null);
+    assert.equal(forgeRunToEraseAtSignup(owned, NOW), true);
+    assert.equal(forgeRunToEraseAtSignup(JSON.stringify(STALE), NOW), true);
+    assert.equal(forgeRunToEraseAtSignup(JSON.stringify(RUN), NOW), false);
+    const src = read(...LOGIN);
+    assert.match(src, /!forgeRunOffered && forgeRunToEraseAtSignup\(readLocalForgeRunRaw\(\)\)/);
   });
 });
 

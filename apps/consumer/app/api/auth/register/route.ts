@@ -8,7 +8,7 @@
  * (forgeOutput/resume/narrative) and the user's contact info (name + phone) are
  * persisted server-side at creation, so the user lands in the Refinery with
  * their work intact and profile complete -- not on a locked dashboard. The
- * forge_session lives in forge.* localStorage and is lost crossing to the authed
+ * Forge run lives in forge.* localStorage and is lost crossing to the authed
  * refinery.* origin, so the relay in the dashboard layout never sees it.
  *
  * The Forge run is saved ONLY when the body also says `saveForgeRun: true`
@@ -238,7 +238,7 @@ export async function POST(request: Request) {
     }
 
     // Best-effort: carry the anonymous Forge work onto the new account, only
-    // when the person ticked the box (forgeRunToPersist above). Must run
+    // when the person answered "Yes" (forgeRunToPersist above). Must run
     // BEFORE the contact upsert so the contact merge reads (and preserves) the
     // profile_data that saveForgeSession writes. Never log the run or an error
     // message that could quote it.
