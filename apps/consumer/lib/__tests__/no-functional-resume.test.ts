@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { buildFullContext } from "../context-library";
 
 const ROUTE = readFileSync(join(__dirname, "..", "..", "app", "api", "forge", "generate-docs", "route.ts"), "utf8");
+const RUSH = readFileSync(join(__dirname, "..", "..", "app", "api", "rush-resume", "route.ts"), "utf8");
 
 // Every mention of "functional" must be the negative rule.
 function functionalMentions(text: string): string[] {
@@ -41,5 +42,15 @@ describe("no functional resume instruction", () => {
     const rules = ROUTE.split("\n").filter((l) => /no work history/i.test(l));
     assert.ok(rules.length >= 2, rules.join("\n"));
     for (const l of rules) assert.match(l, /never guess a year/i, l);
+  });
+
+  it("the Rush writer only mentions a functional page to forbid it, and keeps dates", () => {
+    assert.doesNotMatch(RUSH, /functional\/skills-based format is fine/i);
+    const mentions = functionalMentions(RUSH);
+    assert.ok(mentions.length >= 1, "the Rush prompt should carry the dated-page rule");
+    for (const l of mentions) {
+      assert.match(l, /never a dateless functional page/i, l);
+      assert.match(l, /each with the years the person gave/i, l);
+    }
   });
 });
