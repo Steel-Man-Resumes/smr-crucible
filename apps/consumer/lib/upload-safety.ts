@@ -260,7 +260,10 @@ function readDict(lx: Lexer): StreamDict | null {
       continue;
     }
     // A value for `key` at the top level.
-    const k = key;
+    // pdf.js reads a stream's filter as dict.get("F", "Filter") and an image's
+    // size as dict.get("W", "Width") / ("H", "Height"): the short keys count
+    // exactly like the long ones (security review 3a r3).
+    const k = key === "F" ? "Filter" : key === "W" ? "Width" : key === "H" ? "Height" : key;
     key = null;
     const indirect = () => {
       // "<num> <num> R": peek two more tokens.
@@ -551,6 +554,27 @@ export interface PdfScan {
   largestStream: number;
 }
 
+/*
+ * OBJECT HEADERS, READ THE WAY pdf.js READS THEM (security review 3a r3, M1).
+ * Between "N", "G" and "obj" pdf.js accepts any run of PDF whitespace (NUL,
+ * TAB, LF, FF, CR, SPACE) and "%" comments to the end of the line. A plain
+ * \s regex misses NUL and comments, and an object it misses would escape
+ * every per-object check. This pattern takes the same separators; the global
+ * search tries every start position, so a header is found wherever pdf.js
+ * could be pointed at it. "obj" must end at a delimiter, as a token does.
+ */
+const PDF_SEP = "(?:[\\x00\\t\\n\\f\\r ]|%[^\\r\\n]*[\\r\\n])+";
+export const OBJ_HEADER_RE_SOURCE = `(\\d+)${PDF_SEP}(\\d+)${PDF_SEP}obj(?![^\\x00\\t\\n\\f\\r ()<>\\[\\]{}/%])`;
+
+/** Every object header in the file: where it starts and where its body begins. */
+export function findObjectHeaders(s: string): Array<{ at: number; body: number }> {
+  const re = new RegExp(OBJ_HEADER_RE_SOURCE, "g");
+  const out: Array<{ at: number; body: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s))) out.push({ at: m.index, body: m.index + m[0].length });
+  return out;
+}
+
 /** Throws UnsafeUploadError when the PDF could make a reader inflate too much. */
 export function assertSafePdf(buf: Buffer): PdfScan {
   const s = buf.toString("latin1");
@@ -564,10 +588,8 @@ export function assertSafePdf(buf: Buffer): PdfScan {
     if (d?.keys.has("Encrypt")) throw locked();
   }
   const scan: PdfScan = { streams: 0, decodedBytes: 0, largestStream: 0 };
-  const objRe = /(\d+)\s+(\d+)\s+obj\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = objRe.exec(s))) {
-    const lx = new Lexer(s, m.index + m[0].length);
+  for (const header of findObjectHeaders(s)) {
+    const lx = new Lexer(s, header.body);
     const first = lx.next();
     if (!first || first.t !== "dict-open") continue;
     const dict = readDict(lx);
@@ -578,9 +600,12 @@ export function assertSafePdf(buf: Buffer): PdfScan {
     // A stream object.
     scan.streams++;
     if (scan.streams > PDF_MAX_STREAMS) throw new UnsafeUploadError("pdf_too_many_streams", TOO_BIG);
+    // The data starts after the next end of line, wherever it is, as pdf.js
+    // finds it (skipToNextLine): "stream" may be followed by other bytes first.
     let start = lx.i + 6;
+    while (start < s.length && s[start] !== "\r" && s[start] !== "\n") start++;
     if (s[start] === "\r") start++;
-    if (s[start] === "\n") start++;
+    if (s[start] === "\n" && s[start - 1] !== "\n") start++;
     // An encryption entry in a cross-reference stream.
     if (dict.type === "XRef" && dict.keys.has("Encrypt")) throw locked();
     const plan = checkFilters(dict.filters, dict.filterKeys);
