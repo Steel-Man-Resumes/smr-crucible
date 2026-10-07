@@ -21,6 +21,11 @@ import { formatResumeDownload, type ResumeDocument } from "@/components/resume/r
 import { printResumePdf } from "@/components/resume/resumePrint";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { resolveResumeGroup, type ResumeGroup } from "@crucible/core/src/libraryGroupingShared";
+import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
+import { useLanes } from "@/components/lanes/useLanes";
+import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
+import { LaneIntro } from "@/components/lanes/LaneIntro";
+import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, type LibraryLaneChoice } from "@/lib/lanes";
 
 const RESUME_GROUP_LABELS: { key: ResumeGroup; label: string }[] = [
   { key: "masters", label: "Masters (locked baselines)" },
@@ -41,6 +46,8 @@ interface Artifact {
   is_current?: boolean;
   lane?: string | null;
   is_locked?: boolean;
+  lane_id?: string | null;
+  is_demo?: boolean;
   updated_at: string;
 }
 
@@ -145,13 +152,23 @@ export default function VaultPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState("");
 
+  // Career lanes (073): the Library holds every lane; the switcher narrows it.
+  const lanes = useLanes();
+  const [laneFilter, setLaneFilter] = useState<LibraryLaneChoice>("all");
+  // FU2: examples and test resumes are hidden until asked for.
+  const [examples, setExamples] = useState<Artifact[]>([]);
+  const [showExamples, setShowExamples] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null);
+
   const PAGE = 100;
 
   // Server-side search + pagination. A blank query loads the first page; a query
   // hits ?q= so search covers everything, not just the loaded page.
   const load = useCallback((query: string, offset = 0, append = false) => {
-    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset), examples: "hide" });
     if (query.trim()) params.set("q", query.trim());
+    const laneParam = laneFilterParam(laneFilter);
+    if (laneParam) params.set("laneId", laneParam);
     return fetch(`/api/artifacts?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : { items: [], total: 0 }))
       .then((d) => {
@@ -161,12 +178,84 @@ export default function VaultPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, [laneFilter]);
+
+  const loadExamples = useCallback(() => {
+    fetch("/api/artifacts?examples=only&limit=100")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setExamples(d.items || d.data || []))
+      .catch(() => {});
   }, []);
 
-  // Initial load.
+  // Initial load, and again when the lane changes.
   useEffect(() => {
-    load("");
-  }, [load]);
+    load(q);
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadExamples();
+  }, [loadExamples]);
+
+  // Move one piece of work to another lane (or main), or in and out of the examples.
+  async function moveToLane(a: Artifact, choice: string) {
+    const laneId = choice === MAIN_LANE_KEY ? null : laneIdForSave(choice);
+    if ((a.lane_id ?? null) === laneId) return;
+    setMoving(a.id);
+    try {
+      const res = await fetch(`/api/artifacts/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laneId }),
+      });
+      if (res.ok) {
+        const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : MAIN_LANE_LABEL;
+        setStatusMsg(`Moved to ${name}.`);
+        // In a one-lane view the moved item leaves the list.
+        setItems((prev) =>
+          laneFilter === "all" ? prev.map((x) => (x.id === a.id ? { ...x, lane_id: laneId } : x)) : prev.filter((x) => x.id !== a.id)
+        );
+      } else {
+        setStatusMsg("Could not move that. Try again.");
+      }
+    } catch {
+      setStatusMsg("Could not move that. Try again.");
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  async function setExample(a: Artifact, isDemo: boolean) {
+    setMoving(a.id);
+    try {
+      const res = await fetch(`/api/artifacts/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDemo }),
+      });
+      if (res.ok) {
+        setStatusMsg(isDemo ? "Moved to examples." : "Back in your Library.");
+        if (isDemo) {
+          setItems((prev) => prev.filter((x) => x.id !== a.id));
+          setTotal((t) => Math.max(0, t - 1));
+          setExamples((prev) => [{ ...a, is_demo: true }, ...prev]);
+        } else {
+          setExamples((prev) => prev.filter((x) => x.id !== a.id));
+          load(q);
+        }
+      } else {
+        setStatusMsg("Could not change that. Try again.");
+      }
+    } catch {
+      setStatusMsg("Could not change that. Try again.");
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  function laneName(id: string | null | undefined): string {
+    if (!id) return MAIN_LANE_LABEL;
+    return lanes.lanes.find((l) => l.id === id)?.name ?? lanes.archived.find((l) => l.id === id)?.name ?? MAIN_LANE_LABEL;
+  }
 
   // Debounced server search on q change (skip the very first render -- initial
   // load already covers the empty query).
@@ -404,7 +493,15 @@ ${body}
                   Baseline{a.lane ? ` · ${a.lane}` : ""}
                 </span>
               )}
+              {a.is_demo && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-t-line text-t-phos-dim">
+                  Example
+                </span>
+              )}
             </div>
+            {laneFilter === "all" && !a.is_demo && (
+              <p className="text-xs text-t-phos-dim mt-0.5" data-testid="item-lane">Lane: {laneName(a.lane_id)}</p>
+            )}
             <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -492,6 +589,38 @@ ${body}
                 Lock as a baseline
               </button>
             )}
+          </div>
+        )}
+
+        {(isResume || a.artifact_type === "cover_letter") && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {!a.is_demo && (lanes.lanes.length > 0 || a.lane_id) && (
+              <label className="inline-flex items-center gap-2 text-xs text-t-phos-dim">
+                Move to
+                <select
+                  aria-label={`Move ${title(a)} to a lane`}
+                  value={a.lane_id ?? MAIN_LANE_KEY}
+                  disabled={moving === a.id}
+                  onChange={(e) => moveToLane(a, e.target.value)}
+                  className="t-focus bg-t-bg border border-t-line px-2 py-1 text-xs text-t-white"
+                >
+                  {lanes.lanes.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                  <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
+                </select>
+              </label>
+            )}
+            <button
+              type="button"
+              data-testid={a.is_demo ? "not-example" : "to-examples"}
+              onClick={() => setExample(a, !a.is_demo)}
+              disabled={moving === a.id || !!a.is_locked}
+              title={a.is_locked ? "Unlock the baseline first" : undefined}
+              className="text-xs font-medium text-t-phos-dim hover:text-t-white disabled:opacity-50"
+            >
+              {a.is_demo ? "Not an example" : "Move to examples"}
+            </button>
           </div>
         )}
 
@@ -591,6 +720,21 @@ ${body}
         and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Vault</Link>.
       </p>
 
+      {/* Career lanes (073): which lane's work is shown. */}
+      <div className="mb-6 space-y-3">
+        <LaneSwitcher
+          lanes={lanes}
+          value={laneFilter}
+          includeAll
+          label="Showing"
+          onChange={(c) => {
+            setLaneFilter(c);
+            if (c !== "all") lanes.setActive(c);
+          }}
+        />
+        <LaneIntro lanes={lanes} tool="library" laneId={laneIdForSave(laneFilter)} />
+      </div>
+
       {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for
           them. Renders nothing when there are none. */}
       <div className="mb-8">
@@ -600,9 +744,10 @@ ${body}
       <p aria-live="polite" className="sr-only">{statusMsg}</p>
 
       {items.length === 0 && !query ? (
-        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
-          Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it
-          will show up here.
+        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12" data-testid="library-empty">
+          {laneFilter === "all"
+            ? "Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it will show up here."
+            : "Nothing in this lane yet. Tailor a resume while you're working in this lane and it shows up here."}
         </div>
       ) : (
         <>
@@ -682,6 +827,29 @@ ${body}
             </div>
           )}
         </>
+      )}
+
+      {/* FU2: examples and test resumes, hidden unless asked for. Never deleted here. */}
+      {examples.length > 0 && (
+        <section className="mt-10 border-t border-t-line pt-6" data-testid="examples">
+          <button
+            type="button"
+            data-testid="examples-toggle"
+            onClick={() => setShowExamples((v) => !v)}
+            aria-expanded={showExamples}
+            className="t-focus text-sm font-medium text-t-phos-dim hover:text-t-white"
+          >
+            {showExamples ? "Hide examples" : `Show examples (${examples.length})`}
+          </button>
+          {showExamples && (
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-t-phos-dim">
+                Sample and test resumes, kept out of your way. Tap Not an example to bring one back.
+              </p>
+              {examples.map((a) => renderCard(a))}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
