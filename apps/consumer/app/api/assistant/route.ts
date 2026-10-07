@@ -16,7 +16,7 @@
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
 import { auth } from "@/auth";
-import { sessionPending } from "@/lib/session-policy";
+import { forgeUserId } from "@/lib/session-policy";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   // A session still owing its two-step code is served as signed out (the
   // middleware already removes its cookie here; this is the second lock, since
   // a signed-in user reaches memory and cohort data below).
-  const userId = sessionPending(session?.user as any) ? undefined : session?.user?.id;
+  const userId = forgeUserId(session);
 
   if (userId) {
     // Authenticated: user-rate-limited (atomic increment-then-check)

@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled } from "@/lib/mock-ai";
@@ -111,7 +112,8 @@ async function handlePost(request: Request) {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
     // login wall before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const body = await request.json();
     const action: string = typeof body.action === "string" ? body.action : "";

@@ -158,11 +158,15 @@ export function sessionPending(user: { mfa?: unknown; claim?: unknown } | null |
  *
  * These exact paths are the API routes the Forge pages call that work with no
  * session at all (IP rate limited, or no session use). For them a pending
- * session is treated exactly like no session: the hold does not apply, and the
- * middleware removes the session cookie from the request before the route
- * runs, so the route's own auth() sees nobody. A pending session gains nothing
- * here that a signed-out visitor does not already have, and no work is
- * attributed to the account it has not finished signing in to.
+ * session is treated exactly like no session, by two independent locks:
+ *  1. the hold does not apply, and the middleware removes every cookie Auth.js
+ *     would read as the session (forgeAnonymousRequestHeaders), so the route's
+ *     own auth() normally sees nobody;
+ *  2. the routes that read the session take the user through forgeUserId /
+ *     forgeSessionUser, which return nothing for a pending session, so no work
+ *     is credited to the account even if a session cookie got through.
+ * A pending session gains nothing here that a signed-out visitor does not
+ * already have.
  *
  * Exact match only. Account routes (/api/forge/save, /api/forge/load,
  * /api/forge/summary, /api/consent, /api/sharing/*, /api/support-request,
@@ -202,17 +206,25 @@ export function pendingSessionTreatment(
   return mfaGateApplies(path) ? "hold" : "none";
 }
 
-/** Auth.js session cookie names (plain or __Secure-, possibly chunked .0, .1, ...). */
-const SESSION_COOKIE_RE = /^(__Secure-)?authjs\.session-token(\.\d+)?$/;
+/**
+ * Cookies Auth.js reads as the session. Its SessionStore takes EVERY cookie
+ * whose name starts with the configured session cookie name and joins them
+ * (chunks), so "authjs.session-token-x" or "authjs.session-tokenZ" is read as
+ * the session too. This is the same prefix rule, for both names Auth.js may be
+ * configured with (plain, and __Secure- on https without the shared domain).
+ */
+const SESSION_COOKIE_PREFIXES = ["authjs.session-token", "__Secure-authjs.session-token"];
 
 export function isSessionCookieName(name: string): boolean {
-  return SESSION_COOKIE_RE.test(name);
+  return SESSION_COOKIE_PREFIXES.some((p) => name.startsWith(p));
 }
 
 /**
- * A copy of the request headers with every Auth.js session cookie removed from
- * the Cookie header (other cookies kept), so a route reading auth() sees no
- * session. Edge-safe.
+ * A copy of the request headers with every cookie Auth.js would read as the
+ * session removed from the Cookie header (other cookies kept). Split the way
+ * Auth.js parses it: pairs separated by ";", the name is the text before the
+ * first "=" with surrounding whitespace removed. A repeated name is removed
+ * every time. Edge-safe.
  */
 export function headersWithoutSessionCookie(headers: Headers): Headers {
   const out = new Headers(headers);
@@ -225,6 +237,40 @@ export function headersWithoutSessionCookie(headers: Headers): Headers {
   if (kept.length) out.set("cookie", kept.join("; "));
   else out.delete("cookie");
   return out;
+}
+
+/**
+ * Lock 1, used by the middleware: the request headers a Forge route should run
+ * with for this session, or null to leave the request as it is.
+ */
+export function forgeAnonymousRequestHeaders(
+  path: string,
+  user: { mfa?: unknown; claim?: unknown } | null | undefined,
+  headers: Headers
+): Headers | null {
+  if (pendingSessionTreatment(path, user) !== "anonymous") return null;
+  return headersWithoutSessionCookie(headers);
+}
+
+type SessionLike = { user?: { id?: string | null; email?: string | null } | null } | null | undefined;
+
+/**
+ * Lock 2, used by the Forge routes that read the session: the signed-in user,
+ * or null when there is none or it still owes its code or first-proof choice.
+ */
+export function forgeSessionUser(session: SessionLike): { id: string; email: string | null } | null {
+  const user = session?.user as
+    | { id?: string | null; email?: string | null; mfa?: unknown; claim?: unknown }
+    | null
+    | undefined;
+  if (!user || sessionPending(user)) return null;
+  if (typeof user.id !== "string" || !user.id) return null;
+  return { id: user.id, email: user.email ?? null };
+}
+
+/** The user id a Forge route may credit work to, or undefined. */
+export function forgeUserId(session: SessionLike): string | undefined {
+  return forgeSessionUser(session)?.id;
 }
 
 /** Paths that exercise admin powers (cross-user tools, impersonation). */

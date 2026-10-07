@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeSessionUser } from "@/lib/session-policy";
 import { incrementIpUsage, getOne } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { getClientIp } from "@/lib/auth-rate-limit";
@@ -69,8 +70,9 @@ async function handlePost(request: Request) {
   }
 
   // Signed in: your package goes to your own account address, nobody else's.
+  // A session that still owes its two-step code counts as signed out here.
   const session = await auth().catch(() => null);
-  const sessionEmail = session?.user?.email?.toLowerCase().trim();
+  const sessionEmail = forgeSessionUser(session)?.email?.toLowerCase().trim();
   if (sessionEmail && email !== sessionEmail) {
     return NextResponse.json(
       { error: "While you're signed in, we can only send this to your account email." },

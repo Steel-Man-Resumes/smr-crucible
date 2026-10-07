@@ -6,8 +6,14 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { NextResponse } from "next/server";
 import {
   authRouteSkipsSessionChecks,
+  forgeAnonymousRequestHeaders,
+  forgeSessionUser,
+  forgeUserId,
   headersWithoutSessionCookie,
   isAdminPowerPath,
   isForgeAnonymousApiRoute,
@@ -166,14 +172,92 @@ describe("the request a pending session's Forge call reaches the route with", ()
     assert.equal(out.get("accept"), "application/json");
   });
 
-  it("recognizes exactly the session cookie names, one rule shared with sign-in guards", () => {
-    for (const n of ["authjs.session-token", "__Secure-authjs.session-token", "authjs.session-token.0", "__Secure-authjs.session-token.12"]) {
+  it("recognizes every name Auth.js reads as the session (prefix rule, like its SessionStore)", () => {
+    for (const n of [
+      "authjs.session-token",
+      "__Secure-authjs.session-token",
+      "authjs.session-token.0",
+      "__Secure-authjs.session-token.12",
+      "authjs.session-token-x",
+      "authjs.session-tokenZ",
+      "authjs.session-token.a",
+      "authjs.session-token.0x",
+      "__Secure-authjs.session-token-x",
+    ]) {
       assert.equal(isSessionCookieName(n), true, n);
     }
-    for (const n of ["authjs.session-token-x", "xauthjs.session-token", "authjs.csrf-token", "next-auth.session-token", "smr_impersonate"]) {
+    for (const n of ["xauthjs.session-token", "authjs.csrf-token", "__Host-authjs.csrf-token", "next-auth.session-token", "smr_impersonate", "authjs.session"]) {
       assert.equal(isSessionCookieName(n), false, n);
     }
     assert.equal(guardsIsSessionCookieName, isSessionCookieName);
+  });
+
+  it("strips renamed and repeated session cookies too", () => {
+    const out = headersWithoutSessionCookie(
+      new Headers({
+        cookie:
+          "authjs.session-token-x=a; authjs.session-tokenZ=b; authjs.session-token.a=c; authjs.session-token.0x=d; " +
+          "authjs.session-token=e; authjs.session-token=f; \tauthjs.session-token.1=g; keep=1",
+      })
+    );
+    assert.equal(out.get("cookie"), "keep=1");
+  });
+});
+
+describe("lock 1: the request the middleware forwards", () => {
+  const COOKIE = "smr_access=ABC; authjs.session-token=aaa; authjs.session-token-x=bbb";
+
+  it("pending session on a Forge route: forwarded with no session cookie", () => {
+    const h = forgeAnonymousRequestHeaders("/api/parse", PENDING_CODE, new Headers({ cookie: COOKIE }));
+    assert.ok(h);
+    // The same call the middleware makes, and what Next forwards to the route.
+    const res = NextResponse.next({ request: { headers: h } });
+    assert.equal(res.headers.get("x-middleware-request-cookie"), "smr_access=ABC");
+    assert.match(res.headers.get("x-middleware-override-headers") ?? "", /cookie/);
+  });
+
+  it("leaves every other request as it is", () => {
+    const h = new Headers({ cookie: COOKIE });
+    assert.equal(forgeAnonymousRequestHeaders("/api/parse", FULL, h), null);
+    assert.equal(forgeAnonymousRequestHeaders("/api/parse", null, h), null);
+    assert.equal(forgeAnonymousRequestHeaders("/api/forge/save", PENDING_CODE, h), null);
+    assert.equal(forgeAnonymousRequestHeaders("/api/auth/mfa-verify", PENDING_CODE, h), null);
+  });
+
+  it("middleware.ts forwards exactly those headers, and auth.ts holds only on \"hold\"", () => {
+    const mw = readFileSync(join(__dirname, "..", "..", "middleware.ts"), "utf8");
+    assert.match(mw, /import \{ forgeAnonymousRequestHeaders \} from "@\/lib\/session-policy"/);
+    assert.match(mw, /forgeAnonymousRequestHeaders\(req\.nextUrl\.pathname, req\.auth\?\.user as any, req\.headers\)/);
+    assert.match(mw, /NextResponse\.next\(\{ request: \{ headers: anonymousHeaders \} \}\)/);
+    const authTs = readFileSync(join(__dirname, "..", "..", "auth.ts"), "utf8");
+    assert.match(authTs, /pendingSessionTreatment\(path, session\.user as any\) === "hold"/);
+    assert.doesNotMatch(authTs, /mfaGateApplies\(path\)/);
+  });
+});
+
+describe("lock 2: Forge routes never credit a pending session", () => {
+  it("returns no user for a pending session, the user for a full one", () => {
+    for (const extra of [PENDING_CODE, PENDING_2FA_CHOICE, PENDING_PASSWORD_CHOICE]) {
+      const s = { user: { id: "u1", email: "a@example.org", ...extra } };
+      assert.equal(forgeUserId(s as any), undefined, JSON.stringify(extra));
+      assert.equal(forgeSessionUser(s as any), null, JSON.stringify(extra));
+    }
+    const full = { user: { id: "u1", email: "a@example.org", ...FULL } };
+    assert.equal(forgeUserId(full as any), "u1");
+    assert.deepEqual(forgeSessionUser(full as any), { id: "u1", email: "a@example.org" });
+    assert.equal(forgeUserId(null), undefined);
+    assert.equal(forgeUserId({ user: { id: "", ...FULL } } as any), undefined);
+  });
+
+  it("every listed route that reads the session takes the user through the helper", () => {
+    const root = join(__dirname, "..", "..", "app");
+    for (const p of FORGE_ROUTES) {
+      const src = readFileSync(join(root, p, "route.ts"), "utf8");
+      const readsSession = /\bauth\(/.test(src);
+      if (!readsSession) continue;
+      assert.match(src, /forge(UserId|SessionUser)\(session\)/, p);
+      assert.doesNotMatch(src, /session\??\.user/, p);
+    }
   });
 });
 

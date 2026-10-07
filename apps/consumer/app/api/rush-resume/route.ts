@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { JD_MAX, RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
@@ -65,7 +66,8 @@ async function handlePost(request: Request) {
     // IP-rate-limited Forge flow -- anonymous use is intentional (no login wall
     // before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const input: RushInput = await request.json();
 
