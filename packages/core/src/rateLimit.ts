@@ -47,6 +47,10 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // "Email me my package" sends mail from SMR's domain to a typed address.
   // A person needs one or two sends; the route also caps per recipient.
   "email-package": 5,
+  // The second check (a different model family reads the page against the
+  // person's words). A paid call; one or two runs per resume. Off unless
+  // SECOND_CHECK_ENABLED, and also held by a daily dollar cap.
+  "second-check": 5,
 };
 
 export interface RateLimitResult {
