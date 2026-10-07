@@ -66,6 +66,23 @@ export const RESTRICTED_GRANTS = {
   employer_working_agreement: ["SELECT", "INSERT", "UPDATE"],
   employer_agreement_activity: ["SELECT", "INSERT"],
   directory_tier_v: [],
+  // Local resource directory (072). Platform-admin tables, admin RLS, nothing is
+  // deleted. The app reads only the two public views, which show a row only when
+  // its newest check is PASS, fresh, unchanged, and not low confidence or dataset-only.
+  resource_area: [],
+  resource_org: [],
+  resource_service: [],
+  resource_check: [],
+  resource_contact: [],
+  resource_suppression: [],
+  resource_chain: [],
+  resource_chain_step: [],
+  resource_chain_step_review: [],
+  resource_chain_step_dep: [],
+  resource_public_v: ["SELECT"],
+  resource_chain_public_v: ["SELECT"],
+  resource_recheck_queue_v: [],
+  resource_chain_recheck_queue_v: [],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
@@ -76,6 +93,10 @@ export const DIRECTORY_OBJECTS = [
   "directory_evidence_live", "directory_place_evidence", "employer_standing_v",
   "directory_public_v", "directory_public_evidence_v", "directory_mark_v", "directory_health_v",
   "employer_working_agreement", "employer_agreement_activity", "directory_tier_v",
+  "resource_area", "resource_org", "resource_service", "resource_check", "resource_contact",
+  "resource_suppression", "resource_chain", "resource_chain_step", "resource_chain_step_review",
+  "resource_chain_step_dep", "resource_public_v", "resource_chain_public_v", "resource_recheck_queue_v",
+  "resource_chain_recheck_queue_v",
 ];
 
 /**
