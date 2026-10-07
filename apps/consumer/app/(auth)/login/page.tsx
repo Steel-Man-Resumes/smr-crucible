@@ -10,8 +10,9 @@
  * 4. From Forge: defaults to "Create Account" mode
  */
 
-import { Suspense, useState, useEffect, type CSSProperties } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { signIn, signOut } from "next-auth/react";
+import { WORKSHOP_SCOPE } from "../workshopScope";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -36,25 +37,6 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
-// The SMR site's workshop palette (its locked t-* values), applied to this page
-// only so the Refinery front door looks like the site that sends people here.
-// Every t-* class below picks these up; nothing else in the app changes.
-const WORKSHOP_SCOPE = {
-  "--t-bg": "#121110",
-  "--t-panel": "#1a1815",
-  "--t-panel-2": "#201d18",
-  "--t-panel-3": "#28231c",
-  "--t-line": "#3a352c",
-  "--t-line-strong": "#5a5246",
-  "--t-amber": "#b98b32",
-  "--t-amber-bright": "#dbc173",
-  "--t-phos": "#9fbf8f",
-  "--t-phos-dim": "#b9b3a0",
-  "--t-white": "#ece7d9",
-  "--t-bone-dim": "#b9b3a0",
-  "--t-red": "#d9392a",
-  "--t-red-bright": "#d9392a",
-} as CSSProperties;
 
 // Same-origin relative path only (lib/safe-path.ts). Keeps an honored
 // callbackUrl from ever becoming an open redirect. Auth.js also rejects

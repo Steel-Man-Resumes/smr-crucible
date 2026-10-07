@@ -32,9 +32,8 @@ import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
-import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 import { previewIdForHref } from "@/lib/featurePreviews";
-import { lockedToolLine } from "@crucible/core/src/journeyStages";
+import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LockKeyhole, LogOut, Menu, Sparkles, X } from "lucide-react";
 
@@ -245,11 +244,13 @@ function isNavUnlocked(
   }
   const tierRank = TIER_RANK[userTier] ?? 3;
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
-  const stateRank = GATE_STATE_RANK[onboardingState] ?? 3;
-  const requiredRank = GATE_STATE_RANK[item.minState] ?? 3;
-  if (stateRank > requiredRank) return false;
-  if (item.requiresDisclosure && !disclosureComplete) return false;
-  return true;
+  // Same rule the dashboard cards use (one gate, two displays).
+  return clientToolUnlocked({
+    state: onboardingState,
+    minState: item.minState,
+    requiresDisclosure: item.requiresDisclosure,
+    disclosureComplete,
+  });
 }
 
 // Hide items requiring a tier the user can never reach (partner-only, admin-only)

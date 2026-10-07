@@ -30,9 +30,7 @@ import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { TBtn } from "@crucible/consumer-ui";
-// Deep, runtime-pure import: the one shared gate-state ordering.
-import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
-import { lockedToolLine } from "@crucible/core/src/journeyStages";
+import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -44,6 +42,8 @@ interface ToolCard {
   accent: string;
   /** Minimum onboarding state to unlock */
   minState: OnboardingState;
+  /** Builds on a disclosure plan, like the sidebar item of the same name. */
+  requiresDisclosure?: boolean;
 }
 
 const ALL_TOOLS: ToolCard[] = [
@@ -78,6 +78,7 @@ const ALL_TOOLS: ToolCard[] = [
     color: "bg-t-panel border-t-steel",
     accent: "text-t-steel",
     minState: "full_access",
+    requiresDisclosure: true,
   },
   {
     href: "/dashboard/resources",
@@ -106,9 +107,20 @@ const ALL_TOOLS: ToolCard[] = [
   },
 ];
 
-function isToolUnlocked(tool: ToolCard, state: OnboardingState, isAdmin: boolean): boolean {
+function isToolUnlocked(
+  tool: ToolCard,
+  state: OnboardingState,
+  isAdmin: boolean,
+  disclosureComplete: boolean
+): boolean {
   if (isAdmin) return true;
-  return (GATE_STATE_RANK[state] ?? 3) <= (GATE_STATE_RANK[tool.minState] ?? 3);
+  // Same rule as the sidebar (one gate, two displays).
+  return clientToolUnlocked({
+    state,
+    minState: tool.minState,
+    requiresDisclosure: tool.requiresDisclosure,
+    disclosureComplete,
+  });
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -544,7 +556,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-t-white mb-4">Your Tools</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {ALL_TOOLS.map((tool) => {
-            const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin);
+            const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin, onboarding.disclosureComplete);
             const typeForTool = Object.entries(TYPE_TOOL_HREF).find(
               ([, href]) => href === tool.href
             )?.[0];
@@ -555,7 +567,7 @@ export default function DashboardPage() {
               // and description stay quiet; the unlock line does not.
               const lockLine = lockedToolLine({
                 state: onboarding.state,
-                requiresDisclosure: tool.href === "/dashboard/interview",
+                requiresDisclosure: tool.requiresDisclosure,
                 disclosureComplete: onboarding.disclosureComplete,
               });
               return (
@@ -601,7 +613,7 @@ export default function DashboardPage() {
 
       {/* Settings -- get people in early (RT2). Real features only, named. */}
       <section className="border-t border-t-line pt-8">
-        <h2 className="text-lg font-bold text-t-white mb-1">Settings does more than most apps</h2>
+        <h2 className="text-lg font-bold text-t-white mb-1">What Settings lets you do</h2>
         <ul className="mb-4 mt-2 space-y-1.5 text-sm text-t-bone-dim">
           <li>Name your coach and pick how direct it is.</li>
           <li>See the reason behind each suggestion t.ROY made.</li>

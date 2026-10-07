@@ -17,6 +17,7 @@ import {
   stepPositionLabel,
   whyForNextStep,
   arcStageForNextStep,
+  clientToolUnlocked,
 } from "@crucible/core/src/journeyStages";
 import { computeNextStep } from "@crucible/core/src/computeNextStep";
 import type { UserProfile } from "@crucible/core/src/getUserProfile";
@@ -128,4 +129,33 @@ test("the Settings picks are real: each named feature is in the source", () => {
   for (const comp of ["CoachSettingsSection", "DecisionLogViewer", "SharingConsentSection"]) {
     assert.ok(settings.includes(`<${comp}`), `Settings page does not render ${comp}`);
   }
+});
+
+test("a person who finished every step sees all steps done, not 'Step 2 of 6'", () => {
+  // The engine reuses stage 2 and stage 6 for the "all done" states.
+  assert.equal(arcStageForNextStep({ stage: 2, reason: "default_matches" }), 7);
+  assert.equal(arcStageForNextStep({ stage: 6, reason: "follow_up_due" }), 7);
+  assert.equal(stepPositionLabel(arcStageForNextStep({ stage: 2, reason: "default_matches" })), "Keep going");
+  // Real step 2 and real step 6 are untouched.
+  assert.equal(arcStageForNextStep({ stage: 2, reason: "no_saved_jobs" }), 2);
+  assert.equal(arcStageForNextStep({ stage: 6, reason: "no_application" }), 6);
+});
+
+test("sidebar and dashboard cards share one gate: Interview needs the disclosure plan", () => {
+  const interview = { minState: "full_access", requiresDisclosure: true };
+  assert.equal(clientToolUnlocked({ state: "full_access", ...interview, disclosureComplete: false }), false);
+  assert.equal(clientToolUnlocked({ state: "full_access", ...interview, disclosureComplete: true }), true);
+  assert.equal(clientToolUnlocked({ state: "needs_resume", ...interview, disclosureComplete: true }), false);
+  assert.equal(clientToolUnlocked({ state: "needs_resume", minState: "needs_resume" }), true);
+  assert.equal(clientToolUnlocked({ state: "needs_profile", minState: "needs_resume" }), false);
+  // Both displays call this function (no private copy of the rule).
+  const shell = readFileSync(join(ROOT, "app", "(dashboard)", "RefineryShell.tsx"), "utf8");
+  const dash = readFileSync(join(DASH, "page.tsx"), "utf8");
+  assert.ok(shell.includes("clientToolUnlocked(") && dash.includes("clientToolUnlocked("));
+});
+
+test("Settings headings state what it does, with no comparison to other apps", () => {
+  const dash = readFileSync(join(DASH, "page.tsx"), "utf8");
+  const tour = readFileSync(join(ROOT, "components", "GuidedTour.tsx"), "utf8");
+  for (const src of [dash, tour]) assert.ok(!/other apps|than most apps/i.test(src));
 });
