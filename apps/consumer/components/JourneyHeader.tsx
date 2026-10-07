@@ -11,6 +11,8 @@
 import { useState, useEffect } from "react";
 import { NextStepCard, type NextStep } from "@/components/NextStepCard";
 import { StageProgressBar } from "@/components/StageProgressBar";
+import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
+import { arcStageForNextStep } from "@crucible/core/src/journeyStages";
 
 export function JourneyHeader() {
   const [next, setNext] = useState<NextStep | null>(null);
@@ -20,17 +22,26 @@ export function JourneyHeader() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/next-step")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j?.data) setNext(j.data as NextStep);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    function load() {
+      // no-store: after the tour is completed or deferred the server has just
+      // invalidated its cache, so never serve this from the browser cache.
+      fetch("/api/next-step", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!cancelled && j?.data) setNext(j.data as NextStep);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
+    load();
+    // The guided tour announces when it is completed or deferred; refetch so the
+    // card stops showing the tour step without a full reload.
+    window.addEventListener(NEXT_STEP_CHANGED_EVENT, load);
     return () => {
       cancelled = true;
+      window.removeEventListener(NEXT_STEP_CHANGED_EVENT, load);
     };
   }, []);
 
@@ -55,7 +66,7 @@ export function JourneyHeader() {
 
   return (
     <div className="space-y-4">
-      <StageProgressBar currentStage={next.stage} />
+      <StageProgressBar currentStage={arcStageForNextStep(next)} />
       <NextStepCard next={next} />
       {why && (
         <details className="group -mt-1 px-1">

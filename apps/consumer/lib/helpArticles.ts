@@ -57,7 +57,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: "save-work",
     title: "Where is my saved work?",
     keywords: ["saved work", "my materials", "where is my resume", "vault", "find my resume"],
-    body: "Everything you make lands in My Materials. Open it any time to reopen or reuse a resume, cover letter, or plan. Your work is saved to your account, so it is here when you come back.",
+    body: "Everything you make lands in your Library. Open it any time to reopen or reuse a resume, cover letter, or plan. Your work is saved to your account, so it is here when you come back.",
   },
   {
     id: "human",

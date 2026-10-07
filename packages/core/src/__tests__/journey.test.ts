@@ -174,3 +174,47 @@ test("journey stages: stage-3 href matches the live tailor route", async () => {
     "stage-3 next step must target the live route, got " + r.href
   );
 });
+
+// ─── Orientation (tour) steps and the progress arc ────────────────────────────
+
+test("tour steps: both stage-0 steps link to the dashboard tour request", async () => {
+  const { TOUR_HREF } = await import("../journeyStages");
+  assert.equal(TOUR_HREF, "/dashboard?tour=1");
+  const required = computeNextStep(
+    mkProfile({ forgeComplete: true, onboardingComplete: false, onboardingDeferrals: 2 })
+  );
+  const pending = computeNextStep(
+    mkProfile({ forgeComplete: true, onboardingComplete: false, onboardingDeferrals: 0 })
+  );
+  assert.equal(required.href, TOUR_HREF);
+  assert.equal(pending.href, TOUR_HREF);
+  assert.equal(pending.stage, 0);
+  assert.equal(pending.reason, "onboarding_pending");
+});
+
+test("tour steps: once the tour is complete the ladder moves on", () => {
+  const r = computeNextStep(mkProfile({ forgeComplete: true, onboardingComplete: true }));
+  assert.notEqual(r.stage, 0);
+  assert.ok(!r.href.includes("tour=1"));
+});
+
+test("tour steps: the Forge comes before a soft orientation", () => {
+  const r = computeNextStep(
+    mkProfile({ forgeComplete: false, onboardingComplete: false, onboardingDeferrals: 1 })
+  );
+  assert.equal(r.stage, 1);
+});
+
+test("progress arc: orientation never shows Foundation as current once the Forge is done", async () => {
+  const { arcStageForNextStep } = await import("../journeyStages");
+  const pending = computeNextStep(mkProfile({ forgeComplete: true, onboardingComplete: false }));
+  assert.equal(pending.stage, 0);
+  assert.equal(arcStageForNextStep(pending), 2);
+  const required = computeNextStep(
+    mkProfile({ forgeComplete: true, onboardingComplete: false, onboardingDeferrals: 2 })
+  );
+  assert.equal(arcStageForNextStep(required), 1);
+  // Every other stage maps to itself, capped at 7.
+  for (let s = 1; s <= 6; s++) assert.equal(arcStageForNextStep({ stage: s }), s);
+  assert.equal(arcStageForNextStep({ stage: 12 }), 7);
+});

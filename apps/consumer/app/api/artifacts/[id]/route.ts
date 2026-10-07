@@ -98,7 +98,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       {
         error: "artifact_locked",
         message:
-          "This is a locked baseline. Unlock it in My Materials to edit, or tailor a copy instead.",
+          "This is a locked baseline. Unlock it in your Library to edit, or tailor a copy instead.",
       },
       { status: 409 }
     );
@@ -125,7 +125,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       {
         error: "artifact_locked",
         message:
-          "This is a locked baseline. Unlock it in My Materials before deleting.",
+          "This is a locked baseline. Unlock it in your Library before deleting.",
       },
       { status: 409 }
     );

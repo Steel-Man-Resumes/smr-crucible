@@ -80,7 +80,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
   },
   vault: {
     id: "vault",
-    title: "My Materials",
+    title: "Library",
     whatItDoes:
       "It keeps every resume, cover letter, and plan you make in one place, so you can reopen or reuse them anytime.",
     sampleOutput:
