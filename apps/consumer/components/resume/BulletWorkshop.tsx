@@ -17,7 +17,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
-import { RANGE_CHOICES, QUANTITY_UNITS, type QuantityUnit } from "@/lib/number-truth";
+import { countPromptsFor, quantityFromCounts } from "@/lib/count-prompts";
 import { hasChip, toggleChip, canGenerateBullet } from "@/lib/bullet-chips";
 import { WORKSHOP_PLACEHOLDERS } from "@/lib/workshop-placeholders";
 
@@ -146,9 +146,11 @@ export function BulletWorkshop({
   const [tools, setTools] = useState(saved?.tools ?? "");
   const [often, setOften] = useState(saved?.often ?? "");
   const [quantity, setQuantity] = useState(saved?.quantity ?? "");
-  // Typed, picked from the offered ranges, or "not sure". Recorded with the bullet.
+  // Typed by the person, or "not sure". Recorded with the bullet. No figure
+  // is ever offered: the prompts below name what to count, and the person
+  // types the number (decision D2).
   const [quantitySource, setQuantitySource] = useState<BulletEvidence["quantitySource"]>(saved?.quantitySource);
-  const [quantityUnit, setQuantityUnit] = useState<QuantityUnit | null>(null);
+  const [counts, setCounts] = useState<Record<string, string>>({});
   const [improved, setImproved] = useState(saved?.improved ?? "");
   const [draft, setDraft] = useState<string | null>(saved?.draft ?? null);
   // A draft belongs to the answers it was written from. If the answers change
@@ -158,10 +160,6 @@ export function BulletWorkshop({
   const [draftFrom, setDraftFrom] = useState<string | null>(() => (saved?.draft ? answersKey : null));
   const [draftEdited, setDraftEdited] = useState(false);
   const draftStale = draft !== null && draftFrom !== null && draftFrom !== answersKey && !draftEdited;
-  // What was in the "How many?" box before a pick replaced it, so one tap undoes it.
-  const [quantityUndo, setQuantityUndo] = useState<{ value: string; source: BulletEvidence["quantitySource"] } | null>(null);
-  const quantityUnitRef = useRef<QuantityUnit | null>(null);
-  quantityUnitRef.current = quantityUnit;
   const [generating, setGenerating] = useState(false);
   const [toolHints, setToolHints] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -173,10 +171,6 @@ export function BulletWorkshop({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (quantityUnitRef.current) {
-          setQuantityUnit(null);
-          return;
-        }
         onClose();
         return;
       }
@@ -421,86 +415,54 @@ export function BulletWorkshop({
               value={quantity}
               onChange={(v) => {
                 setQuantity(v);
+                setCounts({});
                 setQuantitySource(v.trim() ? "typed" : undefined);
-                setQuantityUndo(null);
               }}
               placeholder={WORKSHOP_PLACEHOLDERS.quantity}
               why={WHY.quantity}
             />
-            {/* Pick what you were counting, then the closest range. The ranges are
-                fixed in code, never written by a model, and a pick only fills the
-                box. Nothing reaches the resume until the person accepts it. */}
-            <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="What were you counting?">
-              {QUANTITY_UNITS.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  aria-pressed={quantityUnit === u}
-                  onClick={() => setQuantityUnit(quantityUnit === u ? null : u)}
-                  className={`t-focus min-h-touch border px-3 text-sm transition-colors hover:border-t-amber ${
-                    quantityUnit === u ? "border-t-amber bg-t-panel text-t-white" : "border-t-line bg-t-panel-2 text-t-phos"
-                  }`}
-                >
-                  {u}
-                </button>
-              ))}
-            </div>
-            {quantityUnit && (
-              <div className="mt-2 border-l-2 border-t-amber pl-2">
-                <p className="mb-1.5 text-[11px] text-t-phos">
-                  {quantityUnit === "crew" ? "About how big was the crew?" : `About how many ${quantityUnit}?`}{" "}
-                  {"Pick the closest one. Only pick it if it's true. You can change it after."}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {RANGE_CHOICES[quantityUnit].map((r) => (
-                    <button
-                      key={r.label}
-                      type="button"
-                      onClick={() => {
-                        if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
-                        setQuantity(r.fill);
-                        setQuantitySource("picked");
-                        setQuantityUnit(null);
-                        document.getElementById("bw-how-many")?.focus();
-                      }}
-                      className="t-focus min-h-touch border border-t-line bg-t-panel-2 px-3 text-sm text-t-phos transition-colors hover:border-t-amber"
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
-                      setQuantity("");
-                      setQuantitySource("unsure");
-                      setQuantityUnit(null);
-                      document.getElementById("bw-how-many")?.focus();
+            {/* What could be counted for this line's work. Each prompt names the
+                thing to count and nothing else; the person types their own
+                figure beside it. No number, range or example is ever offered. */}
+            <div className="mt-2 space-y-1.5" role="group" aria-label="What could you count here?" data-testid="count-prompts">
+              <p className="text-[11px] text-t-phos">What could you count here? Type a number only if you know it.</p>
+              {countPromptsFor(did || initialBullet || "", jobTitle).map((prompt, i) => (
+                <label key={prompt} className="flex items-center gap-2 text-sm text-t-phos">
+                  <input
+                    id={i === 0 ? "bw-count-first" : undefined}
+                    type="text"
+                    inputMode="decimal"
+                    value={counts[prompt] ?? ""}
+                    onChange={(e) => {
+                      const next = { ...counts, [prompt]: e.target.value };
+                      setCounts(next);
+                      const q = quantityFromCounts(next);
+                      setQuantity(q);
+                      setQuantitySource(q ? "typed" : undefined);
                     }}
-                    className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
-                  >
-                    {"I'm not sure"}
-                  </button>
-                </div>
-              </div>
-            )}
+                    aria-label={`How many ${prompt}`}
+                    className="t-focus min-h-touch w-20 shrink-0 border border-t-line bg-t-panel px-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+                  />
+                  <span>{prompt}</span>
+                </label>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setCounts({});
+                  setQuantity("");
+                  setQuantitySource("unsure");
+                  document.getElementById("bw-how-many")?.focus();
+                }}
+                className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
+              >
+                {"I'm not sure"}
+              </button>
+            </div>
             {quantitySource === "unsure" && !quantity.trim() && (
               <p className="mt-1.5 text-[11px] text-t-phos-dim">
                 {"That's fine. We'll leave the number out. A true line with no number still works."}
               </p>
-            )}
-            {quantityUndo && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuantity(quantityUndo.value);
-                  setQuantitySource(quantityUndo.source);
-                  setQuantityUndo(null);
-                }}
-                className="t-focus mt-1 min-h-touch text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2 hover:text-t-white"
-              >
-                {`Undo. Put back "${quantityUndo.value}"`}
-              </button>
             )}
           </div>
           </section>
@@ -512,7 +474,7 @@ export function BulletWorkshop({
             surfaceId="bullet-quantity"
             enabled={!quantity.trim() && quantitySource !== "unsure"}
             delayMs={9000}
-            message="Tap what you counted, or type a number you know is true."
+            message="Pick something you counted and type the number you know is true."
           />
           <Field
             label="What got better because of you?"
