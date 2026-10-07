@@ -629,7 +629,7 @@ async function generateResumeContent(
   const currentRole = workHistory[0]?.title || 'Professional';
   const allBullets = workHistory.flatMap((j: any) => j.bullets || []).slice(0, 10);
 
-  const prompt = `You are a TORI Award-winning resume writer. Generate enhanced resume content.
+  const prompt = `You are an expert resume writer. Generate enhanced resume content.
 
 CANDIDATE DATA:
 Name: ${parsedProfile.profile?.full_name || 'Candidate'}

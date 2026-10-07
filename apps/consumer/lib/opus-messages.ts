@@ -99,7 +99,7 @@ const OBSERVER_MESSAGES: Record<string, string> = {
   dashboard:
     "The Refinery implements persistent scaffolded career services (Wood, Bruner, Ross, 1976). Progressive unlock ensures users build skills before advancing. Each tool's output feeds the next.",
   "application-tailor":
-    "TORI-competitive resume generation with research-backed prompts. Generative identity framing (Maruna, 2001) transforms duties into achievements. Multi-level detection adapts output to user sophistication.",
+    "Resume generation with research-backed prompts. Generative identity framing (Maruna, 2001) transforms duties into achievements. Multi-level detection adapts output to user sophistication.",
   jobs:
     "Fair-chance employer matching uses JSearch API with AI enrichment. Ban-the-box compliance checking, WOTC tax credit awareness, and second-chance employer database.",
   disclosure:

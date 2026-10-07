@@ -1,7 +1,7 @@
 /**
- * Document Download API — Converts plain text to TORI-standard DOCX
+ * Document Download API — Converts plain text to SMR's standard DOCX layout
  *
- * Matches the Meg Sanger TORI reference:
+ * Layout:
  * - Navy header block with white text (name, headline, contact)
  * - Georgia headers + Arial body (8pt body, 9pt headers)
  * - Tight margins (0.28" top/bot, 0.43" sides) for one-page fit
@@ -51,7 +51,7 @@ export const maxDuration = 30;
 const MAX_DOWNLOAD_REQUEST_BYTES = 500_000;
 const MAX_DOCUMENT_CHARS = 200_000;
 
-// TORI color palette (matches Meg Sanger reference)
+// SMR standard DOCX color palette
 const NAVY = "1B2A4A";       // dark navy — headers, section titles, accent
 const WHITE = "FFFFFF";       // white text on navy backgrounds
 const DARK = "1a1a1a";       // near-black body text
@@ -171,7 +171,7 @@ async function handlePost(request: Request) {
   }
 }
 
-// --- Resume DOCX Builder (TORI Standard) ---
+// --- Resume DOCX Builder (SMR standard layout) ---
 
 async function buildResumeDocx(text: string): Promise<Buffer> {
   const lines = text.split("\n");
@@ -372,7 +372,7 @@ async function buildResumeDocx(text: string): Promise<Buffer> {
       {
         properties: {
           page: {
-            // TORI tight margins: 0.28" top/bot, 0.43" sides
+            // SMR tight margins: 0.28" top/bot, 0.43" sides
             margin: {
               top: MARGIN_TOP_TWIPS,     // 0.28in
               right: MARGIN_RIGHT_TWIPS, // 0.43in

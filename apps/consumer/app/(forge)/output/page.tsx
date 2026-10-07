@@ -1024,7 +1024,7 @@ export default function OutputPage() {
   );
 }
 
-// ─── Resume Preview (mirrors the TORI DOCX format visually) ─────────────────
+// ─── Resume Preview (mirrors the SMR standard DOCX layout visually) ─────────────────
 
 const PREVIEW_SECTION_HEADERS = new Set([
   "PROFESSIONAL SUMMARY", "CAREER SUMMARY", "SUMMARY",

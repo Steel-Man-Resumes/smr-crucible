@@ -35,7 +35,7 @@ export const TWIPS_PER_INCH = 1440;
 export const PAGE_WIDTH_TWIPS = Math.round(8.5 * TWIPS_PER_INCH); // 12240
 export const PAGE_HEIGHT_TWIPS = Math.round(11 * TWIPS_PER_INCH); // 15840
 
-/** TORI tight margins from the route: 0.28" top/bottom, 0.43" left/right. */
+/** SMR standard tight margins from the route: 0.28" top/bottom, 0.43" left/right. */
 export const MARGIN_TOP_TWIPS = 403; // 0.28in
 export const MARGIN_BOTTOM_TWIPS = 403; // 0.28in
 export const MARGIN_LEFT_TWIPS = 619; // 0.43in
