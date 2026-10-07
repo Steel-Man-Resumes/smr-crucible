@@ -25,6 +25,10 @@ const GOAL_LABELS: Record<string, string> = {
   growth: "Growth",
   meaning: "Meaningful work",
   immediate: "Immediate income",
+  independence: "My own boss someday",
+  community: "Give back",
+  flexibility: "Flexible schedule",
+  back_to_my_trade: "Back to my trade",
 };
 
 export default function ForgeAccumulator() {

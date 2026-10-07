@@ -18,6 +18,7 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import ForgeAccumulator from "@/components/ForgeAccumulator";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
+import { findQuestion, nextPath, planForgePath, previousPath } from "@/lib/forge-path";
 
 const GOAL_OPTIONS = [
   {
@@ -29,6 +30,12 @@ const GOAL_OPTIONS = [
     id: "growth",
     label: "Room to grow",
     description: "I want to build skills and move up over time.",
+  },
+  {
+    // Brings the licenses-and-training prompt onto the story screen (forge-path R4).
+    id: "back_to_my_trade",
+    label: "Get back into my trade",
+    description: "Work I already know how to do: a trade, a license, a skill I've used.",
   },
   {
     id: "meaning",
@@ -90,7 +97,21 @@ export default function GoalsPage() {
   const [hookNarrative, setHookNarrative] = useState(
     isDemo ? (DEMO_SESSION.hookNarrative || "") : (session.hookNarrative || "")
   );
-  const [showHookPrompt, setShowHookPrompt] = useState(!isDemo);
+  // The plan for this screen, from everything answered so far plus the goals
+  // picked on this screen right now (lib/forge-path.ts).
+  const plan = planForgePath({ ...session, goals: selected });
+  const light = plan.depth === "light";
+  const planned = (id: Parameters<typeof findQuestion>[2]) => findQuestion(plan, "goals", id);
+  const tone = planned("goals")?.variant === "open" ? "open" : "direct";
+  // Light path: everything past the goal cards waits behind one "Add more".
+  const [showMore, setShowMore] = useState(false);
+  const shown = (id: Parameters<typeof findQuestion>[2]) => {
+    const q = planned(id);
+    return !!q && (!q.folded || !light || showMore);
+  };
+  const [showHookPrompt, setShowHookPrompt] = useState(
+    !isDemo && (!planned("hook")?.folded || !!session.hookNarrative)
+  );
   const [resumeConfidence, setResumeConfidence] = useState<string>(
     isDemo ? "" : (session.resumeConfidence || "")
   );
@@ -113,6 +134,13 @@ export default function GoalsPage() {
   }
 
   function handleContinue() {
+    saveGoals();
+    const goals = isDemo ? DEMO_SESSION.goals : selected;
+    router.push(nextPath(planForgePath({ ...session, goals }), "goals"));
+  }
+
+  /** Save this screen's answers (Continue and Back both keep them). */
+  function saveGoals() {
     updateSession({
       goals: isDemo ? DEMO_SESSION.goals : selected,
       goalNarrative: isDemo ? DEMO_SESSION.goalNarrative : (narrative || undefined),
@@ -121,20 +149,26 @@ export default function GoalsPage() {
       resumeWorries: isDemo ? undefined : (resumeWorries.length ? resumeWorries : undefined),
       lastPageVisited: "goals",
     });
-    router.push("/story");
   }
 
   const canContinue = isDemo || selected.length > 0 || narrative.trim().length > 0;
 
   return (
     <FlowPage
-      title="What do you actually want?"
-      subtitle="Pick as many as fit. This changes what jobs I recommend."
+      title={tone === "open" && !isDemo ? "What could work look like for you?" : "What do you actually want?"}
+      subtitle={
+        tone === "open" && !isDemo
+          ? "Pick anything that sounds right. Nothing here is locked in."
+          : "Pick as many as fit. This changes what jobs I recommend."
+      }
       actionLabel={isDemo ? "Next" : "Continue"}
       actionDisabled={!canContinue}
       onAction={handleContinue}
       showBack
-      onBack={() => router.push("/resume")}
+      onBack={() => {
+        if (!isDemo) saveGoals();
+        router.push(previousPath(plan, "goals"));
+      }}
       footer={
         !isDemo ? (
           <p>
@@ -183,9 +217,23 @@ export default function GoalsPage() {
         </p>
       )}
 
+      {/* Light path: the rest is optional depth, one tap away. */}
+      {!isDemo && light && !showMore && (
+        <button
+          type="button"
+          onClick={() => setShowMore(true)}
+          data-testid="goals-add-more"
+          className="t-focus mt-6 min-h-touch w-full border border-dashed border-t-line bg-t-panel px-4 py-3 text-left text-sm text-t-phos hover:border-t-phos-dim hover:text-t-white"
+        >
+          <span className="font-medium text-t-white">Add more about what you want</span>{" "}
+          <span className="text-t-phos-dim">(optional). It helps, but you can skip it today.</span>
+        </button>
+      )}
+
       {/* Self-disclosure (F2 s.2.3): primes how we build the resume. Optional. */}
-      {!isDemo && (
+      {!isDemo && (shown("confidence") || shown("worries")) && (
         <div className="mt-6 bg-t-panel px-4 py-3 border border-t-line">
+          {shown("confidence") && (<>
           <p className="text-sm font-medium text-t-white mb-2">
             How strong is your resume right now?{" "}
             <span className="font-normal text-t-phos-dim">(optional)</span>
@@ -206,6 +254,7 @@ export default function GoalsPage() {
               </button>
             ))}
           </div>
+          </>)}
           <p className="text-sm font-medium text-t-white mb-2">
             Anything you&apos;re worried about?{" "}
             <span className="font-normal text-t-phos-dim">(optional)</span>
@@ -237,8 +286,9 @@ export default function GoalsPage() {
       )}
 
       {/* Optional free-text for more nuanced expression */}
+      {(isDemo || shown("goalNarrative") || shown("hook")) && (
       <div className="mt-6 space-y-4">
-        {!showNarrative ? (
+        {isDemo || shown("goalNarrative") ? (!showNarrative ? (
           !isDemo && (
             <button
               onClick={() => setShowNarrative(true)}
@@ -275,10 +325,10 @@ export default function GoalsPage() {
               className={`w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y ${isDemo ? "bg-t-panel-2 cursor-default" : ""}`}
             />
           </div>
-        )}
+        )) : null}
 
         {/* Hooks-for-change prompt — surfaces what would make work feel meaningful */}
-        {!isDemo && (selected.length > 0 || showNarrative) && !showHookPrompt && (
+        {!isDemo && shown("hook") && (selected.length > 0 || showNarrative) && !showHookPrompt && !light && (
           <button
             onClick={() => setShowHookPrompt(true)}
             className="text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber block"
@@ -286,7 +336,7 @@ export default function GoalsPage() {
             What would make work feel like yours?
           </button>
         )}
-        {(showHookPrompt || (isDemo && DEMO_SESSION.hookNarrative)) && (
+        {((shown("hook") && (showHookPrompt || light)) || (isDemo && DEMO_SESSION.hookNarrative)) && (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <label
@@ -319,6 +369,7 @@ export default function GoalsPage() {
           </div>
         )}
       </div>
+      )}
     </FlowPage>
   );
 }

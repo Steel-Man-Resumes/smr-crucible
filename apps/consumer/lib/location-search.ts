@@ -113,7 +113,7 @@ function zipSuggestion(index: LocationIndex, zip: string): LocationSuggestion | 
   if (!where) return null;
   return {
     kind: "zip",
-    label: `${zip}  ${where.name}, ${where.st}`,
+    label: `${zip} (${where.name}, ${where.st})`,
     detail: place && county ? county.name : undefined,
     value: `${where.name}, ${where.st} ${zip}`,
     state: where.st,

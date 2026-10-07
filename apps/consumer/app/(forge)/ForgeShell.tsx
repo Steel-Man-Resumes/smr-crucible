@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { ForgeProvider, useForgeSession } from "@/lib/forge-context";
-import { AssistantDrawer, ProgressIndicator } from "@crucible/consumer-ui";
+import { AssistantDrawer } from "@crucible/consumer-ui";
+import { ForgePathProgress } from "@/components/forge/ForgePathProgress";
+import { planForgePath, progressSteps } from "@/lib/forge-path";
 import { AssistantChat } from "@/components/AssistantChat";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ProductFamilyBrand } from "@/components/brand/BrandMarks";
@@ -18,25 +21,25 @@ function getPageId(pathname: string): string {
   return segment || "forge";
 }
 
-const FORGE_STEPS = [
-  { path: "/resume", label: "Resume" },
-  { path: "/goals", label: "Goals" },
-  { path: "/story", label: "Story" },
-  { path: "/preferences", label: "Preferences" },
-  { path: "/processing", label: "Processing" },
-  { path: "/output", label: "Results" },
-];
-
 export { WORKSHOP_PATHS, QUIET_PATHS };
 
-// Pages that show the progress bar (not intro/welcome — those are entry gates)
-const PROGRESS_PATHS = FORGE_STEPS.map((s) => s.path);
-
+/**
+ * The step list is the person's own path (lib/forge-path.ts), recomputed from
+ * their answers on every render: a short path shows fewer steps, an added
+ * screen appears the moment it is added. Intro and welcome are entry gates
+ * and show no bar.
+ */
 function ForgeProgress() {
   const pathname = usePathname();
-  const stepIndex = PROGRESS_PATHS.indexOf(pathname);
-  if (stepIndex < 0) return null;
-  return <ProgressIndicator current={stepIndex} total={FORGE_STEPS.length} />;
+  const { session } = useForgeSession();
+  // The session lives in this browser only, so the server cannot know the
+  // path. Draw the bar after mount to keep server and client output equal.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const steps = progressSteps(planForgePath(session), pathname);
+  if (!steps) return null;
+  if (!mounted) return <div className="h-[30px]" aria-hidden="true" />;
+  return <ForgePathProgress steps={steps} />;
 }
 
 function ForgeAssistant() {
