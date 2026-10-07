@@ -64,6 +64,14 @@ export interface ForgeSessionData {
 
   // Page 6-7: Output
   forgeOutput?: Record<string, unknown>;
+  /**
+   * The finish page's own state: the documents the writer made (so a reload
+   * never spends another AI call) and the person's defend answers, one per
+   * line. Versioned (`v`, see lib/finish-gate.ts) and tied to this run by a
+   * key, so a copy from another run or shape is ignored. Browser only: the
+   * account save picks its fields by name and does not carry this.
+   */
+  forgeFinish?: import("./finish-gate").StoredFinish;
 
   // Audience & engagement tracking
   audience?: "client" | "partner" | "observer";

@@ -30,6 +30,13 @@ import { useMemo, useState } from "react";
 import { scoreResume, type LensScore, type LensFix } from "@/lib/ats/lenses";
 import { applyFix } from "@/lib/ats/apply-fix";
 
+/** A sample posting the person can try in the keyword box (optional). */
+export interface AtsSamplePosting {
+  id: string;
+  title: string;
+  text: string;
+}
+
 function verdict(score: number): string {
   if (score >= 85) return "Strong";
   if (score >= 70) return "Solid";
@@ -56,14 +63,22 @@ export function AtsScorePanel({
   resumeText,
   sourceText,
   onApply,
+  samplePostings,
+  samplePostingLabel,
 }: {
   resumeText: string;
   /** The person's intake, so the scorer can flag details the resume dropped. */
   sourceText?: string;
   /** Omit to render read-only, with no one-click fixes. */
   onApply?: (nextText: string) => void;
+  /** Optional sample postings offered beside the paste box. Omit for none. */
+  samplePostings?: AtsSamplePosting[];
+  /** Shown whenever a sample is in the box, so it is never taken for a real job. */
+  samplePostingLabel?: string;
 }) {
   const [posting, setPosting] = useState("");
+  const [sampleId, setSampleId] = useState<string | null>(null);
+  const activeSample = samplePostings?.find((s) => s.id === sampleId && s.text === posting) ?? null;
   const [openLens, setOpenLens] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<LensFix | null>(null);
   const [applied, setApplied] = useState<string[]>([]);
@@ -189,11 +204,44 @@ export function AtsScorePanel({
         <textarea
           id="ats-posting"
           value={posting}
-          onChange={(e) => setPosting(e.target.value)}
+          onChange={(e) => {
+            setPosting(e.target.value);
+            setSampleId(null);
+          }}
           rows={3}
           placeholder="Paste the duties and qualifications from a posting you want."
           className="mt-1.5 w-full border border-t-line bg-t-bg px-3 py-2 text-xs text-t-phos"
         />
+        {samplePostings && samplePostings.length > 0 && (
+          <div className="mt-2" data-testid="sample-postings">
+            <p className="text-[11px] text-t-phos-dim">No posting handy? Try a sample:</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {samplePostings.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setPosting(s.text);
+                    setSampleId(s.id);
+                  }}
+                  aria-pressed={activeSample?.id === s.id}
+                  className={`t-focus min-h-touch border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                    activeSample?.id === s.id
+                      ? "border-t-amber text-t-amber-bright"
+                      : "border-t-line text-t-phos hover:border-t-phos-dim"
+                  }`}
+                >
+                  {s.title}
+                </button>
+              ))}
+            </div>
+            {activeSample && samplePostingLabel && (
+              <p className="mt-1.5 text-[11px] font-semibold text-t-amber-bright" data-testid="sample-posting-label">
+                {samplePostingLabel}
+              </p>
+            )}
+          </div>
+        )}
         {report.hasPosting && (
           <p className="mt-1.5 text-[11px] text-t-phos-dim">
             Scored against this posting only. A different job scores differently,
