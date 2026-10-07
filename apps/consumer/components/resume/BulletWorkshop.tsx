@@ -19,6 +19,7 @@ import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
 import { RANGE_CHOICES, QUANTITY_UNITS, type QuantityUnit } from "@/lib/number-truth";
 import { hasChip, toggleChip, canGenerateBullet } from "@/lib/bullet-chips";
+import { WORKSHOP_PLACEHOLDERS } from "@/lib/workshop-placeholders";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -352,7 +353,7 @@ export function BulletWorkshop({
             label="What did you actually do?"
             value={did}
             onChange={setDid}
-            placeholder="e.g., loaded trucks and kept track of inventory"
+            placeholder={WORKSHOP_PLACEHOLDERS.did}
             why={WHY.did}
             textarea
           />
@@ -361,7 +362,7 @@ export function BulletWorkshop({
               label="What tools, equipment, or systems did you use?"
               value={tools}
               onChange={setTools}
-              placeholder="e.g., forklift, RF scanner, Excel"
+              placeholder={WORKSHOP_PLACEHOLDERS.tools}
               why={WHY.tools}
             />
             {toolHints.length > 0 && (
@@ -408,7 +409,7 @@ export function BulletWorkshop({
             optional
             value={often}
             onChange={setOften}
-            placeholder="e.g., every shift, daily, during peak season"
+            placeholder={WORKSHOP_PLACEHOLDERS.often}
             chips={OFTEN_CHIPS}
             why={WHY.often}
           />
@@ -423,7 +424,7 @@ export function BulletWorkshop({
                 setQuantitySource(v.trim() ? "typed" : undefined);
                 setQuantityUndo(null);
               }}
-              placeholder="e.g., 3 new hires, 200 orders a day"
+              placeholder={WORKSHOP_PLACEHOLDERS.quantity}
               why={WHY.quantity}
             />
             {/* Pick what you were counting, then the closest range. The ranges are
@@ -517,7 +518,7 @@ export function BulletWorkshop({
             label="What got better because of you?"
             value={improved}
             onChange={setImproved}
-            placeholder="e.g., fewer mistakes, faster loading, kept the team on schedule"
+            placeholder={WORKSHOP_PLACEHOLDERS.improved}
             chips={IMPROVED_CHIPS}
             why={WHY.improved}
             textarea
