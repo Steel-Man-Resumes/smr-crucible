@@ -14,6 +14,7 @@ import {
   UnsafeUploadError,
   assertSafePdf,
   decodeAscii85,
+  findObjectHeaders,
   jpegFrameSize,
   safeDocxForMammoth,
   storedZip,
@@ -387,5 +388,60 @@ describe("hotfix review: real files main reads stay accepted", () => {
     const b = docx(docXml("x"));
     assert.doesNotThrow(() => safeDocxForMammoth(Buffer.concat([b, Buffer.from("\n")])));
     refused(() => safeDocxForMammoth(Buffer.concat([b, Buffer.alloc(2048)])), "zip_malformed");
+  });
+});
+
+/* ------------------------- security review 3a r3, M1: separators ------- */
+
+/** Minimal PDF text around one object (no xref needed by the scan). */
+const mini = (...parts: Array<string | Buffer>) =>
+  Buffer.concat([Buffer.from("%PDF-1.7\n"), ...parts.map((p) => (typeof p === "string" ? Buffer.from(p, "latin1") : p)), Buffer.from("\nendstream\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n")]);
+
+describe("r3 M1: object headers and tokens are read with pdf.js's separators", () => {
+  const OLD = /(\d+)\s+(\d+)\s+obj\b/;
+  it("headers split by NUL, comments, TAB, FF or CR are found (the old \\s regex missed the first two)", () => {
+    for (const h of ["5\x000\x00obj", "5%x\n0%y\nobj", "5\t0\fobj", "5\r\n0\r\nobj", "5 %a\r%b\n0 obj", "5\x00%c\n\x000\x00obj"]) {
+      const found = findObjectHeaders(h + "<<>>");
+      assert.equal(found.length, 1, JSON.stringify(h));
+      assert.equal(found[0].at, 0);
+    }
+    assert.equal(OLD.test("5\x000\x00obj"), false, "the gap this fixes");
+    assert.equal(OLD.test("5%x\n0%y\nobj"), false, "the gap this fixes");
+    assert.deepEqual(findObjectHeaders("1 0 endobj"), []);
+    assert.deepEqual(findObjectHeaders("5 0 objx"), []);
+    assert.equal(findObjectHeaders("(a%b) 5 0 %c\nobj<<>>")[0].at, 6);
+  });
+
+  it("a stream behind such a header is seen (chain refused) and capped (over the cap refused)", () => {
+    const z = deflateSync(Buffer.from("BT ET"));
+    refused(() => assertSafePdf(mini("5\x000\x00obj<</Filter[/FlateDecode/FlateDecode]>>stream\n", z)), "pdf_filter");
+    refused(() => assertSafePdf(mini("5%x\n0%y\nobj<</Filter[/FlateDecode/FlateDecode]>>stream\n", z)), "pdf_filter");
+    refused(() => assertSafePdf(mini("5%x\n0\x00obj<</Filter/FlateDecode>>stream\n", deflateSync(spaces(PDF_MAX_STREAM_BYTES + 1024)))), "pdf_stream_too_big");
+  });
+
+  it("dictionary tokens take the same separators: Filter, Width, Height, MediaBox, UserUnit, Encrypt", () => {
+    const z = deflateSync(Buffer.from("BT ET"));
+    refused(() => assertSafePdf(mini("5 0 obj<<\x00/Filter\x00[/FlateDecode\x00/FlateDecode]>>stream\n", z)), "pdf_filter");
+    refused(() => assertSafePdf(mini("5 0 obj<</Filter%c\n[/FlateDecode%c\n/FlateDecode]>>stream\n", z)), "pdf_filter");
+    refused(() => assertSafePdf(mini("5 0 obj<</Subtype/Image/Width%c\n100000/Height\x00100000>>stream\n", "x")), "pdf_image_too_big");
+    refused(() => assertSafePdf(mini("5 0 obj<</Type/Page/MediaBox\x00[0\x000\x0099999\x0099999]>>stream\n", "x")), "pdf_page_too_big");
+    refused(() => assertSafePdf(mini("5 0 obj<</Type/Page/UserUnit%c\n75000>>stream\n", "x")), "pdf_page_too_big");
+    refused(() => assertSafePdf(Buffer.from("%PDF-1.7\ntrailer\x00<<\x00/Encrypt\x009 0 R>>\n%%EOF\n", "latin1")), "pdf_encrypted");
+    refused(() => assertSafePdf(Buffer.from("%PDF-1.7\ntrailer%c\n<</Encr#79pt 9 0 R>>\n%%EOF\n", "latin1")), "pdf_encrypted");
+  });
+
+  it("pdf.js's short keys count: /F for the filter, /W and /H for an image's size", () => {
+    const z = deflateSync(Buffer.from("BT ET"));
+    refused(() => assertSafePdf(mini("5 0 obj<</F[/FlateDecode/FlateDecode]>>stream\n", z)), "pdf_filter");
+    refused(() => assertSafePdf(mini("5 0 obj<</Subtype/Image/W 100000/H 100000>>stream\n", "x")), "pdf_image_too_big");
+  });
+
+  it("stream and endstream: a comment before 'stream', bytes before its end of line, and a lying /Length change nothing", () => {
+    const big = deflateSync(spaces(PDF_MAX_STREAM_BYTES + 1024));
+    refused(() => assertSafePdf(mini("5 0 obj<</Filter/FlateDecode>>%c\nstream\n", big)), "pdf_stream_too_big");
+    refused(() => assertSafePdf(mini("5 0 obj<</Filter/FlateDecode>>stream junk\r\n", big)), "pdf_stream_too_big");
+    refused(() => assertSafePdf(mini("5 0 obj<</Filter/FlateDecode/Length\x001>>stream\n", big)), "pdf_stream_too_big");
+    // An unfiltered content stream behind a NUL header still has its inline images checked.
+    refused(() => assertSafePdf(mini("5\x000\x00obj<<>>stream\nq BI /W 100000 /H 100000 /BPC 8 /CS /G ID x EI Q")), "pdf_image_too_big");
   });
 });
