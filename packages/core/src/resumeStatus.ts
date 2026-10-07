@@ -62,6 +62,8 @@ export interface OpenItem {
   why: string;
   /** Set only on items raised by the second check. Mint and defend items leave it out. */
   from?: "second_check";
+  /** The checker's finding kind, when it has one (for example "grid_term" for a skills term). */
+  kind?: string;
 }
 
 export interface DefendAnswer {
@@ -471,7 +473,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       return !(a && hasCredentialStatus(a.answer));
     });
     const findings = [...mint.findings, ...checkCredentialUpgrade(resumeText, sourceText), ...status];
-    for (const f of findings) push(f.rule, f.severity, f.line, f.why, questionForFinding(f));
+    for (const f of findings) {
+      push(f.rule, f.severity, f.line, f.why, questionForFinding(f));
+      if (f.kind) items[items.length - 1].kind = f.kind;
+    }
 
     if (requireDefend) {
       for (const d of defendLines) {

@@ -17,11 +17,16 @@
 
 import { CREDENTIALS_KEY } from "./forge-path";
 import {
+  answerStands,
   getResumeStatus,
+  introducedWords,
+  questionForFinding,
   type DefendAnswer,
   type OpenItem,
   type ResumeStatus,
 } from "@crucible/core/src/resumeStatus";
+import { linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
 
 export type { DefendAnswer, OpenItem, ResumeStatus };
@@ -47,6 +52,8 @@ export interface StoredFinish {
   key: string;
   docs: FinishDocs;
   defendAnswers: DefendAnswer[];
+  /** Skills the person added from a job posting in the keyword check. Each is asked about. */
+  addedTerms?: string[];
 }
 
 /** Small stable string hash (FNV-1a), enough to tell one run from another. */
@@ -89,11 +96,19 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       grounding: d.grounding ?? null,
     },
     defendAnswers: Array.isArray(s.defendAnswers)
-      ? s.defendAnswers.filter(
-          (a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string"
-        )
-        .map((a) => (a.kind === "rewrite" ? a : { line: a.line, answer: a.answer, verdict: a.verdict }))
+      ? s.defendAnswers
+          .filter((a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string")
+          .map((a) =>
+            // A stored rewrite is trusted only when it is consistent with
+            // itself: it names the line it replaced, and its text is its line.
+            a.kind === "rewrite" &&
+            typeof a.replaced === "string" &&
+            squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
+              ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "rewrite" as const, replaced: a.replaced }
+              : { line: a.line, answer: a.answer, verdict: a.verdict }
+          )
       : [],
+    addedTerms: Array.isArray(s.addedTerms) ? s.addedTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
   };
 }
 
@@ -132,51 +147,79 @@ const stripBullet = (l: string) => l.replace(/^\s*[-•*]\s*/, "").trim();
 
 export type DefendChoice = "stands" | "cut";
 
-/** Record one answer for one line. Replaces that line's earlier answer; never touches another line's. */
+/**
+ * Record one answer for one line. Replaces that line's earlier answer; never
+ * touches another line's. A rewrite record on the same line is kept (it says
+ * what the person introduced), and the new answer goes last so it is the one
+ * the checker reads for the line.
+ */
 export function recordAnswer(
   answers: DefendAnswer[],
   line: string,
   answer: string,
-  verdict: DefendChoice,
-  kind?: "rewrite"
+  verdict: DefendChoice
 ): DefendAnswer[] {
   const k = squash(line);
   const next: DefendAnswer = { line, answer: answer.trim(), verdict };
-  if (kind) next.kind = kind;
-  return [...answers.filter((a) => squash(a.line) !== k), next];
+  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite"), next];
+}
+
+/** The lines on a page, without bullets, squashed, for "is this line still here". */
+function pageLineSet(...texts: string[]): Set<string> {
+  return new Set(texts.flatMap((t) => linesOf(t || "")).map((l) => squash(stripBullet(l))));
 }
 
 /**
- * Lines the person typed themselves through "Change it". They are the
- * person's own claim, so they join the source the checker reads. Ordinary
- * answers never do (an answer that repeats a written number must not make it
- * "sourced").
+ * What the person introduced through "Change it", for the source the checker
+ * reads. Only rewrites that are consistent (their text is their line, they
+ * name the line they replaced) and whose line is still on the page count, and
+ * from each only the words and numbers that were not in the replaced line. A
+ * written number typed back, a period or a status word that was already there
+ * adds nothing.
  */
-export function rewritesOf(answers: DefendAnswer[]): string {
+export function rewritesOf(answers: DefendAnswer[], ...pageTexts: string[]): string {
+  const onPage = pageLineSet(...pageTexts);
   return answers
-    .filter((a) => a.kind === "rewrite" && a.verdict === "stands" && a.answer.trim())
-    .map((a) => a.answer.trim())
+    .filter(
+      (a) =>
+        a.kind === "rewrite" &&
+        a.verdict === "stands" &&
+        typeof a.replaced === "string" &&
+        squash(stripBullet(a.answer)) === squash(stripBullet(a.line)) &&
+        onPage.has(squash(stripBullet(a.line)))
+    )
+    .map((a) => introducedWords(stripBullet(a.answer), stripBullet(a.replaced as string)))
+    .filter(Boolean)
     .join("\n");
 }
 
-const NUMBER_TOKEN_RE = /\$?\d[\d,]*(?:\.\d+)?%?/g;
-const digitsOf = (s: string) => s.replace(/[^\d.]/g, "").replace(/\.$/, "");
-
-/**
- * The starting text for "Change it". A number the person never gave becomes
- * "[your number]", so the box never hands them the written figure to keep.
- * They type their own or take that part out; a bracket left in blocks the
- * finish (STD-F05), so nothing slips through.
- */
-export function prefillRewrite(line: string, ownWords: string): string {
-  const theirs = new Set((ownWords.match(NUMBER_TOKEN_RE) ?? []).map(digitsOf));
-  return stripBullet(line).replace(NUMBER_TOKEN_RE, (n) => (theirs.has(digitsOf(n)) ? n : "[your number]"));
+/** The one source the gate and every panel check against: own words plus what rewrites introduced. */
+export function gateSource(ownWords: string, answers: DefendAnswer[], ...pageTexts: string[]): string {
+  const added = rewritesOf(answers, ...pageTexts);
+  return added ? `${ownWords}\n\n${added}` : ownWords;
 }
 
-/** The answer on file for a line, if any. */
+const NUMBER_TOKEN_RE = /\$?\d[\d,]*(?:\.\d+)?%?|\b[A-Za-z]+\b/g;
+
+/**
+ * The starting text for "Change it". A number the person never gave (digits
+ * or a number word) becomes "[your number]", so the box never hands them the
+ * written figure to keep. A bracket left in blocks the finish (STD-F05).
+ */
+export function prefillRewrite(line: string, ownWords: string): string {
+  const theirs = numbersIn(ownWords);
+  return stripBullet(line).replace(NUMBER_TOKEN_RE, (tok) => {
+    const ns = Array.from(numbersIn(tok));
+    if (!ns.length) return tok;
+    return ns.every((n) => theirs.has(n)) ? tok : "[your number]";
+  });
+}
+
+/** The answer on file for a line (the latest one that is not a rewrite record), if any. */
 export function answerFor(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
   const k = squash(line);
-  return answers.find((a) => squash(a.line) === k);
+  const mine = answers.filter((a) => squash(a.line) === k);
+  return [...mine].reverse().find((a) => a.kind !== "rewrite") ?? mine[mine.length - 1];
 }
 
 /** Take one line off the page. Returns the text unchanged when the line is not there. */
@@ -206,16 +249,94 @@ export function changeLine(resumeText: string, line: string, rewrite: string): s
   return out.join("\n");
 }
 
+export interface RewriteResult {
+  text: string;
+  answers: DefendAnswer[];
+  /** False when nothing changed (same line, empty rewrite, or the line is gone). */
+  changed: boolean;
+}
+
+/**
+ * "Change it": put the person's rewrite on the page and record it, with the
+ * line it replaced. A rewrite of a rewrite keeps the original written line as
+ * `replaced`, so words the person introduced earlier stay theirs and the
+ * writer's words never become theirs by being carried along.
+ */
+export function applyRewrite(text: string, answers: DefendAnswer[], line: string, rewrite: string): RewriteResult {
+  const next = changeLine(text, line, rewrite);
+  if (next === text) return { text, answers, changed: false };
+  const typed = stripBullet(rewrite.replace(/\s*\n\s*/g, " "));
+  const newLine = linesOf(next).find((l) => stripBullet(l) === typed) ?? typed;
+  const prior = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
+  const replaced = prior?.replaced ?? line;
+  const k = squash(newLine);
+  return {
+    text: next,
+    answers: [
+      ...answers.filter((a) => squash(a.line) !== k),
+      { line: newLine, answer: typed, verdict: "stands", kind: "rewrite", replaced },
+    ],
+    changed: true,
+  };
+}
+
 /** The line as the person should see it in an edit box: no bullet glyph. */
 export function editableLine(line: string): string {
   return stripBullet(line);
 }
 
+// ---- skills added from a posting --------------------------------------------------
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const termRe = (term: string) => new RegExp(`(?<![\\w])${escapeRe(term.trim())}(?![\\w])`, "i");
+
+/**
+ * An answer about one skills term stands only when it stands like any answer
+ * and talks about that term (a word starting the same way: "bathed" for
+ * "bathing"). A general "I did that" for a list of posting words is not one
+ * time they did each of them.
+ */
+export function skillAnswerStands(a: DefendAnswer | undefined, term: string, source: string): boolean {
+  if (!answerStands(a, term, source)) return false;
+  const heads = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).map((w) => w.slice(0, 4));
+  const want = new Set(heads(term));
+  return heads(a?.answer ?? "").some((h) => want.has(h));
+}
+
+/** True when the term is still on the page. */
+export function termOnPage(text: string, term: string): boolean {
+  return !!term.trim() && termRe(term).test(text);
+}
+
+/** Take one added skill term off its skills line. Returns the text unchanged when it is not a listed item. */
+export function cutTerm(text: string, term: string): string {
+  const t = term.trim().toLowerCase();
+  if (!t) return text;
+  const re = termRe(term);
+  return text
+    .split("\n")
+    .map((l) => {
+      if (!re.test(l)) return l;
+      const m = l.match(/^(\s*(?:[-•*]\s*)?(?:[A-Za-z &/]+:\s*)?)(.*)$/);
+      const prefix = m?.[1] ?? "";
+      const parts = (m?.[2] ?? l).split(/\s*[,;|•]\s*/);
+      const kept = parts.filter((p) => p.trim().toLowerCase() !== t);
+      if (kept.length === parts.length) return l;
+      return kept.length ? prefix + kept.join(", ") : "";
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 // ---- the view ------------------------------------------------------------------
 
-/** One resume line and everything open about it. */
+export type GroupTarget = "resume" | "letter" | "skill";
+
+/** One line (or added skill) and everything open about it. */
 export interface LineGroup {
   line: string;
+  /** Which document the line is in. "skill": a term added from a posting. */
+  target: GroupTarget;
   items: OpenItem[];
   /** True when at least one BLOCK is open on this line. */
   blocking: boolean;
@@ -232,95 +353,214 @@ export interface LineGroup {
   answer?: DefendAnswer;
 }
 
+/** An open item with the document it is in. */
+export type GateItem = OpenItem & { target: GroupTarget; /** Raised by the generate-docs claim trace. */ trace?: boolean };
+
 export interface FinishView {
   status: ResumeStatus;
   state: "finished" | "draft";
+  /** Every open item the gate holds: resume, cover letter, added skills, second check. */
+  openItems: GateItem[];
   /** Lines with something open, BLOCK lines first, in page order. */
   groups: LineGroup[];
   /** Defend lines already explained, in page order (shown as checked). */
   checkedLines: LineGroup[];
-  /** Open items not tied to one line (no resume, none of the person's words). */
-  general: OpenItem[];
+  /** Open items not tied to one line on the page (no resume, none of the person's words, a line we could not find). */
+  general: GateItem[];
   /** Things that block "finished": blocking lines plus general BLOCKs. */
   fixCount: number;
   /** Verifiable progress on the defend step. */
   defendDone: number;
   defendTotal: number;
+  /** The one source every panel checks against. */
+  source: string;
 }
 
 const ANSWERABLE = (i: OpenItem) => i.rule === "STD-C04" || (i.rule === "STD-T03" && i.severity === "FIX");
+
+type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown };
+
+/**
+ * The claim trace from generate-docs, as open items: a claim it flagged that
+ * is still on the page, and a line that may say more about a credential than
+ * the person did. Anything the Checks section shows as a blocker is held here.
+ */
+function groundingItems(grounding: unknown, resumeText: string, letterText: string): GateItem[] {
+  const outcomes = (grounding as { outcomes?: unknown })?.outcomes;
+  if (!Array.isArray(outcomes)) return [];
+  const items: GateItem[] = [];
+  for (const o of outcomes as GroundingOutcome[]) {
+    if (typeof o?.claim !== "string" || !o.claim.trim()) continue;
+    if (o.status !== "still_there" && o.status !== "credential") continue;
+    const target: GroupTarget = o.doc === "cover_letter" ? "letter" : "resume";
+    const text = target === "letter" ? letterText : resumeText;
+    const needle = o.claim.trim().toLowerCase();
+    const line = linesOf(text).find((l) => l.toLowerCase().includes(needle));
+    if (!line) continue; // changed or cut since: settled
+    items.push(
+      o.status === "credential"
+        ? {
+            rule: "STD-T03",
+            severity: "BLOCK",
+            line,
+            target,
+            trace: true,
+            why: "Our second check says this may say more about a card, license or certification than you told us.",
+            question: "Change it to what you actually hold, the way your card or papers say it, or cut it.",
+          }
+        : {
+            rule: "STD-C04",
+            severity: "BLOCK",
+            line,
+            target,
+            trace: true,
+            why: "Our second check couldn't match this to anything you told us.",
+            question: "Tell me in one sentence how you'd describe this, in your own words. If it isn't true, change it or cut it.",
+          }
+    );
+  }
+  return items;
+}
 
 export function buildFinishView(input: {
   resumeText: string;
   ownWords: string;
   defendAnswers: DefendAnswer[];
+  coverLetterText?: string;
+  /** Skill terms the person added from a posting (keyword check). */
+  addedTerms?: string[];
+  /** The grounding block from generate-docs, when there is one. */
+  grounding?: unknown;
+  /** The second check's findings, only when it ran. */
+  secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
 }): FinishView {
-  const rewrites = rewritesOf(input.defendAnswers);
+  const letter = input.coverLetterText ?? "";
+  const answers = input.defendAnswers;
+  const source = gateSource(input.ownWords, answers, input.resumeText, letter);
   const status = getResumeStatus({
     resumeText: input.resumeText,
-    sourceText: rewrites ? `${input.ownWords}\n\n${rewrites}` : input.ownWords,
-    defendAnswers: input.defendAnswers,
+    sourceText: source,
+    defendAnswers: answers,
+    secondCheckFindings: input.secondCheckFindings,
   });
 
-  const general = status.openItems.filter((i) => !i.line);
-  const byLine = new Map<string, OpenItem[]>();
-  for (const item of status.openItems) {
-    if (!item.line) continue;
-    const list = byLine.get(item.line) ?? [];
-    list.push(item);
-    byLine.set(item.line, list);
+  const items: GateItem[] = [];
+  for (const i of status.openItems) {
+    // A skills term the person never said is asked about like any other
+    // claim, one term at a time, and blocks until they explain it or it goes.
+    if (i.kind === "grid_term") {
+      if (skillAnswerStands(answerFor(answers, i.line), i.line, source)) continue;
+      items.push({ ...i, severity: "BLOCK", target: "skill" });
+      continue;
+    }
+    items.push({ ...i, target: "resume" });
   }
 
-  const groups: LineGroup[] = Array.from(byLine.entries()).map(([line, items]) => ({
-    line,
-    items,
-    blocking: items.some((i) => i.severity === "BLOCK"),
-    answerable: items.every(ANSWERABLE),
-    checked: false,
-    answer: answerFor(input.defendAnswers, line),
-  }));
-  // openItems is already BLOCKs first then FIXes, each in page order; a line
-  // with a BLOCK sorts ahead of FIX-only lines.
-  groups.sort((a, b) => Number(b.blocking) - Number(a.blocking));
+  // The cover letter ships in the same package, so it is checked too.
+  if (letter.trim() && input.resumeText.trim() && source.trim()) {
+    for (const f of runMintCheck({ output: letter, source, kind: "cover_letter" }).findings) {
+      items.push({ rule: f.rule, severity: f.severity, line: f.line, why: f.why, question: questionForFinding(f), target: "letter" });
+    }
+  }
 
-  const openDefend = new Set(
-    status.openItems.filter((i) => i.rule === "STD-C04").map((i) => squash(i.line))
+  // Skills added from a posting: each one is explained in the person's words.
+  for (const term of Array.from(new Set((input.addedTerms ?? []).map((t) => t.trim()).filter(Boolean)))) {
+    if (!termOnPage(input.resumeText, term)) continue;
+    if (items.some((i) => i.target === "skill" && i.line.toLowerCase() === term.toLowerCase())) continue;
+    if (skillAnswerStands(answerFor(answers, term), term, source)) continue;
+    items.push({
+      rule: "STD-C04",
+      severity: "BLOCK",
+      line: term,
+      target: "skill",
+      why: "You added this from a job posting.",
+      question: `Tell me one time you did "${term}" at work, in your own words. If you can't, it comes off.`,
+    });
+  }
+
+  // The claim trace, settled by a standing answer when it asks for one.
+  for (const g of groundingItems(input.grounding, input.resumeText, letter)) {
+    if (g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
+    if (items.some((i) => i.target === g.target && i.line === g.line && i.rule === g.rule)) continue;
+    items.push(g);
+  }
+
+  // An item whose line is not on its page cannot be changed or cut there.
+  const resumeLines = pageLineSet(input.resumeText);
+  const letterLines = pageLineSet(letter);
+  const onItsPage = (i: GateItem) =>
+    i.target === "skill" ? true : (i.target === "letter" ? letterLines : resumeLines).has(squash(stripBullet(i.line)));
+  const general = items.filter((i) => !i.line || !onItsPage(i));
+  const lined = items.filter((i) => i.line && onItsPage(i));
+
+  const byLine = new Map<string, GateItem[]>();
+  for (const item of lined) {
+    const k = `${item.target}\u0000${item.line}`;
+    const list = byLine.get(k) ?? [];
+    list.push(item);
+    byLine.set(k, list);
+  }
+
+  const order = linesOf(input.resumeText);
+  const targetRank: Record<GroupTarget, number> = { resume: 0, skill: 1, letter: 2 };
+  const groups: LineGroup[] = Array.from(byLine.values()).map((its) => ({
+    line: its[0].line,
+    target: its[0].target,
+    items: its,
+    blocking: its.some((i) => i.severity === "BLOCK"),
+    answerable: its[0].target === "skill" || (its[0].target !== "letter" && its.every(ANSWERABLE)),
+    checked: false,
+    answer: answerFor(answers, its[0].line),
+  }));
+  groups.sort(
+    (a, b) =>
+      Number(b.blocking) - Number(a.blocking) ||
+      targetRank[a.target] - targetRank[b.target] ||
+      order.indexOf(a.line) - order.indexOf(b.line)
   );
+
+  const openDefend = new Set(status.openItems.filter((i) => i.rule === "STD-C04").map((i) => squash(i.line)));
+  const groupedResume = new Set(groups.filter((g) => g.target === "resume").map((g) => g.line));
   const checkedLines: LineGroup[] = status.defendLines
     .filter((d) => !openDefend.has(squash(d.line)))
-    .filter((d) => !byLine.has(d.line))
+    .filter((d) => !groupedResume.has(d.line))
     .map((d) => ({
       line: d.line,
+      target: "resume" as const,
       items: [],
       blocking: false,
       answerable: true,
       checked: true,
-      answer: answerFor(input.defendAnswers, d.line),
+      answer: answerFor(answers, d.line),
     }));
 
   const defendTotal = status.defendLines.length;
   const defendDone = status.defendLines.filter((d) => !openDefend.has(squash(d.line))).length;
+  const blocks = items.filter((i) => i.severity === "BLOCK").length;
 
   return {
     status,
-    state: status.state,
+    state: blocks > 0 ? "draft" : "finished",
+    openItems: [...items.filter((i) => i.severity === "BLOCK"), ...items.filter((i) => i.severity === "FIX")],
     groups,
     checkedLines,
     general,
     fixCount: groups.filter((g) => g.blocking).length + general.filter((i) => i.severity === "BLOCK").length,
     defendDone,
     defendTotal,
+    source,
   };
 }
 
 /**
  * The open items in plain words, for the DRAFT file's to-do page. Every BLOCK
- * and every FIX, nothing added.
+ * and every FIX the gate holds (resume, letter, added skills), nothing added.
  */
-export function openItemsInPlainWords(status: ResumeStatus): string[] {
-  return status.openItems.map((i) => {
+export function openItemsInPlainWords(view: { openItems: Array<OpenItem & { target?: GroupTarget }> }): string[] {
+  return view.openItems.map((i) => {
     const what = i.severity === "BLOCK" ? "Fix before you send" : "Worth checking";
-    return i.line ? `${what}: "${stripBullet(i.line)}". ${i.question}` : `${what}: ${i.question}`;
+    const where = i.target === "letter" ? " (cover letter)" : i.target === "skill" ? " (skills)" : "";
+    return i.line ? `${what}${where}: "${stripBullet(i.line)}". ${i.question}` : `${what}${where}: ${i.question}`;
   });
 }
 

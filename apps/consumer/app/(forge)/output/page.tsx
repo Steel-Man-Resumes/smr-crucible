@@ -31,9 +31,10 @@ import { findDiscrepancies } from "@/lib/resume-discrepancies";
 import {
   buildFinishView,
   canEmailPackage,
-  changeLine,
+  applyRewrite,
   countWord,
   cutLine,
+  cutTerm,
   downloadMode,
   finishKey,
   FINISH_STATE_VERSION,
@@ -47,6 +48,7 @@ import {
   statusLine,
   TOUR_SEEN_KEY,
   type DefendAnswer,
+  type LineGroup,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { DefendPanel } from "@/components/forge/finish/DefendPanel";
@@ -81,7 +83,7 @@ const READINESS_CONFIG: Record<string, {
   },
   preparation: {
     refineryCta: "Continue to The Refinery",
-    refinerySubtext: "Free. No credit card. Your results carry over.",
+    refinerySubtext: "Free. No credit card. Your story carries over.",
     careersHeading: "Career Paths That Fit",
     strengthsHeading: "Your Strengths",
   },
@@ -124,6 +126,8 @@ export default function OutputPage() {
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   const [grounding, setGrounding] = useState<unknown>(null);
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
+  // Skill terms the person added from a job posting; each is asked about.
+  const [addedTerms, setAddedTerms] = useState<string[]>([]);
   const [docError, setDocError] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -146,6 +150,7 @@ export default function OutputPage() {
     setKeepInsideLines(stored.docs.keepInsideLines);
     setGrounding(stored.docs.grounding);
     setDefendAnswers(stored.defendAnswers);
+    setAddedTerms(stored.addedTerms ?? []);
     setDocState("done");
   }, [session]);
 
@@ -158,11 +163,12 @@ export default function OutputPage() {
         key: finishKey(session, keepInsideLines),
         docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding },
         defendAnswers,
+        addedTerms,
       },
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, defendAnswers, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, defendAnswers, addedTerms, updateSession]);
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -206,6 +212,7 @@ export default function OutputPage() {
       setGrounding(data.grounding ?? null);
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
+      setAddedTerms([]);
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -228,8 +235,8 @@ export default function OutputPage() {
   // ---- the gate ----------------------------------------------------------------
   const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
   const view = useMemo(
-    () => buildFinishView({ resumeText, ownWords, defendAnswers }),
-    [resumeText, ownWords, defendAnswers]
+    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";
@@ -289,7 +296,9 @@ export default function OutputPage() {
   }, [ready]);
 
   const tourSteps: TourStep[] = [
-    { target: "finish-resume", text: "This is your new resume, built from your own words. It comes first because it's what you came for." },
+    view.state === "finished"
+      ? { target: "finish-resume", text: "This is your new resume. It comes first because it's what you came for." }
+      : { target: "finish-resume", text: "This is your new resume. It's a draft until you've settled the lines t.ROY asks about. It comes first because it's what you came for." },
     view.state === "finished"
       ? { target: "fix-list", text: "Every line we asked about is checked. You can still change an answer." }
       : { target: "fix-list", text: "These are the lines only you can answer. For each one: say it's true, change it, or cut it. When they're done, your resume is finished." },
@@ -298,33 +307,46 @@ export default function OutputPage() {
       : { target: "finish-download", text: "Download here. Until it's finished, every file is marked DRAFT so nobody mistakes it for the final one." },
     { target: "finish-checks", text: "These checks read your page the way a screener would. Open one if you want the details." },
     { target: "finish-story", text: "Your story: your strengths, skills and jobs that fit, from what you told us." },
-    { target: "finish-next", text: "When you're ready, the Refinery aims this resume at real jobs." },
+    { target: "finish-next", text: "When you're ready, the Refinery aims your resume at real jobs." },
   ];
 
   // ---- actions -------------------------------------------------------------------
-  const onAnswer = (line: string, answer: string) => setDefendAnswers((a) => recordAnswer(a, line, answer, "stands"));
-  const onChange = (line: string, rewrite: string) => {
-    const next = changeLine(resumeText, line, rewrite);
-    if (next === resumeText) return;
-    setResumeText(next);
-    // The new line is in the person's own words: their rewrite is its answer.
-    const newLine = next.split("\n").map((l) => l.trim()).find((l) => l.replace(/^[-•*]\s*/, "") === rewrite.replace(/\s*\n\s*/g, " ").replace(/^\s*[-•*]\s*/, "").trim());
-    setDefendAnswers((a) => (newLine ? recordAnswer(a, newLine, rewrite, "stands", "rewrite") : a));
+  const onAnswer = (group: LineGroup, answer: string) =>
+    setDefendAnswers((a) => recordAnswer(a, group.line, answer, "stands"));
+  /** Returns false when nothing changed, so the panel can say so. */
+  const onChange = (group: LineGroup, rewrite: string): boolean => {
+    if (group.target === "skill") return false;
+    const text = group.target === "letter" ? coverLetterText : resumeText;
+    const r = applyRewrite(text, defendAnswers, group.line, rewrite);
+    if (!r.changed) return false;
+    if (group.target === "letter") setCoverLetterText(r.text);
+    else setResumeText(r.text);
+    setDefendAnswers(r.answers);
+    return true;
   };
-  const onCut = (line: string) => {
-    setResumeText((t) => cutLine(t, line));
-    setDefendAnswers((a) => recordAnswer(a, line, "", "cut"));
+  const onCut = (group: LineGroup) => {
+    if (group.target === "skill") {
+      setResumeText((t) => cutTerm(t, group.line));
+      setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== group.line.toLowerCase()));
+      return;
+    }
+    if (group.target === "letter") setCoverLetterText((t) => cutLine(t, group.line));
+    else setResumeText((t) => cutLine(t, group.line));
+    setDefendAnswers((a) => recordAnswer(a, group.line, "", "cut"));
   };
 
   const goFix = () => {
-    const first = document.getElementById("fix-item-0") || document.getElementById("fix-list");
+    const first =
+      document.querySelector<HTMLElement>('[data-testid="fix-item"][data-blocking="true"]') ||
+      document.getElementById("fix-item-0") ||
+      document.getElementById("fix-list");
     if (!first) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     first.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
     first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   };
 
-  const draftItems = () => (view.state === "finished" ? undefined : openItemsInPlainWords(view.status));
+  const draftItems = () => (view.state === "finished" ? undefined : openItemsInPlainWords(view));
 
   async function runDownload(fn: () => Promise<void>) {
     setBusy(true);
@@ -348,7 +370,7 @@ export default function OutputPage() {
     runDownload(() => downloadResume({ format, kind: "resume", text: resumeText, ...downloadMode(view.state), openItems: draftItems() }));
   const handleLetter = () =>
     runDownload(() =>
-      downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, ...downloadMode(view.state), openItems: draftItems() })
+      downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, resumeText, ...downloadMode(view.state), openItems: draftItems() })
     );
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -357,7 +379,8 @@ export default function OutputPage() {
   };
 
   // ---- check summaries -------------------------------------------------------------
-  const mintBlocks = view.status.openItems.filter((i) => i.rule !== "STD-C04" && i.severity === "BLOCK").length;
+  const mintBlocks = view.openItems.filter((i) => i.target === "resume" && !i.trace && i.rule !== "STD-C04" && i.severity === "BLOCK").length;
+  const traceBlocks = view.openItems.filter((i) => i.trace && i.severity === "BLOCK").length;
   const discrepancies = useMemo(
     () => (resumeText.trim() ? findDiscrepancies(resumeText, { sourceText: session.resumeText }) : []),
     [resumeText, session.resumeText]
@@ -521,7 +544,7 @@ export default function OutputPage() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              <DefendPanel view={view} ownWords={ownWords} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
+              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} />
             </aside>
           </div>
 
@@ -576,7 +599,7 @@ export default function OutputPage() {
                 attention={mintBlocks > 0}
                 testId="check-mint"
               >
-                <MintCheckPanel resumeText={resumeText} sourceText={ownWords} />
+                <MintCheckPanel resumeText={resumeText} sourceText={view.source} />
               </CheckSection>
 
               <CheckSection
@@ -597,11 +620,13 @@ export default function OutputPage() {
                   summary={
                     !verifierRan
                       ? "It didn't run this time. Read every line yourself before you send it."
-                      : groundingNote && groundingOpenCount(groundingNote) > 0
-                        ? `${countWord(groundingOpenCount(groundingNote))} ${groundingOpenCount(groundingNote) === 1 ? "thing" : "things"} to check before you send it.`
-                        : "It traced every line back to what you told us and fixed what it could."
+                      : traceBlocks > 0
+                        ? `Not finished yet: ${thingWord(traceBlocks)} to fix before you send it. They're in your list at the top.`
+                        : groundingNote && groundingOpenCount(groundingNote) > 0
+                          ? `${countWord(groundingOpenCount(groundingNote))} ${groundingOpenCount(groundingNote) === 1 ? "thing" : "things"} worth a look. None of them stops you from finishing.`
+                          : "It traced every line back to what you told us and fixed what it could."
                   }
-                  attention={!verifierRan || (!!groundingNote && groundingOpenCount(groundingNote) > 0)}
+                  attention={!verifierRan || traceBlocks > 0}
                   testId="check-grounding"
                 >
                   {!verifierRan && (
@@ -626,6 +651,7 @@ export default function OutputPage() {
                   onApply={setResumeText}
                   samplePostings={samples}
                   samplePostingLabel={SAMPLE_POSTING_LABEL}
+                  onConfirmTerm={(term) => setAddedTerms((t) => (t.some((x) => x.toLowerCase() === term.toLowerCase()) ? t : [...t, term]))}
                 />
               </CheckSection>
 

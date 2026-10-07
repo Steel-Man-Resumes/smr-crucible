@@ -22,6 +22,7 @@ import {
   progressLine,
   readStoredFinish,
   recordAnswer,
+  applyRewrite,
   prefillRewrite,
   rewritesOf,
   REVIEW_ASK_LINE,
@@ -82,7 +83,7 @@ test("answers are per line: one answer settles one line, never another", () => {
 
 test("answering every defend line makes the page finished", () => {
   let answers = recordAnswer([], "x", "y", "stands").slice(0, 0);
-  for (const d of fresh().status.defendLines) answers = recordAnswer(answers, d.line, "That is what I did, in my words.", "stands");
+  for (const d of fresh().status.defendLines) answers = recordAnswer(answers, d.line, "I did this myself on most shifts there, the owner can tell you.", "stands");
   const v = buildFinishView({ resumeText: RESUME, ownWords: SOURCE, defendAnswers: answers });
   assert.equal(v.state, "finished");
   assert.equal(v.fixCount, 0);
@@ -113,7 +114,7 @@ test("recording a second answer for a line replaces the first, never pools", () 
 test("a year the person never gave is a BLOCK that an answer cannot settle", () => {
   const moved = RESUME.replace("2019 - 2023", "2018 - 2023");
   let answers = recordAnswer([], "x", "y", "stands").slice(0, 0);
-  for (const d of fresh().status.defendLines) answers = recordAnswer(answers, d.line, "That is what I did, in my words.", "stands");
+  for (const d of fresh().status.defendLines) answers = recordAnswer(answers, d.line, "I did this myself on most shifts there, the owner can tell you.", "stands");
   const v = buildFinishView({ resumeText: moved, ownWords: SOURCE, defendAnswers: answers });
   assert.equal(v.state, "draft");
   const g = v.groups.find((x) => x.items.some((i) => i.rule === "STD-T05"));
@@ -229,18 +230,23 @@ test("Change it never hands over a number the person did not give", () => {
   assert.equal(prefillRewrite("- Saved $1,200 a month", own), "Saved [your number] a month");
 });
 
-test("a rewrite is the person's own words; an ordinary answer is not", () => {
+test("a rewrite counts only for what the person typed new; the written number typed back is not theirs", () => {
   const resume = "Sam Delgado\nSpringfield, IL | sam@example.com\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Cut food waste by 30% with a new prep list";
   const own = "Line Cook, Riverside Diner, 2019 - 2023. I made a new prep list.";
+  const line = "- Cut food waste by 30% with a new prep list";
   // Echoing the written number in an answer leaves it open.
-  const echoed = recordAnswer([], "- Cut food waste by 30% with a new prep list", "yes it was 30%", "stands");
+  const echoed = recordAnswer([], line, "yes it was 30%", "stands");
   assert.equal(buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: echoed }).state, "draft");
-  // The person typing the line themselves makes the figure theirs.
-  const mine = "Cut food waste by 30% with a new prep list";
-  const rewritten = recordAnswer([], mine, mine, "stands", "rewrite");
-  assert.equal(rewritesOf(rewritten), mine);
-  const view = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: rewritten });
-  assert.ok(!view.groups.some((g) => /30%/.test(g.line)), JSON.stringify(view.groups.map((g) => g.line)));
+  // Retyping the written figure through "Change it" does not source it.
+  const back = applyRewrite(resume, [], line, "Cut food waste by 30% with a new prep list each week");
+  assert.equal(back.changed, true);
+  assert.equal(rewritesOf(back.answers, back.text), "each week");
+  assert.equal(buildFinishView({ resumeText: back.text, ownWords: own, defendAnswers: back.answers }).state, "draft");
+  // A number the person typed new is theirs.
+  const mine = applyRewrite(resume, [], line, "Cut food waste by about 10% with a new prep list");
+  assert.match(rewritesOf(mine.answers, mine.text), /about 10%/);
+  const view = buildFinishView({ resumeText: mine.text, ownWords: own, defendAnswers: mine.answers });
+  assert.ok(!view.openItems.some((i) => i.rule === "STD-T02"), JSON.stringify(view.openItems));
 });
 
 test("the credentials answer counts as the person's own words", () => {

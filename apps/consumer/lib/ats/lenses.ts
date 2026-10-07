@@ -169,9 +169,20 @@ const STOPWORDS = new Set(
     " you your we our they their this that these those it its have has had do does did not no" +
     " work works working job role position candidate applicant experience ability able required" +
     " preferred plus strong excellent good years year etc including include includes other all" +
-    " any more most least well also than then when while who whom which what how why if per")
+    " any more most least well also than then when while who whom which what how why if per" +
+    // Posting filler: words every posting has that say nothing about the work.
+    " duties duty responsibilities responsible qualifications qualification requirements requirement" +
+    " using use used help helps take takes make makes get gets keep keeps need needs needed want" +
+    " like each every full part time times long periods period basic simple new team teams" +
+    " day days week weeks shift shifts hours hour company employer employees employee staff")
     .split(/\s+/)
 );
+
+/** Words that name a credential: a person holds these or doesn't, so they are never one-tap adds. */
+const CREDENTIAL_TERM_RE = /^(?:certif|licen|registered|cna|cdl|osha|servsafe|hazmat|forklift-certified|cpr|emt|lpn|rn|journeyman|apprentice)/i;
+export function isCredentialTerm(term: string): boolean {
+  return CREDENTIAL_TERM_RE.test(term.trim());
+}
 
 function keywordsOf(text: string): Set<string> {
   return new Set(
@@ -561,15 +572,19 @@ function keywordCoverage(text: string, posting?: string): LensScore {
     ...base,
     score,
     summary: `Your resume already shows ${covered} of the ${emphasized.length} terms this posting leans on.`,
-    findings: missing.slice(0, 12).map((term) => ({
+    findings: missing.slice(0, 12).map((term): LensFinding => isCredentialTerm(term) ? {
+      // A credential is never added from a posting with one tap. If the person
+      // holds it, it goes under certifications the way their card says it.
+      message: `The posting asks about "${term}". That is a credential: list it only if you hold it, the way your card or papers say it.`,
+    } : {
       message: `The posting asks about "${term}" and your resume does not mention it.`,
       fix: {
         kind: "confirm_then_add",
         term,
         label: `I have done this`,
-        question: `Have you actually done work involving "${term}"? If yes, we will add it in your own words. If no, it stays off. A keyword you cannot back up fails at the interview instead of the filter.`,
+        question: `Have you actually done work involving "${term}"? If yes, it goes on your skills line and we ask you for one time you did it. If no, it stays off. A keyword you cannot back up fails at the interview instead of the filter.`,
       },
-    })),
+    }),
   };
 }
 
