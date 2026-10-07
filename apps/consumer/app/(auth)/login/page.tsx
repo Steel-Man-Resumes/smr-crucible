@@ -657,8 +657,7 @@ function LoginForm() {
                 <span>Save the resume in progress on this computer to my new account</span>
               </label>
               <p className="mt-1 pl-6 text-[11px] leading-relaxed text-t-bone-dim">
-                {forgeRunOffer.name ? `(started by ${forgeRunOffer.name}) ` : ""}
-                Not yours? Leave this unticked and use Clear this computer.
+                Only tick this if you started it. Not yours? Leave it unticked and use Clear this computer.
               </p>
             </div>
           )}
