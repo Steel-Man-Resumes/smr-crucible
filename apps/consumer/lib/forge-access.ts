@@ -36,27 +36,71 @@ export const FORGE_WALL_ENV = "NEXT_PUBLIC_FORGE_SIGN_IN_WALL";
  */
 export type ForgeWall = "open" | "announced" | "up";
 
-/** The instant the wall goes up, or null when the value is missing or unreadable. */
+/*
+ * A DATE OR SWITCH THAT CANNOT BE READ LEAVES THE WALL DOWN (security review
+ * 3a r1, L1). Down is how the Forge works today, so a typo can never lock
+ * people out of it by surprise; the cost is that a typo does not put the wall
+ * up. Two guards cover that side: a unit test fails the build when the date in
+ * this file is set but unreadable (forge-wall.test.ts), and the server logs a
+ * clear warning (once per process) when it meets an unreadable date or switch.
+ * "Unreadable" includes impossible calendar dates (February 30), a missing
+ * time, and a missing offset: nothing is guessed.
+ */
+
+const warned = new Set<string>();
+function warnOnce(message: string) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  if (typeof console !== "undefined") console.warn(`[forge-wall] ${message}`);
+}
+
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|([+-])(\d{2}):(\d{2}))$/;
+
+/** The instant the wall goes up, or null when the value is missing or unreadable (never a guess). */
 export function forgeWallStartsAt(startsAt: string | null | undefined = FORGE_SIGN_IN_STARTS_AT): number | null {
   if (typeof startsAt !== "string" || !startsAt.trim()) return null;
-  // A full date and time with an explicit offset or Z. A bare date would be read
-  // as UTC midnight, which is the evening before in the US: refused, not guessed.
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(startsAt.trim())) return null;
+  const m = DATE_RE.exec(startsAt.trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi, se] = [m[1], m[2], m[3], m[4], m[5], m[6] ?? "0"].map(Number);
+  if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || se > 59) return null;
+  // The day must exist in that month (no February 30, no April 31).
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return null;
+  if (m[8]) {
+    const oh = Number(m[9]);
+    const om = Number(m[10]);
+    if (oh > 14 || om > 59) return null;
+  }
   const t = Date.parse(startsAt.trim());
   return Number.isFinite(t) ? t : null;
+}
+
+/** The switch as written, read leniently ("ON", " on "); anything else is unset. */
+export function readWallSwitch(raw: string | null | undefined): "on" | "off" | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "on" || v === "off") return v;
+  if (v) warnOnce(`${FORGE_WALL_ENV}="${raw}" is not "on" or "off"; ignored, the date decides.`);
+  return null;
 }
 
 export function forgeWallState(
   opts: { now?: number; startsAt?: string | null; override?: string | null } = {}
 ): ForgeWall {
-  const override =
+  const override = readWallSwitch(
     opts.override !== undefined
       ? opts.override
-      : (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_FORGE_SIGN_IN_WALL : undefined) ?? null;
+      : (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_FORGE_SIGN_IN_WALL : undefined) ?? null
+  );
   if (override === "on") return "up";
   if (override === "off") return "open";
-  const at = forgeWallStartsAt(opts.startsAt === undefined ? FORGE_SIGN_IN_STARTS_AT : opts.startsAt);
-  if (at === null) return "open";
+  const raw = opts.startsAt === undefined ? FORGE_SIGN_IN_STARTS_AT : opts.startsAt;
+  const at = forgeWallStartsAt(raw);
+  if (at === null) {
+    if (typeof raw === "string" && raw.trim()) {
+      warnOnce(`FORGE_SIGN_IN_STARTS_AT "${raw}" is not a readable date and time with an offset; the wall stays down.`);
+    }
+    return "open";
+  }
   return (opts.now ?? Date.now()) >= at ? "up" : "announced";
 }
 

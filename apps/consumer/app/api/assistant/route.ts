@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { streamText } from "ai";
 import { auth } from "@/auth";
 import { forgeUserId } from "@/lib/session-policy";
+import { signedOutAssistantRefusal } from "@/lib/assistant-limits";
 import { buildSystemPrompt } from "@/lib/assistant-prompt";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { sanitizeForPrompt, sanitizeOrEmpty } from "@/lib/sanitize";
@@ -95,6 +96,11 @@ export async function POST(request: Request) {
     }
   }
 
+  // Signed out: the request must say its size before it is read (L4).
+  if (!userId && contentLength === null) {
+    return NextResponse.json({ error: "Request size required" }, { status: 411 });
+  }
+
   const body = await request.json();
 
   const { context, systemOverride, sessionId } = body as {
@@ -103,6 +109,15 @@ export async function POST(request: Request) {
     sessionId?: string;
   };
   const messages = pluckMessages(body?.messages);
+  if (!userId) {
+    const refusal = signedOutAssistantRefusal(contentLength, messages);
+    if (refusal) {
+      return NextResponse.json(
+        { error: "That message is too long for the chat. Sign in for longer conversations." },
+        { status: refusal }
+      );
+    }
+  }
 
   // THE BROWSER DOES NOT GET TO SAY WHO IT IS TALKING AS. `context` arrives from
   // the client, and `context.org` both SELECTS the staff assistant and supplies
