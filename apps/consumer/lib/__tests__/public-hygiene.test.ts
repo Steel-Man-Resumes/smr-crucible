@@ -25,9 +25,9 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("public source hygiene", () => {
-  it("apps/ and packages/ carry no outside trademark or personal name", () => {
+  it("apps/, packages/ and services/ carry no outside trademark or personal name", () => {
     const hits: string[] = [];
-    for (const top of ["apps", "packages"]) {
+    for (const top of ["apps", "packages", "services"]) {
       for (const f of walk(join(ROOT, top))) {
         const lines = readFileSync(f, "utf8").split("\n");
         lines.forEach((l, i) => {
