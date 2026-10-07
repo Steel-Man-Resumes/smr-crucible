@@ -8,8 +8,12 @@
  * (forgeOutput/resume/narrative) and the user's contact info (name + phone) are
  * persisted server-side at creation, so the user lands in the Refinery with
  * their work intact and profile complete -- not on a locked dashboard. The
- * forge_session lives in forge.* localStorage and is lost crossing to the authed
+ * Forge run lives in forge.* localStorage and is lost crossing to the authed
  * refinery.* origin, so the relay in the dashboard layout never sees it.
+ *
+ * The Forge run is saved ONLY when the body also says `saveForgeRun: true`
+ * (the person answered "Yes" to a required yes/no). On a shared computer the
+ * run in the browser may be someone else's (lib/forge-carry.ts).
  */
 
 import { NextResponse } from "next/server";
@@ -17,6 +21,7 @@ import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
 import { persistForgeSession } from "@/lib/forge-persist";
+import { forgeRunToPersist, MAX_REGISTER_BODY_BYTES } from "@/lib/forge-carry";
 import { passwordProblem } from "@/lib/password-policy";
 import {
   checkAuthRateLimit,
@@ -41,13 +46,30 @@ const TERMS_VERSION = "2026-08-21-v1";
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
-  if (contentLength && parseInt(contentLength, 10) > 1_500_000) {
+  if (contentLength && parseInt(contentLength, 10) > MAX_REGISTER_BODY_BYTES) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
   try {
-    const { email, password, name, phone, forge, turnstileToken, acceptedTerms } =
-      await request.json();
+    // Measure what actually arrived: a chunked request has no content-length.
+    const raw = await request.text();
+    if (Buffer.byteLength(raw, "utf8") > MAX_REGISTER_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large" }, { status: 413 });
+    }
+    const body = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    }
+    const { email, password, name, phone, turnstileToken, acceptedTerms } = body;
+
+    // Shared-computer rule: a Forge run is saved only with an explicit yes.
+    const forgeRun = forgeRunToPersist(body);
+    if (!forgeRun.ok) {
+      return NextResponse.json(
+        { error: "The resume on this computer is too large to save to a new account. Choose No to create your account without it." },
+        { status: 413 }
+      );
+    }
 
     // Bot defense -- env-gated: enforced only when TURNSTILE_SECRET_KEY is set
     // (pair with NEXT_PUBLIC_TURNSTILE_SITE_KEY on the login page widget).
@@ -211,22 +233,20 @@ export async function POST(request: Request) {
           [newUserId, TERMS_VERSION, JSON.stringify({ terms: true, privacy: true, ai_processing: true })]
         );
       } catch (e: any) {
-        console.error("[register] consent record failed:", e?.message || e);
+        console.error("[register] consent record failed:", e?.code || e?.name || "error");
       }
     }
 
-    // Best-effort: carry the anonymous Forge work onto the new account. Must run
+    // Best-effort: carry the anonymous Forge work onto the new account, only
+    // when the person answered "Yes" (forgeRunToPersist above). Must run
     // BEFORE the contact upsert so the contact merge reads (and preserves) the
-    // profile_data that saveForgeSession writes.
-    if (
-      forge &&
-      typeof forge === "object" &&
-      (forge.forgeOutput || forge.resumeText)
-    ) {
+    // profile_data that saveForgeSession writes. Never log the run or an error
+    // message that could quote it.
+    if (forgeRun.run) {
       try {
-        await persistForgeSession(newUserId, forge);
+        await persistForgeSession(newUserId, forgeRun.run);
       } catch (e: any) {
-        console.error("[register] forge persist failed:", e?.message || e);
+        console.error("[register] forge persist failed:", e?.code || e?.name || "error");
       }
     }
 
@@ -261,7 +281,7 @@ export async function POST(request: Request) {
           await query(`UPDATE users SET name = $1 WHERE id = $2`, [cName, newUserId]);
         }
       } catch (e: any) {
-        console.error("[register] contact persist failed:", e?.message || e);
+        console.error("[register] contact persist failed:", e?.code || e?.name || "error");
       }
     }
 
@@ -272,13 +292,17 @@ export async function POST(request: Request) {
       try {
         await ensureUserAttribution(newUserId, orgCode);
       } catch (e: any) {
-        console.error("[register] org attribution failed:", e?.message || e);
+        console.error("[register] org attribution failed:", e?.code || e?.name || "error");
       }
     }
 
-    return NextResponse.json({ success: true, email: trimmedEmail });
+    // userId lets the form mark a run the person said "Yes" to as theirs, so
+    // the Refinery does not ask about it again.
+    return NextResponse.json({ success: true, email: trimmedEmail, userId: newUserId });
   } catch (err: any) {
-    console.error("Registration error:", err?.message || err);
+    // Name or code only: a JSON.parse error quotes the raw body (passwords,
+    // record answers).
+    console.error("Registration error:", err?.code || err?.name || "error");
     return NextResponse.json(
       { error: "Could not create account. Please try again." },
       { status: 500 }

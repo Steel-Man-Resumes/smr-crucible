@@ -24,6 +24,8 @@ import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { isSamePerson } from "@/lib/is-same-person";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 
 interface SavedResume {
   id: string;
@@ -36,6 +38,11 @@ interface SavedResume {
 export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // The local Forge run is read only when it is marked as this user's
+  // (shared-computer rule, lib/forge-carry.ts readOwnForgeSession).
+  const ownerUid = useSession().data?.user?.id;
+  const ownerUidRef = useRef(ownerUid);
+  ownerUidRef.current = ownerUid;
 
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
@@ -188,16 +195,16 @@ export function ResumeWorkspace() {
 
   // --- Check for Forge data ---
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.forgeOutput || session.resumeText) {
-          setForgeAvailable(true);
-        }
+    const check = () => {
+      const session = readOwnForgeSession(ownerUid);
+      if (session && (session.forgeOutput || session.resumeText)) {
+        setForgeAvailable(true);
       }
-    } catch {}
-  }, []);
+    };
+    check();
+    window.addEventListener("forge-synced", check);
+    return () => window.removeEventListener("forge-synced", check);
+  }, [ownerUid]);
 
   // --- Load from URL param ?id= ---
   // A locked baseline must never be opened under its own id (Phase 0.1 keeps
@@ -324,7 +331,7 @@ export function ResumeWorkspace() {
   // application email (R8 rung 3). Never invents; empty is fine.
   function workspaceStrengths(): string[] {
     try {
-      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const s = readOwnForgeSession(ownerUidRef.current) || {};
       const raw = s?.forgeOutput?.strengths;
       if (Array.isArray(raw)) {
         return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);
@@ -438,9 +445,9 @@ export function ResumeWorkspace() {
 
         // Try localStorage first.
         //
-        // Cross-ACCOUNT isolation is enforced upstream: RefineryShell stamps
-        // `_ownerUserId` on sync and purges any blob belonging to a different
-        // account before this screen renders.
+        // Cross-ACCOUNT isolation: readOwnForgeSession returns the local run
+        // only when it is marked as this user's (`_ownerUserId`). An unowned
+        // run (a shared computer's previous person) is never read here.
         //
         // KNOWN LIMITATION, same account: if a newer Forge run was completed in
         // a different browser or origin, the database holds that run while this
@@ -451,9 +458,8 @@ export function ResumeWorkspace() {
         // (the login page clears prior-account state) or Settings -> delete my
         // data.
         try {
-          const stored = localStorage.getItem("forge_session");
-          if (stored) {
-            const session = JSON.parse(stored);
+          const session = readOwnForgeSession(ownerUidRef.current);
+          if (session) {
             forgeOutput = session.forgeOutput;
             resumeText = session.resumeText;
             challenges = session.challenges || [];
