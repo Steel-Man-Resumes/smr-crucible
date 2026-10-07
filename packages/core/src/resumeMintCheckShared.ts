@@ -36,7 +36,7 @@ export interface MintFinding {
   /** Plain words for the person. */
   why: string;
   /** Which check inside a rule raised it, when a rule has more than one. */
-  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "dateless_page";
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "grid_scope_term" | "dateless_page";
 }
 
 export interface MintCheckInput {
@@ -409,7 +409,11 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
         return sc !== undefined && !srcWordList.some((x) => x.startsWith(sc) || (sc === "lead" && x === "led") || (sc === "led" && x.startsWith("lead")));
       });
       if (!scopeUnsaid && words.some((w) => srcStems.has(stemOf(w)))) continue;
-      f.push({ rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.`, kind: "grid_term" });
+      f.push(
+        scopeUnsaid
+          ? { rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" says you ran or led something, and that isn't in anything you told us.`, kind: "grid_scope_term" }
+          : { rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.`, kind: "grid_term" }
+      );
     }
   }
 }

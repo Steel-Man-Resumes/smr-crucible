@@ -15,7 +15,7 @@ import {
 } from "../resumeRules";
 import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
 import { checkCredentialUpgrade } from "../resumeMintCheckShared";
-import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, credentialQuestion, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
@@ -94,7 +94,7 @@ CORE COMPETENCIES
 Equipment: Forklift, RF scanner
 Inventory forecasting`;
   const r = runMintCheck({ output: out, source: src, kind: "resume" });
-  const terms = r.findings.filter((f) => f.kind === "grid_term").map((f) => f.line);
+  const terms = r.findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
   assert.deepEqual(terms, ["Inventory forecasting"]);
 });
 
@@ -259,7 +259,7 @@ test("defend: a line with an unsourced number gets the describe-it question, nev
   const d = pickDefendLines(resume, NO_NUMBERS.source).find((x) => /80/.test(x.line));
   assert.ok(d);
   assert.doesNotMatch(d!.question, /\d|how you know this number/i);
-  assert.match(d!.question, /in one sentence, how would you say this line/i);
+  assert.match(d!.question, /the line stays true without one/i);
   const s = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source });
   for (const i of s.openItems.filter((x) => /80/.test(x.line))) assert.doesNotMatch(i.question, /\d|how you know this number/i);
 });
@@ -302,7 +302,7 @@ test("status: a credential with no type or status asks about it, without supplyi
   const cred = s.openItems.find((i) => i.rule === "STD-T03");
   assert.ok(cred, JSON.stringify(s.openItems));
   assert.equal(cred!.severity, "FIX");
-  assert.equal(cred!.question, `Was "Forklift Operator" a license, a certification, or a training course? Is it current, expired, or still in progress?`);
+  assert.equal(cred!.question, credentialQuestion("Forklift Operator"));
   // The defend step asks about it too, and its answer settles the status.
   const answers = answerAll(CREDENTIAL_NO_STATUS.resume, CREDENTIAL_NO_STATUS.source).map((a) =>
     /Forklift Operator$/.test(a.line) ? { ...a, answer: "It was the warehouse's forklift training, passed in 2021, expired now." } : a

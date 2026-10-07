@@ -297,6 +297,11 @@ export function introducedWords(rewrite: string, replaced: string, writerText = 
   return words.sort((a, b) => a.i - b.i).map((w) => w.s).join(" ");
 }
 
+/** The credential's own name for a credential finding (quoted in its why), else the line's. */
+function credentialNameOf(f: Pick<MintFinding, "line" | "why">): string {
+  return quoted(f.why) ?? credentialName(f.line);
+}
+
 function credentialName(line: string): string {
   return clip(stripBullet(line).split(/[,(|]/)[0].trim() || stripBullet(line), 50);
 }
@@ -421,11 +426,9 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
   const word = quoted(f.why);
   switch (f.rule) {
     case "STD-T02":
-      return f.kind === "dropped_number"
-        ? "You gave us a number here and it is not on the page. Should it go back on, the way you said it?"
-        : "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
+      return f.kind === "dropped_number" ? Q_NUMBER_DROPPED : Q_NUMBER_UNSOURCED;
     case "STD-T05":
-      return "This year is not in what you told us. What years did you do this, as best you know? If you're not sure, say so and we'll mark it to check.";
+      return "This year isn't in what you told us. What years did you do this, as best you know?";
     case "STD-T07":
       return `Would you say "${word ?? "this"}" about yourself or this work? If not, it comes off.`;
     case "STD-C05":
@@ -448,33 +451,59 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
       if (f.kind === "sole_actor") {
         return "Your words say you helped with this. Did you do it on your own, or with someone? Tell me in one sentence how you'd describe it.";
       }
+      if (f.kind === "grid_scope_term") return `"${clip(f.line, 40)}" says you ran or led something. Say what you did, in one sentence.`;
       return `Can you tell me one time you did "${clip(f.line, 40)}" at work? If not, it comes off.`;
     case "STD-T03":
-      return `Was "${credentialName(f.line)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+      return credentialQuestion(credentialName(f.line));
     case "STD-C03":
-      return "Was this your title on the paperwork?";
+      return Q_TITLE;
     default:
       return DESCRIBE;
   }
 }
 
-/** New question (round 2): a credential the person never mentioned. Only a change or a cut settles it. */
-export const CREDENTIAL_UNSAID_QUESTION =
-  "We can't find this credential in anything you told us. If you hold it, change the line to say it the way your card or papers do. If you don't, cut it.";
+// ---- question voice (decision D6) ----------------------------------------
+// Numbers, credentials and titles are asked the way an interviewer would ask
+// them. Everything else is plain and short.
 
-const DESCRIBE_UNSOURCED =
-  "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
+/** A number on the page the person never gave. */
+export const Q_NUMBER_UNSOURCED =
+  "If an interviewer asked where this number came from, could you say? It isn't one you gave us. Change it to a number you know. If you don't know a number, the line stays true without one.";
+/** A number the person gave that did not make it onto the page. */
+export const Q_NUMBER_DROPPED =
+  "You gave us this number and it isn't on the page. An interviewer remembers a real number. Put it back the way you said it?";
+/** One of the person's own numbers, asked once. */
+export const Q_NUMBER_OWN = "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
+/** A job title the person never used. */
+export const Q_TITLE =
+  "If an interviewer called to check this job, would they find this title on your paperwork? Tell me the title your paperwork shows.";
+
+/** A credential's type and status. */
+export function credentialQuestion(name: string): string {
+  return `If an interviewer asked about "${clip(name, 50)}", what would you say it is: a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+}
+
+/**
+ * A credential on the page the person never mentioned (decision D4): a
+ * memory prompt, not a claim. It stays only when they say yes and type its
+ * type and its year or status themselves.
+ */
+export function credentialMemoryPrompt(name: string): string {
+  return `Do you hold ${clip(name, 50)}? Many people forget a card or class they earned.`;
+}
+
+const DESCRIBE_UNSOURCED = Q_NUMBER_UNSOURCED;
 
 function questionForDefend(line: string, reasons: DefendReason[], sourceText: string, credName?: string): string {
   if (reasons.includes("credential")) {
-    return `Was "${clip(credName || credentialName(line), 50)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+    return credentialQuestion(credName || credentialName(line));
   }
   if (reasons.includes("number")) {
     // Never ask a person to defend a number they did not give: that plants it.
     const src = numbersIn(sourceText);
     const unsourced = Array.from(numbersIn(line)).some((n) => !src.has(n));
     if (unsourced) return DESCRIBE_UNSOURCED;
-    return "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
+    return Q_NUMBER_OWN;
   }
   return DESCRIBE;
 }
@@ -616,7 +645,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
           rule: "STD-T03",
           severity: "BLOCK",
           line: m.line,
-          why: `"${clip(m.name, 50)}" isn't in anything you told us. A credential goes on the page only the way your card or papers say it.`,
+          why: `"${clip(m.name, 50)}" was added for you. It stays only if you hold it and tell us what kind it is and when.`,
           kind: "credential_unsaid",
         });
       } else if (c.issue === "upgrade") {
@@ -656,7 +685,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       }));
     const findings = [...mint.findings, ...credentialFindings, ...titleFindings];
     for (const f of findings) {
-      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? CREDENTIAL_UNSAID_QUESTION : questionForFinding(f));
+      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? credentialMemoryPrompt(credentialNameOf(f)) : questionForFinding(f));
       if (f.kind) items[items.length - 1].kind = f.kind;
     }
 

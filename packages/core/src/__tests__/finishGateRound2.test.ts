@@ -11,7 +11,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getResumeStatus, pickDefendLines, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, Q_TITLE, type DefendAnswer } from "../resumeStatus";
 import { runMintCheck, numbersIn } from "../resumeMintCheckShared";
 
 const SOURCE = `Morgan Sample
@@ -72,7 +72,7 @@ test("R2-B3: a job title the person never had raises STD-C03; an answer about th
   const s = status(r, answerEvery(r));
   const c03 = s.openItems.find((i) => i.rule === "STD-C03");
   assert.ok(c03 && c03.severity === "BLOCK", JSON.stringify(s.openItems));
-  assert.equal(c03!.question, "Was this your title on the paperwork?");
+  assert.equal(c03!.question, Q_TITLE);
   const header = "KITCHEN MANAGER | Harbor Street Diner | 2019 - 2023";
   const generic = [...answerEvery(r), { line: header, answer: GOOD, verdict: "stands" as const }];
   assert.equal(status(r, generic).state, "draft", "a generic answer is not about the title");
@@ -211,7 +211,7 @@ test("burden: the two-line minimum fills only with lines that differ from the pe
 test("burden: skills pass only on a real stem or phrase, and never on a scope word the person never used", () => {
   const welder = "Dana Example\nWelded steel for commercial construction projects.";
   const r = `DANA EXAMPLE\n\nSKILLS\nCommunication, Commercial welding, Kitchen supervision\n\nPROFESSIONAL EXPERIENCE\nWELDER | Shop | 2019 - 2023\n- Welded steel.`;
-  const terms = runMintCheck({ output: r, source: `${welder}\nI ran the kitchen at night.`, kind: "resume" }).findings.filter((f) => f.kind === "grid_term").map((f) => f.line);
+  const terms = runMintCheck({ output: r, source: `${welder}\nI ran the kitchen at night.`, kind: "resume" }).findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
   assert.ok(terms.includes("Communication"), "commercial is not communication");
   assert.ok(!terms.includes("Commercial welding"));
   assert.ok(terms.includes("Kitchen supervision"), "a scope word they never used");
