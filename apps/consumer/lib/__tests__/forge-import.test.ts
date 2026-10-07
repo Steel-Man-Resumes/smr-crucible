@@ -11,7 +11,8 @@ import {
   afterSave,
   importDecision,
   importPayload,
-  importQuestion,
+  IMPORT_QUESTION,
+  importYesLabel,
   runHasAnswers,
   runLevel,
   signedOutDecision,
@@ -100,16 +101,10 @@ describe("which runs are saved, asked about, or cleared", () => {
     assert.equal(signedOutDecision(null), "keep");
   });
 
-  it("M1: the question names the account the run would go to", () => {
-    assert.equal(
-      importQuestion("morgan@example.com", "Jordan Example"),
-      "This computer has a resume in progress for Jordan Example. Save it to the account for morgan@example.com?"
-    );
-    assert.equal(
-      importQuestion("morgan@example.com", null),
-      "This computer has a resume in progress. Save it to the account for morgan@example.com?"
-    );
-    assert.doesNotMatch(importQuestion("a@b.c", "X"), /[\u2013\u2014]/);
+  it("M1 (r1, reworded r2 to the hotfix's card): the button names the account; the run's name is never shown", () => {
+    assert.equal(IMPORT_QUESTION, "There's a resume in progress on this computer. Is it yours?");
+    assert.equal(importYesLabel("morgan@example.com"), "Yes, save it to morgan@example.com");
+    assert.doesNotMatch(IMPORT_QUESTION + importYesLabel("a@b.c"), /[\u2013\u2014]/);
   });
 
   it("levels", () => {
@@ -169,7 +164,7 @@ describe("what is sent, and what the account keeps", () => {
   });
 
   it("the shell runs the import; the import skips pending sessions and posts same-origin JSON", () => {
-    assert.match(read("app/(forge)/ForgeShell.tsx"), /<ForgeImport showPrompt=\{!quiet\} \/>/);
+    assert.match(read("app/(forge)/ForgeShell.tsx"), /<ForgeImport showPrompt \/>/);
     const comp = read("components/forge/ForgeImport.tsx");
     assert.match(comp, /!sessionPending\(authUser\)/);
     assert.match(comp, /"\/api\/forge\/save"/);
@@ -205,7 +200,9 @@ describe("H1: no run enters an account except through the Forge's question", () 
   it("the Refinery's sync never claims an unmarked run (no name match)", () => {
     const shell = code(read("app/(dashboard)/RefineryShell.tsx"));
     assert.doesNotMatch(shell, /isSamePerson/);
-    assert.match(shell, /if \(!forgeData\._ownerUserId\) \{\s*clearRunScopedLocalStorage\(\);\s*return;\s*\}/);
+    // Round 2: the Refinery asks as the live hotfix does (lib/forge-carry.ts).
+    assert.match(shell, /forgeSyncDecision\(stored, uid\)/);
+    assert.match(shell, /decision === "ask"/);
   });
 
   it("signing out from the Forge clears the run first", () => {

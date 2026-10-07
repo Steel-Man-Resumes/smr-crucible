@@ -53,7 +53,8 @@ describe("M1: login CSRF through the email-link callback", () => {
       assert.equal(emailCallbackNeedsButton(P, "HEAD", site), true, String(site));
     }
     assert.equal(emailCallbackNeedsButton("/api/auth/callback/google", "GET", "cross-site"), false);
-    assert.equal(emailCallbackNeedsButton(P, "POST", "cross-site"), false);
+    // Round 2: every other method goes to the button page too (see security-3a-r2.test.ts).
+    assert.equal(emailCallbackNeedsButton(P, "POST", "cross-site"), true);
   });
 
   it("it is sent to the button page with the same token, email and return path", () => {
@@ -70,7 +71,8 @@ describe("M1: login CSRF through the email-link callback", () => {
   it("the button page names the account it signs in to", () => {
     assert.equal(maskEmail("morgan@example.com"), "m***@example.com");
     assert.equal(maskEmail(""), null);
-    assert.match(read("app/(auth)/login/finish/page.tsx"), /finish signing in as \$\{who\}/);
+    // Round 2: the full address, not a mask.
+    assert.match(read("app/(auth)/login/finish/page.tsx"), /This link signs you in as/);
   });
 
   it("the Forge header shows the signed-in address with a way out", () => {
@@ -96,6 +98,9 @@ function counters() {
     buckets,
     c: {
       account: async (u: string, e: string) => inc(accounts, `${u}|${e}`),
+      refundAccount: async (u: string, e: string) => {
+        accounts.set(`${u}|${e}`, Math.max(0, (accounts.get(`${u}|${e}`) ?? 0) - 1));
+      },
       bucket: async (k: string, e: string) => inc(buckets, `${k}|${e}`),
     },
   };
@@ -318,7 +323,9 @@ describe("M4: terms for every way in", () => {
   });
 
   it("the public pages, the signed-out allowlist and the wall-down Forge are untouched", () => {
-    for (const p of [...FORGE_PUBLIC_PAGES, ...Object.keys(FORGE_SIGNED_OUT_API_ALLOWLIST), "/dashboard"]) {
+    // Round 2: the Refinery and t.ROY's chat (signed in) are gated too; the
+    // rest of the signed-out allowlist stays open.
+    for (const p of [...FORGE_PUBLIC_PAGES, ...Object.keys(FORGE_SIGNED_OUT_API_ALLOWLIST).filter((r) => r !== "/api/assistant")]) {
       assert.equal(termsGateVerdict(p, true, false), "pass", p);
     }
     assert.equal(termsGateVerdict("/welcome", false, false), "pass");
@@ -326,7 +333,7 @@ describe("M4: terms for every way in", () => {
 
   it("auth.ts sets the claim from the consent row only, and gates on it", () => {
     const a = read("auth.ts");
-    assert.match(a, /termsGateVerdict\(path, wallUp, \(session\.user as any\)\?\.terms\)/);
+    assert.match(a, /termsGateVerdict\(path, wallUp, termsCurrent\(session\.user as any, TERMS_VERSION\)\)/);
     assert.match(a, /pool\.query\(CONSENT_LOOKUP_SQL, \[token\.sub, TERMS_VERSION\]\)/);
     assert.match(a, /\(session\.user as any\)\.terms = \(token as any\)\.terms === true;/);
   });
