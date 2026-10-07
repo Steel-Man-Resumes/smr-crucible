@@ -132,8 +132,11 @@ export async function sendSignInLinkEmail(params: {
  */
 export function emailCallbackNeedsButton(path: string, method: string, secFetchSite: string | null): boolean {
   if (path !== EMAIL_CALLBACK_PATH) return false;
-  if (method !== "GET" && method !== "HEAD") return false;
-  return secFetchSite !== "same-origin";
+  // Round 2: every method but a same-origin GET. A cross-site POST is a
+  // top-level navigation too (an auto-submitting form), and Auth.js reads the
+  // token from the query on POST as well. All of them go to the button page
+  // (303, so the browser follows with a GET).
+  return !(method.toUpperCase() === "GET" && secFetchSite === "same-origin");
 }
 
 /** "morgan@example.com" -> "m***@example.com", for the button page. */

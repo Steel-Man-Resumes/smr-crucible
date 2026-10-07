@@ -15,7 +15,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
-import { EMAIL_LINK_PAGE, emailCallbackTarget, maskEmail } from "@/lib/sign-in-link";
+import { EMAIL_LINK_PAGE, emailCallbackTarget } from "@/lib/sign-in-link";
 
 /** This tab's copy of the validated sign-in target, after the URL is cleaned. */
 const TARGET_KEY = "smr_finish_sign_in";
@@ -74,20 +74,30 @@ function FinishSignIn() {
         {target !== null ? (
           <>
             <h1 className="text-2xl font-semibold text-t-white">Finish signing in</h1>
-            <p className="mt-2 mb-6 text-sm text-t-bone-dim" data-testid="finish-sign-in-as">
-              {(() => {
-                // Name the account, so nobody is signed in to one they did not ask for.
-                let who: string | null = null;
-                try {
-                  who = target ? maskEmail(new URL(target).searchParams.get("email")) : null;
-                } catch {
-                  who = null;
-                }
-                return who
-                  ? `Press the button to finish signing in as ${who}. If that is not your email address, close this page.`
-                  : "Press the button to finish signing in to Steel Man Resumes.";
-              })()}
-            </p>
+            {(() => {
+              // The FULL address the link signs in to (round 2: a masked one
+              // looks the same for a lookalike address). The person holding the
+              // link already has it in the URL.
+              let who: string | null = null;
+              try {
+                who = target ? new URL(target).searchParams.get("email") : null;
+              } catch {
+                who = null;
+              }
+              return (
+                <div className="mt-2 mb-6 text-sm text-t-bone-dim" data-testid="finish-sign-in-as">
+                  {who ? (
+                    <>
+                      <p>This link signs you in as</p>
+                      <p className="mt-1 break-all text-base font-semibold text-t-white" data-testid="finish-email">{who}</p>
+                      <p className="mt-3">Not you? Don&apos;t continue. Close this page.</p>
+                    </>
+                  ) : (
+                    <p>Press the button to finish signing in to Steel Man Resumes.</p>
+                  )}
+                </div>
+              );
+            })()}
             <TBtn
               type="button"
               disabled={going || !target}
