@@ -9,9 +9,11 @@ import {
   recordProgressEvent,
   isResumeGroup,
   queryAsUser,
+  getOpenLane,
 } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
+import { parseLaneIdParam, parseExamplesParam, parseLaneIdBody } from "@/lib/lanes";
 
 // Journey instrumentation: which artifact types link back to a target job
 // application, and into which (whitelisted) column. The column names are fixed
@@ -77,8 +79,12 @@ export async function GET(request: Request) {
   const lane = searchParams.get("lane");
   const groupParam = searchParams.get("group");
   const offsetParam = searchParams.get("offset");
+  // Career lanes (073): ?laneId=<id>|main and ?examples=hide|only.
+  const laneIdParam = searchParams.get("laneId");
+  const examplesParam = searchParams.get("examples");
   const usesPaged =
-    q !== null || lane !== null || groupParam !== null || offsetParam !== null;
+    q !== null || lane !== null || groupParam !== null || offsetParam !== null ||
+    laneIdParam !== null || examplesParam !== null;
 
   if (usesPaged) {
     if (groupParam && !isResumeGroup(groupParam)) {
@@ -93,6 +99,8 @@ export async function GET(request: Request) {
       q: q ?? undefined,
       lane: lane ?? undefined,
       group: groupParam && isResumeGroup(groupParam) ? groupParam : undefined,
+      laneId: parseLaneIdParam(laneIdParam),
+      examples: parseExamplesParam(examplesParam),
       limit: parsedLimit ? Math.min(parsedLimit, 100) : undefined,
       offset,
     });
@@ -149,6 +157,17 @@ export async function POST(request: Request) {
     }
   }
 
+  // Career lanes (073): new work may be saved into one of the person's open
+  // lanes. A lane that is not theirs, or archived, is refused rather than
+  // quietly saved to main, so the screen never shows the wrong lane.
+  const laneId = parseLaneIdBody(body.laneId);
+  if (laneId === "bad") {
+    return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+  }
+  if (laneId && !(await getOpenLane(userId, laneId))) {
+    return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
+  }
+
   try {
     const targetContext =
       body.targetContext && typeof body.targetContext === "object" && !Array.isArray(body.targetContext)
@@ -160,7 +179,8 @@ export async function POST(request: Request) {
       body.type,
       targetContext,
       body.content,
-      typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0
+      typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0,
+      { laneId: laneId ?? null }
     );
 
     // Journey instrumentation: link a tailored resume / disclosure plan back to

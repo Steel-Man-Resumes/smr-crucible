@@ -11,7 +11,8 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getArtifact } from "@crucible/core";
+import { getArtifact, getOpenLane, isUuid } from "@crucible/core";
+import { laneWriterNote } from "@/lib/lanes";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { JD_MAX, RESUME_SOURCE_MAX } from "@/lib/limits";
@@ -63,7 +64,10 @@ async function handlePost(request: Request) {
     const userId = session?.user?.id;
 
     const body = await request.json();
-    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId } = body;
+    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId, laneId } = body;
+    // Career lanes (073): the lane's own length choice, read from the
+    // database (never from the request body), only for the person's open lane.
+    const lane = userId && isUuid(laneId) ? await getOpenLane(userId, laneId) : null;
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
@@ -191,7 +195,7 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
 13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
 14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.
-15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.`;
+15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.${laneWriterNote(lane)}`;
 
     const resumePrompt = `Generate a complete, targeted resume. Return ONLY valid JSON.
 
