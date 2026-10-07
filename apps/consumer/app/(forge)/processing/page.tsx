@@ -146,13 +146,19 @@ export default function ProcessingPage() {
     setReflectionPrompt(REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)]);
   }, []);
 
+  // Nothing here claims work is going on once it has stopped.
+  const building = isDemo || !failure;
   const intro = tour
     ? tour.steps.length
-      ? "While I build, here's what I see on your page now, and what the new one does instead."
-      : "I looked over your page while you wait."
+      ? "Here's what I see on your page now, and what the new one does instead."
+      : "I looked over your page."
     : jobs.length
-      ? "These are the jobs you gave me. I'm reading them with your goals to find your strengths and the paths that fit. Your new page comes right after this."
-      : "I'm reading your answers now. Your new page comes right after this.";
+      ? building
+        ? "These are the jobs you gave me. I'm reading them with your goals to find your strengths and the paths that fit. Your new page comes right after this."
+        : "These are the jobs you gave me."
+      : building
+        ? "I'm reading your answers now. Your new page comes right after this."
+        : "Your answers are still here.";
 
   const openDemoResults = () => {
     updateSession({ forgeOutput: DEMO_OUTPUT, lastPageVisited: "processing" });
@@ -207,7 +213,7 @@ export default function ProcessingPage() {
         </div>
 
         {/* t.ROY and the page */}
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-5">
           <div
             className={`flex items-center gap-3 lg:items-start ${
               tour || jobs.length ? "lg:col-start-2 lg:row-start-1" : "lg:col-span-2"
