@@ -16,8 +16,13 @@
  * already narrow and tested; they are not repeated here. The six-reader judge
  * (model-based) is a separate layer.
  *
- * Pure: no imports, no I/O, safe in the browser and on the server.
+ * Rules come from the shared rulebook (resumeRules.ts); a finding's rule id
+ * maps back to its rulebook rule with rulesForStd().
+ *
+ * Pure: no I/O, safe in the browser and on the server.
  */
+
+import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
 
@@ -28,6 +33,8 @@ export interface MintFinding {
   line: string;
   /** Plain words for the person. */
   why: string;
+  /** Which check inside a rule raised it, when a rule has more than one. */
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status";
 }
 
 export interface MintCheckInput {
@@ -44,6 +51,8 @@ export interface MintCheckResult {
   fixCount: number;
   /** True only when there is no open BLOCK in this layer. Not "mint" by itself. */
   passesDeterministic: boolean;
+  /** The rulebook version these findings were graded against. */
+  rulesVersion: string;
 }
 
 // Spacing and hyphens are not words: "Self-Employed" on the page and
@@ -56,13 +65,13 @@ function saidBy(src: string, phrase: string): boolean {
   return squash(src).includes(squash(phrase));
 }
 
-function linesOf(text: string): string[] {
+export function linesOf(text: string): string[] {
   return text.split("\n").map((l) => l.trim()).filter(Boolean);
 }
 
 // A contact line: email, phone, or a ZIP after a state. Digits inside it
 // ("59923") are not the number a finding is about.
-const CONTACT_LINE_RE = /@|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/;
+export const CONTACT_LINE_RE = /@|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -111,7 +120,7 @@ const WORD_NUMS: Record<string, string> = {
 // "one" and "hundred" are left out on purpose: they are ordinary prose words
 // ("no one", "one of"), and reading them as counts made false findings.
 
-function numbersIn(text: string): Set<string> {
+export function numbersIn(text: string): Set<string> {
   const t = text
     .replace(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, " ") // phone numbers
     .replace(/\b\d{3}[\s.-]\d{4}\b/g, " ") // short phone numbers
@@ -134,6 +143,7 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
       severity: "BLOCK",
       line: lineContaining(out, n),
       why: `The number ${n} is not in anything you told us. Only numbers you gave go on the page.`,
+      kind: "added_number",
     });
   }
   // A letter need not carry every number; a resume must (dropping one is a FIX).
@@ -144,7 +154,8 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
       rule: "STD-T02",
       severity: "FIX",
       line: lineContaining(src, n),
-      why: `You gave the number ${n} and it did not make it onto the page. A number you know is one of the strongest things a resume can carry.`,
+      why: `You gave the number ${n} and it did not make it onto the page. A number you gave belongs on the page the way you said it.`,
+      kind: "dropped_number",
     });
   }
 }
@@ -220,7 +231,7 @@ function checkPlaceholders(out: string, kind: MintCheckInput["kind"], f: MintFin
       f.push({ rule: "STD-F05", severity: "BLOCK", line: l, why: "A placeholder is still on the page. Fill it in with the real detail or take it out." });
     }
     if (FILLER_RE.test(l)) {
-      f.push({ rule: "STD-F02", severity: "BLOCK", line: l, why: "This section says it has nothing in it. Leave the section off the page instead." });
+      f.push({ rule: "STD-F02", severity: "BLOCK", line: l, why: "This section says it has nothing in it. Leave the section off the page instead.", kind: "empty_section" });
     }
   }
 }
@@ -243,7 +254,7 @@ const NEXT_SECTION_RE = /^[A-Z][A-Z &/]{3,}$/;
 // Title Case page ends a section where an ALL CAPS page would.
 const KNOWN_HEADING_RE = /^(?:(?:professional |work |relevant |volunteer )?experience|employment(?: history)?|work history|education(?: (?:and|&) training)?|training|certifications?(?: (?:and|&) licenses?)?|licenses?(?: (?:and|&) certifications?)?|volunteer(?: work)?|projects|awards|references|(?:career |professional )?summary|profile|objective|(?:core |key )?(?:skills|competencies)|languages|additional information):?$/i;
 
-const isSectionEnd = (l: string) => (NEXT_SECTION_RE.test(l) && !l.includes("|")) || KNOWN_HEADING_RE.test(l);
+export const isSectionEnd = (l: string) => (NEXT_SECTION_RE.test(l) && !l.includes("|")) || KNOWN_HEADING_RE.test(l);
 const isBullet = (l: string) => /^[-•*]/.test(l);
 const hasYear = (l: string) => new RegExp(YEAR_RE.source).test(l);
 
@@ -254,7 +265,7 @@ const DATE_PART_RE = /^(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}(?:\s*(?:
 const PLACE_PART_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
 // "Chicago, IL 2019 - 2023" or "Chicago, IL, Jan 2019 to Present" (no pipe).
 const PLACE_THEN_DATE_RE = /^([A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?)[,\s]+(.+)$/;
-function isDateLine(l: string): boolean {
+export function isDateLine(l: string): boolean {
   if (isBullet(l) || !hasYear(l)) return false;
   // A sentence with a year in it ("Earned OSHA 10 in 2021") is not a date line.
   if (!l.includes("|")) {
@@ -269,7 +280,7 @@ function isDateLine(l: string): boolean {
 // An entry header names a title or employer before its first "|". Lines that
 // only use "|" to separate other things are not job entries: a page footer
 // ("555-555-0100 | Page 2") or a scope line ("Reports: 12 Direct | Budget $4M").
-function isEntryHeader(l: string): boolean {
+export function isEntryHeader(l: string): boolean {
   if (isBullet(l) || !l.includes("|")) return false;
   const first = l.split("|")[0].trim();
   return /[A-Za-z]{2,}/.test(first) && !first.includes(":");
@@ -290,7 +301,7 @@ function checkExperienceDates(out: string, f: MintFinding[]) {
     }
     const parts = l.split("|").map((p) => p.trim());
     if (parts.length >= 2 && (!parts[0] || !parts[1])) {
-      f.push({ rule: "STD-F02", severity: "BLOCK", line: l, why: "This entry is missing a job title or an employer." });
+      f.push({ rule: "STD-F02", severity: "BLOCK", line: l, why: "This entry is missing a job title or an employer.", kind: "missing_title" });
     }
   }
 }
@@ -320,15 +331,23 @@ function checkDashes(out: string, f: MintFinding[]) {
   }
 }
 
-// ---- STD-T01 (narrow): skills grid terms the person never mentioned -------
-// Deterministic only for the competencies grid: a term none of whose content
-// words appear in the person's words is a claim to confirm, not a fact.
+// ---- STD-T01 (narrow): skills terms the person never mentioned -----------
+// Deterministic only for the skills section: a term none of whose content
+// words appear in the person's words is a claim to confirm, not a fact. The
+// section may be one comma-separated line, short labeled lines
+// ("Equipment: forklift, pallet jack"), or an old pipe grid.
 const STOP = new Set(["and", "of", "the", "for", "with", "in", "on", "to", "a", "an", "&", "operations", "management", "skills"]);
-const GRID_RE = /^(?:core competencies|skills|key skills|competencies)$/i;
+const GRID_RE = /^(?:core competencies|skills|key skills|competencies|core skills)$/i;
 
 // Match on a shared 4-letter start ("prep" in "prepped" and "preparation"),
 // so a person's own word in another form is not flagged.
 const head = (w: string) => w.slice(0, 4);
+
+/** The skill terms on one skills-section line, without a "Label:" prefix. */
+export function skillTermsOf(line: string): string[] {
+  const body = line.replace(/^[-•*]\s*/, "").replace(/^[A-Za-z][A-Za-z &/]{1,30}:\s*/, "");
+  return body.split(/[|,;]/).map((t) => t.trim()).filter(Boolean);
+}
 
 function checkGrid(out: string, src: string, f: MintFinding[]) {
   const ls = linesOf(out);
@@ -338,13 +357,94 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
   for (let i = start + 1; i < ls.length; i++) {
     const l = ls[i];
     if (isSectionEnd(l)) break;
-    for (const term of l.split("|").map((t) => t.trim()).filter(Boolean)) {
+    for (const term of skillTermsOf(l)) {
       const words = (term.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !STOP.has(w) && w.length > 2);
       if (!words.length) continue;
       if (words.some((w) => srcWords.has(head(w)))) continue;
-      f.push({ rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.` });
+      f.push({ rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.`, kind: "grid_term" });
     }
   }
+}
+
+// ---- STD-T01 (narrow): shared work written as sole work -----------------
+// The person said they "helped with" or "assisted with" something; the page
+// names that same work on a line with no sign it was shared or supervised.
+// A hint for the person to settle, never a verdict: FIX.
+// "helped with X", "assisted in X", "helped out on X". Not "helped customers":
+// helping a customer is the person's own work, not shared work.
+const HELPED_RE = /\b(?:helped|helping|help|assisted|assisting|assist)\s+(?:out\s+)?(?:with|in|on)\s+(?:the\s+|a\s+|an\s+|some\s+)?([a-z][a-z-]{3,})/gi;
+const SHARED_RE = /\b(?:help\w*|assist\w*|with|under|alongside|together|team|crew|supported|support)\b/i;
+const SOLE_STOP = new Set(["with", "them", "they", "other", "others", "people", "anything", "everything", "whatever", "where", "when", "around", "stuff", "things", "out"]);
+
+function checkSoleActor(out: string, src: string, f: MintFinding[]) {
+  const objects = new Set<string>();
+  for (const m of src.matchAll(HELPED_RE)) {
+    const w = m[1].toLowerCase();
+    if (!SOLE_STOP.has(w)) objects.add(w.slice(0, Math.min(w.length, 5)));
+  }
+  if (!objects.size) return;
+  const seen = new Set<string>();
+  for (const l of linesOf(out)) {
+    if (isSectionEnd(l) || isEntryHeader(l) || CONTACT_LINE_RE.test(l) || SHARED_RE.test(l)) continue;
+    const words = l.toLowerCase().match(/[a-z][a-z-]+/g) ?? [];
+    const hit = words.find((w) => Array.from(objects).some((o) => w.startsWith(o)));
+    if (!hit || seen.has(l)) continue;
+    seen.add(l);
+    f.push({
+      rule: "STD-T01",
+      severity: "FIX",
+      line: l,
+      why: "Your words say you helped with this work. This line reads like you did it on your own. Keep it shared if it was shared.",
+      kind: "sole_actor",
+    });
+  }
+}
+
+// ---- STD-T03 (narrow): a credential whose type or status nobody gave -----
+// Used by the draft/finished status, not by runMintCheck (credential claims on
+// the page are checked by the consumer app's credential-truth module). A
+// credential line passes when the page or the person's words give its year or
+// a status word; otherwise it is a question for the person.
+const CRED_SECTION_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?)$/i;
+export const CREDENTIAL_WORD_RE = /\b(?:certif\w*|licen[cs]e[ds]?|OSHA[\s-]*\d+|CDL|CNA|ServSafe|EPA\s*608|CPR|first aid|forklift card)\b/i;
+const STATUS_WORD_RE = /\b(?:active|current|valid|expired|expires|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|through|until|good for)\b/i;
+const GENERIC_CRED_WORDS = new Set(["certification", "certificate", "certified", "license", "licence", "licensed", "card", "training", "course", "class", "program", "level", "state", "issued"]);
+
+/** The credential lines on a resume: every line under a credentials heading, plus any other line naming one. */
+export function credentialLinesOf(out: string): string[] {
+  const ls = linesOf(out);
+  const found: string[] = [];
+  let inCreds = false;
+  for (let i = 0; i < ls.length; i++) {
+    const l = ls[i];
+    if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) { inCreds = true; continue; }
+    if (isSectionEnd(l)) { inCreds = false; continue; }
+    if (i === 0 || CONTACT_LINE_RE.test(l)) continue;
+    if (inCreds || CREDENTIAL_WORD_RE.test(l)) found.push(l);
+  }
+  return found;
+}
+
+export function checkCredentialStatus(out: string, src: string): MintFinding[] {
+  const srcUnits = src.split(/[\n.;]+/).map((u) => u.trim()).filter(Boolean);
+  const f: MintFinding[] = [];
+  for (const l of credentialLinesOf(out)) {
+    if (new RegExp(YEAR_RE.source).test(l) || STATUS_WORD_RE.test(l)) continue;
+    const name = l.replace(/^[-•*]\s*/, "");
+    const key = (name.match(/[A-Za-z0-9]+/g) ?? []).find((w) => w.length >= 3 && !GENERIC_CRED_WORDS.has(w.toLowerCase()));
+    const said = key
+      ? srcUnits.filter((u) => u.toLowerCase().includes(key.toLowerCase()))
+      : [];
+    if (said.some((u) => new RegExp(YEAR_RE.source).test(u) || STATUS_WORD_RE.test(u))) continue;
+    f.push({
+      rule: "STD-T03",
+      severity: "FIX",
+      line: l,
+      why: "We don't know this credential's type or status yet: license, certification or training, and current, expired or in progress.",
+      kind: "credential_status",
+    });
+  }
+  return f;
 }
 
 export function runMintCheck(input: MintCheckInput): MintCheckResult {
@@ -361,8 +461,15 @@ export function runMintCheck(input: MintCheckInput): MintCheckResult {
   if (input.kind !== "cover_letter") {
     checkExperienceDates(out, findings);
     checkGrid(out, src, findings);
+    checkSoleActor(out, src, findings);
   }
   checkDashes(out, findings);
   const blockCount = findings.filter((x) => x.severity === "BLOCK").length;
-  return { findings, blockCount, fixCount: findings.length - blockCount, passesDeterministic: blockCount === 0 };
+  return {
+    findings,
+    blockCount,
+    fixCount: findings.length - blockCount,
+    passesDeterministic: blockCount === 0,
+    rulesVersion: RESUME_RULES_VERSION,
+  };
 }

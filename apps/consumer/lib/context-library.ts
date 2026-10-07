@@ -9,6 +9,8 @@
  * Every AI route imports from here instead of hardcoding context.
  */
 
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 // ─── User Level Detection ───────────────────────────────────────────────────
@@ -50,21 +52,21 @@ const LEVEL_DIRECTIVES: Record<UserLevel, string> = {
   foundation: `USER LEVEL: Foundation (entry-level, rebuilding, limited resume history)
 LANGUAGE: Write at a 6th grade reading level. Short sentences. No jargon.
 TONE: Warm, encouraging, patient. Explain everything. Heavy scaffolding.
-RESUME FORMAT: Dated history in reverse order even when it is thin; never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year or invent an entry. Use only numbers the person gave or picked. If a line has no number, leave it without one. Never estimate.
+RESUME FORMAT: Dated history in reverse order even when it is thin; never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year or invent an entry. Use only numbers the person gave. If a line has no number, leave it without one. Never estimate.
 INTERVIEW: General questions, slow pace, more encouragement. Build confidence.
 DISCLOSURE: Simple script, basic timing advice. Don't overwhelm.`,
 
   professional: `USER LEVEL: Professional (mid-career, solid experience, some education)
 LANGUAGE: Professional level. Concise and direct.
 TONE: Confident peer. Don't over-explain basics.
-RESUME FORMAT: Chronological, real metrics, achievement-dense. Standard professional bar.
+RESUME FORMAT: Chronological and dated. Specific, plain lines; numbers only as the person gave them. Standard professional bar.
 INTERVIEW: Behavioral STAR, industry-specific questions, moderate challenge.
 DISCLOSURE: Employer-specific strategy with legal context.`,
 
   executive: `USER LEVEL: Executive (senior, advanced degrees, leadership history)
 LANGUAGE: Executive level. Assume expertise. Strategic positioning.
 TONE: Colleague-to-colleague. No hand-holding.
-RESUME FORMAT: Achievement-dense, metrics-heavy, ATS + human optimization. Board-level impact framing.
+RESUME FORMAT: Chronological and dated, achievement-focused from the person's own facts; numbers only as the person gave them, never added. Readable by software and by a person.
 INTERVIEW: Executive presence, salary negotiation scenarios, panel interview prep.
 DISCLOSURE: Multi-stakeholder strategy, board-level framing, reputation management.`,
 };
@@ -110,15 +112,17 @@ const RESEARCH: Record<UseCase, string> = {
 
 NARRATIVE IDENTITY (McAdams & McLean, 2013): A resume should read like meeting a person, not scanning a form. There is a narrative arc: where they've been, what they've built, where they're going. Redemption sequences (difficulty → growth → contribution) predict well-being and employer confidence.
 
-GENERATIVE IDENTITY (Maruna, 2001): People who successfully rebuild their careers develop "generative scripts", in which their past challenges become strengths. Frame career progression as intentional growth, not accident. "Led" not "was assigned to." "Built" not "was responsible for."
+GENERATIVE IDENTITY (Maruna, 2001): People who successfully rebuild their careers develop "generative scripts", in which their past challenges become strengths. Show the person's own choices where their words show them, with active verbs their words support. Never make a line bigger than what they did.
 
-SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of confidence. Every bullet should demonstrate a concrete accomplishment: something they DID and the result it produced. Vague duties build no confidence in the reader OR the candidate.
+SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of confidence. Every bullet should show something concrete the person DID, with a result only when they gave one. Vague duties build no confidence in the reader OR the candidate.
 
 SCAFFOLDING (Wood, Bruner, Ross, 1976): Each resume iteration should require less AI support. First resume: heavy scaffolding. Third resume: user drives, AI suggests.
 
-COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Keep every number the person gave, exactly as given: a range stays a range, and "about 20" stays "about 20". Never add a number they did not give. Action verbs only. ATS-optimized but human-readable.
+COMPETITIVE STANDARD: Every resume must compete at the highest professional level by being specific and true. No generic phrases. Readable by software and by a person.
 
-RECORD RULE (absolute): never ADD, infer or hint at incarceration, a record, supervision or justice involvement the person's source does not state, and never state charges, a sentence or supervision status. By default the record stays off the page and the person explains it in person, at the right time; if the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps use years only, never explained.`,
+${resumeRulesBlock("truth")}
+
+RECORD DEFAULT: by default the record stays off the page and the person explains it in person, at the right time; never state charges, a sentence or supervision status. If the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps use years only, never explained.`,
 
   cover_letter: `RESEARCH-BACKED COVER LETTER STANDARDS:
 
@@ -126,7 +130,7 @@ NARRATIVE IDENTITY (McAdams, 2013): The cover letter IS the redemption narrative
 
 SELF-DETERMINATION (Deci & Ryan, 2000): The letter must express autonomy: "I chose this path" not "I'm looking for any opportunity." Competence: specific achievements that prove capability. Relatedness: why THIS company, THIS role.
 
-EMPLOYER PSYCHOLOGY: Lead with the strongest match to the job requirements. Second paragraph proves it with numbers. Close with confidence, not desperation.
+EMPLOYER PSYCHOLOGY: Lead with the strongest match to the job requirements. Second paragraph proves it with the person's own specific facts (numbers only if they gave them). Close with confidence, not desperation.
 
 NEVER: mention records, gaps, "second chances," or anything that requires explanation. The cover letter sells the future, not the past.`,
 
@@ -152,7 +156,7 @@ TRAUMA-INFORMED (SAMHSA, 2014): Never re-traumatize. The user controls what they
 
 SELF-EFFICACY (Bandura, 1977): The single strongest source of confidence is mastery experience: actually doing the thing and succeeding. Each practice session should end with specific, actionable feedback that builds on what they did well (process praise, Dweck 2006).
 
-STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to QUANTIFIED results from their actual resume.
+STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to results from their actual resume, with a number only when the resume or the person gives one.
 
 AFFECT LABELING (Lieberman, 2007): Interview anxiety is normal and reducible. Naming "I'm nervous about the background check question" literally reduces amygdala reactivity. The practice environment should normalize this.
 

@@ -29,6 +29,7 @@ import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { unsupportedNumbers } from "@/lib/number-truth";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getToolsForTitle } from "@/lib/onet";
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
 
 export const maxDuration = 30;
 
@@ -39,14 +40,16 @@ IRON RULES (the truth gate). Never break these:
 - No inflation. A strong TRUE bullet beats an impressive false one. Their story has to survive an interview.
 
 HOW TO WRITE IT:
-- Start with a strong, specific action verb (Operated, Trained, Tracked, Repaired, Coordinated, Maintained, Loaded, Resolved...).
+- Start with a plain, specific action verb their words support (Operated, Tracked, Repaired, Maintained, Loaded...). Never a bigger verb than what they did: "trained" or "led" only if they said so.
 - Lead with what they did; fold in the tool/process, the scale (how often / how many), and the result, but ONLY the ones they actually gave.
 - Be concrete, never generic. Kill empty phrases: no "hard worker", "team player", "results-driven", "detail-oriented".
-- Never let them undersell. If they say they "just" did something, write the real skill in it.
+- Never let them undersell. If they say they "just" did something, name the real skill in it, at its true size. Shared or supervised work stays shared or supervised ("helped with X under the lead" when that is what they said).
 - A number they gave as a range or a bound stays exactly that ("about 6 to 10", "under 50", "more than 25"). Never turn it into one exact number.
 - Reframe honestly: work done in a work program, training, or while incarcerated is REAL experience. Name the skill, not the setting. NEVER write the words incarceration, prison, jail, inmate, offender, or felon. Disclosure is handled in its own place, never on the resume.
 - One sentence. Plain, dignified, true. 6th-grade reading level.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
+
+${resumeRulesBlock("truth")}
 
 Return ONLY the bullet text: no quotes, no bullet symbol, no preamble, no explanation.`;
 
@@ -155,7 +158,11 @@ RULES:
 - Honest and grounded: only claim what the experience supports. Never invent.
 - NEVER mention incarceration, a record, or justice involvement. Disclosure is handled separately.
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
-- 2-3 sentences. Return ONLY the summary text.`;
+- 2-3 sentences.
+
+${resumeRulesBlock("truth")}
+
+Return ONLY the summary text.`;
       const suggestion = plainPunctuation(
         (await callAI("", [{ role: "user", content: prompt }], 300, MODEL_DEEP, { userId, endpoint: "resume-assist" })).trim(),
         logDashSwaps("forge-resume-assist")

@@ -14,8 +14,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFullContext } from "../context-library";
 
-const ROUTE = readFileSync(join(__dirname, "..", "..", "app", "api", "forge", "generate-docs", "route.ts"), "utf8");
-const RUSH = readFileSync(join(__dirname, "..", "..", "app", "api", "rush-resume", "route.ts"), "utf8");
+// The writer prompts live in lib files (built from the shared rulebook) so
+// tests can read the exact text; the routes only import them.
+const ROUTE = readFileSync(join(__dirname, "..", "forge-resume-prompt.ts"), "utf8");
+const RUSH = readFileSync(join(__dirname, "..", "rush-prompt.ts"), "utf8");
 
 // Every mention of "functional" must be the negative rule.
 function functionalMentions(text: string): string[] {

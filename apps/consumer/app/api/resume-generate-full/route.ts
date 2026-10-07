@@ -180,14 +180,14 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 1. Target the resume specifically at the role in <job_posting>.
 2. TRUTH GATE: use ONLY facts present in the person's background. NEVER invent a number, metric, tool, certification, title, employer, or result they did not provide. If a detail is missing, leave it out. Do not guess or pad. Must survive a background-checked interview.
 3. Numbers ONLY where the background states them, kept exactly as given. A bullet with no stated quantity is written strong WITHOUT a number.
-4. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform duties into achievements using only stated facts.
+4. Follow the RESUME TRUTH RULES above. Turn duty phrasing ("responsible for", "tasked with") into a plain action verb only where the person's words support the action. Shared or supervised work keeps its true scope: "helped with" or "under" stays when that is what the person said.
 5. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
-6. Every bullet starts with a strong action verb.
-7. As many CAR bullets as the role's real achievements support (typically 3 to 6). Write fewer rather than padding with invented detail, more when the background genuinely supports it.
+6. Every bullet starts with a plain action verb the person's words support.
+7. As many bullets as the role's real work supports (typically 3 to 6). Write fewer rather than padding with invented detail, more when the background genuinely supports it.
 8. The skills that match the posting AND are supported by the background, typically 9 to 15. Never pad to a count, never drop a real match.
 9. Carry forward ALL education and certifications from the background. A certification becomes its own education entry. Never drop them; never add ones not stated.
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
-11. If a title/company pairing is clearly garbled, repair it. Never invent a new employer or title.
+11. If a title/company pairing looks garbled, keep exactly what the person wrote; never move a title to another employer and never invent a new employer or title. The person checks it.
 12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
 13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
 14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.

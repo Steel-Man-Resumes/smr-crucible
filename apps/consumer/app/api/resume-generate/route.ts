@@ -11,6 +11,7 @@ import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeOrEmpty, sanitizeArrayOrEmpty } from "@/lib/sanitize";
 import { buildFullContext } from "@/lib/context-library";
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
 import { isMockEnabled, MOCK_RESUME } from "@/lib/mock-ai";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
@@ -80,11 +81,13 @@ RULES:
 - Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 - 2-3 sentences max`;
     } else if (action === "suggest_bullet") {
-      prompt = `Suggest one experience bullet point for ${sanitizedTargetJob ? `a ${sanitizedTargetJob} resume` : "a general resume (no target role given)"}.
+      prompt = `${resumeRulesBlock("truth")}
+
+Suggest one experience bullet point for ${sanitizedTargetJob ? `a ${sanitizedTargetJob} resume` : "a general resume (no target role given)"}.
 Their skills: ${sanitizedSkills || "general"}.
 Existing bullets: ${sanitizedBullets || "none yet"}.${forgeBlock}
 
-Write ONE bullet starting with an action verb. Include a number or result ONLY if their input above provides one. Never invent quantities.
+Write ONE bullet starting with a plain action verb their input supports. Include a number or result ONLY if their input above provides one. Never invent quantities. A true bullet without a number is complete.
 No buzzwords. Keep it honest. One sentence only. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 NEVER mention incarceration, criminal records, or any disqualifying information.`;
     } else {

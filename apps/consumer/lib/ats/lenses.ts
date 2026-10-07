@@ -253,9 +253,51 @@ function parseIntegrity(text: string): LensScore {
 /**
  * IMPACT & EVIDENCE -- is there anything here a hiring manager can weigh.
  *
- * Reuses the discrepancy engine rather than restating its rules, so the two
- * surfaces can never disagree about what counts as a weak line.
+ * A true page with no numbers is not a weak page. Evidence is specific work:
+ * a plain action, the thing worked on (equipment, tools, systems, a place),
+ * the scope (who for, how often, what crew), a recognition, or a purpose
+ * (what the work kept running or prevented). A number the person gave is one
+ * kind of evidence, worth half a signal on its own: digits alone never carry
+ * a line, and no finding here ever asks the person to add a number.
+ *
+ * Reuses the discrepancy engine for weak lines, so the two surfaces can never
+ * disagree about what counts as one; its question text is not shown here
+ * because it can ask for a number.
  */
+
+/** Specific-work signals in one line. Each is worth 1 except a bare digit (0.5). */
+const SPECIFIC_SIGNALS: Array<{ id: string; re: RegExp; weight: number }> = [
+  // A named thing mid-line: a proper noun or an acronym ("RF", "OSHA", "Northgate").
+  { id: "named", re: /\s(?:[A-Z]{2,}\b|[A-Z][a-z]+[A-Z]?\w*)/, weight: 1 },
+  // Equipment, tools and systems a shift lead would name.
+  {
+    id: "equipment",
+    re: /\b(?:forklift|pallet jack|reach truck|scanner|register|pos|saw|drill|grinder|lathe|press|welder|torch|truck|trailer|van|loader|excavator|skid steer|mower|compressor|boiler|pump|valve|meter|fryer|grill|oven|dish ?machine|software|spreadsheet|excel|computer|tablet|radio|ladder|scaffold|crane|hoist|conveyor|machine|tools?|equipment|system|line|dock|route|kitchen|warehouse|site|shop|floor)s?\b/i,
+    weight: 1,
+  },
+  // Scope: who for, with whom, how often.
+  {
+    id: "scope",
+    re: /\b(?:crew|team|shift|shifts|customers?|residents?|patients?|clients?|guests?|orders?|loads?|pallets?|units?|parts?|jobs?|work orders?|tickets?|daily|weekly|nightly|each (?:day|night|week|shift)|every (?:day|night|week|shift)|per (?:day|night|week|shift|hour))\b/i,
+    weight: 1,
+  },
+  // Recognition inside the job.
+  {
+    id: "recognition",
+    re: /\b(?:asked back|asked for by name|employee of the (?:month|year)|recogni[sz]ed|award(?:ed)?|promoted|kept on|chosen|selected|trusted|commended|certificate of)\b/i,
+    weight: 1,
+  },
+  // A purpose clause: what the work kept running or prevented.
+  { id: "purpose", re: /\b(?:so (?:that|the|we|it)|to (?:keep|prevent|avoid|make sure|stop)|kept\b|without (?:a|any)\b)/i, weight: 1 },
+  // A number, on its own, is half a signal.
+  { id: "number", re: /\d/, weight: 0.5 },
+];
+
+/** 0 to 1: how specific a line is. Capped at 1, so piling on digits adds nothing. */
+export function lineSpecificity(line: string): number {
+  const total = SPECIFIC_SIGNALS.reduce((a, s) => a + (s.re.test(line) ? s.weight : 0), 0);
+  return Math.min(1, total);
+}
 /**
  * Numbers the person supplied, as they wrote them.
  *
@@ -291,7 +333,7 @@ function impactEvidence(text: string, sourceText?: string): LensScore {
     for (const phrase of lost.slice(0, 4)) {
       findings.push({
         message:
-          "You gave us this detail and it is not on the finished resume. A number you actually know is the strongest thing a resume can carry. It should not have been dropped.",
+          "You gave us this detail and it is not on the finished resume. A detail you gave belongs on the page the way you said it.",
         evidence: phrase,
       });
     }
@@ -302,36 +344,42 @@ function impactEvidence(text: string, sourceText?: string): LensScore {
       id: "impact_evidence",
       name: "Impact and evidence",
       score: 0,
-      what: "Whether your lines show what you did, with something measured",
+      what: "Whether your lines show what you did: the action, what you worked on, and the scope",
       alsoGradedBy: "Rezi and Teal call this a content score",
       summary: "There are no bullet lines to evaluate yet.",
       findings: [],
     };
   }
 
-  const quantified = bs.filter((b) => /\d/.test(b));
   const verbLed = bs.filter((b) => ACTION_VERB_START.test(b) && !GERUND_START.test(b));
+  const specificity = bs.map(lineSpecificity);
+  const vagueLines = bs.filter((_, i) => specificity[i] < 1);
 
   const discrepancies = findDiscrepancies(text);
   const weak = discrepancies.filter(
     (d) => d.kind === "vague_bullet" || d.kind === "first_person"
   );
 
-  const quantRatio = quantified.length / bs.length;
+  const specificRatio = specificity.reduce((a, n) => a + n, 0) / bs.length;
   const verbRatio = verbLed.length / bs.length;
   const weakPenalty = Math.min(30, weak.length * 8);
 
-  // Weighted: something measured matters most, then verb-led phrasing.
-  const score = pct(quantRatio * 55 + verbRatio * 45 - weakPenalty);
+  // Weighted: specific work matters most, then verb-led phrasing. A number is
+  // one way to be specific, never the only one.
+  const score = pct(specificRatio * 55 + verbRatio * 45 - weakPenalty);
 
-  if (quantRatio < 0.4) {
+  if (specificRatio < 0.6 && vagueLines.length) {
     findings.push({
-      message: `Only ${quantified.length} of ${bs.length} lines carry a number. One real number does more than a paragraph of description: a crew size, a count per shift, a percentage, a dollar figure.`,
+      message: `${vagueLines.length} of ${bs.length} lines don't yet say what you worked on. In your own words, name the equipment, the tools, the place, or who the work was for.`,
+      evidence: vagueLines[0],
     });
   }
   for (const d of weak.slice(0, 5)) {
     findings.push({
-      message: d.question,
+      message:
+        d.kind === "first_person"
+          ? d.question
+          : "This line says the job existed, not what you did in it. What is one specific thing you handled here? Say it the way you'd tell a coworker.",
       evidence: d.evidence,
       fix:
         d.kind === "first_person"
@@ -349,7 +397,7 @@ function impactEvidence(text: string, sourceText?: string): LensScore {
     id: "impact_evidence",
     name: "Impact and evidence",
     score,
-    what: "Whether your lines show what you did, with something measured",
+    what: "Whether your lines show what you did: the action, what you worked on, and the scope",
     alsoGradedBy: "Rezi and Teal call this a content score",
     summary:
       score >= 75
