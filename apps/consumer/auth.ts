@@ -12,8 +12,8 @@ import {
   adminSecondFactorOk,
   authRouteSkipsSessionChecks,
   isAdminPowerPath,
-  mfaGateApplies,
   nowSeconds,
+  pendingSessionTreatment,
   sessionPending,
   revocationVerdict,
   sessionRowRequired,
@@ -352,7 +352,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // into a two-step account reaches nothing but the step-up until the code
       // is entered. Pages go to the code page; API calls get 401.
       // F3: the same hold covers the first-proof choice (claim).
-      if (session && sessionPending(session.user as any) && mfaGateApplies(path)) {
+      // S1: the Forge routes that work signed out are not held; the middleware
+      // serves them to a pending session as signed out (session-policy.ts).
+      if (session && pendingSessionTreatment(path, session.user as any) === "hold") {
         if (isApi) {
           const passwordOwed = (session.user as any)?.claim === "password";
           return Response.json(

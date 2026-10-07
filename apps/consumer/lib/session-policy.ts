@@ -148,6 +148,85 @@ export function sessionPending(user: { mfa?: unknown; claim?: unknown } | null |
   return user?.mfa === false || user?.claim === "2fa" || user?.claim === "password";
 }
 
+/*
+ * FORGE ROUTES SERVE A PENDING SESSION AS SIGNED OUT (S1, 2026-10-06).
+ *
+ * The session cookie is shared across the steelmanresumes.com hosts, so a
+ * Refinery sign-in that still owes its code rides along to the Forge. The
+ * Forge needs no sign-in, yet the hold above turned its upload and writing
+ * calls into "Enter your two-step code" errors.
+ *
+ * These exact paths are the API routes the Forge pages call that work with no
+ * session at all (IP rate limited, or no session use). For them a pending
+ * session is treated exactly like no session: the hold does not apply, and the
+ * middleware removes the session cookie from the request before the route
+ * runs, so the route's own auth() sees nobody. A pending session gains nothing
+ * here that a signed-out visitor does not already have, and no work is
+ * attributed to the account it has not finished signing in to.
+ *
+ * Exact match only. Account routes (/api/forge/save, /api/forge/load,
+ * /api/forge/summary, /api/consent, /api/sharing/*, /api/support-request,
+ * /api/user/*, /api/coach/*) are deliberately absent and stay held.
+ */
+const FORGE_ANONYMOUS_API_ROUTES = new Set([
+  "/api/parse",
+  "/api/analyze",
+  "/api/rush-resume",
+  "/api/forge/generate-docs",
+  "/api/forge/download",
+  "/api/forge/email-package",
+  "/api/forge/resume-assist",
+  "/api/resume/fit-check",
+  "/api/assistant",
+  "/api/org-listing",
+]);
+
+/** True for an API route the Forge calls that works with no session. */
+export function isForgeAnonymousApiRoute(path: string): boolean {
+  return FORGE_ANONYMOUS_API_ROUTES.has(path);
+}
+
+/**
+ * What the pending-session rule does on `path`:
+ *  - "none":      the session is not pending, or the path is a step-up or
+ *                 sign-in route a pending session may use as itself;
+ *  - "anonymous": a Forge route that works signed out; serve it as signed out;
+ *  - "hold":      everything else; pages go to the code page, APIs get 401.
+ */
+export function pendingSessionTreatment(
+  path: string,
+  user: { mfa?: unknown; claim?: unknown } | null | undefined
+): "none" | "anonymous" | "hold" {
+  if (!sessionPending(user)) return "none";
+  if (isForgeAnonymousApiRoute(path)) return "anonymous";
+  return mfaGateApplies(path) ? "hold" : "none";
+}
+
+/** Auth.js session cookie names (plain or __Secure-, possibly chunked .0, .1, ...). */
+const SESSION_COOKIE_RE = /^(__Secure-)?authjs\.session-token(\.\d+)?$/;
+
+export function isSessionCookieName(name: string): boolean {
+  return SESSION_COOKIE_RE.test(name);
+}
+
+/**
+ * A copy of the request headers with every Auth.js session cookie removed from
+ * the Cookie header (other cookies kept), so a route reading auth() sees no
+ * session. Edge-safe.
+ */
+export function headersWithoutSessionCookie(headers: Headers): Headers {
+  const out = new Headers(headers);
+  const raw = out.get("cookie");
+  if (!raw) return out;
+  const kept = raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && !isSessionCookieName(part.split("=")[0].trim()));
+  if (kept.length) out.set("cookie", kept.join("; "));
+  else out.delete("cookie");
+  return out;
+}
+
 /** Paths that exercise admin powers (cross-user tools, impersonation). */
 const ADMIN_POWER_PREFIXES = ["/api/admin/", "/api/dev/", "/dashboard/admin"];
 

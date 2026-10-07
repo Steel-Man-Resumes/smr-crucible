@@ -1,6 +1,7 @@
 import { auth } from "./auth";
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { headersWithoutSessionCookie, pendingSessionTreatment } from "@/lib/session-policy";
 
 /**
  * Middleware = next-auth gate + developer-impersonation write blocking.
@@ -36,6 +37,14 @@ export default auth(async (req) => {
     } catch {
       /* invalid cookie: ignore, downstream auth decides */
     }
+  }
+
+  // A session still owing its two-step code (or first-proof choice) reaching a
+  // Forge route that works signed out: the route runs as if signed out. The
+  // session cookie is removed from the request the route sees (the browser
+  // keeps it), so nothing is read from or attributed to that account.
+  if (pendingSessionTreatment(req.nextUrl.pathname, req.auth?.user as any) === "anonymous") {
+    return NextResponse.next({ request: { headers: headersWithoutSessionCookie(req.headers) } });
   }
 });
 
