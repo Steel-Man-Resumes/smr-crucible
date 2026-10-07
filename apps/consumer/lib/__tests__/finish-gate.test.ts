@@ -46,8 +46,8 @@ Line cook
 PROFESSIONAL EXPERIENCE
 LINE COOK | Harbor Street Diner | 2019 - 2023
 - Ran the grill on the breakfast line.
-- Prepped vegetables before open and closed the kitchen at night.
-- Asked by the owner to show new cooks the grill.
+- Spearheaded the kitchen sanitation program.
+- Mentored incoming culinary staff on equipment.
 
 CORE COMPETENCIES
 Grill, Breakfast line, Vegetable prep, Kitchen closing`;
@@ -189,7 +189,7 @@ test("user-facing copy has no em or en dashes", () => {
 test("cut and change touch one line only and keep its bullet", () => {
   const cut = cutLine(RESUME, "- Ran the grill on the breakfast line.");
   assert.doesNotMatch(cut, /Ran the grill/);
-  assert.match(cut, /Prepped vegetables/);
+  assert.match(cut, /Spearheaded the kitchen/);
   assert.equal(cutLine(RESUME, "- not on the page"), RESUME);
   const changed = changeLine(RESUME, "- Ran the grill on the breakfast line.", "Cooked on the grill for the breakfast rush.");
   assert.match(changed, /^- Cooked on the grill for the breakfast rush\.$/m);
@@ -240,12 +240,14 @@ test("a rewrite counts only for what the person typed new; the written number ty
   // Retyping the written figure through "Change it" does not source it.
   const back = applyRewrite(resume, [], line, "Cut food waste by 30% with a new prep list each week");
   assert.equal(back.changed, true);
-  assert.equal(rewritesOf(back.answers, back.text), "each week");
-  assert.equal(buildFinishView({ resumeText: back.text, ownWords: own, defendAnswers: back.answers }).state, "draft");
+  const written = { resume, letter: "" };
+  assert.equal(rewritesOf(back.answers, back.text, written), "each week");
+  assert.equal(rewritesOf(back.answers, back.text), "", "without the writer's documents nothing is added (closed by default)");
+  assert.equal(buildFinishView({ resumeText: back.text, ownWords: own, defendAnswers: back.answers, written }).state, "draft");
   // A number the person typed new is theirs.
   const mine = applyRewrite(resume, [], line, "Cut food waste by about 10% with a new prep list");
-  assert.match(rewritesOf(mine.answers, mine.text), /about 10%/);
-  const view = buildFinishView({ resumeText: mine.text, ownWords: own, defendAnswers: mine.answers });
+  assert.match(rewritesOf(mine.answers, mine.text, written), /about 10%/);
+  const view = buildFinishView({ resumeText: mine.text, ownWords: own, defendAnswers: mine.answers, written });
   assert.ok(!view.openItems.some((i) => i.rule === "STD-T02"), JSON.stringify(view.openItems));
 });
 

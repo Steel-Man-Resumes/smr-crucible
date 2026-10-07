@@ -150,10 +150,11 @@ test("S3: the gate exposes one source for every panel, extended only by what rew
   const applyRewrite = fn<Rewrite>("applyRewrite");
   const resume = page("Ran the grill on the breakfast line.");
   const r = applyRewrite(resume, [], "- Ran the grill on the breakfast line.", "Ran the grill on the breakfast line, about 40 plates an hour on Sundays.");
-  const src = gateSource(SOURCE, r.answers, r.text);
+  const written = { resume, letter: "" };
+  const src = (gateSource as unknown as (o: string, a: Answers, p: string, w: unknown) => string)(SOURCE, r.answers, r.text, written);
   assert.match(src, /about 40 plates an hour/);
   assert.doesNotMatch(src, /breakfast line, about/, "words carried over from the written line are not added");
-  const v = buildFinishView({ resumeText: r.text, ownWords: SOURCE, defendAnswers: r.answers });
+  const v = buildFinishView({ resumeText: r.text, ownWords: SOURCE, defendAnswers: r.answers, written } as Parameters<typeof buildFinishView>[0]);
   assert.equal((v as { source?: string }).source, src);
 });
 

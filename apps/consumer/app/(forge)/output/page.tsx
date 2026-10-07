@@ -49,6 +49,7 @@ import {
   TOUR_SEEN_KEY,
   type DefendAnswer,
   type LineGroup,
+  type WrittenDocs,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { DefendPanel } from "@/components/forge/finish/DefendPanel";
@@ -125,6 +126,8 @@ export default function OutputPage() {
   const [keepInsideLines, setKeepInsideLines] = useState(false);
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   const [grounding, setGrounding] = useState<unknown>(null);
+  // The writer's documents exactly as delivered; never edited (see finish-gate WrittenDocs).
+  const [written, setWritten] = useState<WrittenDocs | null>(null);
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
@@ -149,6 +152,7 @@ export default function OutputPage() {
     setWithheldLines(stored.docs.withheldLines);
     setKeepInsideLines(stored.docs.keepInsideLines);
     setGrounding(stored.docs.grounding);
+    setWritten(stored.docs.written ?? null);
     setDefendAnswers(stored.defendAnswers);
     setAddedTerms(stored.addedTerms ?? []);
     setDocState("done");
@@ -161,14 +165,14 @@ export default function OutputPage() {
       forgeFinish: {
         v: FINISH_STATE_VERSION,
         key: finishKey(session, keepInsideLines),
-        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding },
+        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined },
         defendAnswers,
         addedTerms,
       },
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, defendAnswers, addedTerms, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, updateSession]);
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -210,6 +214,7 @@ export default function OutputPage() {
       setCoverLetterText(data.coverLetter || "");
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
       setGrounding(data.grounding ?? null);
+      setWritten({ resume: data.resume || "", letter: data.coverLetter || "" });
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
       setAddedTerms([]);
@@ -235,8 +240,8 @@ export default function OutputPage() {
   // ---- the gate ----------------------------------------------------------------
   const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
   const view = useMemo(
-    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding]
+    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding, written }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, grounding, written]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";
