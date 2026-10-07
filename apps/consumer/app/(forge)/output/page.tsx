@@ -11,7 +11,7 @@
  * Gateway to Refinery: value-based invitation, not fear-based conversion.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -23,6 +23,7 @@ import { PageFitCheck } from "@/components/resume/PageFitCheck";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
 import { MintCheckPanel } from "@/components/resume/MintCheckPanel";
 import { withholdRecordLines } from "@/lib/record-lines";
+import { hasOpenMintBlock } from "@/lib/mint-blocks";
 import { AtsScorePanel } from "@/components/resume/AtsScorePanel";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
@@ -268,6 +269,22 @@ export default function OutputPage() {
     }
   }, [session.forgeOutput, docState, generateDocs]);
 
+  // Celebrate once, and only when the documents exist and the mint check shows no
+  // open BLOCK. Before this the confetti fired on page load, ahead of the documents
+  // and the check, and a "Not finished yet" warning could appear right after it.
+  const mintBlocked = useMemo(
+    () =>
+      hasOpenMintBlock(
+        resumeText,
+        withholdRecordLines(session.resumeText, keepInsideLines).kept
+      ),
+    [resumeText, session.resumeText, keepInsideLines]
+  );
+  const [celebrated, setCelebrated] = useState(false);
+  useEffect(() => {
+    if (!isDemo && docState === "done" && !mintBlocked) setCelebrated(true);
+  }, [isDemo, docState, mintBlocked]);
+
   const handleDownload = async (type: "resume" | "cover_letter") => {
     const content = type === "resume" ? resumeText : coverLetterText;
     if (!content) return;
@@ -338,7 +355,7 @@ export default function OutputPage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
-      {!isDemo && <CompletionConfetti />}
+      {celebrated && <CompletionConfetti />}
       <GhostGuide
         message={getOpusMessage("output", audience, isDemo)}
         pageId="output"

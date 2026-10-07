@@ -173,8 +173,8 @@ const JOURNEY = [
     stage: "Stage 6",
     name: "Applications + Follow-Up",
     time: "Ongoing",
-    what: "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to My Materials.",
-    tech: "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. My Materials = the vault of all your generated documents.",
+    what: "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to the Library.",
+    tech: "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. Library = the vault of all your generated documents.",
     color: "steel",
   },
 ];
