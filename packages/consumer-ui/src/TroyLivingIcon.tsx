@@ -37,7 +37,7 @@ export function TroyLivingIcon({
       <span className="troy-living__glow" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/images/t-roy-avatar.png"
+        src="/images/t-roy-figure.png"
         alt=""
         className="troy-living__fig"
         draggable={false}
