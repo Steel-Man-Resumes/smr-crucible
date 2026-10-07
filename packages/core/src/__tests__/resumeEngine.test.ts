@@ -14,6 +14,7 @@ import {
   rulesForStd,
 } from "../resumeRules";
 import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
+import { checkCredentialUpgrade } from "../resumeMintCheckShared";
 import { getResumeStatus, pickDefendLines, questionForFinding, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
@@ -390,4 +391,14 @@ test("pickDefendLines: a short headline under the name is never a defend line", 
   assert.ok(!lines.includes("Line Cook"), JSON.stringify(lines));
   const claim = "Sam Delgado\n10 years in busy kitchens\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Ran the grill";
   assert.ok(pickDefendLines(claim, "I ran the grill.").some((d) => d.line === "10 years in busy kitchens"));
+});
+
+test("STD-T03 upgrade: a long summary line is judged by its named credential, not its first word", () => {
+  const page = "Sam Delgado\n\nSUMMARY\nWarehouse associate who loads trailers, keeps the dock clean and is certified to run the forklift.";
+  const src = "Warehouse class at the community center. I have my forklift certification.";
+  assert.deepEqual(checkCredentialUpgrade(page, src), []);
+  // A named credential in a long line is still checked.
+  const page2 = "Sam Delgado\n\nSUMMARY\nWarehouse associate who loads trailers, keeps the dock clean and holds OSHA 10 certification.";
+  const src2 = "I took an OSHA 10 class at the community center.";
+  assert.equal(checkCredentialUpgrade(page2, src2).length, 1);
 });

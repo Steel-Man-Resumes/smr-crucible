@@ -478,6 +478,23 @@ export function hasCredentialStatus(text: string): boolean {
   return new RegExp(YEAR_RE.source).test(text) || STATUS_WORD_RE.test(text);
 }
 
+/**
+ * The word that names a credential line's credential, used to find what the
+ * person said about it. On a short line that is its first specific word. A long
+ * line (a summary sentence) names its credential only by a known name; its
+ * first word is usually not the credential, and matching on it raised false
+ * BLOCKs, so a long line without a known name gives no key.
+ */
+function credentialKey(line: string): string | undefined {
+  const name = line.replace(/^[-•*]\s*/, "");
+  const words = name.match(/\S+/g) ?? [];
+  if (words.length > 8) {
+    const named = name.match(NAMED_CREDENTIAL_RE);
+    return named ? named[0] : undefined;
+  }
+  return (name.match(/[A-Za-z0-9]+/g) ?? []).find((w) => w.length >= 3 && !GENERIC_CRED_WORDS.has(w.toLowerCase()));
+}
+
 const CLAIM_RE = /\b(?:certified|certification|licensed|license|licence)\b/i;
 const COURSE_RE = /\b(?:class|classes|course|courses|training|program|coursework)\b/i;
 const HOLD_RE = /\b(?:certified|certification|certificate|licensed|license|licence|passed|card|registry)\b/i;
@@ -493,8 +510,7 @@ export function checkCredentialUpgrade(out: string, src: string): MintFinding[] 
   const f: MintFinding[] = [];
   for (const l of credentialLinesOf(out)) {
     if (!CLAIM_RE.test(l)) continue;
-    const name = l.replace(/^[-•*]\s*/, "");
-    const key = (name.match(/[A-Za-z0-9]+/g) ?? []).find((w) => w.length >= 3 && !GENERIC_CRED_WORDS.has(w.toLowerCase()));
+    const key = credentialKey(l);
     if (!key) continue;
     const said = srcUnits.filter((u) => u.toLowerCase().includes(key.toLowerCase()));
     if (!said.length) continue;
@@ -516,8 +532,10 @@ export function checkCredentialStatus(out: string, src: string): MintFinding[] {
   const f: MintFinding[] = [];
   for (const l of credentialLinesOf(out)) {
     if (new RegExp(YEAR_RE.source).test(l) || STATUS_WORD_RE.test(l)) continue;
-    const name = l.replace(/^[-•*]\s*/, "");
-    const key = (name.match(/[A-Za-z0-9]+/g) ?? []).find((w) => w.length >= 3 && !GENERIC_CRED_WORDS.has(w.toLowerCase()));
+    const isLong = (l.match(/\S+/g) ?? []).length > 8;
+    const key = credentialKey(l);
+    // A long sentence with no known credential name is not a credential line.
+    if (isLong && !key) continue;
     const said = key
       ? srcUnits.filter((u) => u.toLowerCase().includes(key.toLowerCase()))
       : [];
