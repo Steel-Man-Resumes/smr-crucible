@@ -156,7 +156,7 @@ TRAUMA-INFORMED (SAMHSA, 2014): Never re-traumatize. The user controls what they
 
 SELF-EFFICACY (Bandura, 1977): The single strongest source of confidence is mastery experience: actually doing the thing and succeeding. Each practice session should end with specific, actionable feedback that builds on what they did well (process praise, Dweck 2006).
 
-STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to QUANTIFIED results from their actual resume.
+STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to results from their actual resume, with a number only when the resume or the person gives one.
 
 AFFECT LABELING (Lieberman, 2007): Interview anxiety is normal and reducible. Naming "I'm nervous about the background check question" literally reduces amygdala reactivity. The practice environment should normalize this.
 

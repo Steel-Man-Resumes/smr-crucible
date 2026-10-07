@@ -37,7 +37,7 @@ function topicFraming(topic: string): string {
     case "disclosure":
       return "They are preparing to talk about their record with an employer: the framing, the timing, and the pivot to their strengths. Focus on how they want to TELL their story now, not the legal details of what happened. Never ask them to relive the offense.";
     case "interview":
-      return "They are preparing for a real job interview. Draw out concrete stories, numbers, and examples they can turn into strong answers: the specifics behind what they have told you.";
+      return "They are preparing for a real job interview. Draw out concrete stories and examples they can turn into strong answers: the specifics behind what they have told you. A number only if they know one; never suggest one.";
     case "jobs":
       return "They are figuring out what work to look for. Draw out what they actually want and are good at, and the real-life constraints that matter: schedule, location, pay, transportation, what a good day looks like.";
     default:

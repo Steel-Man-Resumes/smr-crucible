@@ -18,6 +18,7 @@
  * phase surfaces it. Exported handler is a minimal wire-up point.
  */
 
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -150,7 +151,9 @@ async function handlePost(request: Request) {
 
     let edited = baseFields;
     if (!isMockEnabled()) {
-      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.`;
+      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
+
+${resumeRulesBlock("truth")}`;
       const prompt = `Fine-tune this resume for the target role. Reorder and re-emphasize its OWN content only. Add nothing new.
 
 <job_posting>

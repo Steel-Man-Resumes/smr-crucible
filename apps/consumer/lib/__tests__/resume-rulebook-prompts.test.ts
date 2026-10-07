@@ -34,6 +34,30 @@ const OLD_RULES: Array<[string, RegExp]> = [
   ["upgrade verbs as doctrine", /"Led" not "was assigned to/],
   ["metrics-heavy push", /metrics-heavy|real metrics, achievement-dense/i],
   ["duties into achievements", /transform (?:every one|duties) into (?:CAR )?achievement/i],
+  ["CAR bullets", /\bCAR bullets\b|CAR achievements/],
+  ["metrics push", /evidence and metrics|quantifiable competencies|QUANTIFIED results/],
+  ["number pressure", /roughly how much or how often|What is a number you actually know|One real number does more than/i],
+  ["garbled title repair", /clearly garbled, repair it/i],
+];
+
+// Every AI route that writes or rewrites resume text, and how it gets the truth rules.
+const WRITER_ROUTES: Array<[string, string[], RegExp]> = [
+  ["generate-docs", ["app", "api", "forge", "generate-docs", "route.ts"], /buildForgeResumePrompts\(input\)/],
+  ["rush-resume", ["app", "api", "rush-resume", "route.ts"], /RUSH_SYSTEM_PROMPT/],
+  ["resume-generate-full", ["app", "api", "resume-generate-full", "route.ts"], /buildFullContext\("resume"/],
+  ["resume-generate", ["app", "api", "resume-generate", "route.ts"], /\$\{resumeRulesBlock\("truth"\)\}[\s\S]*Suggest one experience bullet/],
+  ["resume-fine-tune", ["app", "api", "resume-fine-tune", "route.ts"], /\$\{resumeRulesBlock\("truth"\)\}/],
+  ["resume-assist bullet", ["app", "api", "forge", "resume-assist", "route.ts"], /const BULLET_SYSTEM = `[\s\S]*\$\{resumeRulesBlock\("truth"\)\}[\s\S]*?`;/],
+  ["resume-assist summary", ["app", "api", "forge", "resume-assist", "route.ts"], /2-3 sentences\.\n\n\$\{resumeRulesBlock\("truth"\)\}/],
+];
+
+// Other prompt or question sources swept for old rules (no truth block needed).
+const SWEPT_FILES: string[][] = [
+  ["app", "api", "analyze", "route.ts"],
+  ["lib", "intake-engine.ts"],
+  ["lib", "resume-discrepancies.ts"],
+  ["app", "api", "interview-practice", "route.ts"],
+  ["app", "api", "disclosure-guide", "route.ts"],
 ];
 
 describe("resume rulebook in every writer", () => {
@@ -100,6 +124,24 @@ describe("resume rulebook in every writer", () => {
     }
   });
 
+  it("every resume-writing route draws on the rulebook's truth rules", () => {
+    for (const [name, path, re] of WRITER_ROUTES) assert.match(read(...path), re, name);
+    // The truth block it interpolates is the versioned one.
+    assert.ok(resumeRulesBlock("truth").startsWith(`RESUME TRUTH RULES (${RESUME_RULES_VERSION})`));
+  });
+
+  it("no writing route or swept prompt still carries an old rule", () => {
+    for (const path of [...WRITER_ROUTES.map(([, p]) => p), ...SWEPT_FILES]) {
+      const text = read(...path);
+      for (const [label, re] of OLD_RULES) assert.doesNotMatch(text, re, `${path.join("/")}: ${label}`);
+    }
+  });
+
+  it("the Refinery writer keeps shared work at its true scope", () => {
+    const full = read("app", "api", "resume-generate-full", "route.ts");
+    assert.match(full, /"helped with" or "under" stays when that is what the person said/);
+  });
+
   it("the routes use the rulebook-built prompts", () => {
     assert.match(read("app", "api", "forge", "generate-docs", "route.ts"), /buildForgeResumePrompts\(input\)/);
     assert.match(read("app", "api", "rush-resume", "route.ts"), /const SYSTEM_PROMPT = RUSH_SYSTEM_PROMPT;/);
@@ -118,6 +160,23 @@ describe("Mini Forge does not share the writer prompts", () => {
     for (const f of files) {
       const text = readFileSync(f, "utf8");
       assert.doesNotMatch(text, /context-library|forge-resume-prompt|rush-prompt|resumeRules|generate-docs|rush-resume/, f);
+    }
+  });
+});
+
+describe("discrepancy questions never press for a number", () => {
+  it("vague and no-number questions make a number optional and suggest no value", async () => {
+    const { findDiscrepancies } = await import("../resume-discrepancies");
+    const text = `PROFESSIONAL EXPERIENCE
+COOK | Harbor Street Diner | 2019 - 2023
+- Responsible for various duties as assigned.
+- Ran the grill on the breakfast line.
+- Closed the kitchen at night.`;
+    const qs = findDiscrepancies(text).filter((d) => d.kind === "vague_bullet" || d.kind === "unquantified_role");
+    assert.ok(qs.length >= 2, JSON.stringify(qs));
+    for (const d of qs) {
+      assert.match(d.question, /If you know a number for this, add it\. If not, the line stands without one\./);
+      assert.doesNotMatch(d.question, /\d|roughly|how much|how often/i);
     }
   });
 });
