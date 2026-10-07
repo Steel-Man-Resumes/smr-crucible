@@ -60,9 +60,29 @@ function linesOf(text: string): string[] {
   return text.split("\n").map((l) => l.trim()).filter(Boolean);
 }
 
+// A contact line: email, phone, or a ZIP after a state. Digits inside it
+// ("59923") are not the number a finding is about.
+const CONTACT_LINE_RE = /@|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The line a finding is about. Prefers the needle as a whole token ("23" in
+ * "23 days", not inside "59923") on a line that is not the contact line.
+ */
 function lineContaining(text: string, needle: string): string {
   const n = needle.toLowerCase();
-  return linesOf(text).find((l) => l.toLowerCase().includes(n)) ?? needle;
+  const token = new RegExp(`(?<![\\w])${escapeRe(n)}(?![\\w]|\\.\\d)`);
+  // Numbers are compared without thousands commas ("1,500" is "1500").
+  const flat = (l: string) => l.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, "$1");
+  const ls = linesOf(text);
+  const body = ls.filter((l) => !CONTACT_LINE_RE.test(l));
+  return (
+    body.find((l) => token.test(flat(l))) ??
+    ls.find((l) => token.test(flat(l))) ??
+    body.find((l) => flat(l).includes(n)) ??
+    ls.find((l) => flat(l).includes(n)) ??
+    needle
+  );
 }
 
 // ---- STD-T05: dates are never moved -------------------------------------

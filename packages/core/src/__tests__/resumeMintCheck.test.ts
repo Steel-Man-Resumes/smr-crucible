@@ -174,3 +174,17 @@ test("STD-A02: en dash is a fix, as the standard writes it; a date range gets th
   assert.deepEqual(only(runMintCheck({ output: CLEAN + "\n-----", source: SRC, kind: "resume" }), "STD-A02"), []);
   assert.ok(only(runMintCheck({ output: CLEAN + "\nShows up early--every day.", source: SRC, kind: "resume" }), "STD-A02").length === 1);
 });
+
+test("a number finding quotes the line it is on, not a contact line whose ZIP holds the digits", () => {
+  const out = "Dana Example\nRiverton, OH 45923 | dana@example.com\n\nPROFESSIONAL EXPERIENCE\nCOOK | Corner Diner | 2019 - 2023\n- Cut ticket times from 23 minutes to 12.";
+  const r = runMintCheck({ output: out, source: "cook corner diner 2019 2023 ticket times 12 minutes 45923", kind: "resume" });
+  const f = r.findings.find((x) => x.rule === "STD-T02" && x.severity === "BLOCK" && /\b23\b/.test(x.why));
+  assert.ok(f, JSON.stringify(r.findings));
+  assert.match(f!.line, /ticket times/);
+});
+
+test("a number written with a thousands comma is quoted from its own line", () => {
+  const out = "PROFESSIONAL EXPERIENCE\nPICKER | Northgate Freight | 2019 - 2023\n- Picked 1,500 orders a week.";
+  const r = runMintCheck({ output: out, source: "picker northgate freight 2019 2023", kind: "resume" });
+  assert.ok(has(r, "STD-T02", "BLOCK", /1,500 orders/), JSON.stringify(r.findings));
+});
