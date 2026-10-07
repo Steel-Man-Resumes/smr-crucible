@@ -75,11 +75,55 @@ ${bodyHtml}
 </body></html>`;
 }
 
-/** Open the resume in a new window and trigger the browser print dialog (Save as PDF). */
+/**
+ * Open the resume in a new window and trigger the browser print dialog (Save as
+ * PDF). The page comes from the same layout model as the PDF and Word downloads
+ * (the HTML format of /api/forge/download), so the printed page matches them.
+ * If that cannot be reached, the older print page below is used so printing
+ * still works.
+ */
 export function printResumePdf(doc: ResumeDocument): void {
+  // The window must open on the click itself, or the browser blocks it.
   const w = window.open("", "_blank");
-  if (w) {
-    w.document.write(buildResumePrintHtml(doc));
-    w.document.close();
-  }
+  if (!w) return;
+  w.document.write(
+    '<!doctype html><meta charset="utf-8"><title>Resume</title><p style="font:16px sans-serif;padding:24px">Getting your page ready...</p>'
+  );
+  w.document.close();
+  const text = formatResumeDownload(doc);
+  const nameTokens = (doc.contact.name || "").trim().split(/\s+/).filter(Boolean);
+  fetch("/api/forge/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: text,
+      type: "resume",
+      format: "html",
+      firstName: nameTokens[0],
+      lastName: nameTokens.length > 1 ? nameTokens.slice(1).join(" ") : undefined,
+      company: doc.meta.targetCompany || undefined,
+      role: doc.meta.targetJob || undefined,
+    }),
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("html failed");
+      return res.text();
+    })
+    .then((html) => {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      const go = () => {
+        w.focus();
+        w.print();
+      };
+      const fonts = (w.document as Document & { fonts?: { ready: Promise<unknown> } }).fonts;
+      if (fonts && fonts.ready) void fonts.ready.then(() => setTimeout(go, 150));
+      else setTimeout(go, 700);
+    })
+    .catch(() => {
+      w.document.open();
+      w.document.write(buildResumePrintHtml(doc));
+      w.document.close();
+    });
 }

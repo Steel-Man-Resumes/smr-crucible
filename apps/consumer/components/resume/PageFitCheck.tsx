@@ -1,31 +1,26 @@
 "use client";
 
 /**
- * Phase 2.5 -- "Check page fit" affordance.
+ * "Check page fit" affordance.
  *
- * Posts the EXACT same plain-text `content` that the Download .docx button sends
- * to /api/forge/download (formatResumeDownload(doc)) to /api/resume/fit-check,
- * so the estimate models precisely what the user downloads. Shows a plain,
- * honest result card.
+ * Posts the same plain-text `content` the download buttons send to
+ * /api/resume/layout, which lays the page out with the real font metrics, the
+ * same layout the PDF is built from. The result is plain words, never a
+ * percentage: "Fits on 1 page", "2 full pages", or "Runs 3 lines onto page 2:
+ * cut or tighten".
  *
- * DOCTRINE: this is an ESTIMATE of the Word/DOCX render, labeled as such. It
- * never edits the resume; the ledger is advice a human acts on.
+ * DOCTRINE: it never edits the resume. If lines run over, the person decides
+ * what to cut or tighten. Nothing is removed for them, and nothing is invented
+ * to fill space.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface LedgerEntry {
-  kind: "omit" | "tighten" | "add";
-  message: string;
-}
-
-interface FitResponse {
-  status: "fits" | "too_short" | "too_long";
-  band: "under" | "ok" | "over" | "empty";
-  pageCount: number;
-  finalPageFullness: number;
-  ledger: LedgerEntry[];
-  cannotReachBandByLevers: boolean;
+interface LayoutResponse {
+  pages: number;
+  words: string;
+  spillLines: number;
+  lastPageFill: number;
 }
 
 export function PageFitCheck({
@@ -38,24 +33,23 @@ export function PageFitCheck({
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<FitResponse | null>(null);
+  const [result, setResult] = useState<LayoutResponse | null>(null);
 
   const check = useCallback(async () => {
     setPending(true);
     setError(null);
     try {
-      const res = await fetch("/api/resume/fit-check", {
+      const res = await fetch("/api/resume/layout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: getContent(), type: "resume" }),
+        body: JSON.stringify({ text: getContent(), kind: "resume" }),
       });
       if (!res.ok) {
         setResult(null);
         setError("Could not check page fit right now. Please try again.");
         return;
       }
-      const data = (await res.json()) as FitResponse;
-      setResult(data);
+      setResult((await res.json()) as LayoutResponse);
     } catch {
       setResult(null);
       setError("Could not check page fit right now. Please try again.");
@@ -64,9 +58,8 @@ export function PageFitCheck({
     }
   }, [getContent]);
 
-  // Auto-check once, when there is content to check. The page-length rule is
-  // not advice the user should have to go looking for; it is a property of the
-  // document they are about to send to an employer.
+  // Auto-check once, when there is content to check. The page-length rule is a
+  // property of the document they are about to send, not advice to go looking for.
   const auto = useRef(false);
   useEffect(() => {
     if (!autoCheck || auto.current) return;
@@ -75,20 +68,7 @@ export function PageFitCheck({
     void check();
   }, [autoCheck, check, getContent]);
 
-  const pct = result ? Math.round(result.finalPageFullness * 100) : 0;
-
-  let headline = "";
-  if (result) {
-    if (result.band === "empty") {
-      headline = "This resume has no content yet.";
-    } else if (result.band === "ok") {
-      headline = `Looks good. This resume renders about ${result.pageCount} page${result.pageCount === 1 ? "" : "s"}. The last page is about ${pct}% full.`;
-    } else if (result.band === "under") {
-      headline = `This resume renders about ${result.pageCount} page${result.pageCount === 1 ? "" : "s"}. The last page is only about ${pct}% full.`;
-    } else {
-      headline = `This resume renders about ${result.pageCount} pages, which is more than two. The last page is about ${pct}% full.`;
-    }
-  }
+  const runsOver = result !== null && result.pages > 1 && result.spillLines <= 8;
 
   return (
     <div className="flex flex-col gap-2">
@@ -102,41 +82,21 @@ export function PageFitCheck({
       </button>
 
       <div aria-live="polite" className="empty:hidden">
-        {error && (
-          <p className="text-sm text-t-red font-medium mt-1">{error}</p>
-        )}
+        {error && <p className="text-sm text-t-red font-medium mt-1">{error}</p>}
 
         {result && !error && (
           <div className="mt-1 border border-t-steel/30 bg-t-steel/5 p-3 text-sm text-t-white">
-            <p className="font-bold">{headline}</p>
-
-            {result.band === "under" && (
+            <p className="font-bold" data-testid="page-fit-words">
+              {result.words}
+            </p>
+            {runsOver && (
               <p className="mt-1">
-                Add real achievements to your most recent role, or leave it. A
-                shorter resume is fine. Never invent content to fill space.
+                You decide what to cut or tighten. Nothing is removed for you, and
+                nothing should be added just to fill space.
               </p>
             )}
-
-            {result.band === "over" && result.ledger.length > 0 && (
-              <div className="mt-2">
-                <p className="font-medium">
-                  To bring it into two pages, you decide what to cut. Nothing is
-                  removed for you. Lower-priority items first:
-                </p>
-                <ul className="mt-1 list-disc pl-5 space-y-1">
-                  {result.ledger
-                    .filter((e) => e.kind !== "add")
-                    .map((e, i) => (
-                      <li key={i}>{e.message}</li>
-                    ))}
-                </ul>
-              </div>
-            )}
-
             <p className="mt-2 text-xs text-t-white/60">
-              This is an estimate of the Word (.docx) render. It models the exact
-              download page size, margins, and fonts, but it is not a pixel-perfect
-              Word page count.
+              Counted from the same page layout your PDF and Word file are made from.
             </p>
           </div>
         )}
