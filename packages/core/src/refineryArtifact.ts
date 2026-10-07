@@ -24,6 +24,10 @@ export interface RefineryArtifact {
   lane: string | null;
   /** R6: an approved, locked per-lane baseline resume. Multiple are allowed. */
   is_locked: boolean;
+  /** 073: the career lane this belongs to. Null = the main lane. */
+  lane_id: string | null;
+  /** 073/074: an example or test resume, hidden by default behind "Show examples". */
+  is_demo: boolean;
   /** Phase 1A: the immediate artifact this one was forked from. Null if never forked. */
   parent_artifact_id: string | null;
   /** Phase 1A: the root of this artifact's lineage (self-referential for the root itself). */
@@ -57,7 +61,8 @@ export async function createArtifact(
   type: ArtifactType,
   targetContext: Record<string, unknown>,
   content: Record<string, unknown>,
-  scaffoldLevel: number = 1.0
+  scaffoldLevel: number = 1.0,
+  opts: { laneId?: string | null } = {}
 ): Promise<RefineryArtifact> {
   // Get next iteration number for this user+type combo
   const latest = await getOneAsUser<{ max_iter: number }>(userId, 
@@ -75,6 +80,9 @@ export async function createArtifact(
     content: JSON.stringify(content),
     iteration_number: nextIter,
     scaffold_level: scaffoldLevel,
+    // 073: the caller has checked the lane is this person's and open; the
+    // composite foreign key (lane_id, user_id) refuses anything else.
+    ...(opts.laneId ? { lane_id: opts.laneId } : {}),
   });
 }
 
@@ -295,6 +303,9 @@ export interface ArtifactPage {
  *              derived from target_context, so this is the title/target search
  *   - lane   : exact lane label
  *   - group  : masters | company | other (a resume sub-group predicate)
+ *   - laneId : a career lane id, or "main" for work outside any lane (073)
+ *   - examples : "hide" leaves out example resumes, "only" lists just them,
+ *                omitted lists everything (the old behaviour)
  *   - limit / offset : pagination (limit clamped to [1,100])
  * Returns the page plus the total matching count (for "showing X of N").
  */
@@ -305,6 +316,8 @@ export async function listArtifactsPaged(
     q?: string;
     lane?: string;
     group?: "masters" | "company" | "other";
+    laneId?: string;
+    examples?: "hide" | "only";
     limit?: number;
     offset?: number;
   } = {}
@@ -328,6 +341,14 @@ export async function listArtifactsPaged(
   if (opts.group && RESUME_GROUP_PREDICATES[opts.group]) {
     where.push(`(${RESUME_GROUP_PREDICATES[opts.group]})`);
   }
+  if (opts.laneId === "main") {
+    where.push(`lane_id IS NULL`);
+  } else if (opts.laneId) {
+    where.push(`lane_id = $${i++}::uuid`);
+    params.push(opts.laneId);
+  }
+  if (opts.examples === "hide") where.push(`is_demo = false`);
+  if (opts.examples === "only") where.push(`is_demo = true`);
 
   const whereSql = where.join(" AND ");
 
