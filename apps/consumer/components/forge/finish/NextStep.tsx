@@ -79,11 +79,13 @@ export function NextStep({
         </div>
       ) : (
         <div className="mb-6 border border-t-line bg-t-panel p-5">
-          <h3 className="mb-2 text-lg font-bold leading-snug text-t-white">The Refinery aims this resume at real jobs.</h3>
+          <h3 className="mb-2 text-lg font-bold leading-snug text-t-white">The Refinery aims your resume at real jobs.</h3>
           <p className="mb-4 text-sm leading-relaxed text-t-phos-dim">
-            Your Forge resume is a strong general one. In The Refinery you tailor it to one job at a time, practice
+            The Forge makes one general resume. In The Refinery you tailor it to one job at a time, practice
             interviews, plan what to say about your record, and use a job board that marks employers we checked for
-            hiring people with records. When you create your free account, everything you built here is waiting there.
+            hiring people with records. When you create your free account, your story and the answers you gave in the
+            Forge carry over. The changes you made on this page don&apos;t carry over yet, so download your resume
+            first.
           </p>
           <TBtn onClick={() => router.push("/login?from=forge")} className="mb-2 w-full text-base">
             {refineryCta.toLowerCase()}

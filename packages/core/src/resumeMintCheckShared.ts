@@ -80,14 +80,22 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  */
 function lineContaining(text: string, needle: string): string {
   const n = needle.toLowerCase();
-  const token = new RegExp(`(?<![\\w])${escapeRe(n)}(?![\\w]|\\.\\d)`);
+  // A digit needle may carry a unit right after it ("3x", "12k", "30%"); the
+  // token must not sit inside a longer number ("23" in "2023" or "59923").
+  const token = /^\d/.test(n)
+    ? new RegExp(`(?<![\\w.])${escapeRe(n)}(?:x|k|m|%|\\+)?(?![\\w]|\\.\\d)`)
+    : new RegExp(`(?<![\\w])${escapeRe(n)}(?![\\w]|\\.\\d)`);
   // Numbers are compared without thousands commas ("1,500" is "1500").
   const flat = (l: string) => l.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, "$1");
   const ls = linesOf(text);
   const body = ls.filter((l) => !CONTACT_LINE_RE.test(l));
+  // A number written as a word ("fifty", "a dozen") is found by its word.
+  const words = Object.keys(WORD_NUMS).filter((w) => WORD_NUMS[w] === needle);
+  const wordRe = words.length ? new RegExp(`\\b(?:${words.join("|")})\\b`) : null;
   return (
     body.find((l) => token.test(flat(l))) ??
     ls.find((l) => token.test(flat(l))) ??
+    (wordRe ? body.find((l) => wordRe.test(l.toLowerCase())) ?? ls.find((l) => wordRe.test(l.toLowerCase())) : undefined) ??
     body.find((l) => flat(l).includes(n)) ??
     ls.find((l) => flat(l).includes(n)) ??
     needle
@@ -115,10 +123,20 @@ function checkYears(out: string, src: string, f: MintFinding[]) {
 // ---- STD-T02: numbers both ways ------------------------------------------
 const WORD_NUMS: Record<string, string> = {
   two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
-  eleven: "11", twelve: "12", fifteen: "15", twenty: "20", thirty: "30", forty: "40", fifty: "50",
+  eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17",
+  eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60",
+  seventy: "70", eighty: "80", ninety: "90", dozen: "12",
+  // Counts with no single value still claim a number: they are compared as words.
+  dozens: "dozens", hundreds: "hundreds", thousands: "thousands", millions: "millions",
 };
 // "one" and "hundred" are left out on purpose: they are ordinary prose words
-// ("no one", "one of"), and reading them as counts made false findings.
+// ("no one", "one of"), and reading them as counts made false findings. So are
+// "double" and "twice" ("double-checked", "twice a week" read as claims).
+
+/** The number a word stands for ("fifty" is "50", "dozens" is "dozens"), or undefined. */
+export function numberWordValue(word: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(WORD_NUMS, word.toLowerCase()) ? WORD_NUMS[word.toLowerCase()] : undefined;
+}
 
 export function numbersIn(text: string): Set<string> {
   const t = text
@@ -129,7 +147,10 @@ export function numbersIn(text: string): Set<string> {
     .replace(YEAR_RE, " ");
   const out = new Set<string>();
   for (const m of t.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) out.add(m.replace(/,/g, ""));
-  for (const w of t.toLowerCase().match(/\b[a-z]+\b/g) ?? []) if (WORD_NUMS[w]) out.add(WORD_NUMS[w]);
+  for (const w of t.toLowerCase().match(/\b[a-z]+\b/g) ?? []) {
+    const v = numberWordValue(w);
+    if (v) out.add(v);
+  }
   return out;
 }
 

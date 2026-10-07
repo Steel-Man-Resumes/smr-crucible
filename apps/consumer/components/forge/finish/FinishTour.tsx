@@ -28,6 +28,8 @@ export function FinishTour({
   const live = steps.filter((s) => typeof document !== "undefined" && document.getElementById(s.target));
   const [i, setI] = useState(0);
   const lit = useRef<HTMLElement | null>(null);
+  // Where focus was before the tour took it, so closing gives it back.
+  const returnTo = useRef<HTMLElement | null>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
 
   const unlight = useCallback(() => {
@@ -39,8 +41,33 @@ export function FinishTour({
   }, []);
 
   useEffect(() => {
-    if (open) setI(0);
+    if (open) {
+      setI(0);
+      const active = document.activeElement;
+      returnTo.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    }
   }, [open]);
+
+  const close = useCallback(() => {
+    onClose();
+    const back = returnTo.current;
+    returnTo.current = null;
+    // After the card unmounts, put focus back where the person was.
+    setTimeout(() => back?.focus({ preventScroll: true }), 0);
+  }, [onClose]);
+
+  // Escape closes the tour from anywhere on the page.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, close]);
 
   useEffect(() => {
     if (!open) {
@@ -89,12 +116,12 @@ export function FinishTour({
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <button onClick={onClose} className="t-focus min-h-touch px-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
+        <button onClick={close} className="t-focus min-h-touch px-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
           Skip the tour
         </button>
         <button
           ref={nextRef}
-          onClick={() => (last ? onClose() : setI((n) => n + 1))}
+          onClick={() => (last ? close() : setI((n) => n + 1))}
           className="t-focus min-h-touch bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright"
         >
           {last ? "Got it" : "Next"}

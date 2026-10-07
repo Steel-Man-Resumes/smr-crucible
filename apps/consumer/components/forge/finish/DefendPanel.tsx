@@ -7,11 +7,12 @@
  * "Cut it". Answers are kept per line. Nothing here suggests a fact.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   editableLine,
   prefillRewrite,
   progressLine,
+  type GateItem,
   type FinishView,
   type LineGroup,
   type OpenItem,
@@ -28,25 +29,46 @@ function uniqueQuestions(items: OpenItem[]): string[] {
   return Array.from(new Set(items.map((i) => i.question)));
 }
 
+export type GroupHandler<R = void> = (group: LineGroup, text: string) => R;
+
 function GroupCard({
   group,
   index,
-  ownWords,
+  source,
   onAnswer,
   onChange,
   onCut,
 }: {
   group: LineGroup;
   index: number;
-  ownWords: string;
-  onAnswer: (line: string, answer: string) => void;
-  onChange: (line: string, rewrite: string) => void;
-  onCut: (line: string) => void;
+  source: string;
+  onAnswer: GroupHandler;
+  onChange: GroupHandler<boolean>;
+  onCut: (group: LineGroup) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("idle");
-  const [answer, setAnswer] = useState(group.answer?.verdict === "stands" ? group.answer.answer : "");
-  const [rewrite, setRewrite] = useState(() => prefillRewrite(group.line, ownWords));
+  const [mode, setModeState] = useState<Mode>("idle");
+  const [answer, setAnswer] = useState(group.answer?.verdict === "stands" && group.answer.kind !== "rewrite" ? group.answer.answer : "");
+  const [rewrite, setRewrite] = useState(() => prefillRewrite(group.line, source));
+  const [notice, setNotice] = useState("");
   const id = `fix-item-${index}`;
+  const cardRef = useRef<HTMLLIElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const firstAction = useRef<HTMLButtonElement>(null);
+  // Focus follows the mode: into the box that opened, back to the card's
+  // first button when it closes. Never lost to the page.
+  const moved = useRef(false);
+  const setMode = (m: Mode) => {
+    moved.current = true;
+    setModeState(m);
+  };
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    if (mode === "answer" || mode === "change") field.current?.focus();
+    else if (mode === "cut") cardRef.current?.querySelector<HTMLButtonElement>("[data-cut-confirm]")?.focus();
+    else (firstAction.current ?? cardRef.current)?.focus();
+  }, [mode]);
+  const noun = group.target === "skill" ? "skill" : "line";
 
   // The checker's own reason, shown when it adds something the question
   // doesn't say, or when an answer was given and the line is still open.
@@ -62,9 +84,13 @@ function GroupCard({
 
   return (
     <li
+      ref={cardRef}
+      tabIndex={-1}
       id={id}
       data-testid="fix-item"
       data-line={group.line}
+      data-target={group.target}
+      data-blocking={group.blocking ? "true" : "false"}
       className={`border px-3 py-3 ${group.checked ? "border-t-line bg-t-panel" : group.blocking ? "border-t-amber bg-t-panel" : "border-t-line bg-t-panel"}`}
     >
       <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">
@@ -78,7 +104,7 @@ function GroupCard({
             <p className="mt-1 text-xs text-t-phos">Your words: {group.answer.answer}</p>
           )}
           {mode === "idle" && (
-            <button onClick={() => setMode("answer")} className="t-focus mt-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
+            <button ref={firstAction} onClick={() => setMode("answer")} className="t-focus mt-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
               Change my answer
             </button>
           )}
@@ -94,13 +120,22 @@ function GroupCard({
           {mode === "idle" && (
             <div className="mt-3 flex flex-wrap gap-2">
               {group.answerable && (
-                <button onClick={() => setMode("answer")} className={BTN_MAIN}>
+                <button ref={firstAction} onClick={() => setMode("answer")} className={BTN_MAIN}>
                   This is true as written
                 </button>
               )}
-              <button onClick={() => setMode("change")} className={group.answerable ? BTN_SOFT : BTN_MAIN}>
-                Change it
-              </button>
+              {group.target !== "skill" && (
+                <button
+                  ref={group.answerable ? undefined : firstAction}
+                  onClick={() => {
+                    setNotice("");
+                    setMode("change");
+                  }}
+                  className={group.answerable ? BTN_SOFT : BTN_MAIN}
+                >
+                  Change it
+                </button>
+              )}
               <button onClick={() => setMode("cut")} className={BTN_SOFT}>
                 Cut it
               </button>
@@ -115,6 +150,7 @@ function GroupCard({
             Say it in your own words
           </label>
           <textarea
+            ref={field}
             id={`${id}-answer`}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
@@ -126,7 +162,7 @@ function GroupCard({
             <button
               onClick={() => {
                 if (!answer.trim()) return;
-                onAnswer(group.line, answer);
+                onAnswer(group, answer);
                 setMode("idle");
               }}
               disabled={!answer.trim()}
@@ -147,12 +183,18 @@ function GroupCard({
             Rewrite the line in your own words
           </label>
           <textarea
+            ref={field}
             id={`${id}-rewrite`}
             value={rewrite}
             onChange={(e) => setRewrite(e.target.value)}
             rows={2}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
+          {notice && (
+            <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="same-line-notice">
+              {notice}
+            </p>
+          )}
           <p className="mt-1 text-[11px] text-t-phos-dim">
             Only write what&apos;s true. If you&apos;re not sure of a number or a year, leave it out. The line is still true without it.
           </p>
@@ -160,7 +202,15 @@ function GroupCard({
             <button
               onClick={() => {
                 if (!rewrite.trim()) return;
-                onChange(group.line, rewrite);
+                if (!onChange(group, rewrite)) {
+                  setNotice(
+                    group.answerable
+                      ? "That's the same line. Change a word, or choose This is true as written."
+                      : "That's the same line. Change a word, or cut it."
+                  );
+                  field.current?.focus();
+                  return;
+                }
                 setMode("idle");
               }}
               disabled={!rewrite.trim()}
@@ -177,11 +227,14 @@ function GroupCard({
 
       {mode === "cut" && (
         <div className="mt-3">
-          <p className="text-sm text-t-white">Take this line off your resume?</p>
+          <p className="text-sm text-t-white">
+            {group.target === "letter" ? "Take this line out of your cover letter?" : `Take this ${noun} off your resume?`}
+          </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
+              data-cut-confirm
               onClick={() => {
-                onCut(group.line);
+                onCut(group);
                 setMode("idle");
               }}
               className={BTN_MAIN}
@@ -198,21 +251,56 @@ function GroupCard({
   );
 }
 
+function Groups({
+  groups,
+  offset,
+  source,
+  onAnswer,
+  onChange,
+  onCut,
+}: {
+  groups: LineGroup[];
+  offset: number;
+  source: string;
+  onAnswer: GroupHandler;
+  onChange: GroupHandler<boolean>;
+  onCut: (group: LineGroup) => void;
+}) {
+  return (
+    <ol className="space-y-2">
+      {groups.map((g, i) => (
+        <GroupCard
+          key={`${g.target}:${g.line}:${g.checked ? "c" : "o"}`}
+          group={g}
+          index={offset + i}
+          source={source}
+          onAnswer={onAnswer}
+          onChange={onChange}
+          onCut={onCut}
+        />
+      ))}
+    </ol>
+  );
+}
+
 export function DefendPanel({
   view,
-  ownWords,
   onAnswer,
   onChange,
   onCut,
 }: {
   view: FinishView;
-  ownWords: string;
-  onAnswer: (line: string, answer: string) => void;
-  onChange: (line: string, rewrite: string) => void;
-  onCut: (line: string) => void;
+  onAnswer: GroupHandler;
+  /** Returns false when the line did not change. */
+  onChange: GroupHandler<boolean>;
+  onCut: (group: LineGroup) => void;
 }) {
   const progress = progressLine(view);
   const finished = view.state === "finished";
+  const resume = view.groups.filter((g) => g.target === "resume");
+  const skills = view.groups.filter((g) => g.target === "skill");
+  const letter = view.groups.filter((g) => g.target === "letter");
+  const common = { source: view.source, onAnswer, onChange, onCut };
 
   return (
     <section id="fix-list" aria-labelledby="fix-list-heading" className="scroll-mt-20" data-testid="fix-list">
@@ -225,17 +313,16 @@ export function DefendPanel({
             ? "You can explain every line we asked about. You can still change an answer."
             : "These are the lines only you can answer. Say it's true, change it, or cut it."}
         </p>
-        {progress && (
-          <p className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
-            {progress}
-          </p>
-        )}
+        <p role="status" aria-live="polite" className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
+          {progress}
+        </p>
       </div>
 
       {view.general.length > 0 && (
         <ul className="mb-3 space-y-2">
-          {view.general.map((i, n) => (
+          {view.general.map((i: GateItem, n) => (
             <li key={n} className="border border-t-amber bg-t-panel px-3 py-3" data-testid="fix-general">
+              {i.line && <p className="text-sm text-t-white">&ldquo;{editableLine(i.line)}&rdquo;</p>}
               <p className="text-sm text-t-white">{i.why}</p>
               <p className="mt-1 text-sm text-t-phos">{i.question}</p>
             </li>
@@ -243,30 +330,21 @@ export function DefendPanel({
         </ul>
       )}
 
-      <ol className="space-y-2">
-        {view.groups.map((g, i) => (
-          <GroupCard
-            key={`${g.line}:${g.answer?.answer ?? ""}`}
-            group={g}
-            index={i}
-            ownWords={ownWords}
-            onAnswer={onAnswer}
-            onChange={onChange}
-            onCut={onCut}
-          />
-        ))}
-        {view.checkedLines.map((g, i) => (
-          <GroupCard
-            key={`checked:${g.line}`}
-            group={g}
-            index={view.groups.length + i}
-            ownWords={ownWords}
-            onAnswer={onAnswer}
-            onChange={onChange}
-            onCut={onCut}
-          />
-        ))}
-      </ol>
+      <Groups groups={[...resume, ...view.checkedLines]} offset={0} {...common} />
+
+      {skills.length > 0 && (
+        <div className="mt-4" data-testid="fix-skills">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Skills you added from a job posting</h3>
+          <Groups groups={skills} offset={resume.length + view.checkedLines.length} {...common} />
+        </div>
+      )}
+
+      {letter.length > 0 && (
+        <div className="mt-4" data-testid="fix-letter">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Your cover letter</h3>
+          <Groups groups={letter} offset={resume.length + view.checkedLines.length + skills.length} {...common} />
+        </div>
+      )}
     </section>
   );
 }

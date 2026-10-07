@@ -65,6 +65,7 @@ export function AtsScorePanel({
   onApply,
   samplePostings,
   samplePostingLabel,
+  onConfirmTerm,
 }: {
   resumeText: string;
   /** The person's intake, so the scorer can flag details the resume dropped. */
@@ -75,6 +76,8 @@ export function AtsScorePanel({
   samplePostings?: AtsSamplePosting[];
   /** Shown whenever a sample is in the box, so it is never taken for a real job. */
   samplePostingLabel?: string;
+  /** Told about each posting term the person confirmed and added, so the page can ask them about it. */
+  onConfirmTerm?: (term: string) => void;
 }) {
   const [posting, setPosting] = useState("");
   const [sampleId, setSampleId] = useState<string | null>(null);
@@ -261,7 +264,10 @@ export function AtsScorePanel({
             <button
               onClick={() => {
                 const next = applyFix(resumeText, pendingConfirm);
-                if (next !== resumeText) onApply?.(next);
+                if (next !== resumeText) {
+                  onApply?.(next);
+                  onConfirmTerm?.(pendingConfirm.term);
+                }
                 setPendingConfirm(null);
               }}
               className="t-focus bg-t-amber px-3 py-1.5 text-xs font-bold text-white hover:bg-t-amber-bright"
