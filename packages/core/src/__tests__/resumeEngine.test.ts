@@ -370,3 +370,16 @@ CASHIER | Corner Market | 2016 - 2019
   const r = runMintCheck({ output: out, source: src, kind: "resume" });
   assert.ok(!r.findings.some((f) => f.kind === "sole_actor"), JSON.stringify(r.findings));
 });
+
+test("STD-F01: a skills-only page with no bullets and no dates is never finished", () => {
+  const resume = `Jane Doe
+Milwaukee, WI | 555-555-0100
+
+SKILLS
+Forklift, Pallet jack, RF scanner
+Injection molding, Quality checks`;
+  const source = "I drove a forklift and a pallet jack, used an RF scanner, ran injection molding and did quality checks.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, requireDefend: false });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});

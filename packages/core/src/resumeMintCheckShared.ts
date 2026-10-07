@@ -286,16 +286,17 @@ export function isEntryHeader(l: string): boolean {
   return /[A-Za-z]{2,}/.test(first) && !first.includes(":");
 }
 
-// A page with work lines and no year anywhere is a dateless page, whatever
-// its headings say. Never finished.
+// A page with content and no year anywhere is a dateless page, whatever its
+// headings say, bullets or not (a skills-only page counts). Never finished.
 function checkDatedPage(out: string, f: MintFinding[]) {
   const ls = linesOf(out).filter((l) => !CONTACT_LINE_RE.test(l));
-  if (!ls.some(isBullet)) return;
+  // The name, a headline and one more line are not yet a page to judge.
+  if (ls.length < 4) return;
   if (ls.some(hasYear)) return;
   f.push({
     rule: "STD-F01",
     severity: "BLOCK",
-    line: ls.find(isBullet) ?? "",
+    line: ls.find(isBullet) ?? ls[ls.length - 1],
     why: "This page has no dates anywhere. Employers expect dates, and a page without them reads as hiding something.",
     kind: "dateless_page",
   });
