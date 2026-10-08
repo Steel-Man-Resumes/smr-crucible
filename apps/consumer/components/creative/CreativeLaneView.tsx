@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CareerLane } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
-import { buildArtistResumeModel, buildWorkSampleList, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
+import { applyPhraseAnswer, buildArtistResumeModel, buildWorkSampleList, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import type { BioContent } from "@crucible/core/src/creativeBio";
 import type { StatementVersion } from "@crucible/core/src/creativeStatement";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
@@ -23,6 +23,7 @@ import { StatementCoach } from "./StatementCoach";
 import { WorkSamplesPanel } from "./WorkSamplesPanel";
 import { PlainTextPanel } from "./PlainTextPanel";
 import { TwoPathsPanel } from "./TwoPathsPanel";
+import { OpenItemAnswersContext, type OpenItemAnswers } from "./OpenItems";
 
 export interface CreativeCtx {
   lane: CareerLane;
@@ -120,6 +121,16 @@ export function CreativeLaneView({
     [putSettings]
   );
 
+  // One-tap answers (review s2r3): does a phrase name the place this lane keeps off.
+  const answers = useMemo<OpenItemAnswers>(
+    () => ({
+      onFacilityWord: (phrase, yes) =>
+        putSettings({ phraseAnswer: { phrase, answer: yes ? "yes" : "no" } }, (cur) => applyPhraseAnswer(cur, phrase, yes ? "yes" : "no") ?? cur),
+      onOfficer: async () => false,
+    }),
+    [putSettings]
+  );
+
   const model = useMemo(() => (ctx ? buildArtistResumeModel(ctx.entries, ctx.settings) : null), [ctx]);
   const samples = useMemo(() => (ctx ? buildWorkSampleList(ctx.entries, ctx.sampleOrder, ctx.settings) : []), [ctx]);
   const status = useMemo(
@@ -141,6 +152,7 @@ export function CreativeLaneView({
   if (!ctx || !model || !status) return <div className="mt-6 h-40 border border-t-line bg-t-panel" aria-hidden="true" />;
 
   return (
+    <OpenItemAnswersContext.Provider value={answers}>
     <section className="mt-6" data-testid="creative-lane" aria-label={`${ctx.lane.name} creative lane`}>
       <div className="border border-t-line bg-t-panel p-3 sm:p-4">
         <p className="text-sm text-t-white">
@@ -218,5 +230,6 @@ export function CreativeLaneView({
         )}
       </div>
     </section>
+    </OpenItemAnswersContext.Provider>
   );
 }

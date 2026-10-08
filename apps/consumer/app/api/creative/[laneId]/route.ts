@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   cleanKindSettings,
   applyTitleMode,
+  applyPhraseAnswer,
   settingsRev,
   listPracticeEntries,
   laneKindOf,
@@ -31,10 +32,12 @@ interface RouteContext {
  *   must be based on), the sample order, the open items, and the pair's plan
  *   card with its general hurdles and help links.
  * PUT /api/creative/[laneId] { settings, rev }  or  { titleMode: { entryId, mode }, rev }
+ *     or  { phraseAnswer: { phrase, answer: "yes" | "no" }, rev }
  *   This lane's choices (name on the page, contact lines, page cap, picked
- *   entries, pronoun), or ONE facility choice for one entry. Always on top of
- *   the revision the screen loaded; facility choices never arrive as a whole
- *   map, so a stale tab can't undo a newer "leave it off".
+ *   entries, pronoun), ONE facility choice for one entry, or ONE answer to
+ *   "Does this name the place you chose to leave off?" for one phrase. Always
+ *   on top of the revision the screen loaded; facility choices and answers
+ *   never arrive as a whole map, so a stale tab can't undo a newer one.
  */
 export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
@@ -97,6 +100,12 @@ export async function PUT(request: Request, context: RouteContext) {
     const tm = body.titleMode as { entryId?: unknown; mode?: unknown };
     const entry = (await listPracticeEntries(g.userId)).find((e) => e.id === tm.entryId && e.names_facility);
     next = entry ? applyTitleMode(current, entry.id, tm.mode) : null;
+    if (!next) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+  } else if (body.phraseAnswer && typeof body.phraseAnswer === "object") {
+    // Whether a phrase names a place kept off: the person's alone (never an assist session).
+    if (g.impersonating) return ownerOnly();
+    const pa = body.phraseAnswer as { phrase?: unknown; answer?: unknown };
+    next = applyPhraseAnswer(current, pa.phrase, pa.answer);
     if (!next) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   } else {
     next = cleanKindSettings(body.settings, current);

@@ -13,6 +13,7 @@ import {
   NEEDS_PROOF_NOTE,
   artistResumePageCap,
   artistResumePlainText,
+  shownEntryIds,
   stillNeedsProof,
   type ArtistResumeModel,
   type CreativeKindSettings,
@@ -62,7 +63,7 @@ export function ArtistResumePanel({
   const showable = entries.filter((e) => e.section !== "work");
   const selected = new Set(Array.isArray(settings.selection) ? settings.selection : showable.map((e) => e.id));
   const blocks = status.openItems.some((x) => x.severity === "BLOCK" && (x.doc === "artist_resume" || x.doc === "record"));
-  const request = { doc: "artist_resume", model, draft: blocks, openItems: exportOpenItemLines(status, entries, settings, "artist_resume") };
+  const request = { doc: "artist_resume", model, draft: blocks, openItems: exportOpenItemLines(status, entries, settings, "artist_resume", shownEntryIds(model)) };
   const cap = artistResumePageCap(settings);
 
   return (
