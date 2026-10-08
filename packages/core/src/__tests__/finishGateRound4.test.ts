@@ -140,6 +140,9 @@ test("S4: 'ran the grill' is ordinary work; 'I managed to' and denials are not a
   assert.equal(answerTalksScope("I managed to get it done on Sundays."), false);
   assert.equal(answerTalksScope("I never supervised anyone."), false);
   assert.equal(answerTalksScope("I supervised the two dishwashers on Sundays."), true);
+  // A count and a describing word before the people noun still count.
+  assert.ok(scopeHits("Trained four new aides on the floor.").length > 0);
+  assert.equal(answerTalksScope("Trained four new aides on the floor."), true);
 });
 
 // ---- notes ---------------------------------------------------------------------------

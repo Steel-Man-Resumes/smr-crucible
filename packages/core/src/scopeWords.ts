@@ -11,7 +11,7 @@
 export type ScopeFamily = "supervise" | "manage" | "lead" | "oversee" | "direct" | "mentor" | "coordinate" | "train" | "schedule";
 
 const PEOPLE = String.raw`(?:crews?|teams?|shifts?|staff|department|store|kitchen|cooks?|workers?|employees?|hires?|associates?|people|operators?|drivers?|loaders?|aides?|nurses?|servers?|dishwashers?|volunteers?|interns?|techs?|technicians?|helpers?|laborers?|pickers?|packers?)`;
-const DET = String.raw`(?:(?:the|a|an|our|my|their|new|other|every|all)\s+)?(?:[a-z-]+\s+)?`;
+const DET = String.raw`(?:(?:the|a|an|our|my|their|new|other|every|all)\s+)?(?:[a-z0-9-]+\s+){0,2}`;
 
 const PATTERNS: Array<[RegExp, ScopeFamily]> = [
   [/\bsupervis\w*/gi, "supervise"],
