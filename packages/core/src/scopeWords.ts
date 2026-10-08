@@ -32,9 +32,9 @@ export type ScopeFamily =
   | "evaluate"
   | "own";
 
-const PEOPLE = String.raw`(?:crews?|teams?|shifts?|staff|staffers?|department|store|kitchen|cooks?|workers?|employees?|hires?|associates?|people|persons?|operators?|drivers?|loaders?|aides?|nurses?|servers?|dishwashers?|volunteers?|interns?|techs?|technicians?|helpers?|laborers?|pickers?|packers?|men|guys|hands|members?|leads|reps?|agents?|cashiers?|clerks?|trainees?|apprentices?|co-?workers?|teammates?|colleagues?|peers?|newcomers?|starters?)`;
+const PEOPLE = String.raw`(?:crews?|teams?|shifts?|staff|staffers?|department|store|kitchen|cooks?|workers?|employees?|hires?|associates?|people|persons?|operators?|drivers?|loaders?|aides?|nurses?|servers?|dishwashers?|volunteers?|interns?|techs?|technicians?|helpers?|laborers?|pickers?|packers?|men|guys|hands|members?|leads|reps?|agents?|cashiers?|clerks?|trainees?|apprentices?|co-?workers?|teammates?|colleagues?|peers?|newcomers?|starters?|temps?)`;
 // Up to three words before the people noun ("all of the new", "a group of new", "the entire overnight dish washing").
-const DET = String.raw`(?!(?:on|in|at|to|for|with|by|as|into|out|from|up|through|under|about|around|over|when|while|whenever|if|until|after|before|because|since|once)\b)(?:(?:the|a|an|our|my|their|new|other|every|all|entire|whole)\s+){0,2}(?:(?:group|team|crew|bunch|handful)\s+of\s+(?:the\s+)?)?(?:of\s+the\s+)?(?:(?!(?:and|or)\s+(?:train|supervis|manag|lead|led|schedul|coordinat|mentor|direct|overs|hir|evaluat|onboard|coach|teach|taught|instruct|assign|ran|run)\w*\b)[a-z0-9-]+\s+){0,3}`;
+const DET = String.raw`(?!(?:on|in|at|to|for|with|by|as|into|out|from|up|through|under|about|around|over|when|while|whenever|if|until|after|before|because|since|once|alongside|beside|among|like|next)\b)(?:(?:the|a|an|our|my|their|new|other|every|all|entire|whole)\s+){0,2}(?:(?:group|team|crew|bunch|handful)\s+of\s+(?:the\s+)?)?(?:of\s+the\s+)?(?:(?!(?:and|or)\s+(?:train|supervis|manag|lead|led|schedul|coordinat|mentor|direct|overs|hir|evaluat|onboard|coach|teach|taught|instruct|assign|ran|run)\w*\b)[a-z0-9-]+\s+){0,3}`;
 
 const PATTERNS: Array<[RegExp, ScopeFamily]> = [
   [/\bsupervis\w*/gi, "supervise"],
@@ -186,7 +186,8 @@ const SUBSET_WORD_RE = /^(?:one|two|three|four|five|six|seven|eight|nine|ten|ele
 function peopleClasses(words: string[], re: RegExp): string[] {
   const out = new Set<string>();
   const marks = new Set<string>();
-  if (words.some((w) => /^(?:all|entire|whole|every)$/.test(w))) {
+  // Round 12: "every shift / week / day / night" is how often, not everyone.
+  if (words.some((w, i) => /^(?:all|entire|whole)$/.test(w) || (w === "every" && !/^(?:shift|shifts|day|days|night|nights|week|weeks|weekend|weekends|morning|evening|month|year|time|sunday|monday|tuesday|wednesday|thursday|friday|saturday|other)$/.test(words[i + 1] ?? "")))) {
     marks.add(GROUP_MARK);
     marks.add(ALL_MARK);
   }
@@ -409,7 +410,14 @@ const PAST_VERB_RE = /^(?:[a-z]+ed|ran|led|oversaw|taught|made|wrote|built|set|d
 const SELF_PAST_BEFORE = new RegExp(String.raw`\bI(?:'ve|\s+have|\s+had)?\s+(?:${ADVERBS}\s+){0,3}$`, "i");
 const USED_TO_BEFORE = new RegExp(String.raw`\bI\s+(?:${ADVERBS}\s+){0,2}used\s+to\s+(?:${ADVERBS}\s+){0,1}$`, "i");
 const ONE_WHO_BEFORE = new RegExp(String.raw`\bI(?:\s+was|\s+am|'m)\s+the\s+one\s+(?:who|that)\s+(?:${ADVERBS}\s+){0,2}$`, "i");
-const HAD_ME_BEFORE = /\b(?:they|he|she|management|my\s+[a-z]+|the\s+[a-z]+|[A-Z][a-z]+)\s+(?:had|made|let)\s+me\s+$|\b(?:got|asked)\s+me\s+to\s+$/i;
+// Round 12 (R12-B1): only "had me / made me", past tense, after a real subject right before it (case-aware:
+// "They", "My boss", "Mike"), with no wish, plan, modal or condition in the clause. "let me", "asked me to"
+// and "got me to" never clear: being let or asked is not doing.
+const HAD_ME_BEFORE = /(?:\b[Tt]hey|\b[Hh]e|\b[Ss]he|\b[Mm]anagement|\b(?:[Mm]y|[Tt]he|[Oo]ur)\s+[a-z]+|\b[A-Z][a-z]+)\s+(?:had|made)\s+me\s+$/;
+const HAD_ME_NOT_DONE = /\b(?:hope|hoped|hoping|hopefully|wish|want|wanted|will|'ll|ll|would|'d|might|may|could|can|should|gonna|going\s+to|once|next|if|when|after|until|soon|someday|maybe)\b/i;
+// "They had me train alongside the new hires": the person was the trainee.
+const TRAINEE_AFTER_RE = /^\s*[a-z]*\s*(?:alongside|under|with|next\s+to|beside|among)\b/i;
+const REFUSED_AFTER_RE = /\bbut\s+I\s+(?:said\s+no|didn'?t|did\s+not|refused|turned\s+it\s+down|never)\b|\band\s+I\s+(?:said\s+no|refused|turned\s+it\s+down)\b/i;
 const COPULA_BEFORE = new RegExp(String.raw`\bI(?:\s+was|\s+am|'m)(?:\s+(?:put|made|${ADVERBS}))?\s+$`, "i");
 const COPULA_CLAIM_RE = /^(?:in charge of|responsible for|took charge|head(?:ed)? up)\b/i;
 const LINE_START_BEFORE = /^\s*(?:[-•*]\s*)?$/;
@@ -423,28 +431,51 @@ const SHARED_BEFORE = /\b(?:[Hh]elp(?:ed|s|ing)?|[Aa]ssist(?:ed|s|ing)?(?:\s+wit
 // Never a claim, whatever else is there: tried, wanted, attempted (the old shared list's other half).
 const NOT_DONE_BEFORE = /\b(?:tried|tries|attempted|wanted|learned|learning)\s+(?:(?:him|her|them|us|[A-Z][a-z]+|the\s+[a-z]+|my\s+[a-z]+)\s+)?(?:to\s+)?$|\b(?:[Ww]ish|[Ww]ished|[Ii]f|[Uu]nless|[Hh]ope|[Hh]oped)\s+(?:I|we)\b[^.;!?]*$/;
 // Their verb with someone else beside it ("trained new hires with him", "with my lead") is shared work.
-const SHARED_AFTER_RE = /^[^.;!?,]*?\b(?:with|alongside|together\s+with)\s+(?:him|her|them|my\s+[a-z]+|the\s+[a-z]+|our\s+[a-z]+|[A-Z][a-z]+)\b/;
+// Round 12 (SF-6): only with a person or a role ("with my lead", "with Mike", "with the other lead"), never a tool.
+const SHARED_AFTER_RE = /^[^.;!?,]*?\b(?:with|alongside|together\s+with)\s+(?:him|her|them|(?:my|the|our|his|her)\s+(?:other\s+|old\s+|shift\s+|team\s+|night\s+|day\s+)?(?:lead|leads|supervisor|manager|boss|trainer|coworkers?|co-workers?|crew|team|partner|foreman|owner|chef|crew\s+lead)\b|[A-Z][a-z]+\b)/;
 
 type Doer = "self" | "shared" | "none";
 
 /** Who does the verb at this spot, by the strict shapes above. `verb` is the claim's first word. */
-function doerOf(before: string, verb: string): Doer {
+function doerOf(before0: string, verb: string, after = ""): Doer {
+  // Round 12: a clause starts again after "but" ("I wanted to quit but I trained the new guys").
+  const before = before0.split(/\bbut\s+(?=I\b)/).pop() as string;
   const past = PAST_VERB_RE.test(verb);
+  if (REFUSED_AFTER_RE.test(after)) return "none";
   if (NOT_DONE_BEFORE.test(before)) return "none";
   if (SHARED_BEFORE.test(before)) return /\bI\b|^\s*(?:[-•*]\s*)?(?:help|assist)/i.test(before) || LINE_START_BEFORE.test(before.replace(SHARED_BEFORE, "")) ? "shared" : "none";
   if (COPULA_CLAIM_RE.test(verb) && COPULA_BEFORE.test(before)) return "self";
   if (USED_TO_BEFORE.test(before)) return "self";
   if (ONE_WHO_BEFORE.test(before)) return "self";
-  if (HAD_ME_BEFORE.test(before)) return "self";
+  if (HAD_ME_BEFORE.test(before)) {
+    const clause = before.split(/[,;]|\band\b/).pop() as string;
+    if (HAD_ME_NOT_DONE.test(clause) || HAD_ME_NOT_DONE.test(before.slice(-80)) || TRAINEE_AFTER_RE.test(after)) return "none";
+    return "self";
+  }
+  // Round 12 (SF-6): a plain present tense with "I" ("I train new hires", "I supervise the night crew") is their
+  // own current work, unless a plan, a wish or a condition sits in the clause.
+  if (!past && PRESENT_SCOPE_RE.test(verb) && SELF_PAST_BEFORE.test(before) && !/\b(?:did|do|does|didn'?t|don'?t)\s+I\s+$/i.test(before) && !PRESENT_NOT_DONE.test(before)) return "self";
   if (!past && !COPULA_CLAIM_RE.test(verb)) return "none";
   if (SHARED_SUBJECT_BEFORE.test(before)) return "shared";
   if (SELF_PAST_BEFORE.test(before)) return "self";
   if (LINE_START_BEFORE.test(before)) return "self";
   // A list of their own duties: every clause starts with a past-tense verb ("trained new guys, ran the dock").
   const list = before.match(LIST_BEFORE);
-  if (list && PAST_VERB_RE.test(list[1])) return "self";
+  // Round 12 (SF-3): never when someone else is the subject in between ("I picked orders and my lead trained
+  // new hires and supervised the night crew": the lead supervised).
+  // The subject that counts is the nearest one: in the clause since the last comma ("made the schedule when the
+  // manager was out, trained new cashiers" is theirs; "I loaded trucks, Mike trained new hires and supervised" is Mike's).
+  const lastSegment = (before.replace(/^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+/, "").split(/[,;]/).pop() as string);
+  if (list && PAST_VERB_RE.test(list[1]) && !OTHER_SUBJECT_IN_LIST.test(lastSegment)) return "self";
+  // Round 12: "I was the shift lead and trained new hires": a later verb takes the nearest subject, here "I".
+  const iClause = before.match(/\bI\s+([^.;!?]*)\band\s+$/);
+  if (past && iClause && !/\bI\b/.test(iClause[1]) && !OTHER_SUBJECT_IN_LIST.test(iClause[1]) && !HAD_ME_NOT_DONE.test(iClause[1]) && !/\b(?:wanted|tried|hoped|planned|asked|told|supposed|going)\b/i.test(iClause[1])) return "self";
   return "none";
 }
+
+const PRESENT_SCOPE_RE = /^(?:train|trains|teach|teaches|coach|coaches|supervise|supervises|run|runs|lead|leads|manage|manages|oversee|oversees|direct|directs|mentor|mentors|coordinate|coordinates|schedule|schedules|onboard|onboards)$/i;
+const PRESENT_NOT_DONE = /\b(?:will|'ll|would|'d|can|could|might|may|should|want|wants|hope|hopes|wish|plan|plans|going\s+to|gonna|if|once|when|next|soon|someday|tomorrow|ready|able|willing)\b/i;
+const OTHER_SUBJECT_IN_LIST = /\b(?:he|she|they|we|while|when|because|where|whereas)\b|\b(?:[Mm]y|[Tt]he|[Oo]ur|[Hh]is|[Hh]er|[Tt]heir)\s+[a-z]+\s+(?:[a-z]+ed|ran|led|oversaw|taught|made|did|took|kept|showed)\b|(?:^|[^.])\b(?!I\b)[A-Z][a-z]+\s+(?:[a-z]+ed|ran|led|oversaw|taught|made|did|took)\b/;
 
 /** Curly apostrophes and quotes as straight ones (round 10: phones type "I’ve"). Same length, so positions hold. */
 export function straightQuotes(text: string): string {
@@ -461,6 +492,8 @@ function personClaims(sourceText: string): Claim[] {
       if (NEGATION_BEFORE.test(before)) return false;
       // A role noun ("manager", "supervisor", "lead") is theirs only when it is their role: "I was the kitchen manager", not "the same manager".
       if (isRoleUse(sentence, m) && !OWN_ROLE_BEFORE.test(before) && !TITLE_START.test(before)) return false;
+      // Round 12 (SF-1): "I was in charge of", "I was responsible for" are read before the passive check.
+      if (COPULA_CLAIM_RE.test(m[0]) && COPULA_BEFORE.test(before)) return true;
       if (PASSIVE_BEFORE.test(before) && !/ing\b/i.test(m[0].split(/\s+/)[0])) return false;
       return true;
     };
@@ -472,7 +505,10 @@ function personClaims(sourceText: string): Claim[] {
         if (!role && NOUN_FORM_RE.test(first)) continue;
         if (!role && /^lead$/i.test(first) && /\b(?:my|our|the|a|his|her|their)\s+$/i.test(sentence.slice(0, m.index))) continue;
         // Round 11: a role ("I was the shift lead") never clears a claim; only the strict verb shapes do.
-        let doer: Doer = role ? "none" : doerOf(sentence.slice(0, m.index), COPULA_CLAIM_RE.test(m[0]) ? m[0] : first);
+        let doer: Doer = role ? "none" : doerOf(sentence.slice(0, m.index), COPULA_CLAIM_RE.test(m[0]) ? m[0] : first, sentence.slice(m.index! + m[0].length));
+        // Round 12 (SF-6): "I made the schedule for 8 cooks": the verb before "the schedule" is the one done.
+        const madeIt = family === "schedule" && !role ? sentence.slice(0, m.index).match(/\b(made|did|wrote|built|set|handled|ran|put\s+together)\s+(?:up\s+)?(?:the|a|our|my)?\s*(?:[a-z-]+\s+)?$/i) : null;
+        if (doer === "none" && madeIt) doer = doerOf(sentence.slice(0, (m.index ?? 0) - madeIt[0].length), madeIt[1].split(/\s+/)[0], sentence.slice(m.index! + m[0].length));
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
         out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared", ...(role ? { role: true } : {}) });
       }
@@ -481,7 +517,7 @@ function personClaims(sourceText: string): Claim[] {
       for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) {
         if (!ok(m)) continue;
         const nouns = objectPeople(sentence.slice(m.index! + m[0].length), PEOPLE_RE);
-        let doer: Doer = doerOf(sentence.slice(0, m.index), m[0]);
+        let doer: Doer = doerOf(sentence.slice(0, m.index), m[0], sentence.slice(m.index! + m[0].length));
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
         if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared" });
       }
@@ -504,8 +540,27 @@ export function scopeNotTheirs(line: string, sourceText: string): ScopeHit | und
   return scopeHitsNotTheirs(line, sourceText)[0];
 }
 
+const plainWords = (t: string) => straightQuotes(t).toLowerCase().replace(/^\s*[-•*]\s*/, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/** True when the line, or every sentence of it, is a line or sentence the person wrote themselves (case and punctuation aside). */
+export function isOwnLine(line: string, sourceText: string): boolean {
+  const body = plainWords(line);
+  if (!body) return false;
+  const own = new Set(
+    straightQuotes(sourceText || "")
+      .split(/\n|(?<=[.!?;])\s+/)
+      .map(plainWords)
+      .filter(Boolean)
+  );
+  if (own.has(body)) return true;
+  const sentences = line.split(/(?<=[.!?;])\s+/).map(plainWords).filter(Boolean);
+  return sentences.length > 1 && sentences.every((x) => own.has(x));
+}
+
 /** Every scope claim on a line that is not the person's, in page order (round 11). */
 export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[] {
+  // Round 12: a line (or sentence) the person wrote word for word is theirs, every claim in it.
+  if (isOwnLine(line, sourceText)) return [];
   const theirs = personClaims(sourceText);
   return scopeHits(line).filter(
     (h) =>
@@ -515,7 +570,8 @@ export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[]
         // A role on the page ("as a shift lead") is cleared by their own role of that name.
         const doer = h.role && c.role ? true : h.shared ? c.self || c.shared : c.self;
         if (!doer) return false;
-        return h.nouns.length
+        // Round 12: "every week" alone is a time, not people; a claim with no people word reads its object.
+        return h.nouns.some((n) => !n.startsWith("~"))
           ? peopleCovered(h.nouns, c.nouns)
           : // Round 7: a claim that names no people is theirs only when they used the verb themselves,
             // about the same thing ("I managed the stockroom" covers "Managed the stockroom", not "Managed inventory").
@@ -588,6 +644,8 @@ const WHO_EMPTY = new Set(["nobody", "noone", "none", "no", "one", "anyone", "so
 /** True when a typed "who or what" names someone or something: a people word, or a real noun (round 11). */
 export function isScopeWhoAnswer(typed: string): boolean {
   const words = (straightQuotes(typed || "").toLowerCase().match(/[a-z][a-z'-]*/g) ?? []).filter(Boolean);
+  // Round 12: a count of people is an answer ("all 40 of them", "about 8").
+  if (/\b\d+\b/.test(typed || "")) return true;
   if (!words.length) return false;
   if (words.some((w) => NOUN_RE.test(w))) return true;
   return words.some((w) => w.length >= 3 && !WHO_EMPTY.has(w));
@@ -616,8 +674,9 @@ const BASE_OF: Record<string, string> = {
 export function helpedForm(text: string, hitWord: string): string | undefined {
   const bullet = text.match(/^\s*[-•*]\s*/)?.[0] ?? "";
   const body = text.slice(bullet.length);
+  // Round 12 (SF-7): "In charge of opening the store" is "Helped with opening the store".
   const lead = body.match(/^(Responsible\s+for|In\s+charge\s+of)\s+(.+)$/i);
-  if (lead) return `${bullet}Helped ${/^responsible/i.test(lead[1]) ? "with" : "run"} ${lead[2]}`;
+  if (lead) return `${bullet}Helped ${/^responsible/i.test(lead[1]) || /^\w+ing\b/i.test(lead[2]) ? "with" : "run"} ${lead[2]}`;
   const first = (hitWord.match(/[A-Za-z]+/) ?? [""])[0];
   const base = BASE_OF[first.toLowerCase()];
   if (!base) return undefined;
@@ -630,5 +689,54 @@ export function helpedForm(text: string, hitWord: string): string | undefined {
   else if (/^\s*$/.test(before)) swap = `Helped ${base}`;
   else if (/(?:\band|,|\bI)\s+$/i.test(before) && first.toLowerCase() !== base) swap = `helped ${base}`;
   else return undefined;
-  return `${bullet}${before}${swap}${body.slice(at + first.length)}`;
+  let rest = body.slice(at + first.length);
+  // Parallel form: "Supervised and trained the night crew" is "Helped supervise and train the night crew".
+  rest = rest.replace(/^(\s+and\s+)([a-z]+)\b/i, (all, and, verb) => (BASE_OF[verb.toLowerCase()] && PAST_VERB_RE.test(verb) ? `${and}${BASE_OF[verb.toLowerCase()]}` : all));
+  // An earlier verb joined to this one stays as it was only when the line reads; "Supervised and trained" with
+  // "trained" picked would mix forms, so it is not offered.
+  if (/\band\s+$/i.test(before) && /^\s*[A-Za-z]+(?:ed|ran|led)\s+and\s+$/i.test(before)) return undefined;
+  return `${bullet}${before}${swap}${rest}`;
+}
+
+const COUNT_WORD_RE = /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|dozen|dozens|hundred|hundreds|couple|few|several)\b/i;
+const GROUP_NOUN_RE = /\b(?:crews?|teams?|shifts?|staff|staffers?|department|people|employees?|workers?|associates?|hires?|guys|hands|members?|coworkers?|co-workers?|teammates?|colleagues?|peers?|newcomers?|starters?)\b/i;
+
+/**
+ * Round 12 (SF-4): what typed "Yes, I did this" words must name for one claim.
+ * A group the line does not count ("the night crew", "new hires") is covered
+ * by any people word, a count of people, or names ("about 8 people on
+ * nights", "Marcus and Tia"). A line that says all, every or entire, or gives
+ * a number, needs the same in their words. A role the line names ("cooks",
+ * "nurses") still needs that role. Returns undefined when the typed words
+ * should go through the ordinary sentence reading instead.
+ */
+export function typedCoversHit(hit: ScopeHit, typed: string, line: string): boolean | undefined {
+  // Round 12 (SF-1): "Responsible for <X>": the typed words must name part of X ("opening and closing" for
+  // "opening and closing the store"), the same count or "all" when X has one.
+  if (hit.family === "responsible") {
+    const typedWords = (straightQuotes(typed).toLowerCase().match(/[a-z]+/g) ?? []).map(stemNoun);
+    const objs = [...(hit.objects ?? []), ...hit.nouns.filter((n) => !n.startsWith("~") && n !== "group")];
+    if (hit.nouns.includes(ALL_MARK) && !/\b(?:all|every|entire|whole)\b/i.test(typed)) return false;
+    return objs.some((o) => o.length > 2 && typedWords.includes(o));
+  }
+  const real = hit.nouns.filter((n) => !n.startsWith("~"));
+  if (!real.length) return undefined;
+  const t = straightQuotes(typed || "");
+  const after = line.slice(Math.max(0, line.toLowerCase().indexOf(hit.word.toLowerCase())));
+  const pageText = `${hit.word} ${after.split(/[.;!?]/)[0]}`;
+  if (!GROUP_NOUN_RE.test(pageText) || real.some((n) => ROLE_GROUP[n])) return undefined;
+  const pageAll = hit.nouns.includes(ALL_MARK);
+  const pageCount = COUNT_WORD_RE.test(pageText.replace(/\bevery\s+\w+/gi, ""));
+  if (pageAll && !/\b(?:all|every|entire|whole|everyone|everybody)\b/i.test(t)) return false;
+  if (pageCount && !COUNT_WORD_RE.test(t) && !/\b(?:all|every|entire|whole)\b/i.test(t)) return false;
+  const words = t.toLowerCase().match(/[a-z][a-z'-]*/g) ?? [];
+  return words.some((w) => NOUN_RE.test(w)) || COUNT_WORD_RE.test(t) || /\b[A-Z][a-z]+\b(?:\s*(?:,|and)\s*[A-Z][a-z]+)?/.test(t.replace(/^\s*[A-Z][a-z]+\s/, (x) => x.toLowerCase()));
+}
+
+/** True when typed words are only the page line (or its object) pasted back (round 12). */
+export function isScopeCopy(typed: string, line: string): boolean {
+  const t = plainWords(typed);
+  const l = plainWords(line);
+  if (!t || !l) return false;
+  return t === l;
 }

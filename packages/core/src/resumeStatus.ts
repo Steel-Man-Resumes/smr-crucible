@@ -40,7 +40,7 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
-import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm } from "./scopeWords";
+import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
 import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
@@ -74,6 +74,8 @@ export interface OpenItem {
   scopeFamily?: string;
   /** Round 11: for a scope claim, the line's shared form ("Helped train new hires"), when there is one. */
   helped?: string;
+  /** Round 12: every scope family on the line still open (one card asks about all of them). */
+  scopeFamilies?: string[];
 }
 
 export interface DefendAnswer {
@@ -91,11 +93,14 @@ export interface DefendAnswer {
    * one). The caller may add rewrites to the person's own words; an ordinary
    * answer is never added to the source (no anchoring path, DEC-45).
    */
-  kind?: "rewrite" | "scope_yes";
+  kind?: "rewrite" | "scope_yes" | "title_yes";
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
   family?: string;
   /** Round 11: a rewrite made by "I helped with it": the line is their shared form; never joins their words. */
   scopeHelp?: boolean;
+  /** Round 12: the claim "I helped with it" was made for, and the sentence it changed (it settles only that one). */
+  scopeHelpFamily?: string;
+  scopeHelpText?: string;
   /**
    * For a rewrite: the line it replaced, as first written (the writer's line,
    * never an earlier rewrite). Only words and numbers the rewrite INTRODUCED
@@ -402,6 +407,8 @@ function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: 
     if (credentialTitle && confirmedKeys.has(credentialKey(full))) continue;
     // A title the person typed themselves (their own rewrite of the header) is theirs.
     if (rewriteOf(answers, l)) continue;
+    // Round 12 (SF-2): "Yes, that was my title", typed by them and matching the title on the line.
+    if (answers.some((a) => a.kind === "title_yes" && squash(a.line) === squash(l) && squash(a.answer) === squash(full))) continue;
     const rest = full.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
     if (confirmedKeys.size && rest && rest !== full && titleIsTheirs(rest, sourceText)) continue;
     out.push(l);
@@ -431,11 +438,25 @@ function personIntroduced(answers: DefendAnswer[], line: string, word: string): 
  * form ("I helped with it"). Nothing typed here joins their words elsewhere.
  */
 export function scopeNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): ReturnType<typeof scopeNotTheirs> {
-  const own = answers.filter((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && isScopeWhoAnswer(a.answer));
+  return scopeAllNotTheirsAnswered(line, sourceText, answers)[0];
+}
+
+/** Every scope claim on a line still not theirs after their answers on that line (round 12: one card per line). */
+export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): NonNullable<ReturnType<typeof scopeNotTheirs>>[] {
+  const own = answers.filter(
+    (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && isScopeWhoAnswer(a.answer) && !isScopeCopy(a.answer, line)
+  );
   const extra = own.map((a) => scopeYesText(a.family as string, a.answer)).join("\n");
-  const helped = !!rewriteOf(answers, line)?.scopeHelp;
-  // Their "I helped with it": the shared claims on this line are theirs; any other claim is still read.
-  return scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).find((h) => !(helped && h.shared));
+  const help = rewriteOf(answers, line);
+  return scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).filter((h) => {
+    // Round 12 (SF-4): typed words that name people, a count or names cover an uncounted group.
+    if (own.some((a) => a.family === h.family && typedCoversHit(h, a.answer, line) === true)) return false;
+    // Their "I helped with it": only the claim it was made for, in its own sentence.
+    if (help?.scopeHelp && h.shared && (!help.scopeHelpFamily || help.scopeHelpFamily === h.family)) {
+      if (!help.scopeHelpText || squash(line).includes(squash(help.scopeHelpText))) return false;
+    }
+    return true;
+  });
 }
 
 /** The lines above the first section heading (after the name): the header block. */
@@ -717,7 +738,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
   // Round 11: a "Yes, I did this" answer settles only its own scope claim, never the line's other questions.
-  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes").map((a) => [squash(a.line), a]));
+  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes" && a.kind !== "title_yes").map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
     if (!answerStands(a, line, sourceText)) return undefined;
@@ -757,25 +778,25 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // never made is settled only by their own rewrite or a cut, never by an
     // answer.
     const scopeFindings: MintFinding[] = [];
-    const scopeOf = new Map<MintFinding, { family: string; helped?: string }>();
+    const scopeOf = new Map<MintFinding, { family: string; families?: string[]; helped?: string }>();
     // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
     const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
     for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
       if (inSkills || credentialSectionLines.has(line)) continue;
-      const hit = scopeNotTheirsAnswered(line, sourceText, answers);
-      if (!hit || personIntroduced(answers, line, hit.word)) continue;
+      // Round 12: ONE card per line, for every claim on it the person has not made.
+      const hits = scopeAllNotTheirsAnswered(line, sourceText, answers).filter((h) => !personIntroduced(answers, line, h.word));
+      const hit = hits[0];
+      if (!hit) continue;
       const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
-      scopeOf.set(finding, { family: hit.family, helped: helpedForm(line, hit.word) });
+      const families = Array.from(new Set(hits.map((h) => h.family)));
+      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 ? helpedForm(line, hit.word) : undefined });
       scopeFindings.push(finding);
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
     for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers)) {
       const hit = scopeNotTheirs(titleOf(line), sourceText);
-      if (hit) {
-        const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
-        scopeOf.set(finding, { family: hit.family });
-        scopeFindings.push(finding);
-      }
+      // Round 12 (SF-2): a job title is settled on its own title card, never by "Yes, I did this".
+      if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
     // A job title on the page that the person never used (round 6: settled
     // only by their own rewrite or a cut, never by an answer).
@@ -811,6 +832,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       const sc = scopeOf.get(f);
       if (sc) {
         items[items.length - 1].scopeFamily = sc.family;
+        if (sc.families && sc.families.length > 1) items[items.length - 1].scopeFamilies = sc.families;
         if (sc.helped) items[items.length - 1].helped = sc.helped;
       }
     }
