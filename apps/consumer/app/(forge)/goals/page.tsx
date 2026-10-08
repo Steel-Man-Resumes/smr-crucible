@@ -316,8 +316,8 @@ export default function GoalsPage() {
           </div>
           {makesCreativeWork === "yes" && (
             <p className="text-xs text-t-phos-dim mt-2" data-testid="forge-practice-next">
-              Good. Your shows, gigs and freelance work go in your practice record. It lives in the Refinery
-              under Creative Work, once you sign in.{" "}
+              Good. Your shows, performances and creative work go in your practice record. It lives in the
+              Refinery under Creative Work, once you sign in.{" "}
               <a href="/dashboard/creative?start=practice" target="_blank" rel="noopener" className="text-t-amber-bright underline">
                 Open it in a new tab
               </a>

@@ -3,12 +3,28 @@
 /** The work-sample list: the person's works, strongest first. Every field is what they typed. */
 
 import { useEffect, useState } from "react";
-import type { WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
+import type { CreativeKindSettings, WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
 import type { CreativeStatus } from "@crucible/core/src/creativeChecks";
 import { SAMPLES_HOW, sendJson } from "@/lib/creative";
 import { OpenItems } from "./OpenItems";
+import { FacilityChoices } from "./FacilityChoices";
+import type { CreativeCtx } from "./CreativeLaneView";
 
-export function WorkSamplesPanel({ laneId, rows, status, onSaved }: { laneId: string; rows: WorkSampleRow[]; status: CreativeStatus; onSaved: () => void }) {
+export function WorkSamplesPanel({
+  laneId,
+  ctx,
+  rows,
+  status,
+  onSettings,
+  onSaved,
+}: {
+  laneId: string;
+  ctx: CreativeCtx;
+  rows: WorkSampleRow[];
+  status: CreativeStatus;
+  onSettings: (patch: Partial<CreativeKindSettings>) => Promise<boolean>;
+  onSaved: () => void;
+}) {
   const [order, setOrder] = useState(rows);
   const [msg, setMsg] = useState("");
   useEffect(() => setOrder(rows), [rows]);
@@ -20,16 +36,22 @@ export function WorkSamplesPanel({ laneId, rows, status, onSaved }: { laneId: st
     setOrder(next.map((r, k) => ({ ...r, number: k + 1 })));
   };
 
+  const choices = <FacilityChoices entries={ctx.entries} settings={ctx.settings} onSettings={onSettings} only="works" />;
   if (!rows.length) {
     return (
-      <p className="border border-t-line bg-t-panel p-3 text-sm text-t-phos-dim" data-testid="samples-empty">
-        No works yet. On Your record, add one with &quot;A work (for your sample list)&quot;.
-      </p>
+      <div className="space-y-4">
+        {choices}
+        <p className="border border-t-line bg-t-panel p-3 text-sm text-t-phos-dim" data-testid="samples-empty">
+          No works on this list yet. On Your record, add one with &quot;A work (for your sample list)&quot;.
+        </p>
+        <OpenItems status={status} doc="work_samples" testId="samples-open-items" />
+      </div>
     );
   }
   return (
     <div className="space-y-4" data-testid="samples-panel">
       <p className="text-sm text-t-phos-dim">{SAMPLES_HOW}</p>
+      {choices}
       <ol className="space-y-2">
         {order.map((r, i) => (
           <li key={r.entryId} className="flex gap-3 border border-t-line bg-t-panel p-3" data-testid="sample-row">
@@ -59,7 +81,7 @@ export function WorkSamplesPanel({ laneId, rows, status, onSaved }: { laneId: st
           data-testid="samples-save"
           className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright"
           onClick={async () => {
-            const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "work_sample_list", order: order.map((x) => x.entryId) });
+            const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "work_sample_list", order: order.map((x) => x.entryId), rev: ctx.sampleRev });
             setMsg(r.ok ? "Order saved." : r.data.message || "That didn't save. Try again.");
             if (r.ok) onSaved();
           }}

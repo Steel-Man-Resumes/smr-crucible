@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * The statement coach (decision C3, rule CR-03). The person writes. t.ROY
- * asks questions beside the text and points out spelling. There is no button
- * anywhere that puts t.ROY's words into the statement: questions are shown,
- * never inserted; a spelling fix swaps one word the server checks; and the
- * save path refuses any run of words a model wrote.
+ * The statement coach (decision C3, rule CR-03), strict v1. The person
+ * writes. Beside the text: a fixed bank of questions and a read-back of the
+ * person's own sentences. Spelling marks come from a word list on the server
+ * (only a token that is not a word, only the one closest word), each shown in
+ * its sentence and fixed one at a time. No model sees or answers the
+ * statement, and nothing on this screen inserts text into it.
  */
 
 import { useState } from "react";
-import { COACH_QUESTIONS, applySpellingMark, marksStillInText, type SpellingMark, type StatementVersion } from "@crucible/core/src/creativeStatement";
+import { COACH_QUESTIONS, applySpellingMark, type SpellingMark, type StatementVersion } from "@crucible/core/src/creativeStatement";
 import { countChars, countWords } from "@crucible/core/src/creativeLaneShared";
 import { STATEMENT_HOW, STATEMENT_SPELLING_HOW, overLimit, sendJson } from "@/lib/creative";
 
@@ -21,10 +22,13 @@ function fmt(iso: string): string {
 export function StatementCoach({
   laneId,
   statement,
+  rev,
   onSaved,
 }: {
   laneId: string;
-  statement: { versions: StatementVersion[]; offeredMarks: SpellingMark[] };
+  statement: { versions: StatementVersion[] };
+  /** The revision this screen loaded; a save lands only on it. */
+  rev: number | null;
   onSaved: () => void;
 }) {
   const saved = statement.versions.length ? statement.versions[statement.versions.length - 1].text : "";
@@ -34,8 +38,7 @@ export function StatementCoach({
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [readBack, setReadBack] = useState<string[]>([]);
-  const [asked, setAsked] = useState<string[]>([]);
-  const [marks, setMarks] = useState<SpellingMark[]>(marksStillInText(statement.offeredMarks, saved));
+  const [marks, setMarks] = useState<SpellingMark[]>([]);
   const dirty = text !== saved;
   const chars = countChars(text);
   const over = overLimit(chars, parseInt(limit, 10) || null);
@@ -44,11 +47,16 @@ export function StatementCoach({
     setBusy(true);
     setError("");
     setMsg("");
-    const r = await sendJson<{ statement?: { offeredMarks: SpellingMark[] } }>(`/api/creative/${laneId}/docs`, "PUT", { type: "artist_statement", ...body });
+    const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", {
+      type: "artist_statement",
+      text: body.text,
+      acceptedMark: body.acceptedMark ? { word: body.acceptedMark.word, suggestion: body.acceptedMark.suggestion } : undefined,
+      rev,
+    });
     setBusy(false);
     if (r.ok) {
       setMsg(body.acceptedMark ? `Fixed "${body.acceptedMark.word}".` : "Saved. It's yours.");
-      if (r.data.statement?.offeredMarks) setMarks(marksStillInText(r.data.statement.offeredMarks, body.text));
+      if (body.acceptedMark) setMarks((ms) => ms.filter((x) => x.word !== body.acceptedMark!.word));
       onSaved();
       return true;
     }
@@ -109,17 +117,17 @@ export function StatementCoach({
               onClick={async () => {
                 setBusy(true);
                 setError("");
-                const r = await sendJson<{ readBack?: string[]; questions?: string[]; marks?: SpellingMark[] }>("/api/creative/coach", "POST", { laneId, text });
+                const r = await sendJson<{ readBack?: string[]; marks?: SpellingMark[] }>("/api/creative/coach", "POST", { laneId, text });
                 setBusy(false);
                 if (r.ok) {
                   setReadBack(r.data.readBack ?? []);
-                  setAsked(r.data.questions ?? []);
                   setMarks(r.data.marks ?? []);
-                } else setError(r.data.message || "t.ROY couldn't look right now. Try again in a moment.");
+                  if (!(r.data.marks ?? []).length) setMsg("No spelling to fix.");
+                } else setError(r.data.message || "That didn't work. Try again in a moment.");
               }}
               className="t-focus min-h-touch px-3 border border-t-line text-sm text-t-white disabled:opacity-50"
             >
-              Ask t.ROY to read it
+              Check spelling and read it back
             </button>
             <a href={`/api/creative/${laneId}/export?doc=statement&format=txt`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">
               Plain text
@@ -131,7 +139,7 @@ export function StatementCoach({
           <section className="border border-t-line bg-t-panel p-3" data-testid="statement-questions">
             <h3 className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">Questions to write from</h3>
             <ul className="mt-2 space-y-2 text-sm text-t-white">
-              {[...asked, ...readBack, ...COACH_QUESTIONS].map((q, i) => (
+              {[...readBack, ...COACH_QUESTIONS].map((q, i) => (
                 <li key={`${i}-${q}`}>{q}</li>
               ))}
             </ul>
@@ -142,7 +150,9 @@ export function StatementCoach({
               <p className="text-xs text-t-phos-dim">{dirty ? "Save your words first, then fix spelling." : STATEMENT_SPELLING_HOW}</p>
               <ul className="mt-2 space-y-2">
                 {marks.map((m) => (
-                  <li key={`${m.word}-${m.suggestion}`} className="flex items-center justify-between gap-2 text-sm" data-testid="statement-mark">
+                  <li key={`${m.word}-${m.suggestion}`} className="flex flex-col gap-1 text-sm" data-testid="statement-mark">
+                    {m.sentence && <span className="text-xs text-t-phos-dim break-words">&ldquo;{m.sentence}&rdquo;</span>}
+                    <span className="flex items-center justify-between gap-2">
                     <span className="text-t-white">
                       <s className="text-t-phos-dim">{m.word}</s> to <span className="font-semibold">{m.suggestion}</span>
                     </span>
@@ -163,6 +173,7 @@ export function StatementCoach({
                       <button type="button" className="t-focus min-h-touch px-2 text-t-phos-dim" onClick={() => setMarks(marks.filter((x) => x !== m))}>
                         Ignore
                       </button>
+                    </span>
                     </span>
                   </li>
                 ))}

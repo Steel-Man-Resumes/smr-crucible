@@ -1,10 +1,13 @@
 "use client";
 
 /**
- * The bio (decision C3): t.ROY drafts from confirmed record facts only, and
- * the person keeps or cuts each sentence. Nothing drafted is in the bio until
- * it is kept. The person can write any sentence themselves. Three lengths,
- * each with a live word and character count (spaces included).
+ * The bio (decision C3, strict v1). The draft is fixed sentences filled from
+ * the person's record, one entry per sentence; nothing is written by a model.
+ * Nothing drafted is in the bio until it is kept. The person can rewrite any
+ * sentence or add their own; the server decides which sentences are record
+ * sentences and which are the person's words (never this screen). Work that
+ * names a facility follows this lane's choices, the same ones every page uses.
+ * Three lengths, each with a live word and character count (spaces included).
  */
 
 import { useState } from "react";
@@ -12,17 +15,18 @@ import {
   BIO_LENGTHS,
   BIO_LIMITS,
   bioCounts,
-  bioText,
+  bioTextForLane,
   type BioContent,
   type BioLength,
   type BioSentence,
 } from "@crucible/core/src/creativeBio";
-import { BIO_DISCLOSURE_MODES, BIO_PRONOUNS, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
+import { BIO_PRONOUNS, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
-import { BIO_HOW, DISCLOSURE_COPY, PRONOUN_COPY, sendJson } from "@/lib/creative";
+import { BIO_HOW, PRONOUN_COPY, sendJson } from "@/lib/creative";
 import type { CreativeCtx } from "./CreativeLaneView";
 import { OpenItems } from "./OpenItems";
 import { CreativePage } from "./CreativePage";
+import { FacilityChoices } from "./FacilityChoices";
 
 const inputCls =
   "t-focus w-full min-h-touch bg-t-bg border border-t-line px-3 py-2 text-sm text-t-white focus:border-t-steel focus:outline-none";
@@ -48,14 +52,12 @@ export function BioPanel({
   const [editing, setEditing] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const s = ctx.settings;
-  const hasFacility = ctx.entries.some((e) => e.names_facility);
-  const needsDisclosure = hasFacility && !s.bioDisclosure;
   const list = bio.lengths[len];
-  const text = bioText(list);
+  const text = bioTextForLane(list, ctx.entries, s);
   const counts = bioCounts(text, len);
   const lim = BIO_LIMITS[len];
-  // Open items for the bio as it stands on screen (saved or not).
-  const live = getCreativeStatus({ entries: ctx.entries, settings: s, bio: { ...bio, disclosure: s.bioDisclosure } });
+  // Open items for the bio as it stands on screen (saved or not), with this lane's current choices.
+  const live = getCreativeStatus({ entries: ctx.entries, settings: s, bio });
   const setList = (next: BioSentence[]) => setBio((b) => ({ ...b, lengths: { ...b.lengths, [len]: next } }));
 
   return (
@@ -80,22 +82,7 @@ export function BioPanel({
         </div>
       </fieldset>
 
-      {hasFacility && (
-        <fieldset className="border border-t-line bg-t-panel p-3 space-y-2" data-testid="bio-disclosure">
-          <legend className="px-1 text-sm text-t-white">Some of your work names a facility. In your bio:</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {BIO_DISCLOSURE_MODES.map((m) => (
-              <label key={m} className={`flex gap-2 border p-2 cursor-pointer ${s.bioDisclosure === m ? "border-t-amber" : "border-t-line"}`}>
-                <input type="radio" name="bio-disclosure" value={m} className="mt-1" checked={s.bioDisclosure === m} data-testid={`bio-disclosure-${m}`} onChange={() => onSettings({ bioDisclosure: m })} />
-                <span>
-                  <span className="block text-sm font-semibold text-t-white">{DISCLOSURE_COPY[m].label}</span>
-                  <span className="block text-xs text-t-phos-dim">{DISCLOSURE_COPY[m].body}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      )}
+      <FacilityChoices entries={ctx.entries} settings={s} onSettings={onSettings} only="pages" />
 
       <div className="flex gap-1" role="tablist" aria-label="Bio length">
         {BIO_LENGTHS.map((l) => (
@@ -121,28 +108,28 @@ export function BioPanel({
           <button
             type="button"
             data-testid="bio-draft"
-            disabled={busy || !s.displayName || needsDisclosure}
+            disabled={busy || !s.displayName}
             onClick={async () => {
               setBusy(true);
               setMsg("");
-              const r = await sendJson<{ sentences?: BioSentence[]; dropped?: number }>("/api/creative/bio-draft", "POST", { laneId, length: len });
+              const r = await sendJson<{ sentences?: BioSentence[] }>("/api/creative/bio-draft", "POST", { laneId, length: len });
               setBusy(false);
               if (r.ok && Array.isArray(r.data.sentences)) {
-                const kept = list.filter((x) => x.approved || x.origin === "person");
-                setList([...kept, ...r.data.sentences]);
+                const keep = list.filter((x) => x.approved || x.origin === "person_written");
+                const have = new Set(keep.map((x) => x.text));
+                setList([...keep, ...r.data.sentences.filter((x) => !have.has(x.text))]);
                 setMsg(
                   r.data.sentences.length
-                    ? `${r.data.sentences.length} drafted from your record. Keep or cut each one.`
-                    : "Not enough in your record to draft from yet. Add a few entries first."
+                    ? `${r.data.sentences.length} sentences built from your record. Keep or cut each one.`
+                    : "Not enough in your record to build from yet. Add a few entries first."
                 );
-              } else setMsg(r.data.message || "t.ROY couldn't draft right now. Try again in a moment.");
+              } else setMsg(r.data.message || "That didn't work. Try again in a moment.");
             }}
             className="t-focus min-h-touch px-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:opacity-50"
           >
-            {busy ? "Drafting..." : "Draft with t.ROY"}
+            {busy ? "Building..." : "Build a draft from my record"}
           </button>
         </div>
-        {needsDisclosure && <p className="text-xs text-t-phos-dim">Pick how your bio handles that work first.</p>}
         <p aria-live="polite" className="text-sm text-t-phos" data-testid="bio-msg">{msg}</p>
 
         <ol className="space-y-2" data-testid="bio-sentences">
@@ -150,14 +137,16 @@ export function BioPanel({
             <li key={x.id} className={`border p-2 ${x.approved ? "border-t-steel" : "border-dashed border-t-line"}`} data-testid="bio-sentence" data-approved={x.approved ? "yes" : "no"}>
               {editing === x.id ? (
                 <div className="space-y-2">
-                  <textarea className={inputCls} rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} aria-label="Your sentence" />
+                  <textarea className={inputCls} rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} aria-label="Your sentence" data-testid="bio-edit-text" />
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      data-testid="bio-edit-save"
                       className="t-focus min-h-touch px-3 border border-t-line text-sm text-t-white"
                       onClick={() => {
                         const t = editText.replace(/\s+/g, " ").trim();
-                        setList(list.map((y): BioSentence => (y.id === x.id ? { ...y, text: t, origin: "person", approved: !!t } : y)).filter((y) => y.text));
+                        // Shown as the person's words; the server decides for itself on save.
+                        setList(list.map((y): BioSentence => (y.id === x.id ? { ...y, text: t, origin: t === y.text ? y.origin : "person_written", approved: !!t } : y)).filter((y) => y.text));
                         setEditing(null);
                       }}
                     >
@@ -171,7 +160,9 @@ export function BioPanel({
               ) : (
                 <>
                   <p className="text-sm text-t-white">{x.text}</p>
-                  <p className="text-xs text-t-phos-dim">{x.origin === "person" ? "Your words." : x.approved ? "Drafted by t.ROY. You kept it." : "Drafted by t.ROY from your record. Not in your bio yet."}</p>
+                  <p className="text-xs text-t-phos-dim">
+                    {x.origin === "person_written" ? "Your words." : x.approved ? "Built from your record. You kept it." : "Built from your record. Not in your bio yet."}
+                  </p>
                   <div className="mt-1 flex flex-wrap gap-3 text-sm">
                     {!x.approved && (
                       <button type="button" data-testid="bio-keep" className="t-focus min-h-touch text-t-amber-bright underline" onClick={() => setList(list.map((y) => (y.id === x.id ? { ...y, approved: true } : y)))}>
@@ -181,7 +172,7 @@ export function BioPanel({
                     <button type="button" data-testid="bio-cut" className="t-focus min-h-touch text-t-phos-dim underline" onClick={() => setList(list.filter((y) => y.id !== x.id))}>
                       Cut
                     </button>
-                    <button type="button" className="t-focus min-h-touch text-t-steel underline" onClick={() => { setEditing(x.id); setEditText(x.text); }}>
+                    <button type="button" data-testid="bio-edit" className="t-focus min-h-touch text-t-steel underline" onClick={() => { setEditing(x.id); setEditText(x.text); }}>
                       Say it my way
                     </button>
                   </div>
@@ -201,7 +192,7 @@ export function BioPanel({
           disabled={!own.trim()}
           data-testid="bio-own-add"
           onClick={() => {
-            setList([...list, { id: `p${Date.now().toString(36)}${localId++}`, text: own.replace(/\s+/g, " ").trim(), origin: "person", approved: true }]);
+            setList([...list, { id: `p${Date.now().toString(36)}${localId++}`, text: own.replace(/\s+/g, " ").trim(), origin: "person_written", approved: true }]);
             setOwn("");
           }}
         >
@@ -214,7 +205,7 @@ export function BioPanel({
           type="button"
           data-testid="bio-save"
           onClick={async () => {
-            const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "artist_bio", bio });
+            const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "artist_bio", bio, rev: ctx.bioRev });
             setMsg(r.ok ? "Bio saved." : r.data.message || "That didn't save. Try again.");
             if (r.ok) onSaved();
           }}
@@ -228,17 +219,17 @@ export function BioPanel({
 
       <OpenItems status={live} doc="bio" testId="bio-open-items" />
 
-      {BIO_LENGTHS.some((l) => bioText(bio.lengths[l])) && (
+      {BIO_LENGTHS.some((l) => bioTextForLane(bio.lengths[l], ctx.entries, s)) && (
         <CreativePage
           request={{
             doc: "bio",
             card: {
               name: s.displayName ?? "",
               discipline: s.discipline ?? "",
-              bios: BIO_LENGTHS.map((l) => ({ label: `${BIO_LIMITS[l].label} bio`, text: bioText(bio.lengths[l]) })),
+              bios: BIO_LENGTHS.map((l) => ({ label: `${BIO_LIMITS[l].label} bio`, text: bioTextForLane(bio.lengths[l], ctx.entries, s) })),
             },
           }}
-          fallbackText={BIO_LENGTHS.map((l) => bioText(bio.lengths[l])).filter(Boolean).join("\n\n")}
+          fallbackText={BIO_LENGTHS.map((l) => bioTextForLane(bio.lengths[l], ctx.entries, s)).filter(Boolean).join("\n\n")}
         />
       )}
     </div>

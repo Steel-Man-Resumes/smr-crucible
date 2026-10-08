@@ -5,7 +5,7 @@
  */
 
 import type { ProofMark, TitleMode } from "@crucible/core/src/practiceRecordShared";
-import type { BioDisclosureMode, BioPronoun } from "@crucible/core/src/creativeLaneShared";
+import type { BioPronoun } from "@crucible/core/src/creativeLaneShared";
 
 export const CREATIVE_TABS = [
   { key: "record", label: "Your record" },
@@ -32,18 +32,12 @@ export const PROOF_COPY: Record<ProofMark, { label: string; body: string }> = {
 
 export const TITLE_MODE_COPY: Record<TitleMode, { label: string; body: string }> = {
   true_title: { label: "Show the real title", body: "Exactly as it was. Some people want it seen." },
-  venue_only: { label: "Just the venue", body: "\"Group exhibition, the venue, the city.\" The title stays off this page." },
-  leave_out: { label: "Leave it off", body: "Not on this lane. It stays in your record." },
+  venue_only: { label: "Just the venue", body: "\"Group exhibition, the venue, the city.\" The title stays off every page on this lane." },
+  leave_out: { label: "Leave it off", body: "Not on any page in this lane. It stays in your record." },
 };
 
 export const TITLE_MODE_WHY =
   "This one names a facility. You pick how it shows on this lane. We never rename it or soften it.";
-
-export const DISCLOSURE_COPY: Record<BioDisclosureMode, { label: string; body: string }> = {
-  include: { label: "Include it", body: "t.ROY can draft from those entries like any other." },
-  context: { label: "In my own words", body: "t.ROY leaves them out of the draft. You write that sentence yourself." },
-  leave_out: { label: "Leave it out", body: "Your bio covers everything else." },
-};
 
 export const PRONOUN_COPY: Record<BioPronoun, string> = {
   name: "Use my name",
@@ -53,10 +47,10 @@ export const PRONOUN_COPY: Record<BioPronoun, string> = {
 };
 
 export const BIO_HOW =
-  "t.ROY drafts from your record only. Nothing gets in until you keep it. Cut anything that doesn't sound like you, or write your own.";
+  "t.ROY builds sentences from your record, one entry at a time. Nothing gets in until you keep it. Rewrite any of them, or write your own.";
 
 export const STATEMENT_HOW =
-  "This one is yours. t.ROY asks questions and points out spelling. It never writes a word of it.";
+  "This one is yours. t.ROY asks questions and points out spelling. It never writes a word of it, and nothing you write here goes to an AI.";
 
 export const STATEMENT_SPELLING_HOW = "Tap Fix to change that one word. Nothing else moves.";
 
@@ -65,6 +59,9 @@ export const SAMPLES_HOW =
 
 export const PLAIN_TEXT_HOW =
   "For application boxes. The count includes spaces, the way most forms count.";
+
+export const PLAIN_TEXT_DRAFT =
+  "Still a draft. Something on this one needs your answer first. You can look at the text, but answer the open items before you paste it anywhere.";
 
 export const PAGE_CAP_COPY = {
   label: "This call allows up to 4 pages",

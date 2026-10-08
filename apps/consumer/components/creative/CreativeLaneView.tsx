@@ -12,7 +12,7 @@ import type { CareerLane } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry } from "@crucible/core/src/practiceRecordShared";
 import { buildArtistResumeModel, buildWorkSampleList, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import type { BioContent } from "@crucible/core/src/creativeBio";
-import type { SpellingMark, StatementVersion } from "@crucible/core/src/creativeStatement";
+import type { StatementVersion } from "@crucible/core/src/creativeStatement";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
 import type { Hurdle, HelpSource, PairPlan } from "@crucible/core/src/twoPathPlan";
 import { CREATIVE_ERRORS, CREATIVE_TABS, TROY_CREATIVE_LINE, sendJson, type CreativeTab } from "@/lib/creative";
@@ -30,8 +30,11 @@ export interface CreativeCtx {
   entries: PracticeEntry[];
   settings: CreativeKindSettings;
   bio: BioContent;
-  statement: { versions: StatementVersion[]; offeredMarks: SpellingMark[] };
+  bioRev: number | null;
+  statement: { versions: StatementVersion[] };
+  statementRev: number | null;
   sampleOrder: string[];
+  sampleRev: number | null;
   plan: null | {
     plan: PairPlan;
     goalFromLane: string | null;
@@ -93,7 +96,7 @@ export function CreativeLaneView({
   );
 
   const model = useMemo(() => (ctx ? buildArtistResumeModel(ctx.entries, ctx.settings) : null), [ctx]);
-  const samples = useMemo(() => (ctx ? buildWorkSampleList(ctx.entries, ctx.sampleOrder) : []), [ctx]);
+  const samples = useMemo(() => (ctx ? buildWorkSampleList(ctx.entries, ctx.sampleOrder, ctx.settings) : []), [ctx]);
   const status = useMemo(
     () =>
       ctx && model
@@ -102,7 +105,7 @@ export function CreativeLaneView({
             settings: ctx.settings,
             artistResume: { model, pages },
             bio: ctx.bio,
-            statement: { versions: ctx.statement.versions, offeredMarks: ctx.statement.offeredMarks, modelPrints: [] },
+            statement: { versions: ctx.statement.versions, modelPrints: [] },
             workSamples: samples,
           })
         : null,
@@ -164,9 +167,11 @@ export function CreativeLaneView({
           />
         )}
         {tab === "bio" && <BioPanel laneId={laneId} ctx={ctx} onSettings={saveSettings} onSaved={load} />}
-        {tab === "statement" && <StatementCoach laneId={laneId} statement={ctx.statement} onSaved={load} />}
-        {tab === "samples" && <WorkSamplesPanel laneId={laneId} rows={samples} status={status} onSaved={load} />}
-        {tab === "text" && <PlainTextPanel ctx={ctx} model={model} samples={samples} />}
+        {tab === "statement" && <StatementCoach laneId={laneId} statement={ctx.statement} rev={ctx.statementRev} onSaved={load} />}
+        {tab === "samples" && (
+          <WorkSamplesPanel laneId={laneId} ctx={ctx} rows={samples} status={status} onSettings={saveSettings} onSaved={load} />
+        )}
+        {tab === "text" && <PlainTextPanel ctx={ctx} model={model} samples={samples} status={status} />}
         {tab === "plan" && (
           <TwoPathsPanel
             key={ctx.partner?.id ?? "unpaired"}
