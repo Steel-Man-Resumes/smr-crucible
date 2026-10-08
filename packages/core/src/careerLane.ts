@@ -31,7 +31,7 @@ import {
 export * from "./careerLaneShared";
 
 const LANE_COLUMNS = `id, user_id, name, target_role, format, hybrid_uneven_history, hybrid_field_change,
-  length_pref, created_at, updated_at, archived_at, is_first, kind, path, pair_lane_id, kind_settings, pair_plan`;
+  length_pref, created_at, updated_at, archived_at, is_first, kind, path, pair_lane_id, kind_settings, pair_plan, cv_type`;
 
 export const LANE_LIST_SQL = `SELECT ${LANE_COLUMNS} FROM career_lane
   WHERE user_id = $1 AND ($2::boolean OR archived_at IS NULL)
@@ -58,8 +58,8 @@ export const LANE_OF_NEWEST_RESUME_SQL = `SELECT ra.lane_id FROM refinery_artifa
   LIMIT 1`;
 
 export const LANE_INSERT_SQL = `INSERT INTO career_lane
-  (user_id, name, target_role, format, hybrid_uneven_history, hybrid_field_change, length_pref, kind, path)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  (user_id, name, target_role, format, hybrid_uneven_history, hybrid_field_change, length_pref, kind, path, cv_type)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   RETURNING ${LANE_COLUMNS}`;
 
 /**
@@ -72,6 +72,7 @@ export const LANE_UPDATE_SQL = `UPDATE career_lane
   SET name = $3, target_role = $4, format = $5, hybrid_uneven_history = $6,
       hybrid_field_change = $7, length_pref = $8,
       path = CASE WHEN pair_lane_id IS NULL THEN $9::text ELSE path END,
+      cv_type = $10::text,
       updated_at = now()
   WHERE id = $1 AND user_id = $2
   RETURNING ${LANE_COLUMNS}`;
@@ -200,7 +201,7 @@ export async function createLane(userId: string, input: LaneSettingsInput): Prom
   const v = settings.value;
   try {
     const rows = await queryAsUser<CareerLane>(userId, LANE_INSERT_SQL, [
-      userId, v.name, v.target_role, v.format, v.hybrid_uneven_history, v.hybrid_field_change, v.length_pref, v.kind, v.path,
+      userId, v.name, v.target_role, v.format, v.hybrid_uneven_history, v.hybrid_field_change, v.length_pref, v.kind, v.path, v.cv_type,
     ]);
     return rows[0] ? { status: "ok", lane: rows[0] } : { status: "not_found" };
   } catch (err) {
@@ -225,7 +226,7 @@ export async function updateLane(
   }
   try {
     const rows = await queryAsUser<CareerLane>(userId, LANE_UPDATE_SQL, [
-      laneId, userId, v.name, v.target_role, v.format, v.hybrid_uneven_history, v.hybrid_field_change, v.length_pref, v.path,
+      laneId, userId, v.name, v.target_role, v.format, v.hybrid_uneven_history, v.hybrid_field_change, v.length_pref, v.path, v.cv_type,
     ]);
     return rows[0] ? { status: "ok", lane: rows[0] } : { status: "not_found" };
   } catch (err) {

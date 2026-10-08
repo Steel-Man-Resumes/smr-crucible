@@ -29,6 +29,15 @@ export const PRACTICE_SECTIONS = [
   "award",
   "education",
   "work",
+  // CV record kinds (076)
+  "appointment",
+  "research",
+  "presentation",
+  "clinical",
+  "license",
+  "service",
+  "membership",
+  "reference",
 ] as const;
 export type PracticeSection = (typeof PRACTICE_SECTIONS)[number];
 
@@ -45,6 +54,11 @@ export const PUBLICATION_STATUSES = ["published", "in_press", "accepted", "submi
 export const AWARD_KINDS = ["award", "grant", "fellowship"] as const;
 export const EDUCATION_STATUSES = ["conferred", "completed", "in_progress"] as const;
 export const HOLDER_KINDS = ["public", "private"] as const;
+export const PRESENTATION_KINDS = ["talk", "poster", "panel", "workshop"] as const;
+/** D4: the person picks what KIND of credential it is. Never inferred. */
+export const CREDENTIAL_KINDS = ["license", "certification", "certificate", "card", "training"] as const;
+/** Where a credential stands, as held. Never upgraded on the page. */
+export const CREDENTIAL_STATUSES = ["active", "inactive", "expired", "in_progress", "eligible"] as const;
 
 export const MAX_PRACTICE_ENTRIES = 300;
 export const PRACTICE_WRITES_PER_DAY = 400;
@@ -98,6 +112,17 @@ export interface PracticeDetails {
   duration?: string;
   description?: string;
   fileName?: string;
+  /** publication: the authors as the person lists them ("R. Example and J. Sample"). */
+  authors?: string;
+  /** presentation: talk | poster | panel | workshop (kind), invited only when the person says so. */
+  invited?: boolean;
+  /** clinical: hours, the person's own number (never supplied). */
+  hours?: string;
+  /** license: the KIND the person picked (D4) and its status as held. */
+  credentialKind?: string;
+  credentialStatus?: string;
+  /** reference: how to reach them, as the reference agreed. */
+  contact?: string;
   /**
    * Set by the server only, never from a request: earlier titles and venues
    * of an entry that names a facility. A lane that keeps the entry off keeps
@@ -140,6 +165,14 @@ export const SECTION_COPY: Record<
   award: { label: "Award, grant or fellowship", title: "Name of the award", venue: "Who gave it", example: "Emerging Artist Grant" },
   education: { label: "Education or training", title: "Degree or study, exactly as on the paper", venue: "School (the one that gave it)", example: "Certificate in Printmaking", hasRange: true },
   work: { label: "A work (for your sample list)", title: "Title of the work", venue: "", example: "Shift Change" },
+  appointment: { label: "Job or appointment (for a CV)", title: "Your title, exactly as it was", venue: "Where (school, clinic, employer)", example: "Research Assistant", hasRange: true },
+  research: { label: "Research experience", title: "Project or role", venue: "Lab, team or organization", example: "Reentry Housing Study", hasRange: true },
+  presentation: { label: "Presentation or talk", title: "Title of the talk or poster", venue: "Conference or event", example: "Learning Behind the Wall" },
+  clinical: { label: "Clinical rotation or placement", title: "Your role, exactly as it was", venue: "Site", example: "Nursing Student Rotation", hasRange: true },
+  license: { label: "License or certification", title: "Name, exactly as on the card or license", venue: "Who issued it", example: "Certified Peer Recovery Specialist" },
+  service: { label: "Service", title: "Your role", venue: "Organization or committee", example: "Student Advisory Board Member", hasRange: true },
+  membership: { label: "Membership", title: "Organization", venue: "", example: "State Arts Educators Association", hasRange: true },
+  reference: { label: "Reference", title: "Their name", venue: "Where they work", example: "J. Sample" },
 };
 
 export function isPracticeSection(v: unknown): v is PracticeSection {
@@ -214,6 +247,7 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
     case "publication":
       put("status", oneOf(PUBLICATION_STATUSES, d.status));
       put("submittedWhen", cleanLine(d.submittedWhen, 40));
+      put("authors", cleanLine(d.authors, NOTE_MAX));
       break;
     case "press":
       put("author", cleanLine(d.author, VENUE_MAX));
@@ -240,6 +274,30 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
       put("degree", bool(d.degree));
       put("status", oneOf(EDUCATION_STATUSES, d.status));
       put("expected", cleanLine(d.expected, 40));
+      break;
+    case "appointment":
+      break;
+    case "research":
+      put("role", cleanLine(d.role, NOTE_MAX));
+      break;
+    case "presentation":
+      put("kind", oneOf(PRESENTATION_KINDS, d.kind));
+      put("invited", bool(d.invited));
+      break;
+    case "clinical":
+      put("hours", cleanLine(d.hours, 20));
+      break;
+    case "license":
+      put("credentialKind", oneOf(CREDENTIAL_KINDS, d.credentialKind));
+      put("credentialStatus", oneOf(CREDENTIAL_STATUSES, d.credentialStatus));
+      break;
+    case "service":
+    case "membership":
+      break;
+    case "reference":
+      put("role", cleanLine(d.role, NOTE_MAX));
+      put("contact", cleanLine(d.contact, 200));
+      put("consent", bool(d.consent));
       break;
     case "work":
       put("medium", cleanLine(d.medium, NOTE_MAX));
@@ -329,7 +387,7 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
   const details = input.details === undefined && current ? current.details : cleanDetails(section, input.details);
 
   // The facts a page needs to say this entry truthfully, asked for up front.
-  if ((section === "exhibition" || section === "performance") && !details.kind) return { ok: false, error: "kind_required" };
+  if ((section === "exhibition" || section === "performance" || section === "presentation") && !details.kind) return { ok: false, error: "kind_required" };
   if (section === "publication" && !details.status) return { ok: false, error: "status_required" };
   if (section === "publication" && details.status === "submitted" && !details.submittedWhen) {
     return { ok: false, error: "submitted_needs_when" };
@@ -371,7 +429,7 @@ export const PRACTICE_ERROR_COPY: Record<PracticeEntryError | "too_many" | "too_
   year_required: "What year was it? Four digits, like 2021.",
   bad_end_year: "The end year has to be the same as the start year or later.",
   bad_proof: "Pick checked, remembered, or still finding the proof.",
-  kind_required: "Was it a solo show, a two-person show, or a group show? For a performance: a performance, a screening, or a reading?",
+  kind_required: "What kind was it? A show: solo, two-person or group. A performance: performance, screening or reading. A talk: talk, poster, panel or workshop.",
   status_required: "Is it published, in press, accepted, or submitted?",
   submitted_needs_when: "When did you submit it? A month and year is enough.",
   too_many: "That's a lot of entries. Remove a few you don't need before adding more.",

@@ -60,7 +60,7 @@ export type ArtifactType =
  * first. The generic content write below refuses them, so no other path can
  * put text into a statement.
  */
-export const CREATIVE_ARTIFACT_TYPES = ["artist_resume", "artist_bio", "artist_statement", "work_sample_list"] as const;
+export const CREATIVE_ARTIFACT_TYPES = ["artist_resume", "artist_bio", "artist_statement", "work_sample_list", "cv"] as const;
 export type CreativeArtifactType = (typeof CREATIVE_ARTIFACT_TYPES)[number];
 export const CREATIVE_TYPES_SQL = CREATIVE_ARTIFACT_TYPES.map((t) => `'${t}'`).join(", ");
 

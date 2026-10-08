@@ -25,8 +25,16 @@ export type LaneLength = (typeof LANE_LENGTHS)[number];
  * and a work-sample list, for one practice. A CV and a performer page come
  * later, each as one more value here and in career_lane_kind_check.
  */
-export const LANE_KINDS = ["resume", "creative"] as const;
+export const LANE_KINDS = ["resume", "creative", "cv"] as const;
 export type LaneKind = (typeof LANE_KINDS)[number];
+
+/** CV sub-types (076): they set the section order and the length rule. */
+export const CV_TYPES = ["academic", "teaching", "clinical", "international"] as const;
+export type CvType = (typeof CV_TYPES)[number];
+
+export function isCvType(v: unknown): v is CvType {
+  return typeof v === "string" && (CV_TYPES as readonly string[]).includes(v);
+}
 
 /** The two-path plan: a realistic job now, and the dream. Null for everyone else. */
 export const LANE_PATHS = ["realistic", "dream"] as const;
@@ -69,6 +77,8 @@ export interface CareerLane {
   path?: LanePath | null;
   /** The other lane of a realistic/dream pair. */
   pair_lane_id?: string | null;
+  /** 076: the CV sub-type, on a CV lane only. */
+  cv_type?: CvType | null;
   /** Per-lane choices for a non-resume kind (see creativeLaneShared). Never facts. */
   kind_settings?: Record<string, unknown>;
   /** The pair's private plan card. Dream lane only. */
@@ -168,6 +178,8 @@ export interface LaneSettingsInput {
   kind?: unknown;
   /** "realistic", "dream", or null to clear. */
   path?: unknown;
+  /** CV lanes: academic | teaching | clinical | international. */
+  cvType?: unknown;
 }
 
 /** The cleaned settings, as columns. */
@@ -180,6 +192,7 @@ export interface LaneSettings {
   length_pref: LaneLength;
   kind: LaneKind;
   path: LanePath | null;
+  cv_type: CvType | null;
 }
 
 export type LaneSettingsError =
@@ -189,7 +202,8 @@ export type LaneSettingsError =
   | "hybrid_needs_both"
   | "bad_kind"
   | "kind_is_fixed"
-  | "bad_path";
+  | "bad_path"
+  | "bad_cv_type";
 
 export type LaneSettingsResult =
   | { ok: true; value: LaneSettings }
@@ -204,6 +218,7 @@ const LANE_DEFAULTS: LaneSettings = {
   length_pref: "auto",
   kind: "resume",
   path: null,
+  cv_type: null,
 };
 
 /**
@@ -215,10 +230,16 @@ const LANE_DEFAULTS: LaneSettings = {
  */
 export function resolveLaneSettings(
   input: LaneSettingsInput,
-  current?: (Omit<LaneSettings, "kind" | "path"> & { kind?: LaneKind; path?: LanePath | null }) | null
+  current?: (Omit<LaneSettings, "kind" | "path" | "cv_type"> & { kind?: LaneKind; path?: LanePath | null; cv_type?: CvType | null }) | null
 ): LaneSettingsResult {
   const base: LaneSettings = current
-    ? { ...LANE_DEFAULTS, ...current, kind: laneKindOf(current), path: isLanePath(current.path) ? current.path : null }
+    ? {
+        ...LANE_DEFAULTS,
+        ...current,
+        kind: laneKindOf(current),
+        path: isLanePath(current.path) ? current.path : null,
+        cv_type: isCvType(current.cv_type) ? current.cv_type : null,
+      }
     : { ...LANE_DEFAULTS };
   const next: LaneSettings = { ...base };
 
@@ -250,6 +271,13 @@ export function resolveLaneSettings(
   if (input.hybridUnevenHistory !== undefined) next.hybrid_uneven_history = input.hybridUnevenHistory === true;
   if (input.hybridFieldChange !== undefined) next.hybrid_field_change = input.hybridFieldChange === true;
 
+  // A CV lane always has a sub-type (academic by default); no other lane has one.
+  if (input.cvType !== undefined) {
+    if (!isCvType(input.cvType)) return { ok: false, error: "bad_cv_type" };
+    next.cv_type = input.cvType;
+  }
+  if (next.kind === "cv" && !next.cv_type) next.cv_type = "academic";
+  if (next.kind !== "cv") next.cv_type = null;
   // Format and length are resume settings; a creative lane keeps the dated default.
   if (next.kind !== "resume" && next.format !== "chronological") return { ok: false, error: "bad_format" };
   if (next.format === "hybrid" && !hybridAllowed(next.hybrid_uneven_history, next.hybrid_field_change)) {

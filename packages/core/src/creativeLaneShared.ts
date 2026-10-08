@@ -50,6 +50,10 @@ export interface CreativeKindSettings {
   /** null/absent: every entry. A list: only these ("Selected" headings). */
   selection?: string[] | null;
   bioPronoun?: BioPronoun;
+  /** CV lanes: research or teaching interests, in the person's own words. */
+  interests?: string;
+  /** CV lanes: languages and skills, in the person's own words. */
+  languages?: string;
   /** Revision of these settings; every save must be based on the current one. */
   rev?: number;
 }
@@ -103,6 +107,8 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   str("email", 160);
   str("phone", 40);
   str("website", 200);
+  str("interests", 600);
+  str("languages", 300);
   if (v("callAllowsMore") === true) out.callAllowsMore = true;
   const modes = cleanTitleModes(cur.titleModes);
   if (Object.keys(modes).length) out.titleModes = modes;
@@ -229,6 +235,22 @@ export function venueOnlyLabel(e: PracticeEntry): string {
       return "Study";
     case "work":
       return "Work";
+    case "appointment":
+      return "Position";
+    case "research":
+      return "Research";
+    case "presentation":
+      return "Presentation";
+    case "clinical":
+      return "Clinical placement";
+    case "license":
+      return "Credential";
+    case "service":
+      return "Service";
+    case "membership":
+      return "Membership";
+    case "reference":
+      return "Reference";
   }
 }
 

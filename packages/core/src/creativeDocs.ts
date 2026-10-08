@@ -32,7 +32,7 @@ export const CREATIVE_DOC_GET_SQL = `SELECT ra.* FROM refinery_artifact ra
 /** Every creative document in a lane, newest per type first. */
 export const CREATIVE_DOCS_IN_LANE_SQL = `SELECT DISTINCT ON (ra.artifact_type) ra.* FROM refinery_artifact ra
   WHERE ra.user_id = $1 AND ra.lane_id = $2
-    AND ra.artifact_type IN ('artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list')
+    AND ra.artifact_type IN ('artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list', 'cv')
   ORDER BY ra.artifact_type, ra.updated_at DESC, ra.created_at DESC`;
 
 /** Content write for a creative document. Only this module sends it. */
