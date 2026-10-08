@@ -47,7 +47,7 @@ PROFESSIONAL EXPERIENCE
 LINE COOK | Harbor Street Diner | 2019 - 2023
 - Ran the grill on the breakfast line.
 - Spearheaded the kitchen sanitation program.
-- Mentored incoming culinary staff on equipment.
+- Kept the walk-in stocked for the dinner crowd.
 
 CORE COMPETENCIES
 Grill, Breakfast line, Vegetable prep, Kitchen closing`;

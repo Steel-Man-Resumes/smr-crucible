@@ -39,8 +39,8 @@ export type GroupHandler<R = void> = (group: LineGroup, text: string) => R;
 export interface CardActions {
   onKeepTerm: (term: string) => void;
   onCutTerm: (term: string) => void;
-  /** Returns false when the details are not enough to keep it. */
-  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string) => boolean;
+  /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
+  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string) => "ok" | "when" | "unchanged";
   onCutCredential: (group: LineGroup) => void;
 }
 
@@ -135,8 +135,13 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             <button
               onClick={() => {
                 if (!type) return setNotice("Pick what kind it is.");
-                if (!actions.onConfirmCredential(group, type, when)) {
-                  setNotice("Add the year you got it, or say if it's current, expired or in progress.");
+                const result = actions.onConfirmCredential(group, type, when);
+                if (result === "when") {
+                  setNotice("Add the year you got it, or say if it's current, expired, in progress or completed.");
+                  return;
+                }
+                if (result === "unchanged") {
+                  setNotice("That didn't change the line. Cut it, or change it on your resume.");
                   return;
                 }
                 setNotice("");

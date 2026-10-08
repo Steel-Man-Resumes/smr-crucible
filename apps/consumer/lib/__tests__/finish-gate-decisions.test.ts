@@ -61,7 +61,8 @@ test("D3: a kept term counts as the person's words; a cut term leaves the page",
   const kept = view(SKILLS, { keptTerms: ["Food safety", "Inventory control"] });
   const card = kept.groups.find((g) => g.target === "skillset");
   assert.deepEqual(card?.terms, ["Customer service"]);
-  assert.match(kept.source, /Food safety/);
+  // Round 3: a kept term settles only its own item; it never joins the person's words.
+  assert.doesNotMatch(kept.source, /Food safety/);
   const cut = cutTerm(SKILLS, "Customer service");
   assert.doesNotMatch(cut, /Customer service/);
   const done = view(cut, { keptTerms: ["Food safety", "Inventory control"] });
@@ -132,14 +133,16 @@ test("D4: the writer's name alone never counts; a stored confirmation without a 
   assert.equal(confirmedWords([], [{ name: "ServSafe", type: "card", when: "yes", text: "ServSafe card" }]), "");
 });
 
-test("D4: 'No, take it off' removes it; a skills-term credential is confirmed in place", () => {
+test("D4: 'No, take it off' removes it; a skills-term credential moves to CERTIFICATIONS when confirmed", () => {
   assert.doesNotMatch(cutCredential(CRED, "- ServSafe Food Handler", false, "ServSafe Food Handler"), /ServSafe/);
   const skills = `${HEAD}\n\nSKILLS\nGrill, Forklift Certified, Breakfast line`;
   const v = view(skills);
   const card = v.groups.find((g) => g.credentialName);
   assert.ok(card && card.target === "skill" && card.line === "Forklift Certified", JSON.stringify(v.groups.map((g) => [g.target, g.line])));
+  // Round 3: a credential leaves the skills list and is listed under CERTIFICATIONS as typed.
   const r = confirmCredential(skills, "Forklift Certified", true, "Forklift Certified", "certification", "current")!;
-  assert.match(r.text, /Grill, Forklift certification, current, Breakfast line/);
+  assert.match(r.text, /^Grill, Breakfast line$/m);
+  assert.match(r.text, /CERTIFICATIONS\n- Forklift certification, current$/);
   assert.doesNotMatch(cutCredential(skills, "Forklift Certified", true, "Forklift Certified"), /Forklift/);
 });
 

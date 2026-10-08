@@ -12,7 +12,10 @@ import * as numberTruth from "../number-truth";
 test("D2: prompts name what to count for the line's work, with no digit or range", () => {
   const trucks = countPromptsFor("Loaded trucks at the dock", "Warehouse associate");
   assert.ok(trucks.includes("trucks loaded on a normal day"), JSON.stringify(trucks));
-  assert.ok(countPromptsFor("Trained new hires on the line").includes("people on your crew"));
+  assert.ok(countPromptsFor("Worked on a team of cooks").includes("people you worked alongside on your crew"));
+  assert.ok(!countPromptsFor("Worked on a team of cooks").includes("new people you trained"), "training is offered only when the line says it");
+  assert.ok(countPromptsFor("Trained new hires on the line").includes("new people you trained"));
+  for (const line of ["Supervised a team", "Worked on a crew"]) assert.ok(!countPromptsFor(line).includes("people on your crew"));
   for (const line of ["Loaded trucks", "Ran the grill", "Helped residents with meals", "Welded steel", "Answered calls", "", "Did things"]) {
     const ps = countPromptsFor(line, "");
     assert.ok(ps.length >= 1);

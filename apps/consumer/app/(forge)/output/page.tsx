@@ -51,7 +51,8 @@ import {
   type LineGroup,
   type WrittenDocs,
   type CredentialConfirm,
-  confirmCredential,
+  applyConfirmation,
+  isCredentialWhen,
   cutCredential,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
@@ -359,13 +360,13 @@ export default function OutputPage() {
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
     },
     onConfirmCredential: (group, type, when) => {
-      const isLetter = group.target === "letter";
-      const r = confirmCredential(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line, type, when);
-      if (!r) return false;
-      if (isLetter) setCoverLetterText(r.text);
-      else setResumeText(r.text);
+      if (!isCredentialWhen(when)) return "when";
+      const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when);
+      if (!r) return "unchanged";
+      setResumeText(r.resume);
+      setCoverLetterText(r.letter);
       setConfirmedCredentials((c) => [...c.filter((x) => x.name.toLowerCase() !== r.confirm.name.toLowerCase()), r.confirm]);
-      return true;
+      return "ok";
     },
     onCutCredential: (group) => {
       const isLetter = group.target === "letter";

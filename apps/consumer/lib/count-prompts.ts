@@ -14,7 +14,10 @@ interface CountRule {
 
 const RULES: CountRule[] = [
   { match: /\b(?:truck|trailer|load|unload|dock|pallet|freight|shipment)/i, prompts: ["trucks loaded on a normal day", "pallets moved in a shift"] },
-  { match: /\b(?:crew|team|supervis|lead|train|mentor|staff|new hire|employee)/i, prompts: ["people on your crew", "new people you trained"] },
+  // "On the crew with you", never "your crew": a count must not read as a crew they ran.
+  { match: /\b(?:crew|team|staff|employee|coworker)/i, prompts: ["people you worked alongside on your crew"] },
+  // Only when the line already says they trained, showed or taught someone.
+  { match: /\b(?:train|taught|teach|show|showed|mentor)/i, prompts: ["new people you trained"] },
   { match: /\b(?:order|pick|pack|scan|inventory|stock|shelf|shelves)/i, prompts: ["orders picked in a shift", "aisles or shelves you kept stocked"] },
   { match: /\b(?:customer|table|guest|served|serve|cashier|register|plate|meal|breakfast|lunch|dinner|grill|cook|kitchen)/i, prompts: ["customers or tables on a busy shift", "plates or orders on a rush"] },
   { match: /\b(?:patient|resident|client|care|aide|nurs)/i, prompts: ["residents or patients you cared for in a shift"] },
