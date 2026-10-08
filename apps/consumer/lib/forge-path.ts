@@ -61,7 +61,8 @@ export type QuestionId =
   | "schedule"
   | "environment"
   | "commute"
-  | "location";
+  | "location"
+  | "practice";
 
 /** The challengeNarratives key the licenses-and-training prompt writes to. */
 export const CREDENTIALS_KEY = "licenses_and_training";
@@ -85,6 +86,7 @@ export const ANSWER_KEY: Record<QuestionId, string> = {
   environment: "preferences.environment",
   commute: "preferences.commute",
   location: "preferences.location",
+  practice: "makesCreativeWork",
 };
 
 export interface PlannedQuestion {
@@ -233,6 +235,9 @@ export function planForgePath(s: PathSession): ForgePath {
       const list: PlannedQuestion[] = [q("goals", tone)];
       if (s.resumeMethod !== "guided") list.push(q("confidence", "default", fold));
       list.push(q("worries", "default", fold));
+      // Optional and quick: do you make art, perform, or freelance? A yes
+      // points to the practice record (creative lanes) in the Refinery.
+      list.push(q("practice", "default", fold));
       list.push(q("goalNarrative", tone, fold));
       list.push(q("hook", tone, fold || tone === "direct"));
       screens.push(screen("goals", take(list)));

@@ -49,6 +49,8 @@ export interface ForgeSessionData {
   // be sensitive to gaps/tenure/thin-history in generation.
   resumeConfidence?: "none" | "rough" | "decent" | "strong";
   resumeWorries?: string[];
+  /** Optional: makes art, performs, or freelances. A yes points to the practice record. */
+  makesCreativeWork?: "yes" | "no";
 
   // Page 4: Story / Hurdles
   challenges?: string[];

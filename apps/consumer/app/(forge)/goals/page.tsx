@@ -118,6 +118,9 @@ export default function GoalsPage() {
   const [resumeWorries, setResumeWorries] = useState<string[]>(
     isDemo ? [] : (session.resumeWorries || [])
   );
+  const [makesCreativeWork, setMakesCreativeWork] = useState<"yes" | "no" | "">(
+    isDemo ? "" : (session.makesCreativeWork || "")
+  );
 
   // Track page visit
   useEffect(() => {
@@ -147,6 +150,7 @@ export default function GoalsPage() {
       hookNarrative: isDemo ? (DEMO_SESSION.hookNarrative || undefined) : (hookNarrative || undefined),
       resumeConfidence: isDemo ? undefined : ((resumeConfidence || undefined) as "none" | "rough" | "decent" | "strong" | undefined),
       resumeWorries: isDemo ? undefined : (resumeWorries.length ? resumeWorries : undefined),
+      makesCreativeWork: isDemo ? undefined : (makesCreativeWork || undefined),
       lastPageVisited: "goals",
     });
   }
@@ -282,6 +286,43 @@ export default function GoalsPage() {
           <p className="text-xs text-t-phos-dim mt-2">
             This just helps us build it right. We only ever use what&apos;s true about you.
           </p>
+        </div>
+      )}
+
+      {/* Optional and quick: creative or freelance work opens the practice record. */}
+      {!isDemo && shown("practice") && (
+        <div className="mt-6 bg-t-panel px-4 py-3 border border-t-line" data-testid="forge-practice">
+          <p className="text-sm font-medium text-t-white mb-2">
+            Do you make art, perform, or freelance?{" "}
+            <span className="font-normal text-t-phos-dim">(optional)</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {([["yes", "Yes"], ["no", "No"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                data-testid={`forge-practice-${id}`}
+                aria-pressed={makesCreativeWork === id}
+                onClick={() => setMakesCreativeWork((prev) => (prev === id ? "" : id))}
+                className={`t-focus px-3 py-1.5 text-sm border transition-colors min-h-touch ${
+                  makesCreativeWork === id
+                    ? "border-t-amber bg-t-panel-2 text-t-amber-bright"
+                    : "border-t-line text-t-phos-dim hover:border-t-phos-dim hover:text-t-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {makesCreativeWork === "yes" && (
+            <p className="text-xs text-t-phos-dim mt-2" data-testid="forge-practice-next">
+              Good. Your shows, gigs and freelance work go in your practice record. It lives in the Refinery
+              under Creative Work, once you sign in.{" "}
+              <a href="/dashboard/creative?start=practice" target="_blank" rel="noopener" className="text-t-amber-bright underline">
+                Open it in a new tab
+              </a>
+            </p>
+          )}
         </div>
       )}
 
