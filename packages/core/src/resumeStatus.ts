@@ -42,7 +42,7 @@ import {
 import { stemOf, acronymsOf } from "./wordStem";
 import { scopeNotTheirs } from "./scopeWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
-import { credentialMentionsOf, credentialsToAsk } from "./credentialMentions";
+import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs } from "./credentialMentions";
 import {
   SECOND_CHECK_RULE,
   validateSecondCheckFindings,
@@ -118,6 +118,8 @@ export interface ResumeStatusInput {
    * is not asked about. Every other credential is a memory prompt.
    */
   credentialsAnswer?: string;
+  /** Keys of credentials the person confirmed (D4): never asked again, and a title's credential word is theirs. */
+  confirmedKeys?: string[];
 }
 
 export interface ResumeStatus {
@@ -359,15 +361,25 @@ export function titleInOwnWords(title: string, sourceText: string): boolean {
   return words.every((w) => src.has(stemOf(w)));
 }
 
-/** The experience entry headers whose title is not in the person's words. */
-function titlesNotTheirs(resumeText: string, sourceText: string): string[] {
+// A title's credential word ("CERTIFIED", "LICENSED", "JOURNEYMAN"): once the person confirms that credential, it is theirs.
+const TITLE_CREDENTIAL_WORDS_RE = /\b(?:certified|licensed|registered|journeyman|master|bonded|accredited|credentialed|apprentice)\b/gi;
+
+/**
+ * The experience entry headers whose title is not one of the person's own
+ * job titles (round 6: the whole title, as in one of their own job headers
+ * or "X at Y" in their words; never scattered or denied words). A title
+ * credential the person confirmed (`confirmedKeys`) is theirs: only the rest
+ * of the title is checked.
+ */
+function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: Set<string> = new Set()): string[] {
   const out: string[] = [];
   let inExperience = false;
   for (const l of linesOf(resumeText)) {
     if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); continue; }
     if (!inExperience || !isEntryHeader(l)) continue;
-    const t = titleOf(l);
-    if (t && !titleInOwnWords(t, sourceText)) out.push(l);
+    let t = titleOf(l);
+    if (confirmedKeys.has(credentialKey(t))) t = t.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
+    if (t && !titleIsTheirs(t, sourceText)) out.push(l);
   }
   return out;
 }
@@ -482,7 +494,7 @@ export const Q_NUMBER_DROPPED =
 export const Q_NUMBER_OWN = "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
 /** A job title the person never used. */
 export const Q_TITLE =
-  "If an interviewer called to check this job, would they find this title on your paperwork? Tell me the title your paperwork shows.";
+  "If an interviewer called to check this job, would they find this title on your paperwork? Change it to the title your paperwork shows.";
 
 /** A credential's type and status. */
 export function credentialQuestion(name: string): string {
@@ -653,7 +665,9 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // confirmation (the line is rewritten from it) or a cut.
     const credentialFindings: MintFinding[] = [];
     const credentialSubject = new Map<string, string>();
-    for (const m of credentialsToAsk(resumeText, input.credentialsAnswer)) {
+    const confirmedKeys = new Set(input.confirmedKeys ?? []);
+    const personText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
+    for (const m of credentialsToAsk(resumeText, personText, confirmedKeys)) {
       credentialSubject.set(m.line, m.name);
       credentialFindings.push({
         rule: "STD-T03",
@@ -667,25 +681,23 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // never made is settled only by their own rewrite or a cut, never by an
     // answer.
     const scopeFindings: MintFinding[] = [];
+    // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
+    const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
     for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
-      if (inSkills) continue;
+      if (inSkills || credentialSectionLines.has(line)) continue;
       const hit = scopeNotTheirs(line, sourceText);
       if (!hit) continue;
       scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
-    for (const line of titlesNotTheirs(resumeText, sourceText)) {
+    for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys)) {
       const hit = scopeNotTheirs(titleOf(line), sourceText);
       if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
-    // A job title on the page that the person never used.
+    // A job title on the page that the person never used (round 6: settled
+    // only by their own rewrite or a cut, never by an answer).
     // Asked like a defend line, so only where there is a defend step.
-    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText) : [])
-      // Settled by an answer about the title itself ("my pay stubs say kitchen manager").
-      .filter((l) => {
-        const a = standingFor(l);
-        return !(a && answerMentions(a.answer, titleOf(l)));
-      })
+    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText, confirmedKeys) : [])
       .map((l) => ({
         rule: "STD-C03",
         severity: "BLOCK" as const,

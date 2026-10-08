@@ -321,7 +321,9 @@ test("status (round 5): a credential the person named in free text is still a me
 test("status: thin history with a dated class is not penalized for thinness", () => {
   // Round 5: the class line is theirs only when it is exactly what they typed in the licenses-and-training answer.
   const typed = "Forklift training, county job center (2023), passed the driving test";
-  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: THIN.source, defendAnswers: answerAll(THIN.resume, THIN.source), credentialsAnswer: typed });
+  // Round 6: a job title counts only as the person's own whole title (their job header).
+  const source = `${THIN.source}\nYard worker | Neighbors in Dayton | 2021 - 2024`;
+  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: source, defendAnswers: answerAll(THIN.resume, source), credentialsAnswer: typed });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 

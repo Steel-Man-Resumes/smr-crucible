@@ -83,8 +83,9 @@ test("B1 (control, round 5): the same credential the person typed, exactly as ty
   const r = page("\n\nCERTIFICATIONS\n- OSHA 30, 2019");
   const free = getResumeStatus({ resumeText: r, sourceText: `${BASE}\nI have my OSHA 30 card from 2019.` });
   assert.ok(free.openItems.some((i) => i.kind === "credential_unsaid"), "free text never says it");
+  // Round 6: a whole line of the person's own words counts too (their uploaded resume, their answers).
   const typed = walk(r, `${BASE}\nOSHA 30, 2019`);
-  assert.equal(typed.state, "draft", "walk() passes no typed answer");
+  assert.equal(typed.state, "finished", JSON.stringify(typed.openItems));
   const s = getResumeStatus({ resumeText: r, sourceText: `${BASE}\nOSHA 30, 2019`, credentialsAnswer: "OSHA 30, 2019" });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });

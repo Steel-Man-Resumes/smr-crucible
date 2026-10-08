@@ -25,6 +25,7 @@
 import { normalizeDigits, numberTokens, numberValues } from "./numberRead";
 import { stemOf } from "./wordStem";
 import { isCredentialTerm } from "./credentialWords";
+import { scopeNotTheirs } from "./scopeWords";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
@@ -385,6 +386,8 @@ export function skillTermsOf(line: string): string[] {
 // true-scope rule, applied to skills).
 const SCOPE_STEMS = ["supervis", "lead", "led", "manag", "train", "schedul", "plan", "budget", "negotiat", "forecast", "direct", "oversee", "oversaw", "coordinat", "mentor"];
 const scopeOf = (w: string) => SCOPE_STEMS.find((s) => w.startsWith(s) || (s === "led" && w === "led"));
+// Scope over plans and money, not people: still read by the word stem.
+const PLAN_STEMS = new Set(["plan", "budget", "negotiat", "forecast"]);
 // A credential term is checked as a credential (credentialMentions), never as
 // a skill. One shared test (credentialWords), so nothing is both.
 
@@ -405,10 +408,13 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
       // The whole term as the person wrote it passes.
       if (srcFlat.includes(` ${words.join(" ")} `)) continue;
       // A scope word they never used never passes on another word's match.
-      const scopeUnsaid = words.some((w) => {
-        const sc = scopeOf(w);
-        return sc !== undefined && !srcWordList.some((x) => x.startsWith(sc) || (sc === "lead" && x === "led") || (sc === "led" && x.startsWith("lead")));
-      });
+      // Round 6: a people-scope word (supervise, manage, lead, train...) is theirs only per claim
+      // (scopeWords: active, not denied, not inside a credential name, same people).
+      const scopeUnsaid =
+        words.some((w) => {
+          const sc = scopeOf(w);
+          return sc !== undefined && PLAN_STEMS.has(sc) && !srcWordList.some((x) => x.startsWith(sc));
+        }) || !!scopeNotTheirs(term, src);
       if (!scopeUnsaid && words.some((w) => srcStems.has(stemOf(w)))) continue;
       f.push(
         scopeUnsaid

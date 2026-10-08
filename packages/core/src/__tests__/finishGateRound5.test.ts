@@ -150,7 +150,6 @@ for (const [typed, line] of [
   ["BLS, 2022", "Basic Life Support, 2022"],
   ["forklift card, expired a while back", "Forklift card"],
   ["OSHA 10", "OSHA 10, current"],
-  ["OSHA 10 card from 2019, forklift card", "OSHA 10 card from 2019"],
   ["I have my OSHA 10 card from 2019", "OSHA 10, 2019"],
 ] as const) {
   test(`Typed exactly: "${typed}" does not cover "${line}" (an expansion, a part, or more than was typed is asked)`, () => {
@@ -163,7 +162,8 @@ test("Typed exactly: a typed line on the resume does not cover the same credenti
   const r = page("\n- Loaded trucks as a current OSHA 10 card holder.\n\nCERTIFICATIONS\n- OSHA 10, 2019");
   const s = getResumeStatus({ resumeText: r, sourceText: BASE, credentialsAnswer: "OSHA 10, 2019" });
   assert.ok(s.openItems.some((i) => i.kind === "credential_unsaid" && /current OSHA 10/.test(i.line)), JSON.stringify(s.openItems));
-  assert.deepEqual(Array.from(typedCredentialEntries("OSHA 10, 2019\nForklift card; CPR")), ["osha 10 2019", "forklift card", "cpr"]);
+  // Round 6: the person's lines stay whole; nothing is cut on a semicolon.
+  assert.deepEqual(Array.from(typedCredentialEntries("OSHA 10, 2019\nForklift card; CPR")), ["osha 10 2019", "forklift card cpr"]);
 });
 
 // ---- B5: no status from free text ------------------------------------------------------
@@ -254,7 +254,8 @@ for (const line of [
 }
 
 test("S2 (control): ordinary work is not a scope claim", () => {
-  for (const l of ["Ran the grill on the breakfast line.", "Ran the breakfast line.", "Trained on the new store register.", "Ran the floor on weekends."]) assert.equal(scopeHits(l).length, 0, l);
+  // Round 6: "ran the line" and "ran the floor" are scope claims now (theirs only when they used the same phrase).
+  for (const l of ["Ran the grill on the breakfast line.", "Trained on the new store register.", "Worked the line on weekends."]) assert.equal(scopeHits(l).length, 0, l);
 });
 
 test("S3: the person's own words are read loosely: 'Trained and mentored twelve new team leads' covers 'trained new team leads'", () => {

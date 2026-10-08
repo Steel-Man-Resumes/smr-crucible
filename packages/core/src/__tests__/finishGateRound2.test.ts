@@ -77,18 +77,18 @@ test("R2-B3: a job title the person never had raises STD-C03; an answer about th
   const generic = [...answerEvery(r), { line: header, answer: GOOD, verdict: "stands" as const }];
   assert.equal(status(r, generic).state, "draft", "a generic answer is not about the title");
   const real = [...answerEvery(r), { line: header, answer: "My pay stubs from Harbor say kitchen manager for the last year.", verdict: "stands" as const }];
-  // Round 5: "manager" is also a scope claim; only a rewrite or a cut settles that part.
-  assert.ok(status(r, real).openItems.every((i) => i.kind === "scope_unsaid" && i.line === header), JSON.stringify(status(r, real).openItems));
-  // A title with no scope word is settled by an answer about the title.
+  // Round 6: a title that is not theirs is settled only by their own rewrite or a cut, never by an answer.
+  assert.ok(status(r, real).openItems.every((i) => i.line === header && (i.kind === "scope_unsaid" || i.kind === "title_unsaid")), JSON.stringify(status(r, real).openItems));
+  assert.ok(status(r, real).openItems.some((i) => i.kind === "title_unsaid"));
+  // A title that is one of their own whole titles is not asked.
   const r2 = page(BASE).replace("LINE COOK |", "SOUS CHEF |");
-  const header2 = "SOUS CHEF | Harbor Street Diner | 2019 - 2023";
-  const real2 = [...answerEvery(r2), { line: header2, answer: "My pay stubs from Harbor say sous chef for the last year.", verdict: "stands" as const }];
-  assert.equal(status(r2, real2).state, "finished", JSON.stringify(status(r2, real2).openItems));
+  assert.ok(!status(r2, answerEvery(r2), `${SOURCE}\nSous chef at Harbor Street Diner for the last year.`).openItems.some((i) => i.rule === "STD-C03"));
 });
 
-test("R2-B3 (control): a title in the person's words in any order is not asked ('cook, line')", () => {
+test("R2-B3 (round 6): a title counts only as the person's whole title, never as scattered words ('cook, line' is asked)", () => {
   const src = SOURCE.replace("Line cook at Harbor Street Diner", "Cook, line, at Harbor Street Diner");
-  assert.ok(!status(page(BASE), [], src).openItems.some((i) => i.rule === "STD-C03"));
+  assert.ok(status(page(BASE), [], src).openItems.some((i) => i.rule === "STD-C03"));
+  assert.ok(!status(page(BASE), [], SOURCE).openItems.some((i) => i.rule === "STD-C03"), "'Line cook at Harbor Street Diner' is their title");
 });
 
 // ---- R2-B4 ---------------------------------------------------------------------------
