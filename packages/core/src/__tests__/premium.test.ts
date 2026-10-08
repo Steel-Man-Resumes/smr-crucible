@@ -148,7 +148,7 @@ describe("078 parts 3 and 4 (security review 3a Part 2 r1: M2, M1, L4)", () => {
     for (const c of ["pin_failures INTEGER NOT NULL DEFAULT 0", "locked_at TIMESTAMPTZ", "imported_at TIMESTAMPTZ", "imported_by UUID REFERENCES users\\(id\\) ON DELETE SET NULL"]) {
       assert.match(sql, new RegExp(`ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS ${c}`));
     }
-    for (const c of ["pin_failures", "locked_at", "imported_at", "imported_by"]) {
+    for (const c of ["pin_failures", "locked_at", "imported_at", "imported_by", "unlocked_at", "unlocked_by"]) {
       assert.match(sql, new RegExp(`^--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS ${c};$`, "m"));
     }
     assert.match(sql, /^--   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;$/m);
@@ -160,5 +160,20 @@ describe("the person sees the sponsoring organization, not a reason", () => {
     const a = resolvePremiumAccess({ isAdmin: false, orgMember: true, orgName: " Sample Reentry Center ", grants: [], now: NOW });
     assert.equal(a.orgName, "Sample Reentry Center");
     assert.equal(resolvePremiumAccess({ isAdmin: false, orgMember: false, orgName: "X", grants: [], now: NOW }).orgName, null);
+  });
+});
+
+describe("r2 N1: the 'recorded' marking trusts the ledger only at a real backfill instant", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+  const pre = readFileSync(join(__dirname, "..", "..", "migrations", "dry-run", "078_proof_source_preflight.sql"), "utf8");
+  it("marks only when some account's email_proven_at equals the ledger time", () => {
+    assert.match(sql, /IF backfill_at IS NOT NULL\s+AND EXISTS \(SELECT 1 FROM users WHERE email_proven_at = backfill_at\) THEN/);
+  });
+  it("the preflight is read-only: one SELECT, no writes of any kind", () => {
+    const body = pre.replace(/--.*$/gm, "");
+    assert.doesNotMatch(body, /\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|GRANT|REVOKE|COMMENT|COPY|DO|CALL|SET|LOCK|VACUUM|REFRESH)\b/i);
+    assert.match(body, /^\s*SELECT\b/);
+    assert.equal(body.split(";").filter((x) => x.trim()).length, 1, "one statement");
+    for (const col of ["at_backfill_instant", "ledger_is_backfill_instant", "most_common_instant", "would_mark"]) assert.match(body, new RegExp(`AS ${col}\\b`));
   });
 });

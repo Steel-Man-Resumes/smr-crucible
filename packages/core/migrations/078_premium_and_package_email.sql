@@ -55,6 +55,8 @@
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS locked_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_by;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS unlocked_at;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS unlocked_by;
 --   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;
 --   DROP TABLE IF EXISTS forge_package_email_sent;
 --   ALTER TABLE users DROP COLUMN IF EXISTS forge_package_email;
@@ -301,12 +303,18 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email_proof_source TEXT
 
 -- Proofs recorded between 068 and this migration were real: every account
 -- that existed at 068 got the same backfill instant, which is 068's
--- _migrations.applied_at (the migration runner inserts that row in the same
--- transaction). A proof more than a minute after that instant came from a
--- sign-in, so it is kept as 'recorded'. Everything else stays NULL, which
--- only means the person is asked to confirm their address before the first
--- automatic email. Without a 068 row there is nothing to tell apart, so
--- nothing is marked.
+-- _migrations.applied_at when the migration runner applied it (it inserts
+-- that row in the same transaction). A proof more than a minute after that
+-- instant came from a sign-in, so it is kept as 'recorded'.
+--
+-- FAIL-SAFE (security review 3a Part 2 r2, N1): the ledger time is trusted
+-- only when it IS a backfill instant, i.e. some account's email_proven_at
+-- equals it exactly. A 068 run by hand, a ledger row written before or after
+-- the backfill, or a zone-less applied_at all fail that test, and then
+-- nothing is marked. Everything not marked stays NULL, which only means the
+-- person is asked to confirm their address once before the first automatic
+-- email. Run migrations/dry-run/078_proof_source_preflight.sql (read-only)
+-- first to see which case a database is in.
 DO $$
 DECLARE backfill_at TIMESTAMPTZ;
 BEGIN
@@ -314,7 +322,8 @@ BEGIN
      AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'applied_at') THEN
     SELECT applied_at INTO backfill_at FROM _migrations WHERE filename = '068_email_proven.sql';
-    IF backfill_at IS NOT NULL THEN
+    IF backfill_at IS NOT NULL
+       AND EXISTS (SELECT 1 FROM users WHERE email_proven_at = backfill_at) THEN
       UPDATE users SET email_proof_source = 'recorded'
        WHERE email_proof_source IS NULL
          AND email_proven_at IS NOT NULL
@@ -327,9 +336,13 @@ END $$;
 --
 -- pin_failures counts wrong PINs in total (the import page and the confirm
 -- step). At 5 the app sets locked_at, and the plan opens again only when an
--- admin clears it. imported_at / imported_by mark the one account a plan was
--- loaded into; after that it never loads again. Old code ignores all four.
+-- admin clears it; unlocked_at / unlocked_by record who did that, and when.
+-- imported_at / imported_by mark the one account a plan was loaded into;
+-- after that it never loads into another (the same account may finish its
+-- own interrupted import). Old code ignores all six.
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS pin_failures INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS unlocked_by UUID REFERENCES users(id) ON DELETE SET NULL;
