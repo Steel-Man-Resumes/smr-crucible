@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { deflateRawSync, deflateSync, crc32 } from "node:zlib";
 import {
+  streamCap,
   PDF_LOCKED_MESSAGE,
   PDF_MAX_IMAGE_STREAM_BYTES,
   PDF_MAX_STREAMS,
@@ -782,8 +783,8 @@ describe("r6: zlib's verdict, object streams by what pdf.js reads, Flate input c
     const obj = (len: string) => mini(`5 0 obj<</Filter/FlateDecode${len}>>stream\n`, body);
     refused(() => assertSafePdf(obj(`/Length ${body.length}`)), "pdf_malformed");
     refused(() => assertSafePdf(obj("/Length 9 0 R")), "pdf_malformed");
-    // No /Length: pdf.js reads to the first "endstream" too, a truncated stream; read the same.
-    assert.ok(assertSafePdf(obj("")).decodedBytes < 64);
+    // No /Length and data still running at "endstream": refused since r7 (was read as truncated in r6).
+    refused(() => assertSafePdf(obj("")), "pdf_malformed");
   });
 
   it("M1: the input zlib reads is charged to the work count", () => {
@@ -794,5 +795,57 @@ describe("r6: zlib's verdict, object streams by what pdf.js reads, Flate input c
     const plain = scanWork();
     assertSafePdf(img("/Filter/FlateDecode"));
     assert.ok(scanWork() - plain >= 0.9 * empties.length, `charged ${scanWork() - plain} for ${empties.length} bytes read`);
+  });
+});
+
+/* ------------------------------- security review 3a r7 ----------------- */
+
+describe("r7: numbers pdf.js reads differently, /Length after any spacing, predictors", () => {
+  const text = Buffer.from("BT /F1 12 Tf (Hello) Tj ET");
+  // Deflate data that still runs past an "endstream" written inside it (a stored block holding the word).
+  const marker = Buffer.from("\nendstream\n");
+  const runsOn = Buffer.concat([Buffer.from([0x78, 0x9c, 0x00, marker.length, 0, ~marker.length & 0xff, 0xff]), marker, deflateRawSync(text)]);
+
+  it("H1: a /Length past the first 'endstream' is found after any whitespace or comment", () => {
+    for (const gap of [" ".repeat(40), "\n% a comment\n", "\r\n\t \x00%c\r%d\n  "]) {
+      const b = Buffer.concat([Buffer.from(`%PDF-1.7\n5 0 obj<</Filter/FlateDecode/Length ${runsOn.length}>>stream\n`, "latin1"), runsOn, Buffer.from(gap + "endstream\nendobj\n", "latin1")]);
+      refused(() => assertSafePdf(b), "pdf_malformed");
+    }
+  });
+
+  it("H1: data still running at 'endstream' is refused unless a direct /Length ends there", () => {
+    const at = (len: string) => mini(`5 0 obj<</Filter/FlateDecode${len}>>stream\n`, runsOn);
+    refused(() => assertSafePdf(at("")), "pdf_malformed");
+    refused(() => assertSafePdf(at("/Length 9 0 R")), "pdf_malformed");
+    refused(() => assertSafePdf(at("/Length 1-0")), "pdf_malformed");
+    // A direct /Length that ends before the first "endstream": pdf.js stops there too (clean truncation).
+    const cut = deflateSync(Buffer.from("BT (" + "Hello ".repeat(300) + ") Tj ET"));
+    const part = cut.subarray(0, cut.length - 40);
+    assert.doesNotThrow(() => assertSafePdf(mini(`5 0 obj<</Filter/FlateDecode/Length ${part.length}>>stream\n`, part)));
+  });
+
+  it("H2: numbers that are not finite are refused; sizes that are not finite never lift the cap", () => {
+    for (const v of ["1-0", "--5", "1e999", "1".repeat(70)]) {
+      refused(() => assertSafePdf(mini(`5 0 obj<</Subtype/Image/Width ${v}/Height 5/Filter/FlateDecode>>stream\n`, deflateSync(Buffer.alloc(10)))), "pdf_malformed");
+    }
+    assert.equal(streamCap({ isImage: true, width: NaN, height: 5 }), PDF_MAX_STREAM_BYTES);
+    assert.equal(streamCap({ isImage: true, width: Infinity, height: 5 }), PDF_MAX_STREAM_BYTES);
+    // The lenient inline reader (binary-typed stream) keeps a NaN size: the pixel check refuses it.
+    refused(() => assertSafePdf(pdf("/Length1 9", Buffer.from("\x01 BI /W 1-0 /H 99 ID x EI", "latin1"))), "pdf_image_too_big");
+  });
+
+  it("M1: a /Predictor is refused outside cross-reference streams and plain images", () => {
+    const z = deflateSync(text);
+    const s1 = (d: string) => mini(`5 0 obj<<${d}/Filter/FlateDecode>>stream\n`, z);
+    refused(() => assertSafePdf(s1("/DecodeParms<</Predictor 12/Columns 5>>")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DP<</Predictor 2>>")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms[null<</Predictor 15/Columns 5>>]")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms 7 0 R")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms<</Predictor 9 0 R>>")), "pdf_malformed");
+    assert.doesNotThrow(() => assertSafePdf(s1("/DecodeParms null")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/DecodeParms<</Predictor 1>>")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/Subtype/Image/Width 5/Height 5/DecodeParms<</Predictor 15/Columns 5/Colors 1>>")));
+    refused(() => assertSafePdf(mini(`5 0 obj<</Subtype/Image/Width 5/Height 5/Filter[/FlateDecode/DCTDecode]/DecodeParms[<</Predictor 15>> null]>>stream\n`, z)), "pdf_malformed");
   });
 });
