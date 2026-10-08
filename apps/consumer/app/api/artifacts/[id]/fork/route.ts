@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { forkArtifact, getOpenLane, setArtifactLane } from "@crucible/core";
 import { parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -18,6 +19,9 @@ function sanitizeReason(value: unknown): string {
 
 /** POST /api/artifacts/[id]/fork -- fork a successor artifact from this one */
 export async function POST(request: Request, context: RouteContext) {
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {

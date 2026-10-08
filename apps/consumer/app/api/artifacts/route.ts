@@ -14,6 +14,7 @@ import {
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 import { parseLaneIdParam, parseExamplesParam, parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 // Journey instrumentation: which artifact types link back to a target job
 // application, and into which (whitelisted) column. The column names are fixed
@@ -118,6 +119,10 @@ export async function GET(request: Request) {
 
 /** POST /api/artifacts — create a new artifact */
 export async function POST(request: Request) {
+  // CSRF: only a page on this app's own origin may write to the account.
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });

@@ -61,7 +61,18 @@ export function isSameOriginJsonPost(
 ): boolean {
   const type = (headers.get("content-type") || "").toLowerCase();
   if (!type.startsWith("application/json")) return false;
+  return isSameOriginRequest(headers, env);
+}
 
+/**
+ * The origin half of isSameOriginJsonPost, for a write that carries no body
+ * (a DELETE). Same rules: Sec-Fetch-Site must be "same-origin"; otherwise an
+ * Origin, when present, must be one of the app's own.
+ */
+export function isSameOriginRequest(
+  headers: Headers,
+  env: Record<string, string | undefined> = process.env
+): boolean {
   const site = headers.get("sec-fetch-site");
   if (site !== null) return site === "same-origin";
 

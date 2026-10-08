@@ -13,6 +13,7 @@ import {
 } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 import { parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost, isSameOriginRequest } from "@/lib/same-origin";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -37,6 +38,10 @@ export async function GET(_request: Request, context: RouteContext) {
 
 /** PATCH /api/artifacts/[id] — update artifact content */
 export async function PATCH(request: Request, context: RouteContext) {
+  // CSRF: only a page on this app's own origin may change the person's work.
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -135,7 +140,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 /** DELETE /api/artifacts/[id] — delete an artifact */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
+  if (!isSameOriginRequest(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {

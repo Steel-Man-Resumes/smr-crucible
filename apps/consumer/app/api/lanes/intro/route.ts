@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
-import { dismissIntro, getOpenLane, isLaneKey, isLaneTool, MAIN_LANE_KEY } from "@crucible/core";
+import { dismissIntro, getOpenLane, isLaneKey, isLaneTool, MAIN_LANE_KEY, incrementUserUsage, LANE_WRITES_PER_DAY } from "@crucible/core";
+import { LANE_ERROR_COPY } from "@/lib/lanes";
 
 /**
  * POST /api/lanes/intro { laneKey: "main" | <lane id>, tool: "tailor" | "library" }
@@ -15,6 +16,12 @@ export async function POST(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  // Lane writes per account per day: stops a loop or a script, never a person.
+  const writes = await incrementUserUsage(userId, "lane-write").catch(() => 0);
+  if (writes > LANE_WRITES_PER_DAY) {
+    return NextResponse.json({ error: "too_many_writes", message: LANE_ERROR_COPY.too_many_writes }, { status: 429 });
+  }
 
   const body = await request.json().catch(() => null);
   const laneKey = typeof body?.laneKey === "string" ? body.laneKey.toLowerCase() : null;
