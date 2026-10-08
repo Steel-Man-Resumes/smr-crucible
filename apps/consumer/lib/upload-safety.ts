@@ -40,9 +40,12 @@
  *    JBIG2) or a shrinking text codec (ASCIIHex, ASCII85). LZW, RunLength,
  *    Crypt and anything unknown are refused, and so is a filter given by an
  *    indirect reference (it could name a chain we cannot see);
- *  - every FlateDecode stream is actually inflated, from its start to the end
- *    of the file (more than any reader takes), the way pdf.js does it (header
- *    checked, then raw deflate), with a hard output cap: no single stream may
+ *  - every FlateDecode stream is actually inflated, over its own data as pdf.js
+ *    finds it (to the first "endstream"; a /Length running past one is
+ *    refused), the way pdf.js does it (header checked, then raw deflate). The
+ *    input zlib reads is charged to the work budget, and data zlib refuses is
+ *    refused (pdf.js's decoder is more lenient and would read on uncapped:
+ *    r6). There is a hard output cap: no single stream may
  *    decode past PDF_MAX_STREAM_BYTES, except an image, which may decode to its
  *    own declared size (width x height x 4, at most PDF_MAX_IMAGE_STREAM_BYTES;
  *    F1: lossless photos and scans), and all of them together not past
@@ -53,7 +56,10 @@
  *    file's own objects and in its object streams;
  *  - a stream inside an object stream is refused (the spec forbids it, and
  *    pdf.js would read it past every cap here); object streams and content
- *    streams under ASCII85 or ASCIIHex alone are decoded and checked too;
+ *    streams under ASCII85 or ASCIIHex alone are decoded and checked too. Any
+ *    stream with /First is checked as an object stream whatever its /Type or
+ *    /Subtype (pdf.js reads labels from nothing but the xref entry), and one
+ *    also labelled or coded as an image is refused (r6);
  *  - an encrypted PDF is refused (its streams cannot be checked). Most are
  *    copy-protected, not password-protected, so the message says so (F4).
  *    Follow-up: decrypt with the empty user password and scan as normal.
@@ -472,6 +478,8 @@ interface StreamDict {
   /** An object stream's /N and /First. */
   n: number | "indirect" | null;
   first: number | "indirect" | null;
+  /** /Length, when given. */
+  length: number | "indirect" | null;
 }
 
 const newFacts = (): StreamDict => ({
@@ -487,6 +495,7 @@ const newFacts = (): StreamDict => ({
   userUnit: null,
   n: null,
   first: null,
+  length: null,
 });
 
 /** A value, as far as the checks need it. */
@@ -604,10 +613,11 @@ function readDictBody(p: Parser, depth: number, collect: boolean): StreamDict | 
       } else out.boxes.push("unreadable");
     } else if (key === "UserUnit") {
       out.userUnit = v.k === "num" ? v.v : v.k === "ref" ? "indirect" : null;
-    } else if (key === "N" || key === "First") {
+    } else if (key === "N" || key === "First" || key === "Length") {
       const n = v.k === "num" ? v.v : v.k === "ref" ? "indirect" : null;
       if (key === "N") out.n = n;
-      else out.first = n;
+      else if (key === "First") out.first = n;
+      else out.length = n;
     }
   }
   // pdf.js reads "stream" after ANY dictionary as a stream (inside arrays and
@@ -681,6 +691,13 @@ function checkFilters(filters: StreamDict["filters"], filterKeys: number): Filte
 }
 
 const tooBig = () => new UnsafeUploadError("pdf_stream_too_big", TOO_BIG);
+
+/** "endstream" right at `at`, after PDF whitespace (pdf.js's /Length check, simplified). */
+function endstreamAfter(b: Buffer, at: number): boolean {
+  let i = at;
+  for (let k = 0; k < 32 && i < b.length && isWs(b[i]); k++) i++;
+  return b.toString("latin1", i, i + 9) === "endstream";
+}
 
 /*
  * BOUNDED DECODERS (r5 M3). Each text codec runs twice over its input: once to
@@ -823,24 +840,31 @@ function checkPixels(w: unknown, h: unknown) {
 /**
  * Inflates a FlateDecode stream the way pdf.js reads one (two header bytes
  * checked, then raw deflate, no checksum), never past `limit` bytes (zlib
- * stops there). Returns the decoded bytes; an empty buffer when pdf.js would
- * refuse the header; null when the data is bad part way (pdf.js stops there
- * too, at an unknown size).
+ * stops there). Returns the decoded bytes (an empty buffer when pdf.js would
+ * refuse the header) and how many input bytes zlib consumed.
+ *
+ * r6 H1: data zlib refuses is REFUSED (pdf_malformed). pdf.js's own decoder
+ * is more lenient than zlib and keeps decoding past where zlib stops, with no
+ * cap, so a stream zlib cannot read cannot be checked. Clean truncation (the
+ * input ends before the last block) is not an error with Z_SYNC_FLUSH and
+ * returns what was decoded.
  */
-function inflatePdfStream(data: Buffer, limit: number): Buffer | null {
-  if (data.length < 2) return Buffer.alloc(0);
+function inflatePdfStream(data: Buffer, limit: number): { out: Buffer; used: number } {
+  if (data.length < 2) return { out: Buffer.alloc(0), used: data.length };
   const cmf = data[0];
   const flg = data[1];
   // pdf.js refuses these headers before decoding anything.
-  if ((cmf & 0x0f) !== 0x08 || ((cmf << 8) + flg) % 31 !== 0 || flg & 0x20) return Buffer.alloc(0);
+  if ((cmf & 0x0f) !== 0x08 || ((cmf << 8) + flg) % 31 !== 0 || flg & 0x20) return { out: Buffer.alloc(0), used: 2 };
   if (limit <= 0) throw tooBig();
   try {
-    return inflateRawSync(data.subarray(2), { maxOutputLength: limit, finishFlush: constants.Z_SYNC_FLUSH });
+    const r = inflateRawSync(data.subarray(2), { maxOutputLength: limit, finishFlush: constants.Z_SYNC_FLUSH, info: true }) as unknown as {
+      buffer: Buffer;
+      engine: { bytesWritten: number };
+    };
+    return { out: r.buffer, used: 2 + r.engine.bytesWritten };
   } catch (e: any) {
     if (e instanceof RangeError || e?.code === "ERR_BUFFER_TOO_LARGE") throw tooBig();
-    // Bad data: pdf.js stops at the same place, short of the limit. How far it
-    // got is not known, so the caller counts the whole limit against the total.
-    return null;
+    throw malformed();
   }
 }
 
@@ -898,45 +922,41 @@ function inlineFacts(entries: Array<[string, Val]>, lenient = false) {
 /**
  * Every inline image in a content stream, read as pdf.js reads them: the
  * content is tokenized from its start, and each BI operator's dictionary is
- * read up to ID. In a content stream (strict) a dictionary that cannot be read
- * cleanly, or an image with no end, is refused (r5). In a stream whose type
- * says it is binary (a font, a colour profile: `strict` false), random bytes
- * can spell "BI", so there a dictionary that cannot be read is checked by the
- * lenient reader below instead of refused. The image data is skipped to the
+ * read strictly up to ID. A dictionary that cannot be read cleanly, or an
+ * image with no end, is refused (r5). The image data is skipped to the
  * earliest end pdf.js could take, so nothing pdf.js reads as content is
- * skipped here.
+ * skipped here. Returns where the "BI"s it checked are, so the lenient pass
+ * below does not read them again (r6 L2).
+ *
+ * Streams whose type says they are binary (a font, a colour profile) are not
+ * tokenized: random bytes spell "BI" there, and refusing on them would refuse
+ * real files. The lenient pass reads every "BI" in them instead.
  */
-function checkContentTokens(src: Src, strict: boolean) {
+function checkContentTokens(src: Src): number[] {
   const lx = new Lexer(src, 0);
   const b = src.b;
+  const checked: number[] = [];
   while (lx.step()) {
-    if (lx.tt === T_BAD) return; // the rest is one unclosed string to pdf.js too
+    if (lx.tt === T_BAD) return checked; // the rest is one unclosed string to pdf.js too
     if (!lx.is("BI")) continue;
-    const afterBI = lx.te;
-    let id: Tok | null = null;
-    let filters: string[] = [];
-    try {
-      const p = new Parser(lx);
-      const entries: Array<[string, Val]> = [];
-      for (;;) {
-        const k = p.take();
-        if (!k) throw malformed();
-        if (k.t === T_WORD && k.v === "ID") {
-          id = k;
-          break;
-        }
-        if (k.t !== T_NAME) throw malformed();
-        const vt = p.take();
-        if (!vt || (vt.t === T_WORD && vt.v === "ID")) throw malformed();
-        entries.push([k.v as string, readValue(p, vt, 1, true)]);
+    const at = lx.ts;
+    const p = new Parser(lx);
+    const entries: Array<[string, Val]> = [];
+    let id: Tok;
+    for (;;) {
+      const k = p.take();
+      if (!k) throw malformed();
+      if (k.t === T_WORD && k.v === "ID") {
+        id = k;
+        break;
       }
-      filters = inlineFacts(entries);
-    } catch (e) {
-      if (strict || !(e instanceof UnsafeUploadError) || (e.reason !== "pdf_malformed" && e.reason !== "pdf_hidden_stream")) throw e;
-      lenientInline(src, afterBI, src.n);
-      lx.i = afterBI;
-      continue;
+      if (k.t !== T_NAME) throw malformed();
+      const vt = p.take();
+      if (!vt || (vt.t === T_WORD && vt.v === "ID")) throw malformed();
+      entries.push([k.v as string, readValue(p, vt, 1, true)]);
     }
+    const filters = inlineFacts(entries);
+    checked.push(at);
     // The data starts one byte after ID.
     let from = id.e + 1;
     const first = filters[0];
@@ -950,71 +970,74 @@ function checkContentTokens(src: Src, strict: boolean) {
     // The first "EI" followed by a space or end of line: pdf.js ends the data
     // there or later.
     let ei = -1;
-    for (let at = src.find("EI", from); at >= 0; at = src.find("EI", at + 1)) {
-      const after = b[at + 2];
-      if (at + 2 >= src.n || after === 0x20 || after === 0x0a || after === 0x0d) {
-        ei = at;
+    for (let e = src.find("EI", from); e >= 0; e = src.find("EI", e + 1)) {
+      const after = b[e + 2];
+      if (e + 2 >= src.n || after === 0x20 || after === 0x0a || after === 0x0d) {
+        ei = e;
         break;
       }
     }
-    if (ei < 0) {
-      if (strict) throw malformed();
-      return;
-    }
+    if (ei < 0) throw malformed();
     lx.i = ei + 2;
   }
+  return checked;
 }
 
 const SIZE_OR_FILTER = new Set(["W", "Width", "H", "Height", "F", "Filter"]);
 
-/** Reads one inline image dictionary leniently from `from` (just past BI), never past `end`. */
+/** The last token's name (decoded), if it could be one of SIZE_OR_FILTER, else null. */
+function sizeOrFilterName(lx: Lexer): string | null {
+  const b = lx.src.b;
+  let hash = false;
+  for (let i = lx.ts + 1; i < lx.te; i++) if (b[i] === 0x23) hash = true;
+  const len = lx.te - lx.ts - 1;
+  if (!hash && len !== 1 && len !== 5 && len !== 6) return null;
+  const raw = latin1(b, lx.ts + 1, lx.te);
+  const name = hash ? raw.replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))) : raw;
+  return SIZE_OR_FILTER.has(name) ? name : null;
+}
+
+/**
+ * Reads one inline image dictionary leniently from `from` (just past BI),
+ * never past `end`: the size and filter keys among the first 200 tokens, up
+ * to ID. One pass on the lexer's own cursor (r6 L2: no token objects).
+ */
 function lenientInline(src: Src, from: number, end: number) {
-  // First a quick read (no values kept) for a size or filter key at all; most
-  // "BI"s outside real images have none, and then that is the whole check.
-  const quick = new Lexer(src, from, end);
-  let found = false;
+  const lx = new Lexer(src, from, end);
   const b = src.b;
-  for (let n = 0; n < 200 && quick.step(); n++) {
-    if (quick.tt === T_BAD || quick.is("ID")) break;
-    if (quick.tt !== T_NAME) continue;
-    const len = quick.te - quick.ts - 1;
-    if (len === 1 || len === 5 || len === 6) {
-      if (SIZE_OR_FILTER.has(latin1(b, quick.ts + 1, quick.te))) found = true;
-    }
-    if (b.subarray(quick.ts, quick.te).indexOf(0x23) >= 0) found = true; // "#" escapes: read in full
-    if (found) break;
-  }
-  if (!found) return;
-  const p = new Parser(new Lexer(src, from, end));
   const entries: Array<[string, Val]> = [];
-  for (let n = 0; n < 200; n++) {
-    const tok = p.take();
-    if (!tok || tok.t === T_BAD || (tok.t === T_WORD && tok.v === "ID")) break;
-    if (tok.t !== T_NAME) continue;
-    const k = tok.v as string;
-    if (k !== "W" && k !== "Width" && k !== "H" && k !== "Height" && k !== "F" && k !== "Filter") continue;
-    const vt = p.take();
-    if (!vt) break;
+  for (let n = 0; n < 200 && lx.step(); n++) {
+    if (lx.tt === T_BAD || lx.is("ID")) break;
+    if (lx.tt !== T_NAME) continue;
+    const k = sizeOrFilterName(lx);
+    if (!k) continue;
+    if (!lx.step()) break;
+    n++;
     let v: Val;
-    if (vt.t === T_NAME) v = { k: "name", v: vt.v as string };
-    else if (vt.t === T_NUM) {
-      const g = p.peek(0);
-      const r = g && g.t === T_NUM ? p.peek(1) : null;
-      v = r && r.t === T_WORD && r.v === "R" ? { k: "ref" } : { k: "num", v: vt.v as number };
-    } else if (vt.t === T_ARR_OPEN) {
+    if (lx.tt === T_NAME) v = { k: "name", v: latin1(b, lx.ts + 1, lx.te) };
+    else if (lx.tt === T_NUM) {
+      const num = Number(latin1(b, lx.ts, lx.te));
+      // "n g R" is a reference (pdf.js resolves it): look two tokens ahead.
+      const back = lx.i;
+      let ref = false;
+      if (lx.step() && lx.tt === T_NUM && lx.step() && lx.is("R")) ref = true;
+      if (!ref) lx.i = back;
+      v = ref ? { k: "ref" } : { k: "num", v: num };
+    } else if (lx.tt === T_ARR_OPEN) {
       const items: Val[] = [];
       let ok = true;
-      for (let m = 0; m < 50; m++) {
-        const a = p.take();
-        if (!a || a.t === T_ARR_CLOSE) break;
-        if (a.t === T_NAME) items.push({ k: "name", v: a.v as string });
-        else ok = false;
+      for (let m = 0; m < 50 && lx.step(); m++) {
+        if (lx.tt === T_ARR_CLOSE) break;
+        if (lx.tt === T_NAME) {
+          const raw = latin1(b, lx.ts + 1, lx.te);
+          items.push({ k: "name", v: raw.indexOf("#") >= 0 ? raw.replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))) : raw });
+        } else ok = false;
       }
       v = ok ? { k: "arr", items } : { k: "other" };
     } else v = { k: "other" };
     entries.push([k, v]);
   }
-  inlineFacts(entries, true);
+  if (entries.length) inlineFacts(entries, true);
 }
 
 /** Where the next "BI" standing as its own word is, at or after `from`, or -1. */
@@ -1036,8 +1059,14 @@ function nextBI(src: Src, from: number): number {
  * plain number or name, is refused. Each read stops at the next "BI", which
  * gets its own read, so no byte is read twice (r5).
  */
-function checkInlineImagesAnywhere(src: Src) {
+function checkInlineImagesAnywhere(src: Src, done: number[] = []) {
   src.rewind();
+  let d = 0;
+  /** The "BI" at `bi` was already read strictly (checkContentTokens). */
+  const strictlyRead = (bi: number) => {
+    while (d < done.length && done[d] < bi) d++;
+    return d < done.length && done[d] === bi;
+  };
   // A read with no "/" in it has no key to check, so the walk goes from "/"
   // to "/", keeping the last "BI" before each (a forward-only cursor): that
   // "BI" starts the read the "/" belongs to, and the read stops at the next
@@ -1050,7 +1079,7 @@ function checkInlineImagesAnywhere(src: Src) {
       nxt = nextBI(src, cur + 2);
     }
     const end = nxt < 0 ? src.n : nxt;
-    lenientInline(src, cur + 2, end);
+    if (!strictlyRead(cur)) lenientInline(src, cur + 2, end);
     if (nxt < 0) return;
     cur = nxt;
     nxt = nextBI(src, cur + 2);
@@ -1280,10 +1309,27 @@ function scanPdf(buf: Buffer): PdfScan {
     let content: Buffer | null = null;
     if (filter === "FlateDecode") {
       const limit = room();
-      content = inflatePdfStream(pre ?? raw, limit);
-      const got = content ? content.length : limit;
-      scan.decodedBytes += got;
-      scan.largestStream = Math.max(scan.largestStream, got);
+      let input: Buffer;
+      if (pre) input = pre;
+      else {
+        // r6 M1: only the stream's own data, as pdf.js finds it, never the
+        // rest of the file. pdf.js takes /Length when an "endstream" follows
+        // it, else the first "endstream" (our `end`). Real deflate data ends
+        // before that (the line end before "endstream" is left over); bytes
+        // past it would only feed the word "endstream" to zlib. A /Length that
+        // runs past an "endstream" in the data is refused.
+        if (typeof dict.length === "number" && start + dict.length > end && endstreamAfter(buf, start + dict.length)) throw malformed();
+        input = buf.subarray(start, end);
+      }
+      const r = inflatePdfStream(input, limit);
+      src.charge(r.used); // the input zlib actually read (r6 M1)
+      // Deflate data still going at the end of the stream's own bytes: pdf.js
+      // would stop there too, unless an indirect /Length (which this scan
+      // does not resolve) sends it further. That case is refused.
+      if (!pre && r.used >= input.length && end < n && dict.length === "indirect") throw malformed();
+      content = r.out;
+      scan.decodedBytes += content.length;
+      scan.largestStream = Math.max(scan.largestStream, content.length);
       if (scan.decodedBytes > PDF_MAX_TOTAL_BYTES) throw tooBig();
     } else if (filter === "ASCII85Decode" || filter === "ASCIIHexDecode") {
       // L2 (r4): a text codec alone only shrinks (ASCII85's "z" aside, which
@@ -1301,14 +1347,25 @@ function scanPdf(buf: Buffer): PdfScan {
       const size = jpeg ? jpegFrameSize(jpeg) : null;
       if (size) checkPixels(size.w, size.h);
     }
+    // r6 H2: pdf.js reads any stream the xref names as an object stream,
+    // whatever its /Type or /Subtype, if it has /N and /First. One with
+    // /First is checked as one here (an ICC profile has /N alone, and pdf.js
+    // cannot use a stream without /First). If it is labelled or coded as an
+    // image, it is refused: real files never do that.
+    const objStm = dict.keys.has("First");
+    if (objStm) {
+      if (dict.isImage || plan.codec || (!content && filter !== null)) throw malformed();
+      if (!content || !content.length) throw malformed();
+      checkObjStm(new Src(content, CONTENT_BUDGET_BASE), dict.n, dict.first);
+    }
     if (content && content.length && !dict.isImage && !plan.codec) {
       // Each stream's content is read with its own budget, from its own size
       // (r5 L1). Unfiltered data is a slice of the file, and slices never
       // overlap (above), so no file byte is read twice this way.
       const csrc = new Src(content, CONTENT_BUDGET_BASE);
-      if (dict.type === "ObjStm") checkObjStm(csrc, dict.n, dict.first);
-      if (dict.type !== "ObjStm" && dict.type !== "XRef") checkContentTokens(csrc, !isBinaryStream(dict));
-      checkInlineImagesAnywhere(csrc);
+      if (dict.type === "ObjStm" && !objStm) checkObjStm(csrc, dict.n, dict.first); // no /First: refused there
+      const strictlyRead = dict.type !== "ObjStm" && dict.type !== "XRef" && !objStm && !isBinaryStream(dict) ? checkContentTokens(csrc) : [];
+      checkInlineImagesAnywhere(csrc, strictlyRead);
     }
   }
 
