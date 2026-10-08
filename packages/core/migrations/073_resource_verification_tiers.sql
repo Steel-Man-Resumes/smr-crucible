@@ -232,8 +232,8 @@ WITH base AS (
          (c.confidence IN ('high','medium')
            AND c.expires_on > (now() AT TIME ZONE 'UTC')::date
            AND c.fields_hash = public.resource_fields_hash(s, o.name, o.website)
-           AND c.review_result = 'PASS'
-           AND o.status = 'active') AS check_ok
+           AND o.status = 'active') AS check_fresh,
+         (c.review_result = 'PASS') AS review_pass
   FROM resource_service s
   JOIN resource_org o ON o.id = s.org_id
   LEFT JOIN LATERAL (
@@ -273,16 +273,16 @@ work AS (
 )
 SELECT b.service_id, b.state, b.county, b.area_id,
   CASE
-    WHEN b.check_ok AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'R4'
-    WHEN b.check_ok AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'R3'
-    WHEN b.check_ok AND co.n > 0 THEN 'R2'
-    WHEN b.check_ok AND b.verify_method <> 'dataset' THEN 'R1'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'R4'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'R3'
+    WHEN b.check_fresh AND co.n > 0 AND (b.verify_method = 'dataset' OR b.review_pass) THEN 'R2'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' THEN 'R1'
     ELSE 'R0' END AS tier,
   CASE
-    WHEN b.check_ok AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'active relationship with a working contact inside its cadence'
-    WHEN b.check_ok AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'the org confirmed the listing'
-    WHEN b.check_ok AND co.n > 0 THEN 'independent corroboration from a different host'
-    WHEN b.check_ok AND b.verify_method <> 'dataset' THEN 'one source, fact-checked'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'active relationship with a working contact inside its cadence'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'the org confirmed the listing'
+    WHEN b.check_fresh AND co.n > 0 AND (b.verify_method = 'dataset' OR b.review_pass) THEN 'independent corroboration from a different host'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' THEN 'one source, fact-checked'
     ELSE 'held: no clean live check, or dataset only' END AS tier_basis
 FROM base b
 LEFT JOIN corr co ON co.service_id = b.service_id
