@@ -67,7 +67,10 @@ test("S2: the writer's 'current' is never the person's status: a BLOCK an answer
   assert.ok(s.openItems.some((i) => i.kind === "credential_status_claimed" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
   const typeOnly = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center, I keep it in my wallet.", verdict: "stands" as const }));
   assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: typeOnly }).state, "draft");
-  const withStatus = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center and it expired last spring.", verdict: "stands" as const }));
+  // Round 4: only an answer of the same status family settles it; one that contradicts the page does not.
+  const contradicts = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center and it expired last spring.", verdict: "stands" as const }));
+  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: contradicts }).state, "draft");
+  const withStatus = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center and it is still current.", verdict: "stands" as const }));
   assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: withStatus }).state, "finished");
 });
 

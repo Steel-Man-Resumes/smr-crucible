@@ -190,7 +190,9 @@ CERTIFICATIONS
   const names = creds.map((d) => d.question.match(/"([^"]+)"/)?.[1]);
   assert.equal(new Set(names).size, names.length, JSON.stringify(names));
   assert.ok(!names.some((n) => /Patient care/.test(n ?? "")), "never named by another term on the line");
-  assert.equal(names.filter((n) => /nursing assistant/i.test(n ?? "")).length, 1);
+  // Round 4: "Nursing assistant" as a job is not the CNA credential, so it is one memory prompt (D4), still asked once.
+  const prompts = getResumeStatus({ resumeText: r, sourceText: src }).openItems.filter((i) => i.kind === "credential_unsaid").map((i) => i.subject ?? "");
+  assert.equal([...names, ...prompts].filter((n) => /nursing assistant/i.test(n ?? "")).length, 1, JSON.stringify([names, prompts]));
 });
 
 test("burden: a credential the person gave with a type and a year is not asked", () => {

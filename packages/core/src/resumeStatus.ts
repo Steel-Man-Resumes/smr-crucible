@@ -40,6 +40,8 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
+import { scopeNotTheirs, answerTalksScope } from "./scopeWords";
+import { answerGivesStatusFor } from "./credentialStatus";
 import { normalizeDigits, numberTokens } from "./numberRead";
 import {
   answerGivesCredentialType,
@@ -373,18 +375,6 @@ function titlesNotTheirs(resumeText: string, sourceText: string): string[] {
   return out;
 }
 
-const SCOPE_WORD_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\w*|mentor\w*|coordinat\w*)\b/gi;
-
-/** The first scope word on a line that the person never used about their work, if any ("led" reads as "lead"). */
-export function scopeNotTheirs(line: string, sourceText: string): string | undefined {
-  const norm = (w: string) => stemOf(w.toLowerCase() === "led" ? "lead" : w);
-  const said = new Set((sourceText.toLowerCase().match(/[a-z]+/g) ?? []).map(norm));
-  for (const m of stripBullet(line).matchAll(SCOPE_WORD_RE)) {
-    if (!said.has(norm(m[1]))) return m[1].toLowerCase() === "led" ? "lead" : m[1].toLowerCase();
-  }
-  return undefined;
-}
-
 /** The lines above the first section heading (after the name): the header block. */
 function headerLinesOf(resumeText: string): Set<string> {
   const out = new Set<string>();
@@ -556,11 +546,13 @@ function pickDefend(
   const mentions = credentialMentionsOf(resumeText || "");
   // A short credential line is asked about as a credential; a longer sentence
   // that also carries one is still read like any other line.
-  const credLines = new Set(
-    mentions
+  const credLines = new Set([
+    ...mentions
       .filter((m) => !m.term && (m.where === "credentials" || m.line.replace(/^[-•*]\s*/, "").split(/\s+/).length <= 8))
-      .map((m) => m.line)
-  );
+      .map((m) => m.line),
+    // A credentials line that lists several credentials is read part by part, never as a line far from their words.
+    ...mentions.filter((m) => m.term && m.where === "credentials").map((m) => m.context),
+  ]);
   // Each credential is asked about once, by its own name, at its home line
   // (or its skills term). Not at all when the person's words already give its
   // type and a year or status.
@@ -653,7 +645,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // A scope word the person never used ("supervised", "managed", "led") is
     // answered only by an answer about that scope.
     const scope = scopeNotTheirs(line, sourceText);
-    if (scope && a!.kind !== "rewrite" && !answerMentions(a!.answer, scope)) return undefined;
+    if (scope && a!.kind !== "rewrite" && !answerTalksScope(a!.answer)) return undefined;
     return a;
   };
 
@@ -690,7 +682,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       } else if (c.issue === "status_claimed") {
         // The page gives a status or year the person never gave: an answer with their own status settles it.
         const a = standingFor(m.line);
-        if (a && hasCredentialStatus(a.answer)) continue;
+        if (a && answerGivesStatusFor(a.answer, m.context || m.line)) continue;
         credentialFindings.push({
           rule: "STD-T03",
           severity: "BLOCK",
@@ -700,7 +692,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
         });
       } else {
         const a = standingFor(m.line);
-        if (a && hasCredentialStatus(a.answer)) continue;
+        if (a && answerGivesStatusFor(a.answer, "")) continue;
         credentialFindings.push({
           rule: "STD-T03",
           severity: "FIX",
