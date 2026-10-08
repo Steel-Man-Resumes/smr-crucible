@@ -203,6 +203,29 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
         list = [new Paragraph({ spacing: { before, after: 0, ...exact(lineH(b)) }, children: [new TextRun({ text: s.lines.join(" "), font: WORD_FONT.serif, size: Math.round(r0.size * 2), color: hex(COLORS.ink) })] })];
         break;
       }
+      case "entry": {
+        // Years at the left, a tab, then the entry hanging beside them.
+        const size = Math.round((b.lines[0]?.runs.find((r) => r.face !== "sansBold")?.size ?? L.body) * 2);
+        const col = tw(64);
+        const parts: TextRun[] = [];
+        s.parts.forEach((p, i) => {
+          parts.push(new TextRun({ text: (i > 0 ? " " : "") + p.text, font: WORD_FONT.serif, size, italics: !!p.italic, color: hex(COLORS.ink) }));
+          if (p.after) parts.push(new TextRun({ text: p.after, font: WORD_FONT.serif, size, color: hex(COLORS.ink) }));
+        });
+        list = [
+          new Paragraph({
+            spacing: { before, after: 0, ...exact(lineH(b)) },
+            indent: { left: col, hanging: col },
+            tabStops: [{ type: TabStopType.LEFT, position: col }],
+            children: [
+              new TextRun({ text: s.years, font: WORD_FONT.sans, size: Math.round(SHAPE.metaSize * 2), bold: true, color: hex(COLORS.ink) }),
+              new TextRun({ children: [new Tab()], font: WORD_FONT.serif, size }),
+              ...parts,
+            ],
+          }),
+        ];
+        break;
+      }
       case "letter-closing":
         list = s.lines.map((t, i) =>
           new Paragraph({

@@ -55,8 +55,6 @@ export interface CreativeKindSettings {
   /** How the bio treats entries that name a facility. Unset until the person picks. */
   bioDisclosure?: BioDisclosureMode;
   bioPronoun?: BioPronoun;
-  /** Work ids, strongest first, for the work-sample list. */
-  sampleOrder?: string[];
 }
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,8 +101,6 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   if (typeof bd === "string" && (BIO_DISCLOSURE_MODES as readonly string[]).includes(bd)) out.bioDisclosure = bd as BioDisclosureMode;
   const bp = v("bioPronoun");
   if (typeof bp === "string" && (BIO_PRONOUNS as readonly string[]).includes(bp)) out.bioPronoun = bp as BioPronoun;
-  const so = v("sampleOrder");
-  if (Array.isArray(so)) out.sampleOrder = ids(so);
   return out;
 }
 
@@ -224,7 +220,10 @@ function commaJoin(parts: Part[]): Part[] {
   parts
     .filter((p) => p.text && p.text.trim())
     .forEach((p, i, arr) => {
-      out.push(i < arr.length - 1 ? { ...p, after: "," } : { ...p });
+      if (i === arr.length - 1) out.push({ ...p });
+      // A quoted title takes its comma inside the quotes ("Two Poems," Review).
+      else if (/^".*"$/.test(p.text)) out.push({ ...p, text: `${p.text.slice(0, -1)},"` });
+      else out.push({ ...p, after: "," });
     });
   return out;
 }

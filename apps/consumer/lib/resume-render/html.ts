@@ -59,6 +59,10 @@ ${fontFaceCss(opts.fontUrls)}
 .rr .letter p{margin:0 0 ${pt((body + 0.5) * 0.75)} 0;font-size:${pt(body + 0.5)};line-height:${L.lineHeight + 0.03}}
 .rr .letter .closing .ln:nth-child(2){margin-top:${pt((body + 0.5) * 1.2)};font-weight:700}
 .rr .checklist h2{margin-top:0}
+.rr .en{display:grid;grid-template-columns:${pt(64)} 1fr;margin:0 0 ${pt(L.bulletAfter + 1.5)} 0;break-inside:avoid}
+.rr .ey{font:700 ${pt(SHAPE.metaSize)}/${L.lineHeight} ${sans};color:${COLORS.ink};white-space:nowrap;padding-top:${pt(Math.max(0, (body - SHAPE.metaSize) * 0.6))}}
+.rr .et{margin:0}
+.rr .et i{font-style:italic}
 ${opts.standalone ? `@page{size:Letter;margin:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(Math.max(0, L.marginBottom - 5))} ${pt(L.marginSide)}}\n` : ""}@media print{
 .rr .page{width:auto;min-height:0;padding:0;margin:0;box-shadow:none;break-after:page}
 .rr .page:last-child{break-after:auto}
@@ -129,6 +133,13 @@ function blockHtml(b: BlockSpec, letter: boolean): string {
       return `<p>${esc(plain(b))}</p>`;
     case "letter-closing":
       return `<p class="closing">${s.lines.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</p>`;
+    case "entry": {
+      // Years in their own column; titles of works and shows in italics.
+      const text = s.parts
+        .map((p) => (p.italic ? `<i>${esc(p.text)}</i>` : esc(p.text)) + (p.after ? esc(p.after) : ""))
+        .join(" ");
+      return `<div class="en"><span class="ey">${esc(s.years)}</span><p class="et">${text}</p></div>`;
+    }
     default:
       return letter ? "" : "";
   }
