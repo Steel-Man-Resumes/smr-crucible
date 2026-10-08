@@ -69,4 +69,12 @@ describe("/api/parse: a refused upload is the plain unreadable error", () => {
     assert.match(block.slice(0, 400), /guided: true/);
     assert.match(block.slice(0, 400), /status: 422/);
   });
+
+  it("a PDF over 10 MB is refused before it is read (r5: pdf.js memory sits outside the worker's heap limit)", () => {
+    const src = readFileSync(join(root, "app/api/parse/route.ts"), "utf8");
+    assert.match(src, /const PDF_MAX_UPLOAD_BYTES = 10 \* 1024 \* 1024;/);
+    const cap = src.indexOf("isPdf && file.size > PDF_MAX_UPLOAD_BYTES");
+    assert.ok(cap > 0 && cap < src.indexOf("await file.arrayBuffer()"), "checked before the file is read");
+    assert.match(src.slice(cap, cap + 300), /status: 413/);
+  });
 });
