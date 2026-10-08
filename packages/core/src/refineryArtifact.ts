@@ -430,7 +430,9 @@ export type ForkResult =
  * (is_locked / is_current / lane are NOT copied) -- a fork is a fresh draft,
  * not a second approved baseline. It does stay in its source's career lane
  * (lane_id, migration 073): a copy tailored from the Warehouse resume is
- * Warehouse work. iteration_number is source + 1.
+ * Warehouse work. An archived lane takes no new work, so a fork of work in an
+ * archived lane goes to the person's newest open lane, or main when there is
+ * none. iteration_number is source + 1.
  *
  * content_hash is computed in SQL with md5(content::text) as part of the same
  * INSERT..SELECT, since the copy never passes through Node -- see hashContent()'s
@@ -467,7 +469,15 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        md5(src.content::text),
        $4,
        $5,
-       src.lane_id
+       CASE
+         WHEN src.lane_id IS NULL THEN NULL
+         WHEN EXISTS (SELECT 1 FROM career_lane l
+                       WHERE l.id = src.lane_id AND l.user_id = src.user_id AND l.archived_at IS NULL)
+           THEN src.lane_id
+         ELSE (SELECT l.id FROM career_lane l
+                WHERE l.user_id = src.user_id AND l.archived_at IS NULL
+                ORDER BY l.created_at DESC LIMIT 1)
+       END
      FROM refinery_artifact src
      WHERE src.id = $1 AND src.user_id = $2
      ON CONFLICT (user_id, parent_artifact_id, operation_key) WHERE operation_key IS NOT NULL

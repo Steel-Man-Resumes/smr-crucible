@@ -17,7 +17,10 @@ import {
   isLaneKey,
   isLaneTool,
   looksLikeExampleResume,
+  looksLikeExampleLetterText,
   isFictionalPhone,
+  MAX_OPEN_LANES,
+  MAX_TOTAL_LANES,
   isFictionalEmail,
   MAIN_LANE_KEY,
   LANE_FORMATS,
@@ -27,7 +30,9 @@ import {
   LANE_ENSURE_FIRST_SQL,
   ARTIFACT_SET_LANE_SQL,
   LANE_ARCHIVE_SQL,
+  LANE_OF_NEWEST_RESUME_SQL,
 } from "../careerLane";
+import { ARTIFACT_FORK_SQL } from "../refineryArtifact";
 import { RLS_PROTECTED_TABLES } from "../rlsHealth";
 
 const MIGRATIONS = join(__dirname, "..", "..", "migrations");
@@ -104,6 +109,15 @@ describe("first lane from the Forge target", () => {
     assert.match(LANE_ENSURE_FIRST_SQL, /WHERE NOT EXISTS \(SELECT 1 FROM career_lane WHERE user_id = \$1\)/);
     assert.match(LANE_ENSURE_FIRST_SQL, /ON CONFLICT DO NOTHING/);
   });
+  it("two tabs cannot make two first lanes, even with different targets (is_first marker, unique per person)", () => {
+    assert.match(LANE_ENSURE_FIRST_SQL, /is_first\)\s+SELECT \$1, \$2, \$3, true/);
+    const sql = readFileSync(join(MIGRATIONS, "073_career_lanes.sql"), "utf8");
+    assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS career_lane_one_first_uniq\s+ON career_lane \(user_id\) WHERE is_first/);
+  });
+  it("a screen opens in the open lane holding the newest resume, examples left out", () => {
+    assert.match(LANE_OF_NEWEST_RESUME_SQL, /l\.archived_at IS NULL/);
+    assert.match(LANE_OF_NEWEST_RESUME_SQL, /is_demo = false/);
+  });
 });
 
 describe("lane keys and tools", () => {
@@ -131,6 +145,37 @@ describe("examples (074 mirror)", () => {
     assert.equal(isFictionalEmail("x@mail.test"), true);
     assert.equal(isFictionalEmail("x@examples.com"), false);
     assert.equal(isFictionalEmail("x@gmail.com"), false);
+  });
+  it("SQL and TypeScript agree on the edge shapes: padded email, phone stored as a number", () => {
+    assert.equal(isFictionalEmail("  Morgan@Example.com  "), true);
+    assert.equal(isFictionalPhone(4145550192), true);
+    assert.equal(isFictionalPhone(4145551234), false);
+    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+    assert.match(sql, /btrim\(lower\(COALESCE\(content->'contact'->>'email', ''\)\)\)/);
+  });
+  it("in a letter, the address must END at the reserved name; real domains that contain one are left", () => {
+    for (const t of ["Write to pat@example.org.", "x@demo.example, thanks", "reach me: x@mail.test", "Call (262) 555-0147 any time."]) {
+      assert.equal(looksLikeExampleLetterText(t), true, t);
+    }
+    for (const t of ["jane@hr.test.com", "jo@example.com.au", "x@mail.invalid.org", "Call 414-867-5309.", "ref 1555-01234"]) {
+      assert.equal(looksLikeExampleLetterText(t), false, t);
+    }
+    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+    assert.match(sql, /\(\?!\[a-z0-9-\]\|\\\.\[a-z0-9\]\)/);
+  });
+  it("074 leaves demo accounts alone, in its own clause (sign-in email is itself a reserved address)", () => {
+    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+    assert.match(sql, /DEMO ACCOUNTS ARE LEFT ALONE/);
+    assert.match(sql, /AND NOT EXISTS \(\s+SELECT 1 FROM users u\s+WHERE u\.id = refinery_artifact\.user_id/);
+    const dry = readFileSync(join(MIGRATIONS, "dry-run", "074_mark_demo_resumes_count.sql"), "utf8");
+    assert.match(dry, /BEGIN TRANSACTION READ ONLY/);
+    assert.match(dry, /count\(\*\)/);
+    assert.doesNotMatch(dry.replace(/--.*$/gm, ""), /\b(UPDATE|DELETE|INSERT)\b/);
+  });
+  it("both migrations give up on a lock after 5 seconds rather than queue every request", () => {
+    for (const f of ["073_career_lanes.sql", "074_mark_demo_resumes.sql"]) {
+      assert.match(readFileSync(join(MIGRATIONS, f), "utf8"), /SET LOCAL lock_timeout = '5s';/, f);
+    }
   });
   it("a resume with no contact block is never an example", () => {
     assert.equal(looksLikeExampleResume({ experience: [] }), false);
@@ -160,6 +205,14 @@ describe("073 schema", () => {
   it("hybrid rule and the format list are in the database too", () => {
     assert.match(sql, /CHECK \(format <> 'hybrid' OR \(hybrid_uneven_history AND hybrid_field_change\)\)/);
     assert.match(sql, /CHECK \(format IN \('chronological', 'hybrid'\)\)/);
+  });
+  it("a fork of work in an archived lane goes to the newest open lane, or main; main stays main", () => {
+    assert.match(ARTIFACT_FORK_SQL, /WHEN src\.lane_id IS NULL THEN NULL/);
+    assert.match(ARTIFACT_FORK_SQL, /l\.archived_at IS NULL\)\s+THEN src\.lane_id/);
+    assert.match(ARTIFACT_FORK_SQL, /ORDER BY l\.created_at DESC LIMIT 1/);
+  });
+  it("caps: open lanes, and all lanes ever made, so create-and-archive cannot loop forever", () => {
+    assert.ok(MAX_OPEN_LANES < MAX_TOTAL_LANES);
   });
   it("lanes are archived by the app, not deleted; archived lanes take no new work", () => {
     assert.doesNotMatch(LANE_ARCHIVE_SQL, /DELETE/);

@@ -32,6 +32,10 @@ export const LANE_TARGET_MAX = 200;
 export const LANE_NAME_FROM_TARGET_MAX = 40;
 /** Most open lanes one person may hold. Generous; stops a loop, not a person. */
 export const MAX_OPEN_LANES = 12;
+/** Most lanes one person may ever make, archived ones included. Bringing one back is the way past it. */
+export const MAX_TOTAL_LANES = 40;
+/** Lane writes (create, settings, archive, tool notes) per account per day. */
+export const LANE_WRITES_PER_DAY = 200;
 
 export interface CareerLane {
   id: string;
@@ -45,6 +49,8 @@ export interface CareerLane {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  /** The lane made automatically from the first Forge resume. */
+  is_first?: boolean;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -197,16 +203,27 @@ export function resolveLaneSettings(
  * example.com/.org/.net or under .test, .example or .invalid. The same rule as
  * migration 074, kept here so it is tested and can be reused.
  */
-const FICTIONAL_EMAIL_RE = /@([a-z0-9-]+\.)*(example\.(com|org|net)|[a-z0-9-]+\.(test|example|invalid))$/;
+const FICTIONAL_DOMAIN = "@([a-z0-9-]+\\.)*(example\\.(com|org|net)|[a-z0-9-]+\\.(test|example|invalid))";
+const FICTIONAL_EMAIL_RE = new RegExp(`${FICTIONAL_DOMAIN}$`);
+/** In free text: the address must END at the reserved name (jane@hr.test.com is real). */
+const FICTIONAL_EMAIL_IN_TEXT_RE = new RegExp(`${FICTIONAL_DOMAIN}(?![a-z0-9-]|\\.[a-z0-9])`);
+const FICTIONAL_PHONE_IN_TEXT_RE = /(?<![A-Za-z0-9_])555[-. ]01[0-9]{2}(?![A-Za-z0-9_])/;
 
 export function isFictionalPhone(phone: unknown): boolean {
-  if (typeof phone !== "string") return false;
-  return /^1?[0-9]{3}55501[0-9]{2}$/.test(phone.replace(/[^0-9]/g, ""));
+  // A phone stored as a JSON number reads the same as SQL's ->> text.
+  if (typeof phone !== "string" && typeof phone !== "number") return false;
+  return /^1?[0-9]{3}55501[0-9]{2}$/.test(String(phone).replace(/[^0-9]/g, ""));
 }
 
 export function isFictionalEmail(email: unknown): boolean {
   if (typeof email !== "string") return false;
   return FICTIONAL_EMAIL_RE.test(email.trim().toLowerCase());
+}
+
+/** Would migration 074 mark this cover letter's text as an example? */
+export function looksLikeExampleLetterText(text: unknown): boolean {
+  if (typeof text !== "string") return false;
+  return FICTIONAL_PHONE_IN_TEXT_RE.test(text) || FICTIONAL_EMAIL_IN_TEXT_RE.test(text.toLowerCase());
 }
 
 /** Would migration 074 mark this resume's content as an example? */

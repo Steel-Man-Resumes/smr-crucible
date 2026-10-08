@@ -35,11 +35,28 @@
 -- Additive and idempotent. Nothing reads these columns until the lane code is
 -- live; old code ignores them.
 --
--- ROLLBACK (no deploy needed while no code reads them):
---   ALTER TABLE refinery_artifact DROP COLUMN IF EXISTS lane_id;
---   ALTER TABLE refinery_artifact DROP COLUMN IF EXISTS is_demo;
---   DROP TABLE IF EXISTS lane_tool_intro;
---   DROP TABLE IF EXISTS career_lane;
+-- LOCKS. Adding the columns and the foreign key takes an ACCESS EXCLUSIVE
+-- lock on refinery_artifact for the length of the transaction (a fast
+-- metadata change plus one validation scan; every lane_id is NULL at apply
+-- time). lock_timeout makes it give up after 5 seconds instead of queueing
+-- every resume request behind a long-running query. If it times out, run it
+-- again.
+--
+-- ROLLBACK, in this order:
+--   1. Revert the lane CODE first and deploy that. Live lane code queries
+--      lane_id and is_demo (the Library, the Tailor, the export, the RLS
+--      health check) and breaks the moment these columns are gone.
+--   2. Rolling back LOSES ALL LANE DATA for good: lane names, settings, which
+--      resume sits in which lane, the example marks, dismissed tool notes. If
+--      anyone has used lanes, export them first.
+--   3. Then, as the owner role:
+--        ALTER TABLE refinery_artifact DROP COLUMN IF EXISTS lane_id;
+--        ALTER TABLE refinery_artifact DROP COLUMN IF EXISTS is_demo;
+--        DROP TABLE IF EXISTS lane_tool_intro;
+--        DROP TABLE IF EXISTS career_lane;
+--        DELETE FROM _migrations WHERE filename IN ('073_career_lanes.sql', '074_mark_demo_resumes.sql');
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE IF NOT EXISTS career_lane (
   id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -58,6 +75,9 @@ CREATE TABLE IF NOT EXISTS career_lane (
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   archived_at            TIMESTAMPTZ,
+  -- The lane made automatically from the first Forge resume. At most one per
+  -- person (index below), so two tabs saving at once cannot make two.
+  is_first               BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT career_lane_hybrid_needs_both_conditions
     CHECK (format <> 'hybrid' OR (hybrid_uneven_history AND hybrid_field_change)),
   -- Target of the composite foreign key below.
@@ -70,6 +90,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS career_lane_open_name_uniq
 
 CREATE INDEX IF NOT EXISTS idx_career_lane_user
   ON career_lane (user_id, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS career_lane_one_first_uniq
+  ON career_lane (user_id) WHERE is_first;
 
 CREATE TABLE IF NOT EXISTS lane_tool_intro (
   user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
