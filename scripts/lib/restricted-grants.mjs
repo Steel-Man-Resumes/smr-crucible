@@ -88,6 +88,8 @@ export const RESTRICTED_GRANTS = {
   resource_chain_step_corroboration: [],
   resource_relationship: [],
   resource_relationship_event: [],
+  resource_corroboration_void: [],
+  resource_relationship_event_void: [],
   resource_service_tier_v: [],
   resource_chain_tier_v: [],
 };
@@ -104,7 +106,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_suppression", "resource_chain", "resource_chain_step", "resource_chain_step_review",
   "resource_chain_step_dep", "resource_public_v", "resource_chain_public_v", "resource_recheck_queue_v",
   "resource_chain_recheck_queue_v",
-  "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_service_tier_v", "resource_chain_tier_v",
+  "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v",
 ];
 
 /**

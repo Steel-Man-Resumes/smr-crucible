@@ -1,4 +1,9 @@
--- 073_resource_verification_tiers.sql  (v1, drafted 2026-10-08, NOT APPLIED, NOT REVIEWED)
+-- 073_resource_verification_tiers.sql  (v2, drafted 2026-10-08, NOT APPLIED)
+-- v2: fixes from the first adversary review (static) and a PGlite (PostgreSQL) test suite. A service tier now
+-- needs everything resource_public_v needs (active, adult-facing, T1 approved), a chain tier needs the chain
+-- to be showing in resource_chain_public_v, a confirmation is bound to the check it confirmed, resource_host
+-- strips query, fragment, userinfo, port and trailing dot, R4 requires R3 evidence for that service,
+-- directories and same-agency pages no longer lift a tier, and wrong corroborations or events can be voided.
 -- Verification tiers for the resource directory (Troy 2026-10-08):
 --   R1 public record      the org's or an agency's own page, quote on the page (lowest, may be shown)
 --   R2 multiple proof     two or more INDEPENDENT sources agree
@@ -9,7 +14,7 @@
 -- NOT the same thing as resource_check.review_tier ('T1','T4') in 072: that column marks content that
 -- needs a named person's approval before it shows (legal, ID, courts). It is unchanged by this file.
 --
--- ADDITIVE. Adds five tables and two owner-only views. Alters no existing table, trigger or view,
+-- ADDITIVE. Adds six tables and two owner-only views. Alters no existing table, trigger or view,
 -- and does not touch resource_public_v or resource_chain_public_v (so the recorded md5 baselines for
 -- those two views do not move). Exposing a tier to the app is a later, separate change made when
 -- services are activated; it will need new baselines.
@@ -18,16 +23,18 @@
 --  R1 service: the newest live check is unexpired, confidence high or medium, its fields hash matches
 --     the service as it is now, review_result PASS, and the check is not a dataset check.
 --  R2 service: R1, plus at least one corroboration row that is flagged independent, is not weak, and
---     whose source host differs from the check's source host. A dataset check can reach R2 only through
---     such a corroboration from an org-owned or government page (source_type official_site or
---     government_site) that is unexpired; a dataset row with no such corroboration is R0.
+--     whose source host differs from the check's source host, and is not a directory. A dataset check can reach R2 only through
+--     such a corroboration from the org's own page (source_type official_site) that is unexpired; a dataset row with no such corroboration is R0. Directory sources (211 and the like) and same-agency
+--     pages never lift a dataset row; only the org's own site (source_type official_site) does.
 --  R3 service: R2 not required. A live unexpired org_reply check (072: source_type org_confirmed_email),
 --     OR a 'confirmed' relationship event for that service within 180 days. "We emailed" ('asked') is
 --     recorded and never raises a tier.
 --  R4 service: an active relationship for the org (service-scoped or org-wide) with a 'working' event
 --     inside cadence_days + 14 days (same rule as directory_relationship_is_live in 061).
---  R3 and R4 need the service to be R1 or better first (a confirmed row whose own check has lapsed
---     does not show a high tier on stale data).
+--  R3 and R4 need a clean non-dataset check first (a confirmed row whose own check has lapsed does not
+--     show a high tier on stale data). A confirmation is bound to the check it confirmed: a newer check
+--     needs a new confirmation. R4 additionally needs the R3 evidence for that same service (a working
+--     contact says the org is reachable, not that this service's phone and hours are right).
 --  Chain: a chain is only as strong as its weakest step. Step R1 = latest review CONFIRMED or CERTIFIED
 --     at depth facts and no open law conflict; step R2 = R1 plus an independent, non-weak step
 --     corroboration whose host differs from the step's source host. Chain tier is the minimum over its
@@ -38,16 +45,18 @@
 -- same organization can be wrongly counted independent if a person flags them so. The flag is a
 -- process control (the importer records the reviewer's call), not a schema guarantee, as with approvals in 072.
 --
--- ALSO REQUIRED IN THE SAME CHANGE: add the five tables and two views to scripts/lib/restricted-grants.mjs
+-- ALSO REQUIRED IN THE SAME CHANGE: add the six tables and two views to scripts/lib/restricted-grants.mjs
 -- (RESTRICTED_GRANTS and DIRECTORY_OBJECTS) with [] for every one.
 --
 -- ROLLBACK (data in the new tables is lost; run as owner, by hand; order matters):
 --   DROP VIEW resource_chain_tier_v, resource_service_tier_v;
---   DROP TABLE resource_relationship_event, resource_relationship, resource_chain_step_corroboration,
---     resource_corroboration;
+--   (first pg_dump the four data tables: relationship events are real contact history)
+--   DROP TABLE resource_relationship_event_void, resource_corroboration_void, resource_relationship_event,
+--     resource_relationship, resource_chain_step_corroboration, resource_corroboration;
 --   DROP FUNCTION public.resource_host(text), public.resource_corroboration_guard(),
 --     public.resource_step_corroboration_guard(), public.resource_relationship_event_guard(),
 --     public.resource_relationship_guard();
+--   DELETE FROM _migrations WHERE filename = '073_resource_verification_tiers.sql';
 --   and remove the new names from restricted-grants.mjs.
 
 DO $$ BEGIN
@@ -62,8 +71,12 @@ END $$;
 -- Host of a URL, lowercased, no leading www. NULL for anything that is not http(s).
 CREATE OR REPLACE FUNCTION public.resource_host(u text) RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
-  SELECT CASE WHEN u ~* '^https?://' THEN
-    regexp_replace(lower(split_part(split_part(split_part(u, '://', 2), '/', 1), ':', 1)), '^www\.', '') END
+  SELECT CASE WHEN u ~* '^https?://[^/?#[:space:]]+' THEN
+    regexp_replace(
+      regexp_replace(
+        regexp_replace(lower(substring(u from '^[hH][tT][tT][pP][sS]?://([^/?#]*)')), '^.*@', ''),
+        ':[0-9]*$', ''),
+      '^www\.|\.$', '', 'g') END
 $$;
 
 -- 1. Corroboration of a service check: a second source for the same service, from a different host.
@@ -93,6 +106,9 @@ BEGIN
   END IF;
   IF public.resource_host(NEW.source_url) IS NULL THEN
     RAISE EXCEPTION 'corroboration needs an http(s) source url' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.observed_on > (now() AT TIME ZONE 'UTC')::date THEN
+    RAISE EXCEPTION 'observed_on is in the future' USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
 END $$;
@@ -125,6 +141,9 @@ BEGIN
   IF public.resource_host(NEW.source_url) IS NULL THEN
     RAISE EXCEPTION 'step corroboration needs an http(s) source url' USING ERRCODE = 'check_violation';
   END IF;
+  IF NEW.observed_on > (now() AT TIME ZONE 'UTC')::date THEN
+    RAISE EXCEPTION 'observed_on is in the future' USING ERRCODE = 'check_violation';
+  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER resource_chain_step_corroboration_guard BEFORE INSERT ON resource_chain_step_corroboration
@@ -151,6 +170,9 @@ BEGIN
   IF NEW.service_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM resource_service s WHERE s.id = NEW.service_id AND s.org_id = NEW.org_id) THEN
     RAISE EXCEPTION 'relationship service must belong to the relationship org' USING ERRCODE = 'check_violation';
   END IF;
+  IF TG_OP = 'INSERT' AND NEW.started_on > (now() AT TIME ZONE 'UTC')::date THEN
+    RAISE EXCEPTION 'started_on is in the future' USING ERRCODE = 'check_violation';
+  END IF;
   IF TG_OP = 'UPDATE' THEN
     IF (to_jsonb(NEW) - 'status' - 'note') IS DISTINCT FROM (to_jsonb(OLD) - 'status' - 'note') THEN
       RAISE EXCEPTION 'only status and note of a relationship change' USING ERRCODE = 'check_violation';
@@ -168,6 +190,7 @@ CREATE TABLE resource_relationship_event (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   relationship_id uuid NOT NULL REFERENCES resource_relationship(id),
   service_id      uuid REFERENCES resource_service(id),
+  check_id        uuid REFERENCES resource_check(id),      -- a confirmation names the live check it confirmed
   kind            text NOT NULL CHECK (kind IN ('asked','confirmed','working')),
   occurred_on     date NOT NULL,
   method          text NOT NULL CHECK (method IN ('email_reply','phone_call','in_person','web_form','partner_report','email_sent')),
@@ -177,7 +200,12 @@ CREATE TABLE resource_relationship_event (
   -- an outbound email alone is only 'asked'; a confirmation or working contact is a reply, call, visit, form or partner report
   CHECK (kind = 'asked' OR method <> 'email_sent'),
   -- a confirmation is about a named service
-  CHECK (kind <> 'confirmed' OR service_id IS NOT NULL)
+  CHECK (kind <> 'confirmed' OR service_id IS NOT NULL),
+  CHECK (kind <> 'confirmed' OR check_id IS NOT NULL),
+  CHECK (kind = 'confirmed' OR check_id IS NULL),
+  -- hearsay does not confirm and does not make a working contact
+  CHECK (kind <> 'confirmed' OR method IN ('email_reply','phone_call','in_person','web_form')),
+  CHECK (kind <> 'working'   OR method IN ('email_reply','phone_call','in_person'))
 );
 CREATE INDEX resource_relationship_event_rel ON resource_relationship_event (relationship_id, occurred_on DESC);
 
@@ -185,7 +213,7 @@ CREATE OR REPLACE FUNCTION public.resource_relationship_event_guard() RETURNS tr
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE rel resource_relationship%ROWTYPE;
 BEGIN
-  SELECT * INTO rel FROM resource_relationship WHERE id = NEW.relationship_id;
+  SELECT * INTO rel FROM resource_relationship WHERE id = NEW.relationship_id FOR SHARE;
   IF NOT FOUND OR rel.status <> 'active' THEN
     RAISE EXCEPTION 'events go on an active relationship' USING ERRCODE = 'check_violation';
   END IF;
@@ -201,10 +229,36 @@ BEGIN
   IF rel.service_id IS NOT NULL AND NEW.service_id IS DISTINCT FROM rel.service_id THEN
     RAISE EXCEPTION 'event service must match a service-scoped relationship' USING ERRCODE = 'check_violation';
   END IF;
+  IF NEW.check_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM resource_check k WHERE k.id = NEW.check_id AND k.service_id = NEW.service_id AND k.status = 'live') THEN
+    RAISE EXCEPTION 'a confirmation must name the live check of its service' USING ERRCODE = 'check_violation';
+  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER resource_relationship_event_guard BEFORE INSERT ON resource_relationship_event
   FOR EACH ROW EXECUTE FUNCTION public.resource_relationship_event_guard();
+
+-- A wrong corroboration or event is voided, never edited or deleted. The tier views skip voided rows.
+CREATE TABLE resource_corroboration_void (
+  corroboration_id uuid PRIMARY KEY REFERENCES resource_corroboration(id),
+  voided_on   date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
+  reason      text NOT NULL CHECK (length(btrim(reason)) > 0),
+  recorded_by text NOT NULL CHECK (length(btrim(recorded_by)) >= 2)
+);
+CREATE TABLE resource_relationship_event_void (
+  event_id    uuid PRIMARY KEY REFERENCES resource_relationship_event(id),
+  voided_on   date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
+  reason      text NOT NULL CHECK (length(btrim(reason)) > 0),
+  recorded_by text NOT NULL CHECK (length(btrim(recorded_by)) >= 2)
+);
+CREATE TRIGGER resource_corroboration_void_fixed BEFORE UPDATE OR DELETE ON resource_corroboration_void
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_change();
+CREATE TRIGGER resource_relationship_event_void_fixed BEFORE UPDATE OR DELETE ON resource_relationship_event_void
+  FOR EACH ROW EXECUTE FUNCTION public.resource_no_change();
+CREATE TRIGGER resource_corroboration_void_no_truncate BEFORE TRUNCATE ON resource_corroboration_void
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
+CREATE TRIGGER resource_relationship_event_void_no_truncate BEFORE TRUNCATE ON resource_relationship_event_void
+  FOR EACH STATEMENT EXECUTE FUNCTION public.resource_no_delete();
 
 -- Insert-only / no delete / no truncate, as in 072.
 CREATE TRIGGER resource_corroboration_fixed BEFORE UPDATE OR DELETE ON resource_corroboration
@@ -229,11 +283,12 @@ CREATE VIEW resource_service_tier_v WITH (security_barrier = true) AS
 WITH base AS (
   SELECT s.id AS service_id, s.org_id, s.state, s.county, s.area_id, s.status AS service_status,
          c.id AS check_id, c.source_url AS check_url, c.verify_method, c.source_type,
-         (c.confidence IN ('high','medium')
+         coalesce(c.confidence IN ('high','medium')
            AND c.expires_on > (now() AT TIME ZONE 'UTC')::date
            AND c.fields_hash = public.resource_fields_hash(s, o.name, o.website)
-           AND o.status = 'active') AS check_fresh,
-         (c.review_result = 'PASS') AS review_pass
+           AND o.status = 'active' AND s.status = 'active' AND s.adult_facing, false) AS check_fresh,
+         coalesce(c.review_result = 'PASS'
+           AND (c.review_tier IS DISTINCT FROM 'T1' OR c.human_approved_by IS NOT NULL), false) AS review_pass
   FROM resource_service s
   JOIN resource_org o ON o.id = s.org_id
   LEFT JOIN LATERAL (
@@ -248,19 +303,21 @@ corr AS (
   WHERE x.independent AND NOT x.weak
     AND x.expires_on > (now() AT TIME ZONE 'UTC')::date
     AND public.resource_host(x.source_url) IS DISTINCT FROM public.resource_host(b.check_url)
-    AND (b.verify_method <> 'dataset' OR x.source_type IN ('official_site','government_site'))
+    AND x.source_type <> 'directory'
+    AND (b.verify_method <> 'dataset' OR x.source_type = 'official_site')
+    AND NOT EXISTS (SELECT 1 FROM resource_corroboration_void v WHERE v.corroboration_id = x.id)
   GROUP BY b.service_id
 ),
 conf AS (
-  SELECT service_id, count(*) AS n FROM (
-    SELECT k.service_id FROM resource_check k
-     WHERE k.status = 'live' AND k.verify_method = 'org_reply'
-       AND k.expires_on > (now() AT TIME ZONE 'UTC')::date
-    UNION ALL
-    SELECT coalesce(e.service_id, r.service_id) FROM resource_relationship_event e
-      JOIN resource_relationship r ON r.id = e.relationship_id AND r.status = 'active'
-     WHERE e.kind = 'confirmed' AND e.occurred_on + 180 >= (now() AT TIME ZONE 'UTC')::date
-  ) t GROUP BY service_id
+  SELECT b.service_id, count(*) AS n FROM base b
+  WHERE b.verify_method = 'org_reply'
+     OR EXISTS (SELECT 1 FROM resource_relationship_event e
+                  JOIN resource_relationship r ON r.id = e.relationship_id AND r.status = 'active'
+                  JOIN resource_service s2 ON s2.id = e.service_id AND s2.org_id = r.org_id
+                 WHERE e.kind = 'confirmed' AND e.check_id = b.check_id
+                   AND e.occurred_on + 180 >= (now() AT TIME ZONE 'UTC')::date
+                   AND NOT EXISTS (SELECT 1 FROM resource_relationship_event_void v WHERE v.event_id = e.id))
+  GROUP BY b.service_id
 ),
 work AS (
   SELECT DISTINCT s.id AS service_id
@@ -269,17 +326,18 @@ work AS (
   WHERE r.status = 'active'
     AND EXISTS (SELECT 1 FROM resource_relationship_event e
                  WHERE e.relationship_id = r.id AND e.kind = 'working'
-                   AND e.occurred_on + r.cadence_days + 14 >= (now() AT TIME ZONE 'UTC')::date)
+                   AND e.occurred_on + r.cadence_days + 14 >= (now() AT TIME ZONE 'UTC')::date
+                   AND NOT EXISTS (SELECT 1 FROM resource_relationship_event_void v WHERE v.event_id = e.id))
 )
 SELECT b.service_id, b.state, b.county, b.area_id,
   CASE
-    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'R4'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL AND cf.n > 0 THEN 'R4'
     WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'R3'
     WHEN b.check_fresh AND co.n > 0 AND (b.verify_method = 'dataset' OR b.review_pass) THEN 'R2'
     WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' THEN 'R1'
     ELSE 'R0' END AS tier,
   CASE
-    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL THEN 'active relationship with a working contact inside its cadence'
+    WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND w.service_id IS NOT NULL AND cf.n > 0 THEN 'confirmed listing plus an active relationship with a working contact inside its cadence'
     WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' AND cf.n > 0 THEN 'the org confirmed the listing'
     WHEN b.check_fresh AND co.n > 0 AND (b.verify_method = 'dataset' OR b.review_pass) THEN 'independent corroboration from a different host'
     WHEN b.check_fresh AND b.review_pass AND b.verify_method <> 'dataset' THEN 'one source, fact-checked'
@@ -303,15 +361,18 @@ step_tier AS (
         CASE WHEN EXISTS (
                SELECT 1 FROM resource_chain_step_corroboration x
                 WHERE x.chain_id = st.chain_id AND x.n = st.n AND x.independent AND NOT x.weak
-                  AND public.resource_host(x.source_url) IS DISTINCT FROM public.resource_host(st.source_url))
+                  AND public.resource_host(x.source_url) IS DISTINCT FROM public.resource_host(st.source_url)
+                  AND x.observed_on + ch0.ttl_days > (now() AT TIME ZONE 'UTC')::date)
              THEN 2 ELSE 1 END
       ELSE 0 END AS lvl
   FROM resource_chain_step st
+  JOIN resource_chain ch0 ON ch0.id = st.chain_id
   LEFT JOIN latest l ON l.chain_id = st.chain_id AND l.n = st.n
 )
 SELECT ch.id AS chain_id, ch.chain_key, ch.state,
   CASE WHEN ch.status = 'live' AND ch.expires_on > (now() AT TIME ZONE 'UTC')::date
             AND ch.confidence IN ('high','medium')
+            AND ch.chain_key IN (SELECT p.chain_key FROM resource_chain_public_v p)
             AND EXISTS (SELECT 1 FROM step_tier t WHERE t.chain_id = ch.id)
        THEN 'R' || (SELECT min(t.lvl) FROM step_tier t WHERE t.chain_id = ch.id)::text
        ELSE 'R0' END AS tier,
@@ -323,7 +384,7 @@ DO $$
 DECLARE t text;
   adm constant text := $q$EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$q$;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['resource_corroboration','resource_chain_step_corroboration','resource_relationship','resource_relationship_event'] LOOP
+  FOREACH t IN ARRAY ARRAY['resource_corroboration','resource_chain_step_corroboration','resource_relationship','resource_relationship_event','resource_corroboration_void','resource_relationship_event_void'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('CREATE POLICY %I ON %I FOR SELECT USING (%s)', t || '_admin_select', t, adm);
@@ -334,12 +395,17 @@ END $$;
 
 -- 7. Grants: the app role gets nothing here.
 REVOKE ALL ON resource_corroboration, resource_chain_step_corroboration, resource_relationship,
-              resource_relationship_event, resource_service_tier_v, resource_chain_tier_v FROM PUBLIC;
+              resource_relationship_event, resource_corroboration_void, resource_relationship_event_void,
+              resource_service_tier_v, resource_chain_tier_v FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     REVOKE ALL ON resource_corroboration, resource_chain_step_corroboration, resource_relationship,
-                  resource_relationship_event, resource_service_tier_v, resource_chain_tier_v FROM smr_app;
+                  resource_relationship_event, resource_corroboration_void, resource_relationship_event_void,
+                  resource_service_tier_v, resource_chain_tier_v FROM smr_app;
+    REVOKE EXECUTE ON FUNCTION public.resource_host(text), public.resource_corroboration_guard(),
+                               public.resource_step_corroboration_guard(), public.resource_relationship_guard(),
+                               public.resource_relationship_event_guard() FROM smr_app;
   END IF;
 END $$;
 REVOKE EXECUTE ON FUNCTION public.resource_host(text), public.resource_corroboration_guard(),
