@@ -480,6 +480,9 @@ interface StreamDict {
   first: number | "indirect" | null;
   /** /Length, when given. */
   length: number | "indirect" | null;
+  /** /Predictor (in this dictionary) and the largest one in /DecodeParms or /DP (r7 M1). */
+  predictor: number | "indirect" | null;
+  decodePredictor: number | "indirect" | null;
 }
 
 const newFacts = (): StreamDict => ({
@@ -496,6 +499,8 @@ const newFacts = (): StreamDict => ({
   n: null,
   first: null,
   length: null,
+  predictor: null,
+  decodePredictor: null,
 });
 
 /** A value, as far as the checks need it. */
@@ -524,7 +529,7 @@ const KEEP_ITEMS = 8;
 function readValue(p: Parser, tok: Tok, depth: number, collect: boolean): Val {
   switch (tok.t) {
     case T_DICT_OPEN: {
-      const facts = readDictBody(p, depth + 1, false);
+      const facts = readDictBody(p, depth + 1, collect);
       return { k: "dict", facts };
     }
     case T_ARR_OPEN: {
@@ -534,7 +539,7 @@ function readValue(p: Parser, tok: Tok, depth: number, collect: boolean): Val {
         const a = p.take();
         if (!a || a.t === T_DICT_CLOSE || a.t === T_BAD) throw malformed();
         if (a.t === T_ARR_CLOSE) return { k: "arr", items };
-        const v = readValue(p, a, depth + 1, false);
+        const v = readValue(p, a, depth + 1, collect);
         if (items) {
           if (items.length < KEEP_ITEMS) items.push(v);
           else items = null;
@@ -544,6 +549,9 @@ function readValue(p: Parser, tok: Tok, depth: number, collect: boolean): Val {
     case T_NAME:
       return { k: "name", v: tok.v as string };
     case T_NUM: {
+      // r7 H2: a number pdf.js would read some other way ("1-0", "--5", one
+      // over 64 characters, or past the float range) is refused, never NaN.
+      if (!Number.isFinite(tok.v)) throw malformed();
       const g = p.peek(0);
       if (g && g.t === T_NUM && Number.isInteger(tok.v) && Number.isInteger(g.v)) {
         const r = p.peek(1);
@@ -618,6 +626,10 @@ function readDictBody(p: Parser, depth: number, collect: boolean): StreamDict | 
       if (key === "N") out.n = n;
       else if (key === "First") out.first = n;
       else out.length = n;
+    } else if (key === "Predictor") {
+      out.predictor = v.k === "num" ? v.v : v.k === "ref" ? "indirect" : null;
+    } else if (key === "DecodeParms" || key === "DP") {
+      out.decodePredictor = predictorOf(v);
     }
   }
   // pdf.js reads "stream" after ANY dictionary as a stream (inside arrays and
@@ -628,6 +640,23 @@ function readDictBody(p: Parser, depth: number, collect: boolean): StreamDict | 
     if (nx && nx.t === T_WORD && nx.v === "stream") throw new UnsafeUploadError("pdf_hidden_stream", NOT_PLAIN);
   }
   return out;
+}
+
+/** The largest /Predictor in a /DecodeParms value (a dictionary, an array of them, null, or a reference). */
+function predictorOf(v: Val): number | "indirect" | null {
+  if (v.k === "ref") return "indirect"; // pdf.js resolves it: unknown here
+  if (v.k === "dict") return v.facts ? v.facts.predictor : "indirect";
+  if (v.k === "arr") {
+    if (!v.items) return "indirect"; // too long to keep: unknown
+    let best: number | "indirect" | null = null;
+    for (const x of v.items) {
+      const p = predictorOf(x);
+      if (p === "indirect") return p;
+      if (p !== null && (best === null || p > best)) best = p;
+    }
+    return best;
+  }
+  return null;
 }
 
 function filterNames(v: Val): StreamDict["filters"] {
@@ -692,11 +721,15 @@ function checkFilters(filters: StreamDict["filters"], filterKeys: number): Filte
 
 const tooBig = () => new UnsafeUploadError("pdf_stream_too_big", TOO_BIG);
 
-/** "endstream" right at `at`, after PDF whitespace (pdf.js's /Length check, simplified). */
-function endstreamAfter(b: Buffer, at: number): boolean {
-  let i = at;
-  for (let k = 0; k < 32 && i < b.length && isWs(b[i]); k++) i++;
-  return b.toString("latin1", i, i + 9) === "endstream";
+/**
+ * "endstream" at `at`, after any whitespace and comments, as pdf.js's
+ * makeStream looks for it after /Length (r7 H1). The skip is charged.
+ */
+function endstreamAfter(src: Src, at: number): boolean {
+  if (at >= src.n) return false;
+  const i = src.skipWs(at, src.n);
+  src.charge(9);
+  return src.b.toString("latin1", i, i + 9) === "endstream";
 }
 
 /*
@@ -827,12 +860,15 @@ export function jpegFrameSize(b: Buffer): { w: number; h: number } | null {
 export function streamCap(d: { isImage: boolean; width: unknown; height: unknown }): number {
   if (!d.isImage || typeof d.width !== "number" || typeof d.height !== "number") return PDF_MAX_STREAM_BYTES;
   const declared = Math.ceil(d.width * d.height * 4 + d.height);
+  // r7 H2 backstop: a size that is not a finite positive number gets the plain cap.
+  if (!Number.isFinite(declared) || !(declared > 0)) return PDF_MAX_STREAM_BYTES;
   return Math.max(PDF_MAX_STREAM_BYTES, Math.min(PDF_MAX_IMAGE_STREAM_BYTES, declared));
 }
 
 function checkPixels(w: unknown, h: unknown) {
   if (w === "indirect" || h === "indirect") throw new UnsafeUploadError("pdf_image_too_big", TOO_BIG);
-  if (typeof w === "number" && typeof h === "number" && w * h > PDF_MAX_IMAGE_PIXELS) {
+  // Written so that NaN fails too (r7 H2).
+  if (typeof w === "number" && typeof h === "number" && !(w * h <= PDF_MAX_IMAGE_PIXELS)) {
     throw new UnsafeUploadError("pdf_image_too_big", TOO_BIG);
   }
 }
@@ -855,6 +891,8 @@ function inflatePdfStream(data: Buffer, limit: number): { out: Buffer; used: num
   const flg = data[1];
   // pdf.js refuses these headers before decoding anything.
   if ((cmf & 0x0f) !== 0x08 || ((cmf << 8) + flg) % 31 !== 0 || flg & 0x20) return { out: Buffer.alloc(0), used: 2 };
+  // r7 H2: zlib reads maxOutputLength NaN as "no cap": only a finite whole number is ever passed.
+  if (!Number.isSafeInteger(limit)) throw malformed();
   if (limit <= 0) throw tooBig();
   try {
     const r = inflateRawSync(data.subarray(2), { maxOutputLength: limit, finishFlush: constants.Z_SYNC_FLUSH, info: true }) as unknown as {
@@ -1293,6 +1331,16 @@ function scanPdf(buf: Buffer): PdfScan {
     const plan = checkFilters(dict.filters, dict.filterKeys);
     const filter = plan.decode;
     if (dict.isImage) checkPixels(dict.width, dict.height);
+    // r7 M1: a /Predictor changes the bytes pdf.js reads after Flate, so the
+    // checks below would read the wrong bytes. Allowed only where nothing is
+    // checked after decoding: cross-reference streams (where predictors are
+    // normal) and images not passed to an image codec (no content checks run
+    // on them, and a predictor never makes the output larger, so the cap holds).
+    const pred = dict.decodePredictor;
+    if (pred !== null && !(typeof pred === "number" && pred <= 1)) {
+      const allowed = dict.type === "XRef" || (dict.isImage && !plan.codec && !dict.keys.has("First"));
+      if (!allowed) throw malformed();
+    }
     const cap = streamCap(dict);
     const room = () => Math.min(cap, PDF_MAX_TOTAL_BYTES - scan.decodedBytes);
     // Flate reads from the start to the end of the file (more than any reader
@@ -1318,15 +1366,19 @@ function scanPdf(buf: Buffer): PdfScan {
         // before that (the line end before "endstream" is left over); bytes
         // past it would only feed the word "endstream" to zlib. A /Length that
         // runs past an "endstream" in the data is refused.
-        if (typeof dict.length === "number" && start + dict.length > end && endstreamAfter(buf, start + dict.length)) throw malformed();
+        if (typeof dict.length === "number" && start + dict.length > end && endstreamAfter(src, start + dict.length)) throw malformed();
         input = buf.subarray(start, end);
       }
       const r = inflatePdfStream(input, limit);
       src.charge(r.used); // the input zlib actually read (r6 M1)
-      // Deflate data still going at the end of the stream's own bytes: pdf.js
-      // would stop there too, unless an indirect /Length (which this scan
-      // does not resolve) sends it further. That case is refused.
-      if (!pre && r.used >= input.length && end < n && dict.length === "indirect") throw malformed();
+      // Deflate data still going at the stream's first "endstream": pdf.js
+      // stops there too only when /Length says so, a direct whole number that
+      // ends there or earlier. Anything else (no /Length, an indirect one, or
+      // one past it) could send pdf.js further, uncapped: refused (r7 H1).
+      if (!pre && r.used >= input.length && end < n) {
+        const L = dict.length;
+        if (!(typeof L === "number" && Number.isSafeInteger(L) && L >= 0 && start + L <= end)) throw malformed();
+      }
       content = r.out;
       scan.decodedBytes += content.length;
       scan.largestStream = Math.max(scan.largestStream, content.length);
