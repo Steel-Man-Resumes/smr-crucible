@@ -50,6 +50,8 @@ export interface CreativeKindSettings {
   /** null/absent: every entry. A list: only these ("Selected" headings). */
   selection?: string[] | null;
   bioPronoun?: BioPronoun;
+  /** Revision of these settings; every save must be based on the current one. */
+  rev?: number;
 }
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,9 +69,24 @@ function ids(v: unknown): string[] {
   return out.slice(0, MAX_SELECTION);
 }
 
+function cleanTitleModes(tm: unknown): Record<string, TitleMode> {
+  const modes: Record<string, TitleMode> = {};
+  if (tm && typeof tm === "object" && !Array.isArray(tm)) {
+    for (const [k, m] of Object.entries(tm as Record<string, unknown>).slice(0, MAX_TITLE_MODES)) {
+      if (ID_RE.test(k) && isTitleMode(m)) modes[k.toLowerCase()] = m;
+    }
+  }
+  return modes;
+}
+
 /**
  * Merge an input over the current settings and clean it. Unknown keys are
  * dropped; a bad value for a known key is dropped too (never guessed).
+ *
+ * Facility choices (titleModes) are NEVER taken from the input here: a whole
+ * map sent by a tab loaded earlier could undo a newer "leave it off". They
+ * change one entry at a time through applyTitleMode, under a revision check.
+ * The revision (rev) is the stored one; the caller bumps it on save.
  */
 export function cleanKindSettings(input: unknown, current?: unknown): CreativeKindSettings {
   const cur = (current && typeof current === "object" && !Array.isArray(current) ? current : {}) as Record<string, unknown>;
@@ -87,19 +104,35 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   str("phone", 40);
   str("website", 200);
   if (v("callAllowsMore") === true) out.callAllowsMore = true;
-  const tm = v("titleModes");
-  if (tm && typeof tm === "object" && !Array.isArray(tm)) {
-    const modes: Record<string, TitleMode> = {};
-    for (const [k, m] of Object.entries(tm as Record<string, unknown>).slice(0, MAX_TITLE_MODES)) {
-      if (ID_RE.test(k) && isTitleMode(m)) modes[k.toLowerCase()] = m;
-    }
-    if (Object.keys(modes).length) out.titleModes = modes;
-  }
+  const modes = cleanTitleModes(cur.titleModes);
+  if (Object.keys(modes).length) out.titleModes = modes;
   const sel = v("selection");
   if (Array.isArray(sel)) out.selection = ids(sel);
   const bp = v("bioPronoun");
   if (typeof bp === "string" && (BIO_PRONOUNS as readonly string[]).includes(bp)) out.bioPronoun = bp as BioPronoun;
+  const rev = Number(cur.rev ?? 0);
+  if (Number.isInteger(rev) && rev > 0) out.rev = rev;
   return out;
+}
+
+/** A lane's STORED settings, cleaned (facility choices and revision included). Use this to read; cleanKindSettings to merge an input. */
+export function readKindSettings(stored: unknown): CreativeKindSettings {
+  return cleanKindSettings({}, stored);
+}
+
+/** The settings revision (0 for none). */
+export function settingsRev(s: { rev?: unknown } | null | undefined): number {
+  const r = Number(s?.rev ?? 0);
+  return Number.isInteger(r) && r >= 0 ? r : 0;
+}
+
+/** One facility choice for one entry, merged into the current settings. Null for a bad id or mode. */
+export function applyTitleMode(current: unknown, entryId: unknown, mode: unknown): CreativeKindSettings | null {
+  if (typeof entryId !== "string" || !ID_RE.test(entryId) || !isTitleMode(mode)) return null;
+  const base = cleanKindSettings({}, current);
+  const modes = { ...(base.titleModes ?? {}), [entryId.toLowerCase()]: mode };
+  if (Object.keys(modes).length > MAX_TITLE_MODES) return null;
+  return { ...base, titleModes: modes };
 }
 
 /** The page cap this lane allows: 2, or 4 when the person says a call allows it. */
@@ -450,3 +483,11 @@ export interface PlainTextDoc {
 export function plainTextDoc(key: PlainTextDoc["key"], label: string, text: string): PlainTextDoc {
   return { key, label, text, chars: countChars(text), words: countWords(text) };
 }
+
+/** How many entries shown on a page are still marked "need to find" proof (a note by the downloads; never a BLOCK). */
+export function stillNeedsProof(entries: PracticeEntry[], shownIds: string[]): number {
+  const shown = new Set(shownIds.map((x) => x.toLowerCase()));
+  return entries.filter((e) => e.proof === "need_to_find" && shown.has(e.id.toLowerCase())).length;
+}
+
+export const NEEDS_PROOF_NOTE = "Some entries still need proof. You can download now; keep the proof handy.";

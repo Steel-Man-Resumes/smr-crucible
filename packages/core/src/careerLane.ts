@@ -110,6 +110,7 @@ export const LANE_SET_PLAN_SQL = `UPDATE career_lane
 export const LANE_SET_KIND_SETTINGS_SQL = `UPDATE career_lane
   SET kind_settings = $3::jsonb, updated_at = now()
   WHERE id = $1 AND user_id = $2 AND archived_at IS NULL
+    AND COALESCE((kind_settings->>'rev')::int, 0) = $4::int
   RETURNING ${LANE_COLUMNS}`;
 
 export const LANE_ARCHIVE_SQL = `UPDATE career_lane
@@ -338,8 +339,19 @@ export async function setLanePlan(userId: string, dreamLaneId: string, plan: Rec
   return rows[0] ?? null;
 }
 
-/** Save a lane's kind settings (already cleaned by the caller). */
-export async function setLaneKindSettings(userId: string, laneId: string, settings: Record<string, unknown>): Promise<CareerLane | null> {
-  const rows = await queryAsUser<CareerLane>(userId, LANE_SET_KIND_SETTINGS_SQL, [laneId, userId, JSON.stringify(settings)]);
+/**
+ * Save a lane's kind settings (already cleaned by the caller) on top of the
+ * revision the caller read. Stamps the next revision. Null when the lane is
+ * gone or someone saved in between.
+ */
+export async function setLaneKindSettings(
+  userId: string,
+  laneId: string,
+  settings: Record<string, unknown>,
+  readRev: number
+): Promise<CareerLane | null> {
+  const rows = await queryAsUser<CareerLane>(userId, LANE_SET_KIND_SETTINGS_SQL, [
+    laneId, userId, JSON.stringify({ ...settings, rev: readRev + 1 }), readRev,
+  ]);
   return rows[0] ?? null;
 }

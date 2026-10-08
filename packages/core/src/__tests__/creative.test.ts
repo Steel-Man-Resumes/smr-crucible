@@ -25,6 +25,9 @@ import {
   buildWorkSampleList,
   workSampleListCsv,
   cleanKindSettings,
+  applyTitleMode,
+  settingsRev,
+  stillNeedsProof,
   artistResumePageCap,
   countChars,
   countWords,
@@ -50,8 +53,8 @@ import {
   bioCounts,
   emptyBio,
 } from "../creativeBio";
-import { spellingMarksFor, isValidSpellingMark, suggestionFor, isDictionaryWord } from "../creativeSpelling";
-import { checkBio } from "../creativeChecks";
+import { spellingMarksFor, spellingCheck, boundedDistance, isValidSpellingMark, suggestionFor, isDictionaryWord } from "../creativeSpelling";
+import { checkBio, exportOpenItemLines, creativeOpenItemLines, HIDDEN_ENTRY_LINE, HIDDEN_SENTENCE_LINE } from "../creativeChecks";
 import { getCreativeStatus, checkArtistResume } from "../creativeChecks";
 import { hurdlesFor, cleanPlan, HELP_SOURCES, HURDLES_NOT_A_VERDICT } from "../twoPathPlan";
 import { RLS_PROTECTED_TABLES } from "../rlsHealth";
@@ -197,17 +200,30 @@ describe("artist resume (CAA order)", () => {
   });
   it("review L3: the largest settings the app allows stay under the database's 16,000-byte check", () => {
     const id = (i: number) => `00000000-0000-4000-8000-${String(900000 + i).padStart(12, "0")}`;
-    const big = cleanKindSettings({
+    let big: CreativeKindSettings | null = cleanKindSettings({
       displayName: "x".repeat(200), discipline: "x".repeat(200), basedIn: "x".repeat(200), email: "x".repeat(200), phone: "x".repeat(200), website: "x".repeat(200),
       callAllowsMore: true, bioPronoun: "they",
       selection: Array.from({ length: 300 }, (_, i) => id(i)),
-      titleModes: Object.fromEntries(Array.from({ length: 300 }, (_, i) => [id(i), "venue_only"])),
-    });
+    }, { rev: 123456 });
+    for (let i = 0; i < 300; i++) big = applyTitleMode(big, id(i), "venue_only") ?? big;
+    big = { ...big!, rev: 123457 };
     assert.ok(Buffer.byteLength(JSON.stringify(big)) < 16000, String(Buffer.byteLength(JSON.stringify(big))));
   });
-  it("kind settings drop unknown keys and bad values", () => {
-    const s = cleanKindSettings({ displayName: "  Ray  ", callAllowsMore: "yes", titleModes: { [SOLO.id]: "soften", [GROUP.id]: "leave_out" }, junk: 1 });
-    assert.deepEqual(s, { displayName: "Ray", titleModes: { [GROUP.id]: "leave_out" } });
+  it("kind settings drop unknown keys and bad values; facility choices never arrive as a map", () => {
+    const s = cleanKindSettings({ displayName: "  Ray  ", callAllowsMore: "yes", titleModes: { [GROUP.id]: "leave_out" }, rev: 99, junk: 1 });
+    assert.deepEqual(s, { displayName: "Ray" });
+    assert.equal(applyTitleMode(s, GROUP.id, "soften"), null);
+    assert.deepEqual(applyTitleMode(s, GROUP.id, "leave_out")?.titleModes, { [GROUP.id]: "leave_out" });
+  });
+  it("review N-M2 / S1: a stale tab's whole map can't undo a newer 'leave it off'", () => {
+    const stored = { ...applyTitleMode({ displayName: "Ray", rev: 4 }, INSIDE_SHOW.id, "leave_out")!, rev: 4 };
+    const staleTab = { titleModes: { [INSIDE_SHOW.id]: "true_title", [PROGRAM.id]: "leave_out" } };
+    const next = cleanKindSettings(staleTab, stored);
+    assert.equal(next.titleModes?.[INSIDE_SHOW.id], "leave_out");
+    assert.equal(next.titleModes?.[PROGRAM.id], undefined, "only applyTitleMode sets a choice");
+    assert.equal(settingsRev(next), 4, "the stored revision is kept; the route checks it");
+    const one = applyTitleMode(stored, PROGRAM.id, "leave_out")!;
+    assert.deepEqual(one.titleModes, { [INSIDE_SHOW.id]: "leave_out", [PROGRAM.id]: "leave_out" });
   });
 });
 
@@ -240,7 +256,7 @@ describe("plain text counts", () => {
 
 // --------------------------------------------------- statement (CR-03) --
 describe("statement coach, strict v1: no model at all; spelling from a word list (CR-03)", () => {
-  const person = "I paint the night shift at the plant. I am not ashamed of where I learned to draw. I never stoped.";
+  const person = "I paint the night shift at the plant. I am not ashamed of where I learned to draw. I keep it seperate.";
 
   it("the coach is fixed code: the question bank plus a read-back of the person's own sentences", () => {
     for (const q of COACH_QUESTIONS) assert.ok(q.endsWith("?"));
@@ -254,8 +270,8 @@ describe("statement coach, strict v1: no model at all; spelling from a word list
 
   it("review P4: a real word is never marked, so not/now, paint/print, draw/drew can't be offered", () => {
     const marks = spellingMarksFor(person);
-    assert.deepEqual(marks.map((m) => [m.word, m.suggestion]), [["stoped", "stopped"]]);
-    assert.match(marks[0].sentence ?? "", /I never stoped\./);
+    assert.deepEqual(marks.map((m) => [m.word, m.suggestion]), [["seperate", "separate"]]);
+    assert.match(marks[0].sentence ?? "", /I keep it seperate\./);
     for (const [w, sug] of [["not", "now"], ["paint", "print"], ["draw", "drew"], ["plant", "plane"], ["am", "was"], ["can", "can't"], ["hate", "have"], ["lie", "live"], ["form", "from"]]) {
       assert.equal(isValidSpellingMark({ word: w, suggestion: sug }), false, `${w} -> ${sug}`);
     }
@@ -268,14 +284,42 @@ describe("statement coach, strict v1: no model at all; spelling from a word list
     assert.equal(suggestionFor("Toledo"), null, "names and capitals are never marked");
     assert.equal(suggestionFor("printmaking"), null, "a real art word is a word");
     assert.equal(suggestionFor("zzqx"), null, "nothing close: no mark");
-    assert.equal(isValidSpellingMark({ word: "stoped", suggestion: "stopped" }), true);
-    assert.equal(isValidSpellingMark({ word: "stoped", suggestion: "stomped" }), false, "only the one fix the list offers");
+    assert.equal(isValidSpellingMark({ word: "seperate", suggestion: "separate" }), true);
+    assert.equal(isValidSpellingMark({ word: "seperate", suggestion: "desperate" }), false, "only the one fix the list offers");
+  });
+
+  it("review N-M1: bare contractions are never marked, and a tie between two words means no mark", () => {
+    for (const t of ["hasnt", "hadnt", "couldnt", "shouldnt", "wouldnt", "aint", "havent", "doesnt", "mustnt", "neednt"]) assert.equal(suggestionFor(t), null, t);
+    // Equally close words: no guess at which one was meant.
+    for (const t of ["addicion", "fram", "pround", "stol", "stoped", "noone", "evr", "nto"]) assert.equal(suggestionFor(t), null, t);
+    // Real one-answer slips still get their fix.
+    for (const [t, fix] of [["recieve", "receive"], ["thier", "their"], ["beleive", "believe"], ["relaspe", "relapse"], ["sobreity", "sobriety"], ["galery", "gallery"]]) {
+      assert.equal(suggestionFor(t), fix, t);
+    }
+  });
+
+  it("review N-M3: a 12,000-character statement of non-words is checked in under a second, and says when it stopped", () => {
+    const letters = "abcdefghijklmnoprstuw";
+    const words: string[] = [];
+    for (let i = 0; words.join(" ").length < 11900; i++) {
+      let w = "s";
+      let k = i;
+      for (let j = 0; j < 9; j++) { w += letters[k % letters.length]; k = Math.floor(k / letters.length) + j * 7 + 3; }
+      words.push(w);
+    }
+    const text = words.join(" ");
+    const t0 = Date.now();
+    const r = spellingCheck(text);
+    const ms = Date.now() - t0;
+    assert.ok(ms < 1000, `${ms} ms`);
+    assert.equal(r.capped, true);
+    assert.ok(boundedDistance("abcdefghij", "zyxwvutsrq", 2) === 3, "the distance gives up past its limit");
   });
 
   it("the save checks every mark on the server, and only one word may change", () => {
-    const mk = { word: "stoped", suggestion: "stopped" };
+    const mk = { word: "seperate", suggestion: "separate" };
     const fixed = applySpellingMark(person, mk);
-    assert.ok(fixed.endsWith("I never stopped."));
+    assert.ok(fixed.endsWith("I keep it separate."));
     assert.deepEqual(checkStatementSave({ previousText: person, nextText: fixed, acceptedMark: mk, validMark: isValidSpellingMark, modelPrints: [] }), { ok: true });
     assert.deepEqual(
       checkStatementSave({ previousText: person, nextText: `${fixed} Truly a visionary.`, acceptedMark: mk, validMark: isValidSpellingMark, modelPrints: [] }),
@@ -548,6 +592,73 @@ describe("realistic and dream: the plan card", () => {
   });
 });
 
+// --------------------------------------------- round 2: the to-do page and more --
+describe("review r2: nothing the lane hides reaches an exported to-do page (N-H1)", () => {
+  const W = entry({ section: "work", title: "Made at Example County Correctional Facility", year: 2020, details: { medium: "ink", dimensions: "9 x 12 in" }, names_facility: true, proof: "need_to_find" });
+  const MURAL = entry({ section: "commission", title: "Mural for Example County Correctional Facility", venue: "Example County", year: 2018, names_facility: true });
+  const QUOTE = entry({ section: "press", title: "Local Artist Opens Studio", venue: "", year: 2023, details: { quote: "Bold work." } });
+  const PROG_NTF = { ...PROGRAM, proof: "need_to_find" as const };
+  const entries = [...ALL.filter((e) => e.id !== PROGRAM.id), PROG_NTF, W, MURAL, QUOTE];
+  const hiddenWords = /Example County|Inside Print|Art From|Made at|Mural for/;
+  for (const mode of ["venue_only", "leave_out", "unset"] as const) {
+    it(`choice ${mode}: no hidden title, venue or sentence in any document's to-do lines`, () => {
+      const settings: CreativeKindSettings = { ...SETTINGS, titleModes: mode === "unset" ? {} : { [INSIDE_SHOW.id]: mode, [PROGRAM.id]: mode, [W.id]: mode, [MURAL.id]: mode } };
+      // A bio kept while the program showed its true title, then the lane switched.
+      const t = bioTemplates([PROGRAM], { ...SETTINGS, titleModes: { [PROGRAM.id]: "true_title" } }).find((x) => x.sourceEntryId === PROGRAM.id)!;
+      const bio = classifyBio({ lengths: { short: [{ id: "a", text: t.text, approved: true }], medium: [], long: [] } }, entries, { ...SETTINGS, titleModes: { [PROGRAM.id]: "true_title" } });
+      const model = buildArtistResumeModel(entries, settings);
+      const rows = buildWorkSampleList(entries, [], settings);
+      const st = getCreativeStatus({ entries, settings, artistResume: { model, pages: 1 }, bio, workSamples: rows });
+      for (const doc of ["artist_resume", "bio", "work_samples", "statement"] as const) {
+        for (const l of creativeOpenItemLines(st, doc)) {
+          // venue only: the venue is the person's chosen line; the TITLE never shows.
+          const bad = mode === "venue_only" ? /Inside Print|Art From|Made at|Mural for/ : hiddenWords;
+          assert.ok(!bad.test(l), `${doc}: ${l}`);
+        }
+        for (const l of exportOpenItemLines(st, entries, settings, doc)) assert.ok(!(mode === "venue_only" ? /Inside Print|Art From|Made at|Mural for/ : hiddenWords).test(l), `export ${doc}: ${l}`);
+      }
+      assert.ok(st.openItems.some((x) => x.line.includes(HIDDEN_ENTRY_LINE) || x.line === HIDDEN_SENTENCE_LINE || mode === "venue_only"));
+    });
+  }
+  it("the export backstop replaces any line that still names a hidden term", () => {
+    const settings: CreativeKindSettings = { titleModes: { [PROGRAM.id]: "leave_out" } };
+    const fake = { state: "draft" as const, blockCount: 1, fixCount: 0, rulesVersion: "x", openItems: [{ rule: "X", severity: "BLOCK" as const, line: "Inside Print Workshop", question: "?", why: "", doc: "bio" as const }] };
+    assert.deepEqual(exportOpenItemLines(fake, [PROGRAM], settings, "bio").length, 1);
+    assert.ok(!/Inside Print/.test(exportOpenItemLines(fake, [PROGRAM], settings, "bio")[0]));
+  });
+});
+
+describe("review r2 LOWs", () => {
+  it("LOW 3: a person's edit that turns a group show into a solo show is asked about", () => {
+    const t = bioTemplates(ALL, SETTINGS).find((x) => x.sourceEntryId === GROUP.id)!;
+    const edited = t.text.replace("a group exhibition", "a solo exhibition");
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: edited, approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    assert.equal(bio.lengths.short[0].origin, "person_written");
+    assert.ok(checkBio(bio, ALL, SETTINGS).some((x) => x.rule === "CR-02" && /solo/.test(x.question)));
+    const prize = classifyBio({ lengths: { short: [{ id: "b", text: "Ray Example won first prize at Harbor Gallery.", approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    assert.ok(checkBio(prize, ALL, SETTINGS).some((x) => x.rule === "CR-02"));
+  });
+  it("LOW 6: a record sentence whose entry changed never prints (and stays a BLOCK)", () => {
+    const t = bioTemplates(ALL, SETTINGS).find((x) => x.sourceEntryId === AWARD.id)!;
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: t.text, approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    const changed = ALL.map((e) => (e.id === AWARD.id ? { ...e, year: 2019 } : e));
+    assert.equal(bioTextForLane(bio.lengths.short, changed, SETTINGS), "");
+    assert.ok(checkBio(bio, changed, SETTINGS).some((x) => x.severity === "BLOCK"));
+  });
+  it("LOW 7: the shared-venue exemption counts only entries the lane shows", () => {
+    const teach = entry({ section: "teaching", title: "Workshop Leader", venue: "Example County Correctional Facility", year: 2021, proof: "need_to_find" });
+    const settings: CreativeKindSettings = { titleModes: { [PROGRAM.id]: "leave_out" } };
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: "Ray Example taught at Example County Correctional Facility.", approved: true }], medium: [], long: [] } }, [PROGRAM, teach], settings);
+    assert.ok(checkBio(bio, [PROGRAM, teach], settings).some((x) => x.severity === "BLOCK" && x.rule === "STD-R03"));
+  });
+  it("L7 note: shown entries still needing proof are counted (a note, never a BLOCK)", () => {
+    const e = { ...GROUP, proof: "need_to_find" as const };
+    const m = buildArtistResumeModel([e, SOLO], SETTINGS);
+    assert.equal(stillNeedsProof([e, SOLO], m.sections.flatMap((x) => x.rows.map((r) => r.entryId))), 1);
+    assert.equal(getCreativeStatus({ entries: [e, SOLO], settings: SETTINGS, artistResume: { model: m, pages: 1 } }).blockCount, 0);
+  });
+});
+
 // -------------------------------------------------------------- migration --
 describe("migration 075", () => {
   const sql = readFileSync(join(MIGRATIONS, "075_creative_lanes.sql"), "utf8");
@@ -563,5 +674,13 @@ describe("migration 075", () => {
   });
   it("practice_entry is in the one list of protected tables", () => {
     assert.ok((RLS_PROTECTED_TABLES as readonly string[]).includes("practice_entry"));
+  });
+});
+
+describe("review r2: reading stored settings keeps the facility choices and revision", () => {
+  it("readKindSettings is what every reader uses", () => {
+    const { readKindSettings } = require("../creativeLaneShared");
+    const stored = { displayName: "Ray", titleModes: { [PROGRAM.id]: "leave_out" }, rev: 3 };
+    assert.deepEqual(readKindSettings(stored), stored);
   });
 });
