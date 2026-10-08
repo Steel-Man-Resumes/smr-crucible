@@ -21,10 +21,13 @@ interface RouteContext {
 
 const CHANGED = { error: "changed_elsewhere", message: "This changed in another tab or window. Refresh the page, then save again." };
 
-/** The revision the browser loaded, if it sent one; otherwise the one read here. */
-function revFrom(body: Record<string, unknown>, fallback: number | null): number | null {
+/**
+ * The revision the browser loaded (null: it loaded none). A save without one
+ * is refused: an old cached screen must never overwrite newer work.
+ */
+function revFrom(body: Record<string, unknown>): number | null | "missing" {
   if (body.rev === null) return null;
-  return typeof body.rev === "number" && Number.isInteger(body.rev) && body.rev >= 0 ? body.rev : fallback;
+  return typeof body.rev === "number" && Number.isInteger(body.rev) && body.rev >= 0 ? body.rev : "missing";
 }
 
 /**
@@ -50,14 +53,17 @@ export async function PUT(request: Request, context: RouteContext) {
   if (!lane) return laneNotFound();
   const body = await readJson(request, 120_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+  const rev = revFrom(body);
+  if (rev === "missing" && body.type !== "artist_resume") return NextResponse.json(CHANGED, { status: 409 });
   const c = await loadCreativeContext(g.userId, lane);
   const now = new Date().toISOString();
+  const readRev = rev === "missing" ? null : rev;
 
   switch (body.type) {
     case "artist_bio": {
       if (g.impersonating) return ownerOnly();
       const bio = classifyBio(body.bio, c.entries, c.settings);
-      const r = await saveCreativeDoc(g.userId, lane.id, "artist_bio", { ...bio, savedAt: now }, revFrom(body, c.bioRev));
+      const r = await saveCreativeDoc(g.userId, lane.id, "artist_bio", { ...bio, savedAt: now }, readRev);
       if (r.status !== "ok") return NextResponse.json(CHANGED, { status: 409 });
       return NextResponse.json({ bio, rev: (r.doc.content as { rev?: number }).rev ?? null });
     }
@@ -85,7 +91,7 @@ export async function PUT(request: Request, context: RouteContext) {
         ? { text, savedAt: now, via: "spelling", mark: acceptedMark }
         : { text, savedAt: now, via: "typed" };
       const versions = [...st.versions, version].slice(-MAX_STATEMENT_VERSIONS);
-      const r = await saveCreativeDoc(g.userId, lane.id, "artist_statement", { versions, modelPrints: st.modelPrints }, revFrom(body, c.statementRev));
+      const r = await saveCreativeDoc(g.userId, lane.id, "artist_statement", { versions, modelPrints: st.modelPrints }, readRev);
       if (r.status !== "ok") return NextResponse.json(CHANGED, { status: 409 });
       return NextResponse.json({ statement: { versions }, rev: (r.doc.content as { rev?: number }).rev ?? null });
     }
@@ -96,7 +102,7 @@ export async function PUT(request: Request, context: RouteContext) {
       const order = Array.isArray(body.order)
         ? Array.from(new Set(body.order.filter((x): x is string => isUuid(x)).map((x) => x.toLowerCase()))).filter((x) => works.has(x))
         : [];
-      const r = await saveCreativeDoc(g.userId, lane.id, "work_sample_list", { order, savedAt: now }, revFrom(body, c.sampleRev));
+      const r = await saveCreativeDoc(g.userId, lane.id, "work_sample_list", { order, savedAt: now }, readRev);
       if (r.status !== "ok") return NextResponse.json(CHANGED, { status: 409 });
       return NextResponse.json({ order, rev: (r.doc.content as { rev?: number }).rev ?? null });
     }

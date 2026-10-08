@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { updatePracticeEntry, deletePracticeEntry, isUuid, PRACTICE_ERROR_COPY } from "@crucible/core";
-import { gate, readJson } from "@/lib/creative-server";
+import { gate, ownerOnlyRecord, readJson } from "@/lib/creative-server";
 import { isSameOriginRequest } from "@/lib/same-origin";
 
 interface RouteContext {
@@ -11,6 +11,7 @@ interface RouteContext {
 export async function PATCH(request: Request, context: RouteContext) {
   const g = await gate(request, { write: true });
   if (!g.ok) return g.res;
+  if (g.impersonating) return ownerOnlyRecord();
   const { id } = await context.params;
   if (!isUuid(id)) return NextResponse.json({ error: "not_found", message: PRACTICE_ERROR_COPY.not_found }, { status: 404 });
   const body = await readJson(request, 20_000);
@@ -26,6 +27,7 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (!isSameOriginRequest(request.headers)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   const g = await gate(request);
   if (!g.ok) return g.res;
+  if (g.impersonating) return ownerOnlyRecord();
   const { id } = await context.params;
   if (!isUuid(id) || !(await deletePracticeEntry(g.userId, id))) {
     return NextResponse.json({ error: "not_found", message: PRACTICE_ERROR_COPY.not_found }, { status: 404 });

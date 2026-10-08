@@ -9,7 +9,7 @@ import {
   artistResumePlainText,
   workSampleListPlainText,
   workSampleListCsv,
-  creativeOpenItemLines,
+  exportOpenItemLines,
   type CreativeDoc,
 } from "@crucible/core";
 import { buildCreative, renderCreativeDocx, renderCreativeHtml, renderCreativePdf, type CreativeRenderRequest } from "@/lib/resume-render";
@@ -61,7 +61,8 @@ export async function GET(request: Request, context: RouteContext) {
   const checkDoc: CreativeDoc = doc === "work_samples" ? "work_samples" : doc === "statement" ? "statement" : doc === "bio" ? "bio" : "artist_resume";
   const items = c.status.openItems.filter((x) => x.doc === checkDoc || x.doc === "record");
   const draft = items.some((x) => x.severity === "BLOCK");
-  const openItems = creativeOpenItemLines({ ...c.status, openItems: items });
+  // The to-do page is exported too: neutral lines for anything the lane keeps off, then a backstop filter.
+  const openItems = exportOpenItemLines({ ...c.status, openItems: items }, c.entries, c.settings);
 
   const text = (body: string, what: string, ext = "txt", type = "text/plain; charset=utf-8") =>
     new NextResponse((draft && ext === "txt" ? "DRAFT\n\n" : "") + body, {

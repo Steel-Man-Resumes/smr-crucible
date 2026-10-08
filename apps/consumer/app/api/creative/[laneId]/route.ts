@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import {
   cleanKindSettings,
+  applyTitleMode,
+  settingsRev,
+  listPracticeEntries,
   setLaneKindSettings,
   hurdlesFor,
   HELP_SOURCES,
   HURDLES_NOT_A_VERDICT,
 } from "@crucible/core";
-import { creativeLane, gate, laneNotFound, loadCreativeContext, readJson } from "@/lib/creative-server";
+import { creativeLane, gate, laneNotFound, loadCreativeContext, ownerOnly, readJson } from "@/lib/creative-server";
+
+const SETTINGS_CHANGED = { error: "changed_elsewhere", message: "These choices changed in another tab or window. Refresh the page, then try again." };
 
 interface RouteContext {
   params: Promise<{ laneId: string }>;
@@ -18,9 +23,11 @@ interface RouteContext {
  *   practice record, the saved bio and statement (with the revision each save
  *   must be based on), the sample order, the open items, and the pair's plan
  *   card with its general hurdles and help links.
- * PUT /api/creative/[laneId] { settings }
- *   This lane's choices (name on the page, contact lines, page cap, how each
- *   title that names a facility shows, bio disclosure and pronoun).
+ * PUT /api/creative/[laneId] { settings, rev }  or  { titleMode: { entryId, mode }, rev }
+ *   This lane's choices (name on the page, contact lines, page cap, picked
+ *   entries, pronoun), or ONE facility choice for one entry. Always on top of
+ *   the revision the screen loaded; facility choices never arrive as a whole
+ *   map, so a stale tab can't undo a newer "leave it off".
  */
 export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
@@ -36,6 +43,7 @@ export async function GET(request: Request, context: RouteContext) {
     partner: c.partner,
     entries: c.entries,
     settings: c.settings,
+    settingsRev: settingsRev(c.settings),
     bio: c.bio,
     bioRev: c.bioRev,
     statement: { versions: c.statement.versions },
@@ -64,10 +72,23 @@ export async function PUT(request: Request, context: RouteContext) {
   if (!lane) return laneNotFound();
   const body = await readJson(request, 40_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
-  const next = cleanKindSettings(body.settings, lane.kind_settings ?? {});
+  // Every settings save names the revision it was based on. No revision, or an old one: refused.
+  const current = cleanKindSettings({}, lane.kind_settings ?? {});
+  if (typeof body.rev !== "number" || body.rev !== settingsRev(current)) return NextResponse.json(SETTINGS_CHANGED, { status: 409 });
+  let next;
+  if (body.titleMode && typeof body.titleMode === "object") {
+    // A facility choice: one entry at a time, the person's alone (never an assist session).
+    if (g.impersonating) return ownerOnly();
+    const tm = body.titleMode as { entryId?: unknown; mode?: unknown };
+    const entry = (await listPracticeEntries(g.userId)).find((e) => e.id === tm.entryId && e.names_facility);
+    next = entry ? applyTitleMode(current, entry.id, tm.mode) : null;
+    if (!next) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+  } else {
+    next = cleanKindSettings(body.settings, current);
+  }
   let saved;
   try {
-    saved = await setLaneKindSettings(g.userId, lane.id, next as Record<string, unknown>);
+    saved = await setLaneKindSettings(g.userId, lane.id, next as Record<string, unknown>, settingsRev(current));
   } catch (err) {
     // The database's size check (075). The app's caps keep under it; this is the plain answer if not.
     if ((err as { code?: string } | null)?.code === "23514") {
@@ -75,6 +96,6 @@ export async function PUT(request: Request, context: RouteContext) {
     }
     throw err;
   }
-  if (!saved) return laneNotFound();
-  return NextResponse.json({ settings: cleanKindSettings(saved.kind_settings ?? {}) });
+  if (!saved) return NextResponse.json(SETTINGS_CHANGED, { status: 409 });
+  return NextResponse.json({ settings: cleanKindSettings({}, saved.kind_settings ?? {}) });
 }

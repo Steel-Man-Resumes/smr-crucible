@@ -19,7 +19,7 @@ import {
   listPracticeEntries,
   listCreativeDocs,
   getLane,
-  cleanKindSettings,
+  readKindSettings,
   readBio,
   readStatement,
   readPlan,
@@ -58,6 +58,14 @@ export async function gate(request: Request, opts: { write?: boolean; bucket?: s
     }
   }
   return { ok: true, userId, impersonating: !!(session as { impersonation?: unknown } | null)?.impersonation };
+}
+
+/** Record entries and facility choices are the person's alone too. */
+export function ownerOnlyRecord(): NextResponse {
+  return NextResponse.json(
+    { error: "owner_only", message: "Only the person can change their own record, not an assist session." },
+    { status: 403 }
+  );
 }
 
 /** Writes that put words in the person's mouth are theirs alone: never under an assist session. */
@@ -128,7 +136,7 @@ export async function loadCreativeContext(userId: string, lane: CareerLane, page
   const partner = partnerRow && !partnerRow.archived_at ? partnerRow : null;
   const docs: Partial<Record<string, RefineryArtifact>> = {};
   for (const d of docRows) docs[d.artifact_type] = d;
-  const settings = cleanKindSettings(lane.kind_settings ?? {});
+  const settings = readKindSettings(lane.kind_settings ?? {});
   const bio = readBio(docs.artist_bio?.content);
   const statement = readStatement(docs.artist_statement?.content);
   const rawOrder = (docs.work_sample_list?.content as { order?: unknown } | undefined)?.order;

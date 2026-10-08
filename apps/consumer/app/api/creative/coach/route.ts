@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { COACH_QUESTIONS, readBackQuestions, STATEMENT_MAX_CHARS } from "@crucible/core";
 // The word list loads only in the routes that need it (not via the package index).
-import { spellingMarksFor } from "@crucible/core/src/creativeSpelling";
+import { spellingCheck } from "@crucible/core/src/creativeSpelling";
 import { creativeLane, gate, laneNotFound, readJson } from "@/lib/creative-server";
 
 export const runtime = "nodejs";
+export const maxDuration = 10;
 
 /**
  * POST /api/creative/coach { laneId, text }
@@ -25,6 +26,9 @@ export async function POST(request: Request) {
   return NextResponse.json({
     fixed: COACH_QUESTIONS,
     readBack: readBackQuestions(text),
-    marks: spellingMarksFor(text),
+    ...(() => {
+      const r = spellingCheck(text);
+      return { marks: r.marks, capped: r.capped };
+    })(),
   });
 }

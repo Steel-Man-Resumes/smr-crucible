@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listPracticeEntries, createPracticeEntry, PRACTICE_ERROR_COPY } from "@crucible/core";
-import { gate, readJson } from "@/lib/creative-server";
+import { gate, ownerOnlyRecord, readJson } from "@/lib/creative-server";
 
 /**
  * The practice record (migration 075): the person's shows, programs, awards
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const g = await gate(request, { write: true });
   if (!g.ok) return g.res;
+  if (g.impersonating) return ownerOnlyRecord();
   const body = await readJson(request, 20_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   const r = await createPracticeEntry(g.userId, body);
