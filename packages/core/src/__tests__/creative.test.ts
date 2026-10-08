@@ -751,7 +751,11 @@ describe("migration 075", () => {
   });
   it("kind is resume | creative with resume the default; new artifact types are allowed", () => {
     assert.match(sql, /kind TEXT NOT NULL DEFAULT 'resume'/);
-    assert.match(sql, /CHECK \(kind IN \('resume', 'creative'\)\)/);
+    // Review s2 M5: lists only ever widen (a re-run after 076 keeps 'cv').
+    assert.match(sql, /smr_widen_list_check\('career_lane', 'kind', 'career_lane_kind_check', ARRAY\['resume', 'creative'\]\)/);
+    assert.match(sql, /IF n = 1 AND have @> want THEN/);
+    const code = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
+    assert.doesNotMatch(code, /DROP CONSTRAINT IF EXISTS (career_lane_kind_check|refinery_artifact_artifact_type_check)/);
     for (const t of CREATIVE_ARTIFACT_TYPES.filter((x) => x !== "cv")) assert.ok(sql.includes(`'${t}'`), t);
   });
   it("practice_entry is in the one list of protected tables", () => {

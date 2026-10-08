@@ -141,7 +141,8 @@ export const ARTIFACT_SET_LANE_SQL = `UPDATE refinery_artifact SET lane_id = $3:
   WHERE id = $1 AND user_id = $2
     AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})
     AND ($3::uuid IS NULL OR EXISTS (
-      SELECT 1 FROM career_lane l WHERE l.id = $3::uuid AND l.user_id = $2 AND l.archived_at IS NULL))
+      SELECT 1 FROM career_lane l WHERE l.id = $3::uuid AND l.user_id = $2 AND l.archived_at IS NULL
+        AND COALESCE(l.kind, 'resume') = 'resume'))
   RETURNING id`;
 
 /** Mark or unmark an example. Not an edit, so updated_at is left alone. */

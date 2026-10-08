@@ -10,6 +10,7 @@ import {
   isResumeGroup,
   queryAsUser,
   getOpenLane,
+  laneKindOf,
 } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
@@ -169,8 +170,10 @@ export async function POST(request: Request) {
   if (laneId === "bad") {
     return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
   }
-  if (laneId && !(await getOpenLane(userId, laneId))) {
-    return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
+  // Resume work goes to a resume lane only: a creative or CV lane never holds it (review s2 LOW 1).
+  if (laneId) {
+    const target = await getOpenLane(userId, laneId);
+    if (!target || laneKindOf(target) !== "resume") return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
   }
 
   try {

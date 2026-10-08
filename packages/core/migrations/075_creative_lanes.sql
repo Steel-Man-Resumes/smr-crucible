@@ -52,6 +52,12 @@
 -- seconds instead of queueing every resume request behind a long query. If it
 -- times out, run it again; every statement is idempotent.
 --
+-- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1, or the runner's
+-- BEGIN). Before applying by hand, check what the target already holds:
+--   SELECT filename FROM _migrations WHERE filename LIKE '07%';
+-- 075 was corrected in place before it was applied anywhere (the plan-card
+-- CHECK); a database that ran an earlier copy needs that CHECK replaced.
+--
 -- ROLLBACK, in this order:
 --   1. Revert the creative lane CODE first and deploy that. Live code reads
 --      kind, path, pair_lane_id, kind_settings, pair_plan and practice_entry
@@ -92,11 +98,7 @@ ALTER TABLE career_lane ADD COLUMN IF NOT EXISTS pair_plan JSONB;
 
 DO $$
 BEGIN
-  -- Later kinds (cv, performer, services) replace this one constraint.
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'career_lane_kind_check') THEN
-    ALTER TABLE career_lane ADD CONSTRAINT career_lane_kind_check
-      CHECK (kind IN ('resume', 'creative'));
-  END IF;
+  -- career_lane_kind_check is set at the end of this file, by widening only.
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'career_lane_path_check') THEN
     ALTER TABLE career_lane ADD CONSTRAINT career_lane_path_check
       CHECK (path IS NULL OR path IN ('realistic', 'dream'));
@@ -232,27 +234,39 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------- artifact type values --
--- 005 made the type CHECK inline, so Postgres named it
--- refinery_artifact_artifact_type_check. A CHECK that tests artifact_type
--- against a list is dropped by its definition (not only by that name; today
--- there is exactly one) and the full list is put back under the known name.
--- The new list is wider than every old one, so the validation scan (done
--- under this file's lock, a few thousand rows) cannot fail on existing rows.
-DO $$
-DECLARE c record;
+-- Widen a "column IN (list)" CHECK without ever narrowing it: read the
+-- values every matching CHECK allows now, union them with this file's list,
+-- and put back exactly one CHECK under the known name. Re-running an older
+-- file after a newer one keeps the newer values (an unknown value is still
+-- refused). Session-temporary: dropped again at the end of this file.
+CREATE OR REPLACE FUNCTION pg_temp.smr_widen_list_check(tbl regclass, col text, cname text, want text[])
+RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  c record;
+  have text[] := '{}';
+  allv text[];
+  n int := 0;
+  pat text := '\(' || col || ' = ANY|' || col || ' IN';
 BEGIN
-  FOR c IN
-    SELECT conname FROM pg_constraint
-     WHERE conrelid = 'refinery_artifact'::regclass AND contype = 'c'
-       AND pg_get_constraintdef(oid) ~ '\(artifact_type = ANY|artifact_type IN'
-  LOOP
-    EXECUTE format('ALTER TABLE refinery_artifact DROP CONSTRAINT %I', c.conname);
+  FOR c IN SELECT oid FROM pg_constraint WHERE conrelid = tbl AND contype = 'c' AND pg_get_constraintdef(oid) ~ pat LOOP
+    have := have || ARRAY(SELECT m[1] FROM regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m);
+    n := n + 1;
   END LOOP;
-END $$;
+  allv := ARRAY(SELECT DISTINCT v FROM unnest(have || want) v ORDER BY v);
+  IF n = 1 AND have @> want THEN
+    RETURN; -- already allows every wanted value: change nothing
+  END IF;
+  FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = tbl AND contype = 'c' AND pg_get_constraintdef(oid) ~ pat LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', tbl, c.conname);
+  END LOOP;
+  EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I CHECK (%I IN (%s))', tbl, cname, col,
+                 (SELECT string_agg(quote_literal(v), ', ') FROM unnest(allv) v));
+END
+$fn$;
 
-ALTER TABLE refinery_artifact ADD CONSTRAINT refinery_artifact_artifact_type_check
-  CHECK (artifact_type IN (
-    'resume', 'cover_letter', 'follow_up', 'disclosure_plan',
-    'interview_prep', 'resource_list', 'job_match',
-    'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list'
-  ));
+-- Never narrows: re-running 075 after a later migration keeps the later values.
+SELECT pg_temp.smr_widen_list_check('refinery_artifact', 'artifact_type', 'refinery_artifact_artifact_type_check',
+  ARRAY['resume', 'cover_letter', 'follow_up', 'disclosure_plan', 'interview_prep', 'resource_list', 'job_match',
+        'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list']);
+SELECT pg_temp.smr_widen_list_check('career_lane', 'kind', 'career_lane_kind_check', ARRAY['resume', 'creative']);
+DROP FUNCTION pg_temp.smr_widen_list_check(regclass, text, text, text[]);

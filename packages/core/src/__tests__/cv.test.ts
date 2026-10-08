@@ -182,7 +182,14 @@ describe("migration 076", () => {
   it("sets lock_timeout, keeps owner-only tables, carries a rollback note", () => {
     assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
     assert.match(sql, /ROLLBACK, in this order/);
-    assert.match(sql, /CHECK \(kind IN \('resume', 'creative', 'cv'\)\)/);
+    assert.match(sql, /smr_widen_list_check\('career_lane', 'kind', 'career_lane_kind_check', ARRAY\['resume', 'creative', 'cv'\]\)/);
+    const code = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
+    assert.doesNotMatch(code, /DROP CONSTRAINT IF EXISTS (career_lane_kind_check|refinery_artifact_artifact_type_check|practice_entry_section_check)/);
+    // Review s2 LOW 1 and LOW 8: rollback frees CV-lane rows first; apply in one transaction.
+    const rollback = sql.slice(sql.indexOf("ROLLBACK, in this order"));
+    const free = rollback.indexOf("UPDATE refinery_artifact SET lane_id = NULL WHERE lane_id IN (SELECT id FROM career_lane WHERE kind = 'cv');");
+    assert.ok(free > 0 && free < rollback.indexOf("DELETE FROM"), "the rollback's first statement frees rows saved in a CV lane");
+    assert.match(sql, /psql -1/);
     assert.match(sql, /career_lane_cv_type_shape/);
     for (const s of ["research", "presentation", "clinical", "license", "service", "appointment", "membership", "reference"]) assert.ok(sql.includes(`'${s}'`), s);
     assert.ok(sql.includes("'cv'"));
