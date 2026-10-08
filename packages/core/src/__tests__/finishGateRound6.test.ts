@@ -63,8 +63,9 @@ for (const [typed, line] of [
   ["OSHA 10 card 2019", "OSHA 10 card (2019)"],
   ["Forklift certified 2019\nCPR card 2022", "Forklift certified 2019"],
 ] as const) {
-  test(`B1 (control): typed ${JSON.stringify(typed)} covers "${line}"`, () => {
-    const s = getResumeStatus({ resumeText: page(`\n\nCERTIFICATIONS\n- ${line}`), sourceText: `${BASE}\n\n${typed}`, credentialsAnswer: typed });
+  test(`B1 (control): their own resume lines ${JSON.stringify(typed)} cover "${line}"`, () => {
+    // Round 7: their uploaded resume, not the free-text licenses answer.
+    const s = getResumeStatus({ resumeText: page(`\n\nCERTIFICATIONS\n- ${line}`), sourceText: `${BASE}\n\n${typed}`, ownResumeText: typed });
     assert.ok(!s.openItems.some((i) => i.kind === "credential_unsaid"), JSON.stringify(s.openItems));
   });
 }

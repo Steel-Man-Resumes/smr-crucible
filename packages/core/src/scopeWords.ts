@@ -38,7 +38,9 @@ const DET = String.raw`(?!(?:on|in|at|to|for|with|by|as|into|out|from|up|through
 
 const PATTERNS: Array<[RegExp, ScopeFamily]> = [
   [/\bsupervis\w*/gi, "supervise"],
-  [/\bmanag(?:e|ed|es|ing|er|ers|ement)\b(?!\s+to\b)/gi, "manage"],
+  [/\bmanag(?:e|ed|es|ing|er|ers)\b(?!\s+to\b)/gi, "manage"],
+  // "Time management", "inventory management" are skills; "team management" claims people.
+  [/\b(?:team|staff|people|crew|employee|personnel|shift|store|kitchen|department|floor)\s+management\b/gi, "manage"],
   [/\b(?:led|lead|leads|leading|leader|leaders|leadership)\b/gi, "lead"],
   [/\bhead(?:ed|s|ing)?\s+up\s+(?:the\s+|a\s+|an\s+)?[a-z-]+/gi, "lead"],
   [new RegExp(String.raw`\bhead(?:ed|s|ing)?\s+${DET}${PEOPLE}\b`, "gi"), "lead"],
@@ -87,6 +89,8 @@ export interface ScopeHit {
   noun?: string;
   /** Every people word the claim names, stemmed. */
   nouns: string[];
+  /** The other content words of its object ("daily dock operations" is dock and operation). */
+  objects?: string[];
 }
 
 /** True when the hit is a role ("kitchen manager", "a shift lead"), not a verb. */
@@ -121,15 +125,55 @@ function nounFor(text: string, m: RegExpMatchArray): string | undefined {
 function peopleFor(text: string, m: RegExpMatchArray): string[] {
   const main = nounFor(text, m);
   if (isRoleUse(text, m) || /^head(?:ed|s|ing)?\s+up\b/i.test(m[0])) return main ? [main] : [];
-  const inside = (m[0].toLowerCase().match(/[a-z]+/g) ?? []).slice(1).filter((w) => NOUN_RE.test(w)).map(stemNoun);
+  const inside = peopleClasses((m[0].toLowerCase().match(/[a-z]+/g) ?? []).slice(1), NOUN_RE);
   return Array.from(new Set([...inside, ...objectPeople(text.slice((m.index ?? 0) + m[0].length).split(/[.;!?]/)[0], NOUN_RE)]));
 }
 
-/** The people words in a verb's object phrase (up to the first preposition other than "of"). */
+const OBJECT_FILLER = new Set(["the", "a", "an", "all", "our", "my", "their", "daily", "and", "or", "both", "overall", "various", "multiple", "every", "each", "new", "two", "three", "four", "five", "six", "it", "them", "this", "that", "of"]);
+
+/** The content words of a claim's object, stemmed ("daily dock operations" is dock and operation). */
+function objectWords(text: string, m: RegExpMatchArray): string[] {
+  const after = text.slice((m.index ?? 0) + m[0].length).split(/[.;!?]/)[0];
+  const all = after.toLowerCase().match(/[a-z]+/g) ?? [];
+  const stop = all.findIndex((w) => OBJECT_STOP.has(w));
+  return (stop >= 0 ? all.slice(0, stop) : all).slice(0, 6).filter((w) => !OBJECT_FILLER.has(w) && w.length > 2).map(stemNoun);
+}
+
+/**
+ * The people in a verb's object phrase (up to the first preposition other
+ * than "of"), as classes: a generic group (crew, team, staff, hires, people,
+ * guys...) is "group", unless a word before it says which ("dish crew" is
+ * "dish", "kitchen staff" is "kitchen"; a time word such as "night" does not
+ * count); a role keeps its own name and its usual group ("cooks" is "cook"
+ * and "kitchen", "dishwashers" is "dishwasher" and "dish").
+ */
 function objectPeople(after: string, re: RegExp): string[] {
   const all = after.toLowerCase().match(/[a-z]+/g) ?? [];
   const stop = all.findIndex((w) => OBJECT_STOP.has(w));
-  return (stop >= 0 ? all.slice(0, stop) : all).slice(0, 7).filter((w) => re.test(w)).map(stemNoun);
+  return peopleClasses((stop >= 0 ? all.slice(0, stop) : all).slice(0, 7), re);
+}
+
+const GROUP = new Set(["crew", "team", "staff", "staffer", "people", "person", "guy", "hire", "employee", "worker", "associate", "trainee", "member", "hand", "man", "helper", "laborer", "volunteer", "intern", "shift", "department", "store", "line"]);
+const TIME_WORDS = new Set(["night", "day", "morning", "evening", "weekend", "overnight", "first", "second", "third", "graveyard", "new", "entire", "whole", "other", "all", "every", "the", "a", "an", "our", "my", "their", "of", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "twelve", "large", "small", "big"]);
+const ROLE_GROUP: Record<string, string> = { cook: "kitchen", dishwasher: "dish", server: "floor", cashier: "front", nurse: "nursing", aide: "nursing", driver: "driving", loader: "dock", picker: "warehouse", packer: "warehouse" };
+
+function peopleClasses(words: string[], re: RegExp): string[] {
+  const out = new Set<string>();
+  words.forEach((w, i) => {
+    if (!re.test(w)) return;
+    const s = stemNoun(w);
+    if (GROUP.has(s)) {
+      const prev = words[i - 1];
+      if (prev && !TIME_WORDS.has(prev) && !/^\d+$/.test(prev) && !re.test(prev)) out.add(stemNoun(prev));
+      else out.add("group");
+      return;
+    }
+    out.add(s);
+    if (ROLE_GROUP[s]) out.add(ROLE_GROUP[s]);
+  });
+  // A specific class says more than "group": drop "group" when a role or modifier is named.
+  if (out.size > 1) out.delete("group");
+  return Array.from(out);
 }
 
 /** The people a few words after a verb: the last word of the first run of people words ("new team leads" is "lead"). */
@@ -152,14 +196,14 @@ export function scopeHits(text: string): ScopeHit[] {
   const found: Array<ScopeHit & { at: number; end: number; role: boolean }> = [];
   for (const [re, family] of PATTERNS) {
     for (const m of (text || "").matchAll(new RegExp(re.source, "gi"))) {
-      if (ROLE_NOUN_RE.test(m[0]) && OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
-      found.push({ family, word: m[0], noun: nounFor(text, m), nouns: peopleFor(text, m), at: m.index!, end: m.index! + m[0].length, role: isRoleUse(text, m) });
+      if ((ROLE_NOUN_RE.test(m[0]) || NOUN_FORM_RE.test(m[0])) && OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
+      found.push({ family, word: m[0], noun: nounFor(text, m), nouns: peopleFor(text, m), objects: objectWords(text, m), at: m.index!, end: m.index! + m[0].length, role: isRoleUse(text, m) });
     }
   }
   // A role word inside another claim is that claim's people ("trained new team leads"), not a role of the person's.
   return found
     .filter((h) => !(h.role && found.some((o) => o !== h && !o.role && o.at <= h.at && o.end >= h.end)))
-    .map(({ family, word, noun, nouns }) => ({ family, word, noun, nouns }));
+    .map(({ family, word, noun, nouns, objects }) => ({ family, word, noun, nouns, objects }));
 }
 
 // The person's own words are read a little more loosely than the page: a
@@ -189,7 +233,16 @@ const OWN_ROLE_BEFORE = /\b(?:i\s+(?:was|am|became|served\s+as|worked\s+as|start
 interface Claim {
   family: ScopeFamily;
   nouns: string[];
+  objects: string[];
+  /** The family's verb, active, with the person as its subject ("I supervised ...", "Supervised ..."). */
+  verbSelf: boolean;
 }
+
+// Noun forms are never a claim of the person's ("my supervision", "management liked my work",
+// "hand-eye coordination", "my mentor", "my lead's directions"); a role noun counts only as their own role.
+const NOUN_FORM_RE = /^(?:supervision|supervisions|management|coordination|coordinations|direction|directions|oversight|leadership|mentorship|lead's|leads'|mentor|mentors)$/i;
+// The person as the subject: the sentence starts with the verb, "I (also) verb", or "(I) verbed X and verb".
+const SELF_SUBJECT_BEFORE = /^\s*(?:[-•*]\s*)?$|\bI\s+(?:[a-z']+\s+){0,2}$|^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+(?:ed|ran|led|did|took|ran)\b[^.;!?]*\band\s+$/i;
 
 /** The scope claims the person makes in their own words, one per sentence hit, active and not denied. */
 function personClaims(sourceText: string): Claim[] {
@@ -205,13 +258,20 @@ function personClaims(sourceText: string): Claim[] {
       return true;
     };
     for (const [re, family] of PATTERNS) {
-      for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) if (ok(m)) out.push({ family, nouns: peopleFor(sentence, m) });
+      for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) {
+        if (!ok(m)) continue;
+        const role = isRoleUse(sentence, m);
+        const first = m[0].split(/\s+/)[0];
+        if (!role && NOUN_FORM_RE.test(first)) continue;
+        if (!role && /^lead$/i.test(first) && /\b(?:my|our|the|a|his|her|their)\s+$/i.test(sentence.slice(0, m.index))) continue;
+        out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: !role && SELF_SUBJECT_BEFORE.test(sentence.slice(0, m.index)) });
+      }
     }
     for (const [re, family] of LOOSE) {
       for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) {
         if (!ok(m)) continue;
         const nouns = objectPeople(sentence.slice(m.index! + m[0].length), PEOPLE_RE);
-        if (nouns.length) out.push({ family, nouns });
+        if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: SELF_SUBJECT_BEFORE.test(sentence.slice(0, m.index)) });
       }
     }
   }
@@ -230,7 +290,18 @@ export function scopeFamiliesIn(sourceText: string): Set<ScopeFamily> {
  */
 export function scopeNotTheirs(line: string, sourceText: string): ScopeHit | undefined {
   const theirs = personClaims(sourceText);
-  return scopeHits(line).find((h) => !theirs.some((c) => c.family === h.family && (!h.nouns.length || c.nouns.some((n) => h.nouns.includes(n)))));
+  return scopeHits(line).find(
+    (h) =>
+      !theirs.some((c) =>
+        c.family !== h.family
+          ? false
+          : h.nouns.length
+            ? c.nouns.some((n) => h.nouns.includes(n))
+            : // Round 7: a claim that names no people is theirs only when they used the verb themselves,
+              // about the same thing ("I managed the stockroom" covers "Managed the stockroom", not "Managed inventory").
+              c.verbSelf && (!(h.objects ?? []).length || c.objects.some((o) => (h.objects ?? []).includes(o)))
+      )
+  );
 }
 
 /**

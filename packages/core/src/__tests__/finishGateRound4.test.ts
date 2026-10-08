@@ -86,8 +86,12 @@ test("B1 (control, round 5): the same credential the person typed, exactly as ty
   // Round 6: a whole line of the person's own words counts too (their uploaded resume, their answers).
   const typed = walk(r, `${BASE}\nOSHA 30, 2019`);
   assert.equal(typed.state, "finished", JSON.stringify(typed.openItems));
-  const s = getResumeStatus({ resumeText: r, sourceText: `${BASE}\nOSHA 30, 2019`, credentialsAnswer: "OSHA 30, 2019" });
-  assert.equal(s.state, "finished", JSON.stringify(s.openItems));
+  // Round 7: the free-text licenses answer gives no exception; a structured row does, when the page shows it exactly.
+  const s = getResumeStatus({ resumeText: r, sourceText: BASE, credentialsAnswer: "OSHA 30, 2019" });
+  assert.equal(s.state, "draft", JSON.stringify(s.openItems));
+  const rows = [{ name: "OSHA 30", kind: "card" as const, when: "2019" }];
+  const rowPage = page("\n\nCERTIFICATIONS\n- OSHA 30 card, 2019");
+  assert.ok(!getResumeStatus({ resumeText: rowPage, sourceText: `${BASE}\nOSHA 30 card, 2019`, credentialRows: rows }).openItems.some((i) => i.kind === "credential_unsaid"));
 });
 
 // ---- B2 ------------------------------------------------------------------------------
@@ -104,7 +108,7 @@ for (const line of ["OSHA 10 (2019), CPR, Forklift card", "OSHA 10, 2019 | ServS
 }
 
 test("B2 (control): 'OSHA 10, 2019' alone still finishes for the person who typed it", () => {
-  const s = getResumeStatus({ resumeText: page("\n\nCERTIFICATIONS\n- OSHA 10, 2019"), sourceText: `${BASE}\nOSHA 10, 2019`, credentialsAnswer: "OSHA 10, 2019" });
+  const s = getResumeStatus({ resumeText: page("\n\nCERTIFICATIONS\n- OSHA 10, 2019"), sourceText: `${BASE}\nOSHA 10, 2019` });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 

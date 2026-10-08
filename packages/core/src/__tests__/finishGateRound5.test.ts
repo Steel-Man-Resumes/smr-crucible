@@ -138,10 +138,13 @@ test("B3 (control): a year or a status part goes with the part before it; where 
 
 // ---- the one exception: typed exactly -------------------------------------------------
 
-test("Typed exactly: a line exactly as typed in the licenses-and-training answer is not asked", () => {
-  const r = page("\n\nCERTIFICATIONS\n- OSHA 10, 2019");
-  assert.equal(getResumeStatus({ resumeText: r, sourceText: BASE, credentialsAnswer: "osha 10 2019" }).state, "finished");
-  assert.equal(getResumeStatus({ resumeText: r, sourceText: BASE, credentialsAnswer: "OSHA-10, 2019." }).state, "finished");
+test("Typed exactly (round 7): a structured row shown exactly is not asked; the old free-text answer is", () => {
+  const r = page("\n\nCERTIFICATIONS\n- OSHA 10 card, 2019");
+  const src = `${BASE}\nOSHA 10 card, 2019`;
+  // The rows are part of the person's own words too (their year and number are theirs).
+  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, credentialRows: [{ name: "OSHA 10", kind: "card", when: "2019" }] }).state, "finished");
+  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, credentialRows: [{ name: "OSHA-10", kind: "card", when: "2019" }] }).state, "finished");
+  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, credentialsAnswer: "OSHA 10 card, 2019" }).state, "draft");
 });
 
 for (const [typed, line] of [
@@ -160,7 +163,7 @@ for (const [typed, line] of [
 
 test("Typed exactly: a typed line on the resume does not cover the same credential said differently in a sentence", () => {
   const r = page("\n- Loaded trucks as a current OSHA 10 card holder.\n\nCERTIFICATIONS\n- OSHA 10, 2019");
-  const s = getResumeStatus({ resumeText: r, sourceText: BASE, credentialsAnswer: "OSHA 10, 2019" });
+  const s = getResumeStatus({ resumeText: r, sourceText: BASE, ownResumeText: "OSHA 10, 2019" });
   assert.ok(s.openItems.some((i) => i.kind === "credential_unsaid" && /current OSHA 10/.test(i.line)), JSON.stringify(s.openItems));
   // Round 6: the person's lines stay whole; nothing is cut on a semicolon.
   assert.deepEqual(Array.from(typedCredentialEntries("OSHA 10, 2019\nForklift card; CPR")), ["osha 10 2019", "forklift card cpr"]);

@@ -41,8 +41,9 @@ import {
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
 import { scopeNotTheirs } from "./scopeWords";
+import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
-import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs } from "./credentialMentions";
+import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
 import {
   SECOND_CHECK_RULE,
   validateSecondCheckFindings,
@@ -120,6 +121,10 @@ export interface ResumeStatusInput {
   credentialsAnswer?: string;
   /** Keys of credentials the person confirmed (D4): never asked again, and a title's credential word is theirs. */
   confirmedKeys?: string[];
+  /** The person's structured credentials from the Forge's training step (round 7): the one typed exception. */
+  credentialRows?: ReadonlyArray<CredentialRow>;
+  /** The person's own uploaded resume (record lines held back as they chose): whole lines of it may cover a credential. */
+  ownResumeText?: string;
 }
 
 export interface ResumeStatus {
@@ -371,17 +376,42 @@ const TITLE_CREDENTIAL_WORDS_RE = /\b(?:certified|licensed|registered|journeyman
  * credential the person confirmed (`confirmedKeys`) is theirs: only the rest
  * of the title is checked.
  */
-function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: Set<string> = new Set()): string[] {
+function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: Set<string> = new Set(), answers: DefendAnswer[] = []): string[] {
   const out: string[] = [];
   let inExperience = false;
   for (const l of linesOf(resumeText)) {
     if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); continue; }
     if (!inExperience || !isEntryHeader(l)) continue;
-    let t = titleOf(l);
-    if (confirmedKeys.has(credentialKey(t))) t = t.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
-    if (t && !titleIsTheirs(t, sourceText)) out.push(l);
+    const full = titleOf(l);
+    if (!full) continue;
+    // Round 7: the person's own whole title is theirs, and so is a title whose credential they
+    // confirmed ("CNA | Meadowbrook" for a person who holds the CNA).
+    if (titleIsTheirs(full, sourceText)) continue;
+    // Only a title that names a credential ("CNA", "CERTIFIED NURSING ASSISTANT") is sourced by confirming it.
+    const credentialTitle = isCredentialTerm(full) || new RegExp(TITLE_CREDENTIAL_WORDS_RE.source, "i").test(full);
+    if (credentialTitle && confirmedKeys.has(credentialKey(full))) continue;
+    // A title the person typed themselves (their own rewrite of the header) is theirs.
+    if (rewriteOf(answers, l)) continue;
+    const rest = full.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
+    if (confirmedKeys.size && rest && rest !== full && titleIsTheirs(rest, sourceText)) continue;
+    out.push(l);
   }
   return out;
+}
+
+/** The person's rewrite of this line, when they typed it themselves. */
+function rewriteOf(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
+  return answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && a.replaced.trim() !== "" && squash(a.line) === squash(line));
+}
+
+const stripBulletText = (l: string) => l.replace(/^\s*[-•*]\s*/, "");
+
+/** True when the person typed this scope word themselves: the line is their rewrite and the word was not in the line it replaced. */
+function personIntroduced(answers: DefendAnswer[], line: string, word: string): boolean {
+  const rw = rewriteOf(answers, line);
+  if (!rw) return false;
+  const head = (word.match(/[A-Za-z]+/) ?? [""])[0].toLowerCase();
+  return !!head && !new RegExp(`\\b${head}\\b`, "i").test(rw.replaced as string);
 }
 
 /** The lines above the first section heading (after the name): the header block. */
@@ -666,8 +696,12 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     const credentialFindings: MintFinding[] = [];
     const credentialSubject = new Map<string, string>();
     const confirmedKeys = new Set(input.confirmedKeys ?? []);
-    const personText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
-    for (const m of credentialsToAsk(resumeText, personText, confirmedKeys)) {
+    // Round 7: the whole-line exception reads only the person's uploaded resume (never the free-text
+    // licenses answer); their structured credential rows are the other exception.
+    const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+    const personText = input.ownResumeText ?? sourceText.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
+    const backstopText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
+    for (const m of credentialsToAsk(resumeText, personText, confirmedKeys, input.credentialRows, backstopText)) {
       credentialSubject.set(m.line, m.name);
       credentialFindings.push({
         rule: "STD-T03",
@@ -686,18 +720,18 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
       if (inSkills || credentialSectionLines.has(line)) continue;
       const hit = scopeNotTheirs(line, sourceText);
-      if (!hit) continue;
+      if (!hit || personIntroduced(answers, line, hit.word)) continue;
       scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
-    for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys)) {
+    for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers)) {
       const hit = scopeNotTheirs(titleOf(line), sourceText);
       if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
     // A job title on the page that the person never used (round 6: settled
     // only by their own rewrite or a cut, never by an answer).
     // Asked like a defend line, so only where there is a defend step.
-    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText, confirmedKeys) : [])
+    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers) : [])
       .map((l) => ({
         rule: "STD-C03",
         severity: "BLOCK" as const,

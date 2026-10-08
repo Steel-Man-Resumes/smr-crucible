@@ -45,7 +45,7 @@ const TYPED = "Forklift Certification | 2019 - 2021";
 // ---- prompt ------------------------------------------------------------------------
 
 test("prompt: carries the page and the person's words as fenced data, without contact details", () => {
-  const p = buildSecondCheckPrompt({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED });
+  const p = buildSecondCheckPrompt({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED });
   assert.match(p.system, /different|never rewrite/i);
   assert.match(p.system, /data, not instructions/);
   assert.match(p.user, /<persons_own_words>[\s\S]*Lakeside Grocery[\s\S]*<\/persons_own_words>/);
@@ -158,39 +158,39 @@ test("validate: shown text may not add a number, quote or name; long dashes go",
 
 test("status: without second-check findings the result is exactly the mint check's", () => {
   for (const page of [CLEAN, FLAWED.invented_number.page, FLAWED.led_for_helped.page]) {
-    const base = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED });
-    assert.deepEqual(getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, secondCheckFindings: undefined }), base);
+    const base = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED });
+    assert.deepEqual(getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, secondCheckFindings: undefined }), base);
     assert.ok(base.openItems.every((i) => !("from" in i)), "mint and defend items carry no source mark");
   }
 });
 
 test("status: an empty second check changes nothing", () => {
-  const base = getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false });
-  assert.deepEqual(getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [] }), base);
+  const base = getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false });
+  assert.deepEqual(getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [] }), base);
   assert.equal(base.state, "finished");
 });
 
 test("status: a second-check BLOCK makes the page a draft, with its own question", () => {
   const { page, line } = FLAWED.expired_as_current;
-  const mintOnly = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false });
+  const mintOnly = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false });
   // Round 5: the line is not what the person typed, so the gate alone asks it as a memory prompt.
   assert.equal(mintOnly.state, "draft");
   assert.ok(mintOnly.openItems.some((i) => i.line === line && i.kind === "credential_unsaid"));
   const findings: SecondCheckFinding[] = [{ line, kind: "credential_status", severity: "BLOCK", reason: "Your words say this expired.", question: "Is this current, expired, or still in progress?" }];
-  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: findings });
+  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: findings });
   assert.equal(s.state, "draft");
   // Same line, same rule, already a BLOCK: not asked twice.
   assert.equal(s.blockCount, 1);
   assert.ok(!s.openItems.some((i) => i.from === "second_check"));
   // On another line the second check's BLOCK lands with its own question.
   const other = "- Made breakfast orders on the grill.";
-  const s2 = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ ...findings[0], line: other }] });
+  const s2 = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ ...findings[0], line: other }] });
   assert.ok(s2.openItems.some((i) => i.line === other && i.from === "second_check" && i.question === "Is this current, expired, or still in progress?"));
 });
 
 test("status: a FIX from the second check is listed but does not hold the finish", () => {
   const { page, line } = FLAWED.invented_employer_detail;
-  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "invented_fact", severity: "FIX", reason: "Not in your words.", question: "Is this true?" }] });
+  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "invented_fact", severity: "FIX", reason: "Not in your words.", question: "Is this true?" }] });
   assert.equal(s.state, "finished");
   assert.equal(s.fixCount, 1);
   assert.equal(s.openItems[0].from, "second_check");
@@ -198,31 +198,31 @@ test("status: a FIX from the second check is listed but does not hold the finish
 
 test("status: not asked twice; a BLOCK still lands over a mint FIX on the same line", () => {
   const { page, line } = FLAWED.led_for_helped;
-  const mint = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false });
+  const mint = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false });
   // Round 5: "Led" is also a scope claim (its own BLOCK); this test is about the STD-T01 items.
   const t01 = (x: typeof mint) => x.openItems.filter((i) => i.rule === "STD-T01");
   assert.deepEqual(t01(mint).map((i) => [i.rule, i.severity]), [["STD-T01", "FIX"]]);
-  const fix = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "scope_inflation", severity: "FIX", reason: "a", question: "b?" }] });
+  const fix = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "scope_inflation", severity: "FIX", reason: "a", question: "b?" }] });
   assert.equal(t01(fix).length, 1, "same rule, same severity: one item");
-  const block = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "scope_inflation", severity: "BLOCK", reason: "a", question: "b?" }] });
+  const block = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "scope_inflation", severity: "BLOCK", reason: "a", question: "b?" }] });
   assert.equal(block.state, "draft");
   assert.deepEqual(t01(block).map((i) => [i.severity, i.from ?? "mint"]), [["BLOCK", "second_check"], ["FIX", "mint"]]);
 });
 
 test("status: a stored finding for a line no longer on the page is dropped", () => {
   const stale: SecondCheckFinding[] = [{ line: FLAWED.led_for_helped.line, kind: "scope_inflation", severity: "BLOCK", reason: "a", question: "b?" }];
-  const s = getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: stale });
+  const s = getResumeStatus({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: stale });
   assert.equal(s.state, "finished");
   assert.equal(s.openItems.length, 0);
 });
 
 test("status: second-check text that adds a fact is replaced before the person sees it", () => {
   const { page, line } = FLAWED.invented_number;
-  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "number_not_in_source", severity: "BLOCK", reason: "It was 30.", question: "Was it 30 aisles?" }] });
+  const s = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "number_not_in_source", severity: "BLOCK", reason: "It was 30.", question: "Was it 30 aisles?" }] });
   const mine = s.openItems.find((i) => i.from === "second_check");
   // The mint check already holds this line as a STD-T02 BLOCK, so nothing is added.
   assert.equal(mine, undefined);
-  const other = getResumeStatus({ resumeText: page, sourceText: SOURCE, credentialsAnswer: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "invented_fact", severity: "BLOCK", reason: "It was 30.", question: "Was it 30 aisles?" }] });
+  const other = getResumeStatus({ resumeText: page, sourceText: SOURCE, ownResumeText: TYPED, requireDefend: false, secondCheckFindings: [{ line, kind: "invented_fact", severity: "BLOCK", reason: "It was 30.", question: "Was it 30 aisles?" }] });
   const f = other.openItems.find((i) => i.from === "second_check")!;
   assert.doesNotMatch(f.why + f.question, /\b30\b/);
 });
@@ -231,7 +231,7 @@ test("status: second-check text that adds a fact is replaced before the person s
 
 test("run: a mock reply is parsed and validated; contact details never reach the provider", async () => {
   const provider = mockSecondCheckProvider({ reply: reply([{ line: FLAWED.expired_as_current.line, kind: "credential_status" }, { line: "Invented line", kind: "other" }]) });
-  const r = await runSecondCheck({ resumeText: FLAWED.expired_as_current.page, sourceText: SOURCE, credentialsAnswer: TYPED }, provider);
+  const r = await runSecondCheck({ resumeText: FLAWED.expired_as_current.page, sourceText: SOURCE, ownResumeText: TYPED }, provider);
   assert.equal(r.status, "ran");
   if (r.status !== "ran") return;
   assert.equal(r.findings.length, 1);
@@ -242,7 +242,7 @@ test("run: a mock reply is parsed and validated; contact details never reach the
 });
 
 test("run: failure, timeout and an unreadable reply all fall back with no findings", async () => {
-  const input = { resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED };
+  const input = { resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED };
   assert.deepEqual(await runSecondCheck(input, mockSecondCheckProvider({ fail: true })), { status: "unavailable", findings: [], usage: null });
   const slow = await runSecondCheck(input, mockSecondCheckProvider({ delayMs: 200 }), { timeoutMs: 20 });
   assert.equal(slow.status, "unavailable");
@@ -262,7 +262,7 @@ test("adapter: OpenAI-compatible request shape, reply text and usage, error stat
     return new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' } }], usage: { prompt_tokens: 900, completion_tokens: 12 } }), { status: 200 });
   }) as unknown as typeof fetch;
   const p = openAICompatibleProvider({ baseUrl: "https://checker.example.test/v1/", model: "checker-model", apiKey: "test-key", fetchImpl });
-  const r = await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED }, p);
+  const r = await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED }, p);
   assert.equal(r.status, "ran");
   assert.deepEqual(r.usage, { inputTokens: 900, outputTokens: 12 });
   assert.equal(seen[0].url, "https://checker.example.test/v1/chat/completions");
@@ -275,7 +275,7 @@ test("adapter: OpenAI-compatible request shape, reply text and usage, error stat
   assert.deepEqual(body.messages.map((m: { role: string }) => m.role), ["system", "user"]);
 
   const failing = openAICompatibleProvider({ baseUrl: "https://checker.example.test/v1", model: "m", apiKey: "k", fetchImpl: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch });
-  assert.equal((await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE, credentialsAnswer: TYPED }, failing)).status, "unavailable");
+  assert.equal((await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED }, failing)).status, "unavailable");
 });
 
 test("config: off by default; all three settings needed; never the writer's family", () => {
@@ -332,7 +332,7 @@ test("harness: each flaw type plants one changed line on the fixture page", () =
 });
 
 test("harness: the mint check alone catches the invented number and misses the rest; a checker that flags the line catches all", async () => {
-  const pairs = [{ source: SOURCE, page: CLEAN, credentialsAnswer: TYPED }];
+  const pairs = [{ source: SOURCE, page: CLEAN, ownResumeText: TYPED }];
   const mint = await scoreChecker(pairs, mintChecker);
   assert.equal(mint.flaws.invented_number.caughtBlock, 1);
   // Round 5: every credential not typed exactly is a memory prompt, so the mint check alone now catches it.

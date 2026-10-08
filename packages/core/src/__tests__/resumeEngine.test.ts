@@ -323,7 +323,8 @@ test("status: thin history with a dated class is not penalized for thinness", ()
   const typed = "Forklift training, county job center (2023), passed the driving test";
   // Round 6: a job title counts only as the person's own whole title (their job header).
   const source = `${THIN.source}\nYard worker | Neighbors in Dayton | 2021 - 2024`;
-  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: source, defendAnswers: answerAll(THIN.resume, source), credentialsAnswer: typed });
+  // Round 7: the class line is theirs as a whole line of their own uploaded resume.
+  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: source, defendAnswers: answerAll(THIN.resume, source), ownResumeText: `${source}\n${typed}` });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 
@@ -384,7 +385,7 @@ test("defend: a thin page in the person's own words, with a dated class they nam
 test("two-page fixture really runs to two pages and stays finished once defended", () => {
   const plan = computeFitPlan(TWO_PAGE.resume, {});
   assert.equal(plan.result.pageCount, 2);
-  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialsAnswer: "OSHA 10 card (2017)" });
+  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialRows: [{ name: "OSHA 10", kind: "card", when: "2017" }] });
   assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
   assert.equal(s.state, "finished");
 });
