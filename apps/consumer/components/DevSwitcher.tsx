@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { clearForgeBrowserKeys } from "@/lib/refinery-guards";
 import {
   useRealTier,
   getViewAs,
@@ -89,6 +90,8 @@ export function DevSwitcher() {
         body: JSON.stringify({ targetUserId, mode: "view" }),
       });
       if (res.ok) {
+        // Clear this browser's Forge and Refinery keys first (M3).
+        clearForgeBrowserKeys();
         // Their real landing, inside the blue read-only frame
         window.location.assign("/dashboard");
         return;

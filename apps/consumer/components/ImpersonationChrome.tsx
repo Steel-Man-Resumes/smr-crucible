@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { clearForgeBrowserKeys } from "@/lib/refinery-guards";
 
 interface Status {
   active: boolean;
@@ -60,6 +61,8 @@ export function ImpersonationChrome() {
         body: JSON.stringify({ notify }),
       });
     } finally {
+      // Whatever the person's session left in this browser goes with it (M3).
+      clearForgeBrowserKeys();
       window.location.href = "/dashboard/admin/users";
     }
   }

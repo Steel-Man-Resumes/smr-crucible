@@ -145,6 +145,23 @@ export function eraseLocalForgeRun(storage: WriteStore | null = browserStorage()
   }
 }
 
+/**
+ * Whose run is in this browser: its owner mark, or null (no run, unowned, or
+ * unreadable). For the Refinery's derived-key rule (lib/refinery-guards.ts),
+ * which needs only the mark, never the run.
+ */
+export function forgeRunOwner(storage: ReadStore | null = browserStorage()): string | null {
+  if (!storage) return null;
+  let raw: string | null = null;
+  try {
+    raw = storage.getItem(FORGE_SESSION_KEY);
+  } catch {
+    return null;
+  }
+  const owner = parseRun(raw)?._ownerUserId;
+  return typeof owner === "string" ? owner : null;
+}
+
 /** Sign-up form: the run to ask about, or null (no run, no work, expired, or already owned by an account). */
 export function readStoredForgeRun(
   stored: string | null,

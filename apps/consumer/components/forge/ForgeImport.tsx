@@ -29,6 +29,7 @@ import {
 } from "@/lib/forge-import";
 import { sessionPending } from "@/lib/session-policy";
 import { signOutOfForge } from "./ForgeAccountBar";
+import { useImpersonating } from "./useImpersonating";
 
 const MAX_TRIES_PER_PAGE = 2;
 
@@ -44,6 +45,10 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       ? { id: authUser.id, name: authUser.name ?? null, email: authUser.email ?? null }
       : null;
 
+  // An admin viewing as someone: this browser's run is the admin's, and the
+  // account behind every Forge route is the person's. Nothing moves either
+  // way until we know no one is being impersonated (M3).
+  const impersonating = useImpersonating(!!user);
   const [asking, setAsking] = useState<{ level: RunLevel; name: string | null } | null>(null);
   const [note, setNote] = useState<"" | "saved" | "failed">("");
   const busy = useRef(false);
@@ -58,7 +63,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
 
   const save = useCallback(
     async (level: RunLevel, announce: boolean) => {
-      if (!user || busy.current || tries.current >= MAX_TRIES_PER_PAGE) return;
+      if (!user || impersonating !== false || busy.current || tries.current >= MAX_TRIES_PER_PAGE) return;
       busy.current = true;
       tries.current += 1;
       const snapshot = run as Record<string, any>;
@@ -85,7 +90,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
         busy.current = false;
       }
     },
-    [run, updateSession, user?.id] // eslint-disable-line react-hooks/exhaustive-deps
+    [run, updateSession, user?.id, impersonating] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const r = run as Record<string, any>;
@@ -103,6 +108,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       return;
     }
     if (!user || busy.current || asking) return;
+    if (impersonating !== false) return;
     const seen = madeHere.current;
     const d = importDecision(run, user, { madeHere: !!seen && seen.userId === user.id && seen.ok });
     if (d.action === "claim") updateSession({ _ownerUserId: user.id });
@@ -112,7 +118,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
     // What this tab saw, for the next look: anything but an open question
     // means the run in hand is empty or this account's from here on.
     madeHere.current = { userId: user.id, ok: d.action !== "ask" };
-  }, [status, user?.id, pathname, level, owner, synced, answered, r.startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, user?.id, pathname, level, owner, synced, answered, r.startedAt, impersonating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Edit your resume" from the Refinery (lib/refinery-guards.ts
   // EDIT_RESUME_HREF): open this account's own saved resume, never the run on
@@ -130,6 +136,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
   }, [pathname]);
   useEffect(() => {
     if (!fromRefinery || !user || asking || loadedFromAccount.current) return;
+    if (impersonating !== false) return;
     if (owner || answered || r.isDemo === true) return;
     loadedFromAccount.current = true;
     fetch("/api/forge/load")
@@ -137,6 +144,9 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       .then((j) => {
         const saved = j?.data;
         if (!saved || typeof saved !== "object" || runLevel(saved) === 0) return;
+        // Only this signed-in account's own saved run, never anyone else's
+        // (the route answers for the effective account; M3).
+        if (j?.userId !== user.id) return;
         // The account's own copy: marked as this account's and as saved, so
         // nothing here sends it back.
         updateSession({ ...saved, ...afterSave(saved, user.id, runLevel(saved)) } as any);
@@ -144,9 +154,9 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       .catch(() => {
         loadedFromAccount.current = false;
       });
-  }, [fromRefinery, user?.id, asking, owner, answered]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fromRefinery, user?.id, asking, owner, answered, impersonating]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!user) return null;
+  if (!user || impersonating !== false) return null;
 
   if (asking && showPrompt) {
     return (

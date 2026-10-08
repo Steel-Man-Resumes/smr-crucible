@@ -2,9 +2,12 @@
  * Shared-computer rules for the Refinery shell (follow-ups to the register
  * hotfix review, round 2: R2, R6, N6, N7, and the welcome tour).
  *
- * Pure and import-free so the shell, the dashboard links and the tests read
- * the same rules. The shell does the I/O.
+ * Pure so the shell, the dashboard links and the tests read the same rules.
+ * The shell does the I/O. The Forge run itself is only ever read through
+ * lib/forge-carry.ts.
  */
+
+import { eraseLocalForgeRun, forgeRunOwner } from "./forge-carry";
 
 /** "Edit your resume" from the Refinery: the Forge, told it was opened from an account. */
 export const EDIT_RESUME_HREF = "/resume?from=refinery";
@@ -101,13 +104,8 @@ export function settleDerivedKeys(uid: string, storage: Store | null = browserSt
   }
   let clear = owner !== null && owner !== uid;
   if (owner === null) {
-    try {
-      const run = JSON.parse(storage.getItem("forge_session") || "null");
-      const runOwner = run && typeof run === "object" ? run._ownerUserId : null;
-      clear = typeof runOwner === "string" && runOwner !== uid;
-    } catch {
-      clear = false;
-    }
+    const runOwner = forgeRunOwner(storage);
+    clear = runOwner !== null && runOwner !== uid;
   }
   if (clear) {
     for (const k of DERIVED_KEYS) {
@@ -124,4 +122,24 @@ export function settleDerivedKeys(uid: string, storage: Store | null = browserSt
     // storage unavailable
   }
   return clear ? "cleared" : "kept";
+}
+
+// ---- impersonation (security review 3a Part 2 r1, M3) ---------------------------
+
+/**
+ * Clear every Forge and Refinery key this browser holds for a person: the
+ * Forge run, its last-synced mark, and the derived keys with their owner
+ * mark. Called when an admin starts or ends viewing as someone, so neither
+ * side's work is ever read as the other's.
+ */
+export function clearForgeBrowserKeys(storage: Store | null = browserStore()): void {
+  if (!storage) return;
+  eraseLocalForgeRun(storage);
+  for (const k of [...DERIVED_KEYS, DERIVED_OWNER_KEY]) {
+    try {
+      storage.removeItem(k);
+    } catch {
+      // ignore
+    }
+  }
 }

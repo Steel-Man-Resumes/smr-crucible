@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealTier } from "@/lib/useUserTier";
+import { clearForgeBrowserKeys } from "@/lib/refinery-guards";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -92,6 +93,9 @@ export default function AdminUsersPage() {
         alert(d.error || "Could not start session.");
         return;
       }
+      // Nothing of the admin's own in this browser is read as the person's,
+      // and nothing of the person's stays behind (security review 3a Part 2 r1, M3).
+      clearForgeBrowserKeys();
       window.location.href = "/dashboard";
     } finally {
       setStarting(false);
