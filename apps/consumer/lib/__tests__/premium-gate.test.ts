@@ -27,11 +27,36 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*
 const PRICE = /\$\s?\d|\bprice|\bcost|\bfee\b|subscri|per month|\/mo\b|\bpaid\b|upgrade/i;
 
 describe("the switch", () => {
-  it("on unless set to off", () => {
-    assert.equal(premiumGateOn(undefined), true);
-    assert.equal(premiumGateOn(""), true);
+  it("off unless explicitly set to on (a deploy never locks tools by accident)", () => {
+    assert.equal(premiumGateOn(undefined), false);
+    assert.equal(premiumGateOn(null), false);
+    assert.equal(premiumGateOn(""), false);
+    assert.equal(premiumGateOn("off"), false);
+    assert.equal(premiumGateOn("true"), false);
+    assert.equal(premiumGateOn("1"), false);
     assert.equal(premiumGateOn("on"), true);
-    assert.equal(premiumGateOn(" OFF "), false);
+    assert.equal(premiumGateOn(" ON "), true);
+  });
+
+  it("reads PREMIUM_GATE from the environment, off when unset", async () => {
+    const person = "00000000-0000-4000-8000-0000000000aa";
+    const saved = process.env.PREMIUM_GATE;
+    try {
+      delete process.env.PREMIUM_GATE;
+      assert.equal(premiumGateOn(), false);
+      assert.equal(await checkPremium(person, "resources", async () => ({ open: [] })), null, "unset: open");
+      process.env.PREMIUM_GATE = "on";
+      assert.equal(premiumGateOn(), true);
+      assert.equal((await checkPremium(person, "resources", async () => ({ open: [] })))?.status, 403, "on: locked");
+    } finally {
+      if (saved === undefined) delete process.env.PREMIUM_GATE;
+      else process.env.PREMIUM_GATE = saved;
+    }
+  });
+
+  it("the status route opens everything when the gate is off", () => {
+    const src = read("app", "api", "user", "premium", "route.ts");
+    assert.match(src, /if \(!premiumGateOn\(\)\) return NextResponse\.json\(\{ data: ALL_OPEN\(\) \}\)/);
   });
 });
 
@@ -57,9 +82,11 @@ describe("the server gate", () => {
     assert.equal(res?.status, 403);
   });
 
-  it("switched off: everything passes without reading anything", async () => {
+  it("off (the default): everything passes without reading anything", async () => {
     let read = 0;
     assert.equal(await checkPremium(person, "resources", async () => { read++; return { open: [] }; }, "off"), null);
+    assert.equal(await checkPremium(person, "resources", async () => { read++; return { open: [] }; }, null), null);
+    assert.equal(await checkPremium(person, "resources", async () => { read++; return { open: [] }; }, ""), null);
     assert.equal(read, 0);
   });
 

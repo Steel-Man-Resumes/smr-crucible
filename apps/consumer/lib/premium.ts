@@ -13,14 +13,19 @@ export const PREMIUM_TOOL_IDS = ["resources", "interview_coaching", "one_click_a
 export type PremiumToolId = (typeof PREMIUM_TOOL_IDS)[number];
 
 /**
- * Deployment switch, read on the server only: "off" opens every premium tool
- * to every signed-in person (an emergency off switch, or to ship this dark).
- * Unset or anything else: the gate is on, as Troy decided.
+ * Deployment switch, read on the server only. OFF BY DEFAULT (CC ruling
+ * 2026-10-08): the gate locks premium tools only when PREMIUM_GATE is set to
+ * "on". Unset, "off" or anything else: every premium tool stays open to every
+ * signed-in person, as before. Why: turning the gate on is an owner decision
+ * on a date of its own, and usage numbers are recorded before any wall goes
+ * up, so a deploy must never lock tools by accident. The locked card, "Ask SMR
+ * for access" and the admin grants all work once it is on (grants and
+ * requests can be made while it is off, and take effect when it goes on).
  */
 export const PREMIUM_GATE_ENV = "PREMIUM_GATE";
 
 export function premiumGateOn(raw: string | undefined | null = typeof process !== "undefined" ? process.env.PREMIUM_GATE : undefined): boolean {
-  return (raw ?? "").trim().toLowerCase() !== "off";
+  return (raw ?? "").trim().toLowerCase() === "on";
 }
 
 /** The names people see. */

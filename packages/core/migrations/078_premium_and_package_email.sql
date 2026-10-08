@@ -16,6 +16,8 @@
 --       required, an end date is optional.
 -- A locked tool says how to get it ("Ask your organization" or "Ask SMR for
 -- access"). Asking files a row Troy sees in admin. It sends no email.
+-- Applying this locks nothing by itself: the app's gate is off until the
+-- deployment sets PREMIUM_GATE=on (apps/consumer/lib/premium.ts).
 --
 -- WHAT THIS ADDS (additive only; nothing existing changes)
 --   premium_grant           one row per grant. Revoked, never deleted by the
