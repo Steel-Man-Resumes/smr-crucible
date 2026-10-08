@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LANE_KINDS, resolveLaneSettings } from "../careerLaneShared";
 import { resolvePracticeEntry, cleanDetails, type PracticeEntry } from "../practiceRecordShared";
-import { applyTitleMode, cleanKindSettings, type CreativeKindSettings } from "../creativeLaneShared";
+import { applyPhraseAnswer, applyTitleMode, cleanKindSettings, type CreativeKindSettings } from "../creativeLaneShared";
 import { ageRangeOf, buildPerformerModel, creditText, performerPlainText, performerShownIds } from "../performerShared";
 import { getPerformerStatus } from "../performerChecks";
 import { exportOpenItemLines, getCreativeStatus } from "../creativeChecks";
@@ -220,11 +220,22 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
     }
   });
 
-  it("the name at the top is held too, so a file name made from the printed name never carries it", () => {
-    const s = off({ displayName: "Ray Example of San Quentin" });
+  it("the name at the top: a whole hidden name is held (so the file name never carries it); part of one is asked, and a Yes holds it (s2r3)", () => {
+    const s = off({ displayName: "Ray Example, San Quentin State Prison" });
     const m = buildPerformerModel([PLAY, SQ], s);
     assert.equal(m.header.name, "");
     assert.ok(m.heldFields.some((h) => h.field === "displayName" && h.reason === "names_hidden"));
+    // The person's own name field is never held for a part: it is asked about with one tap.
+    const s2 = off({ displayName: "Ray Example of San Quentin" });
+    const m2 = buildPerformerModel([PLAY, SQ], s2);
+    assert.deepEqual(m2.asks, [{ field: "displayName", phrase: "Ray Example of San Quentin" }]);
+    const ask = getPerformerStatus({ entries: [PLAY, SQ], settings: s2, model: m2 }).openItems.find((x) => x.answer === "facility_word")!;
+    assert.equal(ask.line, "(top of the page)");
+    assert.doesNotMatch(`${ask.line} ${ask.question} ${ask.why}`, leak);
+    const yes = applyPhraseAnswer(s2, ask.phrase, "yes")!;
+    const m3 = buildPerformerModel([PLAY, SQ], yes);
+    assert.equal(m3.header.name, "");
+    assert.ok(m3.heldFields.some((h) => h.field === "displayName" && h.reason === "names_hidden"));
   });
 
   it("a hidden venue is public only through a line THIS page prints with its true title (s2r2 N-M1)", () => {

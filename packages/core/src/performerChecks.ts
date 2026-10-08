@@ -9,7 +9,9 @@
  *          an age range, never an age.
  *   STD-F07 one page, always (decision C1): overflow becomes Selected credits.
  *   STD-R03 a title or place that names a facility shows only as chosen, and
- *          nothing typed or built names what this lane keeps off.
+ *          nothing typed or built names what this lane keeps off. A line that
+ *          only shares a word with it prints and gets a one-tap card (review
+ *          s2r3 N3-H1); the person's stored answer decides it for good.
  *
  * To-do lines never quote what the person typed and never name a hidden
  * facility (entryLine, neutral lines, then exportOpenItemLines at export).
@@ -17,7 +19,7 @@
 
 import { type PracticeEntry, yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor, artistRowParts } from "./creativeLaneShared";
-import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
+import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, openItemKey } from "./creativeChecks";
 import { isPersonalDetail } from "./cvShared";
 import {
   type PerformerModel,
@@ -30,7 +32,7 @@ import {
   unionLine,
 } from "./performerShared";
 
-export const PERFORMER_RULES_VERSION = `performer-1 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
+export const PERFORMER_RULES_VERSION = `performer-2 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
 
 const FIELD_LINE: Record<string, string> = {
   displayName: "(top of the page)", discipline: "(top of the page)", agent: "(top of the page)", basedIn: "(top of the page)",
@@ -91,6 +93,12 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
         why: "Your choices about work that names a facility apply to every line on this lane, your own words included.",
       });
     }
+  }
+  // Lines that print but share a word with a place this lane keeps off: one tap (N3-H1).
+  // The card quotes the phrase on screen only; its line and question never do.
+  for (const a of model.asks ?? []) {
+    const e = a.entryId ? byId.get(a.entryId.toLowerCase()) : undefined;
+    items.push(facilityAskItem(doc, a.field ? FIELD_LINE[a.field] ?? "(top of the page)" : e ? `${yearsOf(e)}  A line in your record` : "A line in your record", a));
   }
   for (const o of model.omitted) {
     const e = byId.get(o.entryId.toLowerCase());
@@ -188,7 +196,7 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
 
   const seen = new Set<string>();
   const unique = items.filter((x) => {
-    const k = `${x.rule}|${x.line}|${x.question}|${x.entryId ?? ""}`;
+    const k = openItemKey(x);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
