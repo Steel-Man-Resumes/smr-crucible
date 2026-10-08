@@ -84,7 +84,8 @@ for (const line of ["GED | Toledo Adult Education | 2015", "HSED | Milwaukee Are
     const r = withEdu(line);
     const g = view(r, "I never finished high school.").groups.find((x) => x.credentialName && x.education)!;
     const out = cutCredentialEverywhere({ resume: r, letter: "" }, g.credentialName!);
-    assert.equal(out.resume.trim(), `${HEAD}\n\nEDUCATION`.trim());
+    // Round 13 (SF-2): the emptied EDUCATION heading comes off too.
+    assert.equal(out.resume.trim(), HEAD.trim());
     assert.doesNotMatch(out.resume, /Your job title/);
     assert.ok(!view(out.resume, "I never finished high school.").groups.some((x) => x.credentialName));
   });

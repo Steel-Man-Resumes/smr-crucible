@@ -230,5 +230,6 @@ CERTIFICATIONS
 test("R9: cutting or changing a list line never touches a headline with the same words", () => {
   const t = "NAME\nCertified Nursing Assistant\n\nCERTIFICATIONS\n- Certified Nursing Assistant";
   assert.equal(changeLine(t, "- Certified Nursing Assistant", "CNA certification, current"), "NAME\nCertified Nursing Assistant\n\nCERTIFICATIONS\n- CNA certification, current");
-  assert.equal(cutLine(t, "- Certified Nursing Assistant"), "NAME\nCertified Nursing Assistant\n\nCERTIFICATIONS");
+  // Round 13 (SF-2): the emptied CERTIFICATIONS heading comes off with its last line.
+  assert.equal(cutLine(t, "- Certified Nursing Assistant"), "NAME\nCertified Nursing Assistant");
 });

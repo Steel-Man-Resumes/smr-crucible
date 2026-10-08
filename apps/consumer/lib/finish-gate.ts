@@ -28,6 +28,8 @@ import {
   scopeWhy,
   scopeNotTheirsAnswered,
   scopeAllNotTheirsAnswered,
+  roleTitleWhy,
+  roleTitleQuestion,
   Q_SCOPE,
   type DefendAnswer,
   type OpenItem,
@@ -35,9 +37,10 @@ import {
 } from "@crucible/core/src/resumeStatus";
 import { hasCredentialStatus, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
+import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
-import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion } from "@crucible/core/src/scopeWords";
+import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
 import {
   credentialHomes,
@@ -303,8 +306,10 @@ export function ownWordsFor(
 ): string {
   return [
     withholdRecordLines(session.resumeText, keepInsideLines).kept,
-    session.goalNarrative,
-    session.hookNarrative,
+    // Round 13 (R13-B1): the goal box and the "what would make work meaningful" answer are about the job they
+    // want. They are marked so a present tense there ("a job where I train new hires") never counts as done.
+    markGoalText(session.goalNarrative),
+    markGoalText(session.hookNarrative),
     // Training, certificates and licenses they told us about (not record answers).
     session.challengeNarratives?.[CREDENTIALS_KEY],
   ]
@@ -440,7 +445,33 @@ export function cutLine(resumeText: string, line: string): string {
   const hit = lineIndexOf(out, line, target);
   if (hit === -1) return resumeText;
   out.splice(hit, 1);
-  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+  return dropEmptySections(out.join("\n").replace(/\n{3,}/g, "\n\n"));
+}
+
+/**
+ * Round 13 (SF-2): a section heading with no lines under it comes off ("EDUCATION" after its only line is cut,
+ * two headings back to back). Only known section names count, so a name or a letter line is never touched.
+ */
+export function dropEmptySections(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let atEnd = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t && isSectionHeader(t)) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++;
+      if (j >= lines.length || isSectionHeader(lines[j].trim())) {
+        // The heading and the blank lines under it go; the gap before it stays as the gap before the next one.
+        if (j >= lines.length) atEnd = true;
+        i = j - 1;
+        continue;
+      }
+    }
+    out.push(lines[i]);
+  }
+  const joined = out.join("\n").replace(/\n{3,}/g, "\n\n");
+  return atEnd ? joined.replace(/\s+$/, "") : joined;
 }
 
 /**
@@ -1104,7 +1135,7 @@ export function cutCredentialEverywhere(
   const record = (target: "resume" | "letter", beforeText: string, afterText: string) => {
     const was = linesOf(beforeText);
     const now = linesOf(afterText);
-    const gone = was.filter((l) => !now.includes(l));
+    const gone = was.filter((l) => !now.includes(l) && !isSectionHeader(l.trim()));
     const added = now.filter((l) => !was.includes(l));
     gone.forEach((g, i) => changes.push({ target, before: g, after: added[i] ?? null }));
   };
@@ -1232,15 +1263,46 @@ export function applyScopeHelped(text: string, answers: DefendAnswer[], line: st
   };
 }
 
+/** Round 13 (SF-6): true when the typed school names a jail or prison; the person chooses to keep it or change it. */
+export function isFacilitySchool(typed: string | undefined): boolean {
+  const r = typedSchoolParts(typed);
+  return typeof r === "object" && !!r.facility;
+}
+
 /** Round 12 (SF-8): true when something was typed in "What school?" but it is not a school's name. */
 export function isRejectedSchool(typed: string | undefined): boolean {
   return typedSchoolParts(typed) === "rejected";
 }
 
-/** Round 12 (SF-2): "Yes, that was my title": what they type must be the title on the line. */
-export function titleYesResult(line: string, typed: string): "ok" | "empty" | "unmatched" {
+/**
+ * Round 12 (SF-2): "Yes, that was my title": what they type must be the title on the line. Round 13 (SF-9):
+ * their short form counts ("Customer Service Rep", "Asst Mgr"). `current` is the title the card asks about
+ * (a role in the summary or letter); a job header's own title otherwise.
+ */
+export function titleYesResult(line: string, typed: string, current?: string): "ok" | "empty" | "unmatched" {
   if (!typed.trim()) return "empty";
-  return squash(typed) === squash(titleOfHeader(stripBullet(line))) ? "ok" : "unmatched";
+  const title = current ?? titleOfHeader(stripBullet(line));
+  return squash(typed) === squash(title) || sameTitle(typed, title) ? "ok" : "unmatched";
+}
+
+/**
+ * Round 13 (SF-5): what "Use my title" will not take: nothing, an answer that is not a title ("idk", "no",
+ * "n/a", "I don't remember"), fewer than 2 letters, digits or a bar. The same title as the line is a Yes.
+ */
+export function ownTitleProblem(typed: string, current: string): "empty" | "not_a_title" | "same" | undefined {
+  const t = straightQuotes(typed || "").replace(/\s+/g, " ").trim();
+  if (!t) return "empty";
+  if ((t.match(/[A-Za-z]/g) ?? []).length < 2) return "not_a_title";
+  if (/[|\d]/.test(t)) return "not_a_title";
+  const plain = t.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (
+    /^(?:idk|i\s?dk|dk|no|nope|nah|na|n a|none|nothing|nobody|ok|okay|k|yes|yeah|yep|ya|sure|maybe|unsure|not sure|i'?m not sure|dunno|no idea|forgot|i forgot|unknown|whatever|same|n\/a|i don'?t know|i do not know|don'?t know|i don'?t remember|i do not remember|don'?t remember|i can'?t remember|can'?t remember|i don'?t recall|don'?t recall|not sure what it was|i don'?t know my title|no title|there wasn'?t one|didn'?t have one|i didn'?t have one|none really)$/i.test(
+      plain
+    )
+  )
+    return "not_a_title";
+  if (sameTitle(t, current) || squash(t) === squash(current)) return "same";
+  return undefined;
 }
 
 /** Record "Yes, that was my title" for a header line. */
@@ -1253,10 +1315,20 @@ export function recordTitleYes(answers: DefendAnswer[], line: string, typed: str
  * Round 12 (SF-2): "Use my title": their own title replaces only the title
  * part of the job header; the employer, the city and the dates stay.
  */
-export function applyOwnTitle(text: string, answers: DefendAnswer[], line: string, title: string): RewriteResult {
+export function applyOwnTitle(text: string, answers: DefendAnswer[], line: string, title: string, roleTitle?: string): RewriteResult {
   const t = title.replace(/\s+/g, " ").trim().replace(/\|/g, "");
   const body = stripBullet(line);
   if (!t) return { text, answers, changed: false };
+  if (roleTitle) {
+    // Round 13 (SF-4): a role in the summary or letter: only the role's words change, and the new title is theirs.
+    const at = body.toLowerCase().indexOf(roleTitle.toLowerCase());
+    if (at < 0) return { text, answers, changed: false };
+    const fit = /^[A-Z]/.test(body.slice(at)) ? t.charAt(0).toUpperCase() + t.slice(1) : at > 0 ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+    const r = applyRewrite(text, answers, line, `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`);
+    if (!r.changed) return r;
+    const nextLine = (line.match(/^\s*(?:[-*•]\s*)?/)?.[0] ?? "") + `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`;
+    return { ...r, answers: r.answers.map((a) => (a.kind === "rewrite" && squash(a.line) === squash(nextLine) ? { ...a, ownTitle: fit } : a)) };
+  }
   const head = titleOfHeader(body);
   const at = body.indexOf(head);
   const next = at >= 0 ? `${body.slice(0, at)}${t}${body.slice(at + head.length)}` : body;
@@ -1306,7 +1378,8 @@ export interface LineGroup {
   /** Round 11: an unmatched scope claim: its family (for "Who did you train?") and the line's shared form. */
   scope?: { family: string; families: string[]; question: string; helped?: string };
   /** Round 12 (SF-2): a job title the person never used: "Yes, that was my title" or "Use my title". */
-  title?: { current: string };
+  /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
+  title?: { current: string; role?: boolean };
 }
 
 /** An open item with the document it is in. */
@@ -1511,7 +1584,22 @@ function letterItems(
     // A scope word the person typed into the line themselves (their rewrite) is their claim.
     const rw = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
     const theirWord = (word: string) => !!rw && !new RegExp(`\\b${(word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
-    const hits = scopeAllNotTheirsAnswered(sentence, source, own).filter((h) => !theirWord(h.word));
+    const all = scopeAllNotTheirsAnswered(sentence, source, own).filter((h) => !theirWord(h.word));
+    // Round 13 (SF-4): a role used as a title ("As a shift supervisor I ...") gets its own title card.
+    const role = all.find((h) => h.role && h.title);
+    if (role && !items.some((i) => i.line === line && i.kind === "title_unsaid")) {
+      items.push({
+        rule: "STD-C04",
+        severity: "BLOCK",
+        line,
+        target: "letter",
+        kind: "title_unsaid",
+        why: roleTitleWhy(role.title as string),
+        question: roleTitleQuestion(role.title as string),
+        roleTitle: role.title,
+      });
+    }
+    const hits = all.filter((h) => !(h.role && h.title));
     const hit = hits[0];
     const existing = items.find((i) => i.line === line && i.kind === "scope_unsaid");
     if (hit && existing) {
@@ -1519,7 +1607,7 @@ function letterItems(
       existing.scopeFamilies = Array.from(new Set([...(existing.scopeFamilies ?? [existing.scopeFamily as string]), ...hits.map((h) => h.family)]));
       delete existing.helped;
     } else if (hit) {
-      const helpedSentence = hits.length === 1 ? helpedForm(sentence, hit.word) : undefined;
+      const helpedSentence = hits.length === 1 && !hit.role ? helpedForm(sentence, hit.word) : undefined;
       items.push({
         rule: "STD-C04",
         severity: "BLOCK",
@@ -1846,7 +1934,11 @@ export function buildFinishView(input: {
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
-      ...(its.some((i) => i.kind === "title_unsaid") && its[0].target === "resume" ? { title: { current: titleOfHeader(stripBullet(its[0].line)) } } : {}),
+      ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
+        ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }
+        : its.some((i) => i.kind === "title_unsaid") && its[0].target === "resume"
+          ? { title: { current: titleOfHeader(stripBullet(its[0].line)) } }
+          : {}),
       ...(!unsaid && scopeItem(its)
         ? {
             scope: {

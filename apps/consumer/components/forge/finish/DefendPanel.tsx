@@ -41,7 +41,7 @@ export interface CardActions {
   onKeepTerm: (term: string) => void;
   onCutTerm: (term: string) => void;
   /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
-  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string, school?: string) => "ok" | "when" | "unchanged" | "school";
+  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string, school?: string, keepFacility?: boolean) => "ok" | "when" | "unchanged" | "school" | "facility";
   onCutCredential: (group: LineGroup) => void;
   /** Round 8: the lines "No, take it off" would change, shown before it does. */
   onPreviewCut?: (group: LineGroup) => Array<{ target: "resume" | "letter"; before: string; after: string | null }>;
@@ -51,7 +51,7 @@ export interface CardActions {
   onScopeHelped?: (group: LineGroup) => void;
   /** Round 12: "Yes, that was my title" (typed, must match) and "Use my title" (replaces only the title). */
   onTitleYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
-  onOwnTitle?: (group: LineGroup, typed: string) => boolean;
+  onOwnTitle?: (group: LineGroup, typed: string) => "ok" | "empty" | "not_a_title";
 }
 
 /** D3: one card for every skill the person never said. One tap each. */
@@ -96,6 +96,9 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
   const [when, setWhen] = useState("");
   const [school, setSchool] = useState("");
   const [notice, setNotice] = useState("");
+  // Round 13 (SF-6): the school they typed names a jail or prison; they keep it or change it.
+  const [facility, setFacility] = useState(false);
+  const schoolField = useRef<HTMLInputElement>(null);
   const firstType = useRef<HTMLButtonElement>(null);
   const name = group.credentialName ?? editableLine(group.line);
   const prompt = group.items.find((i) => i.kind === "credential_unsaid")?.question ?? "";
@@ -194,8 +197,12 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
               </label>
               <input
                 id={`cred-school-${index}`}
+                ref={schoolField}
                 value={school}
-                onChange={(e) => setSchool(e.target.value)}
+                onChange={(e) => {
+                  setSchool(e.target.value);
+                  setFacility(false);
+                }}
                 placeholder="In your own words"
                 className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
               />
@@ -206,32 +213,27 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
               {notice}
             </p>
           )}
+          {facility && (
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="facility-school">
+              <button onClick={() => save(true)} className={BTN_SOFT}>
+                Keep
+              </button>
+              <button
+                onClick={() => {
+                  setFacility(false);
+                  setNotice("");
+                  schoolField.current?.focus();
+                }}
+                className={BTN_SOFT}
+              >
+                Change
+              </button>
+            </div>
+          )}
           <p className="mt-1 text-[11px] text-t-phos-dim">We put it on your resume the way you say it here.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
-              onClick={() => {
-                if (!type) return setNotice("Pick what kind it is.");
-                const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when, type === "did not finish" ? school : undefined);
-                if (result === "when") {
-                  setNotice(
-                    type === "did not finish"
-                      ? "Type only the years you went, like 2011 - 2014, or leave it empty."
-                      : group.education
-                        ? "Add the year you earned it."
-                        : "Add the year you got it, or say if it's current, expired, in progress or completed."
-                  );
-                  return;
-                }
-                if (result === "school") {
-                  setNotice("Type just the school's name, or leave it empty to take the line off.");
-                  return;
-                }
-                if (result === "unchanged") {
-                  setNotice("That didn't change the line. Cut it, or change it on your resume.");
-                  return;
-                }
-                setNotice("");
-              }}
+              onClick={() => save(false)}
               className={BTN_MAIN}
             >
               Keep it on my resume
@@ -245,6 +247,36 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
       {mode === "ask" && <span className="sr-only">{name}</span>}
     </li>
   );
+
+  function save(keepFacility: boolean) {
+    if (!type) return setNotice("Pick what kind it is.");
+    const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when, type === "did not finish" ? school : undefined, keepFacility);
+    if (result === "facility") {
+      setFacility(true);
+      setNotice("This names a jail or prison school. Keep it, or type a name without it?");
+      return;
+    }
+    if (result === "when") {
+      setNotice(
+        type === "did not finish"
+          ? "Type only the years you went, like 2011 - 2014, or leave it empty."
+          : group.education
+            ? "Add the year you earned it."
+            : "Add the year you got it, or say if it's current, expired, in progress or completed."
+      );
+      return;
+    }
+    if (result === "school") {
+      setNotice("Type just the school's name, or leave it empty to take the line off.");
+      return;
+    }
+    if (result === "unchanged") {
+      setNotice("That didn't change the line. Cut it, or change it on your resume.");
+      return;
+    }
+    setFacility(false);
+    setNotice("");
+  }
 }
 
 /**
@@ -264,7 +296,9 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-title-card="true" data-target={group.target} data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
       <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
-      <p className="mt-1.5 text-sm text-t-phos">Was &ldquo;{group.title?.current}&rdquo; your job title there? A screener checks titles against your records.</p>
+      <p className="mt-1.5 text-sm text-t-phos">
+        Was &ldquo;{group.title?.current}&rdquo; your job title{group.title?.role ? "" : " there"}? A screener checks titles against your records.
+      </p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={() => { setNotice(""); setTyped(""); setMode("yes"); }} className={BTN_MAIN}>
@@ -298,8 +332,11 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
                   const r = actions.onTitleYes?.(group, typed) ?? "empty";
                   if (r === "empty") return setNotice("Type your title.");
                   if (r === "unmatched") return setNotice("That isn't the title on this line. Type it the way it was, or use your own title.");
-                } else if (!(actions.onOwnTitle?.(group, typed) ?? false)) {
-                  return setNotice("Type your title.");
+                } else {
+                  const r = actions.onOwnTitle?.(group, typed) ?? "empty";
+                  if (r === "empty") return setNotice("Type your title.");
+                  // Round 13 (SF-5): not a title ("idk", "no", "I don't remember").
+                  if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker.");
                 }
                 setMode("ask");
               }}

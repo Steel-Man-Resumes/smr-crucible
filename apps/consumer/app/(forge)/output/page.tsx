@@ -35,6 +35,8 @@ import {
   applyScopeHelped,
   titleYesResult,
   isRejectedSchool,
+  isFacilitySchool,
+  ownTitleProblem,
   recordTitleYes,
   applyOwnTitle,
   recordScopeYes,
@@ -403,16 +405,26 @@ export default function OutputPage() {
       return r;
     },
     onTitleYes: (group, typed) => {
-      const r = titleYesResult(group.line, typed);
+      const r = titleYesResult(group.line, typed, group.title?.role ? group.title.current : undefined);
       if (r === "ok") setDefendAnswers((a) => recordTitleYes(a, group.line, typed));
       return r;
     },
     onOwnTitle: (group, typed) => {
-      const r = applyOwnTitle(resumeText, defendAnswers, group.line, typed);
-      if (!r.changed) return false;
-      setResumeText(r.text);
+      // Round 13 (SF-5): "idk", "no", "I don't remember" are not a title; the same title is a Yes.
+      const current = group.title?.current ?? "";
+      const problem = ownTitleProblem(typed, current);
+      if (problem === "empty" || problem === "not_a_title") return problem;
+      if (problem === "same") {
+        setDefendAnswers((a) => recordTitleYes(a, group.line, current));
+        return "ok";
+      }
+      const letter = group.target === "letter";
+      const r = applyOwnTitle(letter ? coverLetterText : resumeText, defendAnswers, group.line, typed, group.title?.role ? current : undefined);
+      if (!r.changed) return "not_a_title";
+      if (letter) setCoverLetterText(r.text);
+      else setResumeText(r.text);
       setDefendAnswers(r.answers);
-      return true;
+      return "ok";
     },
     onScopeHelped: (group) => {
       if (!group.scope?.helped) return;
@@ -428,9 +440,11 @@ export default function OutputPage() {
       setResumeText((t) => cutTerm(t, term));
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
     },
-    onConfirmCredential: (group, type, when, school) => {
+    onConfirmCredential: (group, type, when, school, keepFacility) => {
       // Round 12: something typed in "What school?" that is not a school's name gets its own message.
       if (type === "did not finish" && school?.trim() && isRejectedSchool(school)) return "school";
+      // Round 13 (SF-6): a school inside a jail or prison is printed only when the person chooses to keep it.
+      if (type === "did not finish" && school?.trim() && !keepFacility && isFacilitySchool(school)) return "facility";
       if (!isConfirmWhen(type, when)) return "when";
       // Round 10: the person's own words, so a school they named themselves stays on an education line.
       const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when, { personText: view.source, school });

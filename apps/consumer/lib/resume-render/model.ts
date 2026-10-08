@@ -202,6 +202,8 @@ export function parseResume(text: string): ResumeModel {
     const overview = p !== null && p.kind === "job";
     push({ kind: "para", text: clean(line), role: overview ? "overview" : "body" });
   }
+  // Round 13 (SF-2): never print a heading with nothing under it (a cut can leave one).
+  const kept = blocks.filter((b, i) => b.kind !== "section" || (i + 1 < blocks.length && blocks[i + 1].kind !== "section"));
   return {
     header: {
       name: clean(header.nameLine),
@@ -210,7 +212,7 @@ export function parseResume(text: string): ResumeModel {
       notes: clean(header.publicNotesLine),
       order,
     },
-    blocks,
+    blocks: kept,
   };
 }
 
