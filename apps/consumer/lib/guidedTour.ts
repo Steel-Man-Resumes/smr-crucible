@@ -40,8 +40,11 @@ export function isTourVisible(args: {
   closed: boolean;
   state: TourState | null;
   requested: boolean;
+  /** Something must be answered first (the shell's "Is it yours?" card). */
+  held?: boolean;
 }): boolean {
-  const { tier, onHome, closed, state, requested } = args;
+  const { tier, onHome, closed, state, requested, held } = args;
+  if (held) return false;
   if (tier !== "client" || !onHome || closed || !state) return false;
   // A request opens the tour even if it was already completed (replay).
   return requested || !state.tourComplete;

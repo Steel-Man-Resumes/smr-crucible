@@ -114,6 +114,38 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
     madeHere.current = { userId: user.id, ok: d.action !== "ask" };
   }, [status, user?.id, pathname, level, owner, synced, answered, r.startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // "Edit your resume" from the Refinery (lib/refinery-guards.ts
+  // EDIT_RESUME_HREF): open this account's own saved resume, never the run on
+  // this computer. Only when the browser holds nothing anyone told us (or the
+  // person just said the run here is not theirs and it was erased); a run with
+  // answers is asked about first, above, and stays hidden until then.
+  const loadedFromAccount = useRef(false);
+  const [fromRefinery, setFromRefinery] = useState(false);
+  useEffect(() => {
+    try {
+      setFromRefinery(new URLSearchParams(window.location.search).get("from") === "refinery");
+    } catch {
+      setFromRefinery(false);
+    }
+  }, [pathname]);
+  useEffect(() => {
+    if (!fromRefinery || !user || asking || loadedFromAccount.current) return;
+    if (owner || answered || r.isDemo === true) return;
+    loadedFromAccount.current = true;
+    fetch("/api/forge/load")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((j) => {
+        const saved = j?.data;
+        if (!saved || typeof saved !== "object" || runLevel(saved) === 0) return;
+        // The account's own copy: marked as this account's and as saved, so
+        // nothing here sends it back.
+        updateSession({ ...saved, ...afterSave(saved, user.id, runLevel(saved)) } as any);
+      })
+      .catch(() => {
+        loadedFromAccount.current = false;
+      });
+  }, [fromRefinery, user?.id, asking, owner, answered]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!user) return null;
 
   if (asking && showPrompt) {

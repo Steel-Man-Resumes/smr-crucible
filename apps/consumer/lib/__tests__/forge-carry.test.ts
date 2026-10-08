@@ -102,7 +102,9 @@ describe("Refinery sync: never claims silently", () => {
   it("does nothing before the user is known or without a run", () => {
     assert.equal(forgeSyncDecision(JSON.stringify(RUN), undefined, NOW), "none");
     assert.equal(forgeSyncDecision(null, "user-b", NOW), "none");
-    assert.equal(forgeSyncDecision(JSON.stringify({ pagesVisited: [] }), "user-b", NOW), "none");
+    // A fresh run with no work: nothing to do. (Unstamped or stale, it is
+    // erased: follow-up R3, shared-computer-followups.test.ts.)
+    assert.equal(forgeSyncDecision(JSON.stringify({ pagesVisited: [], _savedAt: NOW - 1000 }), "user-b", NOW), "none");
   });
   it("the shell has no name-match claim, and saves only on an owned run or a Yes", () => {
     const src = read(...SHELL);
@@ -132,6 +134,7 @@ describe("every Refinery reader uses the accessor", () => {
     // fix/s3-accounts (merged 2026-10-08):
     [join("components", "forge", "ForgeAccountBar.tsx")]: "the sign-out clean's removal list (never reads the run)",
     [join("lib", "forge-import.ts")]: "doc comment only; the import's decisions take the run from ForgeProvider",
+    [join("lib", "refinery-guards.ts")]: "R6: reads only the run's owner mark, to tell whose derived keys these are",
   };
   const SERVER_ONLY = Object.keys(ALLOWED).filter((k) => /api|forge-persist/.test(k));
   const MENTION = /\bforge_session\b|FORGE_SESSION_KEY|FORGE_LAST_SYNCED_RUN_KEY|forge_last_synced_run/;

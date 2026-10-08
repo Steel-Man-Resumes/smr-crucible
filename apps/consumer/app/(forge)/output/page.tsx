@@ -163,8 +163,13 @@ export default function OutputPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, defendAnswers, updateSession]);
 
+  const runIsMineRef = useRef(runIsMine);
+  runIsMineRef.current = runIsMine;
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
+    // Every caller, not only the effect below: never another person's run.
+    // Through a ref, so this memoized callback asks with the current sign-in.
+    if (!runIsMineRef.current()) return;
     if (docState === "generating" || docState === "done") return;
     hasStarted.current = true;
     setDocState("generating");

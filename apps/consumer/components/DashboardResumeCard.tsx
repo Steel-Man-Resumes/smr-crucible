@@ -16,6 +16,7 @@ import {
   migrateLegacyResume,
 } from "@/components/resume/resumeModel";
 import { ResumePreview } from "@/components/resume/ResumePreview";
+import { EDIT_RESUME_HREF } from "@/lib/refinery-guards";
 
 export function DashboardResumeCard() {
   const [doc, setDoc] = useState<ResumeDocument | null>(null);
@@ -88,7 +89,7 @@ export function DashboardResumeCard() {
                 Find jobs to apply to
               </Link>
               <Link
-                href="/resume"
+                href={EDIT_RESUME_HREF}
                 className="t-focus px-4 py-2.5 border border-t-line text-sm font-medium text-t-phos text-center hover:border-t-phos-dim hover:text-t-white transition-colors"
               >
                 Edit your resume

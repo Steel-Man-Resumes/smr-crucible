@@ -55,6 +55,8 @@ export interface OnboardingData {
   gate: GateDecision | null;
   /** Convenience mirror of gate.trialMode; false until known. */
   trialMode: boolean;
+  /** Finished loads so far (see the shell's Forge question). */
+  loads: number;
   refresh: () => void;
 }
 
@@ -66,6 +68,9 @@ export function useOnboarding(): OnboardingData {
   const [forgeComplete, setForgeComplete] = useState(false);
   const [disclosureComplete, setDisclosureComplete] = useState(false);
   const [gate, setGate] = useState<GateDecision | null>(null);
+  // How many loads have finished. The Refinery shell compares it across a
+  // Forge save, so it knows when these numbers include that save.
+  const [loads, setLoads] = useState(0);
 
   const refresh = useCallback(() => {
     // Admin = god mode, skip checks
@@ -79,6 +84,7 @@ export function useOnboarding(): OnboardingData {
         unlockAction: null,
         trialMode: false,
       });
+      setLoads((n) => n + 1);
       return;
     }
 
@@ -106,8 +112,12 @@ export function useOnboarding(): OnboardingData {
       // journey endpoint didn't come back -- the page keeps working, just
       // conservatively locked rather than silently full-access.
       setState(gateState ?? "needs_profile");
+      setLoads((n) => n + 1);
     }).catch(() => {
-      if (!cancelled) setState("needs_profile");
+      if (!cancelled) {
+        setState("needs_profile");
+        setLoads((n) => n + 1);
+      }
     });
 
     return () => { cancelled = true; };
@@ -143,6 +153,7 @@ export function useOnboarding(): OnboardingData {
     disclosureComplete,
     gate,
     trialMode: gate?.trialMode ?? false,
+    loads,
     refresh,
   };
 }

@@ -213,9 +213,11 @@ export function markForgeRunOwned(run: ForgeRun, userId: string): ForgeRun {
 
 /**
  * Refinery shell: what to do with the local run for the signed-in user.
- *  - "none":   nothing to do (no user yet, no run, or an unowned run with no work)
+ *  - "none":   nothing to do (no user yet, no run, a fresh unowned run with no
+ *              work, or sample data, which is never saved or asked about)
  *  - "purge":  marked as another account's run; remove it
- *  - "erase":  unowned and past the idle limit; remove it, never offer it
+ *  - "erase":  unowned and past the idle limit, with or without work; remove
+ *              it, never offer it
  *  - "ask":    unowned with work; show "Is it yours?" and do NOT save or show it
  *  - "owned":  this user's run; the normal sync applies
  * There is no silent claim: an unowned run is never "owned" here, whatever its name.
@@ -230,9 +232,16 @@ export function forgeSyncDecision(
   if (!userId) return "none";
   const run = parseRun(stored);
   if (!run) return "none";
-  if (run._ownerUserId) return run._ownerUserId === userId ? "owned" : "purge";
-  if (!forgeRunHasWork(run)) return "none";
+  if (run._ownerUserId) {
+    if (run._ownerUserId !== userId) return "purge";
+    // Sample data is never saved to an account, even this account's own demo.
+    return run.isDemo === true ? "none" : "owned";
+  }
+  // Unowned and past the idle limit: erased whether or not it has a resume
+  // yet. A half-done run (record answers, no resume) is still the previous
+  // person's (review R3).
   if (forgeRunExpired(run, now)) return "erase";
+  if (!forgeRunHasWork(run) || run.isDemo === true) return "none";
   return "ask";
 }
 
