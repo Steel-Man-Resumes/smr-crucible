@@ -19,6 +19,19 @@ export type LaneFormat = (typeof LANE_FORMATS)[number];
 export const LANE_LENGTHS = ["auto", "one_page", "two_pages"] as const;
 export type LaneLength = (typeof LANE_LENGTHS)[number];
 
+/**
+ * What a lane makes (migration 075). "resume": resumes and letters (every lane
+ * before 075). "creative": an artist resume, a bio, the person's own statement
+ * and a work-sample list, for one practice. A CV and a performer page come
+ * later, each as one more value here and in career_lane_kind_check.
+ */
+export const LANE_KINDS = ["resume", "creative"] as const;
+export type LaneKind = (typeof LANE_KINDS)[number];
+
+/** The two-path plan: a realistic job now, and the dream. Null for everyone else. */
+export const LANE_PATHS = ["realistic", "dream"] as const;
+export type LanePath = (typeof LANE_PATHS)[number];
+
 /** The lane tools that show a one-time introduction (lane_tool_intro.tool). */
 export const LANE_TOOLS = ["tailor", "library"] as const;
 export type LaneTool = (typeof LANE_TOOLS)[number];
@@ -51,6 +64,15 @@ export interface CareerLane {
   archived_at: string | null;
   /** The lane made automatically from the first Forge resume. */
   is_first?: boolean;
+  /** 075. Absent on rows read before 075 is applied; treat as "resume". */
+  kind?: LaneKind;
+  path?: LanePath | null;
+  /** The other lane of a realistic/dream pair. */
+  pair_lane_id?: string | null;
+  /** Per-lane choices for a non-resume kind (see creativeLaneShared). Never facts. */
+  kind_settings?: Record<string, unknown>;
+  /** The pair's private plan card. Dream lane only. */
+  pair_plan?: Record<string, unknown> | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,6 +87,19 @@ export function isLaneFormat(v: unknown): v is LaneFormat {
 
 export function isLaneLength(v: unknown): v is LaneLength {
   return typeof v === "string" && (LANE_LENGTHS as readonly string[]).includes(v);
+}
+
+export function isLaneKind(v: unknown): v is LaneKind {
+  return typeof v === "string" && (LANE_KINDS as readonly string[]).includes(v);
+}
+
+export function isLanePath(v: unknown): v is LanePath {
+  return typeof v === "string" && (LANE_PATHS as readonly string[]).includes(v);
+}
+
+/** A lane's kind, reading rows from before 075 as "resume". */
+export function laneKindOf(lane: { kind?: unknown } | null | undefined): LaneKind {
+  return isLaneKind(lane?.kind) ? lane.kind : "resume";
 }
 
 export function isLaneTool(v: unknown): v is LaneTool {
@@ -129,6 +164,10 @@ export interface LaneSettingsInput {
   hybridUnevenHistory?: unknown;
   hybridFieldChange?: unknown;
   lengthPref?: unknown;
+  /** Create only: a lane's kind is set once (its documents depend on it). */
+  kind?: unknown;
+  /** "realistic", "dream", or null to clear. */
+  path?: unknown;
 }
 
 /** The cleaned settings, as columns. */
@@ -139,13 +178,18 @@ export interface LaneSettings {
   hybrid_uneven_history: boolean;
   hybrid_field_change: boolean;
   length_pref: LaneLength;
+  kind: LaneKind;
+  path: LanePath | null;
 }
 
 export type LaneSettingsError =
   | "name_required"
   | "bad_format"
   | "bad_length"
-  | "hybrid_needs_both";
+  | "hybrid_needs_both"
+  | "bad_kind"
+  | "kind_is_fixed"
+  | "bad_path";
 
 export type LaneSettingsResult =
   | { ok: true; value: LaneSettings }
@@ -158,6 +202,8 @@ const LANE_DEFAULTS: LaneSettings = {
   hybrid_uneven_history: false,
   hybrid_field_change: false,
   length_pref: "auto",
+  kind: "resume",
+  path: null,
 };
 
 /**
@@ -169,9 +215,11 @@ const LANE_DEFAULTS: LaneSettings = {
  */
 export function resolveLaneSettings(
   input: LaneSettingsInput,
-  current?: Pick<LaneSettings, keyof LaneSettings> | null
+  current?: (Omit<LaneSettings, "kind" | "path"> & { kind?: LaneKind; path?: LanePath | null }) | null
 ): LaneSettingsResult {
-  const base: LaneSettings = current ? { ...LANE_DEFAULTS, ...current } : { ...LANE_DEFAULTS };
+  const base: LaneSettings = current
+    ? { ...LANE_DEFAULTS, ...current, kind: laneKindOf(current), path: isLanePath(current.path) ? current.path : null }
+    : { ...LANE_DEFAULTS };
   const next: LaneSettings = { ...base };
 
   if (input.name !== undefined || !current) {
@@ -188,9 +236,22 @@ export function resolveLaneSettings(
     if (!isLaneLength(input.lengthPref)) return { ok: false, error: "bad_length" };
     next.length_pref = input.lengthPref;
   }
+  if (input.kind !== undefined) {
+    if (!isLaneKind(input.kind)) return { ok: false, error: "bad_kind" };
+    // A lane's kind is set when it is made: its documents are built for it.
+    if (current && input.kind !== laneKindOf(current)) return { ok: false, error: "kind_is_fixed" };
+    next.kind = input.kind;
+  }
+  if (current) next.kind = laneKindOf(current);
+  if (input.path !== undefined) {
+    if (input.path !== null && !isLanePath(input.path)) return { ok: false, error: "bad_path" };
+    next.path = input.path === null ? null : input.path;
+  }
   if (input.hybridUnevenHistory !== undefined) next.hybrid_uneven_history = input.hybridUnevenHistory === true;
   if (input.hybridFieldChange !== undefined) next.hybrid_field_change = input.hybridFieldChange === true;
 
+  // Format and length are resume settings; a creative lane keeps the dated default.
+  if (next.kind !== "resume" && next.format !== "chronological") return { ok: false, error: "bad_format" };
   if (next.format === "hybrid" && !hybridAllowed(next.hybrid_uneven_history, next.hybrid_field_change)) {
     return { ok: false, error: "hybrid_needs_both" };
   }

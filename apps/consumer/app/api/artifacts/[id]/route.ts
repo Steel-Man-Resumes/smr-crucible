@@ -125,6 +125,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (result.status === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (result.status === "creative_doc") {
+    // Statements, bios and the other creative documents save only through
+    // their own tools, which check every word first.
+    return NextResponse.json(
+      { error: "creative_doc", message: "Open this in Creative work to change it." },
+      { status: 409 }
+    );
+  }
   if (result.status === "locked") {
     return NextResponse.json(
       {
