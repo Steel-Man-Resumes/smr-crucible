@@ -113,7 +113,9 @@ BEGIN
   -- The plan card lives on the dream side only, and stays small.
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'career_lane_pair_plan_shape') THEN
     ALTER TABLE career_lane ADD CONSTRAINT career_lane_pair_plan_shape
-      CHECK (pair_plan IS NULL OR (path = 'dream' AND jsonb_typeof(pair_plan) = 'object'
+      -- path IS NOT NULL spelled out: with a NULL path, path = 'dream' is
+      -- unknown and a CHECK would let it through.
+      CHECK (pair_plan IS NULL OR (path IS NOT NULL AND path = 'dream' AND jsonb_typeof(pair_plan) = 'object'
                                    AND octet_length(pair_plan::text) <= 8000));
   END IF;
   -- Same composite owner key as 073: a lane can only pair with a lane its own
