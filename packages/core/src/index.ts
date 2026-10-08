@@ -73,3 +73,4 @@ export * from './orgVisibilityShared';
 
 // Premium tools by entitlement, never payment (migration 078).
 export * from './premium';
+export * from './packageEmail';

@@ -32,6 +32,7 @@ import { useEffectiveRole } from "@/components/RoleProvider";
 import { passwordProblem } from "@/lib/password-policy";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
+import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 
 interface UsageData {
@@ -474,6 +475,7 @@ export default function SettingsPage() {
           unhideEmployer={unhideEmployer}
         />}
         {!isOrgStaff && <PremiumToolsSection />}
+        {!isOrgStaff && <PackageEmailSetting />}
       </div>
 
       {/* ── 2. Coach & AI ──────────────────────────────────────────── */}

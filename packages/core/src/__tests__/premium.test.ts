@@ -104,7 +104,7 @@ describe("the admin grant form", () => {
 
 describe("the migration and the code agree on the allowlist", () => {
   it("078's CHECKs name exactly PREMIUM_TOOLS", () => {
-    const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_access.sql"), "utf8");
+    const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
     const lists = sql.match(/ARRAY\['resources', 'interview_coaching', 'one_click_apply'\]/g) ?? [];
     assert.ok(lists.length >= 2, "the default and the CHECK");
     assert.match(sql, /tool IN \('resources', 'interview_coaching', 'one_click_apply'\)/);
@@ -114,5 +114,24 @@ describe("the migration and the code agree on the allowlist", () => {
   it("no price, no email: the module never mentions either", () => {
     const src = readFileSync(join(__dirname, "..", "premium.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     assert.doesNotMatch(src, /price|dollar|\$\d+\.\d\d|resend|sendEmail|fetch\(/i);
+  });
+});
+
+describe("078 part 2: one automatic package email per finished version", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+  it("the sent table is owner-only, forced, and never updated", () => {
+    assert.match(sql, /CREATE TABLE IF NOT EXISTS forge_package_email_sent/);
+    assert.match(sql, /PRIMARY KEY \(user_id, version\)/);
+    assert.match(sql, /version ~ '\^\[0-9a-f\]\{64\}\$'/);
+    assert.match(sql, /ALTER TABLE forge_package_email_sent FORCE ROW LEVEL SECURITY/);
+    for (const verb of ["SELECT", "INSERT", "DELETE"]) {
+      assert.match(sql, new RegExp(`forge_package_email_sent_${verb.toLowerCase()} ON forge_package_email_sent FOR ${verb}`));
+    }
+    assert.doesNotMatch(sql, /forge_package_email_sent FOR UPDATE/);
+    assert.match(sql, /GRANT SELECT, INSERT, DELETE ON forge_package_email_sent TO smr_app/);
+    assert.match(sql, /DROP TABLE IF EXISTS forge_package_email_sent/, "rollback names it");
+  });
+  it("the switch defaults on and is additive", () => {
+    assert.match(sql, /ADD COLUMN IF NOT EXISTS forge_package_email BOOLEAN NOT NULL DEFAULT true/);
   });
 });

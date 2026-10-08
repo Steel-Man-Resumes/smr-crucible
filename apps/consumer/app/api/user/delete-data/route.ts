@@ -151,6 +151,11 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
       if ((e as { code?: string })?.code !== "42P01") throw e;
     });
+    // Which finished resumes were already emailed (078, hashes only). Without
+    // them a resume finished after this delete is emailed again, as it should be.
+    await queryAsUser(userId, "DELETE FROM forge_package_email_sent WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
     // Reset access codes and tier
     // Through the database function, not a DELETE: membership is row-level
     // protected (an unscoped delete would remove nothing and this route would

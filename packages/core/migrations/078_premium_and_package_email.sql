@@ -1,5 +1,11 @@
--- 078_premium_access.sql
--- Premium tools come by entitlement, never by payment (lane 3a, Part 2).
+-- 078_premium_and_package_email.sql
+-- Two additive parts (lane 3a, Part 2):
+--   1. Premium tools come by entitlement, never by payment.
+--   2. users.forge_package_email: whether a finished Forge package is emailed
+--      to the person's own proven address (default yes; they can turn it off),
+--      and forge_package_email_sent: one automatic send per finished version.
+--
+-- PART 1. Premium tools.
 --
 -- Troy's rule (locked): individuals never pay. The premium tools (local
 -- resources, interview coaching, one-click apply) open for a person when
@@ -38,7 +44,9 @@
 --   DROP TABLE IF EXISTS premium_access_request;
 --   DROP FUNCTION IF EXISTS public.premium_grant_guard();
 --   DROP FUNCTION IF EXISTS public.premium_request_guard();
---   DELETE FROM _migrations WHERE filename = '078_premium_access.sql';
+--   DROP TABLE IF EXISTS forge_package_email_sent;
+--   ALTER TABLE users DROP COLUMN IF EXISTS forge_package_email;
+--   DELETE FROM _migrations WHERE filename = '078_premium_and_package_email.sql';
 
 CREATE TABLE IF NOT EXISTS premium_access_request (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,5 +221,53 @@ BEGIN
     -- No DELETE on grants: a grant is revoked, never erased by the app.
     GRANT SELECT, INSERT, UPDATE ON premium_grant TO smr_app;
     GRANT SELECT, INSERT, UPDATE, DELETE ON premium_access_request TO smr_app;
+  END IF;
+END $$;
+
+-- PART 2. The finished-package email preference.
+--
+-- When someone finishes in the Forge (finished, not a draft), their package
+-- is emailed to their own account address, only once that address is proven
+-- (users.email_proven_at, 068). This is the person's on/off switch. Default
+-- on, so the finish page can say "We sent it to you@example.com." Nothing else
+-- reads it, and no other email depends on it. Old code ignores it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS forge_package_email BOOLEAN NOT NULL DEFAULT true;
+
+-- One automatic send per finished version. A row says "this finished resume
+-- was already emailed to this person": the sender claims the row before it
+-- sends (the primary key makes the claim atomic, so two tabs cannot both send)
+-- and gives it back if the send does not go out. `version` is a SHA-256 of
+-- the person's id and the finished resume text, never the text itself.
+CREATE TABLE IF NOT EXISTS forge_package_email_sent (
+  user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  version  TEXT NOT NULL CHECK (version ~ '^[0-9a-f]{64}$'),
+  sent_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, version)
+);
+
+-- The person's own rows only (059's owner rule). No admin reads: nobody needs
+-- to know which resumes were emailed. Deleting an account cascades.
+ALTER TABLE forge_package_email_sent ENABLE ROW LEVEL SECURITY;
+ALTER TABLE forge_package_email_sent FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS forge_package_email_sent_select ON forge_package_email_sent;
+CREATE POLICY forge_package_email_sent_select ON forge_package_email_sent FOR SELECT
+  USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid);
+
+DROP POLICY IF EXISTS forge_package_email_sent_insert ON forge_package_email_sent;
+CREATE POLICY forge_package_email_sent_insert ON forge_package_email_sent FOR INSERT
+  WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid);
+
+DROP POLICY IF EXISTS forge_package_email_sent_delete ON forge_package_email_sent;
+CREATE POLICY forge_package_email_sent_delete ON forge_package_email_sent FOR DELETE
+  USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid);
+
+DO $$
+BEGIN
+  REVOKE ALL ON forge_package_email_sent FROM PUBLIC;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    REVOKE ALL ON forge_package_email_sent FROM smr_app;
+    -- No UPDATE: a row is claimed or given back, never changed.
+    GRANT SELECT, INSERT, DELETE ON forge_package_email_sent TO smr_app;
   END IF;
 END $$;
