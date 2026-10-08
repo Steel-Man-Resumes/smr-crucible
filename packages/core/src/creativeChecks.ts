@@ -41,6 +41,7 @@
 
 import {
   type PracticeEntry,
+  PERFORMER_ONLY_SECTIONS,
   looksLikeFacilityName,
   yearsOf,
 } from "./practiceRecordShared";
@@ -72,7 +73,7 @@ import { type StatementContent, auditStatementHistory } from "./creativeStatemen
 export const CREATIVE_RULES_VERSION = "creative-1 (2026-10-07)";
 
 export type CreativeSeverity = "BLOCK" | "FIX";
-export type CreativeDoc = "record" | "artist_resume" | "bio" | "statement" | "work_samples" | "cv";
+export type CreativeDoc = "record" | "artist_resume" | "bio" | "statement" | "work_samples" | "cv" | "performer";
 
 export interface CreativeOpenItem {
   /** CR-* or STD-* rule id. */
@@ -532,7 +533,8 @@ export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[]
  * Duplicate items (same rule, line and question) are listed once.
  */
 export function getCreativeStatus(input: CreativeStatusInput): CreativeStatus {
-  const items: CreativeOpenItem[] = [...checkRecord(input.entries, input.settings)];
+  // Record checks for the entries a creative lane can show (a performer credit, training or union line never holds it up).
+  const items: CreativeOpenItem[] = [...checkRecord(input.entries.filter((e) => !PERFORMER_ONLY_SECTIONS.includes(e.section)), input.settings)];
   if (input.artistResume) items.push(...checkArtistResume(input.artistResume.model, input.entries, input.settings, input.artistResume.pages));
   if (input.bio) items.push(...checkBio(input.bio, input.entries, input.settings));
   if (input.statement) items.push(...checkStatement(input.statement));

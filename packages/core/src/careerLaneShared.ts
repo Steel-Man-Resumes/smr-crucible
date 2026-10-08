@@ -22,10 +22,10 @@ export type LaneLength = (typeof LANE_LENGTHS)[number];
 /**
  * What a lane makes (migration 075). "resume": resumes and letters (every lane
  * before 075). "creative": an artist resume, a bio, the person's own statement
- * and a work-sample list, for one practice. A CV and a performer page come
- * later, each as one more value here and in career_lane_kind_check.
+ * and a work-sample list, for one practice. "cv" (076): a CV by sub-type.
+ * "performer" (077): one performer page (credits, training, skills).
  */
-export const LANE_KINDS = ["resume", "creative", "cv"] as const;
+export const LANE_KINDS = ["resume", "creative", "cv", "performer"] as const;
 export type LaneKind = (typeof LANE_KINDS)[number];
 
 /** CV sub-types (076): they set the section order and the length rule. */

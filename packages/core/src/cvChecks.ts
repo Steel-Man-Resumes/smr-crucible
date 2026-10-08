@@ -22,7 +22,7 @@
 
 import type { CvType } from "./careerLaneShared";
 import type { PracticeEntry } from "./practiceRecordShared";
-import { yearsOf } from "./practiceRecordShared";
+import { PERFORMER_ONLY_SECTIONS, yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
 import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
 import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
@@ -70,8 +70,9 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   const items: CreativeOpenItem[] = [];
 
-  // Record checks every lane runs, for the entries a CV reads (works are not on a CV).
-  for (const it of checkRecord(entries.filter((e) => e.section !== "work"), settings)) {
+  // Record checks every lane runs, for the entries a CV reads (works and
+  // performer credits, training and union lines are not on a CV).
+  for (const it of checkRecord(entries.filter((e) => e.section !== "work" && !PERFORMER_ONLY_SECTIONS.includes(e.section)), settings)) {
     items.push({ ...it, doc: "cv" });
   }
 

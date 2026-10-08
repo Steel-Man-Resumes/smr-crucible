@@ -38,6 +38,10 @@ export const PRACTICE_SECTIONS = [
   "service",
   "membership",
   "reference",
+  // Performer record kinds (077)
+  "credit",
+  "training",
+  "union",
 ] as const;
 export type PracticeSection = (typeof PRACTICE_SECTIONS)[number];
 
@@ -59,6 +63,14 @@ export const PRESENTATION_KINDS = ["talk", "poster", "panel", "workshop"] as con
 export const CREDENTIAL_KINDS = ["license", "certification", "certificate", "card", "training"] as const;
 /** Where a credential stands, as held. Never upgraded on the page. */
 export const CREDENTIAL_STATUSES = ["active", "inactive", "expired", "in_progress", "eligible"] as const;
+/** Performer credits (077): the medium sets the column block it sits in. */
+export const CREDIT_MEDIA = ["theater", "film", "tv", "voice", "music", "other"] as const;
+/** Billing as credited, when the person gives it (CR-08). Never inferred from the role. */
+export const CREDIT_BILLINGS = ["lead", "supporting", "series_regular", "recurring", "guest_star", "co_star", "featured", "ensemble", "understudy", "swing", "background"] as const;
+/** Union status exactly as held (CR-08): a member, eligible to join, or a membership candidate. */
+export const UNION_STATUSES = ["member", "eligible", "candidate"] as const;
+/** Record kinds only a performer page reads: they never hold up an artist resume, a bio or a CV. */
+export const PERFORMER_ONLY_SECTIONS: readonly PracticeSection[] = ["credit", "training", "union"];
 
 export const MAX_PRACTICE_ENTRIES = 300;
 /** Study without a degree, as the person names it (review s2r2 N-M3): classes toward a degree, or classes in a subject. */
@@ -113,7 +125,7 @@ export interface PracticeDetails {
   invitational?: boolean;
   curator?: string;
   touring?: boolean;
-  /** publication: published | in_press | accepted | submitted. education: conferred | completed | in_progress. */
+  /** publication: published | in_press | accepted | submitted. education: conferred | completed | in_progress. union: member | eligible | candidate. */
   status?: string;
   /** publication submitted: when (the person's words, e.g. "March 2026"). */
   submittedWhen?: string;
@@ -139,7 +151,7 @@ export interface PracticeDetails {
   author?: string;
   date?: string;
   quote?: string;
-  /** work: medium, size or length, one line in the person's words, file name. */
+  /** work: medium, size or length, one line in the person's words, file name. credit: medium is theater | film | tv | voice | music | other. */
   medium?: string;
   dimensions?: string;
   duration?: string;
@@ -156,6 +168,12 @@ export interface PracticeDetails {
   credentialStatus?: string;
   /** reference: how to reach them, as the reference agreed. */
   contact?: string;
+  /** credit: billing as credited (lead, guest star...), only when the person gives it. */
+  billing?: string;
+  /** credit: the director, only when the person names them. */
+  director?: string;
+  /** training: who taught it, in the person's words. */
+  teacher?: string;
   /**
    * Set by the server only, never from a request: earlier titles and venues
    * of an entry that names a facility. A lane that keeps the entry off keeps
@@ -206,6 +224,9 @@ export const SECTION_COPY: Record<
   service: { label: "Service", title: "Your role", venue: "Organization or committee", example: "Student Advisory Board Member", hasRange: true },
   membership: { label: "Membership", title: "Organization", venue: "", example: "State Arts Educators Association", hasRange: true },
   reference: { label: "Reference", title: "Their name", venue: "Where they work", example: "J. Sample" },
+  credit: { label: "Acting or performing credit", title: "Production (the play, film, show or recording)", venue: "Company, theater or studio", example: "Our Town" },
+  training: { label: "Training (acting, voice, dance, music)", title: "What you studied", venue: "Where (school, studio or program)", example: "Scene Study", hasRange: true },
+  union: { label: "Union", title: "Union name, exactly", venue: "", example: "SAG-AFTRA" },
 };
 
 export function isPracticeSection(v: unknown): v is PracticeSection {
@@ -335,6 +356,19 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
       put("contact", cleanLine(d.contact, 200));
       put("consent", bool(d.consent));
       break;
+    case "credit":
+      put("medium", oneOf(CREDIT_MEDIA, d.medium));
+      put("role", cleanLine(d.role, 120));
+      put("billing", oneOf(CREDIT_BILLINGS, d.billing));
+      put("director", cleanLine(d.director, 120));
+      break;
+    case "training":
+      put("teacher", cleanLine(d.teacher, 120));
+      put("duration", cleanLine(d.duration, 60));
+      break;
+    case "union":
+      put("status", oneOf(UNION_STATUSES, d.status));
+      break;
     case "work":
       put("medium", cleanLine(d.medium, NOTE_MAX));
       put("dimensions", cleanLine(d.dimensions, 120));
@@ -382,7 +416,9 @@ export type PracticeEntryError =
   | "kind_required"
   | "status_required"
   | "submitted_needs_when"
-  | "license_number";
+  | "license_number"
+  | "medium_required"
+  | "union_status_required";
 
 export type PracticeEntryResult = { ok: true; value: PracticeEntryValue } | { ok: false; error: PracticeEntryError };
 
@@ -426,6 +462,9 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
   // The facts a page needs to say this entry truthfully, asked for up front.
   if ((section === "exhibition" || section === "performance" || section === "presentation") && !details.kind) return { ok: false, error: "kind_required" };
   if (section === "publication" && !details.status) return { ok: false, error: "status_required" };
+  // A credit sits under its medium; a union line says exactly where the person stands (CR-08).
+  if (section === "credit" && !details.medium) return { ok: false, error: "medium_required" };
+  if (section === "union" && !details.status) return { ok: false, error: "union_status_required" };
   if (section === "publication" && details.status === "submitted" && !details.submittedWhen) {
     return { ok: false, error: "submitted_needs_when" };
   }
@@ -475,6 +514,8 @@ export const PRACTICE_ERROR_COPY: Record<PracticeEntryError | "too_many" | "too_
   status_required: "Is it published, in press, accepted, or submitted?",
   submitted_needs_when: "When did you submit it? A month and year is enough.",
   license_number: "Leave the license or certificate number off. Just the name, who issued it, and where it stands. A reader can ask for the number.",
+  medium_required: "Was it theater, film, TV, voice, music or something else?",
+  union_status_required: "Are you a member, eligible to join, or a membership candidate?",
   too_many: "That's a lot of entries. Remove a few you don't need before adding more.",
   too_many_writes: "That's a lot of changes for one day. Try again tomorrow.",
   not_found: "That entry isn't there anymore. Refresh the page.",

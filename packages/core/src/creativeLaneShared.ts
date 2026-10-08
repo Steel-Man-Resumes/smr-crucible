@@ -56,9 +56,31 @@ export interface CreativeKindSettings {
   languages?: string;
   /** CV lanes: the reference the person chose to list first. */
   leadReference?: string;
+  /** Performer lanes: the agent or manager line, as the person types it. */
+  agent?: string;
+  /** Performer lanes: the description the person gives (never asked for an age). */
+  height?: string;
+  hair?: string;
+  eyes?: string;
+  voice?: string;
+  /** Performer lanes: an age RANGE the person plays ("25-35"), never an age (CR-08). */
+  ageRange?: string;
+  /** Performer lanes: special skills, each one only on the page once the person says they can do it on request today. */
+  skills?: PerformerSkill[];
+  /** Performer lanes: show credit years (C2). Off by default; training stays dated either way. */
+  showYears?: boolean;
   /** Revision of these settings; every save must be based on the current one. */
   rev?: number;
 }
+
+export interface PerformerSkill {
+  /** The skill in the person's words. */
+  text: string;
+  /** The person says they can do it on request today (CR-08). */
+  confirmed: boolean;
+}
+export const MAX_SKILLS = 20;
+export const SKILL_MAX = 60;
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
@@ -111,6 +133,23 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   str("website", 200);
   str("interests", 600);
   str("languages", 300);
+  str("agent", 200);
+  str("height", 40);
+  str("hair", 40);
+  str("eyes", 40);
+  str("voice", 80);
+  str("ageRange", 20);
+  const sk = v("skills");
+  if (Array.isArray(sk)) {
+    const skills: PerformerSkill[] = [];
+    for (const x of sk) {
+      const text = cleanLine((x as { text?: unknown } | null)?.text, SKILL_MAX);
+      if (text && !skills.some((y) => y.text.toLowerCase() === text.toLowerCase())) skills.push({ text, confirmed: (x as { confirmed?: unknown }).confirmed === true });
+      if (skills.length >= MAX_SKILLS) break;
+    }
+    if (skills.length) out.skills = skills;
+  }
+  if (v("showYears") === true) out.showYears = true;
   const lr = v("leadReference");
   if (typeof lr === "string" && ID_RE.test(lr)) out.leadReference = lr.toLowerCase();
   if (v("callAllowsMore") === true) out.callAllowsMore = true;
@@ -459,8 +498,19 @@ export function venueOnlyLabel(e: PracticeEntry): string {
       return "Membership";
     case "reference":
       return "Reference";
+    case "credit":
+      return CREDIT_MEDIUM_WORD[e.details.medium ?? ""] ?? "Production";
+    case "training":
+      return "Training";
+    case "union":
+      return "Union";
   }
 }
+
+/** The kind word a performer credit shows when the lane keeps its title off. */
+export const CREDIT_MEDIUM_WORD: Record<string, string> = {
+  theater: "Stage production", film: "Film", tv: "Television", voice: "Voice work", music: "Music performance", other: "Production",
+};
 
 /** The status words a publication shows. Graded, never upgraded (CR-05). */
 export function publicationStatusWords(e: PracticeEntry): string {
