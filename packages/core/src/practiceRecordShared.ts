@@ -69,8 +69,6 @@ export const CREDIT_MEDIA = ["theater", "film", "tv", "voice", "music", "other"]
 export const CREDIT_BILLINGS = ["lead", "supporting", "series_regular", "recurring", "guest_star", "co_star", "featured", "ensemble", "understudy", "swing", "background"] as const;
 /** Union status exactly as held (CR-08): a member, eligible to join, or a membership candidate. */
 export const UNION_STATUSES = ["member", "eligible", "candidate"] as const;
-/** Record kinds only a performer page reads: they never hold up an artist resume, a bio or a CV. */
-export const PERFORMER_ONLY_SECTIONS: readonly PracticeSection[] = ["credit", "training", "union"];
 
 export const MAX_PRACTICE_ENTRIES = 300;
 /** Study without a degree, as the person names it (review s2r2 N-M3): classes toward a degree, or classes in a subject. */

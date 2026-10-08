@@ -322,3 +322,29 @@ describe("migration 077 widen helper", () => {
     assert.doesNotMatch(sql, /\[a-z_\]\+/);
   });
 });
+
+describe("record checks are scoped to the entries a lane reads; hidden names still count everywhere", () => {
+  const EX = entry({ section: "exhibition", title: "Inside Out", venue: "Example River Correctional Center", year: 2020, details: { kind: "group" }, names_facility: true });
+  const LIC = entry({ section: "license", title: "Barber", venue: "Example State Corrections Board", year: 2021, details: { credentialKind: "license", credentialStatus: "active" }, names_facility: true });
+  const DEG = entry({ section: "education", title: "Bachelor of Arts", venue: "Example University", year: 2022, details: { degree: true, status: "conferred" } });
+  it("an unmarked exhibition never holds up a CV, but its name typed in Interests is still held", () => {
+    const s: CreativeKindSettings = { displayName: "Ray Example", email: "ray@example.com" };
+    const st = getCvStatus({ entries: [DEG, EX], settings: s, cvType: "academic" });
+    assert.ok(!st.openItems.some((x) => x.entryId === EX.id), JSON.stringify(st.openItems));
+    const s2 = { ...s, interests: "Art at Example River Correctional Center" };
+    const m = buildCvModel([DEG, EX], s2, "academic");
+    assert.ok(m.heldFields.some((h) => h.field === "interests" && h.reason === "names_hidden"));
+    assert.equal(getCvStatus({ entries: [DEG, EX], settings: s2, cvType: "academic", model: m }).state, "draft");
+  });
+  it("an unmarked license never holds up the artist resume; an unmarked exhibition still does", () => {
+    const s: CreativeKindSettings = { displayName: "Ray Example" };
+    const ar = buildArtistResumeModel([AWARD, LIC], s);
+    assert.ok(!getCreativeStatus({ entries: [AWARD, LIC], settings: s, artistResume: { model: ar } }).openItems.some((x) => x.entryId === LIC.id));
+    const ar2 = buildArtistResumeModel([AWARD, EX], s);
+    assert.ok(getCreativeStatus({ entries: [AWARD, EX], settings: s, artistResume: { model: ar2 } }).openItems.some((x) => x.entryId === EX.id && x.severity === "BLOCK"));
+  });
+  it("an unmarked CV entry or exhibition never holds up the performer page", () => {
+    const st = getPerformerStatus({ entries: [PLAY, LIC, EX], settings: BASE, pages: 1 });
+    assert.equal(st.state, "finished", JSON.stringify(st.openItems));
+  });
+});

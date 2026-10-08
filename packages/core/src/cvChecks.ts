@@ -22,9 +22,9 @@
 
 import type { CvType } from "./careerLaneShared";
 import type { PracticeEntry } from "./practiceRecordShared";
-import { PERFORMER_ONLY_SECTIONS, yearsOf } from "./practiceRecordShared";
+import { yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
-import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
+import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvReads, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
 import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
 
 export const CV_RULES_VERSION = `cv-1 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
@@ -70,9 +70,10 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   const items: CreativeOpenItem[] = [];
 
-  // Record checks every lane runs, for the entries a CV reads (works and
-  // performer credits, training and union lines are not on a CV).
-  for (const it of checkRecord(entries.filter((e) => e.section !== "work" && !PERFORMER_ONLY_SECTIONS.includes(e.section)), settings)) {
+  // Record checks every lane runs, for the entries a CV of this sub-type reads.
+  // An entry it never prints (a work, an exhibition, a performer credit) never
+  // holds it up; its hidden names still count (hiddenFacilityTerms reads every entry).
+  for (const it of checkRecord(entries.filter((e) => cvReads(e, cvType)), settings)) {
     items.push({ ...it, doc: "cv" });
   }
 

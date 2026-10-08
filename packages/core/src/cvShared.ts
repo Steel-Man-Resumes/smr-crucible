@@ -202,6 +202,11 @@ export const CV_ORDER: Record<CvType, Def[]> = {
 
 export { CREDENTIAL_KIND_WORD, CREDENTIAL_STATUS_WORD } from "./creativeLaneShared";
 
+/** Does a CV of this sub-type read this record entry? Only those can hold it up. */
+export function cvReads(e: PracticeEntry, cvType: CvType): boolean {
+  return CV_ORDER[cvType].some((d) => !!d.take && d.take(e));
+}
+
 function commaJoin(parts: Part[]): Part[] {
   const kept = parts.filter((p) => p.text && p.text.trim());
   return kept.map((p, i) => (i < kept.length - 1 ? (/^".*"$/.test(p.text) ? { ...p, text: `${p.text.slice(0, -1)},"` } : { ...p, after: "," }) : { ...p }));
