@@ -51,8 +51,11 @@ import {
   ARTIST_SECTIONS,
   artistResumePageCap,
   artistRowParts,
+  hiddenFacilityTerms,
+  mentionsHiddenFacility,
   rowText,
   titleModeFor,
+  workSampleCheck,
 } from "./creativeLaneShared";
 import {
   type BioContent,
@@ -61,10 +64,9 @@ import {
   bioCounts,
   bioText,
   bioTemplates,
+  bioFacilityCheck,
   bioVocabulary,
   flagSentence,
-  hiddenFacilityTerms,
-  namesHiddenFacility,
   unbackedClaims,
 } from "./creativeBio";
 import { type StatementContent, auditStatementHistory } from "./creativeStatement";
@@ -90,6 +92,35 @@ export interface CreativeOpenItem {
   entryId?: string;
   /** The bio sentence it is about (the screen highlights it; the line never quotes it). */
   sentenceId?: string;
+  /**
+   * A one-tap question the screen answers in place (review s2r3):
+   * "facility_word" asks whether `phrase` names the place kept off;
+   * "officer" asks whether a reference is an officer.
+   */
+  answer?: "facility_word" | "officer";
+  /** The person's own words the facility_word card quotes ON SCREEN only (never in a line or question, which exports print). */
+  phrase?: string;
+}
+
+/** The one-tap card for a line that shares a word with a place this lane keeps off (review s2r3 N3-H1). */
+export const FACILITY_ASK_QUESTION = "Does this name the place you chose to leave off?";
+export const FACILITY_ASK_WHY = "It shares a word with a place you keep off this lane. If it's that place, it comes off the page. If not, it stays, and you won't be asked about it again.";
+export const FACILITY_ASK_YES = "Yes, take it out";
+export const FACILITY_ASK_NO = "No, that's something else";
+
+/** The open item for one facility ask. */
+export function facilityAskItem(doc: CreativeDoc, line: string, ask: { phrase: string; entryId?: string; sentenceId?: string }): CreativeOpenItem {
+  return {
+    rule: "STD-R03", severity: "FIX", line, doc, question: FACILITY_ASK_QUESTION, why: FACILITY_ASK_WHY,
+    answer: "facility_word", phrase: ask.phrase,
+    ...(ask.entryId ? { entryId: ask.entryId } : {}),
+    ...(ask.sentenceId ? { sentenceId: ask.sentenceId } : {}),
+  };
+}
+
+/** One key per open item: two cards about different phrases on the same line are both kept. */
+export function openItemKey(x: CreativeOpenItem): string {
+  return `${x.rule}|${x.line}|${x.question}|${x.entryId ?? ""}|${x.sentenceId ?? ""}|${x.phrase ?? ""}`;
 }
 
 export interface CreativeStatusInput {
@@ -248,6 +279,10 @@ export function checkArtistResume(
       why: "Your choices about work that names a facility apply to every line on this lane.",
     });
   }
+  for (const a of model.asks ?? []) {
+    const e = a.entryId ? byId.get(a.entryId.toLowerCase()) : undefined;
+    out.push(facilityAskItem("artist_resume", e ? `${yearsOf(e)}  A line in your record` : "(top of the page)", a));
+  }
   if (!model.header.name && !(model.heldFields ?? []).includes("displayName")) {
     out.push({
       rule: "STD-F05", severity: "FIX", line: "(top of the page)", doc: "artist_resume",
@@ -349,7 +384,6 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
   const out: CreativeOpenItem[] = [];
   const templates = new Set(bioTemplates(entries, settings).map((t) => t.text));
   const vocab = bioVocabulary(entries, settings);
-  const hidden = hiddenFacilityTerms(entries, settings);
   const name = settings?.displayName ?? "";
   for (const len of BIO_LENGTHS) {
     const list = bio.lengths[len];
@@ -362,6 +396,8 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
       });
     }
     const shown = list.filter((x) => x.approved);
+    // Only what this bio prints makes a hidden venue public (review s2r3 N3-M1).
+    const facility = bioFacilityCheck(list, entries, settings);
     for (const [i, s] of shown.entries()) {
       // A bio item NEVER quotes its sentence (the line prints on a DRAFT export's
       // to-do page, and the sentence may carry an old or hidden name). It points
@@ -369,8 +405,9 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
       const line = `${BIO_LIMITS[len].label} bio, sentence ${i + 1}`;
       const sentenceId = s.id;
       // The lane's CURRENT facility choices win over anything stored with the bio.
-      const leak = namesHiddenFacility(s.text, hidden);
-      if (leak) {
+      const hit = facility.hits.get(s);
+      if (hit?.tier === 2) out.push(facilityAskItem("bio", line, { phrase: hit.phrase, sentenceId }));
+      if (hit?.tier === 1) {
         out.push({
           // Never quote the sentence: the to-do page of a DRAFT export prints this line.
           rule: "STD-R03", severity: "BLOCK", line: `${line}: ${HIDDEN_SENTENCE_LINE.toLowerCase()}`, doc: "bio", sentenceId,
@@ -470,17 +507,18 @@ function e0Line(r: WorkSampleRow, e: PracticeEntry | undefined, settings: Creati
 
 export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[], settings?: CreativeKindSettings | null): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
-  // A work whose own words name something this lane keeps off stays off the list (BLOCK, neutral line).
-  const hidden = hiddenFacilityTerms(entries, settings);
-  for (const e of entries) {
-    if (e.section !== "work" || titleModeFor(e, settings) !== "true_title") continue;
-    if (namesHiddenFacility([e.title, e.details.medium, e.details.description, e.details.fileName].filter(Boolean).join(" "), hidden)) {
-      out.push({
-        rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A work in your record`, doc: "work_samples", entryId: e.id,
-        question: "A work's title or description names something you chose to keep off this lane. It's kept off the list. Change it, or change that choice?",
-        why: "Your choices about work that names a facility apply to every line on this lane.",
-      });
+  // A work whose own words name something this lane keeps off stays off the list (BLOCK, neutral line);
+  // one that only shares a word with it is listed and asked about.
+  for (const [e, hit] of workSampleCheck(entries, settings).hits) {
+    if (hit.tier === 2) {
+      out.push(facilityAskItem("work_samples", `${yearsOf(e)}  A work in your record`, { phrase: hit.phrase, entryId: e.id }));
+      continue;
     }
+    out.push({
+      rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A work in your record`, doc: "work_samples", entryId: e.id,
+      question: "A work's title or description names something you chose to keep off this lane. It's kept off the list. Change it, or change that choice?",
+      why: "Your choices about work that names a facility apply to every line on this lane.",
+    });
   }
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   for (const r of rows) {
@@ -540,7 +578,7 @@ export function getCreativeStatus(input: CreativeStatusInput): CreativeStatus {
 
   const seen = new Set<string>();
   const unique = items.filter((x) => {
-    const k = `${x.rule}|${x.line}|${x.question}|${x.entryId ?? ""}`;
+    const k = openItemKey(x);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -575,9 +613,11 @@ export function exportOpenItemLines(
   entries: PracticeEntry[],
   settings: CreativeKindSettings | null | undefined,
   doc?: CreativeDoc,
-  /** The entries the exported page prints (shownEntryIds of its model): only those make a hidden name public. */
+  /** The entries the exported page prints (shownEntryIds of its model): only those make a hidden name public. Left out: none are. */
   shownIds?: Iterable<string> | null
 ): string[] {
+  // Held or still asked about: either way the line is replaced. Without the
+  // page's ids nothing is public, so every hidden venue stays hidden.
   const hidden = hiddenFacilityTerms(entries, settings, shownIds);
-  return creativeOpenItemLines(status, doc).map((l) => (namesHiddenFacility(l, hidden) ? HIDDEN_ITEM_LINE : l));
+  return creativeOpenItemLines(status, doc).map((l) => (mentionsHiddenFacility(l, hidden) ? HIDDEN_ITEM_LINE : l));
 }
