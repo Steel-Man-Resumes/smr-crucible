@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { autoResultLine, type AutoResult } from "@/lib/email-package-auto-line";
 
 export function FinishedEmailLine(props: {
@@ -24,6 +25,9 @@ export function FinishedEmailLine(props: {
   /** Checked by the page right before sending: the run is this account's. */
   mayUse: () => boolean;
 }) {
+  const { data: authData } = useSession();
+  const accountEmail = typeof authData?.user?.email === "string" ? authData.user.email : "";
+  const [proofLink, setProofLink] = useState<"" | "sending" | "sent" | "failed">("");
   const [result, setResult] = useState<AutoResult | null>(null);
   const [sending, setSending] = useState(false);
   const started = useRef(false);
@@ -52,6 +56,21 @@ export function FinishedEmailLine(props: {
 
   const line = sending ? "Sending your finished resume to your email..." : autoResultLine(result);
   const off = result && !result.sent && result.reason === "off";
+  const unproven = result && !result.sent && result.reason === "unproven";
+
+  // The existing proof flow (Settings uses the same): a sign-in link to the
+  // account's own address. Opening it proves the inbox and comes back here,
+  // and the next finish sends.
+  async function sendProofLink() {
+    if (!accountEmail) return;
+    setProofLink("sending");
+    try {
+      const res = await signIn("resend", { email: accountEmail, redirect: false, callbackUrl: "/output" });
+      setProofLink(res?.error ? "failed" : "sent");
+    } catch {
+      setProofLink("failed");
+    }
+  }
   // Nothing to say (a draft by the server's count, or no address): no box.
   if (!sending && !line && !off) return null;
   return (
@@ -63,6 +82,23 @@ export function FinishedEmailLine(props: {
         </p>
       )}
       {off && <p className="text-sm text-t-phos-dim">You turned off emailing your finished resume.</p>}
+      {unproven && accountEmail && (
+        <div className="mt-2" data-testid="finished-email-confirm">
+          {proofLink === "sent" ? (
+            <p className="text-sm text-t-phos">Check {accountEmail} for the link. Open it, and your resume comes next.</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void sendProofLink()}
+              disabled={proofLink === "sending"}
+              className="t-focus min-h-touch border border-t-line bg-t-panel-2 px-3 py-2 text-sm text-t-white hover:border-t-phos-dim disabled:opacity-50"
+            >
+              {proofLink === "sending" ? "Sending..." : `Email a confirm link to ${accountEmail}`}
+            </button>
+          )}
+          {proofLink === "failed" && <p className="mt-1 text-sm text-t-red">We couldn&apos;t send the link. Try again in a few minutes.</p>}
+        </div>
+      )}
       <p className="mt-2 text-xs text-t-phos-dim">
         <a href="/dashboard/settings#package-email" className="underline underline-offset-2 hover:text-t-white">
           Change this in Settings

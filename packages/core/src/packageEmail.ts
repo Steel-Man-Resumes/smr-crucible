@@ -2,8 +2,9 @@
  * The finished-package email (migration 078, users.forge_package_email).
  *
  * A finished Forge resume is emailed to the person's own account address,
- * and only once that address is proven (users.email_proven_at, 068: an email
- * link, a Google sign-in Google verified, or a reset by email). A typed,
+ * and only once that address is proven by a real proof on record
+ * (users.email_proof_source, 078: an email link, a Google sign-in Google
+ * verified, or a reset by email). 068's backfill does not count. A typed,
  * unproven address gets nothing: it may not be theirs. The person can turn
  * it off, and each finished version goes out once (forge_package_email_sent).
  * Before 078 is applied the column is missing and the switch reads as on (its
@@ -15,7 +16,7 @@ import { getOne, query, queryAsUser } from "./db";
 export interface PackageEmailTarget {
   /** The account's address, lower-cased, or null. */
   email: string | null;
-  /** True only when the address has been proven (068). */
+  /** True only when a real proof is on record (078 email_proof_source; not 068 alone). */
   proven: boolean;
   /** The person's switch. Default on. */
   on: boolean;
@@ -30,13 +31,21 @@ export async function getPackageEmailTarget(userId: string): Promise<PackageEmai
   type Row = { email: string | null; proven: boolean; on?: boolean };
   let row: Row | null;
   try {
+    // Proven means a REAL proof on record (078 email_proof_source), not just
+    // email_proven_at: 068 backfilled that on every older account, typed
+    // addresses included (security review 3a Part 2 r1, M2).
     row = await getOne<Row>(
-      `SELECT email, (email_proven_at IS NOT NULL) AS proven, forge_package_email AS "on" FROM users WHERE id = $1`,
+      `SELECT email,
+              (email_proven_at IS NOT NULL AND email_proof_source IS NOT NULL) AS proven,
+              forge_package_email AS "on"
+         FROM users WHERE id = $1`,
       [userId]
     );
   } catch (e) {
     if (!missingColumn(e)) throw e;
-    row = await getOne<Row>(`SELECT email, (email_proven_at IS NOT NULL) AS proven FROM users WHERE id = $1`, [userId]);
+    // 078 not applied: no way to tell a proof from the backfill, so nobody
+    // counts as proven for the automatic email yet.
+    row = await getOne<Row>(`SELECT email, false AS proven FROM users WHERE id = $1`, [userId]);
   }
   if (!row) return null;
   const email = typeof row.email === "string" && row.email.trim() ? row.email.trim().toLowerCase() : null;

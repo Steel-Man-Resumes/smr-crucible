@@ -6,7 +6,9 @@
  * The rules, all checked here on the server:
  *  - finished: the finish gate (lib/finish-gate.ts) is run again on what was
  *    sent, and a draft sends nothing;
- *  - only to the account's own address, and only once it is proven (068). The
+ *  - only to the account's own address, and only once a REAL proof of it is
+ *    on record (078 email_proof_source: an email link, a verified Google
+ *    sign-in, or a reset by email; 068's backfill does not count). The
  *    request carries no address at all; nothing in it can choose a recipient;
  *  - the person can turn it off (users.forge_package_email, 078);
  *  - once per finished version: the version is claimed in the database

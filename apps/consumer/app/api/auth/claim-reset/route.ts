@@ -17,7 +17,7 @@
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import { auth } from "@/auth";
-import { wipeUnprovenCredentials } from "@/lib/email-proof";
+import { markEmailProven, proofSourceFor, wipeUnprovenCredentials } from "@/lib/email-proof";
 import { runAfterResponse } from "@/lib/session-registry";
 import { buildCredentialsClearedEmail, sendSecurityEmail } from "@/lib/security-email";
 
@@ -42,6 +42,8 @@ export async function POST(req: Request) {
       keepSid: ((session?.user as any)?.sid as string | undefined) || null,
       userAgent: req.headers.get("user-agent") || null,
     });
+    // The person proved the inbox with this sign-in: record how (078, M2).
+    if (outcome === "wiped") await markEmailProven(client, userId, proofSourceFor((session?.user as any)?.via));
   } finally {
     client.release();
   }

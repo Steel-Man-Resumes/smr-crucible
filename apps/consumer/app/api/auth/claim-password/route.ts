@@ -16,7 +16,7 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { markEmailProven } from "@/lib/email-proof";
+import { markEmailProven, proofSourceFor } from "@/lib/email-proof";
 import {
   checkAuthRateLimits,
   getClientIp,
@@ -35,6 +35,8 @@ export async function POST(req: Request) {
   if ((session?.user as any)?.claim !== "password") {
     return NextResponse.json({ error: "There is nothing to confirm on this sign-in." }, { status: 400 });
   }
+  // How this sign-in proved the inbox (an email link or Google), recorded with the proof.
+  const via = (session?.user as any)?.via;
 
   const limit = await checkAuthRateLimits(stepUpRateLimits(getClientIp(req), userId));
   if (!limit.allowed) {
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     const hash: string | null = r.rows[0]?.password_hash ?? null;
     // Nothing left to keep (removed meanwhile): just settle the choice.
     if (!hash) {
-      await markEmailProven(client, userId);
+      await markEmailProven(client, userId, proofSourceFor(via));
       return NextResponse.json({ ok: true });
     }
     if (!(await bcrypt.compare(password, hash))) {
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    await markEmailProven(client, userId);
+    await markEmailProven(client, userId, proofSourceFor(via));
     await refundAuthRateLimits(limit.tickets); // only wrong passwords count
     return NextResponse.json({ ok: true });
   } finally {

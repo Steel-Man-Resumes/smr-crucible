@@ -18,7 +18,7 @@ import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import { auth } from "@/auth";
 import { verifySecondFactor } from "@/lib/second-factor";
-import { markEmailProven } from "@/lib/email-proof";
+import { markEmailProven, proofSourceFor } from "@/lib/email-proof";
 import {
   checkAuthRateLimits,
   getClientIp,
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     // an email-link or Google sign-in shows this person set up the two-step
     // AND has the inbox, so the address is now proven and everything stays.
     if ((session?.user as any)?.claim === "2fa") {
-      await markEmailProven(client, userId);
+      await markEmailProven(client, userId, proofSourceFor((session?.user as any)?.via));
     }
     // Only failed codes count toward the 5 per 15 minutes.
     await refundAuthRateLimits(limit.tickets);
