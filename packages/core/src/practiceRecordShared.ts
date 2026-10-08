@@ -61,6 +61,9 @@ export const CREDENTIAL_KINDS = ["license", "certification", "certificate", "car
 export const CREDENTIAL_STATUSES = ["active", "inactive", "expired", "in_progress", "eligible"] as const;
 
 export const MAX_PRACTICE_ENTRIES = 300;
+
+/** A license or certificate number: letters with 5+ digits, a long digit run, or "#" / "No." / "number" before digits. */
+export const LICENSE_NUMBER_SHAPE = /#\s*[A-Z]{0,4}-?\d|\b(?:no\.?|num\.?|number)\s*:?\s*[A-Z]{0,4}-?\d|\b[A-Z]{1,6}[-\s]?\d{5,}\b|\b\d{5,}\b/i;
 export const PRACTICE_WRITES_PER_DAY = 400;
 
 const TITLE_MAX = 300;
@@ -345,7 +348,8 @@ export type PracticeEntryError =
   | "bad_proof"
   | "kind_required"
   | "status_required"
-  | "submitted_needs_when";
+  | "submitted_needs_when"
+  | "license_number";
 
 export type PracticeEntryResult = { ok: true; value: PracticeEntryValue } | { ok: false; error: PracticeEntryError };
 
@@ -394,6 +398,10 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
   }
 
   const venue = pick(input.venue, (v) => cleanLine(v, VENUE_MAX), current?.venue ?? null);
+  // A license or certificate number is never kept with the entry (a public lookup key).
+  if (section === "license" && (LICENSE_NUMBER_SHAPE.test(title) || LICENSE_NUMBER_SHAPE.test(venue ?? ""))) {
+    return { ok: false, error: "license_number" };
+  }
   const namesFacility =
     input.namesFacility === undefined ? current?.names_facility ?? false : input.namesFacility === true;
 
@@ -432,6 +440,7 @@ export const PRACTICE_ERROR_COPY: Record<PracticeEntryError | "too_many" | "too_
   kind_required: "What kind was it? A show: solo, two-person or group. A performance: performance, screening or reading. A talk: talk, poster, panel or workshop.",
   status_required: "Is it published, in press, accepted, or submitted?",
   submitted_needs_when: "When did you submit it? A month and year is enough.",
+  license_number: "Leave the license or certificate number off. Just the name, who issued it, and where it stands. A reader can ask for the number.",
   too_many: "That's a lot of entries. Remove a few you don't need before adding more.",
   too_many_writes: "That's a lot of changes for one day. Try again tomorrow.",
   not_found: "That entry isn't there anymore. Refresh the page.",

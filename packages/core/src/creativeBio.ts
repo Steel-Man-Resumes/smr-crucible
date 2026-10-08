@@ -19,7 +19,7 @@
 
 import type { PracticeEntry } from "./practiceRecordShared";
 import { placeOf } from "./practiceRecordShared";
-import { type BioPronoun, type CreativeKindSettings, countChars, countWords, titleModeFor } from "./creativeLaneShared";
+import { type BioPronoun, type CreativeKindSettings, countChars, countWords, titleModeFor, hiddenFacilityTerms, namesHiddenFacility } from "./creativeLaneShared";
 
 export const BIO_LENGTHS = ["short", "medium", "long"] as const;
 export type BioLength = (typeof BIO_LENGTHS)[number];
@@ -312,38 +312,8 @@ export function flagSentence(text: string, vocab: string, name: string): Sentenc
   };
 }
 
-/**
- * The facility text a sentence may not carry on this lane: the title of each
- * facility-named entry not shown with its true title, and the venue of each
- * one left off (or not yet chosen). Lowercased.
- */
-export function hiddenFacilityTerms(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string[] {
-  const out: string[] = [];
-  // A venue that a SHOWN, non-facility entry also uses is public on this lane
-  // anyway: shown means confirmed (not "need to find") and, when the lane
-  // picks entries, picked.
-  const picked = Array.isArray(s?.selection) ? new Set(s!.selection!.map((x) => x.toLowerCase())) : null;
-  const shownVenues = new Set(
-    entries
-      .filter((e) => !e.names_facility && e.venue && e.proof !== "need_to_find" && (!picked || picked.has(e.id.toLowerCase())))
-      .map((e) => (e.venue as string).toLowerCase())
-  );
-  for (const e of entries) {
-    if (!e.names_facility) continue;
-    const mode = titleModeFor(e, s);
-    if (mode !== "true_title" && e.title.trim().length >= 4) out.push(e.title.toLowerCase());
-    const venue = e.venue?.toLowerCase();
-    if ((mode === "leave_out" || mode === "unset") && venue && venue.trim().length >= 4 && !shownVenues.has(venue)) out.push(venue);
-    // Earlier names of the entry are never shown on a lane that keeps it off.
-    if (mode !== "true_title") for (const f of e.details.formerNames ?? []) if (f.trim().length >= 4) out.push(f.toLowerCase());
-  }
-  return out;
-}
-
-export function namesHiddenFacility(text: string, terms: string[]): string | null {
-  const t = text.toLowerCase();
-  return terms.find((x) => t.includes(x)) ?? null;
-}
+// hiddenFacilityTerms and namesHiddenFacility live in creativeLaneShared (every page uses them).
+export { hiddenFacilityTerms, namesHiddenFacility } from "./creativeLaneShared";
 
 /**
  * The bio text a page may carry on this lane: approved sentences, minus any

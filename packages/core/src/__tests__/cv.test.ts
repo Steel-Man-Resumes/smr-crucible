@@ -22,17 +22,17 @@ function entry(p: Partial<PracticeEntry> & Pick<PracticeEntry, "section" | "titl
   return { id: id(), user_id: "u", venue: null, city: null, state: null, end_year: null, details: {}, proof: "remembered", names_facility: false, created_at: "", updated_at: "", ...p };
 }
 
-const BA = entry({ section: "education", title: "BA, Sociology", venue: "Lakeshore University", city: "Toledo", state: "OH", year: 2024, details: { degree: true, status: "conferred" } });
+const BA = entry({ section: "education", title: "BA, Sociology", venue: "Example State University", city: "Toledo", state: "OH", year: 2024, details: { degree: true, status: "conferred" } });
 const INSIDE_COLLEGE = entry({ section: "education", title: "Associate of Arts", venue: "Example County Correctional Facility College Program", year: 2019, end_year: 2021, details: { degree: true, status: "conferred" }, names_facility: true });
 const CERT = entry({ section: "education", title: "Certificate in Peer Support", venue: "Community College of Toledo", year: 2022, details: { degree: false } });
 const PEER = entry({ section: "teaching", title: "Peer Literacy Tutor", venue: "Example County Correctional Facility", year: 2018, end_year: 2021, details: { level: "adult learners" }, names_facility: true });
-const TA = entry({ section: "teaching", title: "Teaching Assistant", venue: "Lakeshore University", year: 2023, details: { instructorOfRecord: false } });
-const RA = entry({ section: "appointment", title: "Research Assistant", venue: "Reentry Lab, Lakeshore University", city: "Toledo", state: "OH", year: 2023, end_year: 2024 });
+const TA = entry({ section: "teaching", title: "Teaching Assistant", venue: "Example State University", year: 2023, details: { instructorOfRecord: false } });
+const RA = entry({ section: "appointment", title: "Research Assistant", venue: "Reentry Lab, Example State University", city: "Toledo", state: "OH", year: 2023, end_year: 2024 });
 const PUB = entry({ section: "publication", title: "Learning Behind the Wall", venue: "Journal of Adult Education", year: 2025, details: { status: "submitted", submittedWhen: "March 2025", authors: "R. Example and J. Sample" } });
 const TALK = entry({ section: "presentation", title: "College in Prison, From the Inside", venue: "State Adult Education Conference", city: "Columbus", state: "OH", year: 2024, details: { kind: "talk" } });
 const LIC_OK = entry({ section: "license", title: "Certified Peer Recovery Specialist", venue: "Ohio Certification Board", state: "OH", year: 2023, details: { credentialKind: "certification", credentialStatus: "active" } });
 const LIC_NO_KIND = entry({ section: "license", title: "Food Handler", venue: "County Health Department", year: 2022 });
-const REF_OK = entry({ section: "reference", title: "J. Sample", venue: "Lakeshore University", year: 2023, details: { role: "Course instructor", contact: "jsample@example.edu", consent: true } });
+const REF_OK = entry({ section: "reference", title: "J. Sample", venue: "Example State University", year: 2023, details: { role: "Course instructor", contact: "jsample@example.edu", consent: true } });
 const REF_NO = entry({ section: "reference", title: "A. Other", venue: "Somewhere", year: 2020, details: { role: "Supervisor" } });
 const WORK = entry({ section: "work", title: "Night Bus", year: 2023, details: { medium: "ink", dimensions: "9 x 12 in" } });
 const ALL = [BA, INSIDE_COLLEGE, CERT, PEER, TA, RA, PUB, TALK, LIC_OK, LIC_NO_KIND, REF_OK, REF_NO, WORK];
@@ -79,7 +79,7 @@ describe("the CV, assembled from the record", () => {
   });
   it("exact titles: instructor of record only when true; a submitted piece says submitted and when", () => {
     const text = cvPlainText(buildCvModel(ALL, withModes("true_title"), "academic"));
-    assert.match(text, /2023  Teaching Assistant, Lakeshore University$/m);
+    assert.match(text, /2023  Teaching Assistant, Example State University$/m);
     assert.ok(!/instructor of record/.test(text));
     assert.match(text, /R\. Example and J\. Sample\. "Learning Behind the Wall," Journal of Adult Education \(submitted March 2025\)/);
     assert.match(text, /"College in Prison, From the Inside," State Adult Education Conference, Columbus, OH \(talk\)/);
@@ -102,7 +102,7 @@ describe("the CV, assembled from the record", () => {
     assert.match(text, /Certification: Certified Peer Recovery Specialist, Ohio Certification Board, OH \(Active\)/);
     assert.ok(!/Food Handler/.test(text));
     assert.ok(credentialConfirmed(LIC_OK) && !credentialConfirmed(LIC_NO_KIND));
-    assert.match(text, /J\. Sample, Course instructor, Lakeshore University, jsample@example\.edu/);
+    assert.match(text, /J\. Sample, Course instructor, Example State University, jsample@example\.edu/);
     assert.ok(!/A\. Other/.test(text));
   });
   it("works are never on a CV; there is no photo or birth date field at all", () => {
@@ -143,7 +143,7 @@ describe("CV truth checks", () => {
     const m = buildCvModel(ALL, s, "academic");
     const bad = structuredClone(m);
     const row = bad.sections.find((x) => x.key === "teaching")!.rows!.find((r) => r.entryId === TA.id)!;
-    row.parts = [{ text: "Adjunct Professor, Lakeshore University" }];
+    row.parts = [{ text: "Adjunct Professor, Example State University" }];
     const st = getCvStatus({ entries: ALL, settings: s, cvType: "academic", model: bad });
     assert.ok(st.openItems.some((x) => x.rule === "CV-01" && x.entryId === TA.id));
     for (const x of st.openItems) assert.ok(!/Adjunct Professor/.test(x.line), x.line);
@@ -152,11 +152,12 @@ describe("CV truth checks", () => {
     assert.ok(getCvStatus({ entries: ALL, settings: s, cvType: "academic", model: moved }).openItems.some((x) => x.rule === "STD-T05"));
   });
   it("CV-03: a birth date, age, family status or nationality in what the person typed is a BLOCK (exact words, no guessing)", () => {
-    for (const bad of [{ basedIn: "Toledo, OH. Born 1990" }, { interests: "Married, two kids." }, { languages: "English. Nationality: US" }, { phone: "DOB 04/12/1990" }]) {
-      const st = getCvStatus({ entries: [BA], settings: { ...BASE, ...bad }, cvType: "international" });
+    // Interests print on academic and teaching CVs only, so that case is checked on an academic CV.
+    for (const [bad, cvType] of [[{ basedIn: "Toledo, OH. Born 1990" }, "international"], [{ interests: "Married, two kids." }, "academic"], [{ languages: "English. Nationality: US" }, "international"], [{ phone: "DOB 04/12/1990" }, "international"]] as const) {
+      const st = getCvStatus({ entries: [BA], settings: { ...BASE, ...bad }, cvType });
       assert.ok(st.openItems.some((x) => x.rule === "CV-03" && x.severity === "BLOCK"), JSON.stringify(bad));
       for (const x of st.openItems.filter((i) => i.rule === "CV-03")) assert.ok(!/1990|Married|Nationality/.test(x.line), "the line never quotes it");
-      assert.ok(!/1990|Married|Nationality|DOB/.test(cvPlainText(buildCvModel([BA], { ...BASE, ...bad }, "international"))), "and it never prints");
+      assert.ok(!/1990|Married|Nationality|DOB/.test(cvPlainText(buildCvModel([BA], { ...BASE, ...bad }, cvType))), "and it never prints");
     }
     assert.ok(!getCvStatus({ entries: [BA], settings: BASE, cvType: "academic" }).openItems.some((x) => x.rule === "CV-03"));
   });
@@ -165,14 +166,17 @@ describe("CV truth checks", () => {
     assert.ok(st.openItems.some((x) => x.rule === "CV-04" && x.entryId === REF_NO.id));
     const officer = entry({ section: "reference", title: "P. Officer", venue: "County Probation", year: 2022, details: { role: "Probation officer", consent: true } });
     const st2 = getCvStatus({ entries: [BA, officer, { ...REF_OK, year: 2020 }], settings: BASE, cvType: "academic" });
-    assert.ok(st2.openItems.some((x) => x.rule === "CV-04" && /supervision officer/.test(x.question)));
+    // Two references: the person picks the lead (never by year); an officer picked as lead BLOCKs.
+    assert.ok(st2.openItems.some((x) => x.rule === "CV-04" && x.severity === "BLOCK" && x.line === "References"));
+    const st3 = getCvStatus({ entries: [BA, officer, { ...REF_OK, year: 2020 }], settings: { ...BASE, leadReference: officer.id }, cvType: "academic" });
+    assert.ok(st3.openItems.some((x) => x.rule === "CV-04" && x.severity === "BLOCK" && /corrections officer/.test(x.question)));
   });
   it("STD-F07: international past two pages is a BLOCK; academic has no page cap", () => {
     assert.ok(getCvStatus({ entries: [BA], settings: BASE, cvType: "international", pages: 3 }).openItems.some((x) => x.rule === "STD-F07"));
     assert.ok(!getCvStatus({ entries: [BA], settings: BASE, cvType: "academic", pages: 7 }).openItems.some((x) => x.rule === "STD-F07"));
   });
   it("teaching titles: 'Professor' without instructor of record is asked about (CR-07)", () => {
-    const prof = entry({ section: "teaching", title: "Adjunct Professor", venue: "Lakeshore University", year: 2024 });
+    const prof = entry({ section: "teaching", title: "Adjunct Professor", venue: "Example State University", year: 2024 });
     assert.ok(getCvStatus({ entries: [prof], settings: BASE, cvType: "teaching" }).openItems.some((x) => x.rule === "CR-07"));
   });
 });

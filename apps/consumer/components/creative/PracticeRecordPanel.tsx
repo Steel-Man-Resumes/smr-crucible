@@ -224,7 +224,7 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
         <div className="space-y-1">
           <Check label="This is a degree the school gave me (not a certificate or classes)" checked={!!d.details.degree} onChange={(v) => setDetail({ degree: v })} />
           <Choice name="ed-status" legend="Where does it stand?" value={d.details.status} options={EDUCATION_STATUSES} onChange={(v) => setDetail({ status: v })} />
-          {d.details.status === "in_progress" && <Text label="When do you expect to finish?" value={d.details.expected ?? ""} onChange={(v) => setDetail({ expected: v })} placeholder="2027" max={40} />}
+          {d.details.status === "in_progress" && <Text label="What year do you expect to finish?" value={d.details.expected ?? ""} onChange={(v) => setDetail({ expected: v })} placeholder="2027" max={40} />}
         </div>
       )}
       {d.section === "publication" && (

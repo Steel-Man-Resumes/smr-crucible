@@ -230,7 +230,24 @@ export function checkArtistResume(
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   const secByKey = new Map(ARTIST_SECTIONS.map((s) => [s.key, s]));
 
-  if (!model.header.name) {
+  // Typed fields and rows that name something this lane keeps off: off the page, and a BLOCK with a neutral line.
+  for (const f of model.heldFields ?? []) {
+    out.push({
+      rule: "STD-R03", severity: "BLOCK", line: "(top of the page)", doc: "artist_resume",
+      question: `What you typed for the top of the page names something you chose to keep off this lane. It's kept off. Change it, or change that choice?`,
+      why: `Field: ${f === "displayName" ? "your name" : f === "basedIn" ? "where you're based" : f}. Your choices apply to every line on this lane.`,
+    });
+  }
+  for (const o of model.omitted) {
+    if (o.reason !== "names_hidden") continue;
+    const e = byId.get(o.entryId.toLowerCase());
+    out.push({
+      rule: "STD-R03", severity: "BLOCK", line: e ? `${yearsOf(e)}  A line in your record` : "A line in your record", doc: "artist_resume", entryId: o.entryId,
+      question: "A line in your record names something you chose to keep off this lane. It's kept off the page. Change it, or change that choice?",
+      why: "Your choices about work that names a facility apply to every line on this lane.",
+    });
+  }
+  if (!model.header.name && !(model.heldFields ?? []).includes("displayName")) {
     out.push({
       rule: "STD-F05", severity: "FIX", line: "(top of the page)", doc: "artist_resume",
       question: "What name do you want at the top?", why: "The page needs your name, written the way you use it.",
@@ -452,6 +469,18 @@ function e0Line(r: WorkSampleRow, e: PracticeEntry | undefined, settings: Creati
 
 export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[], settings?: CreativeKindSettings | null): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
+  // A work whose own words name something this lane keeps off stays off the list (BLOCK, neutral line).
+  const hidden = hiddenFacilityTerms(entries, settings);
+  for (const e of entries) {
+    if (e.section !== "work" || titleModeFor(e, settings) !== "true_title") continue;
+    if (namesHiddenFacility([e.title, e.details.medium, e.details.description, e.details.fileName].filter(Boolean).join(" "), hidden)) {
+      out.push({
+        rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A work in your record`, doc: "work_samples", entryId: e.id,
+        question: "A work's title or description names something you chose to keep off this lane. It's kept off the list. Change it, or change that choice?",
+        why: "Your choices about work that names a facility apply to every line on this lane.",
+      });
+    }
+  }
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   for (const r of rows) {
     const e = byId.get(r.entryId.toLowerCase());
@@ -533,7 +562,7 @@ export function creativeOpenItemLines(status: CreativeStatus, doc?: CreativeDoc)
     .map((x) => `${x.line}: ${x.question}`);
 }
 
-export const HIDDEN_ITEM_LINE = "An open item about something you keep off this page. Open Creative work to see it.";
+export const HIDDEN_ITEM_LINE = "An open item about something you keep off this page. Open this lane to see it.";
 
 /**
  * The to-do lines an EXPORT may print: creativeOpenItemLines, then any line

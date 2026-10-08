@@ -24,13 +24,27 @@ import type { CvType } from "./careerLaneShared";
 import type { PracticeEntry } from "./practiceRecordShared";
 import { yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
-import { type CvModel, CV_PERSONAL_RE, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts } from "./cvShared";
+import { type CvModel, LICENSE_NUMBER_RE, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts, isPersonalDetail } from "./cvShared";
 import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
 
 export const CV_RULES_VERSION = `cv-1 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
 
-const PERSONAL_RE = CV_PERSONAL_RE;
-const OFFICER_RE = /\b(parole|probation|supervision|corrections?|correctional|case ?manager|agent)\b/i;
+/** A supervision or corrections officer, by role, name line or workplace. Exact phrases, no guessing. */
+const OFFICER_STRONG = /\b(parole|probation|department of corrections|corrections? officer|correctional officer|community supervision|supervision officer|reentry (?:officer|agent))\b/i;
+const OFFICER_PO = /\bP\.?O\.?(?=\s|$|,)/;
+/** "Officer", "agent" or "case manager" counts only next to a corrections word (a loan officer or a teacher's case manager does not). */
+const OFFICER_WORD = /\b(officer|agent|case ?manager)\b/i;
+const CORRECTIONS_CTX = /\b(corrections?|correctional|parole|probation|jail|prison|sheriff|doc|supervision|detention|penitentiary)\b/i;
+export function looksLikeOfficer(e: PracticeEntry): boolean {
+  const role = `${e.details.role ?? ""} ${e.title}`;
+  const all = `${role} ${e.venue ?? ""}`;
+  return OFFICER_STRONG.test(all) || OFFICER_PO.test(role) || (OFFICER_WORD.test(role) && CORRECTIONS_CTX.test(all));
+}
+
+const FIELD_LINE: Record<string, string> = {
+  displayName: "(top of the page)", discipline: "(top of the page)", basedIn: "(top of the page)", email: "(top of the page)",
+  phone: "(top of the page)", website: "(top of the page)", interests: "Interests", languages: "Languages and skills",
+};
 
 export interface CvStatusInput {
   entries: PracticeEntry[];
@@ -63,18 +77,50 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
     items.push({ rule: "STD-F02", severity: "BLOCK", line: "(empty page)", doc: "cv", question: "What's one degree, job, class you taught or talk you gave? Add it to your record.", why: "There's nothing on the page yet." });
   }
 
-  // CV-03: nothing personal of that kind, in anything the person typed for the page.
-  const typed: [string, string | undefined][] = [
-    ["(top of the page)", settings?.displayName], ["(top of the page)", settings?.discipline], ["(top of the page)", settings?.basedIn],
-    ["(top of the page)", settings?.email], ["(top of the page)", settings?.phone], ["(top of the page)", settings?.website],
-    ["Interests", settings?.interests], ["Languages and skills", settings?.languages],
-  ];
-  for (const [where, text] of typed) {
-    if (text && PERSONAL_RE.test(text)) {
+  // Typed fields held off the page: personal details (CV-03) or a name this lane keeps off (STD-R03).
+  // The line names the field, never its text.
+  for (const h of model.heldFields) {
+    items.push(
+      h.reason === "personal"
+        ? {
+            rule: "CV-03", severity: "BLOCK", line: FIELD_LINE[h.field], doc: "cv",
+            question: "This looks like a birth date, age, family status, nationality or photo. It's kept off the page. Take it out?",
+            why: "A CV here never carries those. Readers can't fairly ask for them, and you don't have to give them.",
+          }
+        : {
+            rule: "STD-R03", severity: "BLOCK", line: FIELD_LINE[h.field], doc: "cv",
+            question: "What you typed here names something you chose to keep off this lane. It's kept off the page. Change it, or change that choice?",
+            why: "Your choices about work that names a facility apply to every line on this lane, your own words included.",
+          }
+    );
+  }
+  // Rows held off the page, with a neutral line.
+  for (const o of model.omitted) {
+    const e = byId.get(o.entryId.toLowerCase());
+    if (!e) continue;
+    if (o.reason === "needs_status") {
       items.push({
-        rule: "CV-03", severity: "BLOCK", line: where, doc: "cv",
-        question: "This looks like a birth date, age, family status, nationality or photo. It's kept off the page. Take it out?",
-        why: "A CV here never carries those. Readers can't fairly ask for them, and you don't have to give them.",
+        rule: "CV-05", severity: "BLOCK", line: entryLine(e, settings), doc: "cv", entryId: e.id,
+        question: "Is this a degree? If so, was it conferred, or is it still in progress (and when do you expect to finish)?",
+        why: "A degree shows exactly as it stands. It stays off the page until you say.",
+      });
+    } else if (o.reason === "license_number") {
+      items.push({
+        rule: "CV-02", severity: "BLOCK", line: `${yearsOf(e)}  A credential in your record`, doc: "cv", entryId: e.id,
+        question: "This looks like it has a license or certificate number in it. Take the number out? A reader can ask for it.",
+        why: "A number opens a public lookup. It stays off the page.",
+      });
+    } else if (o.reason === "personal") {
+      items.push({
+        rule: "CV-03", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc: "cv", entryId: e.id,
+        question: "A line in your record looks like it has a birth date, age, family status or nationality in it. It's kept off the page. Take that part out?",
+        why: "A CV here never carries those.",
+      });
+    } else if (o.reason === "names_hidden") {
+      items.push({
+        rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc: "cv", entryId: e.id,
+        question: "A line in your record names something you chose to keep off this lane. It's kept off the page. Change it, or change that choice?",
+        why: "Your choices about work that names a facility apply to every line on this lane.",
       });
     }
   }
@@ -116,12 +162,8 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
     });
   }
 
-  // CV-04: references.
-  const shownRefs: PracticeEntry[] = [];
-  for (const s of model.sections) for (const r of s.rows ?? []) {
-    const e = byId.get(r.entryId.toLowerCase());
-    if (e && e.section === "reference") shownRefs.push(e);
-  }
+  // CV-04: references. The person picks who leads; an officer never does.
+  const refRows = model.sections.find((x) => x.key === "reference")?.rows ?? [];
   for (const e of entries) {
     if (e.section === "reference" && !e.details.consent) {
       items.push({
@@ -131,10 +173,19 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
       });
     }
   }
-  if (shownRefs[0] && OFFICER_RE.test(`${shownRefs[0].details.role ?? ""} ${shownRefs[0].venue ?? ""}`)) {
+  if (refRows.length >= 2 && !model.leadReference) {
     items.push({
-      rule: "CV-04", severity: "FIX", line: "References, first one", doc: "cv", entryId: shownRefs[0].id,
-      question: "Your first reference looks like a supervision officer. Who else knows your work or your studies?",
+      rule: "CV-04", severity: "BLOCK", line: "References", doc: "cv",
+      question: "Who should be your first reference? Pick one.",
+      why: "You choose who leads. It is never decided by date.",
+    });
+  }
+  const lead = refRows.length === 1 ? refRows[0] : model.leadReference ? refRows[0] : null;
+  const leadEntry = lead ? byId.get(lead.entryId.toLowerCase()) : undefined;
+  if (leadEntry && looksLikeOfficer(leadEntry)) {
+    items.push({
+      rule: "CV-04", severity: "BLOCK", line: "References, first one", doc: "cv", entryId: leadEntry.id,
+      question: "Your first reference looks like a parole, probation or corrections officer. Who else knows your work or your studies?",
       why: "An officer is never the lead reference. A teacher, supervisor or colleague speaks to the work.",
     });
   }
@@ -147,6 +198,14 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
       question: `An international CV is ${cap} pages at most. Which entries are your strongest? Pick those as Selected.`,
       why: "Two pages when the real record fills them, never more. Nothing shrunk, nothing padded.",
     });
+  }
+
+  // Backstop: no open item's line may carry a personal detail or a credential number.
+  for (const it of items) {
+    const e = it.entryId ? byId.get(it.entryId.toLowerCase()) : undefined;
+    if (isPersonalDetail(it.line) || (e?.section === "license" && LICENSE_NUMBER_RE.test(it.line))) {
+      it.line = e ? `${yearsOf(e)}  A line in your record` : "A line in your record";
+    }
   }
 
   const seen = new Set<string>();

@@ -17,18 +17,65 @@
  */
 
 import type { CvType } from "./careerLaneShared";
-import { type PracticeEntry, type PracticeSection, placeOf, yearsOf } from "./practiceRecordShared";
-import { type ArtistRow, type CreativeKindSettings, type Part, artistRowParts, titleModeFor } from "./creativeLaneShared";
+import { type PracticeEntry, type PracticeSection, LICENSE_NUMBER_SHAPE as LICENSE_NUMBER_RE, placeOf, yearsOf } from "./practiceRecordShared";
+import {
+  type ArtistRow,
+  type CreativeKindSettings,
+  type Part,
+  CREDENTIAL_KIND_WORD,
+  CREDENTIAL_STATUS_WORD,
+  artistRowParts,
+  hiddenFacilityTerms,
+  namesHiddenFacility,
+  rowText,
+  titleModeFor,
+} from "./creativeLaneShared";
 
 /**
- * Words and date shapes that would put a birth date, age, family status,
- * nationality or photo on a CV. Exact words, no guessing. Typed text that
- * carries one never prints (and the checks ask about it).
+ * Personal details by PATTERN (not single words), so real topics such as
+ * "citizenship and reentry policy" or "photo essays" never trip it:
+ * born + a year or date; a date-of-birth label + something after it; age + a
+ * number; "N years old"; a marital status standing alone as a statement; a
+ * spouse label; "<nationality> citizen" or "citizen of"; a nationality,
+ * citizenship, gender, religion or race label; a photo attached. A bare date
+ * alone ("Submitted 03/15/2025") is not one.
  */
-export const CV_PERSONAL_RE =
-  /\b(born|d\.?o\.?b\.?|date of birth|birth ?date|birthday|age:?\s*\d{1,2}|\d{1,2}\s*years old|married|marital|divorced|widowed|nationality|citizenship|photo|headshot)\b|\b\d{1,2}[/.-]\d{1,2}[/.-](19|20)\d{2}\b/i;
+export const CV_PERSONAL_PATTERNS: RegExp[] = [
+  /\bborn\b[\s,:]*(?:on\s+|in\s+)?(?:\d{1,2}[/.-]\d{1,2}[/.-])?(?:[A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+)?(19|20)\d{2}\b/i,
+  /\b(?:d\.?o\.?b\.?|date of birth|birth ?date|birthday)\s*[:\-]?\s*[\dA-Z]/i,
+  /\bage[d]?\s*:?\s*\d{1,3}\b/i,
+  /\b\d{1,3}\s*(?:years?|yrs?)\.?\s*old\b/i,
+  /(?:^|[;.]\s*)(?:married|single|divorced|widowed|separated)\s*(?:$|[,.;(]|\s+with\b|\s+\d|\s+and\s+\d)/i,
+  /\b(?:marital status|spouse|wife|husband)\s*:/i,
+  /\bcitizen of\b/i,
+  /\b(?:[Uu]\.?[Ss]\.?(?:[Aa]\.?)?|[Uu]nited [Ss]tates|[A-Z][a-z]+an|[A-Z][a-z]+ese|[A-Z][a-z]+ish)\s+[Cc]itizen\b/,
+  /\b(?:nationality|citizenship|gender|sex|religion|ethnicity|race)\s*:/i,
+  /\b(?:photo|picture)\s+(?:attached|enclosed|included|below)\b|\bheadshot\b/i,
+];
+export const CV_PERSONAL_RE = new RegExp(CV_PERSONAL_PATTERNS.map((r) => `(?:${r.source})`).join("|"), "i");
+export function isPersonalDetail(text: string | null | undefined): boolean {
+  return !!text && CV_PERSONAL_PATTERNS.some((r) => r.test(text));
+}
 
-const safe = (t: string | undefined): string | undefined => (t && !CV_PERSONAL_RE.test(t) ? t : undefined);
+/** A license or certificate number (same shape the record refuses). */
+export { LICENSE_NUMBER_SHAPE as LICENSE_NUMBER_RE } from "./practiceRecordShared";
+
+/** A title that reads as a degree. */
+export const DEGREE_TITLE_RE = /\b(B\.?F\.?A|M\.?F\.?A|B\.?A|M\.?A|B\.?S|M\.?S|Ph\.?D|Ed\.?D|A\.?A|A\.?S|Associate'?s?|Bachelor'?s?|Master'?s?|Doctor\w*|degree)\b/;
+
+/**
+ * A degree prints only once the person says it was conferred, or is in
+ * progress WITH an expected year (STD-T03 on a CV). "Completed" (coursework
+ * done, no degree conferred) and no status at all hold it off the page.
+ */
+export function degreeStatusKnown(e: PracticeEntry): boolean {
+  if (e.section !== "education") return true;
+  const isDegree = e.details.degree === true || DEGREE_TITLE_RE.test(e.title);
+  if (!isDegree) return true;
+  if (e.details.degree !== true) return false;
+  if (e.details.status === "conferred") return true;
+  return e.details.status === "in_progress" && /\b(19|20)\d{2}\b/.test(String(e.details.expected ?? ""));
+}
 
 export interface CvSection {
   key: string;
@@ -46,7 +93,14 @@ export interface CvModel {
   /** Entries a lane choice must settle before they show (R03). */
   needsChoice: string[];
   /** Entries kept off, and why. */
-  omitted: { entryId: string; reason: "not_selected" | "leave_out" | "needs_choice" | "needs_kind" | "no_consent" }[];
+  omitted: {
+    entryId: string;
+    reason: "not_selected" | "leave_out" | "needs_choice" | "needs_kind" | "no_consent" | "needs_status" | "license_number" | "personal" | "names_hidden";
+  }[];
+  /** Typed fields kept off the page, and why (they never print while this holds). */
+  heldFields: { field: "displayName" | "discipline" | "basedIn" | "email" | "phone" | "website" | "interests" | "languages"; reason: "personal" | "names_hidden" }[];
+  /** The reference the person chose to lead (null when none is chosen). */
+  leadReference: string | null;
   trimmed: boolean;
 }
 
@@ -88,12 +142,7 @@ export const CV_ORDER: Record<CvType, Def[]> = {
   international: [EDUCATION, { ...APPOINTMENTS, heading: "Work Experience" }, TEACHING, RESEARCH, PUBLICATIONS, PRESENTATIONS, AWARDS, LICENSES, SERVICE, MEMBERSHIPS, LANGUAGES, REFERENCES],
 };
 
-export const CREDENTIAL_KIND_WORD: Record<string, string> = {
-  license: "License", certification: "Certification", certificate: "Certificate", card: "Card", training: "Training",
-};
-export const CREDENTIAL_STATUS_WORD: Record<string, string> = {
-  active: "Active", inactive: "Inactive", expired: "Expired", in_progress: "In progress", eligible: "Eligible to test",
-};
+export { CREDENTIAL_KIND_WORD, CREDENTIAL_STATUS_WORD } from "./creativeLaneShared";
 
 function commaJoin(parts: Part[]): Part[] {
   const kept = parts.filter((p) => p.text && p.text.trim());
@@ -107,6 +156,16 @@ export function credentialConfirmed(e: PracticeEntry): boolean {
 
 /** One entry as a CV row, exactly from the record, in the lane's current rendering. */
 export function cvRowParts(e: PracticeEntry, mode: "true_title" | "venue_only"): Part[] {
+  // A credential: its KIND and STATUS print on every rendering (title shown or not).
+  if (e.section === "license") {
+    const d0 = e.details;
+    const kind = CREDENTIAL_KIND_WORD[d0.credentialKind ?? ""] ?? "";
+    const status = { text: `(${CREDENTIAL_STATUS_WORD[d0.credentialStatus ?? ""] ?? ""})` };
+    const head = mode === "venue_only" ? kind : `${kind}: ${e.title}`;
+    const row = commaJoin([{ text: head }, { text: e.venue ?? "" }, { text: e.state ?? "" }]);
+    row.push(status);
+    return row;
+  }
   if (mode === "venue_only") return artistRowParts(e, "venue_only");
   const d = e.details;
   const place = placeOf(e);
@@ -133,11 +192,6 @@ export function cvRowParts(e: PracticeEntry, mode: "true_title" | "venue_only"):
       if (d.hours) row.push({ text: `(${d.hours} hours)` });
       return row;
     }
-    case "license": {
-      const row = commaJoin([{ text: `${CREDENTIAL_KIND_WORD[d.credentialKind ?? ""] ?? ""}: ${e.title}` }, { text: e.venue ?? "" }, { text: e.state ?? "" }]);
-      row.push({ text: `(${CREDENTIAL_STATUS_WORD[d.credentialStatus ?? ""] ?? ""})` });
-      return row;
-    }
     case "reference":
       return commaJoin([{ text: e.title }, { text: d.role ?? "" }, { text: e.venue ?? "" }, { text: d.contact ?? "" }]);
     case "publication": {
@@ -156,6 +210,17 @@ function newestFirst(a: PracticeEntry, b: PracticeEntry): number {
 /** The CV, assembled from the record with this lane's current choices. */
 export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined, cvType: CvType): CvModel {
   const settings = s ?? {};
+  // The lane's hidden facility terms and the personal-detail patterns apply to
+  // EVERY typed field and every row: a hit stays off the page (and blocks).
+  const hidden = hiddenFacilityTerms(entries, settings);
+  const heldFields: CvModel["heldFields"] = [];
+  const safe = (field: CvModel["heldFields"][number]["field"]): string | undefined => {
+    const t = settings[field];
+    if (!t) return undefined;
+    if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
+    if (namesHiddenFacility(t, hidden)) return void heldFields.push({ field, reason: "names_hidden" });
+    return t;
+  };
   const picked = Array.isArray(settings.selection) ? new Set(settings.selection.map((x) => x.toLowerCase())) : null;
   const omitted: CvModel["omitted"] = [];
   const needsChoice: string[] = [];
@@ -163,7 +228,7 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
   let trimmed = false;
   for (const def of CV_ORDER[cvType]) {
     if (def.text) {
-      const text = safe(def.text === "interests" ? settings.interests : settings.languages);
+      const text = safe(def.text);
       if (text) sections.push({ key: def.key, heading: def.heading, text });
       continue;
     }
@@ -196,13 +261,40 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
         omitted.push({ entryId: e.id, reason: "no_consent" });
         continue;
       }
-      rows.push({ entryId: e.id, years: yearsOf(e), parts: cvRowParts(e, mode), mode });
+      if (!degreeStatusKnown(e)) {
+        omitted.push({ entryId: e.id, reason: "needs_status" });
+        continue;
+      }
+      if (e.section === "license" && (LICENSE_NUMBER_RE.test(e.title) || LICENSE_NUMBER_RE.test(e.venue ?? ""))) {
+        omitted.push({ entryId: e.id, reason: "license_number" });
+        continue;
+      }
+      const parts = cvRowParts(e, mode);
+      const text = rowText(parts);
+      if (isPersonalDetail(text)) {
+        omitted.push({ entryId: e.id, reason: "personal" });
+        continue;
+      }
+      if (namesHiddenFacility(text, hidden)) {
+        omitted.push({ entryId: e.id, reason: "names_hidden" });
+        continue;
+      }
+      rows.push({ entryId: e.id, years: yearsOf(e), parts, mode });
+    }
+    // References: the person's chosen lead first; never picked by year.
+    if (def.key === "reference" && settings.leadReference) {
+      const lead = rows.findIndex((r) => r.entryId.toLowerCase() === settings.leadReference!.toLowerCase());
+      if (lead > 0) rows.unshift(...rows.splice(lead, 1));
     }
     if (trimmedHere) trimmed = true;
     if (rows.length) sections.push({ key: def.key, heading: trimmedHere ? `Selected ${def.heading}` : def.heading, rows });
   }
-  const contact = [settings.basedIn, settings.email, settings.phone, settings.website].map(safe).filter((x): x is string => !!x);
-  return { cvType, header: { name: safe(settings.displayName) ?? "", discipline: safe(settings.discipline) ?? "", contact }, sections, needsChoice, omitted, trimmed };
+  const contact = (["basedIn", "email", "phone", "website"] as const).map(safe).filter((x): x is string => !!x);
+  const name = safe("displayName") ?? "";
+  const discipline = safe("discipline") ?? "";
+  const refs = sections.find((x) => x.key === "reference")?.rows ?? [];
+  const leadReference = settings.leadReference && refs[0]?.entryId.toLowerCase() === settings.leadReference.toLowerCase() ? refs[0].entryId : null;
+  return { cvType, header: { name, discipline, contact }, sections, needsChoice, omitted, heldFields, leadReference, trimmed };
 }
 
 /** The CV as plain text. */

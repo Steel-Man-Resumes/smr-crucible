@@ -54,6 +54,8 @@ export interface CreativeKindSettings {
   interests?: string;
   /** CV lanes: languages and skills, in the person's own words. */
   languages?: string;
+  /** CV lanes: the reference the person chose to list first. */
+  leadReference?: string;
   /** Revision of these settings; every save must be based on the current one. */
   rev?: number;
 }
@@ -109,6 +111,8 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   str("website", 200);
   str("interests", 600);
   str("languages", 300);
+  const lr = v("leadReference");
+  if (typeof lr === "string" && ID_RE.test(lr)) out.leadReference = lr.toLowerCase();
   if (v("callAllowsMore") === true) out.callAllowsMore = true;
   const modes = cleanTitleModes(cur.titleModes);
   if (Object.keys(modes).length) out.titleModes = modes;
@@ -156,6 +160,99 @@ export function titleModeFor(entry: Pick<PracticeEntry, "id" | "names_facility">
   return s?.titleModes?.[entry.id.toLowerCase()] ?? "unset";
 }
 
+/** Lowercase words joined by single spaces, padded, so phrase checks match whole words only. */
+function wordsOf(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+}
+
+const RUN_STOPWORDS = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
+/** Every run of 3+ words inside a hidden title or venue (at least two real words), so part of a name still counts. */
+function wordRuns(term: string): string[] {
+  const w = wordsOf(term).trim().split(" ").filter(Boolean);
+  const out: string[] = [];
+  for (let len = 3; len < w.length; len++) {
+    for (let i = 0; i + len <= w.length; i++) {
+      const run = w.slice(i, i + len);
+      if (run.filter((x) => !RUN_STOPWORDS.has(x) && !/^\d+$/.test(x)).length >= 2) out.push(run.join(" "));
+    }
+  }
+  return out;
+}
+
+/**
+ * The facility text a sentence may not carry on this lane: the title of each
+ * facility-named entry not shown with its true title, and the venue of each
+ * one left off (or not yet chosen). Lowercased. Each also counts in part: any
+ * run of three or more of its words (two of them real words), unless that run
+ * is already on the page through something this lane shows. Exact words, no
+ * guessing.
+ */
+export function hiddenFacilityTerms(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string[] {
+  const out: string[] = [];
+  // A venue that a SHOWN, non-facility entry also uses is public on this lane
+  // anyway: shown means confirmed (not "need to find") and, when the lane
+  // picks entries, picked.
+  const picked = Array.isArray(s?.selection) ? new Set(s!.selection!.map((x) => x.toLowerCase())) : null;
+  const isShown = (e: PracticeEntry) =>
+    (!picked || picked.has(e.id.toLowerCase())) &&
+    (e.names_facility
+      ? // a facility entry the person chose to show WITH its venue makes that venue public on this lane
+        titleModeFor(e, s) === "true_title" || titleModeFor(e, s) === "venue_only"
+      : e.proof !== "need_to_find");
+  const shownVenues = new Set(entries.filter((e) => e.venue && isShown(e)).map((e) => (e.venue as string).toLowerCase()));
+  // Text already public on this lane: shown titles (true title only) and shown venues.
+  const publicText = entries
+    .filter(isShown)
+    .map((e) => `${!e.names_facility || titleModeFor(e, s) === "true_title" ? e.title : ""} | ${e.venue ?? ""}`)
+    .map(wordsOf)
+    .join(" | ");
+  const full: string[] = [];
+  for (const e of entries) {
+    if (!e.names_facility) continue;
+    const mode = titleModeFor(e, s);
+    if (mode !== "true_title" && e.title.trim().length >= 4) full.push(e.title.toLowerCase());
+    const venue = e.venue?.toLowerCase();
+    if ((mode === "leave_out" || mode === "unset") && venue && venue.trim().length >= 4 && !shownVenues.has(venue)) full.push(venue);
+    // Earlier names of the entry are never shown on a lane that keeps it off.
+    if (mode !== "true_title") for (const f of e.details.formerNames ?? []) if (f.trim().length >= 4) full.push(f.toLowerCase());
+  }
+  out.push(...full);
+  for (const t of full) for (const r of wordRuns(t)) if (!publicText.includes(` ${r} `) && !out.includes(r)) out.push(r);
+  return out;
+}
+
+/** The hidden term a text names (whole words), or null. */
+export function namesHiddenFacility(text: string, terms: string[]): string | null {
+  const t = wordsOf(text);
+  return terms.find((x) => wordsOf(x).trim() !== "" && t.includes(wordsOf(x))) ?? null;
+}
+
+
+/** The credential kind and status words (D4), shared by every page that prints a credential. */
+export const CREDENTIAL_KIND_WORD: Record<string, string> = {
+  license: "License", certification: "Certification", certificate: "Certificate", card: "Card", training: "Training",
+};
+export const CREDENTIAL_STATUS_WORD: Record<string, string> = {
+  active: "Active", inactive: "Inactive", expired: "Expired", in_progress: "In progress", eligible: "Eligible to test",
+};
+
+/**
+ * The status words an entry carries on EVERY rendering, title shown or not:
+ * a publication's graded status, study in progress, a credential's status.
+ * A venue-only line must never read as more than the true one.
+ */
+export function statusPart(e: PracticeEntry): Part | null {
+  const d = e.details;
+  if (e.section === "publication") {
+    const w = publicationStatusWords(e);
+    return w ? { text: `(${w})` } : null;
+  }
+  if (e.section === "education" && d.status === "in_progress") return { text: `(${d.expected ? `in progress, expected ${d.expected}` : "in progress"})` };
+  if (e.section === "arts_program" && d.status === "in_progress") return { text: "(in progress)" };
+  if (e.section === "license" && d.credentialStatus) return { text: `(${CREDENTIAL_STATUS_WORD[d.credentialStatus] ?? d.credentialStatus})` };
+  return null;
+}
+
 // ------------------------------------------------------ artist resume model --
 
 /** A run of text on a row. Italic for titles of works and shows (CAA). */
@@ -186,8 +283,10 @@ export interface ArtistResumeModel {
   sections: ArtistSection[];
   /** Entries a lane setting asks about before they can show (R03). */
   needsChoice: string[];
-  /** Entries left off on purpose (not selected, or "leave out"). */
-  omitted: { entryId: string; reason: "not_selected" | "leave_out" | "needs_choice" | "private_holder" }[];
+  /** Entries left off on purpose (not selected, "leave out", or naming something this lane hides). */
+  omitted: { entryId: string; reason: "not_selected" | "leave_out" | "needs_choice" | "private_holder" | "names_hidden" }[];
+  /** Typed top-of-page fields kept off because they name something this lane hides. */
+  heldFields: string[];
   /** True when the person trimmed with a selection ("Selected" headings). */
   trimmed: boolean;
 }
@@ -244,7 +343,7 @@ export function venueOnlyLabel(e: PracticeEntry): string {
     case "clinical":
       return "Clinical placement";
     case "license":
-      return "Credential";
+      return CREDENTIAL_KIND_WORD[e.details.credentialKind ?? ""] ?? "Credential";
     case "service":
       return "Service";
     case "membership":
@@ -285,7 +384,11 @@ function commaJoin(parts: Part[]): Part[] {
 export function artistRowParts(e: PracticeEntry, mode: "true_title" | "venue_only"): Part[] {
   const place = placeOf(e);
   if (mode === "venue_only") {
-    return commaJoin([{ text: venueOnlyLabel(e) }, { text: e.venue ?? "" }, { text: place }]);
+    // The kind and the venue, never the title; the status words stay (H1).
+    const row = commaJoin([{ text: venueOnlyLabel(e) }, { text: e.venue ?? "" }, { text: place }]);
+    const st = statusPart(e);
+    if (st) row.push(st);
+    return row;
   }
   const d = e.details;
   switch (e.section) {
@@ -358,6 +461,13 @@ function sortNewestFirst(a: PracticeEntry, b: PracticeEntry): number {
  */
 export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): ArtistResumeModel {
   const settings = s ?? {};
+  const hidden = hiddenFacilityTerms(entries, settings);
+  const heldFields: string[] = [];
+  const keep = (field: keyof CreativeKindSettings): string | undefined => {
+    const t = settings[field] as string | undefined;
+    if (t && namesHiddenFacility(t, hidden)) return void heldFields.push(field);
+    return t;
+  };
   const selection = Array.isArray(settings.selection) ? new Set(settings.selection.map((x) => x.toLowerCase())) : null;
   const omitted: ArtistResumeModel["omitted"] = [];
   const needsChoice: string[] = [];
@@ -385,7 +495,12 @@ export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKind
         omitted.push({ entryId: e.id, reason: "leave_out" });
         continue;
       }
-      rows.push({ entryId: e.id, years: yearsOf(e), parts: artistRowParts(e, mode), mode });
+      const parts = artistRowParts(e, mode);
+      if (namesHiddenFacility(rowText(parts), hidden)) {
+        omitted.push({ entryId: e.id, reason: "names_hidden" });
+        continue;
+      }
+      rows.push({ entryId: e.id, years: yearsOf(e), parts, mode });
     }
     if (trimmedHere) trimmedAny = true;
     if (rows.length) {
@@ -393,12 +508,13 @@ export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKind
     }
   }
 
-  const contact = [settings.basedIn, settings.email, settings.phone, settings.website].filter((x): x is string => !!x);
+  const contact = (["basedIn", "email", "phone", "website"] as const).map(keep).filter((x): x is string => !!x);
   return {
-    header: { name: settings.displayName ?? "", discipline: settings.discipline ?? "", contact },
+    header: { name: keep("displayName") ?? "", discipline: keep("discipline") ?? "", contact },
     sections,
     needsChoice,
     omitted,
+    heldFields,
     trimmed: trimmedAny,
   };
 }
@@ -444,7 +560,13 @@ export function buildWorkSampleList(
   // The lane's choice decides, as for every document. A work has no venue, so
   // "venue only" keeps it off this list just like "leave it off"; a work with
   // no choice yet stays off and is asked about.
-  const works = entries.filter((e) => e.section === "work" && titleModeFor(e, s) === "true_title");
+  const hidden = hiddenFacilityTerms(entries, s);
+  const works = entries.filter(
+    (e) =>
+      e.section === "work" &&
+      titleModeFor(e, s) === "true_title" &&
+      !namesHiddenFacility([e.title, e.details.medium, e.details.description, e.details.fileName].filter(Boolean).join(" "), hidden)
+  );
   const byId = new Map(works.map((w) => [w.id.toLowerCase(), w]));
   const ordered: PracticeEntry[] = [];
   for (const id of order ?? []) {
