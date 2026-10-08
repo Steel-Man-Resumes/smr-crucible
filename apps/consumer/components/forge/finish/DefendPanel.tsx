@@ -73,6 +73,13 @@ function SkillsCard({ group, index, actions }: { group: LineGroup; index: number
   );
 }
 
+/** Round 10 (SF-1): the honest answers about school, in the person's words. */
+const EDUCATION_LABELS: Record<(typeof EDUCATION_KINDS)[number], string> = {
+  earned: "Yes, I earned it",
+  "in progress": "Still working on it",
+  "did not finish": "I went but didn't finish",
+};
+
 /** D4: a credential the person never mentioned, asked as a memory prompt. */
 function CredentialPromptCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
   const [mode, setMode] = useState<"ask" | "yes" | "no">("ask");
@@ -94,9 +101,25 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
       <p className="mt-1.5 text-sm text-t-phos">{prompt}</p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => setMode("yes")} className={BTN_MAIN}>
-            {group.education ? "Yes" : "Yes, I hold it"}
-          </button>
+          {group.education ? (
+            // Round 10 (SF-1): every honest answer about school has its own way out.
+            EDUCATION_KINDS.map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  setType(t);
+                  setMode("yes");
+                }}
+                className={t === "earned" ? BTN_MAIN : BTN_SOFT}
+              >
+                {EDUCATION_LABELS[t]}
+              </button>
+            ))
+          ) : (
+            <button onClick={() => setMode("yes")} className={BTN_MAIN}>
+              Yes, I hold it
+            </button>
+          )}
           <button onClick={() => (actions.onPreviewCut ? setMode("no") : actions.onCutCredential(group))} className={BTN_SOFT}>
             No, take it off
           </button>
@@ -137,20 +160,20 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                 onClick={() => setType(t)}
                 className={type === t ? BTN_MAIN : BTN_SOFT}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {group.education ? EDUCATION_LABELS[t as (typeof EDUCATION_KINDS)[number]] : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
           {type !== "in progress" && (
             <>
           <label htmlFor={`cred-when-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
-            {group.education ? "What year did you earn it?" : "When did you get it, or is it current?"}
+            {type === "did not finish" ? "What years did you go? You can leave this empty." : group.education ? "What year did you earn it?" : "When did you get it, or is it current?"}
           </label>
           <input
             id={`cred-when-${index}`}
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            placeholder={group.education ? "The year, like 2015" : "In your words: the year you got it, or current, expired, in progress"}
+            placeholder={type === "did not finish" ? "Like 2011 - 2014" : group.education ? "The year, like 2015" : "In your words: the year you got it, or current, expired, in progress"}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
             </>
@@ -167,7 +190,13 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                 if (!type) return setNotice("Pick what kind it is.");
                 const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when);
                 if (result === "when") {
-                  setNotice(group.education ? "Add the year you earned it." : "Add the year you got it, or say if it's current, expired, in progress or completed.");
+                  setNotice(
+                    type === "did not finish"
+                      ? "Type only the years you went, like 2011 - 2014, or leave it empty."
+                      : group.education
+                        ? "Add the year you earned it."
+                        : "Add the year you got it, or say if it's current, expired, in progress or completed."
+                  );
                   return;
                 }
                 if (result === "unchanged") {
@@ -434,7 +463,7 @@ function Groups({
         g.target === "skillset" ? (
           <SkillsCard key="skillset" group={g} index={offset + i} actions={actions} />
         ) : g.credentialName ? (
-          <CredentialPromptCard key={`cred:${g.target}:${g.line}`} group={g} index={offset + i} actions={actions} />
+          <CredentialPromptCard key={`cred:${g.target}:${g.line}:${g.credentialName ?? ""}`} group={g} index={offset + i} actions={actions} />
         ) : (
         <GroupCard
           key={`${g.target}:${g.line}:${g.checked ? "c" : "o"}`}

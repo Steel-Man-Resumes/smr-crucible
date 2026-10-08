@@ -96,7 +96,8 @@ test("R9-N4: confirming an education line keeps the school and drops the writer'
   const { start } = walk(r, "", said);
   const g = start.groups.find((x) => x.credentialName && x.education)!;
   assert.equal(g.credentialName, "GED");
-  const res = applyConfirmation({ resume: r, letter: "" }, g.credentialName!, "in progress", "in progress")!;
+  // Round 10 (SF-3): the school rides because the person named it.
+  const res = applyConfirmation({ resume: r, letter: "" }, g.credentialName!, "in progress", "in progress", { personText: said })!;
   assert.match(res.resume, /EDUCATION\nGED, in progress \| Toledo Adult Education$/);
   assert.equal(res.confirm.line, "GED, in progress | Toledo Adult Education");
   const after = walk(res.resume, "", said, { confirmedCredentials: [res.confirm], written: { resume: r, letter: "" } });

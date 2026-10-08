@@ -40,10 +40,11 @@ test("B5: an education line is asked as earned or in progress, and rewritten whe
   const v = view(r, { ownWords: `${OWN}\nI am working on my GED.` });
   const g = v.groups.find((x) => x.credentialName)!;
   assert.ok(g && g.education, JSON.stringify(v.groups));
-  assert.deepEqual([...EDUCATION_KINDS], ["earned", "in progress"]);
+  // Round 10 (SF-1): "did not finish" is the third honest answer.
+  assert.deepEqual([...EDUCATION_KINDS], ["earned", "in progress", "did not finish"]);
   const res = applyConfirmation({ resume: r, letter: "" }, g.credentialName!, "in progress", "in progress")!;
-  // Round 9 (r9-N4): only the named part changes; the school stays and the writer's year comes off.
-  assert.match(res.resume, /EDUCATION\nGED, in progress \| Toledo Adult Education$/);
+  // Round 10 (SF-3): the school rides only when the person named it; here they did not, so it comes off with the year.
+  assert.match(res.resume, /EDUCATION\nGED, in progress$/);
   assert.doesNotMatch(res.resume, /CERTIFICATIONS/);
   const after = view(res.resume, { ownWords: `${OWN}\nI am working on my GED.`, confirmedCredentials: [res.confirm], written: { resume: r, letter: "" } });
   assert.ok(!after.groups.some((x) => x.credentialName), JSON.stringify(after.openItems));

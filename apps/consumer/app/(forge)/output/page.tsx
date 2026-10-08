@@ -383,6 +383,7 @@ export default function OutputPage() {
     setDefendAnswers((a) => recordAnswer(a, group.line, "", "cut"));
   };
 
+  const confirmedLineSet = new Set(confirmedCredentials.flatMap((c) => [c.text, ...(c.line ? [c.line] : [])]));
   const cardActions: CardActions = {
     onKeepTerm: (term) => setKeptTerms((t) => (t.some((x) => x.toLowerCase() === term.toLowerCase()) ? t : [...t, term])),
     onCutTerm: (term) => {
@@ -391,17 +392,19 @@ export default function OutputPage() {
     },
     onConfirmCredential: (group, type, when) => {
       if (!isConfirmWhen(type, when)) return "when";
-      const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when);
+      // Round 10: the person's own words, so a school they named themselves stays on an education line.
+      const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when, { personText: view.source });
       if (!r) return "unchanged";
       setResumeText(r.resume);
       setCoverLetterText(r.letter);
       setConfirmedCredentials((c) => [...c.filter((x) => (x.key ?? x.name.toLowerCase()) !== (r.confirm.key ?? r.confirm.name.toLowerCase())), r.confirm]);
       return "ok";
     },
-    onPreviewCut: (group) => cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line).changes,
+    onPreviewCut: (group) => cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, { keepLines: confirmedLineSet }).changes,
     onCutCredential: (group) => {
       // Round 7: every mention of that credential comes off, on both pages, so it is never asked again.
-      const r = cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line);
+      // Round 10: a line the person already confirmed (an "attended" line) stays.
+      const r = cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, { keepLines: confirmedLineSet });
       setResumeText(r.resume);
       setCoverLetterText(r.letter);
       if (r.remnants.length) setCredentialCutRemnants((rs) => [...rs, ...r.remnants.filter((x) => !rs.includes(x))]);
