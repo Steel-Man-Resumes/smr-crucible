@@ -143,3 +143,95 @@ export function clearForgeBrowserKeys(storage: Store | null = browserStore()): v
     }
   }
 }
+
+/*
+ * BOTH HOSTS (security review 3a Part 2 r2, N3). forge.* and refinery.* each
+ * have their own localStorage, and a page can only clear its own. So a clear
+ * also leaves a mark in a cookie both hosts can read (Domain
+ * .steelmanresumes.com in production; host-only on localhost and previews,
+ * where there is one host anyway). Each host, the next time it loads the
+ * Forge run or settles the Refinery keys, sees a mark newer than the last one
+ * it acted on and clears its own keys too. The limit: the other host clears
+ * when it is next opened in this browser, not at the same moment, and a
+ * browser that blocks cookies gets only the clear on the host in front of it.
+ * The server checks (Forge saves refused while impersonating, a loaded run
+ * stamped only for its own account) hold on both hosts regardless.
+ */
+export const FORGE_CLEAR_COOKIE = "smr_forge_clear";
+export const FORGE_CLEAR_SEEN_KEY = "smr_forge_clear_seen";
+
+interface CookieDoc {
+  cookie: string;
+  location?: { hostname: string; protocol: string };
+}
+
+function browserDoc(): CookieDoc | null {
+  return typeof document === "undefined" ? null : (document as unknown as CookieDoc);
+}
+
+/** The cookie attributes for the mark: shared across steelmanresumes.com hosts in production. */
+export function forgeClearCookieAttrs(hostname: string, protocol: string): string {
+  const shared = hostname === "steelmanresumes.com" || hostname.endsWith(".steelmanresumes.com");
+  return `Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax${shared ? "; Domain=.steelmanresumes.com" : ""}${protocol === "https:" ? "; Secure" : ""}`;
+}
+
+/** The mark's time from a cookie string, or 0. */
+export function readForgeClearMark(cookie: string): number {
+  const m = new RegExp(`(?:^|;\\s*)${FORGE_CLEAR_COOKIE}=(\\d{1,16})`).exec(cookie || "");
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * Clear this host's keys now and mark the clear for the other host. Used when
+ * an impersonation starts, ends (End button) or runs out (the status turns
+ * inactive for any reason).
+ */
+export function clearForgeBrowserKeysEverywhere(
+  storage: Store | null = browserStore(),
+  doc: CookieDoc | null = browserDoc(),
+  now: number = Date.now()
+): void {
+  clearForgeBrowserKeys(storage);
+  try {
+    storage?.setItem(FORGE_CLEAR_SEEN_KEY, String(now));
+  } catch {
+    // ignore
+  }
+  if (doc) {
+    const loc = doc.location ?? { hostname: "", protocol: "" };
+    try {
+      doc.cookie = `${FORGE_CLEAR_COOKIE}=${now}; ${forgeClearCookieAttrs(loc.hostname, loc.protocol)}`;
+    } catch {
+      // cookies blocked: this host is cleared; see the limit above
+    }
+  }
+}
+
+/**
+ * On load: if another host marked a clear this host has not acted on, clear
+ * this host's keys too. Returns whether it cleared.
+ */
+export function applyForgeClearMark(storage: Store | null = browserStore(), doc: CookieDoc | null = browserDoc()): boolean {
+  if (!storage || !doc) return false;
+  let mark = 0;
+  try {
+    mark = readForgeClearMark(doc.cookie);
+  } catch {
+    return false;
+  }
+  if (!mark) return false;
+  let seen = 0;
+  try {
+    seen = Number(storage.getItem(FORGE_CLEAR_SEEN_KEY) || 0) || 0;
+  } catch {
+    return false;
+  }
+  if (mark <= seen) return false;
+  clearForgeBrowserKeys(storage);
+  try {
+    storage.setItem(FORGE_CLEAR_SEEN_KEY, String(mark));
+  } catch {
+    // ignore
+  }
+  return true;
+}

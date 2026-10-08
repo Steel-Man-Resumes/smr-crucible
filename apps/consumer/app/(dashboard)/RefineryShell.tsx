@@ -42,6 +42,7 @@ import {
   forgeQuestionOpen,
   forgeSyncAllowed,
   settleDerivedKeys,
+  applyForgeClearMark,
 } from "@/lib/refinery-guards";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
@@ -379,6 +380,8 @@ export function RefineryShell({
   const derivedSettledFor = useRef<string | null>(null);
   if (authStatus === "authenticated" && shellUid && derivedSettledFor.current !== shellUid) {
     const uid = shellUid;
+    // A clear marked on the other host applies here first (N3).
+    applyForgeClearMark();
     settleDerivedKeys(uid);
     derivedSettledFor.current = uid;
   }

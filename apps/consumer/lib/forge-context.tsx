@@ -7,6 +7,7 @@ import { readOwnForgeSession } from "@/lib/forge-carry";
 import type { ReactNode } from "react";
 import type { ResumeDocument } from "@/components/resume/resumeModel";
 import { migrateStoredSession, STORED_SESSION_VERSION } from "@/lib/forge-preferences";
+import { applyForgeClearMark } from "./refinery-guards";
 
 // --- Forge Session Context ---
 // Tracks user progress through the Forge flow without requiring auth.
@@ -177,6 +178,9 @@ export function isForgeSessionExpired(
 /** Read the stored run, migrating and expiring it. Exported for tests. */
 export function loadSession(): ForgeSessionData {
   if (typeof window === "undefined") return {};
+  // A clear marked on the other host (an impersonation started, ended or ran
+  // out there) applies here before the run is read (lib/refinery-guards.ts).
+  applyForgeClearMark();
   try {
     const stored = localStorage.getItem("forge_session");
     if (!stored) return {};
