@@ -62,8 +62,12 @@ test("B1: a structured row covers the page line that shows exactly that name, ki
   // The rows' rendering is the licenses answer in the person's words (ownWordsFor); it is never a whole-line exception.
   const extra = { credentialRows: rows, credentialsAnswer: text };
   assert.equal(walk(page(`\n\nCERTIFICATIONS\n- ${text}`), src, extra).state, "finished");
-  for (const shown of ["Forklift certification, current", "Forklift card, 2020", "Forklift certification", "Forklift Certified, 2020"]) {
+  for (const shown of ["Forklift certification, current", "Forklift card, 2020", "Forklift certification, 2019", "Forklift Trainer certification, 2020"]) {
     assert.equal(walk(page(`\n\nCERTIFICATIONS\n- ${shown}`), src, extra).state, "draft", shown);
+  }
+  // Round 11 (SF-9): trivial differences are the row: case, punctuation, "Certified" for a certification, no year.
+  for (const shown of ["Forklift Certified, 2020", "Forklift certification", "FORKLIFT CERTIFICATION (2020)"]) {
+    assert.equal(walk(page(`\n\nCERTIFICATIONS\n- ${shown}`), src, extra).state, "finished", shown);
   }
   // An incomplete row is no exception.
   const m = credentialMentionsOf(page(`\n\nCERTIFICATIONS\n- ${text}`)).find((x) => x.where === "credentials")!;

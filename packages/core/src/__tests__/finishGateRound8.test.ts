@@ -152,9 +152,11 @@ for (const [said, line] of [
 }
 for (const [said, line] of [
   ["I trained the new guys on the scanner.", "Trained new hires on the scanner"],
-  ["My lead and I trained the new guys on the scanner.", "Trained new hires on the scanner"],
+  // Round 11: "my lead and I" is shared work; it sources the shared line, not the solo one.
+  ["My lead and I trained the new guys on the scanner.", "Helped train new hires on the scanner"],
   ["I supervised the two dishwashers on Sundays.", "Supervised the dish crew on Sundays"],
-  ["Proven record of leading large teams across three shifts.", "Leads large teams across three production shifts"],
+  // Round 11: resume-style "Proven record of leading" is not one of the strict shapes; their past verb is.
+  ["Led large teams across three shifts.", "Leads large teams across three production shifts"],
 ] as const) {
   test(`S1/S2 (control): "${said}" makes "${line}" theirs`, () => assert.equal(scopeNotTheirs(line, said), undefined));
 }

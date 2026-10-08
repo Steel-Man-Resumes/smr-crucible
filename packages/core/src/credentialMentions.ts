@@ -136,9 +136,41 @@ export function isSchoolName(part: string): boolean {
 export function schoolUsedBy(school: string, personText: string | undefined): boolean {
   const words = normalizeTyped(cleanEducationPart(school)).split(" ").filter(Boolean);
   if (!words.length || words.every((w) => GENERIC_SCHOOL_WORDS.has(w))) return false;
-  const person = ` ${normalizeTyped(personText || "")} `;
-  const head = words.slice(0, Math.min(2, words.length)).join(" ");
-  return person.includes(` ${head} `) || person.includes(` ${words.join(" ")} `);
+  // Round 11 (SF-3, SF-7): every distinctive word of the school must be one of theirs ("Owens" for "Owens
+  // Community College"); a word after it they never said ("Welding Lab Supervisor") is not part of it.
+  // Their contact line never counts ("Toledo, OH" does not make "Toledo Tech" theirs).
+  const mine = personWords(personText);
+  return words.filter((w) => !GENERIC_SCHOOL_WORDS.has(w)).every((w) => mine.has(w));
+}
+
+const personWords = (personText: string | undefined) =>
+  new Set(
+    (personText || "")
+      .split("\n")
+      .filter((l) => !CONTACT_LINE_RE.test(l))
+      .flatMap((l) => normalizeTyped(l).split(" "))
+      .filter(Boolean)
+  );
+
+/**
+ * Round 11 (SF-7): the part of a school name the person used, and what the
+ * writer added after it ("Scott High School Welding Lab Supervisor" is
+ * "Scott High School" and "Welding Lab Supervisor").
+ */
+export function schoolPrefixUsed(part: string, personText: string | undefined): { school: string; rest: string } | undefined {
+  const words = cleanEducationPart(part).split(/\s+/).filter(Boolean);
+  const mine = personWords(personText);
+  for (let n = words.length; n > 0; n--) {
+    const head = words.slice(0, n);
+    const last = normalizeTyped(head[head.length - 1]);
+    if (n < words.length && !SCHOOL_RE.test(last)) continue;
+    const distinct = head.map((w) => normalizeTyped(w)).filter((w) => w && !GENERIC_SCHOOL_WORDS.has(w));
+    if (!distinct.length || !distinct.every((w) => mine.has(w))) continue;
+    const school = head.join(" ");
+    if (!isSchoolName(school)) continue;
+    return { school, rest: words.slice(n).join(" ") };
+  }
+  return undefined;
 }
 
 /**
@@ -158,8 +190,11 @@ export function educationLineRewrite(line: string, raw: string, confirmed: strin
     if (p === raw.trim() || YEARISH_RE.test(p) || isPlacePart(parts, i)) return;
     const c = EDU_REST_STATUS_RE.test(p) || /\(/.test(p) ? cleanEducationPart(p) : p;
     if (!c || YEARISH_RE.test(c) || STATE_PART_RE.test(c) || /^(?:some\s+)?(?:coursework|classes|courses)$/i.test(c)) return;
-    if (isSchoolName(c) && schoolUsedBy(c, personText)) schools.push(c);
-    else if (!isSchoolName(c)) others.push(c);
+    const used = SCHOOL_RE.test(c) ? schoolPrefixUsed(c, personText) : undefined;
+    if (used) {
+      schools.push(used.school);
+      if (used.rest) others.push(used.rest);
+    } else if (!isSchoolName(c) && !/^(?:with|and|or|of|in|at)\b/i.test(c)) others.push(c);
   });
   return { line: `${bullet}${confirmed}${schools.length ? ` | ${schools.join(", ")}` : ""}`, ...(others.length ? { rest: `${bullet}${others.join(", ")}` } : {}) };
 }
@@ -170,14 +205,13 @@ export function educationLineRewrite(line: string, raw: string, confirmed: strin
  * person used) and only the years they typed, with no completion word.
  * Returns "" when there is no school to keep.
  */
-export function educationAttendedLine(line: string, raw: string, name: string, years: string, personText?: string): string {
+export function educationAttendedLine(line: string, raw: string, name: string, years: string, personText?: string, typedSchool?: string): string {
   const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
-  const parts = partsOfEducationLine(line);
-  const named = cleanEducationPart(name);
-  const keep =
-    named && !EDUCATION_CORE_RE.test(named) && named !== "this school" && (isSchoolName(named) || PROGRAM_WORD_RE.test(named))
-      ? named
-      : parts.map(cleanEducationPart).find((p) => isSchoolName(p) && schoolUsedBy(p, personText));
+  // Round 11 (SF-3): only a school the person named (or typed on the card) stays; a school or a course the
+  // writer named never does.
+  void raw;
+  void name;
+  const keep = typedSchoolName(typedSchool) || attendedSchoolOf(line, personText);
   if (!keep) return "";
   const y = attendedYears(years);
   return `${bullet}${keep}, attended${y ? ` ${y}` : ""}`;
@@ -196,6 +230,40 @@ export function withoutEducationPart(line: string, raw: string): string {
   if (kept.length === parts.length) return line;
   if (!kept.some((p) => isSchoolName(p) || EDUCATION_CORE_RE.test(p) || PROGRAM_WORD_RE.test(p))) return "";
   return `${bullet}${kept.join(line.includes("|") ? " | " : ", ")}`;
+}
+
+/** The school on an education line that the person named themselves, if any (round 11). */
+export function attendedSchoolOf(line: string, personText?: string): string | undefined {
+  for (const p of partsOfEducationLine(line)) {
+    const c = cleanEducationPart(p);
+    if (!SCHOOL_RE.test(c)) continue;
+    const used = schoolPrefixUsed(c, personText);
+    if (used) return used.school;
+  }
+  return undefined;
+}
+
+/** A school name the person typed on the card: plain words, no year, no status, no credential (round 11). */
+export function typedSchoolName(typed: string | undefined): string {
+  const t = (typed || "").replace(/\s+/g, " ").trim().replace(/[.,;:]+$/, "");
+  if (!t || t.length > 80 || /\d/.test(t) || EDU_REST_STATUS_RE.test(t) || EDUCATION_CORE_RE.test(t) || /\|/.test(t)) return "";
+  return t;
+}
+
+/**
+ * Round 11 (SF-4): the parts of an education line that name other credentials
+ * ("OSHA 10" in "GED | Toledo Adult Education | OSHA 10 | 2015"), with the
+ * line's years, as a line of their own; "" when there are none. An answer
+ * about the schooling never touches them: they keep their own card.
+ */
+export function credentialPartsOnly(line: string, credRaws: string[]): string {
+  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
+  const parts = partsOfEducationLine(line);
+  const wants = credRaws.map((r) => dehyphenate(r).toLowerCase()).filter(Boolean);
+  const creds = parts.filter((p) => wants.some((w) => dehyphenate(p).toLowerCase().includes(w)));
+  if (!creds.length) return "";
+  const years = parts.filter((p) => YEARISH_RE.test(p));
+  return `${bullet}${[...creds, ...years].join(line.includes("|") ? " | " : ", ")}`;
 }
 
 /** The years in an "I went but didn't finish" answer: one year or a range, nothing else. */
@@ -226,14 +294,16 @@ export function isConfirmedEducationLine(line: string, confirmed: string, person
 }
 
 /** True when a page line is a confirmed "went but didn't finish" line: the named school, "attended", and only the years typed. */
-export function isConfirmedAttendedLine(line: string, name: string, years: string, personText?: string): boolean {
+export function isConfirmedAttendedLine(line: string, name: string, years: string, personText?: string, typedSchool?: string): boolean {
   const body = line.replace(/^\s*[-•*]\s*/, "").trim();
   const m = body.match(/^(.+?), attended(?: (.+))?$/);
   if (!m) return false;
   if ((m[2] ?? "") !== attendedYears(years)) return false;
   const school = m[1];
-  if (NOT_A_SCHOOL_RE.test(school.replace(/\bprogram(?:me)?\b/gi, "")) && !(cleanEducationPart(name) === school)) return false;
-  return cleanEducationPart(name) === school || (isSchoolName(school) && schoolUsedBy(school, personText));
+  void name;
+  // Round 11 (SF-3): the school they typed on the card, or one they named in their own words.
+  if (typedSchoolName(typedSchool) && school === typedSchoolName(typedSchool)) return true;
+  return isSchoolName(school) && schoolUsedBy(school, personText);
 }
 
 /**
@@ -329,7 +399,8 @@ const KEY_DROP = new Set([
   "certified", "certification", "certifications", "certificate", "cert", "card", "cards", "license", "licence",
   "licensed", "endorsement", "permit", "registry", "credential", "holder", "operator", "the", "a", "an", "my", "of", "in",
   // Round 10: "OSHA 10 trained" is the OSHA 10 card, asked and confirmed once.
-  "trained", "authorized", "authorised", "qualified",
+  // Round 11 (SF-1): "authorized" stays in the key ("OSHA authorized trainer" is not the OSHA 10 card).
+  "trained", "qualified",
 ]);
 
 /** The key a credential name is grouped under. */
@@ -839,7 +910,23 @@ export function credentialRowText(r: Pick<CredentialRow, "name" | "kind" | "when
 export function mentionMatchesRow(m: CredentialMention, rows: ReadonlyArray<CredentialRow> | undefined): boolean {
   if (!rows?.length || m.title) return false;
   const shown = [normalizeTyped(m.unit), normalizeTyped(m.context.replace(/^\s*[-•*]\s*/, ""))];
-  return rows.some((r) => isCompleteCredentialRow(r) && shown.includes(normalizeTyped(credentialRowText(r))));
+  if (rows.some((r) => isCompleteCredentialRow(r) && shown.includes(normalizeTyped(credentialRowText(r))))) return true;
+  // Round 11 (SF-9): a credentials line that differs from the row only trivially is the row: the same family
+  // of name, no kind but the row's, and no year or status but the row's ("Forklift Operator Certification,
+  // 2023" for "Forklift, certification, 2023"; "ServSafe Food Handler, 2021" for its card row).
+  if (m.where !== "credentials") return false;
+  const unitKind = NAME_KIND.find(([re]) => re.test(m.unit))?.[1];
+  return rows.some(
+    (r) =>
+      isCompleteCredentialRow(r) &&
+      !DEAD_WHEN_RE.test(r.when) &&
+      r.kind !== "permit" &&
+      credentialFamilyKey(r.name) === credentialFamilyKey(m.name) &&
+      (!unitKind || unitKind === r.kind) &&
+      Array.from(statusSet(m.unit)).every((x) => statusSet(r.when).has(x)) &&
+      Array.from(yearsOf(m.unit)).every((y) => yearsOf(r.when).has(y)) &&
+      !BIGGER_CREDENTIAL_RE.test(m.unit)
+  );
 }
 
 // Long names and their short forms, only to tell that two names are one credential family.
@@ -933,7 +1020,20 @@ export function liveCredentialCovers(m: CredentialMention, held: { name: string;
   const heldKey = credentialFamilyKey(held.name).split(" ").filter(Boolean);
   const mentionKey = credentialFamilyKey(m.name).split(" ").filter(Boolean);
   if (!mentionKey.length || !mentionKey.every((w) => heldKey.includes(w))) return false;
+  // Round 11 (SF-1): a role or level word in or right after the mention names a bigger credential
+  // ("CPR instructor", "OSHA authorized trainer", "Certified Welding Inspector"): never covered by the smaller row.
+  if (BIGGER_CREDENTIAL_RE.test(m.name) && !BIGGER_CREDENTIAL_RE.test(held.name)) return false;
+  if (BIGGER_CREDENTIAL_RE.test(wordsAfterMention(m, 4))) return false;
   const shown = shownAt(m);
+  // Round 11 (N1): a year-only row says when it was earned, not that it is held now. It covers only a
+  // mention that shows that same year, or a bare name in a history sentence ("I passed my AWS D1.1 test").
+  if (!LIVE_WHEN_RE.test(held.when)) {
+    const heldYears0 = yearsOf(held.when);
+    const sameYear = shown.years.size > 0 && Array.from(shown.years).every((y) => heldYears0.has(y));
+    // "OSHA 10 trained" says the training was done (history), not that a card is held now.
+    const history = HISTORY_BEFORE_RE.test(wordsBeforeMention(m, 5)) || /\btrained\b/i.test(`${m.raw} ${wordsAfterMention(m, 1)}`);
+    if (!sameYear && (HOLDING_WORD_RE.test(`${m.name} ${m.raw}`) || HOLDING_BEFORE_RE.test(wordsBeforeMention(m, 3)) || HOLDING_AFTER_RE.test(wordsAfterMention(m, 2)) || !history)) return false;
+  }
   if (shown.dead) return false;
   if (shown.kind && shown.kind !== held.kind) return false;
   const heldStatuses = statusSet(held.when);
@@ -941,6 +1041,32 @@ export function liveCredentialCovers(m: CredentialMention, held: { name: string;
   const heldYears = yearsOf(held.when);
   if (Array.from(shown.years).some((y) => !heldYears.has(y))) return false;
   return true;
+}
+
+// Round 11: words that make a credential a bigger one than its name alone.
+const BIGGER_CREDENTIAL_RE = /\b(?:trainer|trainers|instructor|instructors|inspector|inspectors|evaluator|evaluators|assessor|assessors|examiner|examiners|proctor|proctors|outreach|master|lead|supervisor|supervisors|manager|managers|authori[sz]ed|ii|iii|iv|level\s+\d+)\b/i;
+// Present-tense holding words: a status, which a year alone never shows (round 11, N1).
+const HOLDING_WORD_RE = /\b(?:certified|licensed|registered|credentialed|accredited)\b/i;
+const HOLDING_BEFORE_RE = /\b(?:with|holding|holds|hold|have|has|carry|carries|current|valid|active)\s+(?:(?:a|an|my|the|his|her)\s+)?$/i;
+const HOLDING_AFTER_RE = /^\s*(?:card\s+)?(?:holder|certified|licensed)\b/i;
+const HISTORY_BEFORE_RE = /\b(?:earned|passed|completed|got|received|took|finished|obtained|did|took)\b/i;
+
+function mentionAt(m: CredentialMention): number {
+  return dehyphenate(m.context).toLowerCase().indexOf(dehyphenate(m.raw || m.name).toLowerCase());
+}
+function wordsAfterMention(m: CredentialMention, n: number): string {
+  const at = mentionAt(m);
+  if (at < 0) return "";
+  const after = dehyphenate(m.context).slice(at + (m.raw || m.name).length);
+  return (after.match(/^[^.;!?|]*/)?.[0] ?? "").trim().split(/\s+/).slice(0, n).join(" ");
+}
+function wordsBeforeMention(m: CredentialMention, n: number): string {
+  const at = mentionAt(m);
+  if (at < 0) return "";
+  const before = dehyphenate(m.context).slice(0, at);
+  const clause = before.split(/[.;!?|]/).pop() ?? "";
+  const words = clause.trim().split(/\s+/).filter(Boolean);
+  return words.slice(-n).join(" ") + (words.length ? " " : "");
 }
 
 /**

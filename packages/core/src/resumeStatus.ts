@@ -40,7 +40,7 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
-import { scopeNotTheirs } from "./scopeWords";
+import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
 import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
@@ -70,6 +70,10 @@ export interface OpenItem {
   subject?: string;
   /** For a credential finding on an education line (GED, diploma, degree): confirmed as earned or in progress. */
   education?: boolean;
+  /** Round 11: for a scope claim, its family ("train"), so the card can ask "Who did you train?". */
+  scopeFamily?: string;
+  /** Round 11: for a scope claim, the line's shared form ("Helped train new hires"), when there is one. */
+  helped?: string;
 }
 
 export interface DefendAnswer {
@@ -87,7 +91,11 @@ export interface DefendAnswer {
    * one). The caller may add rewrites to the person's own words; an ordinary
    * answer is never added to the source (no anchoring path, DEC-45).
    */
-  kind?: "rewrite";
+  kind?: "rewrite" | "scope_yes";
+  /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
+  family?: string;
+  /** Round 11: a rewrite made by "I helped with it": the line is their shared form; never joins their words. */
+  scopeHelp?: boolean;
   /**
    * For a rewrite: the line it replaced, as first written (the writer's line,
    * never an earlier rewrite). Only words and numbers the rewrite INTRODUCED
@@ -416,6 +424,20 @@ function personIntroduced(answers: DefendAnswer[], line: string, word: string): 
   return !!head && !new RegExp(`\\b${head}\\b`, "i").test(rw.replaced as string);
 }
 
+/**
+ * Round 11: the first scope claim on a line that is not theirs, reading their
+ * "Yes, I did this" answers for this line only (each as "I trained <their
+ * words>"), and a shared page claim on a line they turned into its shared
+ * form ("I helped with it"). Nothing typed here joins their words elsewhere.
+ */
+export function scopeNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): ReturnType<typeof scopeNotTheirs> {
+  const own = answers.filter((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && isScopeWhoAnswer(a.answer));
+  const extra = own.map((a) => scopeYesText(a.family as string, a.answer)).join("\n");
+  const helped = !!rewriteOf(answers, line)?.scopeHelp;
+  // Their "I helped with it": the shared claims on this line are theirs; any other claim is still read.
+  return scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).find((h) => !(helped && h.shared));
+}
+
 /** The lines above the first section heading (after the name): the header block. */
 function headerLinesOf(resumeText: string): Set<string> {
   const out = new Set<string>();
@@ -564,8 +586,7 @@ export function credentialPromptWhy(name: string): string {
 }
 
 /** New (round 5): a scope claim the person never made. Only their own rewrite or a cut settles it. */
-export const Q_SCOPE =
-  "An interviewer will ask who you were in charge of. Reword this line in your own words to say what you did, or cut it.";
+export const Q_SCOPE = "Is this true? An interviewer will ask you about it.";
 
 /** Why a scope claim is held. */
 export function scopeWhy(word: string): string {
@@ -695,7 +716,8 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
   const defendLines = picks.lines;
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
-  const byLine = new Map(answers.map((a) => [squash(a.line), a]));
+  // Round 11: a "Yes, I did this" answer settles only its own scope claim, never the line's other questions.
+  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes").map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
     if (!answerStands(a, line, sourceText)) return undefined;
@@ -735,18 +757,25 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // never made is settled only by their own rewrite or a cut, never by an
     // answer.
     const scopeFindings: MintFinding[] = [];
+    const scopeOf = new Map<MintFinding, { family: string; helped?: string }>();
     // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
     const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
     for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
       if (inSkills || credentialSectionLines.has(line)) continue;
-      const hit = scopeNotTheirs(line, sourceText);
+      const hit = scopeNotTheirsAnswered(line, sourceText, answers);
       if (!hit || personIntroduced(answers, line, hit.word)) continue;
-      scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
+      const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
+      scopeOf.set(finding, { family: hit.family, helped: helpedForm(line, hit.word) });
+      scopeFindings.push(finding);
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
     for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers)) {
       const hit = scopeNotTheirs(titleOf(line), sourceText);
-      if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
+      if (hit) {
+        const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
+        scopeOf.set(finding, { family: hit.family });
+        scopeFindings.push(finding);
+      }
     }
     // A job title on the page that the person never used (round 6: settled
     // only by their own rewrite or a cut, never by an answer).
@@ -779,6 +808,11 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       if (f.kind) items[items.length - 1].kind = f.kind;
       if (subject) items[items.length - 1].subject = subject;
       if (f.kind === "credential_unsaid" && cred?.education) items[items.length - 1].education = true;
+      const sc = scopeOf.get(f);
+      if (sc) {
+        items[items.length - 1].scopeFamily = sc.family;
+        if (sc.helped) items[items.length - 1].helped = sc.helped;
+      }
     }
 
     if (requireDefend) {

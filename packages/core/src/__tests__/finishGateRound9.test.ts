@@ -80,8 +80,9 @@ for (const [said, line] of [
 
 for (const [said, line] of [
   ["I trained the new guys on the scanner.", "Trained new hires on the scanner"],
-  ["I would train the new guys on the scanner.", "Trained new hires on the scanner"],
-  ["I was in charge of training the new hires.", "Trained new hires on the scanner"],
+  // Round 11 (strict matcher): "would" and "in charge of training" are one-tap cards now; "used to" clears.
+  ["I used to train the new guys on the scanner.", "Trained new hires on the scanner"],
+  ["They had me train the new hires.", "Trained new hires on the scanner"],
   ["I supervised the crew on second shift.", "Supervised the crew on second shift"],
 ] as const) {
   test(`R9-S1 control: "${said}" sources "${line}"`, () => assert.equal(scopeNotTheirs(line, `${OWN}\n${said}`), undefined));

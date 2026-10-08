@@ -66,8 +66,9 @@ for (const [s, line] of [
 ] as const) {
   test(`R10-B1: "${s}" does not source "${line}"`, () => assert.ok(scopeNotTheirs(line, said(s)), s));
 }
+// Round 11 (R11-B1, strict matcher): "would" never clears a claim, habitual or not; the one-tap card does.
 for (const s of ["I would train the new guys every Monday.", "I would always train the new guys.", "I'd train the new guys on the scanner."]) {
-  test(`R10-B1 control: habitual "${s}" sources "Trained new hires"`, () => assert.equal(scopeNotTheirs("Trained new hires on the scanner", said(s)), undefined));
+  test(`R11: "${s}" no longer sources "Trained new hires" (a one-tap card instead)`, () => assert.ok(scopeNotTheirs("Trained new hires on the scanner", said(s))));
 }
 
 // ---- SF-4: nominal claims ---------------------------------------------------------------------
@@ -91,11 +92,11 @@ test("SF-4 control: under the supervision of the shift lead is someone else's", 
 for (const [s, line] of [
   ["I was put in charge of the night crew in 2021.", "In charge of the night crew"],
   ["I basically ran the dock crew on nights.", "Ran the dock crew on nights"],
-  ["I got to train the new guys on the scanner.", "Trained new hires on the scanner"],
+  ["They had me train the new guys on the scanner.", "Trained new hires on the scanner"],
   ["I pretty much trained all the new guys.", "Trained all new hires on the scanner"],
-  ["I wound up supervising the night crew.", "Supervised the night crew"],
+  ["I personally supervised the night crew.", "Supervised the night crew"],
   ["I mainly trained the new guys.", "Trained new hires on the scanner"],
-  ["I started training the new guys after my first year.", "Trained new hires on the scanner"],
+  ["I used to train the new guys after my first year.", "Trained new hires on the scanner"],
   ["I’ve trained the new guys on the scanner.", "Trained new hires on the scanner"],
   ["I’m the one who trains the new hires.", "Trained new hires on the scanner"],
   ["trained new guys, ran the dock crew on nights", "Ran the dock crew on nights"],
@@ -140,12 +141,15 @@ for (const [line, name] of [
   test(`SF-1: "${line}" is asked about "${name}"`, () => assert.equal(educationPartOf(line)?.name, name));
 }
 test("SF-1: 'I went but didn't finish' keeps the school and only the years typed", () => {
-  assert.equal(educationAttendedLine("Scott High School | Toledo, OH | 2011 - 2014", "Scott High School", "Scott High School", "2011 - 2014"), "Scott High School, attended 2011 - 2014");
-  assert.equal(educationAttendedLine("Scott High School | Toledo, OH | Graduated 2014", "Scott High School", "Scott High School", ""), "Scott High School, attended");
+  // Round 11 (SF-3): the school stays only when the person named it (or typed it on the card).
+  assert.equal(educationAttendedLine("Scott High School | Toledo, OH | 2011 - 2014", "Scott High School", "Scott High School", "2011 - 2014", "I went to Scott High"), "Scott High School, attended 2011 - 2014");
+  assert.equal(educationAttendedLine("Scott High School | Toledo, OH | Graduated 2014", "Scott High School", "Scott High School", "", "Scott High, left in 11th"), "Scott High School, attended");
+  assert.equal(educationAttendedLine("Lincoln High School | Toledo, OH | 2011 - 2014", "Lincoln High School", "Lincoln High School", "", "I left school in 11th grade"), "");
+  assert.equal(educationAttendedLine("Lincoln High School | Toledo, OH | 2011 - 2014", "Lincoln High School", "Lincoln High School", "2012", "I left school", "Waite High School"), "Waite High School, attended 2012");
   // A GED line with a school the person never named has nothing to keep.
   assert.equal(educationAttendedLine("GED | Toledo Adult Education | 2015", "GED", "GED", "", "I never got a GED"), "");
   assert.equal(educationAttendedLine("GED | Toledo Adult Education | 2015", "GED", "GED", "2014", "I went to Toledo Adult Education for a while"), "Toledo Adult Education, attended 2014");
-  assert.ok(isConfirmedAttendedLine("Scott High School, attended 2011 - 2014", "Scott High School", "2011 - 2014"));
+  assert.ok(isConfirmedAttendedLine("Scott High School, attended 2011 - 2014", "Scott High School", "2011 - 2014", "I went to Scott High"));
   assert.ok(!isConfirmedAttendedLine("Scott High School, attended 2011 - 2015", "Scott High School", "2011 - 2014"));
   assert.ok(!isConfirmedAttendedLine("Scott High School, graduated", "Scott High School", ""));
   assert.match(educationMemoryPrompt("this school"), /^Did you finish this school\?/);
@@ -212,8 +216,10 @@ WELDER | Toledo Steel Fab | 2018 - 2023
 - MIG and stick welding on structural steel`;
 const AWS_ROW = [{ name: "AWS D1.1", kind: "certification" as const, when: "2019" }];
 test("Q2: a year-only row covers a plain mention with no status and no year, or the same year", () => {
-  assert.deepEqual(names(weldSummary("AWS-certified structural welder with MIG and stick experience."), WELD_OWN, AWS_ROW), []);
+  // Round 11 (N1): "certified" is a present-tense status; a year-only row covers only that year or a history sentence.
+  assert.ok(names(weldSummary("AWS-certified structural welder with MIG and stick experience."), WELD_OWN, AWS_ROW).length > 0);
   assert.deepEqual(names(weldSummary("AWS D1.1 certified in 2019, structural welder."), WELD_OWN, AWS_ROW), []);
+  assert.deepEqual(names(weldSummary("Passed the AWS D1.1 bend test and welded structural steel."), WELD_OWN, AWS_ROW), []);
   assert.ok(names(weldSummary("AWS D1.1 certified since 2015, structural welder."), WELD_OWN, AWS_ROW).length > 0);
   assert.ok(names(weldSummary("Currently AWS-certified structural welder."), WELD_OWN, AWS_ROW).length > 0);
   assert.ok(names(weldSummary("AWS-certified structural welder."), WELD_OWN, [{ name: "AWS D1.1", kind: "certification", when: "expired" }]).length > 0);
