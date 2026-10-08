@@ -6,13 +6,7 @@
  */
 
 import { PremiumLocked, usePremium } from "@/components/premium/PremiumGate";
-import { PREMIUM_TOOL_IDS, PREMIUM_TOOL_LABELS, toolIsOpen } from "@/lib/premium";
-
-function endsLabel(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : ` Open through ${d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`;
-}
+import { PREMIUM_TOOL_IDS, PREMIUM_TOOL_LABELS, premiumAccessLine, toolIsOpen } from "@/lib/premium";
 
 export function PremiumToolsSection() {
   const { status, loaded } = usePremium();
@@ -28,7 +22,7 @@ export function PremiumToolsSection() {
       {open.length > 0 && (
         <p className="mb-4 text-sm text-t-phos" data-testid="premium-open-list">
           Open for you: {open.map((t) => PREMIUM_TOOL_LABELS[t]).join(", ")}.
-          {status.orgMember ? " Your organization opened these." : endsLabel(status.grantEndsAt)}
+          {" "}{premiumAccessLine(status)}
         </p>
       )}
       <div className="space-y-4">

@@ -22,6 +22,7 @@ const ALL_OPEN = (): PremiumStatus => ({
   gate: false,
   open: [...PREMIUM_TOOL_IDS],
   orgMember: false,
+  orgName: null,
   grantEndsAt: null,
   openRequest: null,
 });
@@ -37,6 +38,7 @@ export async function GET() {
       gate: true,
       open: a.open,
       orgMember: a.orgMember,
+      orgName: a.orgName,
       grantEndsAt: a.grantEndsAt,
       openRequest: a.openRequest,
     };

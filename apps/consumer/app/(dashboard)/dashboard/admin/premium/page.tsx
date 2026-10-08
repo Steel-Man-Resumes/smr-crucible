@@ -147,6 +147,9 @@ export default function AdminPremiumPage() {
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
               className="mt-1 block w-full border border-t-line bg-t-panel-2 px-3 py-2 text-t-white"
             />
+            <span className="mt-1 block text-xs text-t-phos-dim" data-testid="grant-reason-note">
+              The person can see this reason if they download their data.
+            </span>
           </label>
           <label className="text-sm text-t-phos-dim">
             End date (optional)

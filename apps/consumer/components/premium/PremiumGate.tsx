@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   PREMIUM_ASK_ORG_HEADING,
   PREMIUM_ASK_ORG_LINE,
@@ -28,9 +29,28 @@ import {
 
 export const PREMIUM_CHANGED_EVENT = "premium-changed";
 
+// One fetch shared by every gate on a page, FOR ONE ACCOUNT: when the
+// signed-in user changes (or signs out) without a full reload, the cached
+// status is dropped, so the next person never sees the last one's tools or
+// request (security review 3a Part 2 r1, note).
 let shared: Promise<PremiumStatus | null> | null = null;
+let sharedFor: string | null = null;
 
-function loadStatus(force = false): Promise<PremiumStatus | null> {
+/** Drop the cached status (exported for tests and sign-out). */
+export function resetPremiumCache(): void {
+  shared = null;
+  sharedFor = null;
+}
+
+function loadStatus(userId: string | null, force = false): Promise<PremiumStatus | null> {
+  if (!userId) {
+    resetPremiumCache();
+    return Promise.resolve(null);
+  }
+  if (sharedFor !== userId) {
+    shared = null;
+    sharedFor = userId;
+  }
   if (!shared || force) {
     shared = fetch("/api/user/premium")
       .then((r) => (r.ok ? r.json() : null))
@@ -41,17 +61,21 @@ function loadStatus(force = false): Promise<PremiumStatus | null> {
 }
 
 export function usePremium(): { status: PremiumStatus | null; loaded: boolean; refresh: () => void } {
+  const { data: authData, status: authStatus } = useSession();
+  const uid = authStatus === "authenticated" ? ((authData?.user as { id?: string } | undefined)?.id ?? null) : null;
   const [status, setStatus] = useState<PremiumStatus | null>(null);
   const [loaded, setLoaded] = useState(false);
   const refresh = useCallback(() => {
-    void loadStatus(true).then((s) => {
+    void loadStatus(uid, true).then((s) => {
       setStatus(s);
       setLoaded(true);
     });
-  }, []);
+  }, [uid]);
   useEffect(() => {
+    if (authStatus === "loading") return;
     let live = true;
-    void loadStatus().then((s) => {
+    setLoaded(false);
+    void loadStatus(uid).then((s) => {
       if (!live) return;
       setStatus(s);
       setLoaded(true);
@@ -62,7 +86,7 @@ export function usePremium(): { status: PremiumStatus | null; loaded: boolean; r
       live = false;
       window.removeEventListener(PREMIUM_CHANGED_EVENT, onChange);
     };
-  }, [refresh]);
+  }, [refresh, authStatus, uid]);
   return { status, loaded, refresh };
 }
 

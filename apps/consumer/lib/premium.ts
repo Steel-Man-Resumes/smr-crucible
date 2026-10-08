@@ -50,6 +50,22 @@ export const PREMIUM_ASK_SMR_HEADING = "Ask SMR for access";
 export const PREMIUM_ASK_SMR_LINE = "Tell us a little about your search if you want. It's optional.";
 export const PREMIUM_ASK_SENT_LINE = "Your request is in. When it's approved, this tool opens here.";
 
+/**
+ * Where a person's open tools come from, in their own words. Never the
+ * admin's grant reason: that is Troy's note (it is still in the person's own
+ * data export, because it is their data).
+ */
+export function premiumAccessLine(status: { orgMember: boolean; orgName?: string | null; grantEndsAt: string | null }): string {
+  if (status.orgMember) return `Access from ${status.orgName?.trim() || "your organization"}.`;
+  if (status.grantEndsAt) {
+    const d = new Date(status.grantEndsAt);
+    if (!Number.isNaN(d.getTime())) {
+      return `Access from SMR until ${d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`;
+    }
+  }
+  return "Access from SMR.";
+}
+
 /** What the server sends when a locked tool is called. */
 export function premiumLockedMessage(tool: PremiumToolId): string {
   return `${PREMIUM_TOOL_LABELS[tool]} isn't open for you yet. Ask your organization, or ask SMR for access.`;
@@ -60,6 +76,8 @@ export interface PremiumStatus {
   gate: boolean;
   open: PremiumToolId[];
   orgMember: boolean;
+  /** The sponsoring organization's name, or null. */
+  orgName?: string | null;
   grantEndsAt: string | null;
   openRequest: { tool: PremiumToolId; createdAt: string } | null;
 }

@@ -44,6 +44,8 @@ export interface PremiumAccess {
   /** Why each open tool is open. */
   via: Partial<Record<PremiumTool, PremiumSource>>;
   orgMember: boolean;
+  /** The sponsoring organization's name, when access comes from one (what the person sees). */
+  orgName: string | null;
   /** The latest end date among live grants that set one (ISO), or null. */
   grantEndsAt: string | null;
   /** The person's open "Ask SMR for access" request, if any. */
@@ -73,6 +75,7 @@ export function grantTools(g: PremiumGrantRow): PremiumTool[] {
 export function resolvePremiumAccess(input: {
   isAdmin: boolean;
   orgMember: boolean;
+  orgName?: string | null;
   grants: PremiumGrantRow[];
   openRequest?: { tool: unknown; created_at: string | Date } | null;
   now?: number;
@@ -96,6 +99,7 @@ export function resolvePremiumAccess(input: {
     open: PREMIUM_TOOLS.filter((t) => !!via[t]),
     via,
     orgMember: input.orgMember,
+    orgName: input.orgMember && typeof input.orgName === "string" && input.orgName.trim() ? input.orgName.trim() : null,
     grantEndsAt: grantEndsAt === null ? null : new Date(grantEndsAt).toISOString(),
     openRequest:
       req && isPremiumTool(req.tool) && reqTime !== null
@@ -115,7 +119,13 @@ const ORG_MEMBER_SQL = `SELECT EXISTS (
       WHERE acr.user_id = $1
         AND ac.is_active = true
         AND (ac.expires_at IS NULL OR ac.expires_at > now())
-   ) AS member`;
+   ) AS member,
+   (SELECT ac.partner_name FROM access_code_redemption acr
+       JOIN access_code ac ON ac.id = acr.access_code_id
+      WHERE acr.user_id = $1
+        AND ac.is_active = true
+        AND (ac.expires_at IS NULL OR ac.expires_at > now())
+      ORDER BY ac.partner_name LIMIT 1) AS org_name`;
 
 const LIVE_GRANTS_SQL = `SELECT tools, ends_at, revoked_at FROM premium_grant
    WHERE user_id = $1 AND revoked_at IS NULL AND (ends_at IS NULL OR ends_at > now())`;
@@ -140,10 +150,12 @@ export async function getPremiumAccess(userId: string): Promise<PremiumAccess> {
     if (isMissingTable(e)) throw Object.assign(new Error("premium tables missing"), { premiumNotReady: true });
     throw e;
   }
-  const member = (rows[0] as Array<{ member: boolean }>)[0]?.member === true;
+  const memberRow = (rows[0] as Array<{ member: boolean; org_name: string | null }>)[0];
+  const member = memberRow?.member === true;
   return resolvePremiumAccess({
     isAdmin,
     orgMember: member,
+    orgName: memberRow?.org_name ?? null,
     grants: (rows[1] ?? []) as PremiumGrantRow[],
     openRequest: ((rows[2] ?? []) as Array<{ tool: unknown; created_at: string }>)[0] ?? null,
   });

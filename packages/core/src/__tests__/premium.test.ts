@@ -135,3 +135,30 @@ describe("078 part 2: one automatic package email per finished version", () => {
     assert.match(sql, /ADD COLUMN IF NOT EXISTS forge_package_email BOOLEAN NOT NULL DEFAULT true/);
   });
 });
+
+describe("078 parts 3 and 4 (security review 3a Part 2 r1: M2, M1, L4)", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+  it("proof source: add-only, known values, real proofs after 068 kept, backfill left NULL", () => {
+    assert.match(sql, /ADD COLUMN IF NOT EXISTS email_proof_source TEXT/);
+    assert.match(sql, /IN \('email_link', 'google', 'password_reset', 'recorded'\)/);
+    assert.match(sql, /email_proven_at > backfill_at \+ interval '1 minute'/);
+    assert.match(sql, /column_name = 'applied_at'/, "works when _migrations has no applied_at");
+  });
+  it("tablet plans: a lock count, a lock, and single use, all add-only with one-line rollbacks", () => {
+    for (const c of ["pin_failures INTEGER NOT NULL DEFAULT 0", "locked_at TIMESTAMPTZ", "imported_at TIMESTAMPTZ", "imported_by UUID REFERENCES users\\(id\\) ON DELETE SET NULL"]) {
+      assert.match(sql, new RegExp(`ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS ${c}`));
+    }
+    for (const c of ["pin_failures", "locked_at", "imported_at", "imported_by"]) {
+      assert.match(sql, new RegExp(`^--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS ${c};$`, "m"));
+    }
+    assert.match(sql, /^--   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;$/m);
+  });
+});
+
+describe("the person sees the sponsoring organization, not a reason", () => {
+  it("orgName only when the access comes from an organization", () => {
+    const a = resolvePremiumAccess({ isAdmin: false, orgMember: true, orgName: " Sample Reentry Center ", grants: [], now: NOW });
+    assert.equal(a.orgName, "Sample Reentry Center");
+    assert.equal(resolvePremiumAccess({ isAdmin: false, orgMember: false, orgName: "X", grants: [], now: NOW }).orgName, null);
+  });
+});
