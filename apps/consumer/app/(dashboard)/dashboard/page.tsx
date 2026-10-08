@@ -225,7 +225,7 @@ export default function DashboardPage() {
       try {
         const [countsRes, recentRes] = await Promise.all([
           fetch("/api/artifacts/counts"),
-          fetch("/api/artifacts?limit=5"),
+          fetch("/api/artifacts?limit=5&examples=hide&order=recent"),
         ]);
         if (countsRes.ok) {
           const { data } = await countsRes.json();

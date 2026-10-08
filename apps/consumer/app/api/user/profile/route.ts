@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { query, queryAsUser, getOneAsUser } from "@crucible/core";
+import { query, queryAsUser, getOneAsUser, PROFILE_CONTACT_RESUME_SQL } from "@crucible/core";
 import { formatPhoneUS } from "@/lib/phone";
 
 export interface UserContact {
@@ -62,10 +62,7 @@ export async function GET() {
   // about themselves; a tailored artifact's contact is derived and circular.
   if (!contact.phone || !contact.city) {
     const artifact = await getOneAsUser<{ content: Record<string, any> }>(userId, 
-      `SELECT content FROM refinery_artifact
-       WHERE user_id = $1 AND artifact_type = 'resume'
-       ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
-       LIMIT 1`,
+      PROFILE_CONTACT_RESUME_SQL,
       [userId]
     );
     if (artifact?.content?.contact) {

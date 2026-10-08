@@ -83,6 +83,8 @@ export async function GET(request: Request) {
   // Career lanes (073): ?laneId=<id>|main and ?examples=hide|only.
   const laneIdParam = searchParams.get("laneId");
   const examplesParam = searchParams.get("examples");
+  // ?order=recent: newest edit first, without the pinned current resume on top.
+  const orderRecent = searchParams.get("order") === "recent";
   const usesPaged =
     q !== null || lane !== null || groupParam !== null || offsetParam !== null ||
     laneIdParam !== null || examplesParam !== null;
@@ -102,6 +104,7 @@ export async function GET(request: Request) {
       group: groupParam && isResumeGroup(groupParam) ? groupParam : undefined,
       laneId: parseLaneIdParam(laneIdParam),
       examples: parseExamplesParam(examplesParam),
+      order: orderRecent ? "recent" : undefined,
       limit: parsedLimit ? Math.min(parsedLimit, 100) : undefined,
       offset,
     });

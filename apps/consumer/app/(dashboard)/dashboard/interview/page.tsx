@@ -233,7 +233,7 @@ function InterviewPracticePage() {
   // Phase 3: load the user's saved resumes so they can interview against a
   // SPECIFIC tailored resume (default: most recent), not just generic Forge data.
   useEffect(() => {
-    fetch("/api/artifacts?type=resume&limit=20")
+    fetch("/api/artifacts?type=resume&limit=20&examples=hide&order=recent")
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then(({ data }) => {
         const list = (data || []).map((a: any) => ({

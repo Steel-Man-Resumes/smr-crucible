@@ -26,7 +26,7 @@ export function DashboardResumeCard() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/artifacts?type=resume");
+        const res = await fetch("/api/artifacts?type=resume&examples=hide&order=recent");
         if (res.ok) {
           const { data } = await res.json();
           const list = Array.isArray(data) ? data : [];

@@ -66,7 +66,7 @@ export async function persistForgeSession(
             forgeOutput: body.forgeOutput,
           });
 
-      const existing = await listArtifacts(userId, { type: "resume" });
+      const existing = await listArtifacts(userId, { type: "resume", examples: "hide" });
       const forgeResume = existing.find(
         (a) => (a.target_context as any)?.source === "forge"
       );
