@@ -849,3 +849,31 @@ describe("r7: numbers pdf.js reads differently, /Length after any spacing, predi
     refused(() => assertSafePdf(mini(`5 0 obj<</Subtype/Image/Width 5/Height 5/Filter[/FlateDecode/DCTDecode]/DecodeParms[<</Predictor 15>> null]>>stream\n`, z)), "pdf_malformed");
   });
 });
+
+/* ------------------------------- security review 3a r8 ----------------- */
+
+describe("r8: predictors stay off object streams, and their rows are sized and capped", () => {
+  const z = deflateSync(Buffer.from("BT ET"));
+  const s1 = (d: string) => mini(`5 0 obj<<${d}/Filter/FlateDecode>>stream\n`, z);
+
+  it("M2: a cross-reference stream with /First may not use a predictor", () => {
+    assert.doesNotThrow(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>")));
+    // Object-stream data that reads cleanly, so only the predictor rule can refuse it.
+    const objstm = mini(`5 0 obj<</Type/XRef/N 1/First 4/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>/Filter/FlateDecode>>stream\n`, deflateSync(Buffer.from("7 0 << /A 1 >>")));
+    refused(() => assertSafePdf(objstm), "pdf_malformed");
+  });
+
+  it("M1: Columns, Colors and BitsPerComponent must be plain positive whole numbers, and the row within the cap", () => {
+    const xref = (p: string) => s1(`/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12${p}>>`);
+    const img = (p: string) => s1(`/Subtype/Image/Width 500/Height 500/DecodeParms<</Predictor 15${p}>>`);
+    for (const p of ["", "/Columns 4", "/Columns 500/Colors 3/BitsPerComponent 8"]) {
+      assert.doesNotThrow(() => assertSafePdf(xref(p)), p);
+      assert.doesNotThrow(() => assertSafePdf(img(p)), p);
+    }
+    for (const p of ["/Columns 0", "/Columns -4", "/Columns 4.5", "/Columns 9 0 R", "/Colors (3)", "/BitsPerComponent 0", "/Columns 99999999/Colors 4/BitsPerComponent 16"]) {
+      refused(() => assertSafePdf(xref(p)), "pdf_malformed");
+      refused(() => assertSafePdf(img(p)), "pdf_malformed");
+    }
+    refused(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms[<</Predictor 12/Columns 99999999>>]")), "pdf_malformed");
+  });
+});
