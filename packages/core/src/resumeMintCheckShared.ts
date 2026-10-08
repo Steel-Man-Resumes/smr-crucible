@@ -37,7 +37,7 @@ export interface MintFinding {
   /** Plain words for the person. */
   why: string;
   /** Which check inside a rule raised it, when a rule has more than one. */
-  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "grid_scope_term" | "credential_status_claimed" | "dateless_page";
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "grid_scope_term" | "credential_status_claimed" | "dateless_page" | "scope_unsaid";
 }
 
 export interface MintCheckInput {

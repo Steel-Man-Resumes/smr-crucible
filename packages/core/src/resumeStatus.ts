@@ -40,18 +40,9 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
-import { scopeNotTheirs, answerTalksScope } from "./scopeWords";
-import { answerGivesStatusFor } from "./credentialStatus";
+import { scopeNotTheirs } from "./scopeWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
-import {
-  answerGivesCredentialType,
-  checkCredentials,
-  credentialAlreadyKnown,
-  credentialHomes,
-  credentialMentionsOf,
-  saidAbout,
-  type CredentialMention,
-} from "./credentialMentions";
+import { credentialMentionsOf, credentialsToAsk } from "./credentialMentions";
 import {
   SECOND_CHECK_RULE,
   validateSecondCheckFindings,
@@ -121,6 +112,12 @@ export interface ResumeStatusInput {
    * Leave out when it did not run: the status is then the mint check alone.
    */
   secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
+  /**
+   * What the person typed in the Forge's licenses-and-training answer. A
+   * credential line on the page exactly as they typed it there is theirs and
+   * is not asked about. Every other credential is a memory prompt.
+   */
+  credentialsAnswer?: string;
 }
 
 export interface ResumeStatus {
@@ -501,6 +498,20 @@ export function credentialMemoryPrompt(name: string): string {
   return `Do you hold ${clip(name, 50)}? Many people forget a card or class they earned.`;
 }
 
+/** Why a credential is asked about (round 5: every credential, until the person confirms it). */
+export function credentialPromptWhy(name: string): string {
+  return `"${clip(name, 50)}" stays on the page only when you tell us you hold it, what kind it is, and when.`;
+}
+
+/** New (round 5): a scope claim the person never made. Only their own rewrite or a cut settles it. */
+export const Q_SCOPE =
+  "An interviewer will ask who you were in charge of. Reword this line in your own words to say what you did, or cut it.";
+
+/** Why a scope claim is held. */
+export function scopeWhy(word: string): string {
+  return `"${clip(word, 40)}" says you ran, led or answered for other people, and that isn't in anything you told us.`;
+}
+
 const DESCRIBE_UNSOURCED = Q_NUMBER_UNSOURCED;
 
 function questionForDefend(line: string, reasons: DefendReason[], sourceText: string, credName?: string): string {
@@ -553,23 +564,14 @@ function pickDefend(
     // A credentials line that lists several credentials is read part by part, never as a line far from their words.
     ...mentions.filter((m) => m.term && m.where === "credentials").map((m) => m.context),
   ]);
-  // Each credential is asked about once, by its own name, at its home line
-  // (or its skills term). Not at all when the person's words already give its
-  // type and a year or status.
-  const credHome = new Map<string, CredentialMention>();
-  for (const m of credentialHomes(mentions)) {
-    if (credentialAlreadyKnown(m, sourceText || "")) continue;
-    // Never mentioned: its BLOCK asks for a change or a cut; a type question would be noise.
-    if (!saidAbout(m, sourceText || "").length) continue;
-    if (!credHome.has(m.line)) credHome.set(m.line, m);
-  }
+  // Round 5: a credential is never a defend line. It is a memory prompt
+  // (getResumeStatus), confirmed with its kind and year or status.
   const picked = new Map<string, Set<DefendReason>>();
   const add = (l: string, r: DefendReason) => {
     if (!picked.has(l)) picked.set(l, new Set());
     picked.get(l)!.add(r);
   };
 
-  for (const m of credHome.values()) add(m.line, "credential");
   for (const { line, inSkills } of body) {
     if (!inSkills && !credLines.has(line) && numbersIn(line).size > 0) add(line, "number");
   }
@@ -595,7 +597,7 @@ function pickDefend(
     .sort((a, b) => posOf(a[0]) - posOf(b[0]) || order.indexOf(a[0]) - order.indexOf(b[0]))
     .map(([line, reasons]) => {
       const rs = Array.from(reasons);
-      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "", credHome.get(line)?.name) };
+      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "") };
     });
   return { lines, allOwn: candidates.length > 0 && candidates.every((c) => c.d === 0), header: headerLinesOf(resumeText || "") };
 }
@@ -631,76 +633,50 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
 
   const picks = resumeText.trim() ? pickDefend(resumeText, sourceText) : { lines: [] as DefendLine[], allOwn: false, header: new Set<string>() };
   const defendLines = picks.lines;
-  const credentialLine = new Set(defendLines.filter((d) => d.reasons.includes("credential")).map((d) => squash(d.line)));
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
   const byLine = new Map(answers.map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
     if (!answerStands(a, line, sourceText)) return undefined;
-    // A credential question is answered only by saying what kind it is.
-    if (credentialLine.has(squash(line)) && a!.kind !== "rewrite" && !answerGivesCredentialType(a!.answer)) return undefined;
     // A headline is answered only by talking about what it says.
     if (picks.header.has(line) && a!.kind !== "rewrite" && !answerMentions(a!.answer, line)) return undefined;
-    // A scope word the person never used ("supervised", "managed", "led") is
-    // answered only by an answer about that scope.
-    const scope = scopeNotTheirs(line, sourceText);
-    if (scope && a!.kind !== "rewrite" && !answerTalksScope(a!.answer)) return undefined;
     return a;
   };
 
   if (resumeText.trim() && sourceText.trim()) {
     const mint = runMintCheck({ output: resumeText, source: sourceText, kind: "resume" });
-    // A credential's missing status is settled only by that line's own
-    // standing answer. A course written up as a certification is never
-    // settled by an answer: the line changes, or the person's words do.
-    // Credentials, one at a time by name: never mentioned by the person
-    // (BLOCK, only a change or a cut), written up from a class (BLOCK), or
-    // with no year or status from anyone (FIX, settled by an answer that
-    // gives one).
+    // Round 5: every credential on the page is a memory prompt (decision
+    // D4), never settled by reading the person's free text. The one
+    // exception is a line exactly as they typed it in their
+    // licenses-and-training answer. The prompt is settled only by a
+    // confirmation (the line is rewritten from it) or a cut.
     const credentialFindings: MintFinding[] = [];
     const credentialSubject = new Map<string, string>();
-    for (const c of checkCredentials(resumeText, sourceText)) {
-      const { mention: m } = c;
+    for (const m of credentialsToAsk(resumeText, input.credentialsAnswer)) {
       credentialSubject.set(m.line, m.name);
-      if (c.issue === "unsaid") {
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "BLOCK",
-          line: m.line,
-          why: `"${clip(m.name, 50)}" was added for you. It stays only if you hold it and tell us what kind it is and when.`,
-          kind: "credential_unsaid",
-        });
-      } else if (c.issue === "upgrade") {
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "BLOCK",
-          line: m.line,
-          why: "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
-          kind: "credential_upgrade",
-        });
-      } else if (c.issue === "status_claimed") {
-        // The page gives a status or year the person never gave: an answer with their own status settles it.
-        const a = standingFor(m.line);
-        if (a && answerGivesStatusFor(a.answer, m.context || m.line)) continue;
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "BLOCK",
-          line: m.line,
-          why: `The page gives "${clip(m.name, 50)}" a status or year you didn't give us.`,
-          kind: "credential_status_claimed",
-        });
-      } else {
-        const a = standingFor(m.line);
-        if (a && answerGivesStatusFor(a.answer, "")) continue;
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "FIX",
-          line: m.line,
-          why: "We don't know this credential's type or status yet: license, certification or training, and current, expired or in progress.",
-          kind: "credential_status",
-        });
-      }
+      credentialFindings.push({
+        rule: "STD-T03",
+        severity: "BLOCK",
+        line: m.line,
+        why: credentialPromptWhy(m.name),
+        kind: "credential_unsaid",
+      });
+    }
+    // A scope claim (ran, led, supervised, trained people...) the person
+    // never made is settled only by their own rewrite or a cut, never by an
+    // answer.
+    const scopeFindings: MintFinding[] = [];
+    for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
+      if (inSkills) continue;
+      const hit = scopeNotTheirs(line, sourceText);
+      if (!hit) continue;
+      scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
+    }
+    // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
+    for (const line of titlesNotTheirs(resumeText, sourceText)) {
+      const hit = scopeNotTheirs(titleOf(line), sourceText);
+      if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
     }
     // A job title on the page that the person never used.
     // Asked like a defend line, so only where there is a defend step.
@@ -717,10 +693,16 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
         why: `"${clip(titleOf(l), 50)}" isn't a title in anything you told us. A title that doesn't match your paperwork comes up at the background check.`,
         kind: "title_unsaid",
       }));
-    const findings = [...mint.findings, ...credentialFindings, ...titleFindings];
+    const findings = [...mint.findings, ...credentialFindings, ...scopeFindings, ...titleFindings];
     for (const f of findings) {
       const subject = f.kind?.startsWith("credential_") ? credentialSubject.get(f.line) : undefined;
-      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? credentialMemoryPrompt(subject ?? credentialNameOf(f)) : questionForFinding(f));
+      push(
+        f.rule,
+        f.severity,
+        f.line,
+        f.why,
+        f.kind === "credential_unsaid" ? credentialMemoryPrompt(subject ?? credentialNameOf(f)) : f.kind === "scope_unsaid" ? Q_SCOPE : questionForFinding(f)
+      );
       if (f.kind) items[items.length - 1].kind = f.kind;
       if (subject) items[items.length - 1].subject = subject;
     }

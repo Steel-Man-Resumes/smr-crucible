@@ -77,7 +77,13 @@ test("R2-B3: a job title the person never had raises STD-C03; an answer about th
   const generic = [...answerEvery(r), { line: header, answer: GOOD, verdict: "stands" as const }];
   assert.equal(status(r, generic).state, "draft", "a generic answer is not about the title");
   const real = [...answerEvery(r), { line: header, answer: "My pay stubs from Harbor say kitchen manager for the last year.", verdict: "stands" as const }];
-  assert.equal(status(r, real).state, "finished");
+  // Round 5: "manager" is also a scope claim; only a rewrite or a cut settles that part.
+  assert.ok(status(r, real).openItems.every((i) => i.kind === "scope_unsaid" && i.line === header), JSON.stringify(status(r, real).openItems));
+  // A title with no scope word is settled by an answer about the title.
+  const r2 = page(BASE).replace("LINE COOK |", "SOUS CHEF |");
+  const header2 = "SOUS CHEF | Harbor Street Diner | 2019 - 2023";
+  const real2 = [...answerEvery(r2), { line: header2, answer: "My pay stubs from Harbor say sous chef for the last year.", verdict: "stands" as const }];
+  assert.equal(status(r2, real2).state, "finished", JSON.stringify(status(r2, real2).openItems));
 });
 
 test("R2-B3 (control): a title in the person's words in any order is not asked ('cook, line')", () => {
@@ -140,15 +146,13 @@ test("R2-B5: a credential the person never mentioned is a BLOCK no answer settle
   }
 });
 
-test("R2-B5: a credential question is answered only by saying what kind it is", () => {
+test("R2-B5 (round 5): a credential is never a defend question; it is a memory prompt no answer settles", () => {
   const src = `${SOURCE}\nI have a food handler card.`;
   const r = page(BASE, "\n\nCERTIFICATIONS\n- Food handler card");
   const line = "- Food handler card";
-  assert.ok(pickDefendLines(r, src).some((d) => d.line === line && d.reasons.includes("credential")));
-  const generic = [...answerEvery(r, src), { line, answer: GOOD, verdict: "stands" as const }];
-  assert.ok(status(r, generic, src).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  assert.ok(!pickDefendLines(r, src).some((d) => d.line === line));
   const typed = [...answerEvery(r, src), { line, answer: "It is a card from the county health office, current until next spring.", verdict: "stands" as const }];
-  assert.ok(!status(r, typed, src).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  assert.ok(status(r, typed, src).openItems.some((i) => i.line === line && i.kind === "credential_unsaid"));
 });
 
 // ---- S1 ------------------------------------------------------------------------------
@@ -163,7 +167,9 @@ for (const ans of ["I did this every day at work.", "That was part of my job dut
 test("S1 (control): an answer about the line, or with a concrete detail, stands", () => {
   const lines = pickDefendLines(P4, SOURCE);
   const a = lines.map((d) => ({ line: d.line, verdict: "stands" as const, answer: /inventory/.test(d.line) ? "I managed the walk-in counts and called the produce guy every Monday." : "I coordinated the catering trays for the insurance office lunches on Fridays." }));
-  assert.equal(status(P4, a).state, "finished");
+  // Round 5: the answers settle the defend questions; only the scope claims are left, for a rewrite or a cut.
+  const open = status(P4, a).openItems;
+  assert.ok(open.length > 0 && open.every((i) => i.kind === "scope_unsaid"), JSON.stringify(open));
 });
 
 // ---- burden --------------------------------------------------------------------------

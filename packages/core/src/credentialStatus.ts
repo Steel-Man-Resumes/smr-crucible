@@ -50,7 +50,7 @@ const WHEN_ALLOWED = new Set([
   "completed", "complete", "since", "until", "through", "due", "good", "got", "earned", "it", "on", "and", "still",
   "as", "of", "year", "january", "february", "march", "april", "may", "june", "july", "august", "september",
   "october", "november", "december", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov",
-  "dec", "spring", "summer", "fall", "winter", "the", "back",
+  "dec", "spring", "summer", "fall", "winter", "the", "back", "is", "to", "from",
 ]);
 
 /**
@@ -72,8 +72,16 @@ export function isStrictCredentialWhen(when: string, now = new Date()): boolean 
   const r = readStatus(t, now);
   if (r.futureYear) return false;
   if (r.families.size > 1) return false;
-  // One status, with at most one year.
-  if (r.years.length > 1) return false;
+  // One status, with at most two years: one year, a range ("2019-2021",
+  // "2019 to 2021"), or a year got or renewed plus when it expires
+  // ("renewed 2024, expires 2027").
+  if (r.years.length > 2) return false;
+  if (r.years.length === 2) {
+    const [a, b] = r.years;
+    const range = /^\s*(?:from\s+)?(?:19|20)\d{2}\s*(?:-|to)\s*(?:19|20)\d{2}\s*$/.test(t.replace(/[\u2013\u2014]/g, "-"));
+    const expiry = new RegExp(`\\b(?:expires|expiring|until|through|due)\\s*(?:in\\s+)?${b}\\b`).test(t);
+    if (!(a <= b && a <= now.getFullYear() && (range ? b <= now.getFullYear() : expiry))) return false;
+  }
   // "valid until 2019, current": an end date already past is not a live status.
   const endYear = t.match(/\b(?:until|through|expires|expiring|due)\s*(?:in\s+)?(19[5-9]\d|20[0-4]\d)\b/);
   if (endYear && Number(endYear[1]) < now.getFullYear() && r.families.has("live")) return false;
@@ -84,16 +92,10 @@ export function isStrictCredentialWhen(when: string, now = new Date()): boolean 
 }
 
 /**
- * True when an answer settles the page's status claim: it gives a status of
- * the same family the page claims (or the page's own year), with no
- * contradicting family and no future year. With no status on the page, any
- * one real status or a past year will do.
+ * Round 5: no status is ever read from a free-text answer. A status on the
+ * page comes only from the person's confirmation (the year-or-status box).
+ * Kept so older callers still load; it never settles anything.
  */
-export function answerGivesStatusFor(answer: string, pageContext: string, now = new Date()): boolean {
-  const a = readStatus(answer, now);
-  if (a.futureYear || a.families.size > 1) return false;
-  const p = readStatus(pageContext, now);
-  if (p.families.size) return Array.from(a.families).some((f) => p.families.has(f));
-  if (p.years.length) return a.years.some((y) => p.years.includes(y));
-  return a.families.size === 1 || a.years.length > 0;
+export function answerGivesStatusFor(_answer: string, _pageContext: string, _now = new Date()): boolean {
+  return false;
 }

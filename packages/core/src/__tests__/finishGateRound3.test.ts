@@ -12,7 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getResumeStatus, pickDefendLines, type DefendAnswer } from "../resumeStatus";
 import { runMintCheck, numbersIn } from "../resumeMintCheckShared";
-import { credentialMentionsOf, checkCredentials } from "../credentialMentions";
+import { credentialMentionsOf, credentialsToAsk } from "../credentialMentions";
 import * as words from "../credentialWords";
 
 const SOURCE = `Morgan Sample
@@ -56,22 +56,21 @@ for (const h of ["Kitchen Supervisor | Breakfast Line", "Kitchen Manager | Line 
 for (const cred of ["Certified Kitchen Supervisor", "Certified Line Cook", "Breakfast Line Certified", "Certified Grill Master"]) {
   test(`S2: "${cred}" is never 'said' because the person used a job word`, () => {
     const r = `${HEAD}\n\nCERTIFICATIONS\n- ${cred}, current`;
-    assert.ok(checkCredentials(r, SOURCE).some((c) => c.issue === "unsaid"), cred);
+    // Round 5: every credential is asked; nothing the person said is read as saying it.
+    assert.ok(credentialsToAsk(r).length > 0, cred);
+    assert.ok(getResumeStatus({ resumeText: r, sourceText: SOURCE }).openItems.some((i) => i.kind === "credential_unsaid"), cred);
   });
 }
 
-test("S2: the writer's 'current' is never the person's status: a BLOCK an answer with their status settles", () => {
+test("S2 (round 5): the writer's 'current' is never the person's status, and no answer settles it", () => {
   const src = `${SOURCE}\nI have my forklift card from the warehouse job.`;
   const r = `${HEAD}\n\nCERTIFICATIONS\n- Forklift card, current`;
   const s = getResumeStatus({ resumeText: r, sourceText: src });
-  assert.ok(s.openItems.some((i) => i.kind === "credential_status_claimed" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
-  const typeOnly = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center, I keep it in my wallet.", verdict: "stands" as const }));
-  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: typeOnly }).state, "draft");
-  // Round 4: only an answer of the same status family settles it; one that contradicts the page does not.
-  const contradicts = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center and it expired last spring.", verdict: "stands" as const }));
-  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: contradicts }).state, "draft");
-  const withStatus = pickDefendLines(r, src).map((d) => ({ line: d.line, answer: "It is a card from the county job center and it is still current.", verdict: "stands" as const }));
-  assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: withStatus }).state, "finished");
+  assert.ok(s.openItems.some((i) => i.kind === "credential_unsaid" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+  for (const ans of ["It is a card from the county job center, I keep it in my wallet.", "It is a card from the county job center and it expired last spring.", "It is a card from the county job center and it is still current."]) {
+    const a = [{ line: "- Forklift card, current", answer: ans, verdict: "stands" as const }];
+    assert.equal(getResumeStatus({ resumeText: r, sourceText: src, defendAnswers: a }).state, "draft", ans);
+  }
 });
 
 test("B3: a long sentence that carries a credential is still a line to ask about; a scope word needs an answer about it", () => {
@@ -80,6 +79,7 @@ test("B3: a long sentence that carries a credential is still a line to ask about
   assert.ok(pickDefendLines(r, SOURCE).some((d) => d.line === line && d.reasons.includes("far_from_your_words")));
   const generic = [{ line, answer: GOOD, verdict: "stands" as const }];
   assert.ok(getResumeStatus({ resumeText: r, sourceText: SOURCE, defendAnswers: generic }).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  // Round 5: even an answer about that scope never settles a scope claim; only a rewrite or a cut does.
   const scope = [{ line, answer: "I supervised the two night loaders when the dock lead was out on Fridays.", verdict: "stands" as const }];
-  assert.ok(!getResumeStatus({ resumeText: r, sourceText: SOURCE, defendAnswers: scope }).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  assert.ok(getResumeStatus({ resumeText: r, sourceText: SOURCE, defendAnswers: scope }).openItems.some((i) => i.line === line && i.kind === "scope_unsaid"));
 });

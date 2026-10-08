@@ -15,7 +15,7 @@ import {
 } from "../resumeRules";
 import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
 import { checkCredentialUpgrade } from "../resumeMintCheckShared";
-import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, credentialQuestion, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, credentialQuestion, credentialMemoryPrompt, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
@@ -119,8 +119,8 @@ test("status: a clean, defended page with no numbers is finished", () => {
 
 // The same page with two lines the writer reworded away from the person's words.
 const FAR = NO_NUMBERS.resume
-  .replace("Ran the grill on the breakfast line.", "Spearheaded the breakfast grill operation.")
-  .replace("Asked by the owner to show new cooks the grill.", "Mentored incoming culinary staff on equipment.");
+  .replace("Ran the grill on the breakfast line.", "Operated the breakfast grill station with precision.")
+  .replace("Asked by the owner to show new cooks the grill.", "Showed incoming culinary staff the equipment.");
 
 test("status: a page entirely in the person's own words asks nothing extra (round 2)", () => {
   const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source });
@@ -304,23 +304,24 @@ test("status: a credential the person only drove past (no card, class or certifi
   assert.equal(cred!.severity, "BLOCK");
 });
 
-test("status: a credential with no type or status asks about it, without supplying one", () => {
+test("status (round 5): a credential the person named in free text is still a memory prompt, and no answer settles it", () => {
   const source = `${CREDENTIAL_NO_STATUS.source}\nI have a forklift operator card from the warehouse.`;
   const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source });
   const cred = s.openItems.find((i) => i.rule === "STD-T03");
-  assert.ok(cred, JSON.stringify(s.openItems));
-  assert.equal(cred!.severity, "FIX");
-  assert.equal(cred!.question, credentialQuestion("Forklift Operator"));
-  // The defend step asks about it too, and its answer settles the status.
+  assert.ok(cred && cred.kind === "credential_unsaid" && cred.severity === "BLOCK", JSON.stringify(s.openItems));
+  assert.equal(cred!.question, credentialMemoryPrompt("Forklift Operator"));
+  assert.doesNotMatch(cred!.question, /\b(?:19|20)\d{2}\b|current|expired/, "the prompt never supplies a status");
   const answers = answerAll(CREDENTIAL_NO_STATUS.resume, source).map((a) =>
     /Forklift Operator$/.test(a.line) ? { ...a, answer: "It was the warehouse's forklift training, passed in 2021, expired now." } : a
   );
   const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source, defendAnswers: answers });
-  assert.ok(!after.openItems.some((i) => i.rule === "STD-T03"), JSON.stringify(after.openItems));
+  assert.ok(after.openItems.some((i) => i.kind === "credential_unsaid"), JSON.stringify(after.openItems));
 });
 
 test("status: thin history with a dated class is not penalized for thinness", () => {
-  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: THIN.source, defendAnswers: answerAll(THIN.resume, THIN.source) });
+  // Round 5: the class line is theirs only when it is exactly what they typed in the licenses-and-training answer.
+  const typed = "Forklift training, county job center (2023), passed the driving test";
+  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: THIN.source, defendAnswers: answerAll(THIN.resume, THIN.source), credentialsAnswer: typed });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 
@@ -381,7 +382,7 @@ test("defend: a thin page in the person's own words, with a dated class they nam
 test("two-page fixture really runs to two pages and stays finished once defended", () => {
   const plan = computeFitPlan(TWO_PAGE.resume, {});
   assert.equal(plan.result.pageCount, 2);
-  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source) });
+  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialsAnswer: "OSHA 10 card (2017)" });
   assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
   assert.equal(s.state, "finished");
 });

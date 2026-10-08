@@ -81,9 +81,15 @@ test("B3: pasting the line back is not an answer", () => {
   assert.equal(getResumeStatus({ resumeText: P3, sourceText: SOURCE, defendAnswers: a }).state, "draft");
 });
 
-test("B3: a real explanation still settles the line", () => {
+test("B3: a real explanation still settles the line (round 5: a scope claim still needs a rewrite or a cut)", () => {
   const a = pickDefendLines(P3, SOURCE).map((d) => ({ line: d.line, answer: /Coordinated/.test(d.line) ? "I coordinated the catering trays for the insurance office lunches on Fridays." : "I managed the walk-in counts and called the produce guy every Monday.", verdict: "stands" as const }));
-  assert.equal(getResumeStatus({ resumeText: P3, sourceText: SOURCE, defendAnswers: a }).state, "finished");
+  const s = getResumeStatus({ resumeText: P3, sourceText: SOURCE, defendAnswers: a });
+  // Every defend question is settled; what is left is only the scope claims ("Managed", "Coordinated").
+  assert.ok(s.openItems.length > 0 && s.openItems.every((i) => i.kind === "scope_unsaid"), JSON.stringify(s.openItems));
+  // In the person's own words, the same lines finish.
+  const src = `${SOURCE}\nI managed inventory and vendor relationships for the restaurant.\nI coordinated catering events for corporate clients.`;
+  const a2 = pickDefendLines(P3, src).map((d) => ({ line: d.line, answer: "I did that at the diner, the owner can say so.", verdict: "stands" as const }));
+  assert.equal(getResumeStatus({ resumeText: P3, sourceText: src, defendAnswers: a2 }).state, "finished");
 });
 
 test("B3: number words count as numbers", () => {

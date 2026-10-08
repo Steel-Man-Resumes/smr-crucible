@@ -8,7 +8,7 @@
  */
 
 // Known credentials by name.
-const NAMED_SOURCE = String.raw`OSHA[\s-]*\d+(?:[\s-]hour)?|CDL(?:[\s-]+Class[\s-]+[A-C])?|CNA|STNA|LPN|EMT(?:-[BP])?|ServSafe(?:\s+(?:Food\s+Handler|Manager|Food\s+Protection\s+Manager))?|EPA\s*608(?:\s+Universal)?|CPR|BLS|First\s+Aid|AWS\s+D\d+(?:\.\d+)?|HAZMAT(?:\s+endorsement)?(?!\s+(?:handling|awareness|storage|waste|spills?|materials?)\b)|TWIC(?:\s+card)?|Forklift\s+card|Food\s+handler(?:'?s)?\s+card|Six\s+Sigma(?:\s+\w+\s+Belt)?|PMP|NCCER`;
+const NAMED_SOURCE = String.raw`OSHA[\s-]*\d+(?:[\s-]hour)?|(?:Class[\s-]*[A-D][\s-]+)?CDL(?:[\s-]+Class[\s-]*[A-D]|[\s-]+\(?[A-D]\)?(?![\w']))?|CNA|STNA|LPN|EMT(?:-[BP])?|ServSafe(?:\s+(?:Food\s+Handler|Manager|Food\s+Protection\s+Manager))?|EPA\s*608(?:\s+Universal)?|CPR|BLS|First\s+Aid|AWS\s+D\d+(?:\.\d+)?|HAZMAT(?:\s+endorsement)?(?!\s+(?:handling|awareness|storage|waste|spills?|materials?)\b)|TWIC(?:\s+card)?|Forklift\s+card|Food\s+handler(?:'?s)?\s+card|Six\s+Sigma(?:\s+\w+\s+Belt)?|PMP|NCCER`;
 
 /** A fresh global regex for known credential names (global regexes keep state, so one per use). */
 export function namedCredentialRe(): RegExp {

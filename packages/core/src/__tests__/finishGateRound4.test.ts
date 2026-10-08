@@ -54,7 +54,8 @@ for (const [said, line] of FAMILY) {
     const r = page(`\n\nCERTIFICATIONS\n- ${line}`);
     const s = walk(r, `${BASE}\n${said}`);
     assert.equal(s.state, "draft");
-    assert.ok(s.openItems.some((i) => i.kind === "credential_unsaid" && i.line === `- ${line}`), JSON.stringify(s.openItems));
+    // Round 5: a list line is asked part by part, so the prompt may sit on a part of the line.
+    assert.ok(s.openItems.some((i) => i.kind === "credential_unsaid" && (i.line === `- ${line}` || line.includes(i.line))), JSON.stringify(s.openItems));
   });
 }
 
@@ -70,19 +71,22 @@ for (const [said, line] of [
   });
 }
 
-test("B1: spelling variants meet on one key; family members never do", () => {
-  for (const v of ["OSHA-10", "OSHA10", "OSHA 10-Hour", "10-hour OSHA", "OSHA 10"]) assert.equal(canonicalCredentialKey(v), canonicalCredentialKey("OSHA 10"), v);
-  assert.equal(canonicalCredentialKey("Forklift Certified"), canonicalCredentialKey("Certified Forklift Operator"));
-  for (const [a, b] of [["OSHA 10", "OSHA 30"], ["CDL Class A", "CDL Class B"], ["CPR", "Certified CPR Instructor"], ["ServSafe Manager", "ServSafe Food Handler"], ["Six Sigma Black Belt", "Six Sigma Yellow Belt"]]) {
+test("B1: one key per credential on the page; family members never meet (round 5: spellings are not guessed at)", () => {
+  for (const v of ["OSHA-10", "OSHA 10", "osha 10"]) assert.equal(canonicalCredentialKey(v), canonicalCredentialKey("OSHA 10"), v);
+  assert.equal(canonicalCredentialKey("Class-A CDL"), canonicalCredentialKey("CDL Class A"));
+  for (const [a, b] of [["OSHA 10", "OSHA 30"], ["CDL Class A", "CDL Class B"], ["Class-A CDL", "CDL"], ["CPR", "Certified CPR Instructor"], ["ServSafe Manager", "ServSafe Food Handler"], ["Six Sigma Black Belt", "Six Sigma Yellow Belt"]]) {
     assert.notEqual(canonicalCredentialKey(a), canonicalCredentialKey(b), `${a} / ${b}`);
   }
 });
 
-test("B1 (control): the same credential the person named, with their year, still finishes", () => {
-  const s = walk(page("\n\nCERTIFICATIONS\n- OSHA 30, 2019"), `${BASE}\nI have my OSHA 30 card from 2019.`);
+test("B1 (control, round 5): the same credential the person typed, exactly as typed, still finishes; named only in free text, it is asked", () => {
+  const r = page("\n\nCERTIFICATIONS\n- OSHA 30, 2019");
+  const free = getResumeStatus({ resumeText: r, sourceText: `${BASE}\nI have my OSHA 30 card from 2019.` });
+  assert.ok(free.openItems.some((i) => i.kind === "credential_unsaid"), "free text never says it");
+  const typed = walk(r, `${BASE}\nOSHA 30, 2019`);
+  assert.equal(typed.state, "draft", "walk() passes no typed answer");
+  const s = getResumeStatus({ resumeText: r, sourceText: `${BASE}\nOSHA 30, 2019`, credentialsAnswer: "OSHA 30, 2019" });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
-  const aws = page("\n\nCERTIFICATIONS\n- AWS D1.1 certification, renewed yearly");
-  assert.ok(!pickDefendLines(aws, `${BASE}\nPassed AWS D1.1 certification renewal every year.`).some((d) => d.reasons.includes("credential")));
 });
 
 // ---- B2 ------------------------------------------------------------------------------
@@ -98,8 +102,9 @@ for (const line of ["OSHA 10 (2019), CPR, Forklift card", "OSHA 10, 2019 | ServS
   });
 }
 
-test("B2 (control): 'OSHA 10, 2019' alone still finishes for the person who named it", () => {
-  assert.equal(walk(page("\n\nCERTIFICATIONS\n- OSHA 10, 2019"), `${BASE}\nI have my OSHA 10 card from 2019.`).state, "finished");
+test("B2 (control): 'OSHA 10, 2019' alone still finishes for the person who typed it", () => {
+  const s = getResumeStatus({ resumeText: page("\n\nCERTIFICATIONS\n- OSHA 10, 2019"), sourceText: `${BASE}\nOSHA 10, 2019`, credentialsAnswer: "OSHA 10, 2019" });
+  assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 
 // ---- S1 ------------------------------------------------------------------------------
@@ -110,13 +115,14 @@ test("S1: the writer's 'current' clears only with an answer that says current", 
   for (const ans of ["It is a card, I passed the test at the county job center.", "It is a card I got through the county job center.", "It is a card, finished the class at the job center.", "It is a card, I was enrolled at the job center."]) {
     assert.equal(walk(r, src, () => ans).state, "draft", ans);
   }
-  assert.equal(walk(r, src, () => "It is a card from the county job center and it is current.").state, "finished");
+  // Round 5: no answer settles a status, not even one that says current. Only a confirmation does.
+  assert.equal(walk(r, src, () => "It is a card from the county job center and it is current.").state, "draft");
 });
 
 // ---- S3 ------------------------------------------------------------------------------
 
 test("S3: the year-or-status box takes exactly one status, and no future year", () => {
-  for (const w of ["2021", "current", "expired", "in progress", "completed", "expired in 2019", "completed 2018", "current, expires 2027", "valid until 2027"]) assert.equal(isStrictCredentialWhen(w), true, w);
+  for (const w of ["2021", "current", "expired", "in progress", "completed", "expired in 2019", "completed 2018", "current, expires 2027", "valid until 2027", "2019-2021", "2019 to 2021", "renewed 2024, expires 2027", "got it in 2019 and it is still current"]) assert.equal(isStrictCredentialWhen(w, new Date("2026-10-07")), true, w);
   for (const w of ["current expired", "expired, current", "currently expired", "active and expired", "completed in progress", "valid until 2019, current", "2049", "since 2045", "still current as of 2030", "through", "good for", "passed", "current 2019 2020 2021"]) {
     assert.equal(isStrictCredentialWhen(w), false, w);
   }
