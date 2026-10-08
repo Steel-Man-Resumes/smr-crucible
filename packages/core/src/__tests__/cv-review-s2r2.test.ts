@@ -48,11 +48,11 @@ describe("N-H1: part of a hidden facility name counts", () => {
     ["San Quentin State Prison", ["San Quentin", "SAN QUENTIN", "san-quentin", "Quentin"]],
     ["Stateville Correctional Center", ["Stateville", "STATEVILLE", "stateville's yard"]],
     ["Rikers Island Correctional Facility", ["Riker's", "Rikers Island", "RIKERS"]],
-    ["Folsom State Prison", ["Folsom", "folsom's"]],
   ];
+  // Review s2r3 N3-H1: the person's home place (basedIn) is never held, only asked about (below).
   for (const [venue, says] of cases) {
     for (const say of says) {
-      for (const field of ["interests", "languages", "discipline", "basedIn"] as const) {
+      for (const field of ["interests", "languages", "discipline"] as const) {
         it(`${venue}: "${say}" in ${field} is held off the CV with a BLOCK`, () => {
           const { e, s } = hiddenAt(venue);
           const set = { ...s, [field]: `Theater; the program at ${say}` };
@@ -71,11 +71,13 @@ describe("N-H1: part of a hidden facility name counts", () => {
       }
     }
   }
-  it("a two-word name: the terms hold 'san quentin' and each distinctive word", () => {
+  it("a two-word name: the terms hold 'san quentin' and the distinctive word, never 'san' alone (s2r3)", () => {
     const { e, s } = hiddenAt("San Quentin State Prison");
     const t = hiddenFacilityTerms([e], s);
-    for (const x of ["san quentin state prison", "san quentin", "san", "quentin"]) assert.ok(t.includes(x), x);
-    assert.ok(!t.includes("state") && !t.includes("prison"), "generic words alone never count");
+    assert.ok(t.fullNames.includes("san quentin state prison"));
+    assert.ok(t.runs.includes("san quentin"));
+    assert.deepEqual(t.words, ["quentin"]);
+    assert.ok(!t.runs.includes("state prison"), "generic words alone never count");
   });
   it("a one-distinctive-word name: 'Stateville' alone counts", () => {
     assert.deepEqual(distinctiveWords("Stateville Correctional Center"), ["stateville"]);
@@ -84,7 +86,7 @@ describe("N-H1: part of a hidden facility name counts", () => {
   });
   it("generic words, directions and numbers are never distinctive", () => {
     assert.deepEqual(distinctiveWords("North Central Federal Detention Unit 32 of the State"), []);
-    assert.deepEqual(distinctiveWords("Example County Jail Annex II"), ["example", "annex"]);
+    assert.deepEqual(distinctiveWords("Example County Jail Annex II"), ["example"]);
   });
   it("a word already on the page through a shown entry does not count", () => {
     const { e, s } = hiddenAt("Example Valley State Prison");
@@ -99,8 +101,8 @@ describe("N-H1: part of a hidden facility name counts", () => {
     const t = entry({ section: "arts_program", title: "Theater program, Example Ridge Prison", venue: "Example Arts Council", year: 2025, names_facility: true, details: { status: "in_progress" } });
     const s = applyTitleMode(BASE, t.id, "venue_only")!;
     const terms = hiddenFacilityTerms([BA, t], s);
-    assert.ok(terms.includes("ridge"));
-    assert.ok(!terms.includes("theater") && !terms.includes("program"));
+    assert.ok(terms.words.includes("ridge"));
+    assert.ok(!terms.words.includes("theater") && !terms.runs.some((r) => r.includes("theater")));
     // The venue-only row prints (its kind label is the page's word, not the person's).
     assert.match(cvPlainText(buildCvModel([BA, t], s, "academic")), /Arts program, Example Arts Council \(in progress\)/);
   });
@@ -119,8 +121,13 @@ describe("N-H1: part of a hidden facility name counts", () => {
   });
   it("the file name and metadata use the printed name: a held name never rides along", () => {
     const { e, s } = hiddenAt("San Quentin State Prison");
-    const m = buildCvModel([BA, e], { ...s, displayName: "Dana Sample, San Quentin" }, "academic");
+    // A whole hidden name is held in every field, the name field included.
+    const m = buildCvModel([BA, e], { ...s, displayName: "Dana Sample, San Quentin State Prison" }, "academic");
     assert.equal(m.header.name, "");
+    // Part of one in the person's own name is only asked about (s2r3 N3-H1).
+    const m2 = buildCvModel([BA, e], { ...s, displayName: "Dana Sample, San Quentin" }, "academic");
+    assert.equal(m2.header.name, "Dana Sample, San Quentin");
+    assert.ok(m2.asks.some((a) => a.field === "displayName"));
   });
 });
 

@@ -144,7 +144,8 @@ test("review r2: exports print only safe to-do lines; settings and choices need 
 
 test("review r3: the on-screen preview prints the same safe to-do lines as the download; the bio list highlights by id", () => {
   const ar = readFileSync(join(APP, "components", "creative", "ArtistResumePanel.tsx"), "utf8");
-  assert.match(ar, /exportOpenItemLines\(status, entries, settings, "artist_resume"\)/);
+  // Only what the artist resume prints makes a hidden name public (review s2r3 N3-M1).
+  assert.match(ar, /exportOpenItemLines\(status, entries, settings, "artist_resume", shownEntryIds\(model\)\)/);
   assert.ok(!/creativeOpenItemLines/.test(ar));
   const bio = readFileSync(join(APP, "components", "creative", "BioPanel.tsx"), "utf8");
   assert.match(bio, /it\.sentenceId/);
@@ -201,4 +202,16 @@ test("performer lanes: the export builds the page from the database (8x10 or Let
     assert.match(rd(...p), /await creativeLane\(g\.userId/, p.join("/"));
   }
   assert.match(rd("lib", "creative-server.ts"), /return docLane\(userId, laneId, \["creative"\]\);/);
+});
+
+test("review s2r3: the export passes each document's printed ids; one-tap answers are the person's alone; the record form takes other names", () => {
+  const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
+  const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
+  assert.match(exp, /exportOpenItemLines\(\{ \.\.\.c\.status, openItems: items \}, c\.entries, c\.settings, checkDoc, shown\)/);
+  const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
+  assert.match(lane, /body\.phraseAnswer[\s\S]*?if \(g\.impersonating\) return ownerOnly\(\);[\s\S]*?applyPhraseAnswer\(current, pa\.phrase, pa\.answer\)/);
+  const items = rd("components", "creative", "OpenItems.tsx");
+  assert.match(items, /FACILITY_ASK_YES, FACILITY_ASK_NO/);
+  for (const v of ["CvLaneView.tsx", "CreativeLaneView.tsx"]) assert.match(rd("components", "creative", v), /OpenItemAnswersContext\.Provider value=\{answers\}/);
+  assert.match(rd("components", "creative", "PracticeRecordPanel.tsx"), /Other names people use for it \(optional\)/);
 });

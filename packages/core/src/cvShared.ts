@@ -17,17 +17,20 @@
  */
 
 import type { CvType } from "./careerLaneShared";
-import { type PracticeEntry, type PracticeSection, hasLicenseNumber, placeOf, yearsOf } from "./practiceRecordShared";
+import { type PracticeEntry, type PracticeSection, hasIdLabelNumber, hasLicenseNumber, placeOf, yearsOf } from "./practiceRecordShared";
 import {
   type ArtistRow,
   type CreativeKindSettings,
+  type FacilityAsk,
+  type FacilityFieldKind,
   type Part,
   CREDENTIAL_KIND_WORD,
   CREDENTIAL_STATUS_WORD,
   artistRowParts,
+  facilityCheck,
   hiddenFacilityTerms,
-  namesHiddenFacility,
-  rowCheckText,
+  rowFacilityHit,
+  settleShown,
   studyTitle,
   titleModeFor,
 } from "./creativeLaneShared";
@@ -35,12 +38,13 @@ import {
 /**
  * Personal details (CV-03) by SHAPE, never by single words (review s2r2
  * N-M4). A field is cut into pieces at ; | ( ) [ ] , and at the end of a
- * sentence, and a shape counts only where a piece STARTS with it: "Gender:
- * female" or "Member (place of birth: ...)" are caught, a talk called "Race:
- * What Parole Boards Miss" or "Urban Citizen Science Network" are not. A
- * label (gender, race, religion, nationality...) counts only with a short
- * value of one or two words. Passport and Social Security numbers count
- * anywhere. A bare date alone ("Submitted 03/15/2025") is not one.
+ * sentence, and a shape counts only where a piece STARTS with it (a
+ * first-person lead-in like "I am" or "I was" may come first, s2r3 N3-L2):
+ * "Gender: female" or "Member (place of birth: ...)" are caught, "Urban
+ * Citizen Science Network" is not. A gender, race or religion label with a
+ * capitalized multiword title after it is a title ("Gender: Equity Award").
+ * Passport and Social Security numbers count anywhere. A bare date alone
+ * ("Submitted 03/15/2025") is not one.
  *
  * buildCvModel runs this only on fields where a person writes about
  * themselves (the top of the page, Interests and Languages, a role, a job
@@ -49,29 +53,41 @@ import {
  */
 const PIECE = String.raw`(?:^|[;|()\[\]\n,]\s*|[.!?]\s+)`;
 const PIECE_END = String.raw`\s*(?:$|[;|()\[\]\n,.!?])`;
-const SHORT_VALUE = String.raw`[^\s;|()\[\]\n,.!?]+(?:\s+[^\s;|()\[\]\n,.!?]+)?`;
 const NUMBER_WORD = String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)`;
-const at = (body: string) => new RegExp(PIECE + body, "i");
+/** An age in words: "forty-five", "thirty one", "nineteen". */
+const AGE_WORD = String.raw`(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[\s-]?(?:one|two|three|four|five|six|seven|eight|nine))?|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)`;
+/** A first-person lead-in the shape may start with: "I am 45 years old", "I was born in 1980", "I'm a US citizen", "my wife" (review s2r3 N3-L2). */
+const LEAD = String.raw`(?:(?:i\s+am|i'?m|i\s+was|i've\s+been|im|my)\s+(?:a\s+|an\s+)?)?`;
+const at = (body: string) => new RegExp(PIECE + LEAD + body, "i");
 export const CV_PERSONAL_PATTERNS: RegExp[] = [
-  // born + a date: "Born 1990", "born in 1985", "Born: March 4, 1990", "born 04/12/1990", "Born 2 March 1980"
+  // born + a date: "Born 1990", "born in 1985", "Born: March 4, 1990", "born 04/12/1990", "Born 2 March 1980", "I was born in 1980"
   at(String.raw`born\b[\s,:]*(?:on\s+|in\s+)?(?:\d{1,2}[/.-]\d{1,2}[/.-]|\d{1,2}(?:st|nd|rd|th)?\s+[a-z]{3,9}\.?,?\s+|[a-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+)?(?:19|20)\d{2}\b`),
+  // born in a place: "Born in Mexico"
+  at(String.raw`born\s+in\s+[a-z]`),
   // a date-of-birth or place-of-birth label with something after it
   at(String.raw`(?:d\.?o\.?b\.?|date of birth|birth ?date|birthday)\s*[:\-–]?\s*[\da-z]`),
   at(String.raw`(?:place of birth|birth ?place|country of birth)\s*[:\-–]?\s*\S`),
-  // age: "Age 34", "aged 41", "34 years old", "29 yrs old", "45 y/o"
-  at(String.raw`age[d]?\s*[:\-–]?\s*\d{1,3}\b`),
-  at(String.raw`\d{1,3}\s*(?:(?:years?|yrs?)\.?\s*old\b|y\/o\b|y\.o\.?|yo\b)`),
-  // family status standing alone, or as a label: "Married", "Single.", "Divorced with 2 children", "Status: married"
-  at(String.raw`(?:married|single|divorced|widowed|separated)\s*(?:$|[,.;(]|\s+with\b|\s+\d|\s+and\s+\d)`),
+  // age: "Age 34", "aged 41", "Age forty-five", "34 years old", "29 yrs old", "45 y/o", "I am 45 years old"
+  at(String.raw`age[d]?\s*[:\-–]?\s*(?:\d{1,3}\b|${AGE_WORD}\b)`),
+  at(String.raw`(?:\d{1,3}|${AGE_WORD})\s*(?:(?:years?|yrs?)\.?\s*old\b|y\/o\b|y\.o\.?|yo\b)`),
+  // family status standing alone, or as a label: "Married", "Single.", "(married)", "Single | Two kids", "Divorced with 2 children", "Status: married"
+  at(String.raw`(?:married|single|divorced|widowed|separated)\s*(?:$|[,.;()|]|\s+with\b|\s+\d|\s+and\s+\d)`),
   at(String.raw`(?:marital |family |civil )?status\s*[:\-–]\s*(?:married|single|divorced|widowed|separated|partnered)\b`),
   at(String.raw`(?:marital status|spouse|wife|husband|children|kids)\s*[:\-–]\s*\S`),
   at(String.raw`(?:father|mother|parent) of ${NUMBER_WORD}\b`),
-  // citizenship standing alone: "US citizen", "American citizen", "Mexican national", "Citizen of Mexico", "Dual citizenship"
+  // "my wife", "my kids"; "Two kids", "3 children" standing alone
+  new RegExp(PIECE + String.raw`my\s+(?:wife|husband|spouse|kids|children|sons?|daughters?)\b`, "i"),
+  new RegExp(PIECE + String.raw`${NUMBER_WORD}\s+(?:kids|children|sons|daughters)` + PIECE_END, "i"),
+  // citizenship standing alone: "US citizen", "I'm a US citizen", "American citizen", "Mexican national", "Citizen of Mexico", "Dual citizenship"
   at(String.raw`citizen of\b`),
   at(String.raw`(?:u\.?s\.?(?:a\.?)?|united states|[a-z]+(?:an|ese|ish|ch|i))\s+(?:citizen|national)` + PIECE_END),
   at(String.raw`dual (?:citizen|citizenship|nationality)\b`),
-  // a label with a short value: "Nationality: US", "Nationality - Mexican", "Gender: female", "Race: Black"
-  at(String.raw`(?:nationality|citizenship|gender|sex|religion|ethnicity|race)\s*[:\-–]\s*${SHORT_VALUE}` + PIECE_END),
+  // nationality or citizenship as a label: any value ("Nationality: United States of America", "Nationality - Mexican")
+  at(String.raw`(?:nationality|citizenship)\s*[:\-–]\s*\S`),
+  // the same without a separator, a proper-noun value: "Nationality Mexican", "Citizenship US" (a role like "Citizenship coach" is not one)
+  new RegExp(PIECE + String.raw`(?:[Nn]ationality|NATIONALITY|[Cc]itizenship|CITIZENSHIP)\s+[A-Z][A-Za-z.]*` + PIECE_END),
+  // gender with no separator, a gender word: "Gender female"
+  at(String.raw`(?:gender|sex)\s+(?:female|male|man|woman|m|f|non-?binary|nonbinary|trans\w*)` + PIECE_END),
   // a photo
   at(String.raw`(?:photo|picture)\s+(?:attached|enclosed|included|below)\b`),
   at(String.raw`headshot\b`),
@@ -80,9 +96,33 @@ export const CV_PERSONAL_PATTERNS: RegExp[] = [
   /\b(?:ssn|social security(?:\s+(?:number|no\.?))?)\s*[:#\-]?\s*\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/i,
   /\b\d{3}-\d{2}-\d{4}\b/,
 ];
-export const CV_PERSONAL_RE = new RegExp(CV_PERSONAL_PATTERNS.map((r) => `(?:${r.source})`).join("|"), "i");
+/**
+ * A gender, sex, religion, ethnicity or race label with a value (review
+ * s2r3 N3-L2): "Gender: female", "Race: Black and Latino". A label followed
+ * by a capitalized multiword TITLE is a title, not a detail ("Gender: Equity
+ * Award", "Race: Equity Now"): two or more capitalized words, at least one of
+ * them not an identity word. A longer lowercase phrase is a topic ("Race:
+ * policing and parole").
+ */
+const LABEL_VALUE_RE = new RegExp(PIECE + String.raw`(?:gender|sex|religion|ethnicity|race)\s*[:\-–]\s*([^;|()\[\]\n,.!?]+)`, "gi");
+const IDENTITY_WORDS = new Set(
+  "black white latino latina latinx hispanic asian native american african indigenous pacific islander alaska alaskan hawaiian middle eastern arab mixed multiracial biracial caucasian european mexican chicano chicana catholic christian muslim jewish buddhist hindu sikh baptist methodist lutheran mormon protestant orthodox atheist agnostic none male female man woman nonbinary non-binary trans transgender queer cis cisgender".split(" ")
+);
+function labelValueIsDetail(text: string): boolean {
+  for (const m of text.matchAll(LABEL_VALUE_RE)) {
+    const words = m[1].trim().split(/\s+/).filter(Boolean);
+    const caps = words.filter((w) => /^[A-Z]/.test(w));
+    const isTitle = caps.length >= 2 && caps.some((w) => !IDENTITY_WORDS.has(w.toLowerCase()));
+    // A short value, or one made only of identity words ("Black and Latino"), is a detail; a longer phrase ("policing and parole") is a topic.
+    const identityOnly = words.every((w) => IDENTITY_WORDS.has(w.toLowerCase()) || /^(?:and|or|&|of)$/i.test(w));
+    if (words.length && !isTitle && (words.length <= 2 || identityOnly)) return true;
+  }
+  return false;
+}
+/** The whole personal-detail check, shape list and label rule together (kept as a `.test()` for older callers). */
+export const CV_PERSONAL_RE: { test(text: string): boolean } = { test: (text) => isPersonalDetail(text) };
 export function isPersonalDetail(text: string | null | undefined): boolean {
-  return !!text && CV_PERSONAL_PATTERNS.some((r) => r.test(text));
+  return !!text && (CV_PERSONAL_PATTERNS.some((r) => r.test(text)) || labelValueIsDetail(text));
 }
 
 /** Sections whose title is the person's own role or a name they gave (scanned). Every other title is a work, a talk, a study or an organization. */
@@ -105,15 +145,21 @@ export { LICENSE_NUMBER_SHAPE as LICENSE_NUMBER_RE } from "./practiceRecordShare
 
 /** Rows that may carry an ID number (review s2r2 N-L2): credentials, memberships, clinical placements. */
 const NUMBER_SECTIONS: ReadonlySet<PracticeSection> = new Set<PracticeSection>(["license", "membership", "clinical"]);
-/** True when a credential, membership or clinical row carries a license, member or ID number (title, venue or state). */
+/**
+ * True when a row carries an ID number: a credential, membership or clinical
+ * row with a license, member or ID number (title, venue or state), or ANY row
+ * with a badge, employee or ID number of 5+ digits (review s2r3 N3-L4).
+ */
 export function rowHasIdNumber(e: PracticeEntry): boolean {
-  return NUMBER_SECTIONS.has(e.section) && (hasLicenseNumber(e.title) || hasLicenseNumber(e.venue, { address: true }) || hasLicenseNumber(e.state));
+  if (NUMBER_SECTIONS.has(e.section) && (hasLicenseNumber(e.title) || hasLicenseNumber(e.venue, { address: true }) || hasLicenseNumber(e.state))) return true;
+  const d = e.details;
+  return [e.title, e.venue, d.role, d.contact, d.level].some(hasIdLabelNumber);
 }
 
 /** A title that reads as a degree (the bare word "degree" alone does not: "Non-degree study"). */
 export const DEGREE_TITLE_RE = /\b(B\.?F\.?A|M\.?F\.?A|B\.?A|M\.?A|B\.?S|M\.?S|Ph\.?D|Ed\.?D|A\.?A|A\.?S|Associate'?s?|Bachelor'?s?|Master'?s?|Doctor\w*)\b/;
-/** A title that already says it is study without a degree. */
-const NON_DEGREE_RE = /\b(?:non-?degree|course ?work|classes|credits? (?:toward|towards|in))\b/i;
+/** A title that already says, AT ITS START, it is study without a degree (review s2r3 N3-L3: "Bachelor of Arts (classes)" still reads as a degree). */
+const NON_DEGREE_RE = /^\s*(?:non-?degree|course ?work|classes|credits?)\b/i;
 export function readsAsDegree(title: string): boolean {
   return DEGREE_TITLE_RE.test(title) && !NON_DEGREE_RE.test(title);
 }
@@ -134,6 +180,12 @@ export function degreeStatusKnown(e: PracticeEntry): boolean {
   if (e.details.status === "conferred") return true;
   return e.details.status === "in_progress" && /\b(19|20)\d{2}\b/.test(String(e.details.expected ?? ""));
 }
+
+export type CvField = "displayName" | "discipline" | "basedIn" | "email" | "phone" | "website" | "interests" | "languages";
+/** How each typed field is read for facility words: the person's own name, email and home place are never held, only asked about. */
+export const FIELD_KIND: Record<CvField, FacilityFieldKind> = {
+  displayName: "name", email: "name", basedIn: "place", phone: "text", website: "name", discipline: "text", interests: "text", languages: "text",
+};
 
 export interface CvSection {
   key: string;
@@ -156,7 +208,9 @@ export interface CvModel {
     reason: "not_selected" | "leave_out" | "needs_choice" | "needs_kind" | "no_consent" | "needs_status" | "license_number" | "personal" | "names_hidden";
   }[];
   /** Typed fields kept off the page, and why (they never print while this holds). */
-  heldFields: { field: "displayName" | "discipline" | "basedIn" | "email" | "phone" | "website" | "interests" | "languages"; reason: "personal" | "names_hidden" }[];
+  heldFields: { field: CvField; reason: "personal" | "names_hidden" }[];
+  /** Lines that print but share a word with a place this lane keeps off: one tap to answer (review s2r3 N3-H1). */
+  asks: FacilityAsk[];
   /** The reference the person chose to lead (null when none is chosen). */
   leadReference: string | null;
   trimmed: boolean;
@@ -331,16 +385,28 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
     pending.push({ def, rows, trimmedHere });
   }
 
-  // The lane's hidden facility terms (built from what this CV prints) and the
-  // personal-detail shapes apply to every typed field and every row: a hit
-  // stays off the page (and blocks).
-  const hidden = hiddenFacilityTerms(entries, settings, pending.flatMap((p) => p.rows.map((r) => r.entryId)));
+  // The lane's hidden facility terms, built from what this CV prints. A row
+  // the check drops never makes a name public (review s2r3 N3-L1). Then the
+  // personal-detail shapes and the facility check apply to every typed field
+  // and every row: tier 1 stays off the page (and blocks), tier 2 prints and
+  // is asked about.
+  const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
+  const settled = settleShown(
+    pending.flatMap((p) => p.rows),
+    (r) => r.entryId,
+    (r, t) => rowFacilityHit(r, byId.get(r.entryId.toLowerCase()), t),
+    (ids) => hiddenFacilityTerms(entries, settings, ids)
+  );
+  const hidden = settled.terms;
   const heldFields: CvModel["heldFields"] = [];
-  const safe = (field: CvModel["heldFields"][number]["field"]): string | undefined => {
+  const asks: FacilityAsk[] = [];
+  const safe = (field: CvField): string | undefined => {
     const t = settings[field];
     if (!t) return undefined;
     if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
-    if (namesHiddenFacility(t, hidden)) return void heldFields.push({ field, reason: "names_hidden" });
+    const h = facilityCheck(t, hidden, FIELD_KIND[field]);
+    if (h?.tier === 1) return void heldFields.push({ field, reason: "names_hidden" });
+    if (h) asks.push({ field, phrase: h.phrase });
     return t;
   };
   const sections: CvSection[] = [];
@@ -352,9 +418,13 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
       continue;
     }
     const rows = all.filter((r) => {
-      if (!namesHiddenFacility(rowCheckText(r), hidden)) return true;
-      omitted.push({ entryId: r.entryId, reason: "names_hidden" });
-      return false;
+      const h = settled.hits.get(r);
+      if (h?.tier === 1) {
+        omitted.push({ entryId: r.entryId, reason: "names_hidden" });
+        return false;
+      }
+      if (h) asks.push({ entryId: r.entryId, phrase: h.phrase });
+      return true;
     });
     // References: the person's chosen lead first; never picked by year.
     if (def.key === "reference" && settings.leadReference) {
@@ -369,7 +439,7 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
   const discipline = safe("discipline") ?? "";
   const refs = sections.find((x) => x.key === "reference")?.rows ?? [];
   const leadReference = settings.leadReference && refs[0]?.entryId.toLowerCase() === settings.leadReference.toLowerCase() ? refs[0].entryId : null;
-  return { cvType, header: { name, discipline, contact }, sections, needsChoice, omitted, heldFields, leadReference, trimmed };
+  return { cvType, header: { name, discipline, contact }, sections, needsChoice, omitted, heldFields, asks, leadReference, trimmed };
 }
 
 /** The CV as plain text. */

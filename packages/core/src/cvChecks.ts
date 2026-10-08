@@ -25,29 +25,71 @@ import type { PracticeEntry } from "./practiceRecordShared";
 import { yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
 import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvReads, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
-import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
+import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, openItemKey } from "./creativeChecks";
 
-export const CV_RULES_VERSION = `cv-1 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
+export const CV_RULES_VERSION = `cv-2 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
+
+/** The one-tap officer question (review s2r3 N3-M2). */
+export const OFFICER_ASK_QUESTION = "Is this person a corrections, probation or parole officer?";
+export const OFFICER_ASK_WHY = "An officer is never your first reference. If they aren't one, say so once and this goes away.";
 
 /**
  * A supervision or corrections officer, by role, name line or workplace.
  * Exact phrases on word boundaries, no guessing (review s2r2 N-M2 widened
  * it: plurals, the Bureau of Prisons, pretrial services, residential reentry
- * centers and halfway houses, community corrections).
+ * centers and halfway houses, community corrections; s2r3 N3-M2 added ranks,
+ * short forms and boards).
  */
-const OFFICER_STRONG = /\b(parole|probation|department of corrections|corrections? officer|correctional officer|community supervision|supervision officer|reentry (?:officer|agent)|pretrial services?(?: officer| agent)?|probation and parole agent)\b/i;
+const OFFICER_STRONG = new RegExp(
+  String.raw`\b(paroles?|probation|department of corrections|corrections? officers?|correctional officers?|community supervision|supervision officer|` +
+    String.raw`re-?entry (?:officer|agent)s?|pre-?trial(?: services?)?(?: officers?| agents?)?|probation and parole agent|USPO|U\.?S\.? probation|` +
+    String.raw`deputy sheriffs?|detention (?:officers?|deputy|deputies)|deputy wardens?)\b`,
+  "i"
+);
+/** "C.O." with or without dots: only in the role or name line, as capitals ("CO-founder" is not one). */
+const OFFICER_CO = /(?:^|[\s,(])C\.?O\.?(?=$|[\s,)])(?!-)/;
 const OFFICER_PO = /\bP\.?O\.?(?=\s|$|,)/;
 /** "Officer", "agent", "case manager", "counselor" or "unit manager" counts only next to a corrections word (a loan officer or a school counselor does not). */
 const OFFICER_WORD = /\b(officers?|agents?|case ?managers?|counsell?ors?|unit managers?)\b/i;
+/** A rank at a jail, prison or facility: sergeant, lieutenant, captain, warden, deputy (an Army sergeant or a museum's deputy director is not one). */
+const OFFICER_RANK = /\b(sergeants?|sgt\.?|lieutenants?|lt\.?|captains?|capt\.?|wardens?|deputy|deputies)(?=\W|$)/i;
 const CORRECTIONS_CTX = new RegExp(
-  String.raw`\b(corrections?|correctional|parole|probation|jails?|prisons?|sheriffs?|doc|bop|bureau of prisons|pretrial|supervision|detention|penitentiar(?:y|ies)|` +
-    String.raw`residential re-?entry(?: centers?| centres?)?|rrc|halfway houses?|community corrections|department of corrections)\b`,
+  String.raw`\b(corrections?|correctional|paroles?|probation|jails?|prisons?|sheriffs?|doc|bop|bureau of prisons|pre-?trial|supervision|detention|penitentiar(?:y|ies)|` +
+    String.raw`residential re-?entry(?: centers?| centres?)?|rrc|halfway houses?|community corrections|department of corrections|community justice)\b`,
   "i"
 );
+/** Rank words also need a place that IS a facility (a jail, prison, sheriff, detention or a facility). */
+const RANK_CTX = new RegExp(CORRECTIONS_CTX.source.replace(/\)\\b$/, "|facility|facilities|institution|institutions)\\b"), "i");
 export function looksLikeOfficer(e: PracticeEntry): boolean {
+  if (e.details.officer === true) return true;
   const role = `${e.details.role ?? ""} ${e.title}`;
   const all = `${role} ${e.venue ?? ""}`;
-  return OFFICER_STRONG.test(all) || OFFICER_PO.test(role) || (OFFICER_WORD.test(role) && CORRECTIONS_CTX.test(all));
+  return (
+    OFFICER_STRONG.test(all) ||
+    OFFICER_PO.test(role) ||
+    OFFICER_CO.test(e.details.role ?? "") ||
+    OFFICER_CO.test(e.title) ||
+    (OFFICER_WORD.test(role) && CORRECTIONS_CTX.test(all)) ||
+    (OFFICER_RANK.test(role) && RANK_CTX.test(all))
+  );
+}
+
+/**
+ * A bare "Officer", "Agent", "Deputy" or "Supervising officer" with only a
+ * county, state, city or district (or nothing) for where they work (review
+ * s2r3 N3-M2). Could be a police officer or a probation officer: asked once
+ * (FIX), never guessed. A stored "No" clears it; a "Yes" makes it an officer.
+ */
+const BARE_ROLE = /^\s*(?:my\s+)?(?:supervising\s+)?(?:officers?|agents?|deputy|deputies)\s*$/i;
+const NAME_RANK = /^\s*(?:officer|agent|deputy)\s+\S/i;
+const BARE_BODY = /^\s*(?:(?:the\s+)?(?:[A-Z][\w'.-]*\s+){0,3}(?:county|state|city|district|parish|borough|township|commonwealth)|(?:state|district|commonwealth|city|county) of\s+[A-Za-z .'-]+|u\.?s\.?a?\.?|united states|federal government)\s*$/i;
+export function maybeOfficer(e: PracticeEntry): boolean {
+  if (e.section !== "reference" || e.details.officer !== undefined || looksLikeOfficer(e)) return false;
+  const role = e.details.role ?? "";
+  const name = e.title.split(",")[0];
+  const asked = BARE_ROLE.test(role) || /\bsupervising officer\b/i.test(role) || NAME_RANK.test(name);
+  const where = (e.venue ?? "").trim() || e.title.split(",").slice(1).join(",").trim();
+  return asked && (!where || BARE_BODY.test(where));
 }
 
 const FIELD_LINE: Record<string, string> = {
@@ -104,6 +146,11 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
             why: "Your choices about work that names a facility apply to every line on this lane, your own words included.",
           }
     );
+  }
+  // Lines that print but share a word with a place this lane keeps off: one tap (N3-H1).
+  for (const a of model.asks ?? []) {
+    const e = a.entryId ? byId.get(a.entryId.toLowerCase()) : undefined;
+    items.push(facilityAskItem("cv", a.field ? FIELD_LINE[a.field] : e ? `${yearsOf(e)}  A line in your record` : "A line in your record", a));
   }
   // Rows held off the page, with a neutral line.
   for (const o of model.omitted) {
@@ -199,6 +246,15 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
       why: "You choose who leads. It is never decided by date.",
     });
   }
+  // A reference on the page that might be an officer: asked once (N3-M2).
+  for (const r of refRows) {
+    const e = byId.get(r.entryId.toLowerCase());
+    if (!e || !maybeOfficer(e)) continue;
+    items.push({
+      rule: "CV-04", severity: "FIX", line: entryLine(e, settings), doc: "cv", entryId: e.id, answer: "officer",
+      question: OFFICER_ASK_QUESTION, why: OFFICER_ASK_WHY,
+    });
+  }
   const lead = refRows.length === 1 ? refRows[0] : model.leadReference ? refRows[0] : null;
   const leadEntry = lead ? byId.get(lead.entryId.toLowerCase()) : undefined;
   if (leadEntry && looksLikeOfficer(leadEntry)) {
@@ -231,7 +287,7 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
 
   const seen = new Set<string>();
   const unique = items.filter((x) => {
-    const k = `${x.rule}|${x.line}|${x.question}|${x.entryId ?? ""}`;
+    const k = openItemKey(x);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;

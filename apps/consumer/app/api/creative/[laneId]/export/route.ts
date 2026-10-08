@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   BIO_LENGTHS,
   BIO_LIMITS,
+  bioFacilityCheck,
   bioTextForLane,
   countChars,
   countWords,
@@ -72,7 +73,16 @@ export async function GET(request: Request, context: RouteContext) {
   const items = c.status.openItems.filter((x) => x.doc === checkDoc || x.doc === "record");
   const draft = items.some((x) => x.severity === "BLOCK");
   // The to-do page is exported too: neutral lines for anything the lane keeps off, then a backstop filter.
-  const openItems = exportOpenItemLines({ ...c.status, openItems: items }, c.entries, c.settings);
+  // Only what THIS document prints makes a hidden name public (review s2r3 N3-M1); the statement prints no entry.
+  const shown =
+    doc === "artist_resume"
+      ? shownEntryIds(c.model)
+      : doc === "work_samples"
+        ? c.samples.map((r) => r.entryId)
+        : doc === "bio"
+          ? BIO_LENGTHS.flatMap((len) => bioFacilityCheck(c.bio.lengths[len], c.entries, c.settings).kept.map((x) => (x.origin === "fact" ? x.sourceEntryId ?? "" : ""))).filter(Boolean)
+          : [];
+  const openItems = exportOpenItemLines({ ...c.status, openItems: items }, c.entries, c.settings, checkDoc, shown);
 
   const text = (body: string, what: string, ext = "txt", type = "text/plain; charset=utf-8") =>
     new NextResponse((draft && ext === "txt" ? "DRAFT\n\n" : "") + body, {

@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CV_TYPES, type CareerLane, type CvType } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
-import type { CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
+import { applyPhraseAnswer, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import { buildCvModel, cvPageCap, cvPlainText, CV_TYPE_COPY } from "@crucible/core/src/cvShared";
 import { getCvStatus } from "@crucible/core/src/cvChecks";
 import { exportOpenItemLines } from "@crucible/core/src/creativeChecks";
@@ -17,7 +17,7 @@ import { stillNeedsProof, NEEDS_PROOF_NOTE, shownEntryIds } from "@crucible/core
 import { CREATIVE_ERRORS, CV_TABS, sendJson } from "@/lib/creative";
 import { PracticeRecordPanel, CV_SECTION_ORDER } from "./PracticeRecordPanel";
 import { FacilityChoices } from "./FacilityChoices";
-import { OpenItems } from "./OpenItems";
+import { OpenItems, OpenItemAnswersContext, type OpenItemAnswers } from "./OpenItems";
 import { CreativePage } from "./CreativePage";
 
 interface CvCtx {
@@ -87,6 +87,23 @@ export function CvLaneView({ laneId }: { laneId: string }) {
     [put]
   );
 
+  // One-tap answers (review s2r3): does a phrase name the place kept off; is a reference an officer.
+  const answers = useMemo<OpenItemAnswers>(
+    () => ({
+      onFacilityWord: (phrase, yes) =>
+        put({ phraseAnswer: { phrase, answer: yes ? "yes" : "no" } }, (s) => applyPhraseAnswer(s, phrase, yes ? "yes" : "no") ?? s),
+      onOfficer: async (entryId, yes) => {
+        const e = ctx?.entries.find((x) => x.id === entryId);
+        if (!e) return false;
+        const r = await sendJson(`/api/practice/${entryId}`, "PATCH", { details: { ...e.details, officer: yes } });
+        if (!r.ok) setNotice(r.data.message || CREATIVE_ERRORS.failed);
+        await load();
+        return r.ok;
+      },
+    }),
+    [put, ctx, load]
+  );
+
   const model = useMemo(() => (ctx ? buildCvModel(ctx.entries, ctx.settings, ctx.cvType) : null), [ctx]);
   const status = useMemo(() => (ctx && model ? getCvStatus({ entries: ctx.entries, settings: ctx.settings, cvType: ctx.cvType, model, pages }) : null), [ctx, model, pages]);
 
@@ -99,6 +116,7 @@ export function CvLaneView({ laneId }: { laneId: string }) {
   const refRows = model.sections.find((x) => x.key === "reference")?.rows ?? [];
 
   return (
+    <OpenItemAnswersContext.Provider value={answers}>
     <section className="mt-6" data-testid="cv-lane" aria-label={`${ctx.lane.name} CV lane`}>
       <div className="border border-t-line bg-t-panel p-3 sm:p-4">
         <p className="text-sm text-t-white">
@@ -229,5 +247,6 @@ export function CvLaneView({ laneId }: { laneId: string }) {
         )}
       </div>
     </section>
+    </OpenItemAnswersContext.Provider>
   );
 }

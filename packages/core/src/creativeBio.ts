@@ -19,7 +19,7 @@
 
 import type { PracticeEntry } from "./practiceRecordShared";
 import { placeOf } from "./practiceRecordShared";
-import { type BioPronoun, type CreativeKindSettings, countChars, countWords, titleModeFor, hiddenFacilityTerms, namesHiddenFacility } from "./creativeLaneShared";
+import { type BioPronoun, type CreativeKindSettings, type FacilityHit, type HiddenTerms, countChars, countWords, titleModeFor, hiddenFacilityTerms, facilityCheck, settleShown } from "./creativeLaneShared";
 
 export const BIO_LENGTHS = ["short", "medium", "long"] as const;
 export type BioLength = (typeof BIO_LENGTHS)[number];
@@ -316,18 +316,35 @@ export function flagSentence(text: string, vocab: string, name: string): Sentenc
 export { hiddenFacilityTerms, namesHiddenFacility } from "./creativeLaneShared";
 
 /**
+ * The facility check for one bio length (review s2r3 N3-M1): only what the
+ * bio itself prints can make a hidden venue public, so the entries "on this
+ * page" are the sources of its approved, current record sentences, and a
+ * sentence the check drops never counts. Returns the terms, the sentences
+ * kept, and each sentence's hit (tier 1 held, tier 2 asked about).
+ */
+export function bioFacilityCheck(
+  sentences: BioSentence[],
+  entries: PracticeEntry[],
+  s: CreativeKindSettings | null | undefined
+): { terms: HiddenTerms; kept: BioSentence[]; hits: Map<BioSentence, FacilityHit> } {
+  const current = new Set(bioTemplates(entries, s).map((t) => t.text));
+  const approved = sentences.filter((x) => x.approved && (x.origin !== "fact" || current.has(x.text)));
+  return settleShown(
+    approved,
+    (x) => (x.origin === "fact" ? x.sourceEntryId ?? null : null),
+    (x, t) => facilityCheck(x.text, t, "text"),
+    (ids) => hiddenFacilityTerms(entries, s, ids)
+  );
+}
+
+/**
  * The bio text a page may carry on this lane: approved sentences, minus any
  * that name a facility the lane keeps off (those are left out, and the open
  * items say why). Every render, export and copy box uses this.
  */
 export function bioTextForLane(sentences: BioSentence[], entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string {
-  const hidden = hiddenFacilityTerms(entries, s);
   // A record sentence whose entry changed is left out too: the old claim never prints.
-  const current = new Set(bioTemplates(entries, s).map((t) => t.text));
-  return sentences
-    .filter((x) => x.approved && !namesHiddenFacility(x.text, hidden) && (x.origin !== "fact" || current.has(x.text)))
-    .map((x) => x.text)
-    .join(" ");
+  return bioFacilityCheck(sentences, entries, s).kept.map((x) => x.text).join(" ");
 }
 
 /**

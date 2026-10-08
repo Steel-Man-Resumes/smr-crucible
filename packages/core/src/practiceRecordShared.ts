@@ -83,11 +83,17 @@ const NCCER_CODE_RE = /\b\d{5}(?:-\d{2})?\b/g;
 /** A ZIP code in an address: after a comma or a state's two letters ("Libby, MT 59923", "Example County Health, 59923"). */
 const ZIP_RE = /(?:,\s*|\b[A-Z]{2}\s+)\d{5}(?:-\d{4})?(?=\s*(?:$|,))/g;
 
+/** A date written with digits ("03/15/2025", "3.15.25", "2025-03-15", "12/2025"): never a number to hold. */
+const DIGIT_DATE_RE = /\b(?:(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|[12]\d|3[01])[./-](?:\d{4}|\d{2})|(?:0?[1-9]|[12]\d|3[01])[./-](?:0?[1-9]|1[0-2])[./-](?:\d{4}|\d{2})|(?:19|20)\d{2}[./-](?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|1[0-2])[./](?:19|20)\d{2})\b/g;
+/** A rule cite ("49 CFR 172.704", "29 U.S.C. 651"): a law's section, not a number to hold. */
+const RULE_CITE_RE = /\b\d+\s*(?:CFR|C\.F\.R\.|U\.?S\.?C\.?)\s*(?:§+\s*)?\d+(?:\.\d+)*(?:\([a-z0-9]+\))*/gi;
+
 /**
  * True when a text carries a license, certificate, member or ID number
- * (review s2r2 N-L2, N-L3). Digit groups joined by hyphens or spaces count as
- * one number ("123-4567", "12 345 67"), unless every group is a year
- * ("2019-2021"). Standard and code names are not numbers, and with
+ * (review s2r2 N-L2, N-L3; s2r3 N3-L4). Digit groups joined by spaces,
+ * hyphens, dots or slashes count as one number ("123-4567", "12 345 67",
+ * "RN.1234.567", "1234/567"), unless every group is a year ("2019-2021").
+ * Standard and code names are not numbers, a date is not one, and with
  * `address`, neither is a ZIP code.
  */
 export function hasLicenseNumber(text: string | null | undefined, opts: { address?: boolean } = {}): boolean {
@@ -95,12 +101,25 @@ export function hasLicenseNumber(text: string | null | undefined, opts: { addres
   let t = text.replace(STANDARD_NAME_RE, " ");
   if (/\bNCCER\b/i.test(text)) t = t.replace(NCCER_CODE_RE, " ");
   if (opts.address) t = t.replace(ZIP_RE, " ");
+  t = t.replace(DIGIT_DATE_RE, " ").replace(RULE_CITE_RE, " ");
   if (LICENSE_NUMBER_SHAPE.test(t)) return true;
-  for (const m of t.matchAll(/\d+(?:[\s-]+\d+)+/g)) {
-    const groups = m[0].split(/[\s-]+/);
+  for (const m of t.matchAll(/\d+(?:[\s./-]+\d+)+/g)) {
+    const groups = m[0].split(/[\s./-]+/);
     if (groups.join("").length >= 6 && !groups.every((g) => /^(?:19|20)\d{2}$/.test(g))) return true;
   }
   return false;
+}
+
+/**
+ * A badge, employee, staff, student, member or ID number of 5+ digits, in
+ * any row (review s2r3 N3-L4): "Driver, badge 4471229", "employee ID
+ * 4471229". A ZIP code after a state ("Boise, ID 83702") is not one.
+ */
+const ID_LABEL_NUMBER_RE =
+  /\b(?:badge|employee|staff|student|member(?:ship)?|inmate|offender|booking|id|i\.d\.)\s*(?:id|no\.?|number|num\.?|#)?\s*[:#-]?\s*[A-Z]{0,3}-?\d(?:[\s.-]?\d){4,}/i;
+export function hasIdLabelNumber(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return ID_LABEL_NUMBER_RE.test(text.replace(ZIP_RE, " "));
 }
 export const PRACTICE_WRITES_PER_DAY = 400;
 
@@ -172,6 +191,18 @@ export interface PracticeDetails {
   director?: string;
   /** training: who taught it, in the person's words. */
   teacher?: string;
+  /**
+   * reference: the person's answer to "Is this person a corrections,
+   * probation or parole officer?" (review s2r3 N3-M2). true: never the lead
+   * reference. false: the question is not asked again.
+   */
+  officer?: boolean;
+  /**
+   * An entry that names a facility: other names people use for the place
+   * ("the Q", "SQ", "Angola"), typed by the person (review s2r3 N3-H1). Kept
+   * off every lane that keeps the place off, matched whole.
+   */
+  otherNames?: string[];
   /**
    * Set by the server only, never from a request: earlier titles and venues
    * of an entry that names a facility. A lane that keeps the entry off keeps
@@ -271,6 +302,21 @@ function bool(v: unknown): boolean | undefined {
   return v === true ? true : v === false ? false : undefined;
 }
 
+/** At most this many other names for a place, each this long. */
+export const MAX_OTHER_NAMES = 8;
+const OTHER_NAME_MAX = 80;
+
+/** Other names for a place, from a list or one line split at commas or semicolons. Trimmed, no repeats, capped. */
+export function cleanOtherNames(v: unknown): string[] {
+  const raw = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,;\n]+/) : [];
+  const out: string[] = [];
+  for (const x of raw) {
+    const s = cleanLine(x, OTHER_NAME_MAX);
+    if (s && !out.some((o) => o.toLowerCase() === s.toLowerCase())) out.push(s);
+  }
+  return out.slice(0, MAX_OTHER_NAMES);
+}
+
 /** Keep only the details that belong to this section, cleaned. Unknown keys are dropped. */
 export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDetails {
   const d = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
@@ -278,6 +324,9 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
   const put = <K extends keyof PracticeDetails>(k: K, v: PracticeDetails[K] | null | undefined) => {
     if (v !== undefined && v !== null) out[k] = v;
   };
+  // Any entry may name a place people also call something else.
+  const other = cleanOtherNames(d.otherNames);
+  if (other.length) out.otherNames = other;
   switch (section) {
     case "exhibition":
       put("kind", oneOf(EXHIBITION_KINDS, d.kind));
@@ -353,6 +402,7 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
       put("role", cleanLine(d.role, NOTE_MAX));
       put("contact", cleanLine(d.contact, 200));
       put("consent", bool(d.consent));
+      put("officer", bool(d.officer));
       break;
     case "credit":
       put("medium", oneOf(CREDIT_MEDIA, d.medium));

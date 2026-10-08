@@ -102,6 +102,8 @@ interface Draft {
   proof: ProofMark;
   namesFacility: boolean;
   facilityTouched: boolean;
+  /** Other names people use for the place, one line, split at commas. */
+  otherNames: string;
 }
 
 function draftOf(e?: PracticeEntry, section: PracticeSection = "exhibition"): Draft {
@@ -117,6 +119,7 @@ function draftOf(e?: PracticeEntry, section: PracticeSection = "exhibition"): Dr
     proof: e?.proof ?? "remembered",
     namesFacility: e?.names_facility ?? false,
     facilityTouched: !!e,
+    otherNames: (e?.details.otherNames ?? []).join(", "),
   };
 }
 
@@ -142,7 +145,7 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
         setError("");
         const body = {
           section: d.section, title: d.title, venue: d.venue, city: d.city, state: d.state,
-          year: d.year, endYear: d.endYear || null, details: d.details, proof: d.proof, namesFacility,
+          year: d.year, endYear: d.endYear || null, details: { ...d.details, otherNames: namesFacility ? d.otherNames : [] }, proof: d.proof, namesFacility,
         };
         const r = entry ? await sendJson(`/api/practice/${entry.id}`, "PATCH", body) : await sendJson("/api/practice", "POST", body);
         setBusy(false);
@@ -323,6 +326,18 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
           testId="practice-names-facility"
         />
         <p className="text-xs text-t-phos-dim">You'll choose how it shows on each lane: the real title, just the venue, or not at all.</p>
+        {namesFacility && (
+          <div className="mt-2">
+            <Text
+              label="Other names people use for it (optional)"
+              hint="Short names or nicknames, split with commas. Wherever you keep the place off, these stay off too."
+              value={d.otherNames}
+              onChange={(v) => set({ otherNames: v })}
+              max={400}
+              testId="practice-other-names"
+            />
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-t-red" role="alert">{error}</p>}
