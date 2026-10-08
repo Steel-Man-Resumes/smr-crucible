@@ -53,9 +53,11 @@ import {
   type CredentialConfirm,
   applyConfirmation,
   isCredentialWhen,
-  cutCredentialWithRemnant,
+  cutCredentialEverywhere,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
+import { withholdRecordLines } from "@/lib/record-lines";
+import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
@@ -259,10 +261,30 @@ export default function OutputPage() {
   const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
   // The licenses-and-training answer: a credential line exactly as typed there is not asked about.
   const credentialsAnswer = session.challengeNarratives?.[CREDENTIALS_KEY];
+  // Round 7: the structured rows are the typed exception; whole lines of their own resume are the other.
+  const credentialRows = useMemo(() => completeCredentialRows(readCredentialRows(session.credentialRows)), [session.credentialRows]);
+  const ownResumeText = useMemo(
+    () => withholdRecordLines(session.originalResumeText ?? session.resumeText, keepInsideLines).kept,
+    [session.originalResumeText, session.resumeText, keepInsideLines]
+  );
   const view = useMemo(
     () =>
-      buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants]
+      buildFinishView({
+        resumeText,
+        ownWords,
+        defendAnswers,
+        coverLetterText,
+        addedTerms,
+        keptTerms,
+        confirmedCredentials,
+        grounding,
+        written,
+        credentialsAnswer,
+        credentialCutRemnants,
+        credentialRows,
+        ownResumeText,
+      }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants, credentialRows, ownResumeText]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";
@@ -377,11 +399,11 @@ export default function OutputPage() {
       return "ok";
     },
     onCutCredential: (group) => {
-      const isLetter = group.target === "letter";
-      const { text: next, remnant } = cutCredentialWithRemnant(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line);
-      if (isLetter) setCoverLetterText(next);
-      else setResumeText(next);
-      if (remnant) setCredentialCutRemnants((r) => (r.includes(remnant) ? r : [...r, remnant]));
+      // Round 7: every mention of that credential comes off, on both pages, so it is never asked again.
+      const r = cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line);
+      setResumeText(r.resume);
+      setCoverLetterText(r.letter);
+      if (r.remnants.length) setCredentialCutRemnants((rs) => [...rs, ...r.remnants.filter((x) => !rs.includes(x))]);
     },
   };
 

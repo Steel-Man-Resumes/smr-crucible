@@ -45,6 +45,8 @@ import {
   sameCredential,
   mentionsOfName,
   titleOfHeader,
+  credentialLineText,
+  type CredentialRow,
 } from "@crucible/core/src/credentialMentions";
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
@@ -502,32 +504,9 @@ export function cutTerm(text: string, term: string): string {
 
 // ---- credentials the person confirmed (D4) ---------------------------------------
 
-// The writer's type and status words never survive a confirmation: the line
-// is rebuilt from the name the person said yes to, the kind they picked, and
-// their own year or status. A class letter they confirmed stays ("CDL Class A").
-// A title word stays when it is part of the credential's own name ("Registered Nurse", "Licensed
-// Practical Nurse", "Certified Nursing Assistant"), so the line says what the person said yes to.
-const CLAIM_WORDS_RE =
-  /\b(?:certified(?!\s+(?:nursing|medical|pharmacy|welding|public|home|nurse|professional|clinical)\b)|certification|certifications|certificate|cert|licensed(?!\s+(?:practical|vocational|professional|clinical)\b)|license|licence|card|cards|training|course|program|endorsement|permit|registry|registered(?!\s+[A-Za-z])|holder|class(?![\s-]*[a-d0-9]\b))\b/gi;
-const NAME_STATUS_RE =
-  /\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|in good standing|up to date|good for|through|until|since)\b|\b(?:19|20)\d{2}\b/gi;
-
-/** The credential's name without the writer's type or status words ("Forklift Certified" is "Forklift"). */
-function bareName(name: string): string {
-  return (
-    name
-      .replace(CLAIM_WORDS_RE, " ")
-      .replace(NAME_STATUS_RE, " ")
-      .replace(/[()]/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .replace(/^[,\s-]+|[,\s-]+$/g, "")
-      .trim() || name.trim()
-  );
-}
-
-/** The line as the person confirmed it: the name, the kind they picked, and their own year or status. */
+/** The line as the person confirmed it: the name, the kind they picked, and their own year or status (core credentialLineText). */
 export function confirmedCredentialText(name: string, type: CredentialType, when: string): string {
-  return `${bareName(name)} ${type}, ${when.trim().replace(/[.\s]+$/, "")}`;
+  return credentialLineText(name, type, when);
 }
 
 /**
@@ -548,9 +527,14 @@ const MOVE_RIGHT_RE =
 const ORPHAN_START_RE = /^(?:and|or|but|so|who|which|that|as|with|while|plus)\b[\s,]*/i;
 const ORPHAN_END_RE = /[\s,]*\b(?:and|or|but|so|who|which|that|as|with|while|plus)$/i;
 
+/** A credential's words as a pattern that also matches them joined by a hyphen ("forklift-certified"). */
+function wordsPattern(raw: string): RegExp {
+  return new RegExp(escapeRe(raw.trim()).replace(/(?:\\s|\s|-|\\-)+/g, "[\\s\\u2010-\\u2015-]+"), "i");
+}
+
 /** Take a credential's words out of a longer sentence. Returns the rest of the sentence, tidied. */
 function removeFromSentence(sentence: string, raw: string): string {
-  const pattern = new RegExp(escapeRe(raw.trim()).replace(/\s+/g, "\\s+"), "i");
+  const pattern = wordsPattern(raw);
   const m = sentence.match(pattern);
   if (!m || m.index === undefined) return sentence;
   let start = m.index;
@@ -576,7 +560,7 @@ function removeFromSentence(sentence: string, raw: string): string {
 }
 
 // A period after one of these is not a sentence end ("Main St.", "Acme Inc.", "U.S.", "Dr. Lee", "J. Smith").
-const ABBREV_END_RE = /(?:\b(?:St|Ave|Rd|Blvd|Hwy|Inc|Co|Corp|Ltd|LLC|Dr|Mr|Mrs|Ms|Jr|Sr|No|Mt|Ft|Dept|Univ|vs|etc|approx|a\.m|p\.m)\.|\b[A-Z]\.|(?:\b[A-Za-z]\.){2,})$/;
+const ABBREV_END_RE = /(?:\b(?:St|Ave|Rd|Blvd|Hwy|Ln|Ct|Pl|Ste|Inc|Co|Corp|Ltd|LLC|Bros|Mfg|Assn|Intl|Twp|Dr|Mr|Mrs|Ms|Jr|Sr|No|Mt|Ft|Dept|Univ|vs|etc|approx|a\.m|p\.m|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.|\b[A-Z]\.|(?:\b[A-Za-z]\.){2,})$/;
 
 /** The sentences of a paragraph, never broken at an abbreviation or an initial. */
 export function splitSentences(paragraph: string): string[] {
@@ -585,7 +569,8 @@ export function splitSentences(paragraph: string): string[] {
   for (const p of pieces) {
     const prev = out[out.length - 1];
     // Join when the last piece ends on an abbreviation, or this one does not start a sentence.
-    if (prev !== undefined && (ABBREV_END_RE.test(prev) || !/^["'(\[]?[A-Z0-9]/.test(p))) out[out.length - 1] = `${prev} ${p}`;
+    // Join when the last piece ends on an abbreviation, or this one does not start a sentence (lower case, a digit).
+    if (prev !== undefined && (ABBREV_END_RE.test(prev) || !/^["'(\[]?[A-Z]/.test(p))) out[out.length - 1] = `${prev} ${p}`;
     else out.push(p);
   }
   return out;
@@ -601,7 +586,7 @@ const STATUS_ANY_RE = /\b(?:current|currently|valid|active|expired|expires|renew
  * paragraph without them.
  */
 function dropSentences(paragraph: string, raw: string): string {
-  const pattern = new RegExp(escapeRe(raw.trim()).replace(/\s+/g, "\\s+"), "i");
+  const pattern = wordsPattern(raw);
   const kept: string[] = [];
   let dropped = false;
   for (const sent of splitSentences(paragraph)) {
@@ -808,6 +793,49 @@ export function cutCredentialWithRemnant(text: string, line: string, isTerm: boo
   return { text: next, remnant: linesOf(next).find((l) => stripBullet(l) === rest) ?? rest };
 }
 
+/**
+ * "No, take it off", everywhere (round 7): every mention of that credential
+ * on the resume and in the letter comes off, so the same credential is never
+ * asked again on the next line. A list item goes alone, never its whole
+ * line; a short line goes; inside a longer resume sentence the rest is kept
+ * as a leftover the gate holds; in the letter the whole sentence goes, and
+ * what stays of its paragraph is read again.
+ */
+export function cutCredentialEverywhere(
+  docs: { resume: string; letter: string },
+  name: string
+): { resume: string; letter: string; remnants: string[] } {
+  const key = credentialKeyOf(name);
+  const remnants: string[] = [];
+  const mentionsIn = (t: string) => {
+    const found = credentialMentionsOf(t).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+    return [...found, ...mentionsOfName(t, name).filter((b) => !found.some((f) => f.line === b.line))];
+  };
+  let resume = docs.resume;
+  for (let guard = 0; guard < 20; guard++) {
+    const m = mentionsIn(resume)[0];
+    if (!m) break;
+    const r = cutCredentialWithRemnant(resume, m.line, m.term, m.raw || name);
+    if (r.text === resume) break;
+    resume = r.text;
+    if (r.remnant) remnants.push(r.remnant);
+  }
+  let letter = joinWrappedLines(docs.letter);
+  for (let guard = 0; guard < 20; guard++) {
+    const m = mentionsIn(letter).find((x) => !x.term);
+    if (!m) break;
+    const current = linesOf(letter).find((l) => l === m.line);
+    if (!current) break;
+    const rest = dropSentences(current, m.raw || m.name);
+    const next = rest ? changeLine(letter, m.line, rest) : cutLine(letter, m.line);
+    if (next === letter) break;
+    letter = next;
+    if (rest && splitSentences(rest).some((sent) => readsAsFragment(sent) || (STATUS_ANY_RE.test(sent) && !credentialMentionsOf(`x\n${sent}`).length))) {
+      remnants.push(linesOf(letter).find((l) => l === rest) ?? rest);
+    }
+  }
+  return { resume, letter, remnants };
+}
 
 // ---- the view ------------------------------------------------------------------
 
@@ -879,7 +907,7 @@ const ANSWERABLE = (i: OpenItem) =>
 // Words that start a fragment, not a sentence: a joining word or a relative pronoun.
 const FRAGMENT_START_RE = /^(?:and|or|but|so|nor|yet|plus|who|whom|whose|which|that|where|while|as|with|because|since|although|though|than)\b/i;
 const IRREGULAR_VERB_RE =
-  /\b(?:ran|run|runs|led|lead|leads|made|make|makes|kept|keep|keeps|built|build|builds|drove|drive|drives|took|take|takes|did|do|does|got|get|gets|went|go|goes|set|sets|held|hold|holds|fed|feed|met|meet|sold|sell|taught|teach|put|cut|cuts|brought|bring|bought|buy|caught|dug|fixed|fix|fixes|ate|wrote|write|writes|read|reads|spoke|speak|swept|sweep|stood|stand|told|tell|found|find|gave|give|gives|left|lift|lifts|load|loads|cook|cooks|clean|cleans|open|opens|close|closes|serve|serves|stock|stocks|pack|packs|help|helps|work|works|is|was|are|were|am|has|have|had)\b/i;
+  /\b(?:ran|run|runs|led|lead|leads|made|make|makes|kept|keep|keeps|built|build|builds|drove|drive|drives|took|take|takes|did|do|does|got|get|gets|went|go|goes|set|sets|held|hold|holds|fed|feed|met|meet|sold|sell|taught|teach|put|cut|cuts|brought|bring|bought|buy|caught|dug|fixed|fix|fixes|ate|wrote|write|writes|read|reads|spoke|speak|swept|sweep|stood|stand|told|tell|found|find|gave|give|gives|left|lift|lifts|load|loads|cook|cooks|clean|cleans|open|opens|close|closes|serve|serves|stock|stocks|pack|packs|help|helps|work|works|is|was|are|were|am|has|have|had|would|could|will|can|should|may|might|be|been|want|wants|say|says|said|love|like|know|knew|see|saw|show|showed|start|started|bring|brings)\b/i;
 
 /**
  * True when a leftover must be reworded or cut: a sentence of it reads as a
@@ -978,7 +1006,16 @@ const SAME_NAME: Array<[RegExp, string]> = [
   [/\b(?:certified\s+)?forklift\s+operator\b/gi, "forklift"],
 ];
 function sameNameWords(name: string): string {
-  return SAME_NAME.reduce((t, [re, to]) => t.replace(re, to), name);
+  const t = SAME_NAME.reduce((acc, [re, to]) => acc.replace(re, to), name).toLowerCase();
+  // One family, one key (round 7): every OSHA card of one number, every CDL of one class, every CPR card.
+  const osha = t.match(/\bosha\s*-?\s*(\d+)/);
+  if (osha) return `osha ${osha[1]}`;
+  if (/\bcdl\b/.test(t)) {
+    const cls = t.match(/\bclass[\s-]*([a-d])\b|\bcdl[\s-]*\(?([a-d])\)?(?![\w'])/);
+    return `cdl ${cls ? `class_${cls[1] ?? cls[2]}` : ""}`.trim();
+  }
+  if (/\bcpr\b/.test(t)) return "cpr";
+  return t;
 }
 
 /** New (round 5): two confirmations that may be one credential, told two ways. */
@@ -1026,7 +1063,7 @@ function letterItems(
   resumeText: string,
   source: string,
   answers: DefendAnswer[],
-  personText: string,
+  personText: { text: string; rows?: ReadonlyArray<CredentialRow>; backstop: string },
   askedOnResume: Set<string>
 ): GateItem[] {
   const items: GateItem[] = [];
@@ -1034,7 +1071,10 @@ function letterItems(
   for (const { line, sentence } of letterSentences(letter)) {
     // A scope claim the person never made: only their own rewrite or a cut settles it.
     const hit = scopeNotTheirs(sentence, source);
-    if (hit && !items.some((i) => i.line === line && i.kind === "scope_unsaid")) {
+    // A scope word the person typed into the line themselves (their rewrite) is their claim.
+    const rw = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
+    const theirWord = !!hit && !!rw && !new RegExp(`\\b${(hit.word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
+    if (hit && !theirWord && !items.some((i) => i.line === line && i.kind === "scope_unsaid")) {
       items.push({ rule: "STD-C04", severity: "BLOCK", line, target: "letter", kind: "scope_unsaid", why: scopeWhy(hit.word), question: Q_SCOPE });
     }
     // A sentence far from the person's words: settled by an answer, like a defend line.
@@ -1057,7 +1097,7 @@ function letterItems(
   // The resume's card is the one place a shared credential is asked. While it
   // is open the page is a draft; confirming it takes the letter's sentence
   // out, and cutting it leaves the letter's mention to be asked here.
-  for (const m of credentialsToAsk(letter, personText, askedOnResume)) {
+  for (const m of credentialsToAsk(letter, personText.text, askedOnResume, personText.rows, personText.backstop)) {
     items.push({
       rule: "STD-T03",
       severity: "BLOCK",
@@ -1093,6 +1133,10 @@ export function buildFinishView(input: {
   credentialsAnswer?: string;
   /** What "No, take it off" left of longer sentences (held like a confirmed move's leftover). */
   credentialCutRemnants?: string[];
+  /** The person's structured credentials from the Forge's training step (round 7): the one typed exception. */
+  credentialRows?: ReadonlyArray<CredentialRow>;
+  /** The person's own uploaded resume (record lines held back as they chose). Whole lines of it may cover a credential. */
+  ownResumeText?: string;
 }): FinishView {
   const letter = input.coverLetterText ?? "";
   const answers = input.defendAnswers;
@@ -1122,6 +1166,8 @@ export function buildFinishView(input: {
     secondCheckFindings: input.secondCheckFindings,
     credentialsAnswer: input.credentialsAnswer,
     confirmedKeys: confirms.map((c) => c.key).filter((k): k is string => !!k),
+    credentialRows: input.credentialRows,
+    ownResumeText: input.ownResumeText,
   });
 
   const resumeLines = pageLineSet(input.resumeText);
@@ -1153,10 +1199,13 @@ export function buildFinishView(input: {
     for (const f of runMintCheck({ output: letter, source, kind: "cover_letter" }).findings) {
       items.push({ rule: f.rule, severity: f.severity, line: f.line, why: f.why, question: questionForFinding(f), target: "letter" });
     }
-    const personText = `${source}\n\n${input.credentialsAnswer ?? ""}`;
+    // The same exception the resume uses: their uploaded resume (never the free-text licenses answer) and their rows.
+    const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+    const personText = input.ownResumeText ?? source.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
+    const backstopText = `${source}\n\n${input.credentialsAnswer ?? ""}`;
     const confirmedSet = new Set(confirms.map((c) => c.key).filter((k): k is string => !!k));
-    const askedOnResume = new Set([...credentialsToAsk(resumeForChecks, personText, confirmedSet).map((m) => m.key), ...confirmedSet]);
-    items.push(...letterItems(letter, input.resumeText, source, answers, personText, askedOnResume));
+    const askedOnResume = new Set([...credentialsToAsk(resumeForChecks, personText, confirmedSet, input.credentialRows, backstopText).map((m) => m.key), ...confirmedSet]);
+    items.push(...letterItems(letter, input.resumeText, source, answers, { text: personText, rows: input.credentialRows, backstop: backstopText }, askedOnResume));
   }
 
   // Skills added from a posting go on the same keep-or-cut card.

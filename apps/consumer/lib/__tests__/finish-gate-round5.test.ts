@@ -94,19 +94,21 @@ test("S5 (control): two different credentials confirmed differently are not a co
   assert.ok(!v.openItems.some((i) => i.kind === "credential_confirmed_conflict"), JSON.stringify(v.openItems));
 });
 
-test("Typed exactly: the licenses-and-training answer is the one exception, on the resume and in the letter", () => {
+test("Typed exactly (round 7): a structured row is the one exception; the old free-text answer is not", () => {
   const r = HEAD("\n\nCERTIFICATIONS\n- Forklift card, expired 2020");
-  // The answer is part of the person's own words too (ownWordsFor), so its year is theirs.
-  const typed = (t: string) => ({ ownWords: `${BASE}\n\n${t}`, credentialsAnswer: t });
-  assert.equal(view(r, typed("forklift card, expired 2020")).state, "finished");
-  assert.equal(view(r, typed("forklift card")).state, "draft");
-  // Round 6: a whole line of the person's own words (their uploaded resume) counts the same way.
+  const rows = [{ name: "Forklift", kind: "card" as const, when: "expired 2020" }];
+  // The rows are part of the person's own words too (ownWordsFor), so their year is theirs.
+  const withRows = { ownWords: `${BASE}\n\nForklift card, expired 2020`, credentialsAnswer: "Forklift card, expired 2020", credentialRows: rows };
+  assert.equal(view(r, withRows).state, "finished");
+  assert.equal(view(r, { ...withRows, credentialRows: [{ name: "Forklift", kind: "card" as const, when: "current" }] }).state, "draft");
+  // The free-text answer alone gives no exception, even word for word.
+  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card, expired 2020`, credentialsAnswer: "forklift card, expired 2020" }).state, "draft");
+  // A whole line of their uploaded resume still counts; a line saying they let it go does not, and lines never join.
   assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card, expired 2020` }).state, "finished");
-  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card\nexpired 2020` }).state, "finished");
   assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card; never renewed it` }).state, "draft");
-  // The letter never borrows the resume's typed line: its own mention is asked.
+  // The letter never borrows the resume's line: its own mention is asked.
   const letter = letterOf("I ran the grill at Harbor Street Diner. My forklift card is current.");
-  const v = view(r, { coverLetterText: letter, ...typed("forklift card, expired 2020") });
+  const v = view(r, { coverLetterText: letter, ...withRows });
   assert.ok(v.openItems.some((i) => i.target === "letter" && i.kind === "credential_unsaid"), JSON.stringify(v.openItems));
 });
 

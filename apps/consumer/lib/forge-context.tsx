@@ -57,6 +57,12 @@ export interface ForgeSessionData {
     context: string;
   };
   challengeNarratives?: Record<string, string>;
+  /**
+   * The licenses-and-training answer as structured rows (round 7): name,
+   * kind, year or status. A rendering of the rows is also written to
+   * challengeNarratives.licenses_and_training for the writer.
+   */
+  credentialRows?: import("./credential-rows").CredentialRowDraft[];
 
   // Page 5: Preferences
   // Comma-joined ids per question; see lib/forge-preferences.ts for the format.
