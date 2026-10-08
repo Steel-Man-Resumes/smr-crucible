@@ -65,6 +65,7 @@ import {
   flagSentence,
   hiddenFacilityTerms,
   namesHiddenFacility,
+  unbackedClaims,
 } from "./creativeBio";
 import { type StatementContent, auditStatementHistory } from "./creativeStatement";
 
@@ -112,6 +113,22 @@ export interface CreativeStatus {
 
 const clip = (s: string, n = 70) => (s.length > n ? `${s.slice(0, n).trim()}...` : s);
 
+/** What an open item says in place of an entry this lane keeps off (a DRAFT to-do page is exported too). */
+export const HIDDEN_ENTRY_LINE = "An entry in your record (title kept off this page)";
+export const HIDDEN_SENTENCE_LINE = "A sentence naming something you keep off this lane";
+
+/**
+ * The line an open item shows for an entry: its true title only when this
+ * lane shows the true title; the venue-only text when that is the choice;
+ * otherwise a neutral line. entryId still points the screen at the record.
+ */
+export function entryLine(e: PracticeEntry, settings: CreativeKindSettings | null | undefined): string {
+  const mode = titleModeFor(e, settings);
+  if (mode === "true_title") return `${yearsOf(e)}  ${e.title}`;
+  if (mode === "venue_only" && e.section !== "work") return `${yearsOf(e)}  ${rowText(artistRowParts(e, "venue_only"))}`;
+  return `${yearsOf(e)}  ${HIDDEN_ENTRY_LINE}`;
+}
+
 const DEGREE_RE = /\b(B\.?F\.?A|M\.?F\.?A|B\.?A|M\.?A|B\.?S|M\.?S|Ph\.?D|Ed\.?D|A\.?A|A\.?S|Associate'?s?|Bachelor'?s?|Master'?s?|Doctor\w*|degree)\b/;
 const FACULTY_RE = /\b(professor|faculty|lecturer|instructor of record)\b/i;
 const UPGRADE_WORDS: { re: RegExp; ok: (e: PracticeEntry) => boolean; what: string }[] = [
@@ -127,7 +144,7 @@ const UPGRADE_WORDS: { re: RegExp; ok: (e: PracticeEntry) => boolean; what: stri
 export function checkRecord(entries: PracticeEntry[], settings: CreativeKindSettings | null | undefined): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
   for (const e of entries) {
-    const line = `${yearsOf(e)}  ${e.title}`;
+    const line = entryLine(e, settings);
     const mode = titleModeFor(e, settings);
     if (mode === "unset") {
       out.push({
@@ -328,7 +345,8 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
       const leak = namesHiddenFacility(s.text, hidden);
       if (leak) {
         out.push({
-          rule: "STD-R03", severity: "BLOCK", line, doc: "bio",
+          // Never quote the sentence: the to-do page of a DRAFT export prints this line.
+          rule: "STD-R03", severity: "BLOCK", line: HIDDEN_SENTENCE_LINE, doc: "bio",
           question: "This sentence names something you chose to keep off this lane. Cut it, or change that choice?",
           why: "Your choices about work that names a facility apply to every page on this lane.",
         });
@@ -349,6 +367,13 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
           rule: "CR-04", severity: "FIX", line, doc: "bio",
           question: `Where does "${f.untraced[0]}" come from? It isn't in your record. Add it there, or say it another way.`,
           why: "Panels check what a bio names. Your record is where the proof lives.",
+        });
+      }
+      for (const w of unbackedClaims(s.text, entries)) {
+        out.push({
+          rule: "CR-02", severity: "FIX", line, doc: "bio",
+          question: `"${w}": does your record back that? Your record lists it differently. Say it the way the record does, or add it there.`,
+          why: "A show, award or program is described the way it really was. Panels check.",
         });
       }
       if (f.numberWord) {
@@ -413,12 +438,16 @@ export function checkStatement(statement: StatementContent): CreativeOpenItem[] 
 
 // ------------------------------------------------------------ work samples --
 
+function e0Line(r: WorkSampleRow, e: PracticeEntry | undefined, settings: CreativeKindSettings | null | undefined): string {
+  return e && titleModeFor(e, settings) !== "true_title" ? `${r.number}. ${HIDDEN_ENTRY_LINE}` : `${r.number}. ${r.title}`;
+}
+
 export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[], settings?: CreativeKindSettings | null): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   for (const r of rows) {
     const e = byId.get(r.entryId.toLowerCase());
-    const line = `${r.number}. ${r.title}`;
+    const line = e0Line(r, byId.get(r.entryId.toLowerCase()), settings);
     if (!e || e.section !== "work") {
       out.push({
         rule: "CR-10", severity: "BLOCK", line, doc: "work_samples",
@@ -494,4 +523,21 @@ export function creativeOpenItemLines(status: CreativeStatus, doc?: CreativeDoc)
   return status.openItems
     .filter((x) => !doc || x.doc === doc || x.doc === "record")
     .map((x) => `${x.line}: ${x.question}`);
+}
+
+export const HIDDEN_ITEM_LINE = "An open item about something you keep off this page. Open Creative work to see it.";
+
+/**
+ * The to-do lines an EXPORT may print: creativeOpenItemLines, then any line
+ * that still names a facility this lane keeps off is replaced whole by a
+ * neutral line (the backstop behind entryLine and the bio's neutral line).
+ */
+export function exportOpenItemLines(
+  status: CreativeStatus,
+  entries: PracticeEntry[],
+  settings: CreativeKindSettings | null | undefined,
+  doc?: CreativeDoc
+): string[] {
+  const hidden = hiddenFacilityTerms(entries, settings);
+  return creativeOpenItemLines(status, doc).map((l) => (namesHiddenFacility(l, hidden) ? HIDDEN_ITEM_LINE : l));
 }

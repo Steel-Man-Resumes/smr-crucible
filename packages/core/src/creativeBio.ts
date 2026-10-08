@@ -319,8 +319,15 @@ export function flagSentence(text: string, vocab: string, name: string): Sentenc
  */
 export function hiddenFacilityTerms(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string[] {
   const out: string[] = [];
-  // A venue that a shown, non-facility entry also uses is public on this lane anyway.
-  const shownVenues = new Set(entries.filter((e) => !e.names_facility && e.venue).map((e) => (e.venue as string).toLowerCase()));
+  // A venue that a SHOWN, non-facility entry also uses is public on this lane
+  // anyway: shown means confirmed (not "need to find") and, when the lane
+  // picks entries, picked.
+  const picked = Array.isArray(s?.selection) ? new Set(s!.selection!.map((x) => x.toLowerCase())) : null;
+  const shownVenues = new Set(
+    entries
+      .filter((e) => !e.names_facility && e.venue && e.proof !== "need_to_find" && (!picked || picked.has(e.id.toLowerCase())))
+      .map((e) => (e.venue as string).toLowerCase())
+  );
   for (const e of entries) {
     if (!e.names_facility) continue;
     const mode = titleModeFor(e, s);
@@ -343,5 +350,44 @@ export function namesHiddenFacility(text: string, terms: string[]): string | nul
  */
 export function bioTextForLane(sentences: BioSentence[], entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string {
   const hidden = hiddenFacilityTerms(entries, s);
-  return sentences.filter((x) => x.approved && !namesHiddenFacility(x.text, hidden)).map((x) => x.text).join(" ");
+  // A record sentence whose entry changed is left out too: the old claim never prints.
+  const current = new Set(bioTemplates(entries, s).map((t) => t.text));
+  return sentences
+    .filter((x) => x.approved && !namesHiddenFacility(x.text, hidden) && (x.origin !== "fact" || current.has(x.text)))
+    .map((x) => x.text)
+    .join(" ");
+}
+
+/**
+ * Claim words in a person's own sentence that the entries it names do not
+ * back: a group show called "solo", a grant called a "fellowship", a prize
+ * the record has no field for. Only checked when the sentence names an
+ * entry's title or venue. A FIX each (the person's words, asked about).
+ */
+const CLAIMS: { re: RegExp; word: string; backs: (e: PracticeEntry) => boolean }[] = [
+  { re: /\bsolo\b/i, word: "solo", backs: (e) => e.section === "exhibition" && e.details.kind === "solo" },
+  { re: /\btwo[- ]person\b/i, word: "two-person", backs: (e) => e.section === "exhibition" && e.details.kind === "two_person" },
+  { re: /\bjuried\b/i, word: "juried", backs: (e) => e.details.juried === true },
+  { re: /\binvitational\b/i, word: "invitational", backs: (e) => e.details.invitational === true },
+  { re: /\bcurated\b/i, word: "curated", backs: (e) => !!e.details.curator },
+  { re: /\btour(ed|ing)?\b/i, word: "toured", backs: (e) => e.details.touring === true },
+  { re: /\bfellowship\b/i, word: "fellowship", backs: (e) => e.section === "award" && e.details.kind === "fellowship" },
+  { re: /\bresiden(cy|ce)\b/i, word: "residency", backs: (e) => e.section === "residency" },
+  { re: /\b(prize|first|winner|won|national|nationally)\b/i, word: "", backs: () => false },
+];
+
+export function unbackedClaims(text: string, entries: PracticeEntry[]): string[] {
+  const t = text.toLowerCase();
+  const named = entries.filter((e) => (e.title.length >= 4 && t.includes(e.title.toLowerCase())) || (e.venue && e.venue.length >= 4 && t.includes(e.venue.toLowerCase())));
+  if (!named.length) return [];
+  const out: string[] = [];
+  for (const c of CLAIMS) {
+    const m = text.match(c.re);
+    if (!m) continue;
+    const word = c.word || m[0].toLowerCase();
+    // A word that is part of an entry's own title or venue is the record speaking.
+    if (named.some((e) => c.re.test(e.title) || c.re.test(e.venue ?? ""))) continue;
+    if (!named.some(c.backs)) out.push(word);
+  }
+  return out;
 }
