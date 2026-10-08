@@ -175,19 +175,26 @@ describe("what is sent, and what the account keeps", () => {
 
 // Security review 3a r1, H1: account creation carried any run in the browser
 // (someone else's, already saved to their account) into the new account.
-describe("H1: no run enters an account except through the Forge's question", () => {
+// Merge with the production hotfix (security 3a r3, "keep both asks"): the
+// sign-up form now asks a required yes/no, and register saves a run only on
+// `saveForgeRun: true`; a run another account owns is never offered.
+describe("H1: no run enters an account without the person's yes", () => {
   const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-  it("the create-account form sends no run and leaves no ownership mark", () => {
+  it("the create-account form sends a run only through the yes/no, and leaves no name mark", () => {
     const login = code(read("app/(auth)/login/page.tsx"));
     const body = login.slice(login.indexOf('fetch("/api/auth/register"'), login.indexOf('fetch("/api/auth/register"') + 400);
-    assert.doesNotMatch(body, /\bforge\b/);
+    assert.doesNotMatch(body, /\bforge\s*:/);
+    assert.match(body, /\.\.\.forgeFields/);
+    assert.match(login, /forgeRegisterFields\(offeredRun, forgeRunOffered \? forgeChoice : null\)/);
     assert.doesNotMatch(login, /_registeredAs/);
   });
 
-  it("register ignores any run it is sent and never saves one", () => {
+  it("register saves a run only when forgeRunToPersist says so (an explicit yes)", () => {
     const reg = code(read("app/api/auth/register/route.ts"));
-    assert.doesNotMatch(reg, /persistForgeSession|saveForgeSession|forge-persist/);
+    assert.match(reg, /const forgeRun = forgeRunToPersist\(body\)/);
+    assert.match(reg, /if \(forgeRun\.run\) \{\s*try \{\s*await persistForgeSession\(newUserId, forgeRun\.run\)/);
+    assert.doesNotMatch(reg, /persistForgeSession\([^)]*body/);
     assert.doesNotMatch(reg, /\bforge\b\s*[,}]/);
   });
 

@@ -10,7 +10,7 @@
  * 4. From Forge: defaults to "Create Account" mode
  */
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn, signOut } from "next-auth/react";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
@@ -24,6 +24,19 @@ import { isForgeSignInPage } from "@/lib/forge-access";
 import { useForgeWall } from "@/components/forge/useForgeWall";
 import { TERMS_TICKED_KEY, tickedMark } from "@/lib/terms-ticked";
 import { TERMS_VERSION } from "@/lib/terms";
+import {
+  FORGE_RUN_CHOICE_DEFAULT,
+  FORGE_SESSION_KEY,
+  type ForgeRunChoice,
+  readLocalForgeRunRaw,
+  readStoredForgeRun,
+  forgeRunToEraseAtSignup,
+  eraseLocalForgeRun,
+  forgeChoiceComplete,
+  forgeRegisterFields,
+  forgeAfterSignup,
+  markForgeRunOwned,
+} from "@/lib/forge-carry";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -41,6 +54,8 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
+const FORGE_CHOICE_HINT =
+  "Pick yes or no above to create your account. This keeps another person's resume out of your account.";
 
 // Same-origin relative path only (lib/safe-path.ts). Keeps an honored
 // callbackUrl from ever becoming an open redirect. Auth.js also rejects
@@ -77,6 +92,13 @@ function LoginForm() {
   // Create-account only: explicit Terms/Privacy/AI-processing acceptance,
   // required before any account or Forge data is persisted server-side.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Shared-computer rule: a Forge run in this browser may be someone else's.
+  // When one is here, creating an account needs an explicit yes or no, with
+  // nothing preselected (lib/forge-carry.ts). The run asked about is kept
+  // from page load, so the one sent is the one the person answered about.
+  const [forgeChoice, setForgeChoice] = useState<ForgeRunChoice>(FORGE_RUN_CHOICE_DEFAULT);
+  const [forgeRunOffered, setForgeRunOffered] = useState(false);
+  const offeredRunRef = useRef<Record<string, any> | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -94,6 +116,22 @@ function LoginForm() {
     const urlCode = searchParams.get("code");
     if (urlCode) { setCode(urlCode); setShowCode(true); }
   }, [searchParams]);
+
+  // Ask about a run only when an unowned one with work in it is in this
+  // browser. An unowned run past the Forge's 24-hour idle limit is erased,
+  // never offered. A run already marked with an owner is never offered either
+  // (it is saved in that account); it is erased once a new account is created.
+  useEffect(() => {
+    const raw = readLocalForgeRunRaw();
+    const run = readStoredForgeRun(raw);
+    if (!run && raw) {
+      try {
+        if (!JSON.parse(raw)?._ownerUserId && forgeRunToEraseAtSignup(raw)) eraseLocalForgeRun();
+      } catch {}
+    }
+    offeredRunRef.current = run;
+    setForgeRunOffered(!!run);
+  }, []);
 
   // NextAuth error from URL
   useEffect(() => {
@@ -152,8 +190,9 @@ function LoginForm() {
 
   /**
    * Clear the PREVIOUS account's derived state when creating a new account in
-   * a browser that already has one. `forge_session` is left for the Forge to
-   * ask about (it is never sent with the new account).
+   * a browser that already has one, WITHOUT touching `forge_session` -- that
+   * blob is carried onto the new account below only if the person answers
+   * "Yes", and erased if they answer "No".
    *
    * This is the path used to give each demo persona its own clean account.
    */
@@ -262,21 +301,21 @@ function LoginForm() {
     { const problem = passwordProblem(password); if (problem) { setError(problem); return; } }
     if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
+    if (!forgeChoiceComplete(forgeRunOffered, forgeChoice)) { setError(FORGE_CHOICE_HINT); return; }
     setError(""); setSending(true); storeCode();
 
-    // The Forge run in this browser is NOT sent with the new account (security
-    // review 3a r1, H1). On a shared computer it may be someone else's, already
-    // saved to their account. The Forge page this person lands on next asks
-    // them, naming the new account, before anything is saved
-    // (components/forge/ForgeImport.tsx); register ignores any run it is sent.
-    //
-    // Everything else in this browser belongs to whoever was signed in before
-    // and must not follow a brand-new account either: their saved jobs,
-    // progress counters and approved-resume pointer.
-    let hadRun = false;
-    try {
-      hadRun = !!localStorage.getItem("forge_session");
-    } catch { hadRun = false; }
+    // Carry the Forge work onto the new account server-side, ONLY when the
+    // person answered "Yes". The forge_session lives in forge.* localStorage
+    // and is lost crossing to the authed origin, so we hand it to the register
+    // call. On a shared computer it may be someone else's run, so "No" (or no
+    // run offered) sends nothing.
+    const offeredRun = forgeRunOffered ? offeredRunRef.current : null;
+    const forgeFields = forgeRegisterFields(offeredRun, forgeRunOffered ? forgeChoice : null);
+
+    // The Forge work above carries forward only by choice. Everything else in this
+    // browser belongs to whoever was signed in before and must not follow a
+    // brand-new account -- otherwise the previous person's saved jobs, progress
+    // counters and approved-resume pointer become this account's opening state.
     clearPriorAccountState();
 
     try {
@@ -292,7 +331,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), turnstileToken, acceptedTerms: true }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), ...forgeFields, turnstileToken, acceptedTerms: true }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -300,23 +339,31 @@ function LoginForm() {
         setSending(false);
         return;
       }
+      // The account exists. "No": erase the run from this computer now, before
+      // any redirect, so no later screen can pick it up. "Yes": mark it as this
+      // new account's run so the Refinery does not ask again. A run another
+      // account owns was never offered; erase it too.
+      const created = await res.json().catch(() => ({}));
+      const after = forgeAfterSignup(forgeRunOffered, forgeChoice);
+      if (after === "erase" || (!forgeRunOffered && forgeRunToEraseAtSignup(readLocalForgeRunRaw()))) {
+        eraseLocalForgeRun();
+      } else if (after === "mark-owned" && offeredRun && typeof created?.userId === "string") {
+        try {
+          localStorage.setItem(FORGE_SESSION_KEY, JSON.stringify(markForgeRunOwned(offeredRun, created.userId)));
+        } catch {}
+      }
       // Acquisition attribution only -- no PII, no product detail (GA doctrine).
-      trackGA("refinery_signup", { from_forge: hadRun });
-      // New accounts with no Forge data go to /intro, not /dashboard
+      trackGA("refinery_signup", { from_forge: !!forgeFields.forge });
+      // New accounts with no Forge data go to /intro, not /dashboard. A run
+      // answered "No" is not this account's data.
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
         if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
-        // Came from a Forge screen: back to it.
+        // Came from a Forge screen (the sign-in wall): back to it. A run
+        // answered "Yes" is marked as this account's below, so the Forge
+        // shows it; "No" erased it.
         if (forgeReturn) return forgeReturn;
-        try {
-          const s = localStorage.getItem("forge_session");
-          const session = s ? JSON.parse(s) : null;
-          // A finished run waits on the Forge's finish page, where the person
-          // is asked whether to save it to this new account.
-          // Only an unmarked run is offered there; a run marked for another
-          // account is never this new account's.
-          return session?.forgeOutput && !session?._ownerUserId ? "/output" : "/intro";
-        } catch { return "/intro"; }
+        return forgeFields.forge?.forgeOutput ? callbackUrl : "/intro";
       })();
       const result = await signIn("password-login", {
         email: email.trim(), password, callbackUrl: createCallback, redirect: false,
@@ -340,7 +387,7 @@ function LoginForm() {
     if (!email.trim()) return;
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to continue."); return; }
     setError(""); setSending(true); storeCode();
-    // The box ticked here is recorded once the link signs them in, on this
+    // The box checked here is recorded once the link signs them in, on this
     // browser only (app/(auth)/login/terms).
     try {
       localStorage.setItem(TERMS_TICKED_KEY, JSON.stringify(tickedMark(email, TERMS_VERSION)));
@@ -401,7 +448,8 @@ function LoginForm() {
     || (mode !== "magic-link" && !password)
     || (twoFactorStep && !totp.trim())
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms))
-    || (mode === "magic-link" && !acceptedTerms);
+    || (mode === "magic-link" && !acceptedTerms)
+    || (mode === "create" && !forgeChoiceComplete(forgeRunOffered, forgeChoice));
 
   return (
     <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
@@ -640,6 +688,43 @@ function LoginForm() {
               />
             )}
           </div>
+
+          {/* Shared-computer rule: a run on this computer needs a yes or a no,
+              nothing preselected. Create account stays disabled until then. */}
+          {mode === "create" && forgeRunOffered && (
+            <fieldset className="border border-t-line px-4 py-3">
+              <legend className="px-1 text-sm font-semibold text-t-white">
+                There&apos;s a resume in progress on this computer. Is it yours?
+              </legend>
+              <label className="mt-1 flex items-start gap-2 text-sm text-t-white">
+                <input
+                  type="radio"
+                  name="forge-run-choice"
+                  value="yes"
+                  checked={forgeChoice === "yes"}
+                  onChange={() => setForgeChoice("yes")}
+                  disabled={sending}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+                />
+                <span>Yes, this is my resume. Save it to my new account.</span>
+              </label>
+              <label className="mt-2 flex items-start gap-2 text-sm text-t-white">
+                <input
+                  type="radio"
+                  name="forge-run-choice"
+                  value="no"
+                  checked={forgeChoice === "no"}
+                  onChange={() => setForgeChoice("no")}
+                  disabled={sending}
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
+                />
+                <span>No, this isn&apos;t mine. Erase it from this computer.</span>
+              </label>
+              {forgeChoice === null && (
+                <p className="mt-2 text-sm text-t-bone-dim">{FORGE_CHOICE_HINT}</p>
+              )}
+            </fieldset>
+          )}
 
           {/* Terms / Privacy / AI-processing consent -- create and email-link
               modes. Required before any account or Forge data persists:
