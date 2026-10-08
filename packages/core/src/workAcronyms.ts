@@ -21,7 +21,7 @@
 const WORK = [
   // warehouse, logistics, manufacturing
   "RF", "PPE", "FIFO", "FEFO", "LIFO", "WMS", "SKU", "SKUS", "LTL", "FTL", "DC", "UPS", "USPS", "FEDEX", "QA", "QC", "KPI", "KPIS", "SOP", "SOPS",
-  "LOTO", "HVAC", "CNC", "PLC", "MIG", "TIG", "OTR", "DOT", "ERP", "MRP", "ISO", "GMP", "JIT", "BOL", "ASN", "RMA", "EDI", "TMS",
+  "LOTO", "HVAC", "CNC", "PLC", "MIG", "TIG", "SMAW", "GMAW", "FCAW", "GTAW", "SAW", "OTR", "DOT", "ERP", "MRP", "ISO", "GMP", "JIT", "BOL", "ASN", "RMA", "EDI", "TMS",
   // food service, retail
   "POS", "BOH", "FOH", "VIP", "GM", "AGM",
   // office, IT
@@ -45,7 +45,8 @@ const SKIP = new Set([...WORK, ...STATES]);
 
 // Round 9: words a training word next to them does not make a claim ("Used an AED in training drills",
 // "Completed ESL classes"). Only a holding word does ("AED certified", "ESL certificate").
-const HOLDING_ONLY = new Set(["AED", "ESL"]);
+// Round 10 (SF-7): welding processes are every welder's vocabulary ("Stick (SMAW) Welding"), never a card by themselves.
+const HOLDING_ONLY = new Set(["AED", "ESL", "SMAW", "GMAW", "FCAW", "GTAW", "SAW", "MIG", "TIG"]);
 
 /** True when only a holding word (certified, card, license...), never a training word, makes this listed word a claim. */
 export function needsHoldingWord(token: string): boolean {

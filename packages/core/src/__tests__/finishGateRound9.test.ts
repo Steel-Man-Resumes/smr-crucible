@@ -102,7 +102,8 @@ for (const [said, line] of [
 
 for (const [said, line] of [
   ["I trained the new guys on the scanner.", "Trained new hires on the scanner"],
-  ["I trained the crew on the scanner.", "Trained the whole crew on the scanner"],
+  // Round 10 (SF-6): "all / whole / every" on the page needs the same word in theirs.
+  ["I trained the whole crew on the scanner.", "Trained the whole crew on the scanner"],
   ["I trained all the new guys on the scanner.", "Trained all new hires on the scanner"],
   ["I supervised the two dishwashers on Sundays.", "Supervised the dish crew on Sundays"],
 ] as const) {
@@ -167,9 +168,12 @@ test("R9-B2: the person's own education line covers the writer's split of it", (
 test("R9-N4: education prompts name the credential, and the rewrite keeps the school", () => {
   assert.equal(educationPartOf("Owens Community College | Associate of Applied Science | 2019")?.name, "Associate of Applied Science");
   assert.equal(educationPartOf("High School Equivalency (GED)")?.name, "High School Equivalency");
-  assert.equal(educationLineRewrite("GED | Toledo Adult Education | 2023", "GED", "GED, in progress"), "GED, in progress | Toledo Adult Education");
-  assert.equal(educationLineRewrite("Scott High School, Toledo, OH | Graduated", "Scott High School", "Scott High School, 2008"), "Scott High School, 2008 | Toledo, OH");
-  assert.ok(isConfirmedEducationLine("GED, in progress | Toledo Adult Education", "GED, in progress"));
+  // Round 10 (SF-3): the school rides only when the person named it; places and the writer's year come off.
+  assert.equal(educationLineRewrite("GED | Toledo Adult Education | 2023", "GED", "GED, in progress", "working on my GED at Toledo Adult Education").line, "GED, in progress | Toledo Adult Education");
+  assert.equal(educationLineRewrite("GED | Toledo Adult Education | 2023", "GED", "GED, in progress", "working on my GED").line, "GED, in progress");
+  assert.equal(educationLineRewrite("Scott High School, Toledo, OH | Graduated", "Scott High School", "Scott High School, 2008").line, "Scott High School, 2008");
+  assert.ok(isConfirmedEducationLine("GED, in progress | Toledo Adult Education", "GED, in progress", "I go to Toledo Adult Education"));
+  assert.ok(!isConfirmedEducationLine("GED, in progress | Toledo Adult Education", "GED, in progress", "I am working on my GED"));
   assert.ok(!isConfirmedEducationLine("GED, in progress | Toledo Adult Education | 2023", "GED, in progress"));
   assert.ok(!isConfirmedEducationLine("GED, in progress | Graduated", "GED, in progress"));
   assert.match(educationMemoryPrompt("GED"), /^Do you have a GED\?/);

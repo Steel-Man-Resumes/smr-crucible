@@ -55,6 +55,8 @@ export interface CredentialMention {
   title?: boolean;
   /** True when it is an education line (a GED, a diploma, a degree): confirmed as earned or in progress. */
   education?: boolean;
+  /** Round 10: a credential (not the schooling) found on an education line ("Welding Certificate" beside a diploma). */
+  onEducationLine?: boolean;
 }
 
 const CRED_SECTION_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?)$/i;
@@ -84,10 +86,15 @@ const EDU_PART_SPLIT_RE = /\s*(?:\||,|;|\s[-\u2013\u2014]\s)\s*/;
 const YEARISH_RE = /^(?:(?:class\s+of\s+)?(?:19|20)\d{2}(?:\s*[-\u2013]\s*(?:(?:19|20)\d{2}|present))?|present)$/i;
 const STATE_PART_RE = /^[A-Z]{2}$/;
 
+// Round 10: the status of a school someone went to without finishing is a status too, never a name
+// ("Attended 2004 - 2007", "Coursework through 11th grade", "did not graduate").
+const EDU_NOT_DONE_RE = /\b(?:attended|attending|(?:some\s+)?coursework\s+through\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+grade|through\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+grade|did\s+not\s+(?:finish|graduate|complete)|didn'?t\s+(?:finish|graduate|complete)|no\s+diploma|non-?graduate|left\s+in\s+\d{1,2}(?:st|nd|rd|th)\s+grade)\b/gi;
+
 /** An education part without its year, its status or a bracketed aside ("Graduated 2008" is "", "High School Equivalency (GED)" is "High School Equivalency"). */
 function cleanEducationPart(p: string): string {
   return p
     .replace(/\(([^)]*)\)/g, " ")
+    .replace(EDU_NOT_DONE_RE, " ")
     .replace(/\b(?:graduated|graduating|completed|finished)(?:\s+(?:from|at|in))?\b/gi, " ")
     .replace(/\bclass\s+of\b/gi, " ")
     .replace(/\b(?:19|20)\d{2}\b/g, " ")
@@ -97,38 +104,136 @@ function cleanEducationPart(p: string): string {
     .trim();
 }
 
-const EDU_REST_STATUS_RE = /\b(?:19|20)\d{2}\b|\b(?:graduated|graduating|completed|completion|finished|class\s+of|in progress|current|currently|enrolled|expected|anticipated|present|earned|passed)\b/i;
+const EDU_REST_STATUS_RE = /\b(?:19|20)\d{2}\b|\b(?:graduated|graduating|completed|completion|finished|class\s+of|in progress|current|currently|enrolled|expected|anticipated|present|earned|passed|attended|attending)\b/i;
+// A program, a course or a grade: what a prompt may name when a line has no credential word.
+const PROGRAM_WORD_RE =
+  /\b(?:program|programme|technology|technician|welding|cosmetology|nursing|culinary|automotive|hvac|electrical|plumbing|carpentry|machining|machinist|trucking|business|administration|management|science|sciences|arts|studies|engineering|accounting|medical|phlebotomy|grade|course|courses|coursework|classes|training|apprenticeship|construction|manufacturing|logistics|computer|information|criminal|justice|english|math|basic\s+education|literacy)\b/i;
+// Words that are never a school's own name: honors, scores, programs and record words never ride on a confirmation.
+const NOT_A_SCHOOL_RE = /\b(?:honou?r|honors|roll|dean'?s|list|gpa|valedictorian|salutatorian|society|award|attendance|scholarship|cum\s+laude|magna|summa|program|programme|training|course|certificate|certification|license|diploma|degree|jail|prison|correctional|corrections|detention|facility|inmate|penitentiary|doc|reentry|re-entry)\b|\d/i;
+// Generic school words: a name made only of these says nothing about which school.
+const GENERIC_SCHOOL_WORDS = new Set(["high", "school", "college", "community", "technical", "tech", "university", "center", "centre", "career", "academy", "institute", "adult", "education", "the", "of", "area", "county", "state", "city", "public", "schools"]);
 
-/**
- * Round 9 (r9-N4): an education line rewritten from the person's
- * confirmation. Only the part the prompt named changes: it becomes what they
- * confirmed ("GED, in progress"), first; the line's other parts (the school,
- * the place) stay after a bar, with every year and status of the writer's
- * taken off ("GED | Toledo Adult Education | 2023" is "GED, in progress |
- * Toledo Adult Education").
- */
-export function educationLineRewrite(line: string, raw: string, confirmed: string): string {
-  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
-  const parts = line
-    .slice(bullet.length)
+const partsOfEducationLine = (line: string) =>
+  line
+    .replace(/^\s*[-•*]\s*/, "")
     .split(EDU_PART_SPLIT_RE)
     .map((p) => p.trim())
     .filter(Boolean);
-  const rest = parts
-    .filter((p) => p !== raw.trim())
-    .map((p) => (EDU_REST_STATUS_RE.test(p) ? cleanEducationPart(p) : p))
-    .filter((p) => p && !YEARISH_RE.test(p) && !EDU_REST_STATUS_RE.test(p));
-  return `${bullet}${confirmed}${rest.length ? ` | ${rest.join(", ")}` : ""}`;
+const isStatePart = (p: string) => STATE_PART_RE.test(cleanEducationPart(p)) || STATE_PART_RE.test(p);
+const isPlacePart = (parts: string[], i: number) => isStatePart(parts[i]) || (/^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?$/.test(parts[i]) && isStatePart(parts[i + 1] ?? ""));
+
+/** True when a part names a school: a school word, and no honor, score, program, credential or record word. */
+export function isSchoolName(part: string): boolean {
+  const c = cleanEducationPart(part);
+  return !!c && SCHOOL_RE.test(c) && !NOT_A_SCHOOL_RE.test(c);
 }
 
-/** True when a page line is a confirmed education line: the confirmed text, then only parts with no year or status ("GED, in progress | Toledo Adult Education"). */
-export function isConfirmedEducationLine(line: string, confirmed: string): boolean {
+/**
+ * Round 10 (SF-3): a school name the person used: its first two words (or the
+ * whole name) appear together in their own words ("Scott High" for "Scott
+ * High School"), and it names more than generic words.
+ */
+export function schoolUsedBy(school: string, personText: string | undefined): boolean {
+  const words = normalizeTyped(cleanEducationPart(school)).split(" ").filter(Boolean);
+  if (!words.length || words.every((w) => GENERIC_SCHOOL_WORDS.has(w))) return false;
+  const person = ` ${normalizeTyped(personText || "")} `;
+  const head = words.slice(0, Math.min(2, words.length)).join(" ");
+  return person.includes(` ${head} `) || person.includes(` ${words.join(" ")} `);
+}
+
+/**
+ * Round 9 (r9-N4), round 10 (SF-3): an education line rewritten from the
+ * person's confirmation. The part the prompt named becomes what they
+ * confirmed ("GED, in progress"); only a school name they used themselves
+ * rides after a bar. Everything else the writer put there (honors, a GPA, a
+ * program or a training, a facility) moves to its own line under it, where
+ * every check reads it; years, statuses and places come off.
+ */
+export function educationLineRewrite(line: string, raw: string, confirmed: string, personText?: string): { line: string; rest?: string } {
+  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
+  const parts = partsOfEducationLine(line);
+  const schools: string[] = [];
+  const others: string[] = [];
+  parts.forEach((p, i) => {
+    if (p === raw.trim() || YEARISH_RE.test(p) || isPlacePart(parts, i)) return;
+    const c = EDU_REST_STATUS_RE.test(p) || /\(/.test(p) ? cleanEducationPart(p) : p;
+    if (!c || YEARISH_RE.test(c) || STATE_PART_RE.test(c) || /^(?:some\s+)?(?:coursework|classes|courses)$/i.test(c)) return;
+    if (isSchoolName(c) && schoolUsedBy(c, personText)) schools.push(c);
+    else if (!isSchoolName(c)) others.push(c);
+  });
+  return { line: `${bullet}${confirmed}${schools.length ? ` | ${schools.join(", ")}` : ""}`, ...(others.length ? { rest: `${bullet}${others.join(", ")}` } : {}) };
+}
+
+/**
+ * Round 10 (SF-1): "I went but didn't finish". The line keeps the school (the
+ * part the card named, when it is a school or a program, else a school the
+ * person used) and only the years they typed, with no completion word.
+ * Returns "" when there is no school to keep.
+ */
+export function educationAttendedLine(line: string, raw: string, name: string, years: string, personText?: string): string {
+  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
+  const parts = partsOfEducationLine(line);
+  const named = cleanEducationPart(name);
+  const keep =
+    named && !EDUCATION_CORE_RE.test(named) && named !== "this school" && (isSchoolName(named) || PROGRAM_WORD_RE.test(named))
+      ? named
+      : parts.map(cleanEducationPart).find((p) => isSchoolName(p) && schoolUsedBy(p, personText));
+  if (!keep) return "";
+  const y = attendedYears(years);
+  return `${bullet}${keep}, attended${y ? ` ${y}` : ""}`;
+}
+
+/**
+ * Round 10 (SF-2): an education line without one of its parts ("High School
+ * Diploma | Penta Career Center | Welding Certificate | 2015" without the
+ * certificate). Returns "" when no school or credential is left.
+ */
+export function withoutEducationPart(line: string, raw: string): string {
+  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
+  const want = dehyphenate(raw).toLowerCase();
+  const parts = partsOfEducationLine(line);
+  const kept = parts.filter((p) => !dehyphenate(p).toLowerCase().includes(want));
+  if (kept.length === parts.length) return line;
+  if (!kept.some((p) => isSchoolName(p) || EDUCATION_CORE_RE.test(p) || PROGRAM_WORD_RE.test(p))) return "";
+  return `${bullet}${kept.join(line.includes("|") ? " | " : ", ")}`;
+}
+
+/** The years in an "I went but didn't finish" answer: one year or a range, nothing else. */
+export function attendedYears(years: string): string {
+  const t = (years || "").trim().replace(/[–—]/g, "-");
+  const m = t.match(/^((?:19|20)\d{2})(?:\s*(?:-|to)\s*((?:19|20)\d{2}))?$/i);
+  return m ? (m[2] ? `${m[1]} - ${m[2]}` : m[1]) : "";
+}
+
+/** True when an answer box holds only years for "didn't finish" (or nothing). */
+export function isAttendedYears(years: string): boolean {
+  return !(years || "").trim() || !!attendedYears(years);
+}
+
+/**
+ * True when a page line is a confirmed education line (round 10): the
+ * confirmed text, then only school names the person used ("GED, 2015 |
+ * Toledo Adult Education").
+ */
+export function isConfirmedEducationLine(line: string, confirmed: string, personText?: string): boolean {
   const body = line.replace(/^\s*[-•*]\s*/, "").trim();
   const c = confirmed.trim();
   if (body === c) return true;
   if (!body.startsWith(`${c} | `)) return false;
   const rest = body.slice(c.length + 3);
-  return !!rest.trim() && !EDU_REST_STATUS_RE.test(rest) && !rest.includes("|");
+  if (!rest.trim() || rest.includes("|") || EDU_REST_STATUS_RE.test(rest)) return false;
+  return rest.split(/\s*,\s*/).every((p) => isSchoolName(p) && schoolUsedBy(p, personText));
+}
+
+/** True when a page line is a confirmed "went but didn't finish" line: the named school, "attended", and only the years typed. */
+export function isConfirmedAttendedLine(line: string, name: string, years: string, personText?: string): boolean {
+  const body = line.replace(/^\s*[-•*]\s*/, "").trim();
+  const m = body.match(/^(.+?), attended(?: (.+))?$/);
+  if (!m) return false;
+  if ((m[2] ?? "") !== attendedYears(years)) return false;
+  const school = m[1];
+  if (NOT_A_SCHOOL_RE.test(school.replace(/\bprogram(?:me)?\b/gi, "")) && !(cleanEducationPart(name) === school)) return false;
+  return cleanEducationPart(name) === school || (isSchoolName(school) && schoolUsedBy(school, personText));
 }
 
 /**
@@ -136,34 +241,31 @@ export function isConfirmedEducationLine(line: string, confirmed: string): boole
  * about the credential, never the school): the part with GED, HSED, a
  * diploma, a degree or a certificate; else the program ("Welding Program",
  * "12th grade"); else the school. "Graduated", "Completed" and years come off
- * the name: they are what the person confirms.
+ * the name: they are what the person confirms. Round 10: never a city, a
+ * state or a status word ("Attended"); with nothing else, "this school".
  */
 export function educationPartOf(body: string): { name: string; raw: string } | undefined {
-  const parts = body
-    .replace(/^\s*[-•*]\s*/, "")
-    .split(EDU_PART_SPLIT_RE)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const parts = partsOfEducationLine(body);
   const clean = cleanEducationPart;
-  const named = parts.filter((p) => clean(p) && !YEARISH_RE.test(p) && !STATE_PART_RE.test(p));
+  // "Coursework completed through 11th grade": a bare "coursework" or "some classes" left over is a status, not a program.
+  const named = parts.filter((p, i) => clean(p) && !YEARISH_RE.test(clean(p)) && !isPlacePart(parts, i) && !/^(?:some\s+)?(?:coursework|classes|courses)$/i.test(clean(p)));
   const core = named.find((p) => EDUCATION_CORE_RE.test(p));
   if (core) return { name: clean(core) || core, raw: core };
-  // A city before a state ("Toledo" in "Toledo, OH") is a place, not a program.
-  const isPlace = (p: string) => /^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?$/.test(p) && STATE_PART_RE.test(parts[parts.indexOf(p) + 1] ?? "");
-  const candidates = named.filter((p) => !isPlace(p));
   // A program or a grade ("Welding Program", "Welding Technology", "12th grade") before the school.
-  const program = candidates.find((p) => /\bprogram(?:me)?\b/i.test(p)) ?? candidates.find((p) => !SCHOOL_RE.test(p));
-  if (program) return { name: clean(program) || program, raw: program };
-  const school = candidates.find((p) => SCHOOL_RE.test(p)) ?? candidates[0];
-  return school ? { name: clean(school) || school, raw: school } : undefined;
+  const program = named.find((p) => !isSchoolName(p) && PROGRAM_WORD_RE.test(clean(p)));
+  if (program) return { name: clean(program), raw: program };
+  const school = named.find((p) => SCHOOL_RE.test(clean(p)));
+  if (school) return { name: clean(school), raw: school };
+  return parts.length ? { name: "this school", raw: parts[0] } : undefined;
 }
 
+const HIGH_SCHOOL_DONE_RE = /\b(?:(?:finished|graduated(?:\s+from)?|completed|got\s+through|made\s+it\s+through)\s+(?:my\s+|the\s+)?high\s+school|high\s+school\s+grad\b)/gi;
 // A schooling credential by name, on any line.
 const EDU_NAMED_RE = /^(?:GED|G\.E\.D\.?|HSED|HiSET|High\s+School\s+(?:Diploma|Equivalency(?:\s+Diploma)?|Graduate|Degree))$/i;
 
 /** True when an education line is an entry to ask about: a school or program, a year, or a "graduated / completed" status. */
 function isEducationEntry(body: string): boolean {
-  return EDUCATION_CORE_RE.test(body) || EDUCATION_STATUS_RE.test(body) || SCHOOL_RE.test(body) || /\b(?:19|20)\d{2}\b/.test(body);
+  return EDUCATION_CORE_RE.test(body) || EDUCATION_STATUS_RE.test(body) || SCHOOL_RE.test(body) || /\b(?:19|20)\d{2}\b/.test(body) || PROGRAM_WORD_RE.test(body) || /\beducation\b/i.test(body);
 }
 
 // Holding claims: "Forklift Certified", "AWS D1.1 Structural Welding Certification", "Welding Certificate".
@@ -226,6 +328,8 @@ const LEAD_TRIM = /^(?:(?:earned|obtained|got|hold|holds|held|have|has|had|passe
 const KEY_DROP = new Set([
   "certified", "certification", "certifications", "certificate", "cert", "card", "cards", "license", "licence",
   "licensed", "endorsement", "permit", "registry", "credential", "holder", "operator", "the", "a", "an", "my", "of", "in",
+  // Round 10: "OSHA 10 trained" is the OSHA 10 card, asked and confirmed once.
+  "trained", "authorized", "authorised", "qualified",
 ]);
 
 /** The key a credential name is grouped under. */
@@ -388,7 +492,8 @@ export function removeCredentialPart(line: string, part: string): string {
 
 /** A hyphen or dash between two letters, read as a space ("forklift-certified", "CDL-A"); same length, so positions hold. */
 export function dehyphenate(text: string): string {
-  return text.replace(/(?<=[A-Za-z])[-\u2010-\u2015](?=[A-Za-z])/g, " ");
+  // Round 10: curly apostrophes read as straight ones ("Driver’s License"), same length.
+  return text.replace(/(?<=[A-Za-z])[-\u2010-\u2015](?=[A-Za-z])/g, " ").replace(/[\u2018\u2019\u02bc]/g, "'");
 }
 
 function namedIn(text: string): string[] {
@@ -427,11 +532,13 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     if (!key || out.some((m) => m.line === line && m.key === key)) return;
     // Round 9: a GED, HSED or high school diploma is education wherever it is ("I earned my G.E.D.").
     const education = opts.education || EDU_NAMED_RE.test(name);
-    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}), ...(education ? { education: true } : {}) });
+    const onEducationLine = readingEducation && !education;
+    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}), ...(education ? { education: true } : {}), ...(onEducationLine ? { onEducationLine: true } : {}) });
   };
 
   let seenHeading = false;
   let inEducation = false;
+  let readingEducation = false;
   let combined = false;
 
   // A credentials-section line: every part of it is a credential to ask about, each on its own.
@@ -483,6 +590,8 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
       claimWordAt.add(m.index! + m[0].length - m[2].length);
       push(l, raw, "other", false, raw, at(raw).unit, at(raw).part, { anyName: generic });
     }
+    // Round 10 (SF-8): "I finished high school", "graduated high school", "high school grad" claim the diploma.
+    for (const m of lf.matchAll(HIGH_SCHOOL_DONE_RE)) push(l, "High school diploma", "other", false, m[0], at(m[0]).unit, at(m[0]).part, { education: true });
     for (const m of lf.matchAll(LEADING_CLAIM_RE)) {
       if (NOT_A_NAME_RE.test(m[2])) continue;
       // "Forklift Certified Line Cook": the claim word already closes "Forklift Certified"; "Line Cook" is the job.
@@ -518,6 +627,7 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     // Round 9: an education line is asked about as education (GED, HSED, a diploma, a degree, or a school
     // or program with a year or a "graduated / completed" status), and never returns early: a holding claim
     // in it ("Toledo Tech | Forklift Certified | 2019") is read by the claim readers like any line.
+    readingEducation = inEducation;
     if (inEducation) {
       const before = out.length;
       if (EDUCATION_CORE_RE.test(body)) pushEducation(l, body);
@@ -648,7 +758,7 @@ export interface CredentialRow {
 // own name stays ("Registered Nurse", "Licensed Practical Nurse", "Certified
 // Nursing Assistant"), and so does a class letter ("CDL Class A").
 const CLAIM_WORDS_RE =
-  /\b(?:certified(?!\s+(?:nursing|medical|pharmacy|welding|public|home|nurse|professional|clinical)\b)|certification|certifications|certificate|cert|licensed(?!\s+(?:practical|vocational|professional|clinical)\b)|license|licence|card|cards|training|course|program|endorsement|permit|registry|registered(?!\s+[A-Za-z])|holder|class(?![\s-]*[a-d0-9]\b))\b/gi;
+  /\b(?:certified(?!\s+(?:nursing|medical|pharmacy|welding|public|home|nurse|professional|clinical)\b)|certification|certifications|certificate|cert|licensed(?!\s+(?:practical|vocational|professional|clinical)\b)|license|licence|card|cards|training|trained|authori[sz]ed|qualified|course|program|endorsement|permit|registry|registered(?!\s+[A-Za-z])|holder|class(?![\s-]*[a-d0-9]\b))\b/gi;
 const NAME_STATUS_RE =
   /\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|in good standing|up to date|good for|through|until|since)\b|\b(?:19|20)\d{2}\b/gi;
 
@@ -762,11 +872,14 @@ function deadRowKeys(rows: ReadonlyArray<CredentialRow> | undefined): Set<string
 const LIVE_WHEN_RE = /\b(?:current|currently|active|valid|in good standing|good standing)\b/i;
 
 /** True when a kind and a year-or-status say the person holds it now: current, active or valid, and not a permit or a course. */
-export function isLiveCredential(kind: string, when: string): boolean {
-  return kind !== "permit" && kind !== "training course" && LIVE_WHEN_RE.test(when) && !DEAD_WHEN_RE.test(when);
+export function isLiveCredential(kind: string, when: string, yearOnly = false): boolean {
+  // Round 10 (open question 2): for a structured row, a year-only answer ("certification, 2019") counts too;
+  // liveCredentialCovers then takes only a mention that shows that same year, or no status and no year at all.
+  const dated = yearOnly && /\b(?:19|20)\d{2}\b/.test(when) && !/[a-z]/i.test(when.replace(/\b(?:in|since|earned|got|passed)\b/gi, ""));
+  return kind !== "permit" && kind !== "training course" && (LIVE_WHEN_RE.test(when) || dated) && !DEAD_WHEN_RE.test(when);
 }
 
-const SHOWN_KIND_WORDS_RE = /^(?:\s*[-\u2010-\u2015]?\s*(?:certification|certificate|cert|card|license|licence|licensed|certified|permit|endorsement|registry|course|training|program|holder|status))+/i;
+const SHOWN_KIND_WORDS_RE = /^(?:\s*[-\u2010-\u2015]?\s*(?:certification|certificate|certified|cert|card|license|licence|licensed|permit|endorsement|registry|course|training|program|holder|status)\b)+/i;
 const SHOWN_STATUS_AFTER_RE =
   /^\s*(?:\([^)]{0,20}\)|,?\s*(?:(?:that\s+is|which\s+is|is|and\s+is|currently)\s+)?(?:active|current|currently|valid|expired|expires|expiring|inactive|lapsed|renewed|suspended|revoked|pending|in\s+progress|in\s+good\s+standing|up\s+to\s+date)\b|,?\s*(?:since|from|in|through|until|exp\.?|expires?|issued|earned|obtained|valid\s+through|current\s+through)?\s*(?:19|20)\d{2}\b)/i;
 const SHOWN_STATUS_BEFORE_RE =
@@ -813,10 +926,13 @@ function shownAt(m: CredentialMention): { kind?: string; statuses: Set<string>; 
  * ("Certified Nursing Assistant" is "CNA"). Never a title, a list term, a
  * credentials or education line; never an expired, lapsed or permit row.
  */
-export function liveCredentialCovers(m: CredentialMention, held: { name: string; kind: string; when: string }): boolean {
+export function liveCredentialCovers(m: CredentialMention, held: { name: string; kind: string; when: string }, opts: { yearOnly?: boolean } = {}): boolean {
   if (m.where !== "other" || m.title || m.term || m.education) return false;
-  if (!isLiveCredential(held.kind, held.when)) return false;
-  if (credentialFamilyKey(held.name) !== credentialFamilyKey(m.name)) return false;
+  if (!isLiveCredential(held.kind, held.when, !!opts.yearOnly)) return false;
+  // The same family, or a mention that names less of it ("AWS-certified" for the AWS D1.1 row).
+  const heldKey = credentialFamilyKey(held.name).split(" ").filter(Boolean);
+  const mentionKey = credentialFamilyKey(m.name).split(" ").filter(Boolean);
+  if (!mentionKey.length || !mentionKey.every((w) => heldKey.includes(w))) return false;
   const shown = shownAt(m);
   if (shown.dead) return false;
   if (shown.kind && shown.kind !== held.kind) return false;
@@ -835,14 +951,11 @@ export function liveCredentialCovers(m: CredentialMention, held: { name: string;
  */
 function educationIsTheirs(m: CredentialMention, person: PersonLine[]): boolean {
   if (!m.education || m.where !== "credentials") return false;
-  const partsOf = (t: string) =>
-    new Set(
-      t
-        .replace(/^\s*[-•*]\s*/, "")
-        .split(EDU_PART_SPLIT_RE)
-        .map(normalizeTyped)
-        .filter(Boolean)
-    );
+  // Round 10: a city or state the writer added ("GED | Toledo, OH | 2014" for their "GED, 2014") claims nothing.
+  const partsOf = (t: string) => {
+    const parts = partsOfEducationLine(t);
+    return new Set(parts.filter((_, i) => !isPlacePart(parts, i)).map(normalizeTyped).filter(Boolean));
+  };
   const page = partsOf(m.context);
   if (!page.size) return false;
   return person.some((p) => {
@@ -1071,7 +1184,7 @@ export function credentialsToAsk(
     // Round 8: a credential their row marks expired, lapsed, suspended or not yet held is covered by nothing else.
     if (dead.has(m.key) || dead.has(credentialFamilyKey(m.name))) return true;
     // Round 9: a current row covers its plain mentions in sentences ("Certified nursing assistant with eight years").
-    if (rows?.some((r) => isCompleteCredentialRow(r) && liveCredentialCovers(m, r))) return false;
+    if (rows?.some((r) => isCompleteCredentialRow(r) && liveCredentialCovers(m, r, { yearOnly: true }))) return false;
     // Round 9: an education line made only of parts of one line they wrote.
     if (educationIsTheirs(m, person)) return false;
     // A job title covers the title itself only: when the whole title is in one of their own job header lines.

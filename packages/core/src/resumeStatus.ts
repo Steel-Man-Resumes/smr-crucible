@@ -712,24 +712,24 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // licenses-and-training answer. The prompt is settled only by a
     // confirmation (the line is rewritten from it) or a cut.
     const credentialFindings: MintFinding[] = [];
-    const credentialSubject = new Map<string, string>();
+    // Round 10 (SF-2): each credential finding carries its own name and kind, never its line's.
+    const credentialOf = new Map<MintFinding, { name: string; education: boolean }>();
     const confirmedKeys = new Set(input.confirmedKeys ?? []);
     // Round 7: the whole-line exception reads only the person's uploaded resume (never the free-text
     // licenses answer); their structured credential rows are the other exception.
     const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
     const personText = input.ownResumeText ?? sourceText.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
     const backstopText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
-    const educationLines = new Set<string>();
     for (const m of credentialsToAsk(resumeText, personText, confirmedKeys, input.credentialRows, backstopText)) {
-      credentialSubject.set(m.line, m.name);
-      if (m.education) educationLines.add(m.line);
-      credentialFindings.push({
+      const finding: MintFinding = {
         rule: "STD-T03",
         severity: "BLOCK",
         line: m.line,
         why: credentialPromptWhy(m.name),
         kind: "credential_unsaid",
-      });
+      };
+      credentialOf.set(finding, { name: m.name, education: !!m.education });
+      credentialFindings.push(finding);
     }
     // A scope claim (ran, led, supervised, trained people...) the person
     // never made is settled only by their own rewrite or a cut, never by an
@@ -761,14 +761,15 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       }));
     const findings = [...mint.findings, ...credentialFindings, ...scopeFindings, ...titleFindings];
     for (const f of findings) {
-      const subject = f.kind?.startsWith("credential_") ? credentialSubject.get(f.line) : undefined;
+      const cred = credentialOf.get(f);
+      const subject = cred?.name;
       push(
         f.rule,
         f.severity,
         f.line,
         f.why,
         f.kind === "credential_unsaid"
-          ? educationLines.has(f.line)
+          ? cred?.education
             ? educationMemoryPrompt(subject ?? credentialNameOf(f))
             : credentialMemoryPrompt(subject ?? credentialNameOf(f))
           : f.kind === "scope_unsaid"
@@ -777,7 +778,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       );
       if (f.kind) items[items.length - 1].kind = f.kind;
       if (subject) items[items.length - 1].subject = subject;
-      if (f.kind === "credential_unsaid" && educationLines.has(f.line)) items[items.length - 1].education = true;
+      if (f.kind === "credential_unsaid" && cred?.education) items[items.length - 1].education = true;
     }
 
     if (requireDefend) {
