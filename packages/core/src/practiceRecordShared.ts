@@ -98,6 +98,12 @@ export interface PracticeDetails {
   duration?: string;
   description?: string;
   fileName?: string;
+  /**
+   * Set by the server only, never from a request: earlier titles and venues
+   * of an entry that names a facility. A lane that keeps the entry off keeps
+   * these off too, so a rename never lets an old name through.
+   */
+  formerNames?: string[];
 }
 
 export interface PracticeEntry {
@@ -332,6 +338,15 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
   const venue = pick(input.venue, (v) => cleanLine(v, VENUE_MAX), current?.venue ?? null);
   const namesFacility =
     input.namesFacility === undefined ? current?.names_facility ?? false : input.namesFacility === true;
+
+  // Remember a facility entry's earlier names (server side; cleanDetails drops any sent in).
+  const former = Array.isArray(current?.details?.formerNames) ? [...(current!.details.formerNames as string[])] : [];
+  if (current && (namesFacility || current.names_facility)) {
+    for (const [was, now] of [[current.title, title], [current.venue, venue]] as const) {
+      if (was && was !== now && !former.includes(was)) former.push(was);
+    }
+  }
+  if (former.length) (details as PracticeDetails).formerNames = former.slice(-6).map((x) => x.slice(0, TITLE_MAX));
 
   return {
     ok: true,

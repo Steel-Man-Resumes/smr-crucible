@@ -334,6 +334,8 @@ export function hiddenFacilityTerms(entries: PracticeEntry[], s: CreativeKindSet
     if (mode !== "true_title" && e.title.trim().length >= 4) out.push(e.title.toLowerCase());
     const venue = e.venue?.toLowerCase();
     if ((mode === "leave_out" || mode === "unset") && venue && venue.trim().length >= 4 && !shownVenues.has(venue)) out.push(venue);
+    // Earlier names of the entry are never shown on a lane that keeps it off.
+    if (mode !== "true_title") for (const f of e.details.formerNames ?? []) if (f.trim().length >= 4) out.push(f.toLowerCase());
   }
   return out;
 }
@@ -373,7 +375,9 @@ const CLAIMS: { re: RegExp; word: string; backs: (e: PracticeEntry) => boolean }
   { re: /\btour(ed|ing)?\b/i, word: "toured", backs: (e) => e.details.touring === true },
   { re: /\bfellowship\b/i, word: "fellowship", backs: (e) => e.section === "award" && e.details.kind === "fellowship" },
   { re: /\bresiden(cy|ce)\b/i, word: "residency", backs: (e) => e.section === "residency" },
-  { re: /\b(prize|first|winner|won|national|nationally)\b/i, word: "", backs: () => false },
+  { re: /\b(prize|winner|national|nationally)\b/i, word: "", backs: () => false },
+  // "first" and "won" only when they sit with a prize, award or place ("her first group show" is fine).
+  { re: /\b(first|won)\b(?=[^.]*\b(prize|award|place|competition|contest|honou?rs?)\b)|\b(prize|award|place|competition|contest|honou?rs?)\b[^.]*\b(first|won)\b/i, word: "", backs: () => false },
 ];
 
 export function unbackedClaims(text: string, entries: PracticeEntry[]): string[] {
@@ -384,7 +388,8 @@ export function unbackedClaims(text: string, entries: PracticeEntry[]): string[]
   for (const c of CLAIMS) {
     const m = text.match(c.re);
     if (!m) continue;
-    const word = c.word || m[0].toLowerCase();
+    // One word only, never a span of the sentence.
+    const word = (c.word || m.slice(1).find((x) => x && /^(first|won|prize|winner|national|nationally)$/i.test(x)) || m[0].split(/\s+/)[0]).toLowerCase();
     // A word that is part of an entry's own title or venue is the record speaking.
     if (named.some((e) => c.re.test(e.title) || c.re.test(e.venue ?? ""))) continue;
     if (!named.some(c.backs)) out.push(word);

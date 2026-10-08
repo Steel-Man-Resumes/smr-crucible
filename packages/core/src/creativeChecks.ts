@@ -88,6 +88,8 @@ export interface CreativeOpenItem {
   doc: CreativeDoc;
   /** The practice entry it is about, when there is one. */
   entryId?: string;
+  /** The bio sentence it is about (the screen highlights it; the line never quotes it). */
+  sentenceId?: string;
 }
 
 export interface CreativeStatusInput {
@@ -115,7 +117,7 @@ const clip = (s: string, n = 70) => (s.length > n ? `${s.slice(0, n).trim()}...`
 
 /** What an open item says in place of an entry this lane keeps off (a DRAFT to-do page is exported too). */
 export const HIDDEN_ENTRY_LINE = "An entry in your record (title kept off this page)";
-export const HIDDEN_SENTENCE_LINE = "A sentence naming something you keep off this lane";
+export const HIDDEN_SENTENCE_LINE = "Names something this lane keeps off";
 
 /**
  * The line an open item shows for an entry: its true title only when this
@@ -251,8 +253,10 @@ export function checkArtistResume(
   for (const sec of model.sections) {
     const def = secByKey.get(sec.key);
     for (const row of sec.rows) {
-      const text = `${row.years}  ${rowText(row.parts)}`;
       const e = byId.get(row.entryId.toLowerCase());
+      // A line shows an entry only through the lane's CURRENT rendering of it
+      // (never the row text handed in, which may be old or altered).
+      const text = e ? entryLine(e, settings) : "A line that is not in your record";
       if (!e) {
         out.push({
           rule: "CR-01", severity: "BLOCK", line: clip(text), doc: "artist_resume",
@@ -339,14 +343,19 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
         why: "Only sentences you keep go in your bio.",
       });
     }
-    for (const s of list.filter((x) => x.approved)) {
-      const line = clip(s.text);
+    const shown = list.filter((x) => x.approved);
+    for (const [i, s] of shown.entries()) {
+      // A bio item NEVER quotes its sentence (the line prints on a DRAFT export's
+      // to-do page, and the sentence may carry an old or hidden name). It points
+      // by position; the screen highlights the sentence by its id.
+      const line = `${BIO_LIMITS[len].label} bio, sentence ${i + 1}`;
+      const sentenceId = s.id;
       // The lane's CURRENT facility choices win over anything stored with the bio.
       const leak = namesHiddenFacility(s.text, hidden);
       if (leak) {
         out.push({
           // Never quote the sentence: the to-do page of a DRAFT export prints this line.
-          rule: "STD-R03", severity: "BLOCK", line: HIDDEN_SENTENCE_LINE, doc: "bio",
+          rule: "STD-R03", severity: "BLOCK", line: `${line}: ${HIDDEN_SENTENCE_LINE.toLowerCase()}`, doc: "bio", sentenceId,
           question: "This sentence names something you chose to keep off this lane. Cut it, or change that choice?",
           why: "Your choices about work that names a facility apply to every page on this lane.",
         });
@@ -354,8 +363,8 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
       }
       if (s.origin === "fact" && !templates.has(s.text)) {
         out.push({
-          rule: "CR-04", severity: "BLOCK", line, doc: "bio",
-          question: "This sentence came from your record, and your record changed. Keep it in your own words, or cut it?",
+          rule: "CR-04", severity: "BLOCK", line, doc: "bio", sentenceId,
+          question: "This sentence came from your record, and your record changed. Review it on screen: keep it in your own words, or cut it?",
           why: "A drafted sentence can only say what your record says today.",
         });
         continue;
@@ -364,42 +373,42 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
       const f = flagSentence(s.text, vocab, name);
       if (f.untraced.length) {
         out.push({
-          rule: "CR-04", severity: "FIX", line, doc: "bio",
+          rule: "CR-04", severity: "FIX", line, doc: "bio", sentenceId,
           question: `Where does "${f.untraced[0]}" come from? It isn't in your record. Add it there, or say it another way.`,
           why: "Panels check what a bio names. Your record is where the proof lives.",
         });
       }
       for (const w of unbackedClaims(s.text, entries)) {
         out.push({
-          rule: "CR-02", severity: "FIX", line, doc: "bio",
+          rule: "CR-02", severity: "FIX", line, doc: "bio", sentenceId,
           question: `"${w}": does your record back that? Your record lists it differently. Say it the way the record does, or add it there.`,
           why: "A show, award or program is described the way it really was. Panels check.",
         });
       }
       if (f.numberWord) {
         out.push({
-          rule: "STD-T02", severity: "FIX", line, doc: "bio",
+          rule: "STD-T02", severity: "FIX", line, doc: "bio", sentenceId,
           question: `"${f.numberWord}": what's the real count? Put in the number you can back up, or cut it.`,
           why: "Numbers come from you and have to hold up.",
         });
       }
       if (f.firstPerson) {
         out.push({
-          rule: "CR-04", severity: "FIX", line, doc: "bio",
+          rule: "CR-04", severity: "FIX", line, doc: "bio", sentenceId,
           question: "A bio is written about you (she, he, they, or your name). Want to put this sentence that way?",
           why: "Bios are third person. Your statement is where you say I.",
         });
       }
       if (f.statementWords) {
         out.push({
-          rule: "CR-04", severity: "FIX", line, doc: "bio",
+          rule: "CR-04", severity: "FIX", line, doc: "bio", sentenceId,
           question: `"${f.statementWords}" is about what the work means. Does this belong in your statement instead?`,
           why: "The bio lists facts. The statement says what the work is about.",
         });
       }
       if (f.puff) {
         out.push({
-          rule: "CR-04", severity: "FIX", line, doc: "bio",
+          rule: "CR-04", severity: "FIX", line, doc: "bio", sentenceId,
           question: `What backs up "${f.puff}"? If nothing in your record does, cut the word.`,
           why: "Praise words read as claims. A panel looks for the facts behind them.",
         });
@@ -426,10 +435,9 @@ export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: Cr
 export function checkStatement(statement: StatementContent): CreativeOpenItem[] {
   const bad = auditStatementHistory(statement);
   if (!bad) return [];
-  const v = statement.versions[bad.index];
   return [
     {
-      rule: "CR-03", severity: "BLOCK", line: clip(v?.text ?? ""), doc: "statement",
+      rule: "CR-03", severity: "BLOCK", line: `Statement, saved version ${bad.index + 1}`, doc: "statement",
       question: "Part of this matches words a model wrote. Can you put that part in your own words?",
       why: "Your statement is yours. The tool never writes it.",
     },
