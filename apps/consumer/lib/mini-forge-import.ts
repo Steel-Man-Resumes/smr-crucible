@@ -9,13 +9,7 @@ export function nonEmptyList(value: unknown): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
-/**
- * Wrong-PIN tries allowed per tablet code per day at the import confirm step
- * (shared-computer review, Mini Forge path 5). A 4-digit PIN has 10,000
- * values; five tries a day keeps guessing pointless.
- */
-export const MINI_FORGE_PIN_TRIES = 5;
-export const MINI_FORGE_PIN_ENDPOINT = "mini-forge-pin";
+// PIN try limits and the plan lock live in lib/mini-forge-guard.ts.
 
 /**
  * Postgres needs a timestamp it can parse. The Neon driver hands created_at

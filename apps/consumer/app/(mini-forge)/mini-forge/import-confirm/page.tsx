@@ -6,25 +6,40 @@
  * some point in the last two hours. On a shared computer the person signed in
  * now may not be the person who did that. So before a tablet plan is saved
  * into an account, the signed-in person enters the tablet PIN again, and the
- * page names the account it goes to. Wrong PINs are limited per code per day.
+ * page names the account it goes to. PIN tries are limited per plan (keyed on
+ * the id the database returns, never the cookie's spelling), per network and
+ * per account, and the plan locks after too many wrong PINs in total; a plan
+ * loads into one account only, once (lib/mini-forge-guard.ts).
  *
  * Server-rendered with server actions (no client JS), like the import page.
  * Outside the middleware matcher, so it checks the session itself: signed in,
  * not revoked, and not halfway through a second step.
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth, isSessionRevoked, signOut } from "@/auth";
-import { incrementIpUsage, saveForgeSession } from "@crucible/core";
+import { incrementIpUsage, incrementUserUsage, saveForgeSession } from "@crucible/core";
 import { sessionPending } from "@/lib/session-policy";
-import { getTabletSessionForImport, TABLET_COOKIE, verifyPin } from "@/lib/tablet-session";
 import {
-  MINI_FORGE_PIN_ENDPOINT,
-  MINI_FORGE_PIN_TRIES,
-  nonEmptyList,
-  toIsoTimestamp,
-} from "@/lib/mini-forge-import";
+  getTabletSessionForImport,
+  markImported,
+  recordPinFailure,
+  tabletColumnsMissing,
+  TABLET_COOKIE,
+  unmarkImported,
+  verifyPin,
+} from "@/lib/tablet-session";
+import { nonEmptyList, toIsoTimestamp } from "@/lib/mini-forge-import";
+import {
+  canonicalTabletId,
+  countPinTry,
+  ipFromHeaders,
+  MINI_FORGE_LOCK_AFTER,
+  MINI_FORGE_MESSAGES,
+  planStateBlock,
+  validPin,
+} from "@/lib/mini-forge-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -56,41 +71,78 @@ async function clearTabletCookie() {
 export default async function ImportConfirmPage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
   const person = await signedInPerson();
-  const tabletId = (await cookies()).get(TABLET_COOKIE)?.value;
+  const tabletId = canonicalTabletId((await cookies()).get(TABLET_COOKIE)?.value);
   if (!tabletId) redirect("/dashboard");
 
   async function confirm(formData: FormData) {
     "use server";
     const me = await signedInPerson();
     const jar = await cookies();
-    const id = jar.get(TABLET_COOKIE)?.value;
-    if (!id) redirect("/dashboard");
+    // Only the canonical spelling: any other is a different counter key for
+    // the same row (security review 3a Part 2 r1, M1).
+    const id = canonicalTabletId(jar.get(TABLET_COOKIE)?.value);
+    if (!id) {
+      await clearTabletCookie();
+      redirect("/dashboard");
+    }
     const pin = String(formData.get("pin") ?? "").trim();
-    if (!/^\d{4}$/.test(pin)) redirect("/mini-forge/import-confirm?error=invalid_pin");
+    if (!validPin(pin)) redirect("/mini-forge/import-confirm?error=invalid_pin");
 
-    // Every try counts, right or wrong, before the PIN is checked.
-    const tries = await incrementIpUsage(`mf-pin:${id}`, MINI_FORGE_PIN_ENDPOINT);
-    if (tries > MINI_FORGE_PIN_TRIES) redirect("/mini-forge/import-confirm?error=too_many");
-
-    const tablet = await getTabletSessionForImport(id);
+    let tablet;
+    try {
+      tablet = await getTabletSessionForImport(id);
+    } catch (e) {
+      if (tabletColumnsMissing(e)) redirect("/mini-forge/import-confirm?error=unavailable");
+      throw e;
+    }
     if (!tablet || !tablet.forge_output) {
       await clearTabletCookie();
       redirect("/dashboard");
     }
-    if (!(await verifyPin(pin, tablet.pin_hash))) redirect("/mini-forge/import-confirm?error=wrong_pin");
 
+    // Every try counts, right or wrong, before the PIN is checked: keyed on
+    // the id the database returned, per network and per account.
+    const { allowed } = await countPinTry(
+      { bucket: incrementIpUsage, account: incrementUserUsage },
+      { plan: tablet.id, ip: ipFromHeaders(await headers()), userId: me.id }
+    );
+    if (!allowed) redirect("/mini-forge/import-confirm?error=too_many");
+
+    // The plan's own state, before the PIN (the answer never depends on it).
+    const block = planStateBlock(tablet, { needReady: true });
+    if (block === "imported") {
+      await clearTabletCookie();
+      redirect("/mini-forge/import-confirm?error=imported");
+    }
+    if (block) redirect(`/mini-forge/import-confirm?error=${block}`);
+
+    if (!(await verifyPin(pin, tablet.pin_hash))) {
+      await recordPinFailure(tablet.id, MINI_FORGE_LOCK_AFTER);
+      redirect("/mini-forge/import-confirm?error=wrong_pin");
+    }
+
+    // Single use: claim the import first (atomic), then save. If the save
+    // throws, the claim is given back and the cookie stays, so the person
+    // can try again.
+    if (!(await markImported(tablet.id, me.id))) {
+      await clearTabletCookie();
+      redirect("/mini-forge/import-confirm?error=imported");
+    }
     const intake = (tablet.forge_intake ?? {}) as Record<string, unknown>;
-    // Same saveForgeSession contract as the full Forge. If it throws, the
-    // cookie stays, so the person can try again.
-    await saveForgeSession(me.id, `mini-forge-${tablet.id}`, {
-      readinessStage: intake.readiness_stage as string | undefined,
-      goals: nonEmptyList(intake.goals),
-      challenges: nonEmptyList(intake.challenges),
-      preferences: intake.work_type ? { work_type: intake.work_type as string } : undefined,
-      forgeOutput: tablet.forge_output as Record<string, unknown>,
-      pagesVisited: ["mini-forge-intake"],
-      startedAt: toIsoTimestamp(tablet.created_at),
-    });
+    try {
+      await saveForgeSession(me.id, `mini-forge-${tablet.id}`, {
+        readinessStage: intake.readiness_stage as string | undefined,
+        goals: nonEmptyList(intake.goals),
+        challenges: nonEmptyList(intake.challenges),
+        preferences: intake.work_type ? { work_type: intake.work_type as string } : undefined,
+        forgeOutput: tablet.forge_output as Record<string, unknown>,
+        pagesVisited: ["mini-forge-intake"],
+        startedAt: toIsoTimestamp(tablet.created_at),
+      });
+    } catch (e) {
+      await unmarkImported(tablet.id, me.id).catch(() => {});
+      throw e;
+    }
     await clearTabletCookie();
     redirect("/dashboard?welcome=mini-forge");
   }
@@ -109,9 +161,10 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
   }
 
   const messages: Record<string, string> = {
-    invalid_pin: "Enter the 4-digit PIN you made on the tablet.",
+    ...MINI_FORGE_MESSAGES,
+    // The plan is already known here (this browser opened it), so a wrong
+    // PIN can say so; the limits above still apply.
     wrong_pin: "That PIN doesn't match this plan. Check it and try again.",
-    too_many: "Too many tries for this code today. Try again tomorrow.",
   };
 
   return (

@@ -7,6 +7,7 @@
 
 import bcrypt from "bcryptjs";
 import { query, getOne } from "@crucible/core";
+import { canonicalTabletId } from "./mini-forge-guard";
 
 export const TABLET_COOKIE = "mf_session";
 
@@ -41,6 +42,16 @@ export interface TabletSession {
   processed_at: Date | null;
   claimed_at: Date | null;
   expires_at: Date;
+  /** 078: wrong PINs in total, the lock, and the single-use import. */
+  pin_failures?: number;
+  locked_at?: Date | null;
+  imported_at?: Date | null;
+  imported_by?: string | null;
+}
+
+/** Postgres "column does not exist": 078 is not applied here yet. */
+export function tabletColumnsMissing(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "42703";
 }
 
 export async function createTabletSession(
@@ -69,23 +80,12 @@ export async function createTabletSession(
 }
 
 export async function getTabletSession(id: string): Promise<TabletSession | null> {
+  // Only the canonical spelling (lib/mini-forge-guard.ts): one plan, one id.
+  if (!canonicalTabletId(id)) return null;
   return getOne<TabletSession>(
     `SELECT * FROM tablet_session WHERE id = $1 AND expires_at > NOW() AND claimed_at IS NULL`,
     [id]
   );
-}
-
-export async function getTabletSessionByCode(
-  importCode: string,
-  pin: string
-): Promise<TabletSession | null> {
-  const session = await getOne<TabletSession>(
-    `SELECT * FROM tablet_session WHERE import_code = $1 AND expires_at > NOW()`,
-    [importCode.toUpperCase().trim()]
-  );
-  if (!session) return null;
-  const valid = await verifyPin(pin, session.pin_hash);
-  return valid ? session : null;
 }
 
 export async function updateIntake(
@@ -137,10 +137,72 @@ export async function releaseProcessingClaim(id: string): Promise<void> {
   );
 }
 
-/** Read a session regardless of claimed_at -- used by import-complete after claim. */
+/**
+ * Read a plan for the import confirm step, regardless of claimed_at. The id
+ * must already be canonical (lib/mini-forge-guard.ts canonicalTabletId); the
+ * row's own id is what callers key their counters on.
+ */
 export async function getTabletSessionForImport(id: string): Promise<TabletSession | null> {
+  if (!canonicalTabletId(id)) return null;
   return getOne<TabletSession>(
     `SELECT * FROM tablet_session WHERE id = $1 AND expires_at > NOW()`,
     [id]
   );
+}
+
+/** A plan by its code alone (the PIN is checked by the caller, after the plan-state checks). */
+export async function getTabletSessionByCodeOnly(importCode: string): Promise<TabletSession | null> {
+  return getOne<TabletSession>(
+    `SELECT * FROM tablet_session WHERE import_code = $1 AND expires_at > NOW()`,
+    [importCode]
+  );
+}
+
+/**
+ * One wrong PIN, counted on the plan itself. At `lockAfter` in total the plan
+ * locks (locked_at) until an admin clears it. Throws when 078 is missing.
+ */
+export async function recordPinFailure(id: string, lockAfter: number): Promise<{ failures: number; locked: boolean }> {
+  const row = await getOne<{ pin_failures: number; locked: boolean }>(
+    `UPDATE tablet_session
+        SET pin_failures = pin_failures + 1,
+            locked_at = CASE WHEN pin_failures + 1 >= $2 THEN COALESCE(locked_at, now()) ELSE locked_at END
+      WHERE id = $1
+      RETURNING pin_failures, (locked_at IS NOT NULL) AS locked`,
+    [id, lockAfter]
+  );
+  return { failures: row?.pin_failures ?? 0, locked: row?.locked === true };
+}
+
+/**
+ * Single use: mark the plan imported into this account. Atomic, so two
+ * confirms can never both win. Returns false when it was already imported.
+ */
+export async function markImported(id: string, userId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE tablet_session SET imported_at = now(), imported_by = $2
+      WHERE id = $1 AND imported_at IS NULL
+      RETURNING id`,
+    [id, userId]
+  );
+  return rows.length > 0;
+}
+
+/** Undo markImported when the save itself failed, so the person can try again. */
+export async function unmarkImported(id: string, userId: string): Promise<void> {
+  await query(
+    `UPDATE tablet_session SET imported_at = NULL, imported_by = NULL WHERE id = $1 AND imported_by = $2`,
+    [id, userId]
+  );
+}
+
+/** Admin: clear a plan's lock and wrong-PIN count, by its code. Returns whether a plan matched. */
+export async function clearPinLock(importCode: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE tablet_session SET pin_failures = 0, locked_at = NULL
+      WHERE import_code = $1
+      RETURNING id`,
+    [importCode]
+  );
+  return rows.length > 0;
 }

@@ -24,7 +24,7 @@ describe("Mini Forge path 5: the import confirms the person, not the browser", (
     const pinAt = page.indexOf("verifyPin(");
     const saveAt = page.indexOf("saveForgeSession(");
     assert.ok(pinAt > 0 && saveAt > pinAt, "PIN checked before the save");
-    const capAt = page.indexOf("tries > MINI_FORGE_PIN_TRIES");
+    const capAt = page.indexOf("countPinTry(");
     assert.ok(capAt > 0 && capAt < pinAt, "tries are counted and capped before the PIN is checked");
     assert.match(page, /sessionPending\(/);
     assert.match(page, /Not \$\{person\.email\}\? /);

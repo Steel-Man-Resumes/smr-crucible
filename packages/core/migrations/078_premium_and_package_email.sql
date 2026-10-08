@@ -4,6 +4,11 @@
 --   2. users.forge_package_email: whether a finished Forge package is emailed
 --      to the person's own proven address (default yes; they can turn it off),
 --      and forge_package_email_sent: one automatic send per finished version.
+--   3. users.email_proof_source: HOW the inbox was proven (security review 3a
+--      Part 2 r1, M2). 068 backfilled email_proven_at on every older account,
+--      typed addresses included; the automatic email needs a real proof.
+--   4. tablet_session: a wrong-PIN count and lock, and single-use imports
+--      (security review 3a Part 2 r1, M1 and L4).
 --
 -- PART 1. Premium tools.
 --
@@ -46,6 +51,11 @@
 --   DROP TABLE IF EXISTS premium_access_request;
 --   DROP FUNCTION IF EXISTS public.premium_grant_guard();
 --   DROP FUNCTION IF EXISTS public.premium_request_guard();
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS pin_failures;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS locked_at;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_at;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_by;
+--   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;
 --   DROP TABLE IF EXISTS forge_package_email_sent;
 --   ALTER TABLE users DROP COLUMN IF EXISTS forge_package_email;
 --   DELETE FROM _migrations WHERE filename = '078_premium_and_package_email.sql';
@@ -273,3 +283,53 @@ BEGIN
     GRANT SELECT, INSERT, DELETE ON forge_package_email_sent TO smr_app;
   END IF;
 END $$;
+
+-- PART 3. How the inbox was proven.
+--
+-- 068 set email_proven_at = now() on EVERY account that existed then, because
+-- there was no record of how they signed in. That includes accounts made with
+-- a password and a typed address nobody ever proved. That was fine for the
+-- question 068 answers (whether to ask "keep your password?"), but not as
+-- permission to email someone's finished resume by itself.
+--
+-- email_proof_source is set ONLY by a real inbox proof: an email-link sign-in,
+-- a Google sign-in whose address Google verified, or a password reset by
+-- email (apps/consumer/lib/email-proof.ts). The automatic package email needs
+-- it. NULL means "no proof on record", whatever email_proven_at says.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_proof_source TEXT
+  CHECK (email_proof_source IS NULL OR email_proof_source IN ('email_link', 'google', 'password_reset', 'recorded'));
+
+-- Proofs recorded between 068 and this migration were real: every account
+-- that existed at 068 got the same backfill instant, which is 068's
+-- _migrations.applied_at (the migration runner inserts that row in the same
+-- transaction). A proof more than a minute after that instant came from a
+-- sign-in, so it is kept as 'recorded'. Everything else stays NULL, which
+-- only means the person is asked to confirm their address before the first
+-- automatic email. Without a 068 row there is nothing to tell apart, so
+-- nothing is marked.
+DO $$
+DECLARE backfill_at TIMESTAMPTZ;
+BEGIN
+  IF to_regclass('public._migrations') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'applied_at') THEN
+    SELECT applied_at INTO backfill_at FROM _migrations WHERE filename = '068_email_proven.sql';
+    IF backfill_at IS NOT NULL THEN
+      UPDATE users SET email_proof_source = 'recorded'
+       WHERE email_proof_source IS NULL
+         AND email_proven_at IS NOT NULL
+         AND email_proven_at > backfill_at + interval '1 minute';
+    END IF;
+  END IF;
+END $$;
+
+-- PART 4. Mini Forge plans: a wrong-PIN lock, and single-use imports.
+--
+-- pin_failures counts wrong PINs in total (the import page and the confirm
+-- step). At 5 the app sets locked_at, and the plan opens again only when an
+-- admin clears it. imported_at / imported_by mark the one account a plan was
+-- loaded into; after that it never loads again. Old code ignores all four.
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS pin_failures INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_by UUID REFERENCES users(id) ON DELETE SET NULL;

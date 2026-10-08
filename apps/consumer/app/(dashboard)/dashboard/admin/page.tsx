@@ -87,6 +87,12 @@ export default function AdminEvidenceDashboard() {
         </div>
         <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row">
           <Link
+            href="/dashboard/admin/mini-forge"
+            className="t-focus px-4 py-2 bg-transparent border border-t-line text-t-phos text-sm font-bold hover:bg-t-panel-2"
+          >
+            Locked Mini Forge plans
+          </Link>
+          <Link
             href="/dashboard/admin/premium"
             className="t-focus px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10"
           >
