@@ -7,16 +7,17 @@
  *     "not", "paint", "draw", is never touched);
  *   - replace it ONLY with a dictionary word within a small edit distance
  *     (1, or 2 for words of 7 letters or more), starting with the same letter;
- *   - be offered ONLY when one dictionary word is clearly closest: nearest by
- *     edit distance, then commonest by word-list level, then the kind of slip
- *     people make most (a doubled or dropped double letter, two letters
- *     swapped). Still tied: no mark at all.
+ *   - be offered ONLY when exactly one dictionary word is closest. Two words
+ *     at the same distance: no mark at all (no guessing which one was meant).
+ * A token that looks like a contraction typed without its apostrophe
+ * ("hasnt", "couldnt", "aint") is never marked: the nearest word would drop
+ * the "not".
  * Names, capitalised words, words with an apostrophe, numbers and very short
  * tokens are never marked. Negation and modal words are never produced.
  */
 
 import { SPELLING_WORDS_BY_LEVEL } from "./spellingWords";
-import { editDistance, type SpellingMark } from "./creativeStatement";
+import type { SpellingMark } from "./creativeStatement";
 
 /** Art words the general list leaves out. Lowercase. Ours, not SCOWL's. */
 const SUPPLEMENT = [
@@ -32,6 +33,16 @@ const PROTECTED = new Set([
   "wasnt", "was", "were", "is", "am", "are", "be", "been", "have", "has", "had", "hate", "love", "live", "lie",
 ]);
 
+/** Contractions people type without the apostrophe. Never marked. */
+const BARE_CONTRACTIONS = new Set([
+  "aint", "arent", "cant", "couldnt", "darent", "didnt", "doesnt", "dont", "hadnt", "hasnt", "havent", "isnt",
+  "mightnt", "mustnt", "neednt", "oughtnt", "shant", "shouldnt", "wasnt", "werent", "wont", "wouldnt",
+  "im", "ive", "id", "youre", "youve", "theyre", "theyve", "weve", "hes", "shes", "itll", "thats", "whats", "lets",
+]);
+
+/** Most distinct non-words one check looks at. A longer list is cut, and the screen says so. */
+export const MAX_SPELLING_TOKENS = 150;
+
 /** Known misspellings with their one fix. Checked against the list like any mark. */
 const COMMON_MISSPELLINGS: Record<string, string> = {
   acheive: "achieve", accross: "across", begining: "beginning", beleive: "believe", belive: "believe",
@@ -43,34 +54,33 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   occurence: "occurrence", peice: "piece", persue: "pursue", posession: "possession", recieve: "receive",
   remeber: "remember", seperate: "separate", sucess: "success", suprise: "surprise", thier: "their",
   tommorow: "tomorrow", truely: "truly", untill: "until", wich: "which", wierd: "weird", writting: "writing",
-  paintting: "painting", sculpure: "sculpture", portrat: "portrait", inspriation: "inspiration",
+  paintting: "painting", sculpure: "sculpture", portrat: "portrait", inspriation: "inspiration", teh: "the",
 };
 
 let dict: Set<string> | null = null;
-let level: Map<string, number> | null = null;
-let byKey: Map<string, string[]> | null = null;
+let byKey: Map<string, number[]> | null = null;
+let words: string[] = [];
+/** Letter counts per word (26 bytes each): a cheap lower bound that skips most distance work. */
+let bags: Uint8Array = new Uint8Array(0);
 
 function load(): void {
   if (dict) return;
   dict = new Set();
-  level = new Map();
-  for (const [lv, words] of Object.entries(SPELLING_WORDS_BY_LEVEL)) {
-    for (const w of words.split(" ")) {
-      dict.add(w);
-      level.set(w, Number(lv));
-    }
-  }
-  for (const w of SUPPLEMENT) {
-    dict.add(w);
-    if (!level.has(w)) level.set(w, 55);
-  }
+  for (const list of Object.values(SPELLING_WORDS_BY_LEVEL)) for (const w of list.split(" ")) dict.add(w);
+  for (const w of SUPPLEMENT) dict.add(w);
   byKey = new Map();
-  for (const w of dict) {
+  words = Array.from(dict);
+  bags = new Uint8Array(words.length * 26);
+  words.forEach((w, idx) => {
+    for (let i = 0; i < w.length; i++) {
+      const c = w.charCodeAt(i) - 97;
+      if (c >= 0 && c < 26) bags[idx * 26 + c]++;
+    }
     const k = `${w[0]}${w.length}`;
-    const list = byKey.get(k);
-    if (list) list.push(w);
-    else byKey.set(k, [w]);
-  }
+    const list = byKey!.get(k);
+    if (list) list.push(idx);
+    else byKey!.set(k, [idx]);
+  });
 }
 
 export function isDictionaryWord(word: string): boolean {
@@ -78,24 +88,83 @@ export function isDictionaryWord(word: string): boolean {
   return dict!.has(word.toLowerCase());
 }
 
-/** A token the coach is allowed to look at: lowercase letters only, 3 to 30 long, not protected. */
+/** A token the coach is allowed to look at: lowercase letters only, 3 to 30 long, not protected, not a bare contraction. */
 function markable(token: string): boolean {
-  return /^[a-z]{3,30}$/.test(token) && !PROTECTED.has(token);
+  return /^[a-z]{3,30}$/.test(token) && !PROTECTED.has(token) && !BARE_CONTRACTIONS.has(token);
 }
+
+/** Edit distance (with adjacent swaps) that gives up as soon as it must exceed `limit`. Reuses its buffers. */
+const R0 = new Int32Array(33);
+const R1 = new Int32Array(33);
+const R2 = new Int32Array(33);
+export function boundedDistance(a: string, b: string, limit: number): number {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > limit) return limit + 1;
+  if (m > 32 || n > 32) return limit + 1;
+  let prev2 = R0;
+  let prev = R1;
+  let cur = R2;
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    let rowMin = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= n; j++) {
+      const bj = b.charCodeAt(j - 1);
+      let v = prev[j - 1] + (ai === bj ? 0 : 1);
+      const del = prev[j] + 1;
+      const ins = cur[j - 1] + 1;
+      if (del < v) v = del;
+      if (ins < v) v = ins;
+      if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === bj && prev2[j - 2] + 1 < v) v = prev2[j - 2] + 1;
+      cur[j] = v;
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > limit) return limit + 1;
+    const t = prev2;
+    prev2 = prev;
+    prev = cur;
+    cur = t;
+  }
+  return prev[n];
+}
+
+const memo = new Map<string, string | null>();
+const MEMO_MAX = 5000;
 
 /** The one fix for a token that is not a word, or null (a word, ambiguous, or nothing close). */
 export function suggestionFor(token: string): string | null {
+  const hit = memo.get(token);
+  if (hit !== undefined) return hit;
+  const out = computeSuggestion(token);
+  if (memo.size >= MEMO_MAX) memo.clear();
+  memo.set(token, out);
+  return out;
+}
+
+function computeSuggestion(token: string): string | null {
   load();
   if (!markable(token) || dict!.has(token)) return null;
   const known = COMMON_MISSPELLINGS[token];
   if (known && dict!.has(known) && !PROTECTED.has(known)) return known;
+  // Three-letter tokens have too many near words to guess from; only the known list fixes them.
+  if (token.length < 4) return null;
   const limit = token.length >= 7 ? 2 : 1;
   let best = Infinity;
   let found: string[] = [];
+  const tb = new Int32Array(26);
+  for (let i = 0; i < token.length; i++) tb[token.charCodeAt(i) - 97]++;
   for (let len = token.length - limit; len <= token.length + limit; len++) {
-    for (const w of byKey!.get(`${token[0]}${len}`) ?? []) {
+    for (const idx of byKey!.get(`${token[0]}${len}`) ?? []) {
+      // Each edit changes the letter counts by at most 2, so a big difference cannot be close.
+      let diff = 0;
+      const o = idx * 26;
+      for (let c = 0; c < 26; c++) diff += Math.abs(tb[c] - bags[o + c]);
+      if (diff > 2 * limit) continue;
+      const w = words[idx];
       if (PROTECTED.has(w)) continue;
-      const d = editDistance(token, w);
+      const d = boundedDistance(token, w, Math.min(limit, best));
       if (d > limit || d > best) continue;
       if (d < best) {
         best = d;
@@ -103,32 +172,7 @@ export function suggestionFor(token: string): string | null {
       } else found.push(w);
     }
   }
-  if (found.length > 1) {
-    const top = Math.min(...found.map((w) => level!.get(w) ?? 99));
-    found = found.filter((w) => (level!.get(w) ?? 99) === top);
-  }
-  if (found.length > 1) {
-    const slips = found.filter((w) => isCommonSlip(token, w));
-    if (slips.length === 1) found = slips;
-  }
   return found.length === 1 ? found[0] : null;
-}
-
-/** b is a with one letter doubled or one double undone, or two neighbours swapped. */
-export function isCommonSlip(a: string, b: string): boolean {
-  const doubled = (x: string, y: string) => {
-    if (y.length !== x.length + 1) return false;
-    for (let i = 0; i < y.length; i++) {
-      if (y.slice(0, i) + y.slice(i + 1) === x && i > 0 && y[i] === y[i - 1]) return true;
-    }
-    return false;
-  };
-  if (doubled(a, b) || doubled(b, a)) return true;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length - 1; i++) {
-    if (a[i] !== b[i]) return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
-  }
-  return false;
 }
 
 /** The sentence a token sits in, for showing the mark in context. */
@@ -139,19 +183,35 @@ function sentenceAround(text: string, index: number): string {
   return text.slice(start, end).trim().slice(0, 240);
 }
 
-/** Every mark for a text, first occurrence of each misspelled token, with its sentence. */
-export function spellingMarksFor(text: string): SpellingMark[] {
+/**
+ * Every mark for a text, first occurrence of each misspelled token, with its
+ * sentence. Looks at no more than MAX_SPELLING_TOKENS distinct non-words;
+ * `capped` says when the rest went unchecked (the screen says so).
+ */
+export function spellingCheck(text: string): { marks: SpellingMark[]; capped: boolean } {
+  load();
   const out: SpellingMark[] = [];
-  const re = /[A-Za-z]+(?:['’][A-Za-z]+)?/g;
+  const looked = new Set<string>();
+  let capped = false;
+  const re = /[A-Za-z]+(?:['\u2019][A-Za-z]+)?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text ?? ""))) {
     const token = m[0];
-    if (out.some((x) => x.word === token)) continue;
+    if (looked.has(token) || dict!.has(token)) continue;
+    if (looked.size >= MAX_SPELLING_TOKENS) {
+      capped = true;
+      break;
+    }
+    looked.add(token);
     const fix = suggestionFor(token);
     if (fix) out.push({ word: token, suggestion: fix, sentence: sentenceAround(text, m.index) });
     if (out.length >= 30) break;
   }
-  return out;
+  return { marks: out, capped };
+}
+
+export function spellingMarksFor(text: string): SpellingMark[] {
+  return spellingCheck(text).marks;
 }
 
 /** The server's check on an accepted mark: exactly the fix this module offers for that token. */

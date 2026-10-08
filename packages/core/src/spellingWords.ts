@@ -5,10 +5,11 @@
  * Source: the npm package wordlist-english 1.2.1 (MIT), which packages SCOWL
  * (Spell Checker Oriented Word Lists) by Kevin Atkinson. Levels 10 to 55,
  * English and American, lowercase alphabetic words only (67301 words), grouped
- * by SCOWL level (10 = most common) so a spelling fix can prefer the commoner
- * word.
+ * by SCOWL level (10 = most common) as the source lists them.
  *
- * SCOWL notice, kept as its licence asks:
+ * The full notices (SCOWL's Copyright file, unchanged, and the package's MIT
+ * line) are in spellingWords.COPYRIGHT.txt beside this file. SCOWL's own
+ * notice, kept here too as its licence asks:
  *
  *   The collective work is Copyright 2000-2016 by Kevin Atkinson as well
  *   as any of the copyrights mentioned below:
