@@ -31,6 +31,9 @@ import {
   isCvType,
   type CvType,
   type CvModel,
+  buildPerformerModel,
+  getPerformerStatus,
+  type PerformerModel,
   revOf,
   type PracticeEntry,
   type CreativeKindSettings,
@@ -82,7 +85,7 @@ export function ownerOnly(): NextResponse {
 }
 
 /** An open lane of this person's of one of these kinds, or null. */
-export async function docLane(userId: string, laneId: unknown, kinds: Array<"creative" | "cv">): Promise<CareerLane | null> {
+export async function docLane(userId: string, laneId: unknown, kinds: Array<"creative" | "cv" | "performer">): Promise<CareerLane | null> {
   if (!isUuid(laneId)) return null;
   const lane = await getOpenLane(userId, laneId.toLowerCase());
   return lane && (kinds as string[]).includes(laneKindOf(lane)) ? lane : null;
@@ -96,6 +99,36 @@ export async function creativeLane(userId: string, laneId: unknown): Promise<Car
 /** An open CV lane of this person's, or null. */
 export async function cvLane(userId: string, laneId: unknown): Promise<CareerLane | null> {
   return docLane(userId, laneId, ["cv"]);
+}
+
+export interface PerformerContext {
+  lane: CareerLane;
+  partner: CareerLane | null;
+  entries: PracticeEntry[];
+  settings: CreativeKindSettings;
+  model: PerformerModel;
+  status: CreativeStatus;
+  plan: PairPlan | null;
+}
+
+/**
+ * A performer lane's record, choices, assembled page and open items, from the
+ * database, as the person. Pages are counted at the 8x10 trim (the smaller
+ * page: if it fits, Letter fits). A performer lane can pair with a realistic
+ * lane like a creative lane, with the same private plan card.
+ */
+export async function loadPerformerContext(userId: string, lane: CareerLane, pages?: number): Promise<PerformerContext> {
+  const [entries, partnerRow] = await Promise.all([
+    listPracticeEntries(userId),
+    lane.pair_lane_id ? getLane(userId, lane.pair_lane_id) : Promise.resolve(null),
+  ]);
+  const partner = partnerRow && !partnerRow.archived_at ? partnerRow : null;
+  const settings = readKindSettings(lane.kind_settings ?? {});
+  const model = buildPerformerModel(entries, settings);
+  const status = getPerformerStatus({ entries, settings, model, pages });
+  const dream = lane.path === "dream" ? lane : partner?.path === "dream" ? partner : null;
+  const plan = partner ? readPlan(dream?.pair_plan ?? {}) : null;
+  return { lane, partner, entries, settings, model, status, plan };
 }
 
 export interface CvContext {

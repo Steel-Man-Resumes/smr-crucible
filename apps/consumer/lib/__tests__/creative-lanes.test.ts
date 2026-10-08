@@ -170,7 +170,7 @@ test("slice 2 review LOWs: creative lanes refuse doc=cv; file names use the prin
   assert.match(exp, /const name = c\.model\.header\.name/);
   assert.ok(!/settings\.displayName/.test(exp), "never the raw typed name");
   const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
-  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference"\]/);
+  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference", "skills"\]/);
   assert.match(lane, /if \(g\.impersonating && OWNER_ONLY_FIELDS\.some/);
   assert.match(lane, /buildCreative\(\{ doc: "cv", model: v\.model \}\)\.layout\.pages\.length/);
   assert.match(lane, /loadCvContext\(g\.userId, lane, pages\)/);
@@ -180,4 +180,25 @@ test("slice 2 review LOWs: creative lanes refuse doc=cv; file names use the prin
   const view = rd("components", "creative", "CvLaneView.tsx");
   assert.match(view, /data-testid="cv-lead-reference"/);
   assert.match(view, /settings: \{ leadReference: r\.entryId \}/);
+});
+
+test("performer lanes: the export builds the page from the database (8x10 or Letter), counts pages at 8x10, and the screen never takes a photo", () => {
+  const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
+  const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
+  assert.match(exp, /if \(laneKindOf\(lane\) === "performer"\) return exportPerformer\(/);
+  assert.match(exp, /\["8x10", "letter"\]\.includes\(size\)/);
+  assert.match(exp, /exportOpenItemLines\(v\.status, v\.entries, v\.settings, "performer", performerShownIds\(v\.model\)\)/);
+  assert.match(exp, /buildCreative\(\{ doc: "performer", model: v\.model, trim: "8x10" \}\)/);
+  const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
+  assert.match(lane, /buildCreative\(\{ doc: "performer", model: p\.model, trim: "8x10" \}\)\.layout\.pages\.length/);
+  const view = rd("components", "creative", "PerformerLaneView.tsx");
+  assert.ok(!/<img|type="file"|upload|weight/i.test(view.replace(/No weight, no birth date, no age/, "")), "no photo, upload or weight field");
+  assert.match(view, /if \(trim === "8x10"\) setPages\(n\)/);
+  assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "performer", shownIds\)/);
+  assert.match(rd("app", "(dashboard)", "RefineryShell.tsx"), /href: "\/dashboard\/performer", label: "Performer"/);
+  // The coach and bio routes stay creative-only, so a performer lane is never sent to a model.
+  for (const p of [["app", "api", "creative", "coach", "route.ts"], ["app", "api", "creative", "bio-draft", "route.ts"], ["app", "api", "creative", "[laneId]", "docs", "route.ts"]]) {
+    assert.match(rd(...p), /await creativeLane\(g\.userId/, p.join("/"));
+  }
+  assert.match(rd("lib", "creative-server.ts"), /return docLane\(userId, laneId, \["creative"\]\);/);
 });

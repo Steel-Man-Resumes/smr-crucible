@@ -10,13 +10,29 @@ import {
   HELP_SOURCES,
   HURDLES_NOT_A_VERDICT,
 } from "@crucible/core";
-import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext, ownerOnly, readJson } from "@/lib/creative-server";
+import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext, loadPerformerContext, ownerOnly, readJson } from "@/lib/creative-server";
+import type { CareerLane, PairPlan } from "@crucible/core";
 import { buildCreative } from "@/lib/resume-render";
 
 export const runtime = "nodejs";
 
 /** Paragraphs printed as the person's own words, and the lead reference: the person's alone, never an assist session. */
-const OWNER_ONLY_FIELDS = ["interests", "languages", "leadReference"] as const;
+const OWNER_ONLY_FIELDS = ["interests", "languages", "leadReference", "skills"] as const;
+
+/** The pair's plan card as the screens read it (creative and performer lanes alike). */
+function planPayload(lane: CareerLane, partner: CareerLane | null, plan: PairPlan | null) {
+  if (!plan) return null;
+  const dream = lane.path === "dream" ? lane : partner?.path === "dream" ? partner : null;
+  const realistic = lane.path === "realistic" ? lane : partner?.path === "realistic" ? partner : null;
+  return {
+    plan,
+    goalFromLane: dream?.target_role ?? dream?.name ?? null,
+    realisticAim: realistic?.target_role ?? realistic?.name ?? null,
+    hurdles: hurdlesFor(dream?.target_role, dream?.name, realistic?.target_role),
+    notAVerdict: HURDLES_NOT_A_VERDICT,
+    help: HELP_SOURCES,
+  };
+}
 
 const SETTINGS_CHANGED = { error: "changed_elsewhere", message: "These choices changed in another tab or window. Refresh the page, then try again." };
 
@@ -40,8 +56,18 @@ export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv", "performer"]);
   if (!lane) return laneNotFound();
+  if (laneKindOf(lane) === "performer") {
+    // A performer lane: one page, so the page count (at 8x10) comes from the real layout here as in the export.
+    let p = await loadPerformerContext(g.userId, lane);
+    const pages = buildCreative({ doc: "performer", model: p.model, trim: "8x10" }).layout.pages.length;
+    p = await loadPerformerContext(g.userId, lane, pages);
+    return NextResponse.json({
+      lane: p.lane, partner: p.partner, entries: p.entries, settings: p.settings, settingsRev: settingsRev(p.settings),
+      status: p.status, plan: planPayload(p.lane, p.partner, p.plan),
+    });
+  }
   if (laneKindOf(lane) === "cv") {
     // A CV lane: the record, this lane's choices and the CV's open items.
     // The page count comes from the real layout, so the two-page rule (STD-F07) holds here as in the export.
@@ -51,8 +77,6 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ lane: v.lane, cvType: v.cvType, entries: v.entries, settings: v.settings, settingsRev: settingsRev(v.settings), status: v.status });
   }
   const c = await loadCreativeContext(g.userId, lane);
-  const dream = lane.path === "dream" ? lane : c.partner?.path === "dream" ? c.partner : null;
-  const realistic = lane.path === "realistic" ? lane : c.partner?.path === "realistic" ? c.partner : null;
   return NextResponse.json({
     lane: c.lane,
     partner: c.partner,
@@ -66,16 +90,7 @@ export async function GET(request: Request, context: RouteContext) {
     sampleOrder: c.sampleOrder,
     sampleRev: c.sampleRev,
     status: c.status,
-    plan: c.plan
-      ? {
-          plan: c.plan,
-          goalFromLane: dream?.target_role ?? dream?.name ?? null,
-          realisticAim: realistic?.target_role ?? realistic?.name ?? null,
-          hurdles: hurdlesFor(dream?.target_role, dream?.name, realistic?.target_role),
-          notAVerdict: HURDLES_NOT_A_VERDICT,
-          help: HELP_SOURCES,
-        }
-      : null,
+    plan: planPayload(c.lane, c.partner, c.plan),
   });
 }
 
@@ -83,7 +98,7 @@ export async function PUT(request: Request, context: RouteContext) {
   const g = await gate(request, { write: true });
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv", "performer"]);
   if (!lane) return laneNotFound();
   const body = await readJson(request, 40_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });

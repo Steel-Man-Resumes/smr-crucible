@@ -19,6 +19,9 @@ import {
   PRESENTATION_KINDS,
   CREDENTIAL_KINDS,
   CREDENTIAL_STATUSES,
+  CREDIT_MEDIA,
+  CREDIT_BILLINGS,
+  UNION_STATUSES,
   looksLikeFacilityName,
   yearsOf,
   placeOf,
@@ -44,15 +47,23 @@ const KIND_LABEL: Record<string, string> = {
   toward_degree: "Classes toward a degree", coursework: "Classes in a subject", other_study: "A certificate or training",
 };
 
-function Choice({ name, value, options, onChange, legend }: { name: string; value: string | undefined; options: readonly string[]; onChange: (v: string) => void; legend: string }) {
+/** Performer choices (077). Their own labels: "eligible" means eligible to JOIN for a union. */
+const MEDIUM_LABEL: Record<string, string> = { theater: "Theater", film: "Film", tv: "TV", voice: "Voice", music: "Music", other: "Other" };
+const BILLING_LABEL: Record<string, string> = {
+  lead: "Lead", supporting: "Supporting", series_regular: "Series regular", recurring: "Recurring", guest_star: "Guest star",
+  co_star: "Co-star", featured: "Featured", ensemble: "Ensemble", understudy: "Understudy", swing: "Swing", background: "Background",
+};
+const UNION_LABEL: Record<string, string> = { member: "Member", eligible: "Eligible to join", candidate: "Membership candidate" };
+
+function Choice({ name, value, options, onChange, legend, labels = KIND_LABEL, testId }: { name: string; value: string | undefined; options: readonly string[]; onChange: (v: string) => void; legend: string; labels?: Record<string, string>; testId?: string }) {
   return (
-    <fieldset>
+    <fieldset data-testid={testId}>
       <legend className="text-sm text-t-white">{legend}</legend>
       <div className="mt-1 flex flex-wrap gap-2">
         {options.map((o) => (
           <label key={o} className={`min-h-touch flex items-center gap-2 border px-3 text-sm cursor-pointer ${value === o ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos-dim"}`}>
             <input type="radio" name={name} value={o} checked={value === o} onChange={() => onChange(o)} className="sr-only" />
-            {KIND_LABEL[o] ?? o}
+            {labels[o] ?? o}
           </label>
         ))}
       </div>
@@ -156,20 +167,22 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
       {d.section === "performance" && <Choice name="pf-kind" legend="Was it a performance, a screening, or a reading?" value={d.details.kind} options={PERFORMANCE_KINDS} onChange={(v) => setDetail({ kind: v })} />}
       {d.section === "publication" && <Choice name="pub-status" legend="Where does it stand?" value={d.details.status} options={PUBLICATION_STATUSES} onChange={(v) => setDetail({ status: v })} />}
       {d.section === "award" && <Choice name="aw-kind" legend="Award, grant, or fellowship?" value={d.details.kind} options={AWARD_KINDS} onChange={(v) => setDetail({ kind: v })} />}
+      {d.section === "credit" && <Choice name="cr-medium" legend="Theater, film, TV, voice, music, or something else?" value={d.details.medium} options={CREDIT_MEDIA} labels={MEDIUM_LABEL} onChange={(v) => setDetail({ medium: v })} testId="practice-medium-choice" />}
+      {d.section === "union" && <Choice name="un-status" legend="Where do you stand, exactly?" value={d.details.status} options={UNION_STATUSES} labels={UNION_LABEL} onChange={(v) => setDetail({ status: v })} testId="practice-union-status" />}
       {d.section === "presentation" && <Choice name="pr-kind" legend="Was it a talk, a poster, a panel, or a workshop?" value={d.details.kind} options={PRESENTATION_KINDS} onChange={(v) => setDetail({ kind: v })} />}
 
       <Text
         label={d.section === "education" && d.details.study === "toward_degree" ? "Which degree were the classes toward? (exactly as the school names it)" : d.section === "education" && d.details.study === "coursework" ? "What subject were the classes in?" : copy.title}
         value={d.title} onChange={(v) => set({ title: v })} placeholder={copy.example} max={300} testId="practice-title" />
       {copy.venue && <Text label={copy.venue} value={d.venue} onChange={(v) => set({ venue: v })} testId="practice-venue" />}
-      {!["work", "membership", "reference"].includes(d.section) && (
+      {!["work", "membership", "reference", "union"].includes(d.section) && (
         <div className="grid grid-cols-2 gap-3">
           <Text label="City" value={d.city} onChange={(v) => set({ city: v })} max={100} testId="practice-city" />
           <Text label="State" value={d.state} onChange={(v) => set({ state: v })} max={60} testId="practice-state" />
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Text label={d.section === "reference" ? "Since what year do they know you?" : "What year?"} value={d.year} onChange={(v) => set({ year: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2023" max={4} testId="practice-year" />
+        <Text label={d.section === "reference" ? "Since what year do they know you?" : d.section === "union" ? "What year did you join, or become eligible?" : "What year?"} value={d.year} onChange={(v) => set({ year: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2023" max={4} testId="practice-year" />
         {copy.hasRange && <Text label="Until (optional)" value={d.endYear} onChange={(v) => set({ endYear: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2024" max={4} testId="practice-end-year" />}
       </div>
 
@@ -254,6 +267,20 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
           <p className="text-xs text-t-phos-dim">Never put a license number here.</p>
         </div>
       )}
+      {d.section === "credit" && (
+        <div className="space-y-2">
+          <Text label="Your role, exactly as credited (optional)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} placeholder="Emily Webb" max={120} testId="practice-role" />
+          <Choice name="cr-billing" legend="Billing, as credited (only if you know it)" value={d.details.billing} options={CREDIT_BILLINGS} labels={BILLING_LABEL} onChange={(v) => setDetail({ billing: v })} testId="practice-billing" />
+          <Text label="Director (only if you want them named)" value={d.details.director ?? ""} onChange={(v) => setDetail({ director: v })} max={120} testId="practice-director" />
+          <p className="text-xs text-t-phos-dim">The year stays in your record. Your performer page hides credit years unless you turn them on.</p>
+        </div>
+      )}
+      {d.section === "training" && (
+        <div className="space-y-1">
+          <Text label="Who taught it (optional)" value={d.details.teacher ?? ""} onChange={(v) => setDetail({ teacher: v })} max={120} testId="practice-teacher" />
+          <Text label="How long (optional)" value={d.details.duration ?? ""} onChange={(v) => setDetail({ duration: v })} placeholder="2 years" max={60} testId="practice-duration" />
+        </div>
+      )}
       {d.section === "reference" && (
         <div className="space-y-1">
           <Text label="How they know you (their role)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} placeholder="Course instructor" />
@@ -317,6 +344,12 @@ export const CV_SECTION_ORDER: PracticeSection[] = [
   "service", "membership", "reference", "arts_program", "exhibition", "performance", "residency", "commission", "press", "collection", "work",
 ];
 
+/** A performer lane opens on credits; training, union and awards follow, then the rest of the record. */
+export const PERFORMER_SECTION_ORDER: PracticeSection[] = [
+  "credit", "training", "union", "award",
+  "performance", "education", "arts_program", "teaching", "press", "exhibition", "residency", "commission", "publication", "collection", "work",
+];
+
 export function PracticeRecordPanel({ entries, onChanged, order = PRACTICE_SECTIONS }: { entries: PracticeEntry[]; onChanged: () => void; order?: readonly PracticeSection[] }) {
   const [adding, setAdding] = useState(entries.length === 0);
   const [editing, setEditing] = useState<string | null>(null);
@@ -353,6 +386,8 @@ export function PracticeRecordPanel({ entries, onChanged, order = PRACTICE_SECTI
                     </p>
                     <p className="text-xs text-t-phos-dim">
                       {e.details.kind ? `${KIND_LABEL[e.details.kind] ?? e.details.kind}. ` : ""}
+                      {e.section === "credit" && e.details.medium ? `${MEDIUM_LABEL[e.details.medium] ?? e.details.medium}. ` : ""}
+                      {e.section === "union" && e.details.status ? `${UNION_LABEL[e.details.status] ?? e.details.status}. ` : ""}
                       {PROOF_COPY[e.proof].label}.{e.names_facility ? " Names a facility." : ""}
                     </p>
                   </div>

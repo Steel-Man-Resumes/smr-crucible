@@ -23,6 +23,16 @@ export const CV_TABS = [
   { key: "cv", label: "CV" },
 ] as const;
 
+export const PERFORMER_TABS = [
+  { key: "record", label: "Your record" },
+  { key: "page", label: "Performer page" },
+  { key: "plan", label: "Two paths" },
+] as const;
+export type PerformerTab = (typeof PERFORMER_TABS)[number]["key"];
+
+export const PERFORMER_INTRO =
+  "Your shows, films, readings, training and skills, in one record. Your one-page performer resume is built from it, ready for the back of your headshot.";
+
 export const CV_INTRO =
   "Your schooling, teaching, research, talks, clinical work and licenses, in one record. Your CV is built from it, dated line by line.";
 

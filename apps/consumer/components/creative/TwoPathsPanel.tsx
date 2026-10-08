@@ -22,7 +22,8 @@ export function TwoPathsPanel({
   onChanged,
   onAdoptLane,
 }: {
-  ctx: CreativeCtx;
+  /** The lane, its partner and the plan card (a creative or a performer lane). */
+  ctx: Pick<CreativeCtx, "lane" | "partner" | "plan">;
   allLanes: CareerLane[];
   onChanged: () => Promise<void>;
   onAdoptLane: (lane: CareerLane) => void;
@@ -102,7 +103,7 @@ export function TwoPathsPanel({
                 {candidates.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
-                    {laneKindOf(l) === "creative" ? " (creative)" : ""}
+                    {laneKindOf(l) === "creative" ? " (creative)" : laneKindOf(l) === "performer" ? " (performer)" : laneKindOf(l) === "cv" ? " (CV)" : ""}
                   </option>
                 ))}
               </select>

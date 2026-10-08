@@ -97,6 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/application-tailor", label: "Application Tailor", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/creative", label: "Creative Work", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/performer", label: "Performer", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
       { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access", requiresDisclosure: true },
     ],

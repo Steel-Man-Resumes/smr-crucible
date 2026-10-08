@@ -13,10 +13,12 @@ import {
   laneKindOf,
   cvPlainText,
   shownEntryIds,
+  performerPlainText,
+  performerShownIds,
   type CreativeDoc,
 } from "@crucible/core";
 import { buildCreative, renderCreativeDocx, renderCreativeHtml, renderCreativePdf, type CreativeRenderRequest } from "@/lib/resume-render";
-import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext } from "@/lib/creative-server";
+import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext, loadPerformerContext } from "@/lib/creative-server";
 import type { CareerLane } from "@crucible/core";
 
 export const runtime = "nodejs";
@@ -49,10 +51,11 @@ export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv", "performer"]);
   if (!lane) return laneNotFound();
   const url = new URL(request.url);
   if (laneKindOf(lane) === "cv") return exportCv(g.userId, lane, url);
+  if (laneKindOf(lane) === "performer") return exportPerformer(g.userId, lane, url);
   const doc = (DOCS as readonly string[]).includes(url.searchParams.get("doc") ?? "") ? (url.searchParams.get("doc") as Doc) : null;
   const format = (FORMATS as readonly string[]).includes(url.searchParams.get("format") ?? "") ? (url.searchParams.get("format") as Format) : null;
   if (!doc || !format) return NextResponse.json({ error: "Pick a document and a format." }, { status: 400 });
@@ -149,6 +152,38 @@ async function exportCv(userId: string, lane: CareerLane, url: URL): Promise<Nex
   const headers = (type: string, ext: string) => ({ "Content-Type": type, "Content-Disposition": `attachment; filename="${fileName(name, "CV", ext)}"`, "Cache-Control": "no-store" });
   if (format === "txt") return new NextResponse((draft ? "DRAFT\n\n" : "") + cvPlainText(v.model), { headers: headers("text/plain; charset=utf-8", "txt") });
   const req: CreativeRenderRequest = { doc: "cv", model: v.model, draft, openItems };
+  if (format === "pdf") return new NextResponse(Buffer.from(await renderCreativePdf(req)), { headers: headers("application/pdf", "pdf") });
+  if (format === "docx") {
+    return new NextResponse(new Uint8Array(await renderCreativeDocx(req)), { headers: headers("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx") });
+  }
+  return new NextResponse(renderCreativeHtml(req), { headers: headers("text/html; charset=utf-8", "html") });
+}
+
+
+/**
+ * A performer lane's export: the performer page only, built from the database
+ * with this lane's current choices, on 8x10 (default, for the back of a
+ * headshot) or US Letter. One page, always: past one page it is a DRAFT with
+ * its to-do page (safe lines only). Plain text ships beside it (F03).
+ */
+async function exportPerformer(userId: string, lane: CareerLane, url: URL): Promise<NextResponse> {
+  const doc = url.searchParams.get("doc");
+  const format = url.searchParams.get("format");
+  const size = url.searchParams.get("size") ?? "8x10";
+  if (doc !== "performer" || !["pdf", "docx", "html", "txt"].includes(format ?? "") || !["8x10", "letter"].includes(size)) {
+    return NextResponse.json({ error: "Pick the performer page, a format, and 8x10 or Letter." }, { status: 400 });
+  }
+  let v = await loadPerformerContext(userId, lane);
+  const pages = buildCreative({ doc: "performer", model: v.model, trim: "8x10" }).layout.pages.length;
+  v = await loadPerformerContext(userId, lane, pages);
+  const draft = v.status.blockCount > 0;
+  const openItems = exportOpenItemLines(v.status, v.entries, v.settings, "performer", performerShownIds(v.model));
+  // The name as printed: a typed name the lane holds back never reaches the file name.
+  const name = v.model.header.name ?? "";
+  const what = size === "letter" ? "performer-resume-letter" : "performer-resume-8x10";
+  const headers = (type: string, ext: string) => ({ "Content-Type": type, "Content-Disposition": `attachment; filename="${fileName(name, what, ext)}"`, "Cache-Control": "no-store" });
+  if (format === "txt") return new NextResponse((draft ? "DRAFT\n\n" : "") + performerPlainText(v.model), { headers: headers("text/plain; charset=utf-8", "txt") });
+  const req: CreativeRenderRequest = { doc: "performer", model: v.model, trim: size === "letter" ? "letter" : "8x10", draft, openItems };
   if (format === "pdf") return new NextResponse(Buffer.from(await renderCreativePdf(req)), { headers: headers("application/pdf", "pdf") });
   if (format === "docx") {
     return new NextResponse(new Uint8Array(await renderCreativeDocx(req)), { headers: headers("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx") });
