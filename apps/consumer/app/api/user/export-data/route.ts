@@ -328,6 +328,9 @@ export async function POST(req: Request) {
         `SELECT * FROM access_code_redemption WHERE user_id = $1`,
         [userId]
       );
+      // Premium access (078): grants made for this person and what they asked.
+      const { exportPremiumRows } = await import("@crucible/core");
+      payload.premiumAccess = await exportPremiumRows(userId);
     }
 
     return new NextResponse(JSON.stringify(payload, null, 2), {

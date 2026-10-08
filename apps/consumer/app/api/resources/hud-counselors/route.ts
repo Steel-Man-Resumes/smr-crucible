@@ -7,7 +7,9 @@
  */
 
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { getTenantConfig } from "@/lib/tenant-config";
+import { checkPremium } from "@/lib/premium";
 
 export const maxDuration = 15;
 
@@ -35,6 +37,14 @@ interface CounselorResult {
 }
 
 export async function GET(request: Request) {
+  // Local resources are a premium tool (lib/premium.ts): signed in, and open
+  // through an organization or a grant.
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return NextResponse.json({ error: "Please sign in to use this feature." }, { status: 401 });
+  const locked = await checkPremium(userId, "resources");
+  if (locked) return locked;
+
   const { searchParams } = new URL(request.url);
   const location = searchParams.get("location");
   const geo = getTenantConfig().geo;

@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { PremiumGate } from "@/components/premium/PremiumGate";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -130,7 +131,10 @@ export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
       <OnboardingGate toolName="Interview Practice" previewFeature="interview">
-        <Suspense><InterviewPracticePage /></Suspense>
+        {/* Interview coaching is a premium tool: open through an organization or a grant. */}
+        <PremiumGate tool="interview_coaching">
+          <Suspense><InterviewPracticePage /></Suspense>
+        </PremiumGate>
       </OnboardingGate>
     </TierGate>
   );

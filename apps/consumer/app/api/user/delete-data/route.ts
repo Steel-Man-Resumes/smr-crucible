@@ -145,6 +145,12 @@ export async function DELETE(req: Request) {
     // never removed them unless the whole account went too. Row-level protected,
     // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.
     await queryAsUser(userId, "DELETE FROM user_progress_event WHERE user_id = $1", [userId]);
+    // "Ask SMR for access" requests hold the person's own words (078). Grants
+    // are Troy's record of a decision and stay until revoked or the account
+    // goes (they cascade then). Before 078 is applied the table is missing.
+    await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
     // Reset access codes and tier
     // Through the database function, not a DELETE: membership is row-level
     // protected (an unscoped delete would remove nothing and this route would

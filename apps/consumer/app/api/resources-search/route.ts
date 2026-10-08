@@ -137,4 +137,5 @@ export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "resources",
   requiredTier: "client",
+  premium: "resources",
 });
