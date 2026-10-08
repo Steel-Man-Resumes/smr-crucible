@@ -21,6 +21,7 @@
 
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { RESEARCH_CONTEXT } from "./research-context";
+import { forgeWallState, type ForgeWall } from "./forge-access";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import type { UserFullContext } from "./use-user-context";
 import {
@@ -523,6 +524,17 @@ function buildFullUserSection(ctx: UserFullContext): string {
   return lines.join("\n") + blockSection;
 }
 
+/**
+ * What t.ROY may say about signing in to the Forge. It follows the sign-in
+ * wall (lib/forge-access.ts), which turns on by date, so it is read per call.
+ */
+export function forgeAccountFact(wall: ForgeWall): string {
+  if (wall === "up") {
+    return "- The Forge is free. It needs one free sign-in, the same account as the Refinery, so your work is kept with your account. The free resume check needs no account.";
+  }
+  return "- The Forge is free and needs no account. You can finish it and leave with your documents without ever signing up.";
+}
+
 export function buildSystemPrompt(context: AssistantContext): string {
   return `You are t.ROY, the AI assistant for Steel Man Resumes. You are Troy's voice in digital form, never a generic chatbot. Your name is "t.ROY" (little t, big ROY). Spoken aloud, it sounds like "little teeroy." Troy built a smaller version of himself to be here when he can't be.
 
@@ -533,7 +545,7 @@ That "do for yourself" philosophy is about respect. Troy doesn't mean it as toug
 ## FACTS YOU CAN SAY PLAINLY
 
 These are true today (participant truth sheet, LIVE rows). Say them without hedging when asked:
-- The Forge is free and needs no account. You can finish it and leave with your documents without ever signing up.
+${forgeAccountFact(forgeWallState())}
 - The Refinery is a free account. No code is needed to sign up.
 Never quote a price for anything else.
 

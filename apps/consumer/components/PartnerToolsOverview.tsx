@@ -11,13 +11,21 @@
 
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
+import { useForgeWall } from "@/components/forge/useForgeWall";
+
+/** The Forge card's account line follows the sign-in wall (lib/forge-access.ts). */
+export function forgeAccountLine(wall: string | null): string {
+  if (wall === "up") return " One free sign-in, the same account as the Refinery.";
+  if (wall) return " No account is needed until they want to save.";
+  return "";
+}
 
 const TOOL_OVERVIEW = [
   {
     title: "The Forge",
     href: "/intro",
     description:
-      "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to next steps. Free for all clients. No account is needed until they want to save.",
+      "8-page career analysis. Detects readiness stage, extracts skills, builds redemption narrative, maps career paths, and connects barriers to next steps. Free for all clients.",
     research: "Stages of Change (Prochaska), Narrative Identity (McAdams), Giordano's hooks-for-change",
   },
   {
@@ -58,6 +66,7 @@ const TOOL_OVERVIEW = [
 ];
 
 export function PartnerToolsOverview({ noOrgCallout }: { noOrgCallout?: boolean }) {
+  const wall = useForgeWall();
   return (
     <div className="space-y-10">
       {/* Header */}
@@ -139,7 +148,7 @@ export function PartnerToolsOverview({ noOrgCallout }: { noOrgCallout?: boolean 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-t-white mb-1">{tool.title}</h3>
-                  <p className="text-sm text-t-phos-dim leading-relaxed mb-2">{tool.description}</p>
+                  <p className="text-sm text-t-phos-dim leading-relaxed mb-2">{tool.description}{tool.href === "/intro" ? forgeAccountLine(wall) : ""}</p>
                   <p className="text-xs text-t-amber-bright font-medium">Research basis: {tool.research}</p>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-t-phos-dim flex-shrink-0 mt-1">

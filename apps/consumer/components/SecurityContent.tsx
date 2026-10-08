@@ -5,6 +5,8 @@
  * Written at 6th grade reading level. Real architecture details.
  */
 
+import { WallText } from "@/components/forge/WallText";
+
 interface SecurityContentProps {
   showUserControls?: boolean;
 }
@@ -189,9 +191,20 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             buttonLabel="Manage Consent"
             href="/dashboard/settings"
           />
-          <ControlCard
-            title="No Account Required"
-            description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, press Clear this computer, or leave it untouched for a day. On a shared or library computer, press Clear this computer when you finish. To stop abuse we count uses per internet connection, kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed."
+          {/* Follows the Forge sign-in wall (lib/forge-access.ts). */}
+          <WallText
+            open={
+              <ControlCard
+                title="No Account Required"
+                description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, press Clear this computer, or leave it untouched for a day. On a shared or library computer, press Clear this computer when you finish. To stop abuse we count uses per internet connection, kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed."
+              />
+            }
+            up={
+              <ControlCard
+                title="One Free Account"
+                description="The Forge asks you to sign in with a free account, the same one the Refinery uses. That is how your work follows you to another device, and how you can download or delete it in Settings. Until it is saved to your account, your work also sits in this web browser. On a shared or library computer, sign out and press Clear this computer when you finish. To stop abuse we count uses per account and per internet connection. The connection is kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed. The free resume check works without signing in and saves nothing."
+              />
+            }
           />
         </div>
       </Section>

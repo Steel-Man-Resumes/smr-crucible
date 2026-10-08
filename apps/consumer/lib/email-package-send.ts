@@ -86,7 +86,7 @@ export function buildPackageEmail(
   const intro =
     opts.why === "finished"
       ? `This is the resume you finished in The Forge. It is yours. Print it, forward it, use it. ` +
-        `Your Refinery account has it too, ready to aim at real jobs at ` +
+        `Open The Refinery with the same account to aim it at real jobs: ` +
         `<a href="https://refinery.steelmanresumes.com/dashboard" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.`
       : `This is everything you built in The Forge. It is yours. Print it, ` +
         `forward it, use it. When you are ready for the next step (finding real jobs, ` +
@@ -123,7 +123,7 @@ export function buildPackageEmail(
     `=== YOUR RESUME ===\n\n${docs.resumeText}\n\n` +
     (docs.coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${docs.coverLetterText}\n\n` : "") +
     (opts.why === "finished"
-      ? `Your Refinery account has this too: https://refinery.steelmanresumes.com/dashboard\n\n` +
+      ? `Open The Refinery with the same account to aim it at real jobs: https://refinery.steelmanresumes.com/dashboard\n\n` +
         `You received this because you finished your resume in The Forge with your Steel Man Resumes account. ` +
         `You can turn these emails off in Settings in The Refinery.\n${address}\n`
       : `Next step: your free Refinery account at https://refinery.steelmanresumes.com/login\n\n` +

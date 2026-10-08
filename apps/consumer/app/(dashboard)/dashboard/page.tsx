@@ -28,6 +28,7 @@ import { JourneyHeader } from "@/components/JourneyHeader";
 import { DashboardResumeCard } from "@/components/DashboardResumeCard";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
+import { WallText } from "@/components/forge/WallText";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
@@ -393,7 +394,7 @@ export default function DashboardPage() {
                 Start The Forge
               </Link>
               <p className="text-xs text-t-phos-dim mt-4">
-                Free. No account needed until you&apos;re ready to save.
+                <WallText open={<>Free. No account needed until you&apos;re ready to save.</>} up="Free, and it uses the account you are signed in with." />
               </p>
               <p className="text-xs text-t-phos-dim mt-2">
                 Already completed The Forge on another device? Your data syncs automatically.

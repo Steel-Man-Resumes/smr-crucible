@@ -26,6 +26,7 @@
  */
 
 import type { ReactNode } from "react";
+import { useForgeWall } from "@/components/forge/useForgeWall";
 
 export type AccountRoute = "seeker" | "participant" | "org" | "agency";
 
@@ -38,6 +39,8 @@ interface RouteSpec {
   heading: string;
   /** What they need before they start, when that is not "nothing". */
   needs?: string;
+  /** `needs` once the Forge sign-in wall is up (lib/forge-access.ts). */
+  needsUp?: string;
 }
 
 export const ACCOUNT_ROUTES: RouteSpec[] = [
@@ -71,6 +74,8 @@ export const ACCOUNT_ROUTES: RouteSpec[] = [
     heading: "Evaluating Steel Man Resumes",
     needs:
       "There is nothing to sign up for. The Forge runs free with no account, so the fastest way to judge this is to put a real resume through it.",
+    needsUp:
+      "The fastest way to judge this is to put a real resume through the Forge. It needs one free sign-in, the same one a job seeker uses. The free resume check needs no account at all.",
   },
 ];
 
@@ -131,10 +136,13 @@ export function AccountRouteNote({
   children?: ReactNode;
 }) {
   const spec = ACCOUNT_ROUTES.find((r) => r.id === route);
+  const wall = useForgeWall();
   if (!spec?.needs) return null;
+  // A line that depends on the sign-in wall waits until the browser knows it.
+  const needs = spec.needsUp === undefined ? spec.needs : wall === null ? "" : wall === "up" ? spec.needsUp : spec.needs;
   return (
     <section className="mb-6 border-l-[3px] border-t-amber bg-t-panel-2 py-3 pl-4 pr-3">
-      <p className="text-xs leading-relaxed text-t-bone-dim">{spec.needs}</p>
+      <p className="text-xs leading-relaxed text-t-bone-dim">{needs}</p>
       {children}
     </section>
   );
