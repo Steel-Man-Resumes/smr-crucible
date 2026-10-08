@@ -91,12 +91,40 @@ describe("try limits (M1, L3)", () => {
 
 describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () => {
   it("plan state is decided before the PIN", () => {
+    const ok = { pin_failures: 0 };
     assert.equal(planStateBlock(null, { needReady: true }), "not_found");
-    assert.equal(planStateBlock({ imported_at: new Date(), locked_at: new Date() }, { needReady: true }), "imported");
-    assert.equal(planStateBlock({ locked_at: new Date(), forge_output: {} }, { needReady: true }), "locked");
-    assert.equal(planStateBlock({ forge_output: null }, { needReady: true }), "not_ready");
-    assert.equal(planStateBlock({ forge_output: { x: 1 } }, { needReady: true }), null);
+    assert.equal(planStateBlock({ ...ok, imported_at: new Date(), imported_by: "u2", locked_at: new Date() }, { needReady: true, me: "u1" }), "imported");
+    assert.equal(planStateBlock({ ...ok, locked_at: new Date(), forge_output: {} }, { needReady: true }), "locked");
+    assert.equal(planStateBlock({ ...ok, forge_output: null }, { needReady: true }), "not_ready");
+    assert.equal(planStateBlock({ ...ok, forge_output: { x: 1 } }, { needReady: true }), null);
   });
+
+  it("the same account finishes its own interrupted import; any other account cannot (r2 N2)", () => {
+    const claimed = { pin_failures: 0, forge_output: { x: 1 }, imported_at: new Date(), imported_by: "u1" };
+    assert.equal(planStateBlock(claimed, { needReady: true, me: "u1" }), null);
+    assert.equal(planStateBlock(claimed, { needReady: true, me: "u2" }), "imported");
+    assert.equal(planStateBlock(claimed, { needReady: true, me: null }), "imported", "signed out: not yours to finish");
+    const lib = code(read("lib", "tablet-session.ts"));
+    assert.match(lib, /WHERE id = \$1 AND \(imported_at IS NULL OR imported_by = \$2\)/);
+  });
+
+  it("before 078 (no lock columns on the row): 'unavailable', never an error (r2 deploy order)", () => {
+    assert.equal(planStateBlock({ forge_output: { x: 1 } }, { needReady: true }), "unavailable");
+    assert.match(MINI_FORGE_MESSAGES.unavailable, /isn't available right now/);
+    const page = code(read("app", "(mini-forge)", "mini-forge", "import-confirm", "page.tsx"));
+    assert.match(page, /before078Friendly\(\(\) => recordPinFailure\(/);
+    assert.match(page, /before078Friendly\(\(\) => markImported\(/);
+    assert.match(page, /if \(tabletColumnsMissing\(e\)\) redirect\("\/mini-forge\/import-confirm\?error=unavailable"\)/);
+  });
+
+  it("an admin unlock records who and when, and releases only a stuck claim (r2 N2, I2)", () => {
+    const lib = code(read("lib", "tablet-session.ts"));
+    assert.match(lib, /unlocked_at = now\(\), unlocked_by = \$2/);
+    assert.match(lib, /t\.imported_at < now\(\) - make_interval\(mins => \$3::int\)/);
+    assert.match(lib, /NOT EXISTS \(SELECT 1 FROM forge_session fs WHERE fs\.session_id = 'mini-forge-' \|\| t\.id::text\)/);
+    assert.match(code(read("app", "api", "admin", "mini-forge-unlock", "route.ts")), /clearPinLock\(code, guard\.userId\)/);
+  });
+
   it("one message for no such code and a wrong PIN; a lock says who can clear it", () => {
     assert.match(MINI_FORGE_MESSAGES.not_found, /code and PIN/);
     assert.match(MINI_FORGE_MESSAGES.locked, /Ask the staff/);
@@ -133,7 +161,7 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
   it("the database helpers: canonical reads, an atomic single-use mark, a lock at the limit", () => {
     const lib = code(read("lib", "tablet-session.ts"));
     assert.match(lib, /if \(!canonicalTabletId\(id\)\) return null;/);
-    assert.match(lib, /WHERE id = \$1 AND imported_at IS NULL\s+RETURNING id/);
+    assert.match(lib, /WHERE id = \$1 AND \(imported_at IS NULL OR imported_by = \$2\)\s+RETURNING id/);
     assert.match(lib, /locked_at = CASE WHEN pin_failures \+ 1 >= \$2/);
     assert.doesNotMatch(lib, /export async function getTabletSessionByCode\(/, "the PIN-first lookup is gone");
   });
@@ -142,6 +170,6 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
     const route = code(read("app", "api", "admin", "mini-forge-unlock", "route.ts"));
     assert.match(route, /requirePlatformAdmin\(\)/);
     assert.match(route, /isSameOriginJsonPost\(request\.headers\)/);
-    assert.match(route, /clearPinLock\(code\)/);
+    assert.match(route, /clearPinLock\(code, guard\.userId\)/);
   });
 });

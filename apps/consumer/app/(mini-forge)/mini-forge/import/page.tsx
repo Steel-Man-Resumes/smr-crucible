@@ -58,7 +58,7 @@ export default async function ImportPage(
     try {
       tabletSession = await getTabletSessionByCodeOnly(code);
       // The plan's own state first: the answer never depends on the PIN.
-      const block = planStateBlock(tabletSession, { needReady: true });
+      const block = planStateBlock(tabletSession, { needReady: true, me: userId });
       if (block) redirect(`/mini-forge/import?error=${block}`);
       if (!(await verifyPin(pin, tabletSession!.pin_hash))) {
         await recordPinFailure(tabletSession!.id, MINI_FORGE_LOCK_AFTER);

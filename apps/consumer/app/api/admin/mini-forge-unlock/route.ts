@@ -2,8 +2,10 @@
  * Admin: unlock a Mini Forge plan that locked after too many wrong PINs
  * (078 tablet_session.locked_at; security review 3a Part 2 r1, M1). Platform
  * admins with a two-step sign-in only (requirePlatformAdmin), same-origin
- * JSON. Clears the wrong-PIN count and the lock; the plan, its PIN and a
- * finished import are untouched. Nothing is sent to anyone.
+ * JSON. Clears the wrong-PIN count and the lock, records who did it and when,
+ * and releases an import claim that never saved (older than 15 minutes, no
+ * plan saved under it; review r2 N2). The plan, its PIN and a finished import
+ * are untouched. Nothing is sent to anyone.
  */
 
 import { NextResponse } from "next/server";
@@ -24,9 +26,9 @@ export async function POST(request: Request) {
   const code = canonicalImportCode(body?.code);
   if (!code) return NextResponse.json({ error: "Enter the plan's 6-letter code." }, { status: 400 });
   try {
-    const found = await clearPinLock(code);
-    if (!found) return NextResponse.json({ error: "No plan has that code." }, { status: 404 });
-    return NextResponse.json({ ok: true });
+    const r = await clearPinLock(code, guard.userId);
+    if (!r.found) return NextResponse.json({ error: "No plan has that code." }, { status: 404 });
+    return NextResponse.json({ ok: true, claimReleased: r.claimReleased });
   } catch (e) {
     if (tabletColumnsMissing(e)) return NextResponse.json({ error: "Migration 078 is not applied here yet." }, { status: 503 });
     throw e;

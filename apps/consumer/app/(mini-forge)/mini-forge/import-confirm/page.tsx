@@ -68,6 +68,20 @@ async function clearTabletCookie() {
   });
 }
 
+/**
+ * Code that ships before 078: the lock and import columns are missing. Every
+ * write that needs them goes through here, so the person sees "isn't
+ * available right now", never a raw error page (review r2, deploy order).
+ */
+async function before078Friendly<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (e) {
+    if (tabletColumnsMissing(e)) redirect("/mini-forge/import-confirm?error=unavailable");
+    throw e;
+  }
+}
+
 export default async function ImportConfirmPage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
   const person = await signedInPerson();
@@ -109,7 +123,8 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
     if (!allowed) redirect("/mini-forge/import-confirm?error=too_many");
 
     // The plan's own state, before the PIN (the answer never depends on it).
-    const block = planStateBlock(tablet, { needReady: true });
+    // The same account may finish its own interrupted import (review r2, N2).
+    const block = planStateBlock(tablet, { needReady: true, me: me.id });
     if (block === "imported") {
       await clearTabletCookie();
       redirect("/mini-forge/import-confirm?error=imported");
@@ -117,14 +132,15 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
     if (block) redirect(`/mini-forge/import-confirm?error=${block}`);
 
     if (!(await verifyPin(pin, tablet.pin_hash))) {
-      await recordPinFailure(tablet.id, MINI_FORGE_LOCK_AFTER);
+      await before078Friendly(() => recordPinFailure(tablet.id, MINI_FORGE_LOCK_AFTER));
       redirect("/mini-forge/import-confirm?error=wrong_pin");
     }
 
     // Single use: claim the import first (atomic), then save. If the save
     // throws, the claim is given back and the cookie stays, so the person
-    // can try again.
-    if (!(await markImported(tablet.id, me.id))) {
+    // can try again; if this request dies between the two, the same account
+    // finishes it next time (markImported lets its own claim through).
+    if (!(await before078Friendly(() => markImported(tablet.id, me.id)))) {
       await clearTabletCookie();
       redirect("/mini-forge/import-confirm?error=imported");
     }

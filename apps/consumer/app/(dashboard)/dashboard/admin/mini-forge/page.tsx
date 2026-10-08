@@ -31,7 +31,12 @@ export default function AdminMiniForgePage() {
         body: JSON.stringify({ code }),
       });
       const j = await res.json().catch(() => ({}));
-      setMsg(res.ok ? `Plan ${code.trim().toUpperCase()} is open again. The person can enter their code and PIN.` : j.error || "That didn't work.");
+      setMsg(
+        res.ok
+          ? `Plan ${code.trim().toUpperCase()} is open again. The person can enter their code and PIN.` +
+              (j.claimReleased ? " An import that never finished was released too." : "")
+          : j.error || "That didn't work."
+      );
     } catch {
       setMsg("That didn't work.");
     } finally {
@@ -44,7 +49,8 @@ export default function AdminMiniForgePage() {
       <Link href="/dashboard/admin" className="text-sm text-t-phos-dim underline">Back to admin</Link>
       <h1 className="mt-3 text-2xl font-bold text-t-white">Open a locked Mini Forge plan</h1>
       <p className="mt-1 mb-6 text-sm text-t-phos-dim">
-        A plan locks after 5 wrong PINs. Open it again only once you know the person asking made it.
+        A plan locks after 5 wrong PINs. Open it again only once you know the person asking made it. This also
+        releases an import that started over 15 minutes ago and never saved.
       </p>
       <form onSubmit={unlock} className="flex gap-2">
         <label htmlFor="mf-code" className="sr-only">Plan code</label>

@@ -81,8 +81,11 @@ export async function countPinTry(
 }
 
 export interface PlanState {
+  /** Present (a number) only once 078 is applied; undefined means the columns are missing. */
+  pin_failures?: unknown;
   locked_at?: unknown;
   imported_at?: unknown;
+  imported_by?: unknown;
   processing_status?: unknown;
   forge_output?: unknown;
 }
@@ -91,9 +94,17 @@ export interface PlanState {
  * What the plan's own state says, before any PIN is checked. null: go on to
  * the PIN. The answer depends only on the plan, never on the PIN typed.
  */
-export function planStateBlock(p: PlanState | null, opts: { needReady: boolean }): "not_found" | "locked" | "imported" | "not_ready" | null {
+export function planStateBlock(
+  p: PlanState | null,
+  opts: { needReady: boolean; me?: string | null }
+): "not_found" | "unavailable" | "locked" | "imported" | "not_ready" | null {
   if (!p) return "not_found";
-  if (p.imported_at) return "imported";
+  // Code that ships before 078: a plan read with SELECT * has no lock or
+  // import columns. Say so plainly instead of erroring (review r2, deploy order).
+  if (p.pin_failures === undefined) return "unavailable";
+  // Imported into ANOTHER account. The same account may finish its own
+  // interrupted import (review r2, N2).
+  if (p.imported_at && !(opts.me && p.imported_by === opts.me)) return "imported";
   if (p.locked_at) return "locked";
   if (opts.needReady && !p.forge_output) return "not_ready";
   return null;

@@ -47,6 +47,8 @@ export interface TabletSession {
   locked_at?: Date | null;
   imported_at?: Date | null;
   imported_by?: string | null;
+  unlocked_at?: Date | null;
+  unlocked_by?: string | null;
 }
 
 /** Postgres "column does not exist": 078 is not applied here yet. */
@@ -176,12 +178,15 @@ export async function recordPinFailure(id: string, lockAfter: number): Promise<{
 
 /**
  * Single use: mark the plan imported into this account. Atomic, so two
- * confirms can never both win. Returns false when it was already imported.
+ * accounts can never both win. The SAME account may claim again, to finish
+ * its own import that was cut off between the claim and the save (security
+ * review 3a Part 2 r2, N2); the save is an upsert, so finishing twice is
+ * harmless. Returns false when another account holds it.
  */
 export async function markImported(id: string, userId: string): Promise<boolean> {
   const rows = await query<{ id: string }>(
     `UPDATE tablet_session SET imported_at = now(), imported_by = $2
-      WHERE id = $1 AND imported_at IS NULL
+      WHERE id = $1 AND (imported_at IS NULL OR imported_by = $2)
       RETURNING id`,
     [id, userId]
   );
@@ -196,13 +201,37 @@ export async function unmarkImported(id: string, userId: string): Promise<void> 
   );
 }
 
-/** Admin: clear a plan's lock and wrong-PIN count, by its code. Returns whether a plan matched. */
-export async function clearPinLock(importCode: string): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE tablet_session SET pin_failures = 0, locked_at = NULL
-      WHERE import_code = $1
-      RETURNING id`,
-    [importCode]
+/** How old an import claim with nothing saved must be before an admin may release it. */
+export const STUCK_CLAIM_MINUTES = 15;
+
+/**
+ * Admin: open a plan again, by its code. Clears the wrong-PIN count and the
+ * lock, records who did it and when (unlocked_at, unlocked_by), and releases
+ * an import claim that is older than STUCK_CLAIM_MINUTES with no plan saved
+ * under it (security review 3a Part 2 r2, N2): a claim whose save never ran.
+ * A finished import (its forge_session row exists) is never released.
+ */
+export async function clearPinLock(
+  importCode: string,
+  adminId: string
+): Promise<{ found: boolean; claimReleased: boolean }> {
+  const rows = await query<{ id: string; released: boolean }>(
+    `WITH target AS (
+       SELECT t.id,
+              (t.imported_at IS NOT NULL
+               AND t.imported_at < now() - make_interval(mins => $3::int)
+               AND NOT EXISTS (SELECT 1 FROM forge_session fs WHERE fs.session_id = 'mini-forge-' || t.id::text)) AS stuck
+         FROM tablet_session t
+        WHERE t.import_code = $1
+     )
+     UPDATE tablet_session t
+        SET pin_failures = 0, locked_at = NULL, unlocked_at = now(), unlocked_by = $2,
+            imported_at = CASE WHEN target.stuck THEN NULL ELSE t.imported_at END,
+            imported_by = CASE WHEN target.stuck THEN NULL ELSE t.imported_by END
+       FROM target
+      WHERE t.id = target.id
+      RETURNING t.id, target.stuck AS released`,
+    [importCode, adminId, STUCK_CLAIM_MINUTES]
   );
-  return rows.length > 0;
+  return { found: rows.length > 0, claimReleased: rows[0]?.released === true };
 }
