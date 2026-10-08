@@ -5,14 +5,15 @@
  *
  * Searched and paged on the server (lane 3a Part 2, item 3; Troy: the data
  * stays his): ?q= searches, ?industry= filters, ?page= is 0-based. Each answer
- * is one page of at most 25. There is no size parameter and no export, and
- * each account may load a fixed number of pages a day
- * (lib/employer-paging.ts).
+ * is one page of at most 25. There is no size parameter and no export. Pages
+ * are counted per account by tier and per network (lib/employer-paging.ts).
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { incrementUserUsage, listEmployerIndustries, searchPublishedEmployers } from "@crucible/core";
+import { forgeSessionUser } from "@/lib/session-policy";
+import { getClientIp } from "@/lib/auth-rate-limit";
+import { getUserTier, incrementIpUsage, incrementUserUsage, listEmployerIndustries, searchPublishedEmployers } from "@crucible/core";
 import {
   EMPLOYER_PAGES_ENDPOINT,
   EMPLOYER_PAGES_LIMIT_MESSAGE,
@@ -24,15 +25,20 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 10;
 
 export async function GET(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  // A session still owing its second step is not signed in here.
+  const userId = forgeSessionUser(await auth())?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Count first, then answer: a refused page costs nothing to serve.
-  const count = await incrementUserUsage(userId, EMPLOYER_PAGES_ENDPOINT);
-  if (!employerPageAllowed(count)) {
+  // Count first, then answer: a refused page costs nothing to serve. Per
+  // account (by tier) and per network, both counted every time.
+  const [account, network, tier] = await Promise.all([
+    incrementUserUsage(userId, EMPLOYER_PAGES_ENDPOINT),
+    incrementIpUsage(getClientIp(request), EMPLOYER_PAGES_ENDPOINT),
+    getUserTier(userId),
+  ]);
+  if (!employerPageAllowed(account, network, tier)) {
     return NextResponse.json({ error: EMPLOYER_PAGES_LIMIT_MESSAGE }, { status: 429 });
   }
 

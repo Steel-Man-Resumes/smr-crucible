@@ -15,12 +15,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { forgeSessionUser } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { originAllowed } from "@/lib/email-package-guard";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { AUTO_ENDPOINT, sendFinishedPackage } from "@/lib/email-package-auto";
 import { packageFrom, resendKey, resendTransport } from "@/lib/email-package-send";
 
 async function handlePost(request: Request) {
-  if (!originAllowed(request.headers.get("origin"), request.url)) {
+  // This app's own origin and a JSON body only (security review 3a Part 2 r1,
+  // L1): the package box's looser host check would let any steelmanresumes.com host post.
+  if (!isSameOriginJsonPost(request.headers)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }
   const len = Number(request.headers.get("content-length") || 0);

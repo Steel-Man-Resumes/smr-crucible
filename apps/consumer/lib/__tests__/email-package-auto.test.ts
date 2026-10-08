@@ -257,7 +257,8 @@ test("the route takes no address from the request and wires the real claim", () 
   assert.match(src, /claim: claimPackageEmailVersion/);
   assert.match(src, /release: releasePackageEmailVersion/);
   assert.match(src, /mode: "user"/);
-  assert.match(src, /originAllowed\(/);
+  assert.match(src, /isSameOriginJsonPost\(request\.headers\)/);
+  assert.doesNotMatch(src, /originAllowed/);
 });
 
 test("the finished email says why it came and how to turn it off, with no price", async () => {

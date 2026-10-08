@@ -14,7 +14,14 @@ import {
   employerLikePattern,
   employerPageSql,
 } from "@crucible/core/src/employer";
-import { EMPLOYER_PAGES_PER_DAY, employerPageAllowed, parseEmployerQuery } from "../employer-paging";
+import {
+  EMPLOYER_PAGES_PER_DAY,
+  EMPLOYER_PAGES_PER_DAY_NETWORK,
+  EMPLOYER_PAGES_PER_DAY_TEAM,
+  employerPageAllowed,
+  employerPagesPerDay,
+  parseEmployerQuery,
+} from "../employer-paging";
 
 test("a page is about 25, and the SQL asks for one more only to know if another page exists", () => {
   assert.equal(EMPLOYER_PAGE_SIZE, 25);
@@ -85,12 +92,25 @@ test("'all' and blank industry mean no filter", () => {
   assert.equal(parseEmployerQuery(new URLSearchParams("industry=Food%20service")).industry, "Food service");
 });
 
-test("paging is rate limited per account per day", () => {
-  assert.equal(employerPageAllowed(1), true);
-  assert.equal(employerPageAllowed(EMPLOYER_PAGES_PER_DAY), true);
-  assert.equal(employerPageAllowed(EMPLOYER_PAGES_PER_DAY + 1), false);
-  // Plenty for a person browsing; a day's pages are a bounded slice, never the whole set at once.
-  assert.ok(EMPLOYER_PAGES_PER_DAY * EMPLOYER_PAGE_SIZE <= 3000);
+test("paging is rate limited: 20 a day for a person, team tiers keep 120, and a network floor", () => {
+  assert.equal(EMPLOYER_PAGES_PER_DAY, 20);
+  assert.equal(EMPLOYER_PAGES_PER_DAY_TEAM, 120);
+  for (const t of ["client", "default", "observer", null, undefined, "something-new"]) assert.equal(employerPagesPerDay(t), 20, String(t));
+  for (const t of ["partner", "admin", "unlimited"]) assert.equal(employerPagesPerDay(t), 120, t);
+  assert.equal(employerPageAllowed(20, 1, "client"), true);
+  assert.equal(employerPageAllowed(21, 1, "client"), false, "a person's 21st page");
+  assert.equal(employerPageAllowed(21, 1, "partner"), true);
+  assert.equal(employerPageAllowed(121, 1, "partner"), false);
+  // Many fresh accounts from one connection share the network floor.
+  assert.equal(employerPageAllowed(1, EMPLOYER_PAGES_PER_DAY_NETWORK, "client"), true);
+  assert.equal(employerPageAllowed(1, EMPLOYER_PAGES_PER_DAY_NETWORK + 1, "client"), false);
+});
+
+test("the route refuses a pending session and counts per network too", () => {
+  const src = readFileSync(join(__dirname, "..", "..", "app", "api", "employers", "route.ts"), "utf8");
+  assert.match(src, /forgeSessionUser\(await auth\(\)\)/);
+  assert.match(src, /incrementIpUsage\(getClientIp\(request\), EMPLOYER_PAGES_ENDPOINT\)/);
+  assert.match(src, /employerPageAllowed\(account, network, tier\)/);
 });
 
 test("the route counts before it answers, needs a session, and has no export", () => {
