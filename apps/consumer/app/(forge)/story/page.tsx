@@ -135,7 +135,10 @@ export default function StoryPage() {
     // The rows, and the same rows as plain lines for the writer (the old free-text box is gone).
     const rowsText = credentialRowsAsText(credRows);
     const asked = goalPrompts.some((q) => q.id === "credentials");
-    const nextNarratives = asked && rowsText ? { ...narratives, [CREDENTIALS_KEY]: rowsText } : narratives;
+    // Emptying every row clears the old text too, so the writer is never told about a credential they took out (round 8).
+    const { [CREDENTIALS_KEY]: _oldCredentials, ...withoutCredentials } = narratives;
+    void _oldCredentials;
+    const nextNarratives = !asked ? narratives : rowsText ? { ...narratives, [CREDENTIALS_KEY]: rowsText } : withoutCredentials;
     const updates: Partial<typeof session> = {
       challenges: selected,
       criminalRecord: selected.includes("criminal_record")
@@ -224,9 +227,24 @@ export default function StoryPage() {
                     placeholder="The year, or current, expired, in progress"
                     className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
                   />
-                  {needs && row.when.trim() !== "" && needs === "when" && (
+                  {needs === "when" && row.when.trim() !== "" && (
                     <p role="status" className="mt-1 text-xs text-t-amber-bright">
                       Add the year you got it, or say if it&apos;s current, expired, in progress or completed.
+                    </p>
+                  )}
+                  {needs === "name" && (
+                    <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-name-notice">
+                      Keep the name to just the name. Put expired, lapsed, suspended or the year in the box below.
+                    </p>
+                  )}
+                  {needs === "kind-name" && (
+                    <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-kind-notice">
+                      The name says what kind it is. Pick that kind, or take the word out of the name.
+                    </p>
+                  )}
+                  {needs === "permit" && (
+                    <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-permit-notice">
+                      That sounds like a permit. Pick Permit as the kind.
                     </p>
                   )}
                   {credRows.length > 1 && (

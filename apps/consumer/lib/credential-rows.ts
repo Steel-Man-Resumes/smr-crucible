@@ -13,7 +13,8 @@
 
 import {
   CREDENTIAL_KINDS,
-  credentialLineText,
+  credentialRowNameProblem,
+  credentialRowText,
   isCompleteCredentialRow,
   type CredentialKind,
   type CredentialRow,
@@ -39,9 +40,18 @@ export function completeCredentialRows(drafts: ReadonlyArray<CredentialRowDraft>
     .filter((d): d is CredentialRow => isCompleteCredentialRow(d as Partial<CredentialRow>));
 }
 
-/** What a row still needs, when it has a name: its kind, or a year or status the parser takes. */
-export function credentialRowNeeds(d: CredentialRowDraft): "" | "kind" | "when" {
+/**
+ * What a row still needs, when it has a name (round 8): "name" when the name
+ * holds a status or a year (it belongs in the status box), "permit" when the
+ * name says permit and the kind is not Permit, then its kind, then a year or
+ * status the parser takes.
+ */
+export function credentialRowNeeds(d: CredentialRowDraft): "" | "name" | "permit" | "kind-name" | "kind" | "when" {
   if (!d.name.trim()) return "";
+  const problem = credentialRowNameProblem(d.name, d.kind || undefined);
+  if (problem === "status") return "name";
+  if (problem === "permit") return "permit";
+  if (problem === "kind") return "kind-name";
   if (!d.kind) return "kind";
   if (!isStrictCredentialWhen(d.when)) return "when";
   return "";
@@ -56,8 +66,8 @@ export function credentialRowsAsText(drafts: ReadonlyArray<CredentialRowDraft>):
   return drafts
     .filter((d) => d.name.trim())
     .map((d) =>
-      d.kind && isStrictCredentialWhen(d.when)
-        ? credentialLineText(d.name.trim(), d.kind, d.when)
+      d.kind && !credentialRowNeeds(d)
+        ? credentialRowText({ name: d.name, kind: d.kind, when: d.when })
         : [d.name.trim(), d.kind, d.when.trim()].filter(Boolean).join(", ")
     )
     .join("\n");

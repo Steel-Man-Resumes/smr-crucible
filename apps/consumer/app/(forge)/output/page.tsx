@@ -398,6 +398,7 @@ export default function OutputPage() {
       setConfirmedCredentials((c) => [...c.filter((x) => (x.key ?? x.name.toLowerCase()) !== (r.confirm.key ?? r.confirm.name.toLowerCase())), r.confirm]);
       return "ok";
     },
+    onPreviewCut: (group) => cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line).changes,
     onCutCredential: (group) => {
       // Round 7: every mention of that credential comes off, on both pages, so it is never asked again.
       const r = cutCredentialEverywhere({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line);

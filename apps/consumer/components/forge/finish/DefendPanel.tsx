@@ -15,6 +15,7 @@ import {
   progressLine,
   type GateItem,
   CREDENTIAL_TYPES,
+  EDUCATION_KINDS,
   SKILLS_CARD_TEXT,
   type CredentialType,
   type FinishView,
@@ -42,6 +43,8 @@ export interface CardActions {
   /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
   onConfirmCredential: (group: LineGroup, type: CredentialType, when: string) => "ok" | "when" | "unchanged";
   onCutCredential: (group: LineGroup) => void;
+  /** Round 8: the lines "No, take it off" would change, shown before it does. */
+  onPreviewCut?: (group: LineGroup) => Array<{ target: "resume" | "letter"; before: string; after: string | null }>;
 }
 
 /** D3: one card for every skill the person never said. One tap each. */
@@ -72,7 +75,9 @@ function SkillsCard({ group, index, actions }: { group: LineGroup; index: number
 
 /** D4: a credential the person never mentioned, asked as a memory prompt. */
 function CredentialPromptCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
-  const [mode, setMode] = useState<"ask" | "yes">("ask");
+  const [mode, setMode] = useState<"ask" | "yes" | "no">("ask");
+  const kinds: readonly CredentialType[] = group.education ? EDUCATION_KINDS : CREDENTIAL_TYPES;
+  const changes = mode === "no" && actions.onPreviewCut ? actions.onPreviewCut(group) : [];
   const [type, setType] = useState<CredentialType | null>(null);
   const [when, setWhen] = useState("");
   const [notice, setNotice] = useState("");
@@ -90,11 +95,32 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={() => setMode("yes")} className={BTN_MAIN}>
-            Yes, I hold it
+            {group.education ? "Yes, I have it" : "Yes, I hold it"}
           </button>
-          <button onClick={() => actions.onCutCredential(group)} className={BTN_SOFT}>
+          <button onClick={() => (actions.onPreviewCut ? setMode("no") : actions.onCutCredential(group))} className={BTN_SOFT}>
             No, take it off
           </button>
+        </div>
+      ) : mode === "no" ? (
+        <div className="mt-3" data-testid="cut-preview">
+          <p className="text-xs font-semibold text-t-white">These lines change:</p>
+          <ul className="mt-1 space-y-1 text-xs text-t-phos">
+            {changes.map((c, k) => (
+              <li key={k}>
+                <span className="text-t-phos-dim">{c.target === "letter" ? "Letter: " : "Resume: "}</span>
+                <span className="line-through">{editableLine(c.before)}</span>
+                {c.after ? <span>{` becomes "${editableLine(c.after)}"`}</span> : <span>{" comes off"}</span>}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={() => actions.onCutCredential(group)} className={BTN_MAIN} data-testid="cut-confirm">
+              Take it off
+            </button>
+            <button onClick={() => setMode("ask")} className={BTN_SOFT}>
+              Keep it for now
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-3">
@@ -102,7 +128,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             What kind is it?
           </p>
           <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-labelledby={`cred-type-${index}`}>
-            {CREDENTIAL_TYPES.map((t, i) => (
+            {kinds.map((t, i) => (
               <button
                 key={t}
                 ref={i === 0 ? firstType : undefined}
@@ -115,8 +141,10 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
               </button>
             ))}
           </div>
+          {type !== "in progress" && (
+            <>
           <label htmlFor={`cred-when-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
-            When did you get it, or is it current?
+            {group.education ? "What year did you earn it?" : "When did you get it, or is it current?"}
           </label>
           <input
             id={`cred-when-${index}`}
@@ -125,6 +153,8 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             placeholder="In your words: the year you got it, or current, expired, in progress"
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
+            </>
+          )}
           {notice && (
             <p role="status" className="mt-1 text-xs text-t-amber-bright">
               {notice}
@@ -135,7 +165,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             <button
               onClick={() => {
                 if (!type) return setNotice("Pick what kind it is.");
-                const result = actions.onConfirmCredential(group, type, when);
+                const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when);
                 if (result === "when") {
                   setNotice("Add the year you got it, or say if it's current, expired, in progress or completed.");
                   return;
