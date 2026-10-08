@@ -86,7 +86,8 @@ test("SF-4: a count or people word covers an uncounted group; a counted or 'all'
   assert.ok(yes("- Supervised the night crew", "supervise", "about 8 people on nights"));
   assert.ok(yes("- Supervised the night crew", "supervise", "the night crew"));
   assert.ok(yes("- Trained new hires on the scanner", "train", "Marcus and Tia"));
-  assert.ok(yes("- Trained new hires on the scanner", "train", "temps from the agency"));
+  // Round 13 (SF-7 ruling): a different group ("temps" for "new hires") is refused.
+  assert.ok(!yes("- Trained new hires on the scanner", "train", "temps from the agency"));
   assert.ok(!yes("- Trained new hires on the scanner", "train", "my cousin"));
   assert.ok(!yes("- Trained all 40 associates on the scanner", "train", "associates"));
   assert.ok(yes("- Trained all 40 associates on the scanner", "train", "all 40 of them"));

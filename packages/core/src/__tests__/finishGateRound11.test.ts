@@ -171,7 +171,10 @@ test("SF-9: a credentials line that differs trivially from the row is the row", 
 
 test("SF-3/SF-7: a school rides only when the person named it, and only its own words", () => {
   assert.deepEqual(schoolPrefixUsed("Scott High School Welding Lab Supervisor", "I graduated from Scott High in 2014"), { school: "Scott High School", rest: "Welding Lab Supervisor" });
-  assert.equal(attendedSchoolOf("Associate of Applied Science, Welding | Owens Community College | 2019", "I did a year at Owens."), "Owens Community College");
+  // Round 13 (SF-6): only their words about school count. "A year at Owens" could be a job; "a year at Owens
+  // Community College" or "I went to Owens for welding classes" is school.
+  assert.equal(attendedSchoolOf("Associate of Applied Science, Welding | Owens Community College | 2019", "I did a year at Owens."), undefined);
+  assert.equal(attendedSchoolOf("Associate of Applied Science, Welding | Owens Community College | 2019", "I did a year at Owens Community College."), "Owens Community College");
   assert.equal(attendedSchoolOf("Lincoln High School | Toledo, OH | 2011 - 2014", "I left school in 11th grade."), undefined);
   // Their contact line never names a school for them.
   assert.equal(attendedSchoolOf("Toledo Tech | 2019", "Jordan Smith\nToledo, OH | jordan@example.com\nI picked orders."), undefined);

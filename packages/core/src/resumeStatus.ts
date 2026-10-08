@@ -40,7 +40,7 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
-import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy } from "./scopeWords";
+import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
 import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
@@ -76,6 +76,8 @@ export interface OpenItem {
   helped?: string;
   /** Round 12: every scope family on the line still open (one card asks about all of them). */
   scopeFamilies?: string[];
+  /** Round 13 (SF-4): a role used as a job title in the summary or letter ("shift supervisor"), asked on a title card. */
+  roleTitle?: string;
 }
 
 export interface DefendAnswer {
@@ -94,6 +96,8 @@ export interface DefendAnswer {
    * answer is never added to the source (no anchoring path, DEC-45).
    */
   kind?: "rewrite" | "scope_yes" | "title_yes";
+  /** Round 13 (SF-4): a rewrite made by "Use my title" on a role in the summary or letter: the title they typed. */
+  ownTitle?: string;
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
   family?: string;
   /** Round 11: a rewrite made by "I helped with it": the line is their shared form; never joins their words. */
@@ -408,12 +412,21 @@ function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: 
     // A title the person typed themselves (their own rewrite of the header) is theirs.
     if (rewriteOf(answers, l)) continue;
     // Round 12 (SF-2): "Yes, that was my title", typed by them and matching the title on the line.
-    if (answers.some((a) => a.kind === "title_yes" && squash(a.line) === squash(l) && squash(a.answer) === squash(full))) continue;
+    // Round 13 (SF-9): their short form counts ("Customer Service Rep" for "CUSTOMER SERVICE REPRESENTATIVE").
+    if (answers.some((a) => a.kind === "title_yes" && squash(a.line) === squash(l) && (squash(a.answer) === squash(full) || sameTitle(a.answer, full)))) continue;
     const rest = full.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
     if (confirmedKeys.size && rest && rest !== full && titleIsTheirs(rest, sourceText)) continue;
     out.push(l);
   }
   return out;
+}
+
+/** Round 13 (SF-4): why a role used as a title is open, and its question. */
+export function roleTitleWhy(title: string): string {
+  return `"${clip(title, 50)}" isn't a title in anything you told us. A title that doesn't match your paperwork comes up at the background check.`;
+}
+export function roleTitleQuestion(title: string): string {
+  return `Was "${clip(title, 50)}" your job title?`;
 }
 
 /** The person's rewrite of this line, when they typed it themselves. */
@@ -448,9 +461,24 @@ export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answ
   );
   const extra = own.map((a) => scopeYesText(a.family as string, a.answer)).join("\n");
   const help = rewriteOf(answers, line);
-  return scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).filter((h) => {
-    // Round 12 (SF-4): typed words that name people, a count or names cover an uncounted group.
-    if (own.some((a) => a.family === h.family && typedCoversHit(h, a.answer, line) === true)) return false;
+  const k = (h: { family: string; word: string }) => `${h.family}\u0000${h.word.toLowerCase()}`;
+  const withYes = new Set(scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).map(k));
+  const titleYes = answers.filter((a) => a.kind === "title_yes" && squash(a.line) === squash(line));
+  const employers = employerWordsOf(sourceText);
+  return scopeHitsNotTheirs(line, sourceText).filter((h) => {
+    // Round 13 (SF-4): a title in the summary or letter is settled only by its title card ("Yes, that was my
+    // title", "Use my title") or their own words, never by a "Yes, I did this" on the line.
+    if (h.role) {
+      if (h.title && titleYes.some((a) => sameTitle(a.answer, h.title as string))) return false;
+      if (h.title && help?.ownTitle && sameTitle(help.ownTitle, h.title)) return false;
+      return true;
+    }
+    // Round 12 (SF-4): typed words that name people, a count or names cover an uncounted group. Round 13 (SF-7):
+    // typed words that name a different group are refused, and the sentence reading does not get a second go.
+    const verdicts = own.filter((a) => a.family === h.family).map((a) => typedCoversHit(h, a.answer, line, employers));
+    if (verdicts.some((v) => v === true)) return false;
+    if (verdicts.length && verdicts.every((v) => v === false)) return true;
+    if (!withYes.has(k(h))) return false;
     // Their "I helped with it": only the claim it was made for, in its own sentence.
     if (help?.scopeHelp && h.shared && (!help.scopeHelpFamily || help.scopeHelpFamily === h.family)) {
       if (!help.scopeHelpText || squash(line).includes(squash(help.scopeHelpText))) return false;
@@ -779,17 +807,27 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // answer.
     const scopeFindings: MintFinding[] = [];
     const scopeOf = new Map<MintFinding, { family: string; families?: string[]; helped?: string }>();
+    const roleTitleOf = new Map<MintFinding, string>();
     // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
     const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
     for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
       if (inSkills || credentialSectionLines.has(line)) continue;
       // Round 12: ONE card per line, for every claim on it the person has not made.
-      const hits = scopeAllNotTheirsAnswered(line, sourceText, answers).filter((h) => !personIntroduced(answers, line, h.word));
+      const all = scopeAllNotTheirsAnswered(line, sourceText, answers).filter((h) => !personIntroduced(answers, line, h.word));
+      // Round 13 (SF-4): a role used as a title ("Shift supervisor with ...") gets its own title card.
+      const role = all.find((h) => h.role && h.title);
+      if (role) {
+        const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: roleTitleWhy(role.title as string), kind: "title_unsaid" };
+        roleTitleOf.set(finding, role.title as string);
+        scopeFindings.push(finding);
+      }
+      const hits = all.filter((h) => !(h.role && h.title));
       const hit = hits[0];
       if (!hit) continue;
       const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
       const families = Array.from(new Set(hits.map((h) => h.family)));
-      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 ? helpedForm(line, hit.word) : undefined });
+      // Round 13 (SF-3): never "I helped with it" for a title.
+      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 && !hit.role ? helpedForm(line, hit.word) : undefined });
       scopeFindings.push(finding);
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
@@ -829,6 +867,11 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       if (f.kind) items[items.length - 1].kind = f.kind;
       if (subject) items[items.length - 1].subject = subject;
       if (f.kind === "credential_unsaid" && cred?.education) items[items.length - 1].education = true;
+      const roleTitle = roleTitleOf.get(f);
+      if (roleTitle) {
+        items[items.length - 1].roleTitle = roleTitle;
+        items[items.length - 1].question = roleTitleQuestion(roleTitle);
+      }
       const sc = scopeOf.get(f);
       if (sc) {
         items[items.length - 1].scopeFamily = sc.family;

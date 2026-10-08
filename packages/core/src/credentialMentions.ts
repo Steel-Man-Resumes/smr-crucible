@@ -28,6 +28,7 @@ import { linesOf, isSectionEnd, isEntryHeader, skillTermsOf, CONTACT_LINE_RE, ST
 import { isCredentialTerm, namedCredentialRe, credentialInitialsRe, isShortInitialTerm } from "./credentialWords";
 import { isWorkAcronym, needsHoldingWord } from "./workAcronyms";
 import { isStrictCredentialWhen } from "./credentialStatus";
+import { titleWords } from "./scopeWords";
 
 export interface CredentialMention {
   /** The page line it is on, or the part when it is one part of a skills or credentials list line. */
@@ -139,27 +140,67 @@ export function schoolUsedBy(school: string, personText: string | undefined): bo
   // Round 11 (SF-3, SF-7): every distinctive word of the school must be one of theirs ("Owens" for "Owens
   // Community College"); a word after it they never said ("Welding Lab Supervisor") is not part of it.
   // Their contact line never counts ("Toledo, OH" does not make "Toledo Tech" theirs).
-  const mine = personWords(personText);
-  return words.filter((w) => !GENERIC_SCHOOL_WORDS.has(w)).every((w) => mine.has(w));
+  return schoolSaidBy(words, personText);
 }
 
-// Round 12 (SF-8): their contact line, job lines (a bar or a year range) and a "City, ST" never name a school
-// for them: "Midwest Distribution | Toledo, OH" does not make a guessed "Toledo High School" theirs.
-const personWords = (personText: string | undefined) =>
-  new Set(
-    (personText || "")
-      .split("\n")
-      .filter((l) => !CONTACT_LINE_RE.test(l) && !l.includes("|") && !/\b(?:19|20)\d{2}\s*[-\u2013\u2014]\s*(?:(?:19|20)\d{2}|present|now|current)\b/i.test(l))
-      .map((l) => l.replace(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?,\s*[A-Z]{2}\b/g, " "))
-      // "I grew up in Toledo": a place after in / from / near is a city unless a school word follows it ("from Scott High").
-      .map((l) =>
-        l.replace(/\b(?:in|from|near|around|outside|of)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b(?!\s+(?:High|School|Tech|Technical|College|Academy|Community|Adult|Career|Center|Centre|University|Institute|Vocational|Area))/g, (all, place) =>
-          /\b(?:High|School|Tech|Technical|College|Academy|Community|Adult|Career|Center|Centre|University|Institute|Vocational)\b/.test(place) ? all : " "
-        )
-      )
-      .flatMap((l) => normalizeTyped(l).split(" "))
-      .filter(Boolean)
+// Round 13 (SF-6): only the person's words about school count toward a school name: a phrase that ends in a
+// school word ("Scott High", "Owens Community College", "Lincoln HS") or the name after "graduated from",
+// "attended", "dropped out of", "went to" in a sentence about school. An employer ("I worked at the Toledo Zoo",
+// "I worked for Toledo Public Schools") or a city ("Toledo born and raised") never does.
+const STRONG_SCHOOL_TYPES: Record<string, string> = { high: "high", hs: "high", tech: "tech", technical: "tech", polytechnic: "tech", vocational: "tech", college: "college", cc: "college", community: "college", academy: "academy", university: "university", institute: "institute", career: "career", adult: "adult", ged: "adult" };
+const SCHOOL_TYPE_WORD = /^(?:high|hs|tech|technical|polytechnic|vocational|college|cc|community|academy|university|institute|career|adult|school|schools|center|centre|campus|education|ed)$/i;
+const EMPLOYER_BEFORE = /\b(?:work(?:ed|s|ing)?\s+(?:for|at|with|in)|job\s+(?:at|with|for|in)|employed\s+(?:by|at)|hired\s+(?:at|by|on\s+at)|(?:custodian|janitor|cleaner|cook|aide|driver|bus\s+driver)\s+(?:at|for|with)|cleaned\s+(?:at|for)|contract(?:or)?\s+(?:at|for|with))\s+(?:the\s+)?$/i;
+const SCHOOL_TALK = /\b(?:school|grade|diploma|ged|hse|degree|associate'?s?|bachelor'?s?|coursework|courses?|certificate|graduat\w*|class(?:es)?|dropped\s+out|drop\s+out|freshman|sophomore|junior|senior\s+year|semester|enrolled|studied)\b/i;
+type SchoolPhrase = { words: Set<string>; strong: Set<string>; typed: boolean };
+function personSchoolPhrases(personText: string | undefined): SchoolPhrase[] {
+  const out: SchoolPhrase[] = [];
+  const lines = (personText || "")
+    .split("\n")
+    .filter((l) => !CONTACT_LINE_RE.test(l) && !l.includes("|"))
+    .map((l) => l.replace(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?,\s*[A-Z]{2}\b/g, " "));
+  for (const line of lines) {
+    for (const sentence of line.split(/(?<=[.!?;])\s+/)) {
+      const toks = sentence.split(/\s+/);
+      const norm = toks.map((t) => normalizeTyped(t));
+      // A phrase ending in a school word: up to three name words before it, read back to a stop word.
+      for (let i = 0; i < toks.length; i++) {
+        if (!SCHOOL_TYPE_WORD.test(norm[i] || "")) continue;
+        let end = i;
+        while (end + 1 < toks.length && SCHOOL_TYPE_WORD.test(norm[end + 1] || "") && !/[,.;:!?]$/.test(toks[end])) end++;
+        let start = i;
+        while (start > 0 && i - start < 4 && !/[,.;:!?(]$/.test(toks[start - 1]) && !/^(?:at|to|from|of|in|the|a|an|and|or|for|my|our|i|went|attended|go|left|quit|finished|graduated|was|is|with|by|on|out)$/.test(norm[start - 1] || "")) start--;
+        if (start === i && !/^(?:hs|cc)$/.test(norm[i])) {
+          // "school" alone ("left school") names no school.
+          if (!STRONG_SCHOOL_TYPES[norm[i]] || !/[A-Z]/.test(toks[i])) continue;
+        }
+        if (EMPLOYER_BEFORE.test(toks.slice(0, start).join(" "))) continue;
+        const words = norm.slice(start, end + 1).flatMap((w) => w.split(" ")).filter(Boolean);
+        out.push({ words: new Set(words), strong: new Set(words.map((w) => STRONG_SCHOOL_TYPES[w]).filter(Boolean)), typed: true });
+        i = end;
+      }
+      // A name after a school verb, in a sentence about school ("I graduated from Scott", "went to Libbey but left in 10th grade").
+      // "I took some welding classes at Penta", "went to Libbey but left in 10th grade".
+      if (SCHOOL_TALK.test(sentence)) {
+        for (const m of sentence.matchAll(/\b(?:went\s+to|attended|graduated\s+from|dropped\s+out\s+of|finished\s+at|left|at)\s+((?:[A-Z][\w'.]*)(?:\s+[A-Z][\w'.]*){0,2})/g)) {
+          if (EMPLOYER_BEFORE.test(sentence.slice(0, m.index! + m[0].length - m[1].length))) continue;
+          const words = normalizeTyped(m[1]).split(" ").filter(Boolean);
+          if (words.length) out.push({ words: new Set(words), strong: new Set(words.map((w) => STRONG_SCHOOL_TYPES[w]).filter(Boolean)), typed: words.some((w) => SCHOOL_TYPE_WORD.test(w)) });
+        }
+      }
+    }
+  }
+  return out;
+}
+/** True when one phrase of theirs about school holds every distinctive word of the school, and the same kind of school. */
+function schoolSaidBy(schoolWordsNorm: string[], personText: string | undefined): boolean {
+  const distinct = schoolWordsNorm.filter((w) => !GENERIC_SCHOOL_WORDS.has(w));
+  if (!distinct.length) return false;
+  const strong = new Set(schoolWordsNorm.map((w) => STRONG_SCHOOL_TYPES[w]).filter(Boolean));
+  return personSchoolPhrases(personText).some(
+    // A phrase with a school word must be the same kind of school ("Toledo Tech" is not "Toledo High School").
+    (p) => distinct.every((w) => p.words.has(w)) && (!strong.size || !p.typed || [...strong].some((t) => p.strong.has(t)))
   );
+}
 
 /**
  * Round 11 (SF-7): the part of a school name the person used, and what the
@@ -168,13 +209,11 @@ const personWords = (personText: string | undefined) =>
  */
 export function schoolPrefixUsed(part: string, personText: string | undefined): { school: string; rest: string } | undefined {
   const words = cleanEducationPart(part).split(/\s+/).filter(Boolean);
-  const mine = personWords(personText);
   for (let n = words.length; n > 0; n--) {
     const head = words.slice(0, n);
     const last = normalizeTyped(head[head.length - 1]);
     if (n < words.length && !SCHOOL_RE.test(last)) continue;
-    const distinct = head.map((w) => normalizeTyped(w)).filter((w) => w && !GENERIC_SCHOOL_WORDS.has(w));
-    if (!distinct.length || !distinct.every((w) => mine.has(w))) continue;
+    if (!schoolSaidBy(head.map((w) => normalizeTyped(w)).filter(Boolean), personText)) continue;
     const school = head.join(" ");
     if (!isSchoolName(school)) continue;
     return { school, rest: words.slice(n).join(" ") };
@@ -264,30 +303,39 @@ export function typedSchoolName(typed: string | undefined): string {
  * High (left in 11th grade)" is Scott High, through 11th grade). Returns ""
  * when empty, "rejected" when what is left is not a school's name.
  */
-export function typedSchoolParts(typed: string | undefined): { school: string; grade?: string } | "" | "rejected" {
-  let t = (typed || "").replace(/\s+/g, " ").trim();
+export function typedSchoolParts(typed: string | undefined): { school: string; grade?: string; facility?: true } | "" | "rejected" {
+  let t = (typed || "").replace(/\s+/g, " ").replace(/[–—]/g, " - ").replace(/\s+/g, " ").trim();
   if (!t) return "";
   const grade = t.match(/\b(\d{1,2}(?:st|nd|rd|th))\s+grade\b/i)?.[1];
+  // Round 13 (SF-6): "(dropped out)", "(left)", "(didn't finish)", an open "(dropped out" and any dash are statuses.
+  const STATUS_WORDS = String.raw`(?:grade|graduat|finish|left|quit|did\s*n|didn|attend|dropped|drop\s*out|dropout|no\s+diploma|withdr[ae]w)`;
   t = t
-    .replace(/\(([^)]*)\)/g, (all, inner) => (/\b(?:grade|graduat|finish|left|quit|did\s*n|didn|attend)/i.test(inner) ? " " : all))
+    .replace(/^(?:i\s+)?(?:went\s+to|attended|go\s+to|was\s+at)\s+/i, "")
+    .replace(/\(([^)]*)\)/g, (all, inner) => (new RegExp(String.raw`\b${STATUS_WORDS}`, "i").test(inner) ? " " : all))
+    .replace(new RegExp(String.raw`\s*\(\s*${STATUS_WORDS}[^)]*$`, "i"), "")
     .replace(/[,;-]\s*(?:through|thru|until|till|up\s+to)?\s*\d{1,2}(?:st|nd|rd|th)\s+grade\b.*$/i, "")
     .replace(/\s+(?:through|thru|until|till|up\s+to)\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+grade\b.*$/i, "")
     .replace(/[,;-]?\s*(?:did\s+not|didn'?t|never)\s+(?:graduate|finish)\b.*$/i, "")
-    .replace(/[,;-]?\s*(?:left|quit|dropped\s+out)\b.*$/i, "")
+    .replace(/[,;-]?\s*(?:left|quit|dropped\s+out|drop\s*out|dropout|withdrew)\b.*$/i, "")
     .replace(/[,;-]?\s*(?:no\s+diploma|non-?graduate|attended)\b.*$/i, "")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/[.,;:-]+$/, "")
+    .replace(/[\s.,;:(-]+$/, "")
+    .replace(/\(\s*$/, "")
     .trim();
   if (!t || t.length > 80 || /\d/.test(t) || EDU_REST_STATUS_RE.test(t) || EDUCATION_CORE_RE.test(t) || /\|/.test(t)) return "rejected";
   // A name: a school word, or a name in capitals; never "yes", "no" or "n/a".
   if (/^(?:yes|no|ok|okay|none|nope|n\/a|na|idk|sure|high school|school)$/i.test(t) || !(/[A-Z]/.test(t) || SCHOOL_RE.test(t) || /\bhigh\b/i.test(t))) return "rejected";
-  return { school: t, ...(grade ? { grade: grade.toLowerCase() } : {}) };
+  return { school: t, ...(grade ? { grade: grade.toLowerCase() } : {}), ...(SCHOOL_FACILITY_RE.test(t) ? { facility: true as const } : {}) };
 }
+
+/** Round 13 (SF-6): a school box that names a jail or prison: the person chooses to keep it, it is never printed silently. */
+export const SCHOOL_FACILITY_RE = /\b(?:jail|jails|prison|prisons|correctional|corrections|detention|juvenile\s+hall|juvie|county(?!\s+(?:community|college|career|technical|tech|vocational|public|schools?|high|academy|joint))|penitentiary|penal|inmate|lockup|reformatory|youth\s+(?:center|facility|services))\b/i;
 
 const attendedTail = (years: string, grade?: string) => {
   const y = attendedYears(years);
-  return `${y ? ` ${y}` : ""}${grade ? `, through ${grade} grade` : ""}`;
+  // Round 13 (N8): "Scott High, attended through 11th grade" (a comma only after years).
+  return `${y ? ` ${y}` : ""}${grade ? `${y ? "," : ""} through ${grade} grade` : ""}`;
 };
 
 /**
@@ -1276,7 +1324,12 @@ export function personJobTitles(personText: string | undefined): Set<string> {
 /** True when the whole title is one of the person's own job titles. */
 export function titleIsTheirs(title: string, personText: string | undefined): boolean {
   const n = normalizeTyped(title);
-  return !!n && personJobTitles(personText).has(n);
+  if (!n) return false;
+  const titles = personJobTitles(personText);
+  if (titles.has(n)) return true;
+  // Round 13 (SF-9): their short form ("Customer Service Rep", "Asst Mgr") is the same title.
+  const t = titleWords(title).join(" ");
+  return Array.from(titles).some((x) => titleWords(x).join(" ") === t);
 }
 
 // ---- the backstop: capitals nobody gave us -------------------------------------------
