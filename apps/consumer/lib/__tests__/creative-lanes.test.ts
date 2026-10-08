@@ -212,6 +212,8 @@ test("review s2r3: the export passes each document's printed ids; one-tap answer
   assert.match(lane, /body\.phraseAnswer[\s\S]*?if \(g\.impersonating\) return ownerOnly\(\);[\s\S]*?applyPhraseAnswer\(current, pa\.phrase, pa\.answer\)/);
   const items = rd("components", "creative", "OpenItems.tsx");
   assert.match(items, /FACILITY_ASK_YES, FACILITY_ASK_NO/);
-  for (const v of ["CvLaneView.tsx", "CreativeLaneView.tsx"]) assert.match(rd("components", "creative", v), /OpenItemAnswersContext\.Provider value=\{answers\}/);
+  for (const v of ["CvLaneView.tsx", "CreativeLaneView.tsx", "PerformerLaneView.tsx"]) assert.match(rd("components", "creative", v), /OpenItemAnswersContext\.Provider value=\{answers\}/);
+  // The performer screen answers through the same PUT, one phrase at a time.
+  assert.match(rd("components", "creative", "PerformerLaneView.tsx"), /put\(\{ phraseAnswer: \{ phrase, answer: yes \? "yes" : "no" \} \}, \(s\) => applyPhraseAnswer\(s, phrase, yes \? "yes" : "no"\) \?\? s\)/);
   assert.match(rd("components", "creative", "PracticeRecordPanel.tsx"), /Other names people use for it \(optional\)/);
 });

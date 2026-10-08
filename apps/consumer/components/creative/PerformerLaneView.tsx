@@ -12,14 +12,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CareerLane } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
-import { MAX_SKILLS, SKILL_MAX, stillNeedsProof, NEEDS_PROOF_NOTE, type CreativeKindSettings, type PerformerSkill } from "@crucible/core/src/creativeLaneShared";
+import { MAX_SKILLS, SKILL_MAX, applyPhraseAnswer, stillNeedsProof, NEEDS_PROOF_NOTE, type CreativeKindSettings, type PerformerSkill } from "@crucible/core/src/creativeLaneShared";
 import { buildPerformerModel, performerPlainText, performerShownIds, PERFORMER_SECTIONS } from "@crucible/core/src/performerShared";
 import { getPerformerStatus } from "@crucible/core/src/performerChecks";
 import { exportOpenItemLines } from "@crucible/core/src/creativeChecks";
 import { CREATIVE_ERRORS, PERFORMER_TABS, sendJson, type PerformerTab } from "@/lib/creative";
 import { PracticeRecordPanel, PERFORMER_SECTION_ORDER } from "./PracticeRecordPanel";
 import { FacilityChoices } from "./FacilityChoices";
-import { OpenItems } from "./OpenItems";
+import { OpenItems, OpenItemAnswersContext, type OpenItemAnswers } from "./OpenItems";
 import { CreativePage } from "./CreativePage";
 import { TwoPathsPanel } from "./TwoPathsPanel";
 import type { CreativeCtx } from "./CreativeLaneView";
@@ -104,6 +104,18 @@ export function PerformerLaneView({ laneId, allLanes, onAdoptLane, onLanesChange
   );
   const saveSkills = (skills: PerformerSkill[]) => put({ settings: { skills } }, (s) => ({ ...s, skills }));
 
+  // One-tap answers (review s2r3), as on the CV and creative screens: does a
+  // phrase name the place this lane keeps off. A performer page has no
+  // references, so there is never an officer question here.
+  const answers = useMemo<OpenItemAnswers>(
+    () => ({
+      onFacilityWord: (phrase, yes) =>
+        put({ phraseAnswer: { phrase, answer: yes ? "yes" : "no" } }, (s) => applyPhraseAnswer(s, phrase, yes ? "yes" : "no") ?? s),
+      onOfficer: async () => false,
+    }),
+    [put]
+  );
+
   const model = useMemo(() => (ctx ? buildPerformerModel(ctx.entries, ctx.settings) : null), [ctx]);
   const status = useMemo(() => (ctx && model ? getPerformerStatus({ entries: ctx.entries, settings: ctx.settings, model, pages }) : null), [ctx, model, pages]);
 
@@ -117,6 +129,7 @@ export function PerformerLaneView({ laneId, allLanes, onAdoptLane, onLanesChange
   const shownIds = performerShownIds(model);
 
   return (
+    <OpenItemAnswersContext.Provider value={answers}>
     <section className="mt-6" data-testid="performer-lane" aria-label={`${ctx.lane.name} performer lane`}>
       <div className="border border-t-line bg-t-panel p-3 sm:p-4">
         <p className="text-sm text-t-white">
@@ -298,5 +311,6 @@ export function PerformerLaneView({ laneId, allLanes, onAdoptLane, onLanesChange
         )}
       </div>
     </section>
+    </OpenItemAnswersContext.Provider>
   );
 }
