@@ -47,6 +47,11 @@ import {
   mentionsOfName,
   titleOfHeader,
   credentialLineText,
+  educationLineRewrite,
+  isConfirmedEducationLine,
+  isLiveCredential,
+  liveCredentialCovers,
+  type CredentialMention,
   type CredentialRow,
 } from "@crucible/core/src/credentialMentions";
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
@@ -115,6 +120,8 @@ export interface CredentialConfirm {
   remnants?: string[];
   /** A sentence about the credential was taken out of the cover letter. */
   letterSentenceDropped?: boolean;
+  /** Round 9: an education line keeps its school: the whole line as rewritten ("GED, in progress | Toledo Adult Education"). */
+  line?: string;
 }
 
 export const CREDENTIAL_TYPES = ["license", "certification", "card", "training course", "permit"] as const;
@@ -123,6 +130,18 @@ export const EDUCATION_KINDS = ["earned", "in progress"] as const;
 export type CredentialType = (typeof CREDENTIAL_TYPES)[number] | (typeof EDUCATION_KINDS)[number];
 const ALL_KINDS: readonly string[] = [...CREDENTIAL_TYPES, ...EDUCATION_KINDS];
 const isEducationKind = (t: string) => (EDUCATION_KINDS as readonly string[]).includes(t);
+
+/**
+ * True when the year-or-status box is a real answer for this kind (round 9,
+ * r9-N5): "earned" needs a real year ("2015"), never "current"; "in
+ * progress" needs nothing more; a credential takes a year or a status.
+ */
+export function isConfirmWhen(type: string, when: string): boolean {
+  if (type === "in progress") return true;
+  if (!isCredentialWhen(when)) return false;
+  if (type === "earned") return /\b(?:19|20)\d{2}\b/.test(when) && !/[a-z]/i.test(when.replace(/\b(?:in|earned|got|finished|graduated|completed)\b/gi, ""));
+  return true;
+}
 
 /** Small stable string hash (FNV-1a), enough to tell one run from another. */
 function hash(s: string): string {
@@ -201,7 +220,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
               typeof c.name === "string" &&
               typeof c.when === "string" &&
               ALL_KINDS.includes(c.type as string) &&
-              isCredentialWhen(c.when) &&
+              isConfirmWhen(c.type as string, c.when) &&
               !!d.written &&
               writtenNamesCredential(d.written as WrittenDocs, c.name)
           )
@@ -213,6 +232,10 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
             key: credentialKeyOf(c.name),
             remnants: Array.isArray(c.remnants) ? c.remnants.filter((r): r is string => typeof r === "string") : [],
             letterSentenceDropped: c.letterSentenceDropped === true,
+            // An education line is kept only when it is still the confirmed text with no year or status of the writer's.
+            ...(typeof c.line === "string" && isEducationKind(c.type) && isConfirmedEducationLine(c.line, confirmedCredentialText(c.name, c.type, c.when))
+              ? { line: c.line }
+              : {}),
           }))
       : [],
   };
@@ -364,12 +387,18 @@ export function answerFor(answers: DefendAnswer[], line: string): DefendAnswer |
   return [...mine].reverse().find((a) => a.kind !== "rewrite") ?? mine[mine.length - 1];
 }
 
+/** The line itself, exactly, before any other line with the same words (round 9: "- Certified Nursing Assistant" is the list line, not the headline above it). */
+function lineIndexOf(lines: string[], line: string, target: string): number {
+  const exact = lines.findIndex((l) => l.trim() === line.trim());
+  return exact !== -1 ? exact : lines.findIndex((l) => stripBullet(l) === target);
+}
+
 /** Take one line off the page. Returns the text unchanged when the line is not there. */
 export function cutLine(resumeText: string, line: string): string {
   const target = stripBullet(line);
   if (!target) return resumeText;
   const out = resumeText.split("\n");
-  const hit = out.findIndex((l) => stripBullet(l) === target);
+  const hit = lineIndexOf(out, line, target);
   if (hit === -1) return resumeText;
   out.splice(hit, 1);
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
@@ -384,7 +413,7 @@ export function changeLine(resumeText: string, line: string, rewrite: string): s
   const next = stripBullet(rewrite.replace(/\s*\n\s*/g, " "));
   if (!target || !next) return resumeText;
   const out = resumeText.split("\n");
-  const hit = out.findIndex((l) => stripBullet(l) === target);
+  const hit = lineIndexOf(out, line, target);
   if (hit === -1) return resumeText;
   const prefix = out[hit].match(/^\s*(?:[-*•]\s*)?/)?.[0] ?? "";
   out[hit] = prefix + next;
@@ -641,10 +670,12 @@ function applyToDocument(
   name: string,
   confirmed: string,
   isLetter: boolean,
-  education = false
-): MovedResult & { droppedSentence: boolean } {
+  opts: { education?: boolean; held?: { name: string; kind: string; when: string } } = {}
+): MovedResult & { droppedSentence: boolean; educationLine?: string } {
+  const education = !!opts.education;
   const remnants: string[] = [];
   let droppedSentence = false;
+  let educationLine: string | undefined;
   // A letter sentence wrapped across lines is one sentence: join it first, so it goes whole.
   if (isLetter) text = joinWrappedLines(text);
   const found = credentialMentionsOf(text).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
@@ -662,6 +693,21 @@ function applyToDocument(
     }
     const current = linesOf(next).find((l) => l === m.line);
     if (!current) continue;
+    // Round 9 (r9-S2): a credential they hold now stays where a sentence names it plainly
+    // ("Certified nursing assistant with eight years", "as a certified nursing assistant at Meadowbrook").
+    if (opts.held && liveCredentialCovers(m, opts.held)) continue;
+    // Round 9 (r9-N4): an education line changes only in the part the prompt named; the school stays.
+    if (!isLetter && education && m.education && m.where === "credentials") {
+      if (placed) {
+        next = cutLine(next, m.line);
+        continue;
+      }
+      const rewritten = educationLineRewrite(m.line, m.raw || m.name, confirmed);
+      next = changeLine(next, m.line, rewritten);
+      educationLine = stripBullet(rewritten);
+      placed = true;
+      continue;
+    }
     if (isLetter) {
       // The letter never splices inside a sentence: the whole sentence goes.
       const rest = dropSentences(current, m.raw || m.name);
@@ -688,9 +734,25 @@ function applyToDocument(
       remnants.push(linesOf(next).find((l) => stripBullet(l) === rest) ?? rest);
     }
   }
-  // An education line is rewritten where it stands; a credential goes under CERTIFICATIONS.
+  // An education line is rewritten where it stands (or added under EDUCATION when only a sentence named it);
+  // a credential goes under CERTIFICATIONS.
   if (!isLetter && !education) next = ensureCertificationLine(next, confirmed);
-  return { text: next, remnants, droppedSentence };
+  if (!isLetter && education && !placed) next = ensureSectionLine(next, confirmed, "EDUCATION", EDUCATION_HEADING_RE);
+  return { text: next, remnants, droppedSentence, ...(educationLine && educationLine !== confirmed ? { educationLine } : {}) };
+}
+
+const EDUCATION_HEADING_RE = /^(?:education|schooling|academic background)\b.*$|^(?:training|certifications?)\s*(?:and|&)\s*education:?$/i;
+
+/** Put a line under a heading, adding the section at the end when the page has none. */
+function ensureSectionLine(text: string, line: string, heading: string, headingRe: RegExp): string {
+  const lines = text.split("\n");
+  if (lines.some((l) => squash(stripBullet(l)) === squash(line))) return text;
+  const head = lines.findIndex((l) => headingRe.test(l.trim()));
+  if (head === -1) return `${text.replace(/\s+$/, "")}\n\n${heading}\n${line}`;
+  let at = head + 1;
+  while (at < lines.length && lines[at].trim() && !/^[A-Z][A-Z &/]{3,}:?$/.test(lines[at].trim())) at++;
+  lines.splice(at, 0, line);
+  return lines.join("\n");
 }
 
 /** Join a paragraph's hard-wrapped lines: a line that does not end a sentence, followed by one that starts in lower case. */
@@ -728,21 +790,34 @@ export function applyConfirmation(
   type: CredentialType,
   when: string
 ): { resume: string; letter: string; confirm: CredentialConfirm } | null {
-  if (!ALL_KINDS.includes(type) || !isCredentialWhen(when)) return null;
+  if (!ALL_KINDS.includes(type) || !isConfirmWhen(type, when)) return null;
   const confirmed = confirmedCredentialText(name, type, when);
   const key = credentialKeyOf(name);
   // Nothing to confirm when neither page names this credential.
-  const named = (t: string) =>
-    credentialMentionsOf(t).some((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name))) || mentionsOfName(t, name).length > 0;
+  const mentionsIn = (t: string) => credentialMentionsOf(t).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+  const named = (t: string) => mentionsIn(t).length > 0 || mentionsOfName(t, name).length > 0;
   if (!named(docs.resume) && !named(docs.letter)) return null;
-  const r = applyToDocument(docs.resume, key, name, confirmed, false, isEducationKind(type));
-  const l = applyToDocument(docs.letter, key, name, confirmed, true);
+  // Round 9: an education line is confirmed as earned or in progress, a credential as a license, a card...; never crossed.
+  const first = [...mentionsIn(docs.resume), ...mentionsIn(docs.letter)][0];
+  if (first && !!first.education !== isEducationKind(type)) return null;
+  const held = isLiveCredential(type, when) ? { name, kind: type, when } : undefined;
+  const r = applyToDocument(docs.resume, key, name, confirmed, false, { education: isEducationKind(type), held });
+  const l = applyToDocument(docs.letter, key, name, confirmed, true, { held });
   // The line may already read exactly as confirmed: the confirmation still counts.
   if (r.text === docs.resume && l.text === docs.letter && !pageLineSet(docs.resume).has(squash(confirmed))) return null;
   return {
     resume: r.text,
     letter: l.text,
-    confirm: { name, type, when: when.trim(), text: confirmed, key, remnants: [...r.remnants, ...l.remnants], letterSentenceDropped: l.droppedSentence },
+    confirm: {
+      name,
+      type,
+      when: when.trim(),
+      text: confirmed,
+      key,
+      remnants: [...r.remnants, ...l.remnants],
+      letterSentenceDropped: l.droppedSentence,
+      ...(r.educationLine ? { line: r.educationLine } : {}),
+    },
   };
 }
 
@@ -759,16 +834,20 @@ export function confirmCredential(
   type: CredentialType,
   when: string
 ): { text: string; confirm: CredentialConfirm } | null {
-  if (!ALL_KINDS.includes(type) || !isCredentialWhen(when)) return null;
+  if (!ALL_KINDS.includes(type) || !isConfirmWhen(type, when)) return null;
   const confirmed = confirmedCredentialText(name, type, when);
   const key = credentialKeyOf(name);
   // A document with no CERTIFICATIONS heading and no resume header is read as a letter.
   const isLetter = /^\s*dear\b/im.test(text) && !CERT_HEADING_RE.test(text);
-  const r = applyToDocument(text, key, name, confirmed, isLetter);
+  const held = isLiveCredential(type, when) ? { name, kind: type, when } : undefined;
+  const r = applyToDocument(text, key, name, confirmed, isLetter, { education: isEducationKind(type), held });
   if (r.text === text) return null;
   void line;
   void isTerm;
-  return { text: r.text, confirm: { name, type, when: when.trim(), text: confirmed, key, remnants: r.remnants, letterSentenceDropped: r.droppedSentence } };
+  return {
+    text: r.text,
+    confirm: { name, type, when: when.trim(), text: confirmed, key, remnants: r.remnants, letterSentenceDropped: r.droppedSentence, ...(r.educationLine ? { line: r.educationLine } : {}) },
+  };
 }
 
 /** "No, take it off", for callers with no place to keep a leftover: the term, the short line, or the whole line a credential sits inside. */
@@ -1200,13 +1279,19 @@ export function buildFinishView(input: {
   // exactly as the person typed it. That one line is theirs and is not checked
   // again; every other line is checked as before.
   const validConfirms = (input.confirmedCredentials ?? [])
-    .filter((c) => ALL_KINDS.includes(c.type) && isCredentialWhen(c.when))
-    .map((c) => ({ ...c, text: confirmedCredentialText(c.name, c.type, c.when), key: c.key ?? credentialKeyOf(c.name) }));
+    .filter((c) => ALL_KINDS.includes(c.type) && isConfirmWhen(c.type, c.when))
+    .map((c) => {
+      const text = confirmedCredentialText(c.name, c.type, c.when);
+      // Round 9: an education line that kept its school counts only while it is the confirmed text plus parts with no year or status.
+      const line = typeof c.line === "string" && isEducationKind(c.type) && isConfirmedEducationLine(c.line, text) ? c.line : undefined;
+      return { ...c, text, line, key: c.key ?? credentialKeyOf(c.name) };
+    });
   // One credential, one confirmation: the last one for a key is the one that counts.
   const lastByKey = new Map<string, (typeof validConfirms)[number]>();
   for (const c of validConfirms) lastByKey.set(c.key ?? squash(c.name), c);
-  const confirms = Array.from(lastByKey.values()).filter((c) => pageLineSet(input.resumeText).has(squash(c.text)));
-  const confirmedLines = new Set(confirms.map((c) => squash(c.text)));
+  const pageSet = pageLineSet(input.resumeText);
+  const confirms = Array.from(lastByKey.values()).filter((c) => pageSet.has(squash(c.text)) || (!!c.line && pageSet.has(squash(c.line))));
+  const confirmedLines = new Set(confirms.flatMap((c) => [squash(c.text), ...(c.line && pageSet.has(squash(c.line)) ? [squash(c.line)] : [])]));
   const resumeForChecks = input.resumeText
     .split("\n")
     .filter((l) => !confirmedLines.has(squash(stripBullet(l))))
@@ -1285,6 +1370,8 @@ export function buildFinishView(input: {
       if (m.title) continue; // a title keeps its words; the title check reads it
       const c = keyed.find((x) => sameCredential(x.key as string, m.key));
       if (!c) continue;
+      // Round 9 (r9-S2): a credential they hold now may stay in a sentence that names it plainly.
+      if (liveCredentialCovers(m, { name: c.name, kind: c.type, when: c.when })) continue;
       const t: GroupTarget = m.term ? "skill" : target;
       mismatchLines.add(`${t}\u0000${m.line}`);
       items.push({

@@ -95,7 +95,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={() => setMode("yes")} className={BTN_MAIN}>
-            {group.education ? "Yes, I have it" : "Yes, I hold it"}
+            {group.education ? "Yes" : "Yes, I hold it"}
           </button>
           <button onClick={() => (actions.onPreviewCut ? setMode("no") : actions.onCutCredential(group))} className={BTN_SOFT}>
             No, take it off
@@ -150,7 +150,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             id={`cred-when-${index}`}
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            placeholder="In your words: the year you got it, or current, expired, in progress"
+            placeholder={group.education ? "The year, like 2015" : "In your words: the year you got it, or current, expired, in progress"}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
             </>
@@ -167,7 +167,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                 if (!type) return setNotice("Pick what kind it is.");
                 const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when);
                 if (result === "when") {
-                  setNotice("Add the year you got it, or say if it's current, expired, in progress or completed.");
+                  setNotice(group.education ? "Add the year you earned it." : "Add the year you got it, or say if it's current, expired, in progress or completed.");
                   return;
                 }
                 if (result === "unchanged") {

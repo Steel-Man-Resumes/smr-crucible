@@ -52,7 +52,7 @@ import {
   type WrittenDocs,
   type CredentialConfirm,
   applyConfirmation,
-  isCredentialWhen,
+  isConfirmWhen,
   cutCredentialEverywhere,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
@@ -390,7 +390,7 @@ export default function OutputPage() {
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
     },
     onConfirmCredential: (group, type, when) => {
-      if (!isCredentialWhen(when)) return "when";
+      if (!isConfirmWhen(type, when)) return "when";
       const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when);
       if (!r) return "unchanged";
       setResumeText(r.resume);
