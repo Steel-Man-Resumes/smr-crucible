@@ -12,6 +12,7 @@
  */
 
 import { queryAsUser, getOneAsUser } from "./db";
+import { CREATIVE_TYPES_SQL } from "./refineryArtifact";
 import {
   MAX_OPEN_LANES,
   MAX_TOTAL_LANES,
@@ -136,6 +137,7 @@ export const LANE_ENSURE_FIRST_SQL = `INSERT INTO career_lane (user_id, name, ta
  */
 export const ARTIFACT_SET_LANE_SQL = `UPDATE refinery_artifact SET lane_id = $3::uuid
   WHERE id = $1 AND user_id = $2
+    AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})
     AND ($3::uuid IS NULL OR EXISTS (
       SELECT 1 FROM career_lane l WHERE l.id = $3::uuid AND l.user_id = $2 AND l.archived_at IS NULL))
   RETURNING id`;
@@ -243,6 +245,8 @@ export async function setLaneArchived(
     const counts = await getOneAsUser<{ open: number }>(userId, LANE_COUNTS_SQL, [userId]);
     if ((counts?.open ?? 0) >= MAX_OPEN_LANES) return { status: "too_many" };
   }
+  // An archived lane leaves its pair: the open lane never stays paired to it.
+  if (archived) await unpairLane(userId, laneId);
   try {
     const rows = await queryAsUser<CareerLane>(userId, LANE_ARCHIVE_SQL, [laneId, userId, archived]);
     return rows[0] ? { status: "ok", lane: rows[0] } : { status: "not_found" };

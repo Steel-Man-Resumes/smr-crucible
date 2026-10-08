@@ -43,6 +43,9 @@
 -- owner's app role is held to it. The pair trigger runs as the caller, under
 -- the same policies, and only ever looks at the caller's own lanes.
 --
+-- POSTGRES 15 OR LATER. ON DELETE SET NULL (pair_lane_id) needs it. Check
+-- `SHOW server_version` on the target before applying.
+--
 -- LOCKS. Adding columns is a metadata change (fast defaults). The new foreign
 -- key and the artifact type CHECK each scan their table once while holding a
 -- strong lock until commit. lock_timeout makes the file give up after 5
@@ -228,17 +231,18 @@ END $$;
 
 -- ------------------------------------------------- artifact type values --
 -- 005 made the type CHECK inline, so Postgres named it
--- refinery_artifact_artifact_type_check. Any CHECK on artifact_type is dropped
--- by its definition (not only by that name) and the full list is put back
--- under the known name. The new list is wider than every old one, so
--- validating it cannot fail on existing rows.
+-- refinery_artifact_artifact_type_check. A CHECK that tests artifact_type
+-- against a list is dropped by its definition (not only by that name; today
+-- there is exactly one) and the full list is put back under the known name.
+-- The new list is wider than every old one, so the validation scan (done
+-- under this file's lock, a few thousand rows) cannot fail on existing rows.
 DO $$
 DECLARE c record;
 BEGIN
   FOR c IN
     SELECT conname FROM pg_constraint
      WHERE conrelid = 'refinery_artifact'::regclass AND contype = 'c'
-       AND pg_get_constraintdef(oid) LIKE '%artifact_type%'
+       AND pg_get_constraintdef(oid) ~ '\(artifact_type = ANY|artifact_type IN'
   LOOP
     EXECUTE format('ALTER TABLE refinery_artifact DROP CONSTRAINT %I', c.conname);
   END LOOP;
@@ -249,5 +253,4 @@ ALTER TABLE refinery_artifact ADD CONSTRAINT refinery_artifact_artifact_type_che
     'resume', 'cover_letter', 'follow_up', 'disclosure_plan',
     'interview_prep', 'resource_list', 'job_match',
     'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list'
-  )) NOT VALID;
-ALTER TABLE refinery_artifact VALIDATE CONSTRAINT refinery_artifact_artifact_type_check;
+  ));

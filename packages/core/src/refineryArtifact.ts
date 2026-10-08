@@ -62,7 +62,11 @@ export type ArtifactType =
  */
 export const CREATIVE_ARTIFACT_TYPES = ["artist_resume", "artist_bio", "artist_statement", "work_sample_list"] as const;
 export type CreativeArtifactType = (typeof CREATIVE_ARTIFACT_TYPES)[number];
-const CREATIVE_TYPES_SQL = CREATIVE_ARTIFACT_TYPES.map((t) => `'${t}'`).join(", ");
+export const CREATIVE_TYPES_SQL = CREATIVE_ARTIFACT_TYPES.map((t) => `'${t}'`).join(", ");
+
+export function isCreativeType(t: unknown): boolean {
+  return typeof t === "string" && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(t);
+}
 
 /**
  * Create a new artifact. Iteration number auto-increments per user+type.
@@ -427,6 +431,7 @@ export function hashContent(content: Record<string, unknown>): string {
 
 export type ForkResult =
   | { status: "forked"; artifact: RefineryArtifact; deduped: boolean }
+  | { status: "creative_doc" }
   | { status: "not_found" };
 
 /**
@@ -494,6 +499,9 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        END
      FROM refinery_artifact src
      WHERE src.id = $1 AND src.user_id = $2
+       -- Creative documents are never forked: they live in their own lane and
+       -- are written only through the creative tools.
+       AND src.artifact_type NOT IN (${CREATIVE_TYPES_SQL})
      ON CONFLICT (user_id, parent_artifact_id, operation_key) WHERE operation_key IS NOT NULL
        DO NOTHING
      RETURNING *`;
@@ -528,5 +536,10 @@ export async function forkArtifact(opts: {
     );
     if (existing) return { status: "forked", artifact: existing, deduped: true };
   }
+  const src = await getOneAsUser<{ artifact_type: string }>(userId,
+    `SELECT artifact_type FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+    [sourceArtifactId, userId]
+  );
+  if (src && isCreativeType(src.artifact_type)) return { status: "creative_doc" };
   return { status: "not_found" };
 }
