@@ -24,6 +24,9 @@ export const maxDuration = 60;
 // person gets an answer instead of a 504.
 const AI_PARSE_TIMEOUT_MS = 20_000;
 
+/** Largest PDF upload (security review 3a r5); photos and Word files keep 25 MB. */
+const PDF_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 async function handlePost(request: Request) {
   try {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
@@ -52,6 +55,17 @@ async function handlePost(request: Request) {
       if (file.size > 25 * 1024 * 1024) {
         return NextResponse.json(
           { error: "File too large (max 25MB)" },
+          { status: 413 }
+        );
+      }
+      // A PDF is capped lower (security review 3a r5): pdf.js keeps decoded
+      // data outside the extraction worker's heap limit, so its memory is
+      // bounded by the pre-scan's caps plus the file itself. The largest real
+      // resume PDF in the test set is 2.5 MB.
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (isPdf && file.size > PDF_MAX_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { error: "That PDF is too large (max 10MB). Save it again smaller, or paste the text instead." },
           { status: 413 }
         );
       }
