@@ -75,8 +75,8 @@ function entry(p: Partial<PracticeEntry> & Pick<PracticeEntry, "section" | "titl
 // An invented muralist and printmaker.
 const SOLO = entry({ section: "exhibition", title: "Shift Change", venue: "Riverside Arts Center", city: "Toledo", state: "OH", year: 2024, details: { kind: "solo" }, proof: "checked" });
 const GROUP = entry({ section: "exhibition", title: "New Prints", venue: "Harbor Gallery", city: "Toledo", state: "OH", year: 2022, details: { kind: "group" } });
-const INSIDE_SHOW = entry({ section: "exhibition", title: "Art From Lakeview Correctional", venue: "Main Street Library", city: "Akron", state: "OH", year: 2020, details: { kind: "group" }, names_facility: true });
-const PROGRAM = entry({ section: "arts_program", title: "Inside Print Workshop", venue: "Lakeview Correctional Facility", year: 2018, end_year: 2020, details: { role: "printmaker" }, names_facility: true });
+const INSIDE_SHOW = entry({ section: "exhibition", title: "Art From Example County Correctional", venue: "Main Street Library", city: "Akron", state: "OH", year: 2020, details: { kind: "group" }, names_facility: true });
+const PROGRAM = entry({ section: "arts_program", title: "Inside Print Workshop", venue: "Example County Correctional Facility", year: 2018, end_year: 2020, details: { role: "printmaker" }, names_facility: true });
 const AWARD = entry({ section: "award", title: "Emerging Artist Grant", venue: "Toledo Arts Fund", year: 2023, details: { kind: "grant" } });
 const WORK = entry({ section: "work", title: "Night Bus", year: 2023, details: { medium: "Acrylic on panel", dimensions: "24 x 36 in", description: "The last bus home after a double." } });
 const WORK2 = entry({ section: "work", title: "Loading Dock", year: 2021, details: { medium: "Linocut", dimensions: "11 x 14 in" } });
@@ -142,7 +142,7 @@ describe("practice record", () => {
     assert.equal(d.quote, "Bold,  quiet   work.");
   });
   it("facility words are a hint only", () => {
-    assert.equal(looksLikeFacilityName("Art From Lakeview Correctional"), true);
+    assert.equal(looksLikeFacilityName("Art From Example County Correctional"), true);
     assert.equal(looksLikeFacilityName("Riverside Arts Center", null), false);
   });
   it("years print as a plain hyphenated range", () => {
@@ -167,14 +167,14 @@ describe("artist resume (CAA order)", () => {
     const group = m.sections.find((s) => s.key === "group")!;
     const inside = group.rows.find((r) => r.entryId === INSIDE_SHOW.id)!;
     assert.equal(rowText(inside.parts), "Group exhibition, Main Street Library, Akron, OH");
-    assert.ok(!rowText(inside.parts).includes("Lakeview"));
+    assert.ok(!rowText(inside.parts).includes("Example County"));
     const prog = m.sections.find((s) => s.key === "education")!.rows[0];
-    assert.equal(rowText(prog.parts), "Inside Print Workshop, Lakeview Correctional Facility, printmaker");
+    assert.equal(rowText(prog.parts), "Inside Print Workshop, Example County Correctional Facility, printmaker");
   });
   it("R03: with no choice made, the entry stays off and is asked about", () => {
     const m2 = buildArtistResumeModel(ALL, { ...SETTINGS, titleModes: {} });
     assert.deepEqual(m2.needsChoice.sort(), [INSIDE_SHOW.id, PROGRAM.id].sort());
-    assert.ok(!artistResumePlainText(m2).includes("Lakeview"));
+    assert.ok(!artistResumePlainText(m2).includes("Example County"));
   });
   it("leave out keeps it off this lane only", () => {
     const m3 = buildArtistResumeModel(ALL, { ...SETTINGS, titleModes: { [INSIDE_SHOW.id]: "leave_out", [PROGRAM.id]: "leave_out" } });
@@ -347,9 +347,9 @@ describe("bio (C3): drafted only from confirmed facts, each sentence approved", 
   });
   it("disclosure: leave out and in context keep facility entries out of the draft", () => {
     const out = draftBioFromFacts(ALL, { ...SETTINGS, bioDisclosure: "leave_out" }, "long").join(" ");
-    assert.ok(!/Lakeview|Inside Print/.test(out));
+    assert.ok(!/Example County|Inside Print/.test(out));
     const ctx = draftBioFromFacts(ALL, { ...SETTINGS, bioDisclosure: "context" }, "long").join(" ");
-    assert.ok(!/Lakeview|Inside Print/.test(ctx));
+    assert.ok(!/Example County|Inside Print/.test(ctx));
     const inc = draftBioFromFacts(ALL, SETTINGS, "long").join(" ");
     assert.match(inc, /Inside Print Workshop/);
   });
