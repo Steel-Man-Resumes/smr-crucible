@@ -32,29 +32,26 @@ import {
   type CreativeKindSettings,
 } from "../creativeLaneShared";
 import {
-  parseCoachOutput,
   checkStatementSave,
   modelFingerprints,
-  isSpellingFix,
-  dictionaryMarks,
   readBackQuestions,
   auditStatementHistory,
   applySpellingMark,
+  MAX_STATEMENT_VERSIONS,
   COACH_QUESTIONS,
   type StatementContent,
 } from "../creativeStatement";
 import {
   draftBioFromFacts,
-  parseBioDraft,
-  bioVocabulary,
-  bioFactEntries,
-  traceSentence,
-  draftSentenceOk,
-  checkBioSave,
+  bioTemplates,
+  classifyBio,
+  bioTextForLane,
   bioText,
   bioCounts,
   emptyBio,
 } from "../creativeBio";
+import { spellingMarksFor, isValidSpellingMark, suggestionFor, isDictionaryWord } from "../creativeSpelling";
+import { checkBio } from "../creativeChecks";
 import { getCreativeStatus, checkArtistResume } from "../creativeChecks";
 import { hurdlesFor, cleanPlan, HELP_SOURCES, HURDLES_NOT_A_VERDICT } from "../twoPathPlan";
 import { RLS_PROTECTED_TABLES } from "../rlsHealth";
@@ -83,7 +80,7 @@ const WORK2 = entry({ section: "work", title: "Loading Dock", year: 2021, detail
 const ALL = [SOLO, GROUP, INSIDE_SHOW, PROGRAM, AWARD, WORK, WORK2];
 const SETTINGS: CreativeKindSettings = {
   displayName: "Ray Example", discipline: "painter and printmaker", basedIn: "Toledo, OH", email: "ray@example.com",
-  titleModes: { [INSIDE_SHOW.id]: "venue_only", [PROGRAM.id]: "true_title" }, bioDisclosure: "include",
+  titleModes: { [INSIDE_SHOW.id]: "venue_only", [PROGRAM.id]: "true_title" },
 };
 
 // ------------------------------------------------------------------ lanes --
@@ -198,6 +195,16 @@ describe("artist resume (CAA order)", () => {
     assert.equal(artistResumePageCap({}), 2);
     assert.equal(artistResumePageCap({ callAllowsMore: true }), 4);
   });
+  it("review L3: the largest settings the app allows stay under the database's 16,000-byte check", () => {
+    const id = (i: number) => `00000000-0000-4000-8000-${String(900000 + i).padStart(12, "0")}`;
+    const big = cleanKindSettings({
+      displayName: "x".repeat(200), discipline: "x".repeat(200), basedIn: "x".repeat(200), email: "x".repeat(200), phone: "x".repeat(200), website: "x".repeat(200),
+      callAllowsMore: true, bioPronoun: "they",
+      selection: Array.from({ length: 300 }, (_, i) => id(i)),
+      titleModes: Object.fromEntries(Array.from({ length: 300 }, (_, i) => [id(i), "venue_only"])),
+    });
+    assert.ok(Buffer.byteLength(JSON.stringify(big)) < 16000, String(Buffer.byteLength(JSON.stringify(big))));
+  });
   it("kind settings drop unknown keys and bad values", () => {
     const s = cleanKindSettings({ displayName: "  Ray  ", callAllowsMore: "yes", titleModes: { [SOLO.id]: "soften", [GROUP.id]: "leave_out" }, junk: 1 });
     assert.deepEqual(s, { displayName: "Ray", titleModes: { [GROUP.id]: "leave_out" } });
@@ -215,6 +222,9 @@ describe("work-sample list", () => {
   it("CSV keeps formulas inert", () => {
     const evil = entry({ section: "work", title: "=HYPERLINK(1)", year: 2020, details: { medium: "x", dimensions: "y" } });
     assert.match(workSampleListCsv(buildWorkSampleList([evil], [])), /'=HYPERLINK/);
+    // Review L6: a leading tab or carriage return is guarded too.
+    const row = { entryId: "x", number: 1, title: "\t=HYPERLINK(1)", year: "2020", medium: "", size: "", description: "", fileName: "" };
+    assert.match(workSampleListCsv([row]).split("\r\n")[1], /^1,'\t=HYPERLINK/);
   });
 });
 
@@ -229,104 +239,79 @@ describe("plain text counts", () => {
 });
 
 // --------------------------------------------------- statement (CR-03) --
-describe("statement coach: no model text can be saved (CR-03)", () => {
-  const person = "I paint the people who ride the night bus. I started drawing in a workshop and never stoped.";
-  // What a model might send back: a rewrite, praise, a question, a real spelling fix, a fake one.
-  const modelReply = JSON.stringify({
-    questions: [
-      "What do you see on the night bus that others miss?",
-      "Here is a stronger version. Your work powerfully explores themes of resilience and redemption?",
-      "Try this: My practice interrogates labor and visibility through the lens of public transit.",
-    ],
-    spelling: [
-      { word: "stoped", suggestion: "stopped" },
-      { word: "paint", suggestion: "illuminate the lives of" },
-      { word: "workshop", suggestion: "prestigious residency" },
-      { word: "missing", suggestion: "messing" },
-    ],
-    rewrite: "My practice interrogates labor and visibility through the lens of public transit, honoring the quiet resilience of night riders.",
-  });
+describe("statement coach, strict v1: no model at all; spelling from a word list (CR-03)", () => {
+  const person = "I paint the night shift at the plant. I am not ashamed of where I learned to draw. I never stoped.";
 
-  it("the coach keeps only one-sentence questions and single-word spelling fixes", () => {
-    const out = parseCoachOutput(modelReply, person);
-    assert.deepEqual(out.questions, ["What do you see on the night bus that others miss?"]);
-    assert.deepEqual(out.marks, [{ word: "stoped", suggestion: "stopped" }]);
-  });
-
-  it("a save that carries the model's rewrite is refused, even if it reached the page", () => {
-    const prints = modelFingerprints(modelReply, person);
-    const smuggled = `${person} My practice interrogates labor and visibility through the lens of public transit.`;
-    assert.deepEqual(
-      checkStatementSave({ previousText: person, nextText: smuggled, offeredMarks: [], modelPrints: prints }),
-      { ok: false, reason: "model_text" }
-    );
-    // The questions a model asked cannot be pasted in as statement text either.
-    const pastedQuestion = `${person} What do you see on the night bus that others miss`;
-    assert.deepEqual(checkStatementSave({ previousText: person, nextText: pastedQuestion, offeredMarks: [], modelPrints: prints }), { ok: false, reason: "model_text" });
-  });
-
-  it("the person's own new sentence saves; the model quoting them back does not taint it", () => {
-    const draft = `${person} The drivers know every face on the route.`;
-    const echo = JSON.stringify({ questions: ["When you say the drivers know every face on the route, who do you mean?"] });
-    const prints = modelFingerprints(echo, draft);
-    assert.deepEqual(checkStatementSave({ previousText: person, nextText: draft, offeredMarks: [], modelPrints: prints }), { ok: true });
-  });
-
-  it("a spelling mark changes exactly one word, only as offered", () => {
-    const offered = [{ word: "stoped", suggestion: "stopped" }];
-    const fixed = applySpellingMark(person, offered[0]);
-    assert.ok(fixed.endsWith("never stopped."));
-    assert.deepEqual(checkStatementSave({ previousText: person, nextText: fixed, acceptedMark: offered[0], offeredMarks: offered, modelPrints: [] }), { ok: true });
-    // Same mark, but the text also gained other words: refused.
-    assert.deepEqual(
-      checkStatementSave({ previousText: person, nextText: `${fixed} Truly a visionary.`, acceptedMark: offered[0], offeredMarks: offered, modelPrints: [] }),
-      { ok: false, reason: "mark_changed_more" }
-    );
-    // A mark nobody offered: refused.
-    const other = { word: "paint", suggestion: "pant" };
-    assert.deepEqual(
-      checkStatementSave({ previousText: person, nextText: applySpellingMark(person, other), acceptedMark: other, offeredMarks: offered, modelPrints: [] }),
-      { ok: false, reason: "mark_not_offered" }
-    );
-    // A "mark" that is really a rewrite: refused even if it was somehow stored as offered.
-    const phrase = { word: "paint", suggestion: "illuminate the lives of" };
-    assert.deepEqual(
-      checkStatementSave({ previousText: person, nextText: applySpellingMark(person, phrase), acceptedMark: phrase, offeredMarks: [phrase], modelPrints: [] }),
-      { ok: false, reason: "mark_not_spelling" }
-    );
-  });
-
-  it("spelling fixes are close spellings of one word, never a new word", () => {
-    assert.equal(isSpellingFix("recieve", "receive"), true);
-    assert.equal(isSpellingFix("workshop", "residency"), false);
-    assert.equal(isSpellingFix("bus", "bus"), false);
-    assert.equal(isSpellingFix("night", "night bus"), false);
-    assert.deepEqual(dictionaryMarks("I seperate the colors."), [{ word: "seperate", suggestion: "separate" }]);
-  });
-
-  it("the history audit catches a model sentence stored by any path", () => {
-    const at = "2026-10-07T10:00:00.000Z";
-    const c: StatementContent = {
-      versions: [
-        { text: person, savedAt: "2026-10-07T09:00:00.000Z", via: "typed" },
-        { text: `${person} My practice interrogates labor and visibility through the lens of public transit.`, savedAt: "2026-10-07T11:00:00.000Z", via: "typed" },
-      ],
-      offeredMarks: [],
-      modelPrints: [{ at, prints: modelFingerprints(modelReply, person) }],
-    };
-    assert.deepEqual(auditStatementHistory(c), { index: 1, reason: "model_text" });
-    assert.equal(getCreativeStatus({ entries: [], settings: {}, statement: c }).openItems[0].rule, "CR-03");
-    // The same text saved BEFORE the coach ever replied is the person's own.
-    const early: StatementContent = { ...c, modelPrints: [{ at: "2026-10-07T12:00:00.000Z", prints: c.modelPrints[0].prints }] };
-    assert.equal(auditStatementHistory(early), null);
-  });
-
-  it("coach questions and read-back are questions, never text to paste", () => {
+  it("the coach is fixed code: the question bank plus a read-back of the person's own sentences", () => {
     for (const q of COACH_QUESTIONS) assert.ok(q.endsWith("?"));
-    const long = `${"word ".repeat(40).trim()}. I like stuff.`;
-    const rb = readBackQuestions(long);
+    const rb = readBackQuestions(`${"word ".repeat(40).trim()}. I like stuff.`);
     assert.ok(rb.length >= 2);
     for (const q of rb) assert.ok(q.endsWith("?"));
+    // Review P1: a "question" carrying model wording has no way in; there is no model reply to parse.
+    const statement = require("../creativeStatement");
+    assert.equal(statement.parseCoachOutput, undefined);
+  });
+
+  it("review P4: a real word is never marked, so not/now, paint/print, draw/drew can't be offered", () => {
+    const marks = spellingMarksFor(person);
+    assert.deepEqual(marks.map((m) => [m.word, m.suggestion]), [["stoped", "stopped"]]);
+    assert.match(marks[0].sentence ?? "", /I never stoped\./);
+    for (const [w, sug] of [["not", "now"], ["paint", "print"], ["draw", "drew"], ["plant", "plane"], ["am", "was"], ["can", "can't"], ["hate", "have"], ["lie", "live"], ["form", "from"]]) {
+      assert.equal(isValidSpellingMark({ word: w, suggestion: sug }), false, `${w} -> ${sug}`);
+    }
+  });
+
+  it("a mark replaces only a non-word, only with the one closest dictionary word", () => {
+    assert.equal(isDictionaryWord("separate"), true);
+    assert.equal(suggestionFor("seperate"), "separate");
+    assert.equal(suggestionFor("recieve"), "receive");
+    assert.equal(suggestionFor("Toledo"), null, "names and capitals are never marked");
+    assert.equal(suggestionFor("printmaking"), null, "a real art word is a word");
+    assert.equal(suggestionFor("zzqx"), null, "nothing close: no mark");
+    assert.equal(isValidSpellingMark({ word: "stoped", suggestion: "stopped" }), true);
+    assert.equal(isValidSpellingMark({ word: "stoped", suggestion: "stomped" }), false, "only the one fix the list offers");
+  });
+
+  it("the save checks every mark on the server, and only one word may change", () => {
+    const mk = { word: "stoped", suggestion: "stopped" };
+    const fixed = applySpellingMark(person, mk);
+    assert.ok(fixed.endsWith("I never stopped."));
+    assert.deepEqual(checkStatementSave({ previousText: person, nextText: fixed, acceptedMark: mk, validMark: isValidSpellingMark, modelPrints: [] }), { ok: true });
+    assert.deepEqual(
+      checkStatementSave({ previousText: person, nextText: `${fixed} Truly a visionary.`, acceptedMark: mk, validMark: isValidSpellingMark, modelPrints: [] }),
+      { ok: false, reason: "mark_changed_more" }
+    );
+    // Review P4b: not -> now, even if the browser sends it, is refused.
+    const flip = { word: "not", suggestion: "now" };
+    assert.deepEqual(
+      checkStatementSave({ previousText: person, nextText: applySpellingMark(person, flip), acceptedMark: flip, validMark: isValidSpellingMark, modelPrints: [] }),
+      { ok: false, reason: "mark_not_valid" }
+    );
+    // No server check supplied: no mark can be accepted at all.
+    assert.deepEqual(checkStatementSave({ previousText: person, nextText: fixed, acceptedMark: mk, modelPrints: [] }), { ok: false, reason: "mark_not_valid" });
+  });
+
+  it("backstop: a stored model reply's words still can't be saved (the design doesn't rely on it)", () => {
+    const prints = modelFingerprints("Every canvas carries the weight of a double shift.");
+    assert.deepEqual(
+      checkStatementSave({ previousText: person, nextText: `${person} Every canvas carries the weight of a double shift.`, modelPrints: prints }),
+      { ok: false, reason: "model_text" }
+    );
+    assert.deepEqual(checkStatementSave({ previousText: person, nextText: `${person} The drivers know every face.`, modelPrints: prints }), { ok: true });
+  });
+
+  it("review M6: more than 25 versions with an early spelling fix never raises a false CR-03 BLOCK", () => {
+    const mk = { word: "thier", suggestion: "their" };
+    const t = "I paint thier faces on the night shift.";
+    const versions: StatementContent["versions"] = [
+      { text: t, savedAt: "2026-10-07T10:00:00.000Z", via: "typed" },
+      { text: applySpellingMark(t, mk), savedAt: "2026-10-07T10:01:00.000Z", via: "spelling", mark: mk },
+    ];
+    for (let i = 0; i < 24; i++) versions.push({ text: `${applySpellingMark(t, mk)} Line ${i}.`, savedAt: `2026-10-07T11:${String(i).padStart(2, "0")}:00.000Z`, via: "typed" });
+    const kept: StatementContent = { versions: versions.slice(-MAX_STATEMENT_VERSIONS), modelPrints: [] };
+    assert.equal(kept.versions[0].via, "spelling");
+    assert.equal(auditStatementHistory(kept), null);
+    assert.equal(getCreativeStatus({ entries: [], settings: {}, statement: kept }).blockCount, 0);
   });
 
   it("no route outside the creative tools can write a statement", () => {
@@ -336,64 +321,142 @@ describe("statement coach: no model text can be saved (CR-03)", () => {
 });
 
 // ------------------------------------------------------------------- bio --
-describe("bio (C3): drafted only from confirmed facts, each sentence approved", () => {
-  it("the plain draft traces every name, place and year to the record", () => {
-    const facts = bioFactEntries(ALL, SETTINGS.bioDisclosure);
-    const vocab = bioVocabulary(facts, SETTINGS);
-    const s = draftBioFromFacts(ALL, SETTINGS, "long");
-    assert.ok(s.length >= 3);
-    for (const x of s) assert.ok(draftSentenceOk(traceSentence(x, vocab)), x);
-    assert.match(s[0], /^Ray Example is a painter and printmaker based in Toledo, OH\.$/);
+describe("bio (C3), strict v1: fixed templates, one entry per sentence; origin decided by the server", () => {
+  it("every template sentence comes from exactly one entry and names only that entry", () => {
+    const t = bioTemplates(ALL, SETTINGS);
+    assert.ok(t.length >= 4);
+    assert.equal(t[0].key, "intro");
+    assert.equal(t[0].text, "Ray Example is a painter and printmaker based in Toledo, OH.");
+    const byId = new Map(ALL.map((e) => [e.id, e]));
+    for (const x of t.slice(1)) {
+      const e = byId.get(x.sourceEntryId!)!;
+      assert.ok(e, x.text);
+      for (const other of ALL.filter((o) => o.id !== e.id && o.venue && o.venue !== e.venue)) assert.ok(!x.text.includes(other.venue!), `${x.text} pools ${other.venue}`);
+      assert.ok(x.text.includes(String(e.year)) || ["education", "collection"].includes(e.section), x.text);
+    }
   });
-  it("disclosure: leave out and in context keep facility entries out of the draft", () => {
-    const out = draftBioFromFacts(ALL, { ...SETTINGS, bioDisclosure: "leave_out" }, "long").join(" ");
-    assert.ok(!/Example County|Inside Print/.test(out));
-    const ctx = draftBioFromFacts(ALL, { ...SETTINGS, bioDisclosure: "context" }, "long").join(" ");
-    assert.ok(!/Example County|Inside Print/.test(ctx));
-    const inc = draftBioFromFacts(ALL, SETTINGS, "long").join(" ");
-    assert.match(inc, /Inside Print Workshop/);
+
+  it("the lane's choice per entry applies: venue only drops the title; leave out drops the entry", () => {
+    const venue = bioTemplates(ALL, SETTINGS).map((x) => x.text).join(" ");
+    assert.ok(!venue.includes("Art From Example County Correctional"));
+    assert.match(venue, /group exhibition at Main Street Library in 2020/);
+    assert.match(venue, /Inside Print Workshop/);
+    const out = bioTemplates(ALL, { ...SETTINGS, titleModes: { [INSIDE_SHOW.id]: "leave_out", [PROGRAM.id]: "leave_out" } }).map((x) => x.text).join(" ");
+    assert.ok(!/Example County|Inside Print|Main Street Library/.test(out));
+    const unset = bioTemplates(ALL, { ...SETTINGS, titleModes: {} }).map((x) => x.text).join(" ");
+    assert.ok(!/Example County|Inside Print|Main Street Library/.test(unset));
   });
-  it("entries still marked need-to-find are not drafted from", () => {
+
+  it("entries still marked need-to-find are not used", () => {
     const e = entry({ section: "award", title: "Harbor Prize", venue: "Harbor Fund", year: 2021, proof: "need_to_find" });
-    assert.ok(!draftBioFromFacts([e], SETTINGS, "long").join(" ").includes("Harbor Prize"));
+    assert.ok(!bioTemplates([e], SETTINGS).some((x) => x.text.includes("Harbor Prize")));
   });
+
   it("short stays inside 100 words and 600 characters", () => {
     const many = Array.from({ length: 30 }, (_, i) => entry({ section: "award", title: `Prize Number ${i}`, venue: "Toledo Arts Fund", year: 2000 + i }));
-    const s = draftBioFromFacts(many, SETTINGS, "short").join(" ");
+    const s = draftBioFromFacts(many, SETTINGS, "short").map((x) => x.text).join(" ");
     assert.ok(countWords(s) <= 100 && countChars(s) <= 600);
   });
-  it("a model draft keeps only sentences that trace; invented honors and meanings are dropped", () => {
-    const vocab = bioVocabulary(bioFactEntries(ALL, "include"), SETTINGS);
-    const raw = JSON.stringify({ sentences: [
-      "Ray Example is a painter and printmaker based in Toledo, OH.",
-      "Ray Example had a solo exhibition, Shift Change, at Riverside Arts Center in 2024.",
-      "Ray Example's work is held by the Detroit Institute of Arts.",
-      "The acclaimed artist explores themes of labor.",
-      "In 2019 Ray Example won a national prize.",
-    ] });
-    const r = parseBioDraft(raw, vocab);
-    assert.equal(r.kept.length, 2);
-    assert.equal(r.dropped, 3);
+
+  it("review B1: model-style sentences are never 'fact' sentences; each is the person's own and gets asked about", () => {
+    const rec = [
+      entry({ section: "exhibition", title: "Night Shift", venue: "Corner Gallery", city: "Lansing", state: "MI", year: 2023, details: { kind: "group" } }),
+      entry({ section: "award", title: "Emerging Artist Grant", venue: "City Arts Council", year: 2021, details: { kind: "grant" } }),
+    ];
+    const st = { displayName: "Ray Example", discipline: "painter" };
+    const tries = [
+      "Ray Example had a solo exhibition at Corner Gallery in 2021.",
+      "Ray Example has shown in over twenty exhibitions.",
+      "Ray Example won first prize at Corner Gallery in 2023.",
+      "Paris hosted Ray Example's work in 2023.",
+      "Ray Example received a national fellowship from City Arts Council in 2021.",
+      "Ray Example is a painter whose work toured nationally.",
+    ];
+    const bio = classifyBio({ lengths: { short: tries.map((text, i) => ({ id: `m${i}`, text, origin: "fact", approved: true })), medium: [], long: [] } }, rec, st);
+    for (const x of bio.lengths.short) assert.equal(x.origin, "person_written", x.text);
+    assert.ok(!bioTemplates(rec, st).some((t) => tries.includes(t.text)));
+    const items = checkBio(bio, rec, st);
+    // Not a fact sentence, so never drafted and never "finished" on the record's word; these three also carry a name, number or claim the record doesn't hold.
+    for (const t of tries.filter((x) => /twenty|Paris|toured/.test(x))) {
+      assert.ok(items.some((i) => i.line.startsWith(t.slice(0, 40))), `asked about: ${t}`);
+    }
   });
-  it("the save path refuses a drafted sentence that no longer traces", () => {
-    const vocab = bioVocabulary(bioFactEntries(ALL, "include"), SETTINGS);
-    const bio = emptyBio();
-    bio.lengths.short = [{ id: "a", text: "Ray Example won the Harbor Prize in 2019.", origin: "draft", approved: true }];
-    assert.equal(checkBioSave(bio, vocab).ok, false);
-    bio.lengths.short = [{ id: "a", text: "Ray Example won the Harbor Prize in 2019.", origin: "person", approved: true }];
-    assert.equal(checkBioSave(bio, vocab).ok, true);
+
+  it("a sentence equal to a template is a fact sentence with its one source; the browser's label is ignored", () => {
+    const t = bioTemplates(ALL, SETTINGS);
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: t[1].text, origin: "person_written", approved: true }, { id: "b", text: `${t[1].text} Truly.`, origin: "fact", approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    assert.equal(bio.lengths.short[0].origin, "fact");
+    assert.equal(bio.lengths.short[0].sourceEntryId, t[1].sourceEntryId);
+    assert.equal(bio.lengths.short[1].origin, "person_written");
   });
+
+  it("review B3: a person's sentence naming a venue and year not in the record is flagged", () => {
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: "Ray Example had a solo show at the Whitney in 2024.", approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    const items = checkBio(bio, ALL, SETTINGS);
+    assert.ok(items.some((x) => x.rule === "CR-04" && /Whitney|2024/.test(x.question)));
+  });
+
+  it("review B2: the lane's CURRENT choice wins; a stored copy can't re-open a facility name", () => {
+    const t = bioTemplates(ALL, SETTINGS).find((x) => x.sourceEntryId === PROGRAM.id)!;
+    const bio = classifyBio({ disclosure: "include", lengths: { short: [{ id: "a", text: t.text, approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    const nowOff = { ...SETTINGS, titleModes: { ...SETTINGS.titleModes, [PROGRAM.id]: "leave_out" as const } };
+    const items = checkBio(bio, ALL, nowOff);
+    assert.equal(items.filter((x) => x.severity === "BLOCK").length, 1);
+    assert.equal(bioTextForLane(bio.lengths.short, ALL, nowOff), "", "the export leaves the sentence out");
+    // A person's own sentence naming it is held to the same choice.
+    const mine = classifyBio({ lengths: { short: [{ id: "b", text: "Ray Example learned printing at Example County Correctional Facility.", approved: true }], medium: [], long: [] } }, ALL, nowOff);
+    assert.equal(checkBio(mine, ALL, nowOff).filter((x) => x.severity === "BLOCK").length, 1);
+  });
+
+  it("a fact sentence whose entry changed is a BLOCK until the person rewrites or cuts it", () => {
+    const t = bioTemplates(ALL, SETTINGS).find((x) => x.sourceEntryId === AWARD.id)!;
+    const bio = classifyBio({ lengths: { short: [{ id: "a", text: t.text, approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    const changed = ALL.map((e) => (e.id === AWARD.id ? { ...e, year: 2019 } : e));
+    assert.ok(checkBio(bio, changed, SETTINGS).some((x) => x.severity === "BLOCK" && /record changed/.test(x.question)));
+  });
+
   it("only approved sentences are the bio; counts include spaces", () => {
     const t = bioText([
-      { id: "1", text: "One two.", origin: "draft", approved: true },
-      { id: "2", text: "Not yet.", origin: "draft", approved: false },
+      { id: "1", text: "One two.", origin: "fact", approved: true },
+      { id: "2", text: "Not yet.", origin: "fact", approved: false },
     ]);
     assert.equal(t, "One two.");
     assert.deepEqual(bioCounts(t, "short"), { words: 2, chars: 8, over: false });
   });
 });
 
-// ------------------------------------------------------------ the checks --
+// ------------------------------------------------- facility choices (H3) --
+describe("one source of truth for facility names: the lane's current choice, on every document", () => {
+  const W = entry({ section: "work", title: "Made at Example State Correctional Facility", year: 2020, details: { medium: "ink", dimensions: "9 x 12 in" }, names_facility: true });
+  for (const mode of ["true_title", "venue_only", "leave_out", "unset"] as const) {
+    it(`choice ${mode}: artist resume, bio, work samples, CSV and plain text agree`, () => {
+      const settings: CreativeKindSettings = { ...SETTINGS, titleModes: mode === "unset" ? {} : { [INSIDE_SHOW.id]: mode, [PROGRAM.id]: mode, [W.id]: mode } };
+      const entries = [...ALL, W];
+      const resume = artistResumePlainText(buildArtistResumeModel(entries, settings));
+      const bio = bioTemplates(entries, settings).map((x) => x.text).join(" ");
+      const rows = buildWorkSampleList(entries, [], settings);
+      const csv = workSampleListCsv(rows);
+      const text = [resume, bio, csv].join("\n");
+      if (mode === "true_title") {
+        assert.match(resume, /Art From Example County Correctional/);
+        assert.match(bio, /Inside Print Workshop/);
+        assert.match(csv, /Made at Example State Correctional Facility/);
+      } else {
+        assert.ok(!/Art From Example County Correctional|Inside Print Workshop|Made at Example State/.test(text), text);
+      }
+      if (mode === "leave_out" || mode === "unset") assert.ok(!/Example County Correctional Facility/.test(text));
+      const st = getCreativeStatus({ entries, settings, workSamples: rows });
+      const sampleBlock = st.openItems.some((x) => x.doc === "work_samples" && x.severity === "BLOCK");
+      assert.equal(sampleBlock, mode === "unset", "an unset facility work blocks the sample list only until chosen");
+    });
+  }
+  it("review W1: a sample row for a work the lane keeps off is a BLOCK", () => {
+    const rows = buildWorkSampleList([W], [], { titleModes: { [W.id]: "true_title" } });
+    const st = getCreativeStatus({ entries: [W], settings: { titleModes: { [W.id]: "leave_out" } }, workSamples: rows });
+    assert.ok(st.openItems.some((x) => x.doc === "work_samples" && x.rule === "STD-R03" && x.severity === "BLOCK"));
+  });
+});
+
 describe("creative truth checks", () => {
   const model = buildArtistResumeModel(ALL, SETTINGS);
   it("a clean lane is finished, in the getResumeStatus shape", () => {
@@ -452,17 +515,12 @@ describe("creative truth checks", () => {
     rows[0].description = "A haunting meditation on labor.";
     assert.ok(getCreativeStatus({ entries: ALL, settings: SETTINGS, workSamples: rows }).openItems.some((x) => x.rule === "CR-10" && x.severity === "BLOCK"));
   });
-  it("CR-04: an approved drafted sentence that does not trace is a BLOCK; first person and statement words are FIX", () => {
-    const bio = emptyBio();
-    bio.disclosure = "include";
-    bio.lengths.medium = [
-      { id: "1", text: "Ray Example won the Harbor Prize in 2019.", origin: "draft", approved: true },
-      { id: "2", text: "I make work that explores memory.", origin: "person", approved: true },
-    ];
+  it("CR-04: first person and statement words in the person's own sentence are a FIX", () => {
+    const bio = classifyBio({ lengths: { short: [], long: [], medium: [{ id: "2", text: "I make work that explores memory.", approved: true }] } }, ALL, SETTINGS);
     const items = getCreativeStatus({ entries: ALL, settings: SETTINGS, bio }).openItems;
-    assert.ok(items.some((x) => x.rule === "CR-04" && x.severity === "BLOCK"));
     assert.ok(items.some((x) => x.rule === "CR-04" && x.severity === "FIX" && /written about you/.test(x.question)));
     assert.ok(items.some((x) => x.rule === "CR-04" && x.severity === "FIX" && /explores/.test(x.question)));
+    assert.equal(items.filter((x) => x.severity === "BLOCK").length, 0);
   });
   it("open-item questions never carry a dash the house never prints", () => {
     const st = getCreativeStatus({ entries: ALL, settings: { titleModes: {} }, artistResume: { model: buildArtistResumeModel([], {}), pages: 5 } });

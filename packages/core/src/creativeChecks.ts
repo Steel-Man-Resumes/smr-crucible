@@ -13,10 +13,12 @@
  *   CR-02 a kind is never upgraded: group never reads as solo, a reading
  *         never as a performance; juried, invitational, curated by and
  *         touring only when the person said so.
- *   CR-03 the statement holds no words a model wrote. Only spelling marks the
- *         person accepted one by one.
- *   CR-04 the bio: drafted sentences trace to the record; third person; no
- *         statement content; the disclosure mode is picked.
+ *   CR-03 the statement holds no words a model wrote (v1 has no model at
+ *         all; this is the backstop).
+ *   CR-04 the bio: a drafted sentence is a fixed template from one record
+ *         entry and must still match it; the person's own sentences are asked
+ *         about (names or numbers not in the record, first person, statement
+ *         words, praise), never rewritten.
  *   CR-05 status words graded and true (in press, accepted, submitted with
  *         its date, commissioned and paid, held in a collection).
  *   CR-06 a press quote carries its outlet and date.
@@ -24,7 +26,8 @@
  *   CR-10 the work-sample list copies the record; nothing interpretive added.
  *   STD-R03 a title that names a facility shows only as the person chose for
  *         this lane: the true title, a venue-only line, or left out. Never a
- *         softened title.
+ *         softened title. The lane's CURRENT choice is the one source for
+ *         every document (artist resume, bio, work samples, plain text).
  *   STD-T03 a certificate or coursework is not a degree; "in progress" says
  *         when it is expected.
  *   STD-T05 years are never moved.
@@ -57,10 +60,11 @@ import {
   BIO_LIMITS,
   bioCounts,
   bioText,
+  bioTemplates,
   bioVocabulary,
-  bioFactEntries,
-  traceSentence,
-  draftSentenceOk,
+  flagSentence,
+  hiddenFacilityTerms,
+  namesHiddenFacility,
 } from "./creativeBio";
 import { type StatementContent, auditStatementHistory } from "./creativeStatement";
 
@@ -127,8 +131,10 @@ export function checkRecord(entries: PracticeEntry[], settings: CreativeKindSett
     const mode = titleModeFor(e, settings);
     if (mode === "unset") {
       out.push({
-        rule: "STD-R03", severity: "BLOCK", line, doc: "artist_resume", entryId: e.id,
-        question: "This one names a facility. On this lane, do you want the true title, a line with just the venue, or leave it off?",
+        rule: "STD-R03", severity: "BLOCK", line, doc: e.section === "work" ? "work_samples" : "artist_resume", entryId: e.id,
+        question: e.section === "work"
+          ? "This work's title names a facility. On this lane, do you want the true title, or leave it off?"
+          : "This one names a facility. On this lane, do you want the true title, a line with just the venue, or leave it off?",
         why: "It stays off this lane until you pick. A softened or renamed title is never used.",
       });
     } else if (!e.names_facility && looksLikeFacilityName(e.title, e.venue)) {
@@ -177,7 +183,7 @@ export function checkRecord(entries: PracticeEntry[], settings: CreativeKindSett
     }
     if (e.section === "press" && e.details.quote && (!e.venue || !e.details.date)) {
       out.push({
-        rule: "CR-06", severity: "BLOCK", line, doc: "record", entryId: e.id,
+        rule: "CR-06", severity: "BLOCK", line, doc: "artist_resume", entryId: e.id,
         question: "Where did this quote run, and on what date?",
         why: "A quote is used only with its outlet and date, word for word.",
       });
@@ -302,57 +308,74 @@ export function checkArtistResume(
 
 export function checkBio(bio: BioContent, entries: PracticeEntry[], settings: CreativeKindSettings | null | undefined): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
-  const hasFacility = entries.some((e) => e.names_facility);
-  const mode = bio.disclosure ?? settings?.bioDisclosure;
-  if (hasFacility && !mode) {
-    out.push({
-      rule: "CR-04", severity: "FIX", line: "(your bio)", doc: "bio",
-      question: "Some of your work names a facility. In your bio, do you want to include it, mention it in your own words, or leave it out?",
-      why: "You choose how your bio tells that part. Nothing is drafted about it until you pick.",
-    });
-  }
-  const vocab = bioVocabulary(bioFactEntries(entries, mode), settings);
+  const templates = new Set(bioTemplates(entries, settings).map((t) => t.text));
+  const vocab = bioVocabulary(entries, settings);
+  const hidden = hiddenFacilityTerms(entries, settings);
+  const name = settings?.displayName ?? "";
   for (const len of BIO_LENGTHS) {
     const list = bio.lengths[len];
-    const waiting = list.filter((s) => s.origin === "draft" && !s.approved).length;
+    const waiting = list.filter((s) => s.origin === "fact" && !s.approved).length;
     if (waiting) {
       out.push({
         rule: "CR-04", severity: "FIX", line: `${BIO_LIMITS[len].label} bio`, doc: "bio",
         question: `${waiting} drafted ${waiting === 1 ? "sentence is" : "sentences are"} waiting for your OK. Keep or cut each one?`,
-        why: "Only sentences you approve go in your bio.",
+        why: "Only sentences you keep go in your bio.",
       });
     }
     for (const s of list.filter((x) => x.approved)) {
-      const t = traceSentence(s.text, vocab);
       const line = clip(s.text);
-      if (s.origin === "draft" && !draftSentenceOk(t)) {
+      // The lane's CURRENT facility choices win over anything stored with the bio.
+      const leak = namesHiddenFacility(s.text, hidden);
+      if (leak) {
         out.push({
-          rule: "CR-04", severity: "BLOCK", line, doc: "bio",
-          question: t.untraced.length
-            ? `Where does "${t.untraced[0]}" come from? It isn't in your record. Add it there, or cut the sentence.`
-            : "This sentence says more than your record does. Cut it, or write it your own way.",
-          why: "A drafted sentence can only say what your record says.",
+          rule: "STD-R03", severity: "BLOCK", line, doc: "bio",
+          question: "This sentence names something you chose to keep off this lane. Cut it, or change that choice?",
+          why: "Your choices about work that names a facility apply to every page on this lane.",
         });
         continue;
       }
-      if (t.firstPerson) {
+      if (s.origin === "fact" && !templates.has(s.text)) {
+        out.push({
+          rule: "CR-04", severity: "BLOCK", line, doc: "bio",
+          question: "This sentence came from your record, and your record changed. Keep it in your own words, or cut it?",
+          why: "A drafted sentence can only say what your record says today.",
+        });
+        continue;
+      }
+      if (s.origin === "fact") continue;
+      const f = flagSentence(s.text, vocab, name);
+      if (f.untraced.length) {
+        out.push({
+          rule: "CR-04", severity: "FIX", line, doc: "bio",
+          question: `Where does "${f.untraced[0]}" come from? It isn't in your record. Add it there, or say it another way.`,
+          why: "Panels check what a bio names. Your record is where the proof lives.",
+        });
+      }
+      if (f.numberWord) {
+        out.push({
+          rule: "STD-T02", severity: "FIX", line, doc: "bio",
+          question: `"${f.numberWord}": what's the real count? Put in the number you can back up, or cut it.`,
+          why: "Numbers come from you and have to hold up.",
+        });
+      }
+      if (f.firstPerson) {
         out.push({
           rule: "CR-04", severity: "FIX", line, doc: "bio",
           question: "A bio is written about you (she, he, they, or your name). Want to put this sentence that way?",
           why: "Bios are third person. Your statement is where you say I.",
         });
       }
-      if (t.statementWords) {
+      if (f.statementWords) {
         out.push({
           rule: "CR-04", severity: "FIX", line, doc: "bio",
-          question: `"${t.statementWords}" is about what the work means. Does this belong in your statement instead?`,
+          question: `"${f.statementWords}" is about what the work means. Does this belong in your statement instead?`,
           why: "The bio lists facts. The statement says what the work is about.",
         });
       }
-      if (t.puff) {
+      if (f.puff) {
         out.push({
           rule: "CR-04", severity: "FIX", line, doc: "bio",
-          question: `What backs up "${t.puff}"? If nothing in your record does, cut the word.`,
+          question: `What backs up "${f.puff}"? If nothing in your record does, cut the word.`,
           why: "Praise words read as claims. A panel looks for the facts behind them.",
         });
       }
@@ -382,7 +405,7 @@ export function checkStatement(statement: StatementContent): CreativeOpenItem[] 
   return [
     {
       rule: "CR-03", severity: "BLOCK", line: clip(v?.text ?? ""), doc: "statement",
-      question: "Part of this matches words t.ROY wrote. Can you put that part in your own words?",
+      question: "Part of this matches words a model wrote. Can you put that part in your own words?",
       why: "Your statement is yours. The tool never writes it.",
     },
   ];
@@ -390,7 +413,7 @@ export function checkStatement(statement: StatementContent): CreativeOpenItem[] 
 
 // ------------------------------------------------------------ work samples --
 
-export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[]): CreativeOpenItem[] {
+export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[], settings?: CreativeKindSettings | null): CreativeOpenItem[] {
   const out: CreativeOpenItem[] = [];
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   for (const r of rows) {
@@ -400,6 +423,14 @@ export function checkWorkSamples(rows: WorkSampleRow[], entries: PracticeEntry[]
       out.push({
         rule: "CR-10", severity: "BLOCK", line, doc: "work_samples",
         question: "This work isn't in your record. Add it there first?", why: "Every sample comes from your record.",
+      });
+      continue;
+    }
+    if (titleModeFor(e, settings) !== "true_title") {
+      out.push({
+        rule: "STD-R03", severity: "BLOCK", line, doc: "work_samples", entryId: e.id,
+        question: "This work's title names a facility, and this lane keeps it off. Take it off the list, or change that choice?",
+        why: "Your choices about work that names a facility apply to every page on this lane.",
       });
       continue;
     }
@@ -438,7 +469,7 @@ export function getCreativeStatus(input: CreativeStatusInput): CreativeStatus {
   if (input.artistResume) items.push(...checkArtistResume(input.artistResume.model, input.entries, input.settings, input.artistResume.pages));
   if (input.bio) items.push(...checkBio(input.bio, input.entries, input.settings));
   if (input.statement) items.push(...checkStatement(input.statement));
-  if (input.workSamples) items.push(...checkWorkSamples(input.workSamples, input.entries));
+  if (input.workSamples) items.push(...checkWorkSamples(input.workSamples, input.entries, input.settings));
 
   const seen = new Set<string>();
   const unique = items.filter((x) => {

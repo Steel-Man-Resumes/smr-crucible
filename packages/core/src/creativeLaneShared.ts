@@ -26,9 +26,6 @@ import {
 
 // --------------------------------------------------------------- settings --
 
-export const BIO_DISCLOSURE_MODES = ["include", "context", "leave_out"] as const;
-export type BioDisclosureMode = (typeof BIO_DISCLOSURE_MODES)[number];
-
 export const BIO_PRONOUNS = ["name", "they", "she", "he"] as const;
 export type BioPronoun = (typeof BIO_PRONOUNS)[number];
 
@@ -52,19 +49,22 @@ export interface CreativeKindSettings {
   titleModes?: Record<string, TitleMode>;
   /** null/absent: every entry. A list: only these ("Selected" headings). */
   selection?: string[] | null;
-  /** How the bio treats entries that name a facility. Unset until the person picks. */
-  bioDisclosure?: BioDisclosureMode;
   bioPronoun?: BioPronoun;
 }
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_IDS = 300;
+/**
+ * Caps that keep the cleaned settings under the database's 16,000-byte check
+ * (075): 150 selected ids and 120 title choices, about 12 KB at most.
+ */
+const MAX_SELECTION = 150;
+const MAX_TITLE_MODES = 120;
 
 function ids(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   const out: string[] = [];
   for (const x of v) if (typeof x === "string" && ID_RE.test(x) && !out.includes(x.toLowerCase())) out.push(x.toLowerCase());
-  return out.slice(0, MAX_IDS);
+  return out.slice(0, MAX_SELECTION);
 }
 
 /**
@@ -90,15 +90,13 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   const tm = v("titleModes");
   if (tm && typeof tm === "object" && !Array.isArray(tm)) {
     const modes: Record<string, TitleMode> = {};
-    for (const [k, m] of Object.entries(tm as Record<string, unknown>).slice(0, MAX_IDS)) {
+    for (const [k, m] of Object.entries(tm as Record<string, unknown>).slice(0, MAX_TITLE_MODES)) {
       if (ID_RE.test(k) && isTitleMode(m)) modes[k.toLowerCase()] = m;
     }
     if (Object.keys(modes).length) out.titleModes = modes;
   }
   const sel = v("selection");
   if (Array.isArray(sel)) out.selection = ids(sel);
-  const bd = v("bioDisclosure");
-  if (typeof bd === "string" && (BIO_DISCLOSURE_MODES as readonly string[]).includes(bd)) out.bioDisclosure = bd as BioDisclosureMode;
   const bp = v("bioPronoun");
   if (typeof bp === "string" && (BIO_PRONOUNS as readonly string[]).includes(bp)) out.bioPronoun = bp as BioPronoun;
   return out;
@@ -383,8 +381,15 @@ export interface WorkSampleRow {
  * first). Works not in the order follow, newest first. Every field is copied
  * from the record as typed.
  */
-export function buildWorkSampleList(entries: PracticeEntry[], order: string[] | null | undefined): WorkSampleRow[] {
-  const works = entries.filter((e) => e.section === "work");
+export function buildWorkSampleList(
+  entries: PracticeEntry[],
+  order: string[] | null | undefined,
+  s?: CreativeKindSettings | null
+): WorkSampleRow[] {
+  // The lane's choice decides, as for every document. A work has no venue, so
+  // "venue only" keeps it off this list just like "leave it off"; a work with
+  // no choice yet stays off and is asked about.
+  const works = entries.filter((e) => e.section === "work" && titleModeFor(e, s) === "true_title");
   const byId = new Map(works.map((w) => [w.id.toLowerCase(), w]));
   const ordered: PracticeEntry[] = [];
   for (const id of order ?? []) {
@@ -412,7 +417,7 @@ export function workSampleListPlainText(rows: WorkSampleRow[]): string {
 
 function csvCell(s: string): string {
   // Keep spreadsheet formulas inert: a leading = + - @ is quoted with a '.
-  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
   return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
