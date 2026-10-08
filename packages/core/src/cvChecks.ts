@@ -42,7 +42,7 @@ export const OFFICER_ASK_WHY = "An officer is never your first reference. If the
  */
 const OFFICER_STRONG = new RegExp(
   String.raw`\b(paroles?|probation|department of corrections|corrections? officers?|correctional officers?|community supervision|supervision officer|` +
-    String.raw`reentry (?:officer|agent)|pre-?trial(?: services?)?(?: officers?| agents?)?|probation and parole agent|USPO|U\.?S\.? probation|` +
+    String.raw`re-?entry (?:officer|agent)s?|pre-?trial(?: services?)?(?: officers?| agents?)?|probation and parole agent|USPO|U\.?S\.? probation|` +
     String.raw`deputy sheriffs?|detention (?:officers?|deputy|deputies)|deputy wardens?)\b`,
   "i"
 );

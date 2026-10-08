@@ -340,7 +340,7 @@ describe("N3-M2: officers by rank, short form and board", () => {
     ["Deputy Sheriff", "Sample County"], ["Detention deputy", "Sample County"], ["Detention officer", ""], ["C.O.", "Sample State Prison"],
     ["CO", "Sample County"], ["Correctional officer", ""], ["USPO", "District of Sample"], ["Pre-trial officer", "Sample County"],
     ["Pretrial officer", ""], ["Officer", "Board of Pardons and Paroles"], ["Member", "Sample State Parole Board"],
-    ["Corrections Sergeant", ""], ["Correctional Lieutenant", ""], ["Community justice officer", "Sample County"],
+    ["Corrections Sergeant", ""], ["Correctional Lieutenant", ""], ["Community justice officer", "Sample County"], ["Re-entry officer", ""],
   ];
   for (const [role, venue] of officers) {
     it(`${role}${venue ? `, ${venue}` : ""} is an officer, never the lead`, () => {
