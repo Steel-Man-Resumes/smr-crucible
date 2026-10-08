@@ -359,3 +359,127 @@ describe("record checks are scoped to the entries a lane reads; hidden names sti
     assert.equal(st.state, "finished", JSON.stringify(st.openItems));
   });
 });
+
+describe("performer page: the round 3 two-tier matcher (s2r3 N3-H1, N3-L1)", () => {
+  // A credit the lane keeps off, with a name people use for the place. Invented people; the town word is real on purpose (a lone town word is only asked about).
+  const FOL = entry({ section: "credit", title: "Inside Voices Showcase", venue: "Folsom State Prison", year: 2018, details: { medium: "theater", role: "Narrator", otherNames: ["Greystone"] }, names_facility: true });
+  const off = (extra: CreativeKindSettings = {}) => ({ ...applyTitleMode(BASE, FOL.id, "leave_out")!, ...extra });
+  const leak = /Folsom State|Greystone|Inside Voices|Narrator/i;
+  // Two words of the hidden name in another credit's role. (A part already on the page through a printed
+  // title or venue is public by design, so the role is where it can hide.)
+  const TWO = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom State guard" } });
+  // The name people use for it, in a class.
+  const NICK = entry({ section: "training", title: "Voice", venue: "Greystone Studio", year: 2021, details: { teacher: "R. Coach" } });
+  // The town word alone, in a role: printed and asked about with one tap.
+  const LAKE = entry({ section: "credit", title: "Lake Songs", venue: "Lakeside Hall", year: 2023, details: { medium: "music", role: "Townie from Folsom" } });
+  const ENTRIES = [PLAY, FOL, TWO, NICK, LAKE];
+  const S = off({ agent: "Rep since the Folsom State days", skills: [{ text: "Greystone choir solos", confirmed: true }, { text: "Stage combat", confirmed: true }] });
+
+  it("two words of a hidden name and a name people use for it are held (tier 1); a lone town word prints and gets one card (tier 2)", () => {
+    const m = buildPerformerModel(ENTRIES, S);
+    const txt = performerPlainText(m);
+    assert.doesNotMatch(txt, leak, txt);
+    assert.match(txt, /Lake Songs \| Townie from Folsom \| Lakeside Hall/);
+    assert.match(txt, /Our Town \| Emily Webb/);
+    assert.match(txt, /SPECIAL SKILLS\nStage combat$/m);
+    assert.deepEqual(m.omitted.filter((o) => o.reason === "names_hidden").map((o) => o.entryId).sort(), [TWO.id, NICK.id].sort());
+    assert.deepEqual(m.heldFields.map((h) => `${h.field}:${h.reason}`).sort(), ["agent:names_hidden", "skills:names_hidden"]);
+    assert.deepEqual(m.asks, [{ entryId: LAKE.id, phrase: "Lake Songs Townie from Folsom Lakeside Hall" }]);
+    assert.ok(!performerShownIds(m).includes(TWO.id) && !performerShownIds(m).includes(NICK.id) && performerShownIds(m).includes(LAKE.id));
+
+    const st = getPerformerStatus({ entries: ENTRIES, settings: S, model: m, pages: 1 });
+    assert.equal(st.state, "draft");
+    const ask = st.openItems.filter((x) => x.answer === "facility_word");
+    assert.equal(ask.length, 1);
+    assert.equal(ask[0].severity, "FIX");
+    assert.equal(ask[0].doc, "performer");
+    assert.equal(ask[0].line, "2023  A line in your record");
+    assert.equal(ask[0].phrase, "Lake Songs Townie from Folsom Lakeside Hall");
+    // The phrase is on screen only: no line, question or why carries it, and the to-do page never does.
+    for (const it of st.openItems) assert.doesNotMatch(`${it.line} ${it.question} ${it.why}`, /Folsom|Greystone|Inside Voices|Narrator/i);
+    for (const l of exportOpenItemLines(st, ENTRIES, S, "performer", performerShownIds(m))) assert.doesNotMatch(l, /Folsom|Greystone/i);
+    // Without the page's ids nothing is public, and the to-do lines stay clean.
+    for (const l of exportOpenItemLines(st, ENTRIES, S, "performer")) assert.doesNotMatch(l, /Folsom|Greystone/i);
+  });
+
+  it("a stored 'No' clears the card for good, through later saves; a 'Yes' holds the line; the lane keeps a key, never the words", () => {
+    const m = buildPerformerModel(ENTRIES, S);
+    const phrase = m.asks[0].phrase;
+    const no = applyPhraseAnswer(S, phrase, "no")!;
+    assert.doesNotMatch(JSON.stringify(no.phraseAnswers), /Folsom|Lake|Townie/i);
+    const after = (s: CreativeKindSettings) => {
+      const mm = buildPerformerModel(ENTRIES, s);
+      return { m: mm, st: getPerformerStatus({ entries: ENTRIES, settings: s, model: mm, pages: 1 }) };
+    };
+    const n1 = after(no);
+    assert.deepEqual(n1.m.asks, []);
+    assert.ok(!n1.st.openItems.some((x) => x.answer === "facility_word"));
+    assert.match(performerPlainText(n1.m), /Townie from Folsom/);
+    // Another save (the same merge the lane route runs) keeps the answer: the card never comes back.
+    const saved = cleanKindSettings({ phone: "555-0100", showYears: true }, no);
+    assert.deepEqual(saved.phraseAnswers, no.phraseAnswers);
+    const n2 = after(saved);
+    assert.deepEqual(n2.m.asks, []);
+    assert.match(performerPlainText(n2.m), /Townie from Folsom/);
+    // "Yes, take it out": the line comes off every format and blocks with a neutral line.
+    const yes = applyPhraseAnswer(saved, phrase, "yes")!;
+    const y = after(yes);
+    assert.doesNotMatch(performerPlainText(y.m), /Folsom/);
+    assert.ok(y.m.omitted.some((o) => o.entryId === LAKE.id && o.reason === "names_hidden"));
+    const block = y.st.openItems.find((x) => x.entryId === LAKE.id)!;
+    assert.equal(block.severity, "BLOCK");
+    assert.equal(block.line, "2023  A line in your record");
+    // An answer with no words, or a bad answer, is refused.
+    assert.equal(applyPhraseAnswer(S, "  ", "no"), null);
+    assert.equal(applyPhraseAnswer(S, phrase, "maybe"), null);
+  });
+
+  it("a typed field or a skill that only shares the town word prints and is asked about, one card each", () => {
+    const s = off({ discipline: "Actor, Folsom Lake Chorale", skills: [{ text: "Folsom Lake rowing", confirmed: true }] });
+    const m = buildPerformerModel([PLAY, FOL], s);
+    assert.equal(m.header.discipline, "Actor, Folsom Lake Chorale");
+    assert.match(performerPlainText(m), /Folsom Lake rowing/);
+    assert.deepEqual(m.asks.map((a) => a.field).sort(), ["discipline", "skills"]);
+    const st = getPerformerStatus({ entries: [PLAY, FOL], settings: s, model: m, pages: 1 });
+    assert.equal(st.state, "finished");
+    assert.deepEqual(st.openItems.filter((x) => x.answer === "facility_word").map((x) => x.line).sort(), ["(top of the page)", "Special skills"]);
+  });
+
+  it("settled over the credits it prints: a credit hidden by the lane stays hidden while another credit prints its true title, and a dropped credit never makes its venue public", () => {
+    // Another credit at the same place, the person chose its true title on this lane.
+    const OPEN = entry({ section: "credit", title: "Open Doors Revue", venue: "Folsom State Prison", year: 2020, details: { medium: "theater", role: "Chorus" }, names_facility: true });
+    const s = applyTitleMode(off({ agent: "Rep since Folsom State Prison" }), OPEN.id, "true_title")!;
+    const m = buildPerformerModel([PLAY, FOL, OPEN], s);
+    const txt = performerPlainText(m);
+    // The true-title credit prints, so its venue is public on THIS page; the hidden credit's own title and role never print.
+    assert.match(txt, /Open Doors Revue \| Chorus \| Folsom State Prison/);
+    assert.match(txt, /Rep since Folsom State Prison/);
+    assert.doesNotMatch(txt, /Inside Voices|Narrator/);
+    assert.ok(m.omitted.some((o) => o.entryId === FOL.id && o.reason === "leave_out"));
+    // The hidden credit's title is still held wherever it is typed.
+    const m1 = buildPerformerModel([PLAY, FOL, OPEN], { ...s, discipline: "Actor (Inside Voices Showcase alum)" });
+    assert.equal(m1.header.discipline, "");
+    // Now that credit carries the place's other name, so the check drops it. A dropped credit never makes the venue public.
+    const OPEN2 = { ...OPEN, details: { ...OPEN.details, role: "Greystone choir" } };
+    const m2 = buildPerformerModel([PLAY, FOL, OPEN2], s);
+    const txt2 = performerPlainText(m2);
+    assert.doesNotMatch(txt2, /Folsom|Greystone|Open Doors/);
+    assert.ok(m2.omitted.some((o) => o.entryId === OPEN.id && o.reason === "names_hidden"));
+    assert.ok(m2.heldFields.some((h) => h.field === "agent" && h.reason === "names_hidden"));
+    assert.ok(!performerShownIds(m2).includes(OPEN.id));
+    const st2 = getPerformerStatus({ entries: [PLAY, FOL, OPEN2], settings: s, model: m2, pages: 1 });
+    assert.equal(st2.state, "draft");
+    for (const l of exportOpenItemLines(st2, [PLAY, FOL, OPEN2], s, "performer", performerShownIds(m2))) assert.doesNotMatch(l, /Folsom|Greystone|Open Doors/);
+  });
+
+  it("a director or teacher is a person's name: part of a hidden name in it is asked about, never held; the whole name is held", () => {
+    const d = entry({ section: "credit", title: "Night Bus Two", venue: "Example Pictures", year: 2024, details: { medium: "film", director: "Folsom State" } });
+    const m = buildPerformerModel([PLAY, FOL, d], off());
+    assert.match(performerPlainText(m), /Dir\. Folsom State/);
+    assert.deepEqual(m.asks, [{ entryId: d.id, phrase: "Folsom State" }]);
+    const d2 = { ...d, details: { ...d.details, director: "Folsom State Prison" } };
+    const m2 = buildPerformerModel([PLAY, FOL, d2], off());
+    assert.doesNotMatch(performerPlainText(m2), /Folsom/);
+    assert.ok(m2.omitted.some((o) => o.entryId === d.id && o.reason === "names_hidden"));
+  });
+});

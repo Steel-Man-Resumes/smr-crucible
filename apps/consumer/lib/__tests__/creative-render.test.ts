@@ -239,3 +239,74 @@ test("performer page: a long record runs past one page and says so", async () =>
   const { layout } = layoutPerformer(buildPerformerModel(many, { displayName: "Ray Example" }), fontMeasurer());
   assert.ok(layout.pages.length > 1);
 });
+
+test("performer page (s2r3): a two-word part of a hidden name, a name people use for it and a lone town word, in every format, metadata and to-do page included", async () => {
+  const { buildPerformerModel, performerShownIds } = await import("@crucible/core/src/performerShared");
+  const { getPerformerStatus } = await import("@crucible/core/src/performerChecks");
+  const { exportOpenItemLines } = await import("@crucible/core/src/creativeChecks");
+  const { applyTitleMode, applyPhraseAnswer } = await import("@crucible/core/src/creativeLaneShared");
+  const play = entry({ section: "credit", title: "Our Town", venue: "Example Street Theatre", year: 2024, details: { medium: "theater", role: "Emily Webb" } });
+  const fol = entry({ section: "credit", title: "Inside Voices Showcase", venue: "Folsom State Prison", year: 2018, details: { medium: "theater", role: "Narrator", otherNames: ["Greystone"] }, names_facility: true });
+  const two = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom State guard" } });
+  const nick = entry({ section: "training", title: "Voice", venue: "Greystone Studio", year: 2021 });
+  const lake = entry({ section: "credit", title: "Lake Songs", venue: "Lakeside Hall", year: 2023, details: { medium: "music", role: "Townie from Folsom" } });
+  const entries = [play, fol, two, nick, lake];
+  // The whole hidden name in the name field: held, so the title metadata (built from the printed name) never carries it.
+  const s0 = { ...applyTitleMode({ displayName: "Ray Example, Folsom State Prison", email: "ray@example.com" }, fol.id, "leave_out")!, agent: "Rep since the Folsom State days" };
+  const allParts = (buf: Buffer) => {
+    const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    let p = buf.readUInt32LE(eocd + 16);
+    let out = "";
+    for (let i = 0; i < buf.readUInt16LE(eocd + 10); i++) {
+      const [method, csize, nlen, elen, clen, lho] = [buf.readUInt16LE(p + 10), buf.readUInt32LE(p + 20), buf.readUInt16LE(p + 28), buf.readUInt16LE(p + 30), buf.readUInt16LE(p + 32), buf.readUInt32LE(p + 42)];
+      const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28);
+      const raw = buf.subarray(start, start + csize);
+      out += " " + (method === 8 ? inflateRawSync(raw) : Buffer.from(raw)).toString("utf8");
+      p += 46 + nlen + elen + clen;
+    }
+    return out;
+  };
+  const pdfAll = async (bytes: Uint8Array) => {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true, isEvalSupported: false, disableFontFace: true }).promise;
+    const meta = await doc.getMetadata();
+    await doc.destroy();
+    return `${(await pdfText(bytes)).text} META ${JSON.stringify(meta.info)}`;
+  };
+  const formats = async (s: typeof s0) => {
+    const model = buildPerformerModel(entries, s);
+    const status = getPerformerStatus({ entries, settings: s, model, pages: 1 });
+    const openItems = exportOpenItemLines(status, entries, s, "performer", performerShownIds(model));
+    const draft = status.blockCount > 0;
+    const out: Record<string, string> = {};
+    out.pdf8x10 = await pdfAll(await renderCreativePdf({ doc: "performer", model, trim: "8x10", draft, openItems }));
+    out.pdfLetter = await pdfAll(await renderCreativePdf({ doc: "performer", model, trim: "letter", draft, openItems }));
+    out.docx = allParts(await renderCreativeDocx({ doc: "performer", model, trim: "8x10", draft, openItems })).replace(/<[^>]+>/g, " ");
+    out.html = renderCreativeHtml({ doc: "performer", model, trim: "letter", draft, openItems });
+    for (const k of Object.keys(out)) out[k] = out[k].replace(/\s+/g, " ");
+    return { model, status, out };
+  };
+
+  const a = await formats(s0);
+  assert.equal(a.model.header.name, "");
+  for (const [k, v] of Object.entries(a.out)) {
+    assert.doesNotMatch(v, /Folsom State|Greystone|Inside Voices|Narrator/i, k);
+    assert.match(v, /Townie from Folsom/, k);
+    assert.match(v, /DRAFT/i, k);
+    assert.doesNotMatch(v, /Ray Example/, `${k}: the held name never reaches the page or the metadata`);
+  }
+  assert.match(a.out.pdf8x10, /"Title":"Performer resume"/);
+  assert.match(a.out.html, /<title>Performer resume<\/title>/);
+  assert.match(a.out.docx, /Performer resume/);
+  // The card for the town word is a FIX with no words of the person's in its line.
+  const ask = a.status.openItems.find((x) => x.answer === "facility_word")!;
+  assert.equal(ask.line, "2023  A line in your record");
+
+  // "Yes, take it out": the town-word line comes off every format too.
+  const y = await formats({ ...s0, ...applyPhraseAnswer(s0, ask.phrase, "yes")! });
+  for (const [k, v] of Object.entries(y.out)) assert.doesNotMatch(v, /Folsom|Greystone|Inside Voices/i, k);
+  // "No, that's something else": it prints, and is never asked again.
+  const n = await formats({ ...s0, ...applyPhraseAnswer(s0, ask.phrase, "no")! });
+  for (const [k, v] of Object.entries(n.out)) assert.match(v, /Townie from Folsom/, k);
+  assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word"));
+});
