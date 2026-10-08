@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { COACH_QUESTIONS, applySpellingMark, type SpellingMark, type StatementVersion } from "@crucible/core/src/creativeStatement";
 import { countChars, countWords } from "@crucible/core/src/creativeLaneShared";
-import { STATEMENT_HOW, STATEMENT_SPELLING_HOW, overLimit, sendJson } from "@/lib/creative";
+import { SPELLING_CAPPED, STATEMENT_HOW, STATEMENT_SPELLING_HOW, overLimit, sendJson } from "@/lib/creative";
 
 function fmt(iso: string): string {
   const d = new Date(iso);
@@ -117,12 +117,13 @@ export function StatementCoach({
               onClick={async () => {
                 setBusy(true);
                 setError("");
-                const r = await sendJson<{ readBack?: string[]; marks?: SpellingMark[] }>("/api/creative/coach", "POST", { laneId, text });
+                const r = await sendJson<{ readBack?: string[]; marks?: SpellingMark[]; capped?: boolean }>("/api/creative/coach", "POST", { laneId, text });
                 setBusy(false);
                 if (r.ok) {
                   setReadBack(r.data.readBack ?? []);
                   setMarks(r.data.marks ?? []);
-                  if (!(r.data.marks ?? []).length) setMsg("No spelling to fix.");
+                  if (r.data.capped) setMsg(SPELLING_CAPPED);
+                  else if (!(r.data.marks ?? []).length) setMsg("No spelling to fix.");
                 } else setError(r.data.message || "That didn't work. Try again in a moment.");
               }}
               className="t-focus min-h-touch px-3 border border-t-line text-sm text-t-white disabled:opacity-50"

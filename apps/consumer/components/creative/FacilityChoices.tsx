@@ -15,12 +15,13 @@ import { TITLE_MODE_COPY, TITLE_MODE_WHY } from "@/lib/creative";
 export function FacilityChoices({
   entries,
   settings,
-  onSettings,
+  onTitleMode,
   only,
 }: {
   entries: PracticeEntry[];
   settings: CreativeKindSettings;
-  onSettings: (patch: Partial<CreativeKindSettings>) => Promise<boolean>;
+  /** Saves ONE entry's choice (on the screen's settings revision). */
+  onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   /** Limit to works ("works") or everything but works ("pages"). */
   only?: "works" | "pages";
 }) {
@@ -48,7 +49,7 @@ export function FacilityChoices({
                     value={m}
                     checked={cur === m}
                     data-testid={`title-mode-${m}`}
-                    onChange={() => onSettings({ titleModes: { ...(settings.titleModes ?? {}), [e.id]: m } })}
+                    onChange={() => onTitleMode(e.id, m)}
                     className="mt-1"
                   />
                   <span>

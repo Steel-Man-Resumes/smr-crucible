@@ -8,8 +8,15 @@
  */
 
 import { useState } from "react";
-import { yearsOf, type PracticeEntry } from "@crucible/core/src/practiceRecordShared";
-import { artistResumePageCap, artistResumePlainText, type ArtistResumeModel, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
+import { yearsOf, type PracticeEntry, type TitleMode } from "@crucible/core/src/practiceRecordShared";
+import {
+  NEEDS_PROOF_NOTE,
+  artistResumePageCap,
+  artistResumePlainText,
+  stillNeedsProof,
+  type ArtistResumeModel,
+  type CreativeKindSettings,
+} from "@crucible/core/src/creativeLaneShared";
 import { creativeOpenItemLines, type CreativeStatus } from "@crucible/core/src/creativeChecks";
 import { PAGE_CAP_COPY } from "@/lib/creative";
 import { FacilityChoices } from "./FacilityChoices";
@@ -35,6 +42,7 @@ export function ArtistResumePanel({
   model,
   status,
   onSettings,
+  onTitleMode,
   onPages,
 }: {
   laneId: string;
@@ -43,6 +51,7 @@ export function ArtistResumePanel({
   model: ArtistResumeModel;
   status: CreativeStatus;
   onSettings: (patch: Partial<CreativeKindSettings>) => Promise<boolean>;
+  onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   onPages: (n: number) => void;
 }) {
   const [top, setTop] = useState<Record<string, string>>(() =>
@@ -82,7 +91,7 @@ export function ArtistResumePanel({
         <span aria-live="polite" className="ml-3 text-sm text-t-phos">{msg}</span>
       </form>
 
-      <FacilityChoices entries={entries} settings={settings} onSettings={onSettings} only="pages" />
+      <FacilityChoices entries={entries} settings={settings} onTitleMode={onTitleMode} only="pages" />
 
       <section className="border border-t-line bg-t-panel p-4 space-y-3">
         <label className="flex min-h-touch items-start gap-3 text-sm text-t-white">
@@ -125,6 +134,9 @@ export function ArtistResumePanel({
 
       <CreativePage request={request} onPages={onPages} fallbackText={artistResumePlainText(model)} />
 
+      {stillNeedsProof(entries, model.sections.flatMap((x) => x.rows.map((r) => r.entryId))) > 0 && (
+        <p className="text-sm text-t-phos" data-testid="artist-needs-proof">{NEEDS_PROOF_NOTE}</p>
+      )}
       <div className="flex flex-wrap gap-2" data-testid="artist-downloads">
         {(["pdf", "docx", "txt"] as const).map((f) => (
           <a key={f} href={`/api/creative/${laneId}/export?doc=artist_resume&format=${f}`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white hover:border-t-steel">

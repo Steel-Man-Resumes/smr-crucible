@@ -3,7 +3,8 @@
 /** The work-sample list: the person's works, strongest first. Every field is what they typed. */
 
 import { useEffect, useState } from "react";
-import type { CreativeKindSettings, WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
+import { NEEDS_PROOF_NOTE, stillNeedsProof, type WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
+import type { TitleMode } from "@crucible/core/src/practiceRecordShared";
 import type { CreativeStatus } from "@crucible/core/src/creativeChecks";
 import { SAMPLES_HOW, sendJson } from "@/lib/creative";
 import { OpenItems } from "./OpenItems";
@@ -15,14 +16,14 @@ export function WorkSamplesPanel({
   ctx,
   rows,
   status,
-  onSettings,
+  onTitleMode,
   onSaved,
 }: {
   laneId: string;
   ctx: CreativeCtx;
   rows: WorkSampleRow[];
   status: CreativeStatus;
-  onSettings: (patch: Partial<CreativeKindSettings>) => Promise<boolean>;
+  onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   onSaved: () => void;
 }) {
   const [order, setOrder] = useState(rows);
@@ -36,7 +37,7 @@ export function WorkSamplesPanel({
     setOrder(next.map((r, k) => ({ ...r, number: k + 1 })));
   };
 
-  const choices = <FacilityChoices entries={ctx.entries} settings={ctx.settings} onSettings={onSettings} only="works" />;
+  const choices = <FacilityChoices entries={ctx.entries} settings={ctx.settings} onTitleMode={onTitleMode} only="works" />;
   if (!rows.length) {
     return (
       <div className="space-y-4">
@@ -75,6 +76,9 @@ export function WorkSamplesPanel({
           </li>
         ))}
       </ol>
+      {stillNeedsProof(ctx.entries, order.map((x) => x.entryId)) > 0 && (
+        <p className="text-sm text-t-phos" data-testid="samples-needs-proof">{NEEDS_PROOF_NOTE}</p>
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

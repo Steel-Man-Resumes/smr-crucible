@@ -21,6 +21,7 @@ import {
   type BioSentence,
 } from "@crucible/core/src/creativeBio";
 import { BIO_PRONOUNS, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
+import type { TitleMode } from "@crucible/core/src/practiceRecordShared";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
 import { BIO_HOW, PRONOUN_COPY, sendJson } from "@/lib/creative";
 import type { CreativeCtx } from "./CreativeLaneView";
@@ -37,11 +38,13 @@ export function BioPanel({
   laneId,
   ctx,
   onSettings,
+  onTitleMode,
   onSaved,
 }: {
   laneId: string;
   ctx: CreativeCtx;
   onSettings: (patch: Partial<CreativeKindSettings>) => Promise<boolean>;
+  onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   onSaved: () => void;
 }) {
   const [bio, setBio] = useState<BioContent>(ctx.bio);
@@ -82,7 +85,7 @@ export function BioPanel({
         </div>
       </fieldset>
 
-      <FacilityChoices entries={ctx.entries} settings={s} onSettings={onSettings} only="pages" />
+      <FacilityChoices entries={ctx.entries} settings={s} onTitleMode={onTitleMode} only="pages" />
 
       <div className="flex gap-1" role="tablist" aria-label="Bio length">
         {BIO_LENGTHS.map((l) => (

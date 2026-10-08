@@ -7,9 +7,9 @@
  * checks the server and the exports use.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CareerLane } from "@crucible/core/src/careerLaneShared";
-import type { PracticeEntry } from "@crucible/core/src/practiceRecordShared";
+import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
 import { buildArtistResumeModel, buildWorkSampleList, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import type { BioContent } from "@crucible/core/src/creativeBio";
 import type { StatementVersion } from "@crucible/core/src/creativeStatement";
@@ -78,21 +78,46 @@ export function CreativeLaneView({
     load();
   }, [load]);
 
-  const saveSettings = useCallback(
-    async (patch: Partial<CreativeKindSettings>) => {
-      // Show the choice at once; the server's cleaned settings replace it.
-      setCtx((c) => {
-        if (!c) return c;
-        const next: CreativeKindSettings = { ...c.settings, ...patch };
-        if (patch.selection === null) delete next.selection;
-        return { ...c, settings: next };
-      });
-      const r = await sendJson<{ settings?: CreativeKindSettings }>(`/api/creative/${laneId}`, "PUT", { settings: patch });
-      if (r.ok && r.data.settings) setCtx((c) => (c ? { ...c, settings: r.data.settings as CreativeKindSettings } : c));
-      else load();
+  // The settings revision the screen holds; every save is based on it.
+  const revRef = useRef(0);
+  useEffect(() => {
+    revRef.current = Number(ctx?.settings.rev ?? 0);
+  }, [ctx]);
+  const [notice, setNotice] = useState("");
+
+  const putSettings = useCallback(
+    async (body: Record<string, unknown>, optimistic: (s: CreativeKindSettings) => CreativeKindSettings) => {
+      setCtx((c) => (c ? { ...c, settings: optimistic(c.settings) } : c));
+      const r = await sendJson<{ settings?: CreativeKindSettings }>(`/api/creative/${laneId}`, "PUT", { ...body, rev: revRef.current });
+      if (r.ok && r.data.settings) {
+        revRef.current = Number(r.data.settings.rev ?? 0);
+        setCtx((c) => (c ? { ...c, settings: r.data.settings as CreativeKindSettings } : c));
+        setNotice("");
+      } else {
+        // Changed elsewhere (or refused): show what is really saved, and say so.
+        setNotice(r.data.message || CREATIVE_ERRORS.failed);
+        load();
+      }
       return r.ok;
     },
     [laneId, load]
+  );
+
+  const saveSettings = useCallback(
+    (patch: Partial<CreativeKindSettings>) =>
+      putSettings({ settings: patch }, (cur) => {
+        const next: CreativeKindSettings = { ...cur, ...patch };
+        if (patch.selection === null) delete next.selection;
+        return next;
+      }),
+    [putSettings]
+  );
+
+  /** One facility choice for one entry (never a whole map). */
+  const saveTitleMode = useCallback(
+    (entryId: string, mode: TitleMode) =>
+      putSettings({ titleMode: { entryId, mode } }, (cur) => ({ ...cur, titleModes: { ...(cur.titleModes ?? {}), [entryId]: mode } })),
+    [putSettings]
   );
 
   const model = useMemo(() => (ctx ? buildArtistResumeModel(ctx.entries, ctx.settings) : null), [ctx]);
@@ -132,6 +157,12 @@ export function CreativeLaneView({
         </p>
       </div>
 
+      {notice && (
+        <p className="mt-2 text-sm text-t-red" role="alert" data-testid="creative-notice">
+          {notice}
+        </p>
+      )}
+
       <nav aria-label="Creative lane tools" className="mt-3 -mx-4 overflow-x-auto px-4">
         <ul className="flex gap-1 min-w-max" role="tablist">
           {CREATIVE_TABS.map((t) => (
@@ -163,13 +194,14 @@ export function CreativeLaneView({
             model={model}
             status={status}
             onSettings={saveSettings}
+            onTitleMode={saveTitleMode}
             onPages={setPages}
           />
         )}
-        {tab === "bio" && <BioPanel laneId={laneId} ctx={ctx} onSettings={saveSettings} onSaved={load} />}
+        {tab === "bio" && <BioPanel laneId={laneId} ctx={ctx} onSettings={saveSettings} onTitleMode={saveTitleMode} onSaved={load} />}
         {tab === "statement" && <StatementCoach laneId={laneId} statement={ctx.statement} rev={ctx.statementRev} onSaved={load} />}
         {tab === "samples" && (
-          <WorkSamplesPanel laneId={laneId} ctx={ctx} rows={samples} status={status} onSettings={saveSettings} onSaved={load} />
+          <WorkSamplesPanel laneId={laneId} ctx={ctx} rows={samples} status={status} onTitleMode={saveTitleMode} onSaved={load} />
         )}
         {tab === "text" && <PlainTextPanel ctx={ctx} model={model} samples={samples} status={status} />}
         {tab === "plan" && (

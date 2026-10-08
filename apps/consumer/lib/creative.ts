@@ -54,6 +54,9 @@ export const STATEMENT_HOW =
 
 export const STATEMENT_SPELLING_HOW = "Tap Fix to change that one word. Nothing else moves.";
 
+export const SPELLING_CAPPED =
+  "That's a lot of words to check at once. Spelling was checked on the first part only. Fix those, then check again.";
+
 export const SAMPLES_HOW =
   "Put your strongest work first. Every line is what you typed in your record.";
 

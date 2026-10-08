@@ -120,3 +120,24 @@ test("exports and copy boxes honour the lane's facility choices and DRAFT (revie
   assert.match(plain, /bioTextForLane\(/);
   assert.match(plain, /plain-draft-/);
 });
+
+test("review r2: exports print only safe to-do lines; settings and choices need a revision; owner-only record; refusals", () => {
+  const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
+  const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
+  assert.match(exp, /exportOpenItemLines\(/);
+  assert.ok(!/creativeOpenItemLines\(/.test(exp), "the export never uses the unfiltered lines");
+  const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
+  assert.match(lane, /typeof body\.rev !== "number" \|\| body\.rev !== settingsRev\(current\)/);
+  assert.match(lane, /applyTitleMode\(current, entry\.id, tm\.mode\)/);
+  assert.match(lane, /if \(g\.impersonating\) return ownerOnly\(\);/);
+  const docs = rd("app", "api", "creative", "[laneId]", "docs", "route.ts");
+  assert.match(docs, /rev === "missing" && body\.type !== "artist_resume"/);
+  for (const p of [["app", "api", "practice", "route.ts"], ["app", "api", "practice", "[id]", "route.ts"]]) {
+    assert.match(rd(...p), /if \(g\.impersonating\) return ownerOnlyRecord\(\);/);
+  }
+  for (const p of [["app", "api", "quick-apply", "route.ts"], ["app", "api", "fit-check", "route.ts"]]) assert.match(rd(...p), /isCreativeType\(artifact\.artifact_type\)/);
+  assert.match(rd("app", "api", "creative", "coach", "route.ts"), /export const maxDuration = 10;/);
+  const fc = rd("components", "creative", "FacilityChoices.tsx");
+  assert.match(fc, /onTitleMode\(e\.id, m\)/);
+  assert.ok(!/titleModes: \{ \.\.\./.test(fc), "the screen never sends a whole map");
+});
