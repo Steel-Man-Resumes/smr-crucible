@@ -68,6 +68,8 @@ export interface OpenItem {
   kind?: string;
   /** For a credential finding: the credential's full name as found on the page (never clipped). */
   subject?: string;
+  /** For a credential finding on an education line (GED, diploma, degree): confirmed as earned or in progress. */
+  education?: boolean;
 }
 
 export interface DefendAnswer {
@@ -540,6 +542,12 @@ export function credentialMemoryPrompt(name: string): string {
   return `Do you hold ${clip(name, 50)}? Many people forget a card or class they earned.`;
 }
 
+/** New (round 8): an education line the person has not given us. Kept only when they say earned (with the year) or in progress. */
+export function educationMemoryPrompt(name: string): string {
+  const n = clip(name, 50);
+  return `Do you have ${/^[aeiou]/i.test(n) ? "an" : "a"} ${n}? Say if you earned it, and the year, or if you are still working on it.`;
+}
+
 /** Why a credential is asked about (round 5: every credential, until the person confirms it). */
 export function credentialPromptWhy(name: string): string {
   return `"${clip(name, 50)}" stays on the page only when you tell us you hold it, what kind it is, and when.`;
@@ -701,8 +709,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
     const personText = input.ownResumeText ?? sourceText.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
     const backstopText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
+    const educationLines = new Set<string>();
     for (const m of credentialsToAsk(resumeText, personText, confirmedKeys, input.credentialRows, backstopText)) {
       credentialSubject.set(m.line, m.name);
+      if (m.education) educationLines.add(m.line);
       credentialFindings.push({
         rule: "STD-T03",
         severity: "BLOCK",
@@ -747,10 +757,17 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
         f.severity,
         f.line,
         f.why,
-        f.kind === "credential_unsaid" ? credentialMemoryPrompt(subject ?? credentialNameOf(f)) : f.kind === "scope_unsaid" ? Q_SCOPE : questionForFinding(f)
+        f.kind === "credential_unsaid"
+          ? educationLines.has(f.line)
+            ? educationMemoryPrompt(subject ?? credentialNameOf(f))
+            : credentialMemoryPrompt(subject ?? credentialNameOf(f))
+          : f.kind === "scope_unsaid"
+            ? Q_SCOPE
+            : questionForFinding(f)
       );
       if (f.kind) items[items.length - 1].kind = f.kind;
       if (subject) items[items.length - 1].subject = subject;
+      if (f.kind === "credential_unsaid" && educationLines.has(f.line)) items[items.length - 1].education = true;
     }
 
     if (requireDefend) {

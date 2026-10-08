@@ -53,16 +53,25 @@ export interface CredentialMention {
   part: string;
   /** True when the credential is in a dated job header's title ("CERTIFIED NURSING ASSISTANT | ..."). */
   title?: boolean;
+  /** True when it is an education line (a GED, a diploma, a degree): confirmed as earned or in progress. */
+  education?: boolean;
 }
 
 const CRED_SECTION_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?)$/i;
 const SKILLS_RE = /^(?:core competencies|skills|key skills|competencies|core skills|technical skills)$/i;
+const EDUCATION_RE = /^(?:education|education and training|education & training|education\/training|schooling|academic background|training and education)$/i;
+// Round 8: an education line is a credential too (GED, HSE, HiSET, a diploma, a degree, a certificate).
+const EDUCATION_CREDENTIAL_RE =
+  /\b(?:GED|HSE|HiSET|TASC|equivalency|diploma|degree|graduate|associate(?:'s)?|bachelor(?:'s)?|master(?:'s)?|doctorate|certificate|certification|A\.A\.S?\.?|B\.S\.?|B\.A\.?|M\.S\.?|M\.?B\.?A\.?)(?![\w])/i;
 
 // Holding claims: "Forklift Certified", "AWS D1.1 Structural Welding Certification", "Welding Certificate".
 // Words may carry a dot only between digits ("D1.1"), so a match never runs across a sentence end.
-const TRAILING_CLAIM_RE = /((?:\b[A-Za-z0-9][\w&+/'-]*(?:\.\d+)*\s+){1,4}?)(Certified|Certification|Certificate|License|Licence|Licensed|Card|Endorsement|Permit|Registry)\b/gi;
+const TRAILING_CLAIM_RE = /((?:\b[A-Za-z0-9][\w&+/'-]*(?:\.\d+)*\s+){1,4}?)(Certified|Certification|Certificate|License|Licence|Licensed|Card|Endorsement|Permit|Registry|Trained|Authorized|Authorised|Qualified)\b/gi;
 // Words that end a credential's name when read backwards from its claim word ("on weekends as a fully licensed").
+// Equipment and programs a person is trained, authorized or qualified on ("forklift trained").
+const TRAINED_ON_RE = /\b(?:forklift|crane|reach|truck|pallet|jack|scissor|boom|lift|osha|hazmat|haccp|loto|gmp|servsafe|cpr|aed|first\s+aid|rigging|welding|cdl|equipment)\b/i;
 const NAME_STOP = new Set([
+  "cross", "well", "newly", "highly", "recently", "extensively", "properly", "fully", "being", "get", "got", "gets", "become", "trained",
   "a", "an", "the", "my", "our", "your", "his", "her", "their", "i", "i'm", "am", "is", "are", "was", "were", "be", "been",
   "and", "or", "as", "at", "on", "in", "of", "for", "to", "by", "from", "with", "who", "which", "that", "also", "still",
   "fully", "now", "hold", "holds", "held", "have", "has", "had", "got", "earned", "obtained", "passed", "completed",
@@ -77,8 +86,21 @@ const HOLDING_LIST_RE = new RegExp(String.raw`(?:\b([A-Z][a-z]+),\s+)?\b(?:fully
 const NOT_A_NAME_RE = /^(?:since|through|throughout|until|by|from|hand|hands|to|on|at|and|or|in|as|for|with|the|a|an|this|that|it|all|every|during|while|operator|worker|associate|employee|professional|team|staff)\b/i;
 // A title word that says the person holds something.
 // Someone else's: "to the RN", "for CDL drivers", "supported CNA staff", "the RN on duty".
-const OTHERS_BEFORE = /\b(?:to|for|with|from|by|assisted|assisting|supported|supporting|helped|helping|under|other|reported\s+to)\s+(?:the\s+|our\s+|other\s+)?$/i;
-const OTHERS_AFTER = /^\s+(?:drivers?|staff|team|teams|nurses?|aides?|crews?|on\s+duty|units?|department|colleagues|coworkers|co-workers)\b/i;
+// Round 8: someone else's credential only before a plural people word or "on duty" ("CDL drivers",
+// "CNA staff", "the RN on duty"), or after "to the", "under the", "reported to", or "assisted /
+// supported / helped (the)". "with", "by" and "from" never make it someone else's, a singular people
+// word never does ("CDL driver" is the person), and "as a", "I am a" or "a" before it make it theirs.
+const OTHERS_BEFORE = /\b(?:to\s+the|under(?:\s+the)?|reported\s+to(?:\s+the)?|assist(?:ed|ing)(?:\s+the)?|support(?:ed|ing)(?:\s+the)?|help(?:ed|ing)(?:\s+the)?)\s+$/i;
+const OTHERS_AFTER = /^\s+(?:drivers|staff|teams|nurses|aides|crews|workers|employees|operators|technicians|techs|colleagues|coworkers|co-workers|on\s+duty)\b/i;
+const OWN_BEFORE = /\b(?:as\s+an?|i\s+am\s+an?|i'm\s+an?|am\s+an?|an?)\s+$/i;
+
+/** True when a credential at this spot is someone else's ("the RN on duty", "for CDL drivers"), never the person's own. */
+export function isOthersCredential(text: string, index: number, length: number): boolean {
+  const before = text.slice(0, index);
+  if (OWN_BEFORE.test(before)) return false;
+  return OTHERS_AFTER.test(text.slice(index + length)) || OTHERS_BEFORE.test(before);
+}
+
 const TITLE_CREDENTIAL_RE = /\b(?:certified|licensed|registered|journeyman|master|bonded|accredited|credentialed|apprentice)\b/i;
 
 const GENERIC = new Set([
@@ -291,7 +313,7 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     raw: string,
     unit: string,
     part: string,
-    opts: { title?: boolean; anyName?: boolean } = {}
+    opts: { title?: boolean; anyName?: boolean; education?: boolean } = {}
   ) => {
     const name = cleanName(rawName) || rawName.trim();
     let nameWords = nameWordsOf(name);
@@ -300,11 +322,15 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     if (!nameWords.length) return;
     const key = credentialKey(name) || name.toLowerCase();
     if (!key || out.some((m) => m.line === line && m.key === key)) return;
-    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}) });
+    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}), ...(opts.education ? { education: true } : {}) });
   };
 
   let seenHeading = false;
+  let inEducation = false;
   ls.forEach((l, i) => {
+    if (EDUCATION_RE.test(l.replace(/:$/, ""))) { section = "other"; inEducation = true; seenHeading = true; return; }
+    if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) inEducation = false;
+    else if (SKILLS_RE.test(l.replace(/:$/, "")) || isSectionEnd(l)) inEducation = false;
     if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) { section = "credentials"; seenHeading = true; return; }
     if (SKILLS_RE.test(l.replace(/:$/, ""))) { section = "skills"; seenHeading = true; return; }
     if (isSectionEnd(l)) { section = "other"; seenHeading = true; return; }
@@ -312,6 +338,15 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     context = l;
     const body = l.replace(/^\s*[-•*]\s*/, "");
 
+    // An education line: its first part is the credential ("GED", "High School Diploma", "Associate Degree in ...").
+    if (inEducation) {
+      if (EDUCATION_CREDENTIAL_RE.test(body) || namedIn(body).length) {
+        const first = credentialUnitsOf(body)[0] ?? { part: body, unit: body };
+        const part = body.includes("|") ? titleOfHeader(body) : first.part;
+        push(l, part, "credentials", false, part, body.includes("|") ? body : first.unit, part, { anyName: true, education: true });
+      }
+      return;
+    }
     // A dated job header: its title is asked about only when it claims a credential
     // ("CERTIFIED NURSING ASSISTANT", "LICENSED ELECTRICIAN", "JOURNEYMAN ELECTRICIAN").
     if (section === "other" && seenHeading && isDatedHeader(l)) {
@@ -344,8 +379,7 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     const lone = units.length === 1 ? units[0] : null;
     const at = (raw: string) => (lone && lone.part.toLowerCase().includes(raw.toLowerCase()) ? lone : { part: body, unit: body });
     // Someone else's credential in a duty line is not a claim: "the RN on duty", "CDL drivers", "supported CNA staff".
-    const othersAt = (idx: number, len: number) =>
-      OTHERS_BEFORE.test(lf.slice(0, idx)) || OTHERS_AFTER.test(lf.slice(idx + len));
+    const othersAt = (idx: number, len: number) => isOthersCredential(lf, idx, len);
     for (const m of lf.matchAll(namedCredentialRe())) if (!othersAt(m.index!, m[0].length)) push(l, m[0], "other", false, m[0], at(m[0]).unit, at(m[0]).part);
     for (const m of lf.matchAll(credentialInitialsRe())) if (!othersAt(m.index!, m[0].length)) push(l, m[0], "other", false, m[0], at(m[0]).unit, at(m[0]).part);
     for (const m of lf.matchAll(HOLDING_LIST_RE)) {
@@ -366,6 +400,8 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
         name.unshift(words[k]);
       }
       if (!name.length) continue;
+      // "grow qualified pipeline", "well trained": a trained / authorized / qualified claim needs a named thing before it.
+      if (/^(?:trained|authori[sz]ed|qualified)$/i.test(m[2]) && !/\b[A-Z]{2,}/.test(name.join(" ")) && !TRAINED_ON_RE.test(name.join(" "))) continue;
       const raw = `${name.join(" ")} ${m[2]}`;
       // "State licensed": a name of only general words is still the claim ("Do you hold State licensed?").
       const generic = !nameWordsOf(name.join(" ")).length;
@@ -438,7 +474,12 @@ interface PersonLine {
  * status words must all be on the page.
  */
 export function personCredentialLines(personText: string | undefined): PersonLine[] {
-  const lines = (personText || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  // Round 8: a dated job header ("CNA | Meadowbrook | 2014 - 2017") is a job, never a credential line of theirs.
+  const headers = personJobHeaderLines(personText);
+  const lines = (personText || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !headers.has(l));
   return lines.map((l) => {
     const body = l.replace(/^\s*[-•*]\s*/, "");
     // On the person's side, a part that names no credential stays with the part before it ("CDL; failed the road test twice").
@@ -455,7 +496,7 @@ export function personCredentialLines(personText: string | undefined): PersonLin
 // ---- structured credentials (round 7) -----------------------------------------------
 
 /** The kinds a credential can be, as the person picks them (the same as the confirmation box). */
-export const CREDENTIAL_KINDS = ["license", "certification", "card", "training course"] as const;
+export const CREDENTIAL_KINDS = ["license", "certification", "card", "training course", "permit"] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 /** One credential the person entered in the Forge's training step: its name, kind and year or status. */
@@ -493,16 +534,90 @@ export function credentialLineText(name: string, kind: string, when: string): st
   return `${bareCredentialName(name)} ${kind}, ${when.trim().replace(/[.\s]+$/, "")}`;
 }
 
-/** True when a structured row is complete: a name, one of the kinds, and a year or status the strict parser takes. */
+// Round 8: a row's name is the person's, exactly as typed. A status, a "not held" word or a year belongs
+// in the status box, so a name holding one is refused at entry (and is never a complete row).
+const ROW_NAME_STATUS_RE =
+  /\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|lapse|suspended|revoked|in progress|enrolled|pending|renewed|never|not|failed|retake|studying|working on|no longer|lost|denied)\b|\b(?:19|20)\d{2}\b/i;
+const ROW_TYPE_WORD_RE = /\b(?:license|licence|licensed|certification|certificate|certified|card|permit|course|training|endorsement)\b/i;
+const PERMIT_WORD_RE = /\b(?:permit|learner'?s?|instruction)\b/i;
+
+// The kind a type word in the name says ("CDL license" is a license).
+const NAME_KIND: Array<[RegExp, string]> = [
+  [/\b(?:permit|learner'?s?)\b/i, "permit"],
+  [/\b(?:license|licence|licensed)\b/i, "license"],
+  [/\b(?:certification|certificate|certified)\b/i, "certification"],
+  [/\bcard\b/i, "card"],
+  [/\b(?:course|training|class)\b/i, "training course"],
+];
+
+/**
+ * What a row's name box needs: "" when it is fine; "status" when it holds a
+ * status or a year; "permit" when it names a permit and the kind is not
+ * Permit; "kind" when it names another kind than the one picked ("CDL
+ * license" picked as a card).
+ */
+export function credentialRowNameProblem(name: string, kind?: string): "" | "status" | "permit" | "kind" {
+  if (ROW_NAME_STATUS_RE.test(name)) return "status";
+  if (PERMIT_WORD_RE.test(name) && kind && kind !== "permit") return "permit";
+  const said = NAME_KIND.find(([re]) => re.test(name))?.[1];
+  if (said && kind && said !== kind) return "kind";
+  return "";
+}
+
+/** True when a structured row is complete: a name with no status in it, one of the kinds, and a year or status the strict parser takes. */
 export function isCompleteCredentialRow(r: Partial<CredentialRow> | null | undefined): r is CredentialRow {
-  return !!r && typeof r.name === "string" && !!r.name.trim() && (CREDENTIAL_KINDS as readonly string[]).includes(r.kind as string) && typeof r.when === "string" && isStrictCredentialWhen(r.when);
+  return (
+    !!r &&
+    typeof r.name === "string" &&
+    !!r.name.trim() &&
+    (CREDENTIAL_KINDS as readonly string[]).includes(r.kind as string) &&
+    !credentialRowNameProblem(r.name, r.kind) &&
+    typeof r.when === "string" &&
+    isStrictCredentialWhen(r.when)
+  );
+}
+
+/**
+ * A row as one line, the name exactly as the person typed it (round 8): "CDL
+ * permit, 2024" stays a permit. The kind is added only when the name holds
+ * no type word of its own ("Forklift" and certification: "Forklift
+ * certification, 2020").
+ */
+export function credentialRowText(r: Pick<CredentialRow, "name" | "kind" | "when">): string {
+  const name = r.name.trim();
+  const when = r.when.trim().replace(/[.\s]+$/, "");
+  return ROW_TYPE_WORD_RE.test(name) ? `${name}, ${when}` : `${name} ${r.kind}, ${when}`;
 }
 
 /** True when the page shows this credential exactly as one of the person's structured rows: that name, that kind, that year or status. */
 export function mentionMatchesRow(m: CredentialMention, rows: ReadonlyArray<CredentialRow> | undefined): boolean {
   if (!rows?.length || m.title) return false;
   const shown = [normalizeTyped(m.unit), normalizeTyped(m.context.replace(/^\s*[-•*]\s*/, ""))];
-  return rows.some((r) => isCompleteCredentialRow(r) && shown.includes(normalizeTyped(credentialLineText(r.name, r.kind, r.when))));
+  return rows.some((r) => isCompleteCredentialRow(r) && shown.includes(normalizeTyped(credentialRowText(r))));
+}
+
+// Long names and their short forms, only to tell that two names are one credential family.
+const FAMILY_NAMES: Array<[RegExp, string]> = [
+  [/\bcommercial\s+driver'?s?\b(?:\s+licen[cs]e)?/gi, "cdl"],
+  [/\b(?:certified\s+)?nursing\s+assistant\b/gi, "cna"],
+  [/\bstate\s+tested\s+nurs(?:e|ing)\s+(?:aide|assistant)\b/gi, "stna"],
+  [/\blicensed\s+practical\s+nurse\b/gi, "lpn"],
+  [/\bemergency\s+medical\s+technician\b/gi, "emt"],
+  [/\bbasic\s+life\s+support\b/gi, "bls"],
+  [/\bcardiopulmonary\s+resuscitation\b/gi, "cpr"],
+  [/\b(\d+)[\s-]*hour\b/gi, "$1"],
+];
+/** A credential name's family key: the page key after long names become their short forms ("Certified Nursing Assistant" is "cna"). */
+export function credentialFamilyKey(name: string): string {
+  return credentialKey(FAMILY_NAMES.reduce((t, [re, to]) => t.replace(re, to), name));
+}
+
+// A row's status that says the person does not hold it now.
+const DEAD_WHEN_RE = /\b(?:expired|lapsed|suspended|revoked|inactive|in progress|enrolled)\b/i;
+
+/** The keys of credentials the person's rows mark expired, lapsed, suspended or not yet held. */
+function deadRowKeys(rows: ReadonlyArray<CredentialRow> | undefined): Set<string> {
+  return new Set((rows ?? []).filter((r) => r.kind === "permit" || r.kind === "training course" || DEAD_WHEN_RE.test(r.when)).map((r) => credentialFamilyKey(r.name)));
 }
 
 /** Kept for older callers: the person's lines, whole and normalised. */
@@ -557,24 +672,38 @@ const NEGATED_RE = /\b(?:never|not|no|didn['’]?t|did not|wasn['’]?t|was not|
 /** The job titles in the person's own job header lines only ("Line Cook | Harbor Street Diner | 2019 - 2023", "Line cook, Harbor Street Diner, 2019-2023"). */
 export function personHeaderTitles(personText: string | undefined): Set<string> {
   const out = new Set<string>();
-  // Only job headers: under a work heading, or before any heading. A credentials, skills or
-  // education line ("Forklift Certification | 2019 - 2021") is never a job title.
+  for (const l of personJobHeaderLines(personText)) {
+    const body = l.replace(/^\s*[-•*]\s*/, "");
+    out.add(normalizeTyped(body.includes("|") ? titleOfHeader(body) : body.split(",")[0]));
+  }
+  out.delete("");
+  return out;
+}
+
+/**
+ * The person's own job header lines: under a work heading, or before any
+ * heading. A credentials, skills or education line ("Forklift Certification |
+ * 2019 - 2021") is never a job header. Title, employer and dates: three parts
+ * (two under a work heading).
+ */
+// The last part of a "Title, Employer, 2019-2023" line: a year or a range of years.
+const YEARS_PART_RE = /^\s*(?:19|20)\d{2}(?:\s*[-\u2013]\s*(?:(?:19|20)\d{2}|present))?\s*$/i;
+
+export function personJobHeaderLines(personText: string | undefined): Set<string> {
+  const out = new Set<string>();
   let section: "none" | "work" | "other" = "none";
   for (const line of (personText || "").split("\n")) {
     const raw = line.trim();
-    if (/^[A-Z][A-Z &/]{3,}:?$/.test(raw) || CRED_SECTION_RE.test(raw.replace(/:$/, "")) || SKILLS_RE.test(raw.replace(/:$/, ""))) {
+    if (/^[A-Z][A-Z &/]{3,}:?$/.test(raw) || CRED_SECTION_RE.test(raw.replace(/:$/, "")) || SKILLS_RE.test(raw.replace(/:$/, "")) || EDUCATION_RE.test(raw.replace(/:$/, ""))) {
       section = /\b(?:EXPERIENCE|WORK|EMPLOYMENT|HISTORY|JOBS)\b/i.test(raw) ? "work" : "other";
       continue;
     }
-    if (section === "other") continue;
+    if (section === "other" || !raw) continue;
     const l = raw.replace(/^\s*[-•*]\s*/, "");
-    // Title, employer and dates: three parts (two under a work heading).
-    const parts = (sep: string) => l.split(sep).length;
     const need = section === "work" ? 2 : 3;
-    if (l.includes("|") && parts("|") >= need && /\b(?:19|20)\d{2}\b|\bpresent\b/i.test(l)) out.add(normalizeTyped(titleOfHeader(l)));
-    else if (/\b(?:19|20)\d{2}\b/.test(l) && parts(",") >= 3 && !/[.!?]$/.test(l)) out.add(normalizeTyped(l.split(",")[0]));
+    if (l.includes("|") && l.split("|").length >= need && /\b(?:19|20)\d{2}\b|\bpresent\b/i.test(l)) out.add(raw);
+    else if (l.split(",").length >= 3 && YEARS_PART_RE.test(l.split(",").pop() as string)) out.add(raw);
   }
-  out.delete("");
   return out;
 }
 
@@ -589,7 +718,7 @@ export function personJobTitles(personText: string | undefined): Set<string> {
     const l = line.trim().replace(/^\s*[-•*]\s*/, "");
     if (!l) continue;
     if (l.includes("|")) add(titleOfHeader(l));
-    else if (/\b(?:19|20)\d{2}\b/.test(l) && l.split(",").length >= 3 && !/[.!?]$/.test(l)) add(l.split(",")[0]);
+    else if (l.split(",").length >= 3 && YEARS_PART_RE.test(l.split(",").pop() as string)) add(l.split(",")[0]);
     for (const s of l.split(/(?<=[.!?;])\s+/)) {
       if (NEGATED_RE.test(s)) continue;
       const lead = s.match(/^([A-Za-z][A-Za-z'&/ -]{1,40}?)\s+(?:at|for|with)\s+[A-Z0-9]/);
@@ -600,7 +729,7 @@ export function personJobTitles(personText: string | undefined): Set<string> {
       for (const m of s.matchAll(/\bhired\s+on\s+as\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=\s+(?:at|for|with|in|from|on|until|since|and)\b|[.,;]|$)/gi)) add(m[1]);
       for (const m of s.matchAll(/\bmy\s+(?:job|title|position|role)\b[^.;]*?\b(?:was|is)\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=\s+(?:at|for|with|in|from|on|until|since|and)\b|[.,;]|$)/gi)) add(m[1]);
       // "Warehouse associate, Midwest Distribution, 2019-2023."
-      if (/\b(?:19|20)\d{2}\b/.test(s) && s.split(",").length >= 3 && s.split(",")[0].split(/\s+/).length <= 4) add(s.split(",")[0]);
+      if (s.split(",").length >= 3 && YEARS_PART_RE.test((s.split(",").pop() as string).replace(/[.]$/, "")) && s.split(",")[0].split(/\s+/).length <= 4) add(s.split(",")[0]);
       if (/\b(?:worked|employed|hired|job)\b/i.test(s)) {
         for (const m of s.matchAll(/\bas\s+(?:an?|the)\s+([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=\s+(?:at|for|with|in|from|on|until|since|and)\b|[.,;]|$)/gi)) add(m[1]);
       }
@@ -634,14 +763,20 @@ export function backstopMentionsOf(text: string, personText: string | undefined)
     if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) { section = "credentials"; return; }
     if (SKILLS_RE.test(l.replace(/:$/, ""))) { section = "skills"; return; }
     if (isSectionEnd(l)) { section = "other"; return; }
-    if (i === 0 || CONTACT_LINE_RE.test(l) || isEntryHeader(l) || !/[a-z]/.test(l)) return;
+    // A pipe line in a skills or credentials list is a list, not a job header.
+    if (i === 0 || CONTACT_LINE_RE.test(l) || (section === "other" && isEntryHeader(l)) || !/[a-z]/.test(l)) return;
     const body = l.replace(/^\s*[-•*]\s*/, "");
     const terms = section === "other" ? [] : skillTermsOf(l);
     for (const m of l.matchAll(CAPS_TOKEN_RE)) {
       const tok = m[0];
-      if (isWorkAcronym(tok)) continue;
+      // Round 8: a work word next to a holding or training word is a claim ("OSHA trained", "RF certified").
+      if (isWorkAcronym(tok) && !CLAIM_CONTEXT_RE.test(nearWords(l, m.index!, tok.length))) continue;
+      // "in compliance with OSHA standards", "OSHA Safety Standards", "followed HACCP rules": the rules, not a card.
+      if (RULES_AFTER_RE.test(afterWords(l, m.index!, tok.length)) && !CLAIM_CONTEXT_RE.test(nearWords(l, m.index!, tok.length))) continue;
+      // "Boston, MA": a state after a city.
+      if (/^(?:MA|PA)$/.test(tok) && /[A-Z][a-z]+,\s*$/.test(l.slice(0, m.index))) continue;
       // Someone else's ("the RN on duty", "CDL drivers") is not asked about.
-      if (OTHERS_BEFORE.test(l.slice(0, m.index)) || OTHERS_AFTER.test(l.slice(m.index! + tok.length))) continue;
+      if (isOthersCredential(l, m.index!, tok.length)) continue;
       // A bracketed agency after a name ("Certified Forklift Operator (OSHA)") is wording about it.
       if (new RegExp(`^(?:${AGENCIES})$`).test(tok) && l[m.index! - 1] === "(" && l[m.index! + tok.length] === ")") continue;
       if (new RegExp(`\\b${tok.toLowerCase()}\\b`).test(person)) continue;
@@ -654,6 +789,20 @@ export function backstopMentionsOf(text: string, personText: string | undefined)
     }
   });
   return out;
+}
+
+const CLAIM_CONTEXT_RE = /\b(?:trained|training|certified|certification|certificate|authori[sz]ed|qualified|card|course|class|license|licensed|completed)\b/i;
+const RULES_AFTER_RE = /\b(?:guidelines?|standards?|rules?|regulations?|requirements?|procedures?|compliance|protocols?|practices?|policies|policy|codes?|logs?|checklists?)\b/i;
+/** The two words after a token. */
+function afterWords(l: string, index: number, length: number): string {
+  return (l.slice(index + length).match(/[A-Za-z'-]+/g) ?? []).slice(0, 2).join(" ");
+}
+
+/** The two words on each side of a token. */
+function nearWords(l: string, index: number, length: number): string {
+  const before = (l.slice(0, index).match(/[A-Za-z'-]+/g) ?? []).slice(-2).join(" ");
+  const after = (l.slice(index + length).match(/[A-Za-z'-]+/g) ?? []).slice(0, 2).join(" ");
+  return dehyphenate(`${before} ${after}`);
 }
 
 /** The mentions of one name on a page, by the name itself (for a credential the backstop found). */
@@ -679,13 +828,16 @@ export function credentialsToAsk(
   const all = [...credentialMentionsOf(text), ...backstopMentionsOf(text, backstopText ?? personText)];
   const skip = Array.from(skipKeys);
   const headerTitles = personHeaderTitles(personText);
+  const dead = deadRowKeys(rows);
   const ask = all.filter((m) => {
     if (skip.some((k) => sameCredential(k, m.key))) return false;
-    // A credential in a job title skips the prompt only when the whole title is in one of their own job header lines.
+    // An exact structured row is the person's own line, status and all.
+    if (mentionMatchesRow(m, rows)) return false;
+    // Round 8: a credential their row marks expired, lapsed, suspended or not yet held is covered by nothing else.
+    if (dead.has(m.key) || dead.has(credentialFamilyKey(m.name))) return true;
+    // A job title covers the title itself only: when the whole title is in one of their own job header lines.
     if (m.title) return !headerTitles.has(normalizeTyped(m.raw));
-    // Their own job title, said again in a sentence ("Certified nursing assistant with eight years...").
-    if (headerTitles.has(normalizeTyped(m.name))) return false;
-    return !mentionIsTheirs(m, person) && !mentionMatchesRow(m, rows);
+    return !mentionIsTheirs(m, person);
   });
   return credentialHomes(ask);
 }

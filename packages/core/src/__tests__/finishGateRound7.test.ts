@@ -166,7 +166,6 @@ test("S6: a credential title skips the prompt only when the title is in their ow
 for (const line of [
   "Picked orders with an RF scanner",
   "Wore PPE and followed safety rules",
-  "Followed OSHA safety guidelines on the dock",
   "Rotated stock using FIFO",
   "Rang up orders on the POS",
   "Supported BOH and FOH teams",
@@ -183,8 +182,9 @@ for (const line of [
 }
 
 test("S3: the skip list is work vocabulary only; an unknown capital is still asked", () => {
-  for (const t of ["RF", "PPE", "FIFO", "POS", "QA", "HVAC", "GED", "OH", "NYC"]) assert.ok(isWorkAcronym(t), t);
-  for (const t of ["CNA", "CDL", "RN", "QMA", "TABC"]) assert.equal(isWorkAcronym(t), false, t);
+  for (const t of ["RF", "PPE", "FIFO", "POS", "QA", "HVAC", "OH", "NYC"]) assert.ok(isWorkAcronym(t), t);
+  // Round 8: OSHA, HACCP, GED, HSE, MA and PA are claims more often than not.
+  for (const t of ["CNA", "CDL", "RN", "QMA", "TABC", "OSHA", "HACCP", "GED", "HSE", "MA", "PA"]) assert.equal(isWorkAcronym(t), false, t);
   assert.ok(credentialsToAsk(page("\n- QMA on the weekend shift at the care home"), BASE).some((m) => m.name === "QMA"));
 });
 

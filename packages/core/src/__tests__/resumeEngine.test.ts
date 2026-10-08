@@ -385,7 +385,7 @@ test("defend: a thin page in the person's own words, with a dated class they nam
 test("two-page fixture really runs to two pages and stays finished once defended", () => {
   const plan = computeFitPlan(TWO_PAGE.resume, {});
   assert.equal(plan.result.pageCount, 2);
-  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialRows: [{ name: "OSHA 10", kind: "card", when: "2017" }] });
+  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialRows: [{ name: "OSHA 10", kind: "card", when: "2017" }], ownResumeText: "GED, Columbus Adult Learning Center | 2005" });
   assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
   assert.equal(s.state, "finished");
 });

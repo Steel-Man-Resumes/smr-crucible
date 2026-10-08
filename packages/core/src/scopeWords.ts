@@ -153,27 +153,55 @@ function objectPeople(after: string, re: RegExp): string[] {
   return peopleClasses((stop >= 0 ? all.slice(0, stop) : all).slice(0, 7), re);
 }
 
-const GROUP = new Set(["crew", "team", "staff", "staffer", "people", "person", "guy", "hire", "employee", "worker", "associate", "trainee", "member", "hand", "man", "helper", "laborer", "volunteer", "intern", "shift", "department", "store", "line"]);
+// Generic work groups, one class. Volunteers, interns, helpers and laborers are their own people, not "the crew".
+const GROUP = new Set(["crew", "team", "staff", "staffer", "people", "person", "guy", "hire", "employee", "worker", "associate", "trainee", "member", "hand", "man", "shift", "department", "store", "line"]);
 const TIME_WORDS = new Set(["night", "day", "morning", "evening", "weekend", "overnight", "first", "second", "third", "graveyard", "new", "entire", "whole", "other", "all", "every", "the", "a", "an", "our", "my", "their", "of", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "twelve", "large", "small", "big"]);
 const ROLE_GROUP: Record<string, string> = { cook: "kitchen", dishwasher: "dish", server: "floor", cashier: "front", nurse: "nursing", aide: "nursing", driver: "driving", loader: "dock", picker: "warehouse", packer: "warehouse" };
 
+// Markers that ride along with the classes: "~group" when a group is named ("staff", "the crew", "all of the
+// ..."), "~plural" when more than one person is ("the new cooks").
+const GROUP_MARK = "~group";
+const PLURAL_MARK = "~plural";
+
 function peopleClasses(words: string[], re: RegExp): string[] {
   const out = new Set<string>();
+  const marks = new Set<string>();
+  if (words.some((w) => /^(?:all|entire|whole|every)$/.test(w))) marks.add(GROUP_MARK);
   words.forEach((w, i) => {
     if (!re.test(w)) return;
     const s = stemNoun(w);
+    if (s !== w.toLowerCase() || /^(?:men|people|staff|crew|team|hands)$/.test(w)) marks.add(PLURAL_MARK);
     if (GROUP.has(s)) {
+      marks.add(GROUP_MARK);
       const prev = words[i - 1];
       if (prev && !TIME_WORDS.has(prev) && !/^\d+$/.test(prev) && !re.test(prev)) out.add(stemNoun(prev));
       else out.add("group");
       return;
     }
     out.add(s);
+    // A role also names its usual group ("cooks" are kitchen people), so it can stand for "kitchen staff".
     if (ROLE_GROUP[s]) out.add(ROLE_GROUP[s]);
   });
   // A specific class says more than "group": drop "group" when a role or modifier is named.
   if (out.size > 1) out.delete("group");
-  return Array.from(out);
+  return [...Array.from(out), ...Array.from(marks)];
+}
+
+/**
+ * Round 8: the person's claim covers the page's people only when every people
+ * class on the page is in theirs, and a group on the page ("all kitchen
+ * staff", "the crew") needs a group or more than one person on theirs (one
+ * new cook is not the kitchen staff). A role never stands for another role:
+ * "nurses" are not "aides".
+ */
+function peopleCovered(page: string[], theirs: string[]): boolean {
+  const real = page.filter((n) => !n.startsWith("~"));
+  const mine = theirs.filter((n) => !n.startsWith("~"));
+  if (!real.every((n) => mine.includes(n))) return false;
+  // A role on the page needs that very role on theirs, not only its group.
+  if (real.some((n) => ROLE_GROUP[n]) && !real.filter((n) => ROLE_GROUP[n]).every((n) => mine.includes(n))) return false;
+  if (page.includes(GROUP_MARK) && !theirs.includes(GROUP_MARK) && !theirs.includes(PLURAL_MARK)) return false;
+  return true;
 }
 
 /** The people a few words after a verb: the last word of the first run of people words ("new team leads" is "lead"). */
@@ -196,7 +224,8 @@ export function scopeHits(text: string): ScopeHit[] {
   const found: Array<ScopeHit & { at: number; end: number; role: boolean }> = [];
   for (const [re, family] of PATTERNS) {
     for (const m of (text || "").matchAll(new RegExp(re.source, "gi"))) {
-      if ((ROLE_NOUN_RE.test(m[0]) || NOUN_FORM_RE.test(m[0])) && OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
+      // Someone else's role or work: "under the head cook", "for the care coordination team".
+      if (OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
       found.push({ family, word: m[0], noun: nounFor(text, m), nouns: peopleFor(text, m), objects: objectWords(text, m), at: m.index!, end: m.index! + m[0].length, role: isRoleUse(text, m) });
     }
   }
@@ -236,13 +265,20 @@ interface Claim {
   objects: string[];
   /** The family's verb, active, with the person as its subject ("I supervised ...", "Supervised ..."). */
   verbSelf: boolean;
+  /** The person is the one doing it: their own verb ("I trained", "Trained ..."), or their own role ("I was the shift lead"). */
+  self: boolean;
 }
 
 // Noun forms are never a claim of the person's ("my supervision", "management liked my work",
 // "hand-eye coordination", "my mentor", "my lead's directions"); a role noun counts only as their own role.
 const NOUN_FORM_RE = /^(?:supervision|supervisions|management|coordination|coordinations|direction|directions|oversight|leadership|mentorship|lead's|leads'|mentor|mentors)$/i;
 // The person as the subject: the sentence starts with the verb, "I (also) verb", or "(I) verbed X and verb".
-const SELF_SUBJECT_BEFORE = /^\s*(?:[-•*]\s*)?$|\bI\s+(?:[a-z']+\s+){0,2}$|^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+(?:ed|ran|led|did|took|ran)\b[^.;!?]*\band\s+$/i;
+const SELF_SUBJECT_BEFORE = /^\s*(?:[-•*]\s*)?$|\b(?:I|we)\s+(?:[a-z']+\s+){0,2}$|^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+(?:ed|ran|led|did|took|ran)\b[^.;!?]*\band\s+$/i;
+// "I helped manage", "I assisted with training", "I tried to lead": shared work stays shared (round 8).
+const SHARED_BEFORE = /\b(?:help(?:ed|s|ing)?|assist(?:ed|s|ing)?(?:\s+with)?|tried|tries|attempted|learned|learning|wanted)\s+(?:to\s+)?$/i;
+// Resume style: "Proven record of leading large teams", "experience in managing crews" (no other subject named).
+const GERUND_SELF_BEFORE = /^(?:(?!\b(?:he|she|they|my|our|his|her|their|the)\b)[\w\s,'-])*\b(?:of|in|at)\s+$/i;
+const isSelf = (before: string) => (SELF_SUBJECT_BEFORE.test(before) || GERUND_SELF_BEFORE.test(before)) && !SHARED_BEFORE.test(before);
 
 /** The scope claims the person makes in their own words, one per sentence hit, active and not denied. */
 function personClaims(sourceText: string): Claim[] {
@@ -264,14 +300,16 @@ function personClaims(sourceText: string): Claim[] {
         const first = m[0].split(/\s+/)[0];
         if (!role && NOUN_FORM_RE.test(first)) continue;
         if (!role && /^lead$/i.test(first) && /\b(?:my|our|the|a|his|her|their)\s+$/i.test(sentence.slice(0, m.index))) continue;
-        out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: !role && SELF_SUBJECT_BEFORE.test(sentence.slice(0, m.index)) });
+        const verbSelf = !role && isSelf(sentence.slice(0, m.index));
+        out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf, self: role || verbSelf });
       }
     }
     for (const [re, family] of LOOSE) {
       for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) {
         if (!ok(m)) continue;
         const nouns = objectPeople(sentence.slice(m.index! + m[0].length), PEOPLE_RE);
-        if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: SELF_SUBJECT_BEFORE.test(sentence.slice(0, m.index)) });
+        const verbSelf = isSelf(sentence.slice(0, m.index));
+        if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf, self: verbSelf });
       }
     }
   }
@@ -296,10 +334,10 @@ export function scopeNotTheirs(line: string, sourceText: string): ScopeHit | und
         c.family !== h.family
           ? false
           : h.nouns.length
-            ? c.nouns.some((n) => h.nouns.includes(n))
+            ? c.self && peopleCovered(h.nouns, c.nouns)
             : // Round 7: a claim that names no people is theirs only when they used the verb themselves,
               // about the same thing ("I managed the stockroom" covers "Managed the stockroom", not "Managed inventory").
-              c.verbSelf && (!(h.objects ?? []).length || c.objects.some((o) => (h.objects ?? []).includes(o)))
+              c.self && c.verbSelf && (!(h.objects ?? []).length || c.objects.some((o) => (h.objects ?? []).includes(o)))
       )
   );
 }
