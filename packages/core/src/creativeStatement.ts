@@ -1,22 +1,22 @@
 /**
- * The statement coach and the statement's authorship guard (CR-03). Pure.
+ * The statement coach and the statement's authorship guard (CR-03). Pure, and
+ * safe in the browser (the word list lives in creativeSpelling.ts, server
+ * only).
  *
  * The artist statement is the person's own. The tool never writes, rewrites
- * or completes a sentence of it. t.ROY may only:
- *   - ask coaching questions (shown beside the text, never inside it);
- *   - read the draft back as questions (a very long sentence, a vague word);
- *   - offer spelling marks, which the person accepts ONE AT A TIME.
+ * or completes any of it. In v1 the coach is entirely fixed code, and no
+ * model ever sees or answers the statement:
+ *   - a fixed bank of coaching questions (COACH_QUESTIONS);
+ *   - a read-back of the person's OWN sentences as questions (a very long
+ *     sentence, a vague word), quoting nothing but their words;
+ *   - spelling marks from a word list: only a token that is not a word can be
+ *     marked, only with the one closest dictionary word, and the person
+ *     accepts each mark on its own.
  *
- * Three walls keep model text out of the saved statement:
- *   1. parseCoachOutput keeps only questions and single-word spelling marks
- *      from whatever a model returns. Prose, rewrites and "here is a stronger
- *      version" are dropped before anything reaches the screen.
- *   2. Every coach call stores fingerprints of the model's RAW reply (hashed
- *      five-word runs). checkStatementSave refuses a save that adds any
- *      five-word run the model wrote, even if the text somehow reached the
- *      page.
- *   3. An accepted spelling mark is checked as exactly one word swapped for
- *      the word t.ROY offered, a close spelling of it, and nothing else.
+ * Because nothing a model writes exists, there is no model text to keep out.
+ * The save guard below still refuses any five-word run from a stored model
+ * reply (a backstop for any future path), and checks every accepted mark as
+ * exactly one swapped word that the spelling module itself would offer.
  */
 
 // ------------------------------------------------------------- questions --
@@ -44,7 +44,8 @@ function sentencesOf(text: string): string[] {
 
 /**
  * The read-back: questions about the person's own draft. Every one is a
- * question, and none suggests a word for them to use.
+ * question built from fixed wording plus the person's own words; none
+ * suggests a word for them to use.
  */
 export function readBackQuestions(text: string): string[] {
   const out: string[] = [];
@@ -65,27 +66,13 @@ export function readBackQuestions(text: string): string[] {
 // ---------------------------------------------------------- spelling marks --
 
 export interface SpellingMark {
-  /** The word as it appears in the person's text. */
+  /** The word as it appears in the person's text. Never a dictionary word. */
   word: string;
-  /** The spelling t.ROY offers. One word. */
+  /** The one dictionary word offered. */
   suggestion: string;
+  /** The person's sentence the word sits in, shown with the mark. */
+  sentence?: string;
 }
-
-const WORD_RE = /^[A-Za-z][A-Za-z'’]{0,29}$/;
-
-/** Common misspellings. A small fixed list, so marks work with no model at all. */
-const COMMON_MISSPELLINGS: Record<string, string> = {
-  acheive: "achieve", accross: "across", alot: "a", begining: "beginning", beleive: "believe", belive: "believe",
-  becuase: "because", calender: "calendar", comittee: "committee", completly: "completely", concious: "conscious",
-  definately: "definitely", dissapear: "disappear", enviroment: "environment", existance: "existence",
-  experiance: "experience", familar: "familiar", finaly: "finally", foriegn: "foreign", freind: "friend",
-  goverment: "government", happend: "happened", immediatly: "immediately", independant: "independent",
-  knowlege: "knowledge", libary: "library", neccessary: "necessary", noticable: "noticeable", occured: "occurred",
-  occurence: "occurrence", peice: "piece", persue: "pursue", posession: "possession", recieve: "receive",
-  remeber: "remember", seperate: "separate", sucess: "success", suprise: "surprise", thier: "their",
-  tommorow: "tomorrow", truely: "truly", untill: "until", wich: "which", wierd: "weird", writting: "writing",
-  paintting: "painting", sculpure: "sculpture", portrat: "portrait", inspriation: "inspiration",
-};
 
 /** Edit distance with adjacent swaps (Damerau, optimal string alignment). */
 export function editDistance(a: string, b: string): number {
@@ -102,102 +89,24 @@ export function editDistance(a: string, b: string): number {
   return d[m][n];
 }
 
-/**
- * Is this a spelling fix and nothing more? One word in, one word out, a close
- * spelling (edit distance 1 or 2, 3 for long words), never the same word.
- */
-export function isSpellingFix(word: string, suggestion: string): boolean {
-  if (!WORD_RE.test(word) || !WORD_RE.test(suggestion)) return false;
-  const a = word.toLowerCase();
-  const b = suggestion.toLowerCase();
-  if (a === b) return false;
-  if (Math.abs(a.length - b.length) > 2) return false;
-  const limit = Math.max(a.length, b.length) >= 9 ? 3 : 2;
-  return editDistance(a, b) <= limit;
-}
+const WORD_CHARS = "A-Za-z'’";
 
-/** Keep the person's capital letter when the word started with one. */
-function matchCase(word: string, suggestion: string): string {
-  return /^[A-Z]/.test(word) ? suggestion[0].toUpperCase() + suggestion.slice(1) : suggestion;
-}
-
-/** Words of the text (letters and apostrophes), in order. */
-function wordsOf(text: string): string[] {
-  return (text ?? "").match(/[A-Za-z][A-Za-z'’]*/g) ?? [];
-}
-
-/** Spelling marks from the fixed list. */
-export function dictionaryMarks(text: string): SpellingMark[] {
-  const out: SpellingMark[] = [];
-  for (const w of wordsOf(text)) {
-    const fix = COMMON_MISSPELLINGS[w.toLowerCase()];
-    if (fix && fix.length > 1 && isSpellingFix(w, fix) && !out.some((m) => m.word === w)) {
-      out.push({ word: w, suggestion: matchCase(w, fix) });
-    }
+/** Is `next` exactly `prev` with one whole-word `mark.word` replaced by `mark.suggestion`? */
+export function isOneWordSwap(prev: string, next: string, mark: SpellingMark): boolean {
+  const re = new RegExp(`(?<![${WORD_CHARS}])${mark.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![${WORD_CHARS}])`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prev))) {
+    const candidate = prev.slice(0, m.index) + mark.suggestion + prev.slice(m.index + mark.word.length);
+    if (candidate === next) return true;
   }
-  return out;
+  return false;
 }
 
-// ------------------------------------------------- what a model may return --
-
-export interface CoachOutput {
-  questions: string[];
-  marks: SpellingMark[];
-}
-
-const MAX_MODEL_QUESTIONS = 3;
-const QUESTION_MAX = 200;
-
-/**
- * Read a model reply for the coach. Expected JSON:
- *   { "questions": ["...?"], "spelling": [{ "word": "...", "suggestion": "..." }] }
- * Anything else in the reply is thrown away. A "question" must be one
- * sentence ending in "?", short, and must not carry a run of five or more of
- * the person's own words back with changes (a disguised rewrite). A spelling
- * mark must name a word that is in the person's text and pass isSpellingFix.
- */
-export function parseCoachOutput(raw: string, personText: string): CoachOutput {
-  let data: unknown = null;
-  const m = (raw ?? "").match(/\{[\s\S]*\}/);
-  if (m) {
-    try {
-      data = JSON.parse(m[0]);
-    } catch {
-      data = null;
-    }
-  }
-  const obj = (data && typeof data === "object" ? data : {}) as { questions?: unknown; spelling?: unknown };
-  const personWords = new Set(wordsOf(personText));
-
-  const questions: string[] = [];
-  if (Array.isArray(obj.questions)) {
-    for (const q of obj.questions) {
-      if (typeof q !== "string") continue;
-      const t = q.replace(/\s+/g, " ").trim();
-      if (!t || t.length > QUESTION_MAX || !t.endsWith("?")) continue;
-      // One sentence only: no full stop or "!" before the closing "?".
-      if (/[.!]\s/.test(t.slice(0, -1))) continue;
-      // No dashes the house never prints.
-      if (/[\u2013\u2014]/.test(t)) continue;
-      questions.push(t);
-      if (questions.length >= MAX_MODEL_QUESTIONS) break;
-    }
-  }
-
-  const marks: SpellingMark[] = [];
-  if (Array.isArray(obj.spelling)) {
-    for (const s of obj.spelling) {
-      const w = (s as { word?: unknown })?.word;
-      const sug = (s as { suggestion?: unknown })?.suggestion;
-      if (typeof w !== "string" || typeof sug !== "string") continue;
-      if (!personWords.has(w)) continue;
-      if (!isSpellingFix(w, sug)) continue;
-      if (marks.some((x) => x.word === w)) continue;
-      marks.push({ word: w, suggestion: sug });
-      if (marks.length >= 20) break;
-    }
-  }
-  return { questions, marks };
+/** Apply one accepted mark to the first matching whole word. Returns the text unchanged if absent. */
+export function applySpellingMark(text: string, mark: SpellingMark): string {
+  const re = new RegExp(`(?<![${WORD_CHARS}])${mark.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![${WORD_CHARS}])`);
+  const m = re.exec(text);
+  return m ? text.slice(0, m.index) + mark.suggestion + text.slice(m.index + mark.word.length) : text;
 }
 
 // ------------------------------------------------------------ fingerprints --
@@ -230,14 +139,9 @@ export function shinglesOf(text: string): string[] {
   return out;
 }
 
-/**
- * Hashed five-word runs of a model reply, to keep with the statement. Runs
- * that were already in the person's text sent to the coach are left out: a
- * model quoting the person back does not make their own words model text.
- */
-export function modelFingerprints(raw: string, personText = ""): string[] {
-  const own = new Set(shinglesOf(personText));
-  return Array.from(new Set(shinglesOf(raw).filter((s) => !own.has(s)).map(fnv1a))).slice(0, 2000);
+/** Hashed five-word runs of a model reply (for the backstop). v1 stores none. */
+export function modelFingerprints(raw: string): string[] {
+  return Array.from(new Set(shinglesOf(raw).map(fnv1a))).slice(0, 4000);
 }
 
 // -------------------------------------------------------------- the guard --
@@ -249,28 +153,27 @@ export interface StatementSaveInput {
   nextText: string;
   /** Present when the save is ONE accepted spelling mark. */
   acceptedMark?: SpellingMark | null;
-  /** Marks t.ROY actually offered on this statement. */
-  offeredMarks: SpellingMark[];
-  /** Fingerprints of every model reply the coach received for this statement. */
+  /**
+   * The server's mark check (creativeSpelling.isValidSpellingMark). Without
+   * it no mark can be accepted: the browser can never vouch for a mark.
+   */
+  validMark?: (m: SpellingMark) => boolean;
+  /** Fingerprints of any stored model reply (none in v1). The backstop. */
   modelPrints: string[];
 }
 
 export type StatementSaveResult =
   | { ok: true }
-  | { ok: false; reason: "model_text" | "mark_not_offered" | "mark_not_spelling" | "mark_changed_more" | "too_long" };
+  | { ok: false; reason: "model_text" | "mark_not_valid" | "mark_changed_more" | "too_long" };
 
 export const STATEMENT_MAX_CHARS = 12000;
 
 /**
  * Can this text be saved as the person's statement?
- *
- * A typed save: allowed, unless it adds a five-word run that matches any
- * model reply the coach saw (wall 2). Runs already in the previous text are
- * the person's own and stay allowed.
- *
- * A spelling-mark save: the new text must be the previous text with exactly
- * one occurrence of the offered word swapped for its offered spelling, and no
- * other change (wall 3).
+ * A typed save: allowed (the person's own words), unless it adds a
+ * five-word run of a stored model reply (the backstop). A spelling save: the
+ * mark must be exactly the one the spelling module offers for that token,
+ * and the new text must be the previous text with that one word swapped.
  */
 export function checkStatementSave(inp: StatementSaveInput): StatementSaveResult {
   const next = inp.nextText ?? "";
@@ -279,59 +182,27 @@ export function checkStatementSave(inp: StatementSaveInput): StatementSaveResult
 
   if (inp.acceptedMark) {
     const mk = inp.acceptedMark;
-    const offered = inp.offeredMarks.some((o) => o.word === mk.word && o.suggestion === mk.suggestion);
-    if (!offered) return { ok: false, reason: "mark_not_offered" };
-    if (!isSpellingFix(mk.word, mk.suggestion)) return { ok: false, reason: "mark_not_spelling" };
+    if (!inp.validMark || !inp.validMark(mk)) return { ok: false, reason: "mark_not_valid" };
     if (!isOneWordSwap(prev, next, mk)) return { ok: false, reason: "mark_changed_more" };
     return { ok: true };
   }
 
-  const prints = new Set(inp.modelPrints);
-  if (prints.size) {
-    const own = new Set(shinglesOf(prev));
-    for (const sh of shinglesOf(next)) {
-      if (own.has(sh)) continue;
-      if (prints.has(fnv1a(sh))) return { ok: false, reason: "model_text" };
-    }
-  }
+  if (modelTextAdded(prev, next, inp.modelPrints)) return { ok: false, reason: "model_text" };
   return { ok: true };
 }
 
-/** Is `next` exactly `prev` with one whole-word `mark.word` replaced by `mark.suggestion`? */
-export function isOneWordSwap(prev: string, next: string, mark: SpellingMark): boolean {
-  const re = new RegExp(`(?<![A-Za-z'’])${mark.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z'’])`, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(prev))) {
-    const candidate = prev.slice(0, m.index) + mark.suggestion + prev.slice(m.index + mark.word.length);
-    if (candidate === next) return true;
-  }
-  return false;
-}
-
-/** The offered marks whose word still appears in the text (what the screen shows). */
-export function marksStillInText(marks: SpellingMark[], text: string): SpellingMark[] {
-  const words = new Set(wordsOf(text));
-  const seen = new Set<string>();
-  return marks.filter((m) => {
-    const k = `${m.word}>${m.suggestion}`;
-    if (!words.has(m.word) || seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
-
-/** Apply one accepted mark to the first matching whole word. Returns the text unchanged if absent. */
-export function applySpellingMark(text: string, mark: SpellingMark): string {
-  const re = new RegExp(`(?<![A-Za-z'’])${mark.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z'’])`);
-  const m = re.exec(text);
-  return m ? text.slice(0, m.index) + mark.suggestion + text.slice(m.index + mark.word.length) : text;
+/** Does `next` add a five-word run (not already in `prev`) that matches a model print? */
+function modelTextAdded(prev: string, next: string, prints: string[]): boolean {
+  if (!prints.length) return false;
+  const set = new Set(prints);
+  const own = new Set(shinglesOf(prev));
+  return shinglesOf(next).some((sh) => !own.has(sh) && set.has(fnv1a(sh)));
 }
 
 export const STATEMENT_SAVE_COPY: Record<Exclude<StatementSaveResult, { ok: true }>["reason"], string> = {
   model_text: "That text matches words t.ROY wrote. Your statement has to be in your own words. Take that part out and write it your way.",
-  mark_not_offered: "That spelling change wasn't one t.ROY offered. Type the change yourself instead.",
-  mark_not_spelling: "That isn't a spelling fix. Type the change yourself instead.",
-  mark_changed_more: "Only the one word can change when you accept a spelling mark. Save your other edits first.",
+  mark_not_valid: "That isn't a spelling fix t.ROY can make. Type the change yourself instead.",
+  mark_changed_more: "Only the one word can change when you accept a spelling fix. Save your other edits first.",
   too_long: "That's longer than any application allows. Trim it before you save.",
 };
 
@@ -340,32 +211,29 @@ export const STATEMENT_SAVE_COPY: Record<Exclude<StatementSaveResult, { ok: true
 export interface StatementVersion {
   text: string;
   savedAt: string;
-  /** "typed" by the person, or one accepted "spelling" mark. */
+  /** "typed" by the person, or one accepted "spelling" fix. */
   via: "typed" | "spelling";
-  /** The mark accepted, for a "spelling" version. */
-  mark?: SpellingMark;
+  /** The fix accepted, for a "spelling" version. */
+  mark?: { word: string; suggestion: string };
 }
 
-/** Fingerprints of one coach reply, with when it came back. */
+/** Fingerprints of one model reply, with when it came back. v1 writes none. */
 export interface ModelPrintSet {
   at: string;
   prints: string[];
 }
 
 export const MAX_STATEMENT_VERSIONS = 25;
-export const MAX_MODEL_PRINT_SETS = 10;
 
 /** What a statement artifact holds. Only the versions are ever shown as the statement. */
 export interface StatementContent {
   versions: StatementVersion[];
-  /** Marks offered by t.ROY (so an acceptance can be checked). */
-  offeredMarks: SpellingMark[];
-  /** Fingerprints of model replies, newest last. */
+  /** Kept for life when present (never aged out). v1 never adds any. */
   modelPrints: ModelPrintSet[];
 }
 
 export function emptyStatement(): StatementContent {
-  return { versions: [], offeredMarks: [], modelPrints: [] };
+  return { versions: [], modelPrints: [] };
 }
 
 /** Read a stored statement safely (old or odd rows read as empty). */
@@ -381,42 +249,31 @@ export function readStatement(content: unknown): StatementContent {
           ...(v.mark && typeof v.mark.word === "string" && typeof v.mark.suggestion === "string" ? { mark: { word: v.mark.word, suggestion: v.mark.suggestion } } : {}),
         }))
     : [];
-  const offeredMarks = Array.isArray(c.offeredMarks)
-    ? c.offeredMarks.filter((m): m is SpellingMark => !!m && typeof m.word === "string" && typeof m.suggestion === "string")
-    : [];
   const modelPrints = Array.isArray(c.modelPrints)
     ? c.modelPrints
         .filter((p): p is ModelPrintSet => !!p && typeof p.at === "string" && Array.isArray(p.prints))
         .map((p) => ({ at: p.at, prints: p.prints.filter((x) => typeof x === "string") }))
     : [];
-  return { versions, offeredMarks, modelPrints };
+  return { versions, modelPrints };
 }
 
-/** Every fingerprint from coach replies that came back before `iso` (all of them when absent). */
-export function printsBefore(c: StatementContent, iso?: string): string[] {
-  const out: string[] = [];
-  for (const set of c.modelPrints) if (!iso || set.at <= iso) out.push(...set.prints);
-  return out;
+/** Every stored model fingerprint (none in v1). */
+export function allPrints(c: StatementContent): string[] {
+  return c.modelPrints.flatMap((p) => p.prints);
 }
 
 /**
- * Re-check the whole saved history (CR-03): every version, against the one
- * before it and every coach reply that existed when it was saved. Returns the
- * first version that fails, or null when all of it is the person's own.
+ * Re-check the saved history (CR-03) against model text only: does any kept
+ * version contain a five-word run of a stored model reply? Spelling fixes
+ * were checked when they were saved and are not re-derived here, so trimming
+ * old versions can never raise a false BLOCK. With no model text stored (v1),
+ * this is always null.
  */
-export function auditStatementHistory(c: StatementContent): { index: number; reason: string } | null {
-  let prev = "";
+export function auditStatementHistory(c: StatementContent): { index: number; reason: "model_text" } | null {
+  const prints = allPrints(c);
+  if (!prints.length) return null;
   for (let i = 0; i < c.versions.length; i++) {
-    const v = c.versions[i];
-    const r = checkStatementSave({
-      previousText: prev,
-      nextText: v.text,
-      acceptedMark: v.via === "spelling" ? v.mark ?? { word: "", suggestion: "" } : null,
-      offeredMarks: c.offeredMarks,
-      modelPrints: printsBefore(c, v.savedAt),
-    });
-    if (!r.ok) return { index: i, reason: r.reason };
-    prev = v.text;
+    if (modelTextAdded("", c.versions[i].text, prints)) return { index: i, reason: "model_text" };
   }
   return null;
 }
