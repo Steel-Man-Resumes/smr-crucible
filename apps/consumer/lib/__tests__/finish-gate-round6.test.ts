@@ -57,10 +57,12 @@ for (const sent of [
 }
 
 test("B5: what a drop leaves in a letter paragraph is read again; a status with no credential is held", () => {
-  const letter = letterOf("I ran the grill at Harbor Street Diner. I hold my ServSafe Manager certification. Mine is current and I keep it on me.");
+  const letter = letterOf("I hold my ServSafe Manager certification. I ran the grill at Harbor Street Diner. The card is still current.");
   const res = applyConfirmation({ resume: HEAD(), letter }, "ServSafe Manager", "card", "expired")!;
+  assert.match(res.letter, /The card is still current\./);
   const v = view(res.resume, { coverLetterText: res.letter, confirmedCredentials: [res.confirm], written: { resume: HEAD(), letter } });
-  if (/current/.test(res.letter)) assert.ok(v.openItems.some((i) => i.kind === "credential_remnant" && i.target === "letter"), res.letter);
+  const g = v.groups.find((x) => x.target === "letter" && x.items.some((i) => i.kind === "credential_remnant"));
+  assert.ok(g && g.blocking && !g.answerable, JSON.stringify(v.openItems));
 });
 
 test("S1: 'No, take it off' inside a sentence leaves a leftover the gate holds until reworded or cut", () => {
