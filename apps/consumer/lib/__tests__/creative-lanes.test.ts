@@ -141,3 +141,11 @@ test("review r2: exports print only safe to-do lines; settings and choices need 
   assert.match(fc, /onTitleMode\(e\.id, m\)/);
   assert.ok(!/titleModes: \{ \.\.\./.test(fc), "the screen never sends a whole map");
 });
+
+test("review r3: the on-screen preview prints the same safe to-do lines as the download; the bio list highlights by id", () => {
+  const ar = readFileSync(join(APP, "components", "creative", "ArtistResumePanel.tsx"), "utf8");
+  assert.match(ar, /exportOpenItemLines\(status, entries, settings, "artist_resume"\)/);
+  assert.ok(!/creativeOpenItemLines/.test(ar));
+  const bio = readFileSync(join(APP, "components", "creative", "BioPanel.tsx"), "utf8");
+  assert.match(bio, /it\.sentenceId/);
+});

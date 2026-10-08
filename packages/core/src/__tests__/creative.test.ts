@@ -422,7 +422,8 @@ describe("bio (C3), strict v1: fixed templates, one entry per sentence; origin d
     const items = checkBio(bio, rec, st);
     // Not a fact sentence, so never drafted and never "finished" on the record's word; these three also carry a name, number or claim the record doesn't hold.
     for (const t of tries.filter((x) => /twenty|Paris|toured/.test(x))) {
-      assert.ok(items.some((i) => i.line.startsWith(t.slice(0, 40))), `asked about: ${t}`);
+      const id = bio.lengths.short.find((x) => x.text === t)!.id;
+      assert.ok(items.some((i) => i.sentenceId === id), `asked about: ${t}`);
     }
   });
 
@@ -656,6 +657,87 @@ describe("review r2 LOWs", () => {
     const m = buildArtistResumeModel([e, SOLO], SETTINGS);
     assert.equal(stillNeedsProof([e, SOLO], m.sections.flatMap((x) => x.rows.map((r) => r.entryId))), 1);
     assert.equal(getCreativeStatus({ entries: [e, SOLO], settings: SETTINGS, artistResume: { model: m, pages: 1 } }).blockCount, 0);
+  });
+});
+
+
+// ------------------------------------------------------------- round 3 --
+describe("review r3: no open item ever quotes a sentence; old names stay hidden (R3-H1, LOW 2)", () => {
+  const settingsTrue: CreativeKindSettings = { ...SETTINGS, titleModes: { [PROGRAM.id]: "true_title" } };
+  const kept = bioTemplates([PROGRAM], settingsTrue).find((x) => x.sourceEntryId === PROGRAM.id)!;
+  const keptBio = () => classifyBio({ lengths: { short: [{ id: "k1", text: kept.text, approved: true }], medium: [], long: [] } }, [PROGRAM], settingsTrue);
+  const facilityWords = /Inside Print|Example County/;
+  const allLines = (st: ReturnType<typeof getCreativeStatus>, entries: PracticeEntry[], settings: CreativeKindSettings) =>
+    [...st.openItems.map((x) => `${x.line} ${x.question}`), ...exportOpenItemLines(st, entries, settings, "bio")];
+
+  it("R3-D: the facility entry is deleted after its sentence was kept: no line names it, and the body drops it", () => {
+    const bio = keptBio();
+    const settings: CreativeKindSettings = { ...SETTINGS, titleModes: { [PROGRAM.id]: "leave_out" } };
+    const st = getCreativeStatus({ entries: ALL.filter((e) => e.id !== PROGRAM.id), settings, bio });
+    assert.ok(st.openItems.some((x) => x.doc === "bio" && x.severity === "BLOCK" && x.sentenceId === "k1"));
+    for (const l of allLines(st, ALL, settings)) assert.ok(!facilityWords.test(l), l);
+    assert.equal(bioTextForLane(bio.lengths.short, ALL.filter((e) => e.id !== PROGRAM.id), settings), "");
+  });
+
+  it("R3-X: the entry is renamed (title and venue) while 'leave it off' stands: no line names the old or new name", () => {
+    const bio = keptBio();
+    const r = resolvePracticeEntry({ title: "Print Program", venue: "ECCF" }, PROGRAM);
+    assert.ok(r.ok);
+    const renamed: PracticeEntry = { ...PROGRAM, ...r.value };
+    assert.deepEqual(renamed.details.formerNames, ["Inside Print Workshop", "Example County Correctional Facility"]);
+    const settings: CreativeKindSettings = { ...SETTINGS, titleModes: { [PROGRAM.id]: "leave_out" } };
+    const entries = [...ALL.filter((e) => e.id !== PROGRAM.id), renamed];
+    const st = getCreativeStatus({ entries, settings, bio });
+    for (const l of allLines(st, entries, settings)) assert.ok(!/Inside Print|Example County|Print Program|ECCF/.test(l), l);
+    assert.equal(bioTextForLane(bio.lengths.short, entries, settings), "");
+  });
+
+  it("LOW 2: a person's own sentence using the OLD name after a rename is a BLOCK and never prints", () => {
+    const r = resolvePracticeEntry({ title: "Print Program", venue: "ECCF" }, PROGRAM);
+    const renamed: PracticeEntry = { ...PROGRAM, ...(r.ok ? r.value : {}) };
+    const settings: CreativeKindSettings = { ...SETTINGS, titleModes: { [PROGRAM.id]: "leave_out" } };
+    const mine = classifyBio({ lengths: { short: [{ id: "p1", text: "Ray Example learned printing in Inside Print Workshop.", approved: true }], medium: [], long: [] } }, [renamed], settings);
+    const items = checkBio(mine, [renamed], settings);
+    assert.ok(items.some((x) => x.severity === "BLOCK" && x.rule === "STD-R03" && x.sentenceId === "p1"));
+    assert.equal(bioTextForLane(mine.lengths.short, [renamed], settings), "");
+  });
+
+  it("a request can't set formerNames; the server keeps them", () => {
+    const r = resolvePracticeEntry({ section: "arts_program", title: "X", year: 2020, namesFacility: true, details: { formerNames: ["Planted"] } });
+    assert.ok(r.ok && r.value.details.formerNames === undefined);
+  });
+
+  it("no bio or statement item line quotes its sentence, whatever the finding", () => {
+    const texts = ["I make work that explores memory.", "Ray Example won first prize at Harbor Gallery.", "Ray Example had a solo show at the Whitney in 2024.", "Ray Example has shown in over twenty exhibitions."];
+    const bio = classifyBio({ lengths: { short: texts.map((text, i) => ({ id: `s${i}`, text, approved: true })), medium: [], long: [] } }, ALL, SETTINGS);
+    const items = checkBio(bio, ALL, SETTINGS);
+    assert.ok(items.length >= 4);
+    for (const it of items) for (const t of texts) assert.ok(!it.line.includes(t.slice(0, 20)), it.line);
+    for (const it of items) assert.match(it.line, /^Short bio, sentence \d+/);
+  });
+
+  it("artist resume items show an entry only through its current rendering", () => {
+    const model = buildArtistResumeModel(ALL, SETTINGS);
+    const bad = structuredClone(model);
+    bad.sections.find((x) => x.key === "group")!.rows.find((r) => r.entryId === INSIDE_SHOW.id)!.parts = [{ text: "Art From Example County Correctional" }];
+    const items = checkArtistResume(bad, ALL, SETTINGS, 1);
+    assert.ok(items.some((x) => x.entryId === INSIDE_SHOW.id && x.severity === "BLOCK"));
+    for (const it of items) assert.ok(!/Art From/.test(it.line), it.line);
+  });
+});
+
+describe("review r3: spelling keeps the shape of contractions and 'nev' words (R3-M1)", () => {
+  it("misspelled contractions and nev- words get no mark", () => {
+    for (const t of ["havnt", "dosent", "dosnt", "couldent", "wernt", "cannt", "didn", "hadn", "shouldn", "wouldn", "nevr", "nevar", "neva", "wount"]) assert.equal(suggestionFor(t), null, t);
+    for (const [t, fix] of [["recieve", "receive"], ["agreemnt", "agreement"], ["statment", "statement"], ["adiction", "addiction"]]) assert.equal(suggestionFor(t), fix, t);
+  });
+});
+
+describe("review r3: claim words toned down (LOW)", () => {
+  it("'first' and 'won' count only near a prize, award or place word", () => {
+    const g = classifyBio({ lengths: { short: [{ id: "a", text: "Her first show was at Harbor Gallery.", approved: true }, { id: "b", text: "Ray Example won over the room at Harbor Gallery.", approved: true }, { id: "c", text: "Ray Example won first place at Harbor Gallery.", approved: true }], medium: [], long: [] } }, ALL, SETTINGS);
+    const items = checkBio(g, ALL, SETTINGS).filter((x) => x.rule === "CR-02");
+    assert.deepEqual(items.map((x) => x.sentenceId), ["c"]);
   });
 });
 

@@ -61,6 +61,9 @@ export function BioPanel({
   const lim = BIO_LIMITS[len];
   // Open items for the bio as it stands on screen (saved or not), with this lane's current choices.
   const live = getCreativeStatus({ entries: ctx.entries, settings: s, bio });
+  // Open items point at sentences by id (their lines never quote them); the list highlights them here.
+  const flagged = new Map<string, string>();
+  for (const it of live.openItems) if (it.sentenceId && !flagged.has(it.sentenceId)) flagged.set(it.sentenceId, it.question);
   const setList = (next: BioSentence[]) => setBio((b) => ({ ...b, lengths: { ...b.lengths, [len]: next } }));
 
   return (
@@ -137,7 +140,13 @@ export function BioPanel({
 
         <ol className="space-y-2" data-testid="bio-sentences">
           {list.map((x) => (
-            <li key={x.id} className={`border p-2 ${x.approved ? "border-t-steel" : "border-dashed border-t-line"}`} data-testid="bio-sentence" data-approved={x.approved ? "yes" : "no"}>
+            <li
+              key={x.id}
+              className={`border p-2 ${flagged.has(x.id) ? "border-t-amber" : x.approved ? "border-t-steel" : "border-dashed border-t-line"}`}
+              data-testid="bio-sentence"
+              data-approved={x.approved ? "yes" : "no"}
+              data-open={flagged.has(x.id) ? "yes" : "no"}
+            >
               {editing === x.id ? (
                 <div className="space-y-2">
                   <textarea className={inputCls} rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} aria-label="Your sentence" data-testid="bio-edit-text" />
@@ -166,6 +175,11 @@ export function BioPanel({
                   <p className="text-xs text-t-phos-dim">
                     {x.origin === "person_written" ? "Your words." : x.approved ? "Built from your record. You kept it." : "Built from your record. Not in your bio yet."}
                   </p>
+                  {flagged.has(x.id) && (
+                    <p className="text-xs text-t-amber-bright" data-testid="bio-sentence-issue">
+                      {flagged.get(x.id)}
+                    </p>
+                  )}
                   <div className="mt-1 flex flex-wrap gap-3 text-sm">
                     {!x.approved && (
                       <button type="button" data-testid="bio-keep" className="t-focus min-h-touch text-t-amber-bright underline" onClick={() => setList(list.map((y) => (y.id === x.id ? { ...y, approved: true } : y)))}>
