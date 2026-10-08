@@ -58,7 +58,8 @@ test("R11 card: the scope card asks who, takes their words for that line, and th
   const v = view(r);
   const g = scopeGroup(v)!;
   assert.ok(g, JSON.stringify(v.groups.map((x) => x.line)));
-  assert.deepEqual(g.scope, { family: "train", question: "Who did you train?", helped: "- Helped train new hires on the scanner" });
+  // Round 12: the card lists every family it asks about.
+  assert.deepEqual(g.scope, { family: "train", families: ["train"], question: "Who did you train?", helped: "- Helped train new hires on the scanner" });
   const doc = { target: "resume" as const, text: r };
   assert.equal(scopeYesResult(doc, g.line, "train", "", v.source, []), "empty");
   assert.equal(scopeYesResult(doc, g.line, "train", "nobody", v.source, []), "empty");

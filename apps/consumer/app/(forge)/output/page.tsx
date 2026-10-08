@@ -33,6 +33,10 @@ import {
   canEmailPackage,
   applyRewrite,
   applyScopeHelped,
+  titleYesResult,
+  isRejectedSchool,
+  recordTitleYes,
+  applyOwnTitle,
   recordScopeYes,
   scopeYesResult,
   cutScopeSentences,
@@ -394,14 +398,26 @@ export default function OutputPage() {
     onScopeYes: (group, typed) => {
       if (!group.scope) return "empty";
       const doc = group.target === "letter" ? { target: "letter" as const, text: coverLetterText } : { target: "resume" as const, text: resumeText };
-      const r = scopeYesResult(doc, group.line, group.scope.family, typed, view.source, defendAnswers);
-      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.family, typed));
+      const r = scopeYesResult(doc, group.line, group.scope.families, typed, view.source, defendAnswers);
+      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed));
       return r;
+    },
+    onTitleYes: (group, typed) => {
+      const r = titleYesResult(group.line, typed);
+      if (r === "ok") setDefendAnswers((a) => recordTitleYes(a, group.line, typed));
+      return r;
+    },
+    onOwnTitle: (group, typed) => {
+      const r = applyOwnTitle(resumeText, defendAnswers, group.line, typed);
+      if (!r.changed) return false;
+      setResumeText(r.text);
+      setDefendAnswers(r.answers);
+      return true;
     },
     onScopeHelped: (group) => {
       if (!group.scope?.helped) return;
       const text = group.target === "letter" ? coverLetterText : resumeText;
-      const r = applyScopeHelped(text, defendAnswers, group.line, group.scope.helped);
+      const r = applyScopeHelped(text, defendAnswers, group.line, group.scope.helped, group.scope.family);
       if (!r.changed) return;
       if (group.target === "letter") setCoverLetterText(r.text);
       else setResumeText(r.text);
@@ -413,6 +429,8 @@ export default function OutputPage() {
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
     },
     onConfirmCredential: (group, type, when, school) => {
+      // Round 12: something typed in "What school?" that is not a school's name gets its own message.
+      if (type === "did not finish" && school?.trim() && isRejectedSchool(school)) return "school";
       if (!isConfirmWhen(type, when)) return "when";
       // Round 10: the person's own words, so a school they named themselves stays on an education line.
       const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when, { personText: view.source, school });

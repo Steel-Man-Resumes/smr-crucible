@@ -27,6 +27,7 @@ import {
   credentialPromptWhy,
   scopeWhy,
   scopeNotTheirsAnswered,
+  scopeAllNotTheirsAnswered,
   Q_SCOPE,
   type DefendAnswer,
   type OpenItem,
@@ -36,7 +37,7 @@ import { hasCredentialStatus, linesOf, numbersIn, runMintCheck } from "@crucible
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
-import { scopeNotTheirs, straightQuotes, isScopeWhoAnswer, helpedForm, scopeWhoQuestion } from "@crucible/core/src/scopeWords";
+import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
 import {
   credentialHomes,
@@ -57,6 +58,7 @@ import {
   credentialPartsOnly,
   attendedSchoolOf,
   typedSchoolName,
+  typedSchoolParts,
   isConfirmedEducationLine,
   isLiveCredential,
   liveCredentialCovers,
@@ -217,10 +219,21 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
             a.replaced.trim() !== "" &&
             (!d.written || writtenHasLine(d.written as WrittenDocs, a.replaced)) &&
             squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
-              ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "rewrite" as const, replaced: a.replaced, ...(a.scopeHelp === true ? { scopeHelp: true } : {}) }
+              ? {
+                  line: a.line,
+                  answer: a.answer,
+                  verdict: a.verdict,
+                  kind: "rewrite" as const,
+                  replaced: a.replaced,
+                  ...(a.scopeHelp === true ? { scopeHelp: true } : {}),
+                  ...(a.scopeHelp === true && typeof a.scopeHelpFamily === "string" ? { scopeHelpFamily: a.scopeHelpFamily } : {}),
+                  ...(a.scopeHelp === true && typeof a.scopeHelpText === "string" ? { scopeHelpText: a.scopeHelpText } : {}),
+                }
               : // Round 11: a "Yes, I did this" answer keeps its family; it settles only that claim on its line.
                 a.kind === "scope_yes" && typeof a.family === "string"
                 ? { line: a.line, answer: a.answer, kind: "scope_yes" as const, family: a.family }
+                : a.kind === "title_yes"
+                ? { line: a.line, answer: a.answer, kind: "title_yes" as const }
                 : { line: a.line, answer: a.answer, verdict: a.verdict }
           )
       : [],
@@ -322,7 +335,7 @@ export function recordAnswer(
   const k = squash(line);
   const next: DefendAnswer = { line, answer: answer.trim(), verdict };
   // A rewrite and a "Yes, I did this" answer stay: they settle other items on the line (round 11).
-  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite" || a.kind === "scope_yes"), next];
+  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite" || a.kind === "scope_yes" || a.kind === "title_yes"), next];
 }
 
 /** The lines on a page, without bullets, squashed, for "is this line still here". */
@@ -409,7 +422,7 @@ export function prefillRewrite(line: string, ownWords: string): string {
 export function answerFor(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
   const k = squash(line);
   // Round 11: a "Yes, I did this" answer belongs to its scope claim only, never the line's other questions.
-  const mine = answers.filter((a) => squash(a.line) === k && a.kind !== "scope_yes");
+  const mine = answers.filter((a) => squash(a.line) === k && a.kind !== "scope_yes" && a.kind !== "title_yes");
   return [...mine].reverse().find((a) => a.kind !== "rewrite") ?? mine[mine.length - 1];
 }
 
@@ -467,11 +480,19 @@ export function applyRewrite(text: string, answers: DefendAnswer[], line: string
   const prior = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
   const replaced = prior?.replaced ?? line;
   const k = squash(newLine);
+  // Round 12 (SF-5): a "Yes, I did this" answer survives a rewrite that keeps the same claim (only a number changed).
+  const claimKey = (h: { family: string; word: string }) => `${h.family}\u0000${h.word.toLowerCase().replace(/\b\d+\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|dozen)\b/g, " ").replace(/\s+/g, " ").trim()}`;
+  const kept = new Set(scopeHits(typed).map(claimKey));
+  const before = new Map<string, string>(scopeHits(stripBullet(line)).map((h) => [h.family as string, claimKey(h)]));
+  const carried = answers
+    .filter((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && kept.has(before.get(a.family as string) ?? ""))
+    .map((a) => ({ ...a, line: newLine }));
   return {
     text: next,
     answers: [
       ...answers.filter((a) => squash(a.line) !== k),
       { line: newLine, answer: typed, verdict: "stands", kind: "rewrite", replaced },
+      ...carried,
     ],
     changed: true,
   };
@@ -946,7 +967,8 @@ function applyDidNotFinish(
   const edu = all.find((m) => m.education && m.where === "credentials" && (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
   let resume = docs.resume;
   let line: string | undefined;
-  const school = typedSchoolName(typedSchool);
+  // Round 12: what they typed, as typed (a grade they add is written as "through 11th grade").
+  const school = typedSchoolName(typedSchool) ? (typedSchool ?? "").trim() : "";
   if (edu) {
     // Round 11 (SF-4): another credential on the line keeps its own card, asked under CERTIFICATIONS.
     const split = splitOffCredentials(resume, edu.line, all);
@@ -1158,9 +1180,13 @@ const scopeItem = (its: GateItem[]) => its.find((i) => i.kind === "scope_unsaid"
 // ---- round 11: the one-tap scope card ------------------------------------------------------
 
 /** "Yes, I did this": their typed who or what, kept for this line's scope claim only. */
-export function recordScopeYes(answers: DefendAnswer[], line: string, family: string, typed: string): DefendAnswer[] {
+export function recordScopeYes(answers: DefendAnswer[], line: string, family: string | string[], typed: string): DefendAnswer[] {
   const k = squash(line);
-  return [...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && a.family === family)), { line, answer: typed.trim(), kind: "scope_yes", family }];
+  const families = Array.isArray(family) ? family : [family];
+  return [
+    ...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && families.includes(a.family as string))),
+    ...families.map((f) => ({ line, answer: typed.trim(), kind: "scope_yes" as const, family: f })),
+  ];
 }
 
 /**
@@ -1172,26 +1198,69 @@ export function recordScopeYes(answers: DefendAnswer[], line: string, family: st
 export function scopeYesResult(
   doc: { target: "resume" | "letter"; text: string },
   line: string,
-  family: string,
+  family: string | string[],
   typed: string,
   source: string,
   answers: DefendAnswer[]
-): "ok" | "empty" | "unmatched" {
+): "ok" | "empty" | "unmatched" | "copy" {
   if (!isScopeWhoAnswer(typed)) return "empty";
-  const next = recordScopeYes(answers, line, family, typed);
+  // Round 12: the line pasted back is not their words.
+  if (isScopeCopy(typed, line) || splitSentences(line).some((sent) => isScopeCopy(typed, sent))) return "copy";
+  const families = Array.isArray(family) ? family : [family];
+  const next = recordScopeYes(answers, line, families, typed);
+  // Round 12: one card per line; one answer must cover every claim it asked about.
   const still = (text: string) => {
     const own = next.map((a) => (squash(a.line) === squash(line) ? { ...a, line: text } : a));
-    return scopeNotTheirsAnswered(text, source, own)?.family === family;
+    return scopeAllNotTheirsAnswered(text, source, own).some((h) => families.includes(h.family));
   };
   if (doc.target === "letter") return splitSentences(line).some((sent) => still(sent)) ? "unmatched" : "ok";
   return still(line) ? "unmatched" : "ok";
 }
 
 /** "I helped with it": the line becomes its shared form, as the person's own choice (never added to their words). */
-export function applyScopeHelped(text: string, answers: DefendAnswer[], line: string, helped: string): RewriteResult {
+export function applyScopeHelped(text: string, answers: DefendAnswer[], line: string, helped: string, family?: string): RewriteResult {
   const r = applyRewrite(text, answers, line, helped);
   if (!r.changed) return r;
-  return { ...r, answers: r.answers.map((a) => (a.kind === "rewrite" && squash(a.line) === squash(stripBullet(helped)) ? { ...a, scopeHelp: true } : a)) };
+  // Round 12 (SF-7): it settles only the claim it was made for, in the sentence it changed.
+  const was = splitSentences(stripBullet(line));
+  const changed = splitSentences(stripBullet(helped)).find((sent) => !was.includes(sent)) ?? stripBullet(helped);
+  return {
+    ...r,
+    answers: r.answers.map((a) =>
+      a.kind === "rewrite" && squash(a.line) === squash(stripBullet(helped)) ? { ...a, scopeHelp: true, ...(family ? { scopeHelpFamily: family } : {}), scopeHelpText: changed } : a
+    ),
+  };
+}
+
+/** Round 12 (SF-8): true when something was typed in "What school?" but it is not a school's name. */
+export function isRejectedSchool(typed: string | undefined): boolean {
+  return typedSchoolParts(typed) === "rejected";
+}
+
+/** Round 12 (SF-2): "Yes, that was my title": what they type must be the title on the line. */
+export function titleYesResult(line: string, typed: string): "ok" | "empty" | "unmatched" {
+  if (!typed.trim()) return "empty";
+  return squash(typed) === squash(titleOfHeader(stripBullet(line))) ? "ok" : "unmatched";
+}
+
+/** Record "Yes, that was my title" for a header line. */
+export function recordTitleYes(answers: DefendAnswer[], line: string, typed: string): DefendAnswer[] {
+  const k = squash(line);
+  return [...answers.filter((a) => !(a.kind === "title_yes" && squash(a.line) === k)), { line, answer: typed.trim(), kind: "title_yes" }];
+}
+
+/**
+ * Round 12 (SF-2): "Use my title": their own title replaces only the title
+ * part of the job header; the employer, the city and the dates stay.
+ */
+export function applyOwnTitle(text: string, answers: DefendAnswer[], line: string, title: string): RewriteResult {
+  const t = title.replace(/\s+/g, " ").trim().replace(/\|/g, "");
+  const body = stripBullet(line);
+  if (!t) return { text, answers, changed: false };
+  const head = titleOfHeader(body);
+  const at = body.indexOf(head);
+  const next = at >= 0 ? `${body.slice(0, at)}${t}${body.slice(at + head.length)}` : body;
+  return applyRewrite(text, answers, line, next);
 }
 
 /**
@@ -1235,7 +1304,9 @@ export interface LineGroup {
   /** Round 11 (SF-3): on an education card, true when the line's school is one the person named (no need to ask "What school?"). */
   schoolKnown?: boolean;
   /** Round 11: an unmatched scope claim: its family (for "Who did you train?") and the line's shared form. */
-  scope?: { family: string; question: string; helped?: string };
+  scope?: { family: string; families: string[]; question: string; helped?: string };
+  /** Round 12 (SF-2): a job title the person never used: "Yes, that was my title" or "Use my title". */
+  title?: { current: string };
 }
 
 /** An open item with the document it is in. */
@@ -1437,12 +1508,18 @@ function letterItems(
     // A scope claim the person never made: settled by "Yes, I did this" with their own words, "I helped
     // with it", their own rewrite, or a cut (round 11). The paragraph's answers count for its sentences only.
     const own = answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sentence } : a));
-    const hit = scopeNotTheirsAnswered(sentence, source, own);
     // A scope word the person typed into the line themselves (their rewrite) is their claim.
     const rw = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
-    const theirWord = !!hit && !!rw && !new RegExp(`\\b${(hit.word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
-    if (hit && !theirWord && !items.some((i) => i.line === line && i.kind === "scope_unsaid")) {
-      const helpedSentence = helpedForm(sentence, hit.word);
+    const theirWord = (word: string) => !!rw && !new RegExp(`\\b${(word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
+    const hits = scopeAllNotTheirsAnswered(sentence, source, own).filter((h) => !theirWord(h.word));
+    const hit = hits[0];
+    const existing = items.find((i) => i.line === line && i.kind === "scope_unsaid");
+    if (hit && existing) {
+      // Round 12: one card per paragraph line, asking about every claim in it.
+      existing.scopeFamilies = Array.from(new Set([...(existing.scopeFamilies ?? [existing.scopeFamily as string]), ...hits.map((h) => h.family)]));
+      delete existing.helped;
+    } else if (hit) {
+      const helpedSentence = hits.length === 1 ? helpedForm(sentence, hit.word) : undefined;
       items.push({
         rule: "STD-C04",
         severity: "BLOCK",
@@ -1452,6 +1529,7 @@ function letterItems(
         why: scopeWhy(hit.word),
         question: Q_SCOPE,
         scopeFamily: hit.family,
+        ...(hits.length > 1 ? { scopeFamilies: Array.from(new Set(hits.map((h) => h.family))) } : {}),
         ...(helpedSentence ? { helped: line.replace(sentence, helpedSentence) } : {}),
       });
     }
@@ -1768,11 +1846,13 @@ export function buildFinishView(input: {
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
+      ...(its.some((i) => i.kind === "title_unsaid") && its[0].target === "resume" ? { title: { current: titleOfHeader(stripBullet(its[0].line)) } } : {}),
       ...(!unsaid && scopeItem(its)
         ? {
             scope: {
               family: scopeItem(its)!.scopeFamily as string,
-              question: scopeWhoQuestion(scopeItem(its)!.scopeFamily as string),
+              families: scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string],
+              question: Array.from(new Set((scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string]).map((f) => scopeWhoQuestion(f)))).join(" "),
               ...(scopeItem(its)!.helped ? { helped: scopeItem(its)!.helped } : {}),
             },
           }

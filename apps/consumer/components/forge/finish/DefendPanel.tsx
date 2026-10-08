@@ -41,14 +41,17 @@ export interface CardActions {
   onKeepTerm: (term: string) => void;
   onCutTerm: (term: string) => void;
   /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
-  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string, school?: string) => "ok" | "when" | "unchanged";
+  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string, school?: string) => "ok" | "when" | "unchanged" | "school";
   onCutCredential: (group: LineGroup) => void;
   /** Round 8: the lines "No, take it off" would change, shown before it does. */
   onPreviewCut?: (group: LineGroup) => Array<{ target: "resume" | "letter"; before: string; after: string | null }>;
   /** Round 11: "Yes, I did this" with who or what in their words. "empty": names no one; "unmatched": does not cover the line. */
-  onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
+  onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched" | "copy";
   /** Round 11: "I helped with it": the line becomes its shared form. */
   onScopeHelped?: (group: LineGroup) => void;
+  /** Round 12: "Yes, that was my title" (typed, must match) and "Use my title" (replaces only the title). */
+  onTitleYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
+  onOwnTitle?: (group: LineGroup, typed: string) => boolean;
 }
 
 /** D3: one card for every skill the person never said. One tap each. */
@@ -219,6 +222,10 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                   );
                   return;
                 }
+                if (result === "school") {
+                  setNotice("Type just the school's name, or leave it empty to take the line off.");
+                  return;
+                }
                 if (result === "unchanged") {
                   setNotice("That didn't change the line. Cut it, or change it on your resume.");
                   return;
@@ -236,6 +243,76 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
         </div>
       )}
       {mode === "ask" && <span className="sr-only">{name}</span>}
+    </li>
+  );
+}
+
+/**
+ * Round 12 (SF-2): a job title the person never used. They confirm it by
+ * typing it as it was, or type their own title, which replaces only the title
+ * (the employer, the city and the dates stay).
+ */
+function TitleCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const [mode, setMode] = useState<"ask" | "yes" | "own">("ask");
+  const [typed, setTyped] = useState("");
+  const [notice, setNotice] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (mode !== "ask") field.current?.focus();
+  }, [mode]);
+  return (
+    <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-title-card="true" data-target={group.target} data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
+      <p className="mt-1.5 text-sm text-t-phos">Was &ldquo;{group.title?.current}&rdquo; your job title there? A screener checks titles against your records.</p>
+      {mode === "ask" ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={() => { setNotice(""); setTyped(""); setMode("yes"); }} className={BTN_MAIN}>
+            Yes, that was my title
+          </button>
+          <button onClick={() => { setNotice(""); setTyped(""); setMode("own"); }} className={BTN_SOFT}>
+            Use my title
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <label htmlFor={`title-${index}`} className="block text-xs font-semibold text-t-white">
+            {mode === "yes" ? "Type your title the way it was" : "Your title at this job, in your words"}
+          </label>
+          <input
+            ref={field}
+            id={`title-${index}`}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+          />
+          {notice && (
+            <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="title-notice">
+              {notice}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                if (mode === "yes") {
+                  const r = actions.onTitleYes?.(group, typed) ?? "empty";
+                  if (r === "empty") return setNotice("Type your title.");
+                  if (r === "unmatched") return setNotice("That isn't the title on this line. Type it the way it was, or use your own title.");
+                } else if (!(actions.onOwnTitle?.(group, typed) ?? false)) {
+                  return setNotice("Type your title.");
+                }
+                setMode("ask");
+              }}
+              className={BTN_MAIN}
+            >
+              Save
+            </button>
+            <button onClick={() => setMode("ask")} className={BTN_SOFT}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -450,8 +527,13 @@ function GroupCard({
                   field.current?.focus();
                   return;
                 }
+                if (r === "copy") {
+                  setNotice("Say it in your own words.");
+                  field.current?.focus();
+                  return;
+                }
                 if (r === "unmatched") {
-                  setNotice("Your words don't cover this line. Say it the way it happened, or pick another answer.");
+                  setNotice("That doesn't match this line. Say who or what in your words, or pick another answer.");
                   field.current?.focus();
                   return;
                 }
@@ -568,6 +650,8 @@ function Groups({
       {groups.map((g, i) =>
         g.target === "skillset" ? (
           <SkillsCard key="skillset" group={g} index={offset + i} actions={actions} />
+        ) : g.title && actions.onTitleYes ? (
+          <TitleCard key={`title:${g.line}`} group={g} index={offset + i} actions={actions} />
         ) : g.credentialName ? (
           <CredentialPromptCard key={`cred:${g.target}:${g.line}:${g.credentialName ?? ""}`} group={g} index={offset + i} actions={actions} />
         ) : (
