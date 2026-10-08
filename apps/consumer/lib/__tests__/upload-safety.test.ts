@@ -186,7 +186,8 @@ describe("PDF: checked before any reader opens it", () => {
     stored.writeUInt16LE(marker.length, 1);
     stored.writeUInt16LE(~marker.length & 0xffff, 3);
     const body = Buffer.concat([Buffer.from([0x78, 0x9c]), stored, marker, deflateRawSync(spaces(PDF_MAX_STREAM_BYTES + 1024))]);
-    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", body)), "pdf_stream_too_big");
+    // r6: refused before inflating, because its /Length runs past that "endstream" (was pdf_stream_too_big).
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", body)), "pdf_malformed");
   });
 
   it("the one allowed chain (ASCII85 then Flate) is decoded and capped like any other", () => {
@@ -742,5 +743,56 @@ describe("r5 M1, M2: one cursor, every byte charged, work linear in the file", (
       assert.ok(scanWork() <= 12 * b.length + 2 * 1024 * 1024);
       assert.ok(ms < 2000, `${ms.toFixed(1)} ms`);
     }
+  });
+});
+
+/* ------------------------------- security review 3a r6 ----------------- */
+
+describe("r6: zlib's verdict, object streams by what pdf.js reads, Flate input charged", () => {
+  const text = Buffer.from("BT /F1 12 Tf (Hello) Tj ET");
+  // A non-final stored block with LEN 0 and NLEN 0: zlib refuses it, pdf.js's decoder reads past it.
+  const zlibRefuses = (raw: Buffer) => Buffer.concat([Buffer.from([0x78, 0x9c, 0x00, 0x00, 0x00, 0x00, 0x00]), raw]);
+
+  it("H1: a Flate stream zlib refuses is refused, even when its content is plain text", () => {
+    assert.doesNotThrow(() => assertSafePdf(pdf("/Filter /FlateDecode", deflateSync(text))));
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", zlibRefuses(deflateRawSync(text)))), "pdf_malformed");
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", zlibRefuses(deflateRawSync(spaces(PDF_MAX_STREAM_BYTES + 1024))))), "pdf_malformed");
+  });
+
+  it("H1: a cleanly truncated Flate stream is still read (pdf.js reads the same bytes)", () => {
+    const z = deflateSync(Buffer.from("BT /F1 12 Tf (" + "Hello ".repeat(400) + ") Tj ET"));
+    assert.doesNotThrow(() => assertSafePdf(pdf("/Filter /FlateDecode", z.subarray(0, z.length - 40))));
+  });
+
+  it("H2: a stream with /First is checked as an object stream whatever its labels; with an image label it is refused", () => {
+    const inner = "5 0 << /B 1 >> stream\nx\n";
+    const objstm = (d: string) => mini(`2 0 obj\n<< ${d} >>\nstream\n${inner}`);
+    refused(() => assertSafePdf(objstm("/Type /ObjStm /N 1 /First 4")), "pdf_hidden_stream");
+    refused(() => assertSafePdf(objstm("/N 1 /First 4")), "pdf_hidden_stream"); // no /Type
+    refused(() => assertSafePdf(objstm("/Type /XObject /N 1 /First 4")), "pdf_hidden_stream");
+    refused(() => assertSafePdf(objstm("/Type /XObject /Subtype /Image /Width 1 /Height 1 /N 1 /First 4")), "pdf_malformed");
+    // A colour profile has /N alone (pdf.js cannot read it as an object stream): still accepted.
+    assert.doesNotThrow(() => assertSafePdf(mini("2 0 obj\n<< /N 3 /Filter /FlateDecode >>\nstream\n", deflateSync(Buffer.alloc(300, 7)))));
+  });
+
+  it("M1: a Flate stream reads only its own data; a /Length past an inner 'endstream' is refused", () => {
+    const marker = Buffer.from("\nendstream\n");
+    const stored = Buffer.from([0x00, marker.length, 0, ~marker.length & 0xff, 0xff]);
+    const body = Buffer.concat([Buffer.from([0x78, 0x9c]), stored, marker, deflateRawSync(text)]);
+    const obj = (len: string) => mini(`5 0 obj<</Filter/FlateDecode${len}>>stream\n`, body);
+    refused(() => assertSafePdf(obj(`/Length ${body.length}`)), "pdf_malformed");
+    refused(() => assertSafePdf(obj("/Length 9 0 R")), "pdf_malformed");
+    // No /Length: pdf.js reads to the first "endstream" too, a truncated stream; read the same.
+    assert.ok(assertSafePdf(obj("")).decodedBytes < 64);
+  });
+
+  it("M1: the input zlib reads is charged to the work count", () => {
+    // 1 MB of empty stored deflate blocks (5 bytes each), then an empty final block: no output at all.
+    const empties = Buffer.concat([Buffer.from([0x78, 0x9c]), Buffer.alloc(5 * 200_000).fill(Buffer.from([0x00, 0x00, 0x00, 0xff, 0xff])), Buffer.from([0x01, 0x00, 0x00, 0xff, 0xff])]);
+    const img = (filter: string) => mini(`5 0 obj<</Subtype/Image/Width 1/Height 1${filter}>>stream\n`, empties);
+    assertSafePdf(img(""));
+    const plain = scanWork();
+    assertSafePdf(img("/Filter/FlateDecode"));
+    assert.ok(scanWork() - plain >= 0.9 * empties.length, `charged ${scanWork() - plain} for ${empties.length} bytes read`);
   });
 });
