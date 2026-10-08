@@ -9,9 +9,10 @@
  *     (1, or 2 for words of 7 letters or more), starting with the same letter;
  *   - be offered ONLY when exactly one dictionary word is closest. Two words
  *     at the same distance: no mark at all (no guessing which one was meant).
- * A token that looks like a contraction typed without its apostrophe
- * ("hasnt", "couldnt", "aint") is never marked: the nearest word would drop
- * the "not".
+ * A token that looks like a contraction typed without its apostrophe, or
+ * misspelled ("hasnt", "havnt", "dosent", "didn"), is never marked: the
+ * nearest word would drop the "not". A token ending in "nt" or starting with
+ * "nev" only gets a fix that keeps that shape.
  * Names, capitalised words, words with an apostrophe, numbers and very short
  * tokens are never marked. Negation and modal words are never produced.
  */
@@ -39,6 +40,22 @@ const BARE_CONTRACTIONS = new Set([
   "mightnt", "mustnt", "neednt", "oughtnt", "shant", "shouldnt", "wasnt", "werent", "wont", "wouldnt",
   "im", "ive", "id", "youre", "youve", "theyre", "theyve", "weve", "hes", "shes", "itll", "thats", "whats", "lets",
 ]);
+
+/** Helper verbs a misspelled contraction is built on ("havnt", "dosent", "wernt", "didn"). */
+const AUXILIARIES = ["do", "does", "did", "have", "has", "had", "could", "should", "would", "were", "was", "is", "are", "can", "wo", "ai", "must", "need", "might", "dare", "ought"];
+
+/**
+ * Does this look like a contraction typed without (or with a wrong) apostrophe?
+ * Ends in "nt" or "ent" (or a bare "n") on top of something within one letter
+ * of a helper verb. Those are never marked: any near word drops the "not".
+ */
+export function looksLikeContraction(token: string): boolean {
+  const stems: string[] = [];
+  if (token.endsWith("ent")) stems.push(token.slice(0, -3));
+  if (token.endsWith("nt")) stems.push(token.slice(0, -2));
+  if (token.endsWith("n")) stems.push(token.slice(0, -1));
+  return stems.some((st) => st.length >= 1 && AUXILIARIES.some((a) => boundedDistance(st, a, 1) <= 1));
+}
 
 /** Most distinct non-words one check looks at. A longer list is cut, and the screen says so. */
 export const MAX_SPELLING_TOKENS = 150;
@@ -90,7 +107,7 @@ export function isDictionaryWord(word: string): boolean {
 
 /** A token the coach is allowed to look at: lowercase letters only, 3 to 30 long, not protected, not a bare contraction. */
 function markable(token: string): boolean {
-  return /^[a-z]{3,30}$/.test(token) && !PROTECTED.has(token) && !BARE_CONTRACTIONS.has(token);
+  return /^[a-z]{3,30}$/.test(token) && !PROTECTED.has(token) && !BARE_CONTRACTIONS.has(token) && !looksLikeContraction(token);
 }
 
 /** Edit distance (with adjacent swaps) that gives up as soon as it must exceed `limit`. Reuses its buffers. */
@@ -150,6 +167,9 @@ function computeSuggestion(token: string): string | null {
   if (known && dict!.has(known) && !PROTECTED.has(known)) return known;
   // Three-letter tokens have too many near words to guess from; only the known list fixes them.
   if (token.length < 4) return null;
+  // Shape rule: a token ending in "nt", or starting with "nev", only gets a fix
+  // that keeps that shape (so "...nt" never loses its "not", "nev..." never becomes "near").
+  const keepsShape = (w: string) => (!token.endsWith("nt") || w.endsWith("nt")) && (!token.startsWith("nev") || w.startsWith("nev"));
   const limit = token.length >= 7 ? 2 : 1;
   let best = Infinity;
   let found: string[] = [];
@@ -163,7 +183,7 @@ function computeSuggestion(token: string): string | null {
       for (let c = 0; c < 26; c++) diff += Math.abs(tb[c] - bags[o + c]);
       if (diff > 2 * limit) continue;
       const w = words[idx];
-      if (PROTECTED.has(w)) continue;
+      if (PROTECTED.has(w) || !keepsShape(w)) continue;
       const d = boundedDistance(token, w, Math.min(limit, best));
       if (d > limit || d > best) continue;
       if (d < best) {
