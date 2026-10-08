@@ -100,7 +100,10 @@ test("Typed exactly: the licenses-and-training answer is the one exception, on t
   const typed = (t: string) => ({ ownWords: `${BASE}\n\n${t}`, credentialsAnswer: t });
   assert.equal(view(r, typed("forklift card, expired 2020")).state, "finished");
   assert.equal(view(r, typed("forklift card")).state, "draft");
-  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card, expired 2020` }).state, "draft");
+  // Round 6: a whole line of the person's own words (their uploaded resume) counts the same way.
+  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card, expired 2020` }).state, "finished");
+  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card\nexpired 2020` }).state, "finished");
+  assert.equal(view(r, { ownWords: `${BASE}\n\nforklift card; never renewed it` }).state, "draft");
   // The letter never borrows the resume's typed line: its own mention is asked.
   const letter = letterOf("I ran the grill at Harbor Street Diner. My forklift card is current.");
   const v = view(r, { coverLetterText: letter, ...typed("forklift card, expired 2020") });

@@ -53,7 +53,7 @@ import {
   type CredentialConfirm,
   applyConfirmation,
   isCredentialWhen,
-  cutCredential,
+  cutCredentialWithRemnant,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
@@ -138,6 +138,8 @@ export default function OutputPage() {
   // Skills kept on the "added for you" card (D3), credentials confirmed in the person's own words (D4).
   const [keptTerms, setKeptTerms] = useState<string[]>([]);
   const [confirmedCredentials, setConfirmedCredentials] = useState<CredentialConfirm[]>([]);
+  // What "No, take it off" left of longer sentences: held until reworded or cut.
+  const [credentialCutRemnants, setCredentialCutRemnants] = useState<string[]>([]);
   const [docError, setDocError] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -164,6 +166,7 @@ export default function OutputPage() {
     setAddedTerms(stored.addedTerms ?? []);
     setKeptTerms(stored.keptTerms ?? []);
     setConfirmedCredentials(stored.confirmedCredentials ?? []);
+    setCredentialCutRemnants(stored.credentialCutRemnants ?? []);
     setDocState("done");
   }, [session]);
 
@@ -179,11 +182,12 @@ export default function OutputPage() {
         addedTerms,
         keptTerms,
         confirmedCredentials,
+        credentialCutRemnants,
       },
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, updateSession]);
 
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
@@ -231,6 +235,7 @@ export default function OutputPage() {
       setAddedTerms([]);
       setKeptTerms([]);
       setConfirmedCredentials([]);
+      setCredentialCutRemnants([]);
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -255,8 +260,9 @@ export default function OutputPage() {
   // The licenses-and-training answer: a credential line exactly as typed there is not asked about.
   const credentialsAnswer = session.challengeNarratives?.[CREDENTIALS_KEY];
   const view = useMemo(
-    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer]
+    () =>
+      buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";
@@ -372,9 +378,10 @@ export default function OutputPage() {
     },
     onCutCredential: (group) => {
       const isLetter = group.target === "letter";
-      const next = cutCredential(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line);
+      const { text: next, remnant } = cutCredentialWithRemnant(isLetter ? coverLetterText : resumeText, group.line, group.target === "skill", group.credentialName ?? group.line);
       if (isLetter) setCoverLetterText(next);
       else setResumeText(next);
+      if (remnant) setCredentialCutRemnants((r) => (r.includes(remnant) ? r : [...r, remnant]));
     },
   };
 
