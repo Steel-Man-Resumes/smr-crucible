@@ -9,12 +9,13 @@
  */
 
 import { useId, useState } from "react";
-import type { CareerLane, LaneFormat, LaneLength } from "@crucible/core/src/careerLaneShared";
-import { LANE_LENGTHS, MAIN_LANE_KEY, hybridAllowed } from "@crucible/core/src/careerLaneShared";
+import type { CareerLane, LaneLength } from "@crucible/core/src/careerLaneShared";
+import { LANE_LENGTHS, MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
 import {
   FACTS_CARRY_COPY,
   FORMAT_COPY,
-  HYBRID_CONDITION_COPY,
+  HYBRID_COMING_COPY,
+  formatSummaryLabel,
   LANE_ERROR_COPY,
   LENGTH_COPY,
   MAIN_LANE_LABEL,
@@ -110,7 +111,7 @@ export function LaneSwitcher({
       {shownLane && panel !== "edit" && (
         <p className="mt-2 text-xs text-t-phos-dim" data-testid="lane-summary">
           {shownLane.target_role ? `Aiming at ${shownLane.target_role}. ` : ""}
-          {FORMAT_COPY[shownLane.format].label}. {LENGTH_COPY[shownLane.length_pref].label}.
+          {formatSummaryLabel(shownLane.format)}. {LENGTH_COPY[shownLane.length_pref].label}.
         </p>
       )}
 
@@ -163,6 +164,7 @@ function ArchivedRow({ lane, onBack }: { lane: CareerLane; onBack: () => void })
       <span className="text-t-phos">{lane.name}</span>
       <button
         type="button"
+        aria-label={`Bring back ${lane.name}`}
         className="t-focus text-t-steel hover:text-t-white underline"
         onClick={async () => {
           const r = await send(`/api/lanes/${lane.id}`, "PATCH", { archived: false });
@@ -172,7 +174,7 @@ function ArchivedRow({ lane, onBack }: { lane: CareerLane; onBack: () => void })
       >
         Bring back
       </button>
-      {msg && <span className="text-t-red">{msg}</span>}
+      {msg && <span className="text-t-red" role="alert">{msg}</span>}
     </li>
   );
 }
@@ -235,21 +237,10 @@ function EditLaneForm({
 }) {
   const [name, setName] = useState(lane.name);
   const [target, setTarget] = useState(lane.target_role ?? "");
-  const [format, setFormat] = useState<LaneFormat>(lane.format);
-  const [uneven, setUneven] = useState(lane.hybrid_uneven_history);
-  const [fieldChange, setFieldChange] = useState(lane.hybrid_field_change);
   const [length, setLength] = useState<LaneLength>(lane.length_pref);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const canHybrid = hybridAllowed(uneven, fieldChange);
-
-  function setCondition(which: "uneven" | "field", on: boolean) {
-    if (which === "uneven") setUneven(on);
-    else setFieldChange(on);
-    // A hybrid lane loses a condition: back to dates first, visibly.
-    if (!on && format === "hybrid") setFormat("chronological");
-  }
 
   return (
     <form
@@ -260,12 +251,11 @@ function EditLaneForm({
         if (busy) return;
         setBusy(true);
         setError("");
+        // Format is not sent: the stored value (and any hybrid answers) stays
+        // as it is until the hybrid layout can actually be rendered.
         const r = await send(`/api/lanes/${lane.id}`, "PATCH", {
           name,
           targetRole: target,
-          format,
-          hybridUnevenHistory: uneven,
-          hybridFieldChange: fieldChange,
           lengthPref: length,
         });
         setBusy(false);
@@ -282,32 +272,15 @@ function EditLaneForm({
         <input className={`${inputCls} mt-1`} value={target} maxLength={200} onChange={(e) => setTarget(e.target.value)} />
       </label>
 
-      <fieldset className="space-y-2" data-testid="lane-format">
-        <legend className="text-sm font-semibold text-t-white">Resume format</legend>
-        {(["chronological", "hybrid"] as LaneFormat[]).map((f) => {
-          const disabled = f === "hybrid" && !canHybrid;
-          return (
-            <label key={f} className={`flex gap-3 border border-t-line p-3 ${disabled ? "opacity-60" : "cursor-pointer"}`}>
-              <input type="radio" name="lane-format" value={f} checked={format === f} disabled={disabled} onChange={() => setFormat(f)} className="mt-1" />
-              <span>
-                <span className="block text-sm font-semibold text-t-white">{FORMAT_COPY[f].label}</span>
-                <span className="block text-xs text-t-phos-dim">{FORMAT_COPY[f].body}</span>
-              </span>
-            </label>
-          );
-        })}
-        <div className="pl-1 space-y-1">
-          <label className="flex gap-2 text-xs text-t-phos">
-            <input type="checkbox" checked={uneven} onChange={(e) => setCondition("uneven", e.target.checked)} />
-            {HYBRID_CONDITION_COPY.uneven}
-          </label>
-          <label className="flex gap-2 text-xs text-t-phos">
-            <input type="checkbox" checked={fieldChange} onChange={(e) => setCondition("field", e.target.checked)} />
-            {HYBRID_CONDITION_COPY.fieldChange}
-          </label>
+      <section className="space-y-2" data-testid="lane-format" aria-labelledby="lane-format-heading">
+        <h3 id="lane-format-heading" className="text-sm font-semibold text-t-white">Resume format</h3>
+        <div className="border border-t-line p-3">
+          <span className="block text-sm font-semibold text-t-white">{FORMAT_COPY.chronological.label}</span>
+          <span className="block text-xs text-t-phos-dim">{FORMAT_COPY.chronological.body}</span>
         </div>
+        <p className="text-xs text-t-phos-dim" data-testid="lane-hybrid-coming">{HYBRID_COMING_COPY}</p>
         <p className="text-xs text-t-phos-dim">{NO_FUNCTIONAL_COPY}</p>
-      </fieldset>
+      </section>
 
       <fieldset className="space-y-2" data-testid="lane-length">
         <legend className="text-sm font-semibold text-t-white">Length</legend>

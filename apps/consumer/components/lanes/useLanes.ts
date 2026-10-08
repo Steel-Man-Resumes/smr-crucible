@@ -49,6 +49,9 @@ export function useLanes() {
   const [state, setState] = useState<LanesState>({ loaded: false, lanes: [], archived: [], introsSeen: new Set() });
   const [active, setActiveState] = useState<LaneChoice>(MAIN_LANE_KEY);
   const lanesRef = useRef<CareerLane[]>([]);
+  // The open lane holding the newest resume (server): where a screen opens
+  // when the person has not picked a lane in this browser.
+  const defaultRef = useRef<string | null>(null);
   const selfId = useRef(Math.random());
   const loadedRef = useRef(false);
 
@@ -59,6 +62,7 @@ export function useLanes() {
       const d = await res.json();
       const lanes: CareerLane[] = Array.isArray(d.lanes) ? d.lanes : [];
       lanesRef.current = lanes;
+      defaultRef.current = typeof d.defaultLaneId === "string" ? d.defaultLaneId : null;
       loadedRef.current = true;
       setState({
         loaded: true,
@@ -66,7 +70,7 @@ export function useLanes() {
         archived: Array.isArray(d.archived) ? d.archived : [],
         introsSeen: new Set(Array.isArray(d.introsSeen) ? d.introsSeen : []),
       });
-      setActiveState(resolveActiveLane(readRemembered(userId), lanes.map((l) => l.id)));
+      setActiveState(resolveActiveLane(readRemembered(userId), lanes.map((l) => l.id), defaultRef.current));
     } catch {
       // No lanes reachable: the screen works in main, exactly as before lanes.
       loadedRef.current = true;
@@ -81,7 +85,7 @@ export function useLanes() {
       const detail = (e as CustomEvent).detail || {};
       if (detail.from === selfId.current) return;
       if (detail.kind === "list") load();
-      else setActiveState(resolveActiveLane(readRemembered(userId), lanesRef.current.map((l) => l.id)));
+      else setActiveState(resolveActiveLane(readRemembered(userId), lanesRef.current.map((l) => l.id), defaultRef.current));
     };
     window.addEventListener(LANES_CHANGED_EVENT, onChange);
     return () => window.removeEventListener(LANES_CHANGED_EVENT, onChange);
@@ -92,7 +96,7 @@ export function useLanes() {
     (choice: LaneChoice) => {
       // Before the list arrives (a screen opening a resume by id), remember
       // the choice as given; load() resolves it against the real lanes.
-      const next = loadedRef.current ? resolveActiveLane(choice, lanesRef.current.map((l) => l.id)) : choice;
+      const next = loadedRef.current ? resolveActiveLane(choice, lanesRef.current.map((l) => l.id), defaultRef.current) : choice;
       if (loadedRef.current) setActiveState(next);
       const key = activeLaneStorageKey(userId);
       if (key) {

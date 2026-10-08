@@ -26,11 +26,15 @@ export function activeLaneStorageKey(userId: string | null | undefined): string 
 export const LANES_CHANGED_EVENT = "lanes-changed";
 
 /**
- * The lane a screen works in: the remembered one when it is still an open
- * lane of this person's, otherwise main. Never a lane that is gone or archived.
+ * The lane a screen works in: the one the person picked in this browser when
+ * it is still one of their open lanes ("main" counts as a pick); otherwise
+ * the fallback the server gave (the open lane holding their newest resume);
+ * otherwise main. Never a lane that is gone or archived.
  */
-export function resolveActiveLane(remembered: unknown, openLaneIds: string[]): LaneChoice {
-  if (typeof remembered === "string" && isUuid(remembered) && openLaneIds.includes(remembered)) return remembered;
+export function resolveActiveLane(remembered: unknown, openLaneIds: string[], fallback?: unknown): LaneChoice {
+  if (remembered === MAIN_LANE_KEY) return MAIN_LANE_KEY;
+  if (typeof remembered === "string" && isUuid(remembered) && openLaneIds.includes(remembered.toLowerCase())) return remembered.toLowerCase();
+  if (typeof fallback === "string" && isUuid(fallback) && openLaneIds.includes(fallback.toLowerCase())) return fallback.toLowerCase();
   return MAIN_LANE_KEY;
 }
 
@@ -93,6 +97,19 @@ export const FORMAT_COPY: Record<LaneFormat, { label: string; body: string }> = 
   },
 };
 
+/**
+ * Hybrid is stored per lane and checked in the database, but nothing renders
+ * it yet, so the screens do not offer it (house truth rule). This is all they
+ * say about it until the renderer ships.
+ */
+export const HYBRID_COMING_COPY =
+  "Hybrid layout is coming: a short skills list on top, then every job with its years. When it's ready, you'll pick it here.";
+
+/** The format a lane's summary shows. A stored hybrid is not claimed as the page. */
+export function formatSummaryLabel(format: LaneFormat): string {
+  return format === "hybrid" ? "Hybrid saved for when it's ready" : FORMAT_COPY.chronological.label;
+}
+
 export const HYBRID_CONDITION_COPY = {
   uneven: "My work history is uneven. For example, long stretches between jobs.",
   fieldChange: "I'm moving into a new kind of work, and my skills carry over.",
@@ -130,13 +147,18 @@ export function laneIntroLine(tool: LaneTool, laneName: string | null): string {
     : "Your Library keeps every resume and letter you made, sorted by lane.";
 }
 
-export const LANE_ERROR_COPY: Record<LaneSettingsError | "duplicate_name" | "too_many" | "not_found" | "failed", string> = {
+export const LANE_ERROR_COPY: Record<
+  LaneSettingsError | "duplicate_name" | "too_many" | "too_many_total" | "too_many_writes" | "not_found" | "failed",
+  string
+> = {
   name_required: "Give the lane a name.",
   bad_format: "Pick one of the two formats.",
   bad_length: "Pick one of the length choices.",
   hybrid_needs_both: "Skills on top needs both boxes checked. Otherwise dates first is the right call.",
   duplicate_name: "You already have a lane with that name.",
   too_many: "That's the most lanes at once. Archive one first.",
+  too_many_total: "You've made a lot of lanes. Bring back an archived one instead.",
+  too_many_writes: "That's a lot of lane changes for one day. Try again tomorrow.",
   not_found: "That lane isn't there anymore. Refresh the page.",
   failed: "That didn't save. Try again.",
 };

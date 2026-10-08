@@ -154,7 +154,16 @@ export default function VaultPage() {
 
   // Career lanes (073): the Library holds every lane; the switcher narrows it.
   const lanes = useLanes();
-  const [laneFilter, setLaneFilter] = useState<LibraryLaneChoice>("all");
+  // Opens in the lane the person is working in (the lane holding their newest
+  // resume until they pick one); "All lanes" is one tap away. Null until the
+  // lanes arrive, so the first list is the right one.
+  const [laneFilterState, setLaneFilter] = useState<LibraryLaneChoice | null>(null);
+  const laneFilter: LibraryLaneChoice = laneFilterState ?? "all";
+  useEffect(() => {
+    if (lanes.loaded && laneFilterState === null) setLaneFilter(lanes.active);
+  }, [lanes.loaded, lanes.active, laneFilterState]);
+  // "Move to" commits only on the Move button, never on an arrow key in the list.
+  const [moveChoice, setMoveChoice] = useState<Record<string, string>>({});
   // FU2: examples and test resumes are hidden until asked for.
   const [examples, setExamples] = useState<Artifact[]>([]);
   const [showExamples, setShowExamples] = useState(false);
@@ -187,10 +196,11 @@ export default function VaultPage() {
       .catch(() => {});
   }, []);
 
-  // Initial load, and again when the lane changes.
+  // Initial load (once the lane is known), and again when the lane changes.
   useEffect(() => {
+    if (laneFilterState === null) return;
     load(q);
-  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load, laneFilterState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadExamples();
@@ -210,6 +220,11 @@ export default function VaultPage() {
       if (res.ok) {
         const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : MAIN_LANE_LABEL;
         setStatusMsg(`Moved to ${name}.`);
+        setMoveChoice((m) => {
+          const n = { ...m };
+          delete n[a.id];
+          return n;
+        });
         // In a one-lane view the moved item leaves the list.
         setItems((prev) =>
           laneFilter === "all" ? prev.map((x) => (x.id === a.id ? { ...x, lane_id: laneId } : x)) : prev.filter((x) => x.id !== a.id)
@@ -479,7 +494,7 @@ ${body}
         key={a.id}
         className={`bg-t-panel border p-4 ${a.is_current ? "border-t-amber" : "border-t-line"}`}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
@@ -594,23 +609,45 @@ ${body}
 
         {(isResume || a.artifact_type === "cover_letter") && (
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {!a.is_demo && (lanes.lanes.length > 0 || a.lane_id) && (
-              <label className="inline-flex items-center gap-2 text-xs text-t-phos-dim">
-                Move to
-                <select
-                  aria-label={`Move ${title(a)} to a lane`}
-                  value={a.lane_id ?? MAIN_LANE_KEY}
-                  disabled={moving === a.id}
-                  onChange={(e) => moveToLane(a, e.target.value)}
-                  className="t-focus bg-t-bg border border-t-line px-2 py-1 text-xs text-t-white"
-                >
-                  {lanes.lanes.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                  <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
-                </select>
-              </label>
-            )}
+            {!a.is_demo && (lanes.lanes.length > 0 || a.lane_id) && (() => {
+              const current = a.lane_id ?? MAIN_LANE_KEY;
+              const chosen = moveChoice[a.id] ?? current;
+              const archivedHere = a.lane_id && !lanes.lanes.some((l) => l.id === a.lane_id);
+              return (
+                <span className="inline-flex flex-wrap items-center gap-2 text-xs text-t-phos-dim">
+                  <label className="inline-flex items-center gap-2">
+                    Move to
+                    <select
+                      aria-label={`Lane for ${title(a)}`}
+                      data-testid="move-select"
+                      value={chosen}
+                      disabled={moving === a.id}
+                      onChange={(e) => setMoveChoice((m) => ({ ...m, [a.id]: e.target.value }))}
+                      className="t-focus bg-t-bg border border-t-line px-2 py-1 text-xs text-t-white"
+                    >
+                      {archivedHere && (
+                        <option value={a.lane_id!} disabled>
+                          {laneName(a.lane_id)} (archived)
+                        </option>
+                      )}
+                      {lanes.lanes.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                      <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    data-testid="move-commit"
+                    disabled={moving === a.id || chosen === current}
+                    onClick={() => moveToLane(a, chosen)}
+                    className="t-focus min-h-touch px-2 font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-40"
+                  >
+                    Move
+                  </button>
+                </span>
+              );
+            })()}
             <button
               type="button"
               data-testid={a.is_demo ? "not-example" : "to-examples"}
@@ -741,7 +778,7 @@ ${body}
         <SavedJobsPanel heading="Your saved jobs" limit={5} />
       </div>
 
-      <p aria-live="polite" className="sr-only">{statusMsg}</p>
+      <p aria-live="polite" role="status" className="mb-2 min-h-[1rem] text-xs text-t-phos-dim" data-testid="library-status">{statusMsg}</p>
 
       {items.length === 0 && !query ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12" data-testid="library-empty">

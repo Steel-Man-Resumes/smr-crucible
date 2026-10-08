@@ -24,7 +24,10 @@ import {
   parseExamplesParam,
   parseLaneIdBody,
   activeLaneStorageKey,
+  HYBRID_COMING_COPY,
+  formatSummaryLabel,
 } from "../lanes";
+import { isSameOriginRequest } from "../same-origin";
 import { termsGateVerdict } from "../session-policy";
 import { firstLaneTarget } from "../forge-persist";
 
@@ -34,12 +37,25 @@ const L1 = "11111111-1111-4111-8111-111111111111";
 const L2 = "22222222-2222-4222-8222-222222222222";
 
 describe("which lane a screen works in", () => {
-  it("the remembered lane, only while it is still open; otherwise main", () => {
+  it("the remembered lane, only while it is still open", () => {
     assert.equal(resolveActiveLane(L1, [L1, L2]), L1);
     assert.equal(resolveActiveLane(L1, [L2]), "main");
-    assert.equal(resolveActiveLane("main", [L1]), "main");
-    assert.equal(resolveActiveLane(null, [L1]), "main");
     assert.equal(resolveActiveLane("garbage", [L1]), "main");
+  });
+  it("M1: nothing picked yet, the screen opens in the lane holding the newest resume, never an empty main", () => {
+    assert.equal(resolveActiveLane(null, [L1], L1), L1);
+    assert.equal(resolveActiveLane("garbage", [L1, L2], L2), L2);
+    assert.equal(resolveActiveLane(L1, [L2], L2), L2, "a remembered lane that is gone falls to the default");
+    assert.equal(resolveActiveLane(null, [L1], null), "main", "newest resume in main: main");
+    assert.equal(resolveActiveLane(null, [L2], L1), "main", "an archived default is never used");
+  });
+  it("an explicit pick of main is respected over the default", () => {
+    assert.equal(resolveActiveLane("main", [L1], L1), "main");
+  });
+  it("the screens take the server's default and the Library opens in the working lane", () => {
+    assert.match(read("app/api/lanes/route.ts"), /defaultLaneId/);
+    assert.match(read("components/lanes/useLanes.ts"), /resolveActiveLane\(readRemembered\(userId\), lanes\.map\(\(l\) => l\.id\), defaultRef\.current\)/);
+    assert.match(read("app/(dashboard)/dashboard/vault/page.tsx"), /if \(lanes\.loaded && laneFilterState === null\) setLaneFilter\(lanes\.active\)/);
   });
   it("remembered per account, never shared between accounts on one computer", () => {
     assert.equal(activeLaneStorageKey(null), null);
@@ -74,6 +90,8 @@ describe("format and length, in plain words", () => {
     HYBRID_CONDITION_COPY.fieldChange,
     NO_FUNCTIONAL_COPY,
     FACTS_CARRY_COPY,
+    HYBRID_COMING_COPY,
+    formatSummaryLabel("hybrid"),
     ...Object.values(LANE_ERROR_COPY),
     laneIntroLine("tailor", "Warehouse"),
     laneIntroLine("tailor", null),
@@ -86,6 +104,15 @@ describe("format and length, in plain words", () => {
       assert.doesNotMatch(t, /\p{Extended_Pictographic}/u, t);
       assert.doesNotMatch(t, /\b(felon|ex-offender|inmate|ex-con)\b/i, t);
     }
+  });
+  it("M3: hybrid is not offered until the renderer can produce it; a stored hybrid is not claimed", () => {
+    const sw = read("components/lanes/LaneSwitcher.tsx");
+    assert.doesNotMatch(sw, /value="hybrid"|lane-format" value=|name="lane-format"/);
+    assert.doesNotMatch(sw, /hybridUnevenHistory|hybridFieldChange|format,\s*$/m);
+    assert.match(sw, /HYBRID_COMING_COPY/);
+    assert.match(HYBRID_COMING_COPY, /coming/i);
+    assert.doesNotMatch(formatSummaryLabel("hybrid"), /Skills on top/);
+    assert.equal(formatSummaryLabel("chronological"), "Dates first");
   });
   it("hybrid names both conditions; the dateless page is explained and refused", () => {
     assert.match(HYBRID_CONDITION_COPY.uneven, /uneven/i);
@@ -131,9 +158,29 @@ describe("first lane from the Forge", () => {
 });
 
 describe("routes", () => {
-  it("lane writes are same-origin JSON only", () => {
-    for (const f of ["app/api/lanes/route.ts", "app/api/lanes/[id]/route.ts", "app/api/lanes/intro/route.ts"]) {
+  it("lane writes and every artifact write are same-origin only (M4)", () => {
+    for (const f of [
+      "app/api/lanes/route.ts",
+      "app/api/lanes/[id]/route.ts",
+      "app/api/lanes/intro/route.ts",
+      "app/api/artifacts/route.ts",
+      "app/api/artifacts/[id]/route.ts",
+      "app/api/artifacts/[id]/fork/route.ts",
+    ]) {
       assert.match(read(f), /isSameOriginJsonPost\(request\.headers\)/, f);
+    }
+    assert.match(read("app/api/artifacts/[id]/route.ts"), /export async function DELETE\(request: Request[\s\S]{0,120}isSameOriginRequest\(request\.headers\)/);
+  });
+  it("a body-less DELETE is refused from another origin, allowed from this one", () => {
+    const h = (o: Record<string, string>) => new Headers(o);
+    assert.equal(isSameOriginRequest(h({ "sec-fetch-site": "same-origin" })), true);
+    assert.equal(isSameOriginRequest(h({ "sec-fetch-site": "same-site" })), false);
+    assert.equal(isSameOriginRequest(h({ origin: "https://evil.example" })), false);
+  });
+  it("lane writes are rate limited per account per day", () => {
+    for (const f of ["app/api/lanes/route.ts", "app/api/lanes/[id]/route.ts", "app/api/lanes/intro/route.ts"]) {
+      assert.match(read(f), /incrementUserUsage\(userId, "lane-write"\)/, f);
+      assert.match(read(f), /LANE_WRITES_PER_DAY/, f);
     }
   });
   it("the terms gate covers every lane route", () => {
@@ -164,8 +211,12 @@ describe("routes", () => {
     assert.match(gen, /getOpenLane\(userId, laneId\)/);
     assert.match(gen, /laneWriterNote\(lane\)/);
   });
-  it("the export carries the lanes", () => {
-    assert.match(read("app/api/user/export-data/route.ts"), /payload\.careerLanes/);
+  it("the export carries the lanes in full: hybrid answers, updated_at, dismissed notes", () => {
+    const ex = read("app/api/user/export-data/route.ts");
+    assert.match(ex, /payload\.careerLanes/);
+    assert.match(ex, /hybrid_uneven_history: l\.hybrid_uneven_history/);
+    assert.match(ex, /updated_at: l\.updated_at/);
+    assert.match(ex, /payload\.laneToolNotesDismissed = await listDismissedIntros\(userId\)/);
   });
 });
 
@@ -178,5 +229,25 @@ describe("examples", () => {
     assert.match(lib, /Not an example/);
     const ws = read("components/resume/ResumeWorkspace.tsx");
     assert.match(ws, /examples=hide/);
+  });
+  it("an example is never the base resume, the contact source or a 'searching as' choice", () => {
+    const ws = read("components/resume/ResumeWorkspace.tsx");
+    assert.doesNotMatch(ws, /fetch\("\/api\/artifacts\?type=resume&limit=\d+"\)/);
+    assert.match(read("components/apply/BaselineSelector.tsx"), /examples=hide/);
+  });
+  it("accessibility: Move commits on a button; Bring back names its lane; errors announced", () => {
+    const lib = read("app/(dashboard)/dashboard/vault/page.tsx");
+    assert.doesNotMatch(lib, /onChange=\{\(e\) => moveToLane/);
+    assert.match(lib, /data-testid="move-commit"/);
+    assert.match(lib, /\(archived\)/);
+    assert.match(lib, /role="status"/);
+    const sw = read("components/lanes/LaneSwitcher.tsx");
+    assert.match(sw, /aria-label=\{`Bring back \$\{lane\.name\}`\}/);
+    assert.match(sw, /role="alert"/);
+  });
+  it("Switch lane in the editor really switches: it saves, then opens the other lane", () => {
+    const ws = read("components/resume/ResumeWorkspace.tsx");
+    assert.match(ws, /data-testid="workspace-switch-lane"/);
+    assert.match(ws, /await save\(\);\s+setShowLanePicker\(false\);\s+lanes\.setActive\(c\);/);
   });
 });

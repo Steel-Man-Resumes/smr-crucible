@@ -60,6 +60,10 @@ export function ResumeWorkspace() {
   // The person's base resume, across every lane: a new lane starts from it.
   const [baseResume, setBaseResume] = useState<SavedResume | null>(null);
   const [startingLane, setStartingLane] = useState(false);
+  // The editor's own lane picker: switching saves this resume, then opens the
+  // other lane's Tailor (a resume belongs to one lane; "Move to" in the
+  // Library moves it).
+  const [showLanePicker, setShowLanePicker] = useState(false);
 
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
@@ -531,7 +535,7 @@ export function ResumeWorkspace() {
         // computers, common for this population).
         if (!baseDocContact) {
           try {
-            const artRes = await fetch("/api/artifacts?type=resume&limit=20");
+            const artRes = await fetch("/api/artifacts?type=resume&limit=20&examples=hide");
             if (artRes.ok) {
               const { data } = await artRes.json();
               const base = (data || []).find(
@@ -583,7 +587,7 @@ export function ResumeWorkspace() {
         // client never sends approved text.
         let approvedArtifactId: string | undefined;
         try {
-          const artRes = await fetch("/api/artifacts?type=resume&limit=50");
+          const artRes = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
           if (artRes.ok) {
             const { data } = await artRes.json();
             const resumes: any[] = data || [];
@@ -1394,7 +1398,13 @@ export function ResumeWorkspace() {
           <p className="text-xs text-t-phos-dim" data-testid="workspace-lane">
             Lane: <span className="font-semibold text-t-phos">{lanes.activeLane?.name ?? MAIN_LANE_LABEL}</span>
             {" "}
-            <button type="button" onClick={startNewResume} className="t-focus underline hover:text-t-white">
+            <button
+              type="button"
+              data-testid="workspace-switch-lane"
+              aria-expanded={showLanePicker}
+              onClick={() => setShowLanePicker((v) => !v)}
+              className="t-focus underline hover:text-t-white"
+            >
               Switch lane
             </button>
           </p>
@@ -1416,6 +1426,21 @@ export function ResumeWorkspace() {
           </button>
         </div>
       </div>
+
+      {showLanePicker && (
+        <div className="mb-4">
+          <LaneSwitcher
+            lanes={lanes}
+            value={lanes.active}
+            onChange={async (c) => {
+              await save();
+              setShowLanePicker(false);
+              lanes.setActive(c);
+              startNewResume();
+            }}
+          />
+        </div>
+      )}
 
       {/* What the truth check found in this tailored version */}
       {truthCheck && (
