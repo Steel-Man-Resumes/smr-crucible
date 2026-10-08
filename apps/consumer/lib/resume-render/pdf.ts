@@ -43,7 +43,10 @@ export async function buildPdf(input: PdfInput): Promise<Uint8Array> {
 
   for (const layout of input.layouts) {
     for (const p of layout.pages) {
-      const page = pdf.addPage([PAGE_W, PAGE_H]);
+      // Letter, or the layout's own trim (the performer page's 8x10).
+      const W = layout.page?.w ?? PAGE_W;
+      const H = layout.page?.h ?? PAGE_H;
+      const page = pdf.addPage([W, H]);
       // group lines by block so deferred runs (years) are drawn after the block's other text
       let i = 0;
       while (i < p.lines.length) {
@@ -62,8 +65,8 @@ export async function buildPdf(input: PdfInput): Promise<Uint8Array> {
         for (const line of group) {
           if (line.rule) {
             page.drawLine({
-              start: { x: line.rule.x1, y: PAGE_H - line.rule.y },
-              end: { x: line.rule.x2, y: PAGE_H - line.rule.y },
+              start: { x: line.rule.x1, y: H - line.rule.y },
+              end: { x: line.rule.x2, y: H - line.rule.y },
               thickness: line.rule.w,
               color: hex(line.rule.color),
             });
@@ -71,7 +74,7 @@ export async function buildPdf(input: PdfInput): Promise<Uint8Array> {
           if (line.square) {
             page.drawRectangle({
               x: line.square.x,
-              y: PAGE_H - line.square.y - line.square.size,
+              y: H - line.square.y - line.square.size,
               width: line.square.size,
               height: line.square.size,
               color: hex("#1f4e79"),
@@ -81,7 +84,7 @@ export async function buildPdf(input: PdfInput): Promise<Uint8Array> {
         i = j + 1;
       }
       function draw(run: Run, line: PlacedLine) {
-        page.drawText(run.text, { x: run.x, y: PAGE_H - line.y, size: run.size, font: fonts[run.face], color: hex(run.color) });
+        page.drawText(run.text, { x: run.x, y: H - line.y, size: run.size, font: fonts[run.face], color: hex(run.color) });
       }
     }
   }

@@ -90,6 +90,50 @@ export function cleanCreativeRequest(body: unknown): CreativeRenderRequest | nul
       openItems,
     };
   }
+  if (b.doc === "performer") {
+    const m = (b.model && typeof b.model === "object" ? b.model : {}) as Record<string, unknown>;
+    const h = (m.header && typeof m.header === "object" ? m.header : {}) as Record<string, unknown>;
+    let rows = 0;
+    const parts = (v: unknown) =>
+      (Array.isArray(v) ? v : []).slice(0, 12).map((p) => {
+        const part = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+        return { text: str(part.text), italic: part.italic === true, after: str(part.after, 3) || undefined };
+      });
+    const lines = (v: unknown, n: number) => (Array.isArray(v) ? v : []).slice(0, n).map((x) => str(x, 200)).filter(Boolean);
+    const credits = (Array.isArray(m.credits) ? m.credits : []).slice(0, 6).map((c) => {
+      const sec = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
+      return {
+        heading: str(sec.heading, 80),
+        rows: (Array.isArray(sec.rows) ? sec.rows : []).filter(() => rows++ < MAX_ROWS).map((r) => {
+          const row = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+          return { years: str(row.years, 20), cols: (Array.isArray(row.cols) ? row.cols : []).slice(0, 3).map(parts) };
+        }),
+      };
+    });
+    const sections = (Array.isArray(m.sections) ? m.sections : []).slice(0, 6).map((s) => {
+      const sec = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
+      return {
+        heading: str(sec.heading, 80),
+        text: str(sec.text, 1400) || undefined,
+        rows: (Array.isArray(sec.rows) ? sec.rows : []).filter(() => rows++ < MAX_ROWS).map((r) => {
+          const row = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+          return { years: str(row.years, 20), parts: parts(row.parts) };
+        }),
+      };
+    });
+    return {
+      doc: "performer",
+      model: {
+        header: { name: str(h.name, 120), discipline: str(h.discipline, 120), unions: lines(h.unions, 6), stats: lines(h.stats, 6), contact: lines(h.contact, 6) },
+        credits,
+        sections,
+        showYears: m.showYears === true,
+      },
+      trim: b.trim === "letter" ? "letter" : "8x10",
+      draft,
+      openItems,
+    };
+  }
   if (b.doc === "bio") {
     const cd = (b.card && typeof b.card === "object" ? b.card : {}) as Record<string, unknown>;
     const card: BioCardInput = {

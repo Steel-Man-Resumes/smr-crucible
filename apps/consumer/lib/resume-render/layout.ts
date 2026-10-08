@@ -70,7 +70,8 @@ export interface BlockSpec {
     | { kind: "header" }
     | { kind: "letter-para"; lines: string[] }
     | { kind: "letter-closing"; lines: string[] }
-    | EntrySrc;
+    | EntrySrc
+    | CreditSrc;
   before: number;
   after: number;
   lines: LineSpec[];
@@ -87,6 +88,25 @@ export interface EntrySrc {
   years: string;
   parts: { text: string; italic?: boolean; after?: string }[];
 }
+
+/**
+ * A performer credit: three columns (production | role or billing | company,
+ * place, director), with the years in a narrow column first only when the
+ * lane shows them. Each column wraps on its own.
+ */
+export interface CreditSrc {
+  kind: "credit";
+  years: string;
+  cols: { text: string; italic?: boolean; after?: string }[][];
+}
+
+/** A page size in points. Letter unless a layout says otherwise (the performer page also prints 8x10). */
+export interface PageSize {
+  w: number;
+  h: number;
+}
+export const LETTER_PAGE: PageSize = { w: PAGE_W, h: PAGE_H };
+export const TRIM_8X10: PageSize = { w: 576, h: 720 };
 
 export interface PlacedLine {
   /** Baseline, points from the top of the page. */
@@ -116,6 +136,8 @@ export interface Layout {
   pageStartBlocks: number[];
   name: string;
   draft: boolean;
+  /** Absent: US Letter. */
+  page?: PageSize;
 }
 
 export interface FitInfo {
@@ -453,8 +475,8 @@ function pageExtras(m: Measurer, L: Level, name: string, pageNo: number, draft: 
   return out;
 }
 
-export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: string, draft: boolean, extrasAfter = 6): Layout {
-  const bottom = PAGE_H - L.marginBottom;
+export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: string, draft: boolean, extrasAfter = 6, size: PageSize = LETTER_PAGE): Layout {
+  const bottom = size.h - L.marginBottom;
   const contentH = bottom - L.marginTop;
   const pages: PlacedPage[] = [];
   const pageStartBlocks: number[] = [];
@@ -474,7 +496,7 @@ export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: strin
       readRank: line.readRank,
       runs: line.runs.map((r) => ({ ...r, x: r.x + L.marginSide })),
     };
-    if (line.rule) placed.rule = { y: top + line.height + line.rule.gap + line.rule.w / 2, w: line.rule.w, color: line.rule.color, x1: L.marginSide, x2: PAGE_W - L.marginSide };
+    if (line.rule) placed.rule = { y: top + line.height + line.rule.gap + line.rule.w / 2, w: line.rule.w, color: line.rule.color, x1: L.marginSide, x2: size.w - L.marginSide };
     if (line.square) {
       const first = line.runs[0];
       const sz = line.square.size;
@@ -542,7 +564,7 @@ export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: strin
     atTop = false;
     void contentH;
   }
-  return { level: L, pages, blocks, pageStartBlocks, name, draft };
+  return { level: L, pages, blocks, pageStartBlocks, name, draft, ...(size === LETTER_PAGE ? {} : { page: size }) };
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +575,7 @@ function lastPageStats(layout: Layout): { lines: number; fill: number } {
   const last = layout.pages[layout.pages.length - 1];
   const real = last.lines.filter((l) => !l.extra);
   // a line of a block counts once per drawn row
-  const contentH = PAGE_H - layout.level.marginBottom - layout.level.marginTop;
+  const contentH = (layout.page ?? LETTER_PAGE).h - layout.level.marginBottom - layout.level.marginTop;
   return { lines: real.length, fill: Math.min(1, Math.max(0, (last.bottomUsed - layout.level.marginTop) / contentH)) };
 }
 

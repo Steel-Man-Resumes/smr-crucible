@@ -22,9 +22,14 @@ import {
   Paragraph,
   Tab,
   TabStopType,
+  Table,
+  TableCell,
+  TableLayoutType,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
-import { COLORS, PAGE_H, PAGE_W, SHAPE, WORD_FONT, type FaceKey } from "./style";
+import { COLORS, CREDIT_COLS, CREDIT_GAP, CREDIT_YEAR_COL, PAGE_H, PAGE_W, SHAPE, WORD_FONT, type FaceKey } from "./style";
 import type { BlockSpec, Layout, Run } from "./layout";
 
 const tw = (pt: number) => Math.round(pt * 20);
@@ -78,8 +83,10 @@ export interface DocxInput {
 export async function buildDocx(inp: DocxInput): Promise<Buffer> {
   const { layout } = inp;
   const L = layout.level;
-  const textW = PAGE_W - 2 * L.marginSide;
-  const children: Paragraph[] = [];
+  const pageW = layout.page?.w ?? PAGE_W;
+  const pageH = layout.page?.h ?? PAGE_H;
+  const textW = pageW - 2 * L.marginSide;
+  const children: (Paragraph | Table)[] = [];
   const starts = new Set(layout.pageStartBlocks.slice(1));
   const pageOfStart = new Map<number, number>();
   layout.pageStartBlocks.forEach((id, k) => pageOfStart.set(id, k + 1));
@@ -105,7 +112,7 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
     return out;
   };
 
-  const flush = (b: BlockSpec, list: Paragraph[]) => {
+  const flush = (b: BlockSpec, list: (Paragraph | Table)[]) => {
     if (starts.has(b.id)) children.push(...extras(pageOfStart.get(b.id) ?? 2, true));
     else if (first) children.push(...extras(1, false));
     children.push(...list);
@@ -115,7 +122,7 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
     const s = b.src;
     const gap = starts.has(b.id) || first ? 0 : Math.max(prevAfter, b.before);
     const before = tw(gap);
-    let list: Paragraph[] = [];
+    let list: (Paragraph | Table)[] = [];
     switch (s.kind) {
       case "header": {
         const rows = b.lines;
@@ -226,6 +233,44 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
         ];
         break;
       }
+      case "credit": {
+        // Three columns as a borderless table (the years column first only when shown).
+        const size = Math.round(L.body * 2);
+        const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+        const share = CREDIT_COLS.reduce((a, b) => a + b, 0);
+        const yearsW = s.years ? CREDIT_YEAR_COL : 0;
+        const colsW = textW - yearsW;
+        const widths = [...(s.years ? [yearsW] : []), ...CREDIT_COLS.map((f) => (colsW * f) / share)];
+        const cell = (runs: TextRun[], w: number, last: boolean) =>
+          new TableCell({
+            width: { size: tw(w), type: WidthType.DXA },
+            borders: { top: none, bottom: none, left: none, right: none },
+            margins: { top: 0, bottom: 0, left: 0, right: last ? 0 : tw(CREDIT_GAP) },
+            children: [new Paragraph({ spacing: { before, after: 0, ...exact(lineH(b)) }, children: runs })],
+          });
+        const colRuns = (ps: { text: string; italic?: boolean; after?: string }[]) => {
+          const out: TextRun[] = [];
+          ps.forEach((p, i) => {
+            out.push(new TextRun({ text: (i > 0 ? " " : "") + p.text, font: WORD_FONT.serif, size, italics: !!p.italic, color: hex(COLORS.ink) }));
+            if (p.after) out.push(new TextRun({ text: p.after, font: WORD_FONT.serif, size, color: hex(COLORS.ink) }));
+          });
+          return out;
+        };
+        const cells = [
+          ...(s.years ? [cell([new TextRun({ text: s.years, font: WORD_FONT.sans, size: Math.round(SHAPE.metaSize * 2), bold: true, color: hex(COLORS.ink) })], yearsW, false)] : []),
+          ...s.cols.map((c, i) => cell(colRuns(c), widths[(s.years ? 1 : 0) + i], i === s.cols.length - 1)),
+        ];
+        list = [
+          new Table({
+            layout: TableLayoutType.FIXED,
+            width: { size: tw(textW), type: WidthType.DXA },
+            columnWidths: widths.map((w) => tw(w)),
+            borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+            rows: [new TableRow({ cantSplit: true, children: cells })],
+          }),
+        ];
+        break;
+      }
       case "letter-closing":
         list = s.lines.map((t, i) =>
           new Paragraph({
@@ -294,7 +339,7 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
       {
         properties: {
           page: {
-            size: { width: tw(PAGE_W), height: tw(PAGE_H) },
+            size: { width: tw(pageW), height: tw(pageH) },
             margin: { top: tw(L.marginTop), bottom: tw(L.marginBottom), left: tw(L.marginSide), right: tw(L.marginSide), header: 0, footer: 0 },
           },
         },

@@ -13,8 +13,10 @@
  * width one in tests). PDF, Word and HTML all draw from the Layout this makes.
  */
 
-import { COLORS, PAGE_W, SHAPE, type FaceKey, type Level } from "./style";
+import { COLORS, CREDIT_COLS, CREDIT_GAP, CREDIT_YEAR_COL, PAGE_W, SHAPE, type FaceKey, type Level } from "./style";
 import {
+  LETTER_PAGE,
+  TRIM_8X10,
   headerBlock,
   lineBox,
   paginate,
@@ -211,4 +213,86 @@ export function cvBlocks(m: Measurer, model: CvInput, L: Level): BlockSpec[] {
 
 export function layoutCv(model: CvInput, m: Measurer, opts: { draft?: boolean } = {}): { layout: Layout; fit: FitInfo } {
   return pickLayout((L) => paginate(m, cvBlocks(m, model, L), L, model.header.name, !!opts.draft));
+}
+
+// ------------------------------------------------------- the performer page --
+
+export interface PerformerInput {
+  header: { name: string; discipline: string; unions: string[]; stats: string[]; contact: string[] };
+  credits: { heading: string; rows: { years: string; cols: { text: string; italic?: boolean; after?: string }[][] }[] }[];
+  sections: { heading: string; text?: string; rows?: { years: string; parts: { text: string; italic?: boolean; after?: string }[] }[] }[];
+  /** C2: credit years print only when the lane turns them on. Training and awards are always dated. */
+  showYears: boolean;
+}
+
+export type PerformerTrim = "8x10" | "letter";
+
+/** One credit: each column wraps on its own; the row is as tall as its tallest column. */
+function creditBlock(m: Measurer, years: string, cols: EntrySrc["parts"][], L: Level, W: number, id: number): BlockSpec {
+  const size = L.body;
+  const yearsW = years ? CREDIT_YEAR_COL : 0;
+  const share = CREDIT_COLS.reduce((a, b) => a + b, 0);
+  const avail = W - yearsW - CREDIT_GAP * (CREDIT_COLS.length - 1) - (years ? CREDIT_GAP : 0);
+  const widths = CREDIT_COLS.map((f) => (avail * f) / share);
+  const xs: number[] = [];
+  let x = years ? yearsW + CREDIT_GAP : 0;
+  for (const w of widths) {
+    xs.push(x);
+    x += w + CREDIT_GAP;
+  }
+  const wrapped = cols.slice(0, 3).map((c, i) => wrapParts(m, c, size, widths[i]));
+  const n = Math.max(1, ...wrapped.map((w) => w.length));
+  const lines: LineSpec[] = [];
+  for (let i = 0; i < n; i++) {
+    const b = lineBox(m, "serif", size, L.lineHeight);
+    const runs: Run[] = [];
+    if (i === 0 && years) runs.push({ text: years, face: "sansBold", size: SHAPE.metaSize, color: COLORS.ink, x: 0 });
+    wrapped.forEach((w, ci) => (w[i] ?? []).forEach((r) => runs.push({ ...r, x: r.x + xs[ci] })));
+    lines.push({ runs, height: b.height, baseline: b.baseline, gapBefore: 0 });
+  }
+  return { id, src: { kind: "credit", years, cols: cols.slice(0, 3) }, before: 0, after: L.bulletAfter + 1.5, keepNext: false, lines };
+}
+
+/**
+ * The performer page: the house header (name, then discipline and union
+ * status, the description the person gave, then contact or agent), credits by
+ * medium in three columns, then training and awards (dated) and special
+ * skills. Never a photo: the headshot stays off the page.
+ */
+export function performerBlocks(m: Measurer, model: PerformerInput, L: Level, pageW: number): BlockSpec[] {
+  const W = pageW - 2 * L.marginSide;
+  const out: BlockSpec[] = [];
+  let id = 0;
+  const head: ModelHeader = {
+    name: model.header.name,
+    headline: [model.header.discipline, ...model.header.unions].filter(Boolean).join(" | "),
+    contact: model.header.contact.join(" | "),
+    notes: model.header.stats.join(" | "),
+  };
+  const hb = headerBlock(m, head, L, W, id);
+  if (hb) {
+    out.push(hb);
+    id++;
+  }
+  for (const c of model.credits) {
+    out.push(sectionBlock(m, c.heading.toUpperCase(), L, id++));
+    for (const r of c.rows) out.push(creditBlock(m, model.showYears ? r.years : "", r.cols, L, W, id++));
+  }
+  for (const sec of model.sections) {
+    out.push(sectionBlock(m, sec.heading.toUpperCase(), L, id++));
+    if (sec.text) {
+      const text = plainDashes(sec.text);
+      out.push({
+        id: id++, src: { kind: "para", text, role: "body" }, before: 0, after: L.paraAfter, keepNext: false,
+        lines: textLines(m, text, "serif", L.body, COLORS.ink, W, L.lineHeight),
+      });
+    }
+    for (const r of sec.rows ?? []) out.push(entryBlock(m, { kind: "entry", years: r.years, parts: r.parts }, L, W, id++));
+  }
+  return out;
+}
+
+export function layoutPerformer(model: PerformerInput, m: Measurer, opts: { draft?: boolean; trim?: PerformerTrim } = {}): { layout: Layout; fit: FitInfo } {
+  const size = opts.trim === "letter" ? LETTER_PAGE : TRIM_8X10;
+  return pickLayout((L) => paginate(m, performerBlocks(m, model, L, size.w), L, model.header.name, !!opts.draft, 6, size));
 }

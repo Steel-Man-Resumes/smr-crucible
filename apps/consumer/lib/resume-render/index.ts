@@ -113,12 +113,15 @@ export { type FitInfo } from "./layout";
 // fonts and builders as the resume.
 // ---------------------------------------------------------------------------
 
-import { layoutArtistResume, layoutBioCard, layoutCv, type ArtistResumeInput, type BioCardInput, type CvInput } from "./creative";
+import { layoutArtistResume, layoutBioCard, layoutCv, layoutPerformer, type ArtistResumeInput, type BioCardInput, type CvInput, type PerformerInput, type PerformerTrim } from "./creative";
+
+export type { PerformerInput, PerformerTrim } from "./creative";
 
 export type CreativeRenderRequest =
   | { doc: "artist_resume"; model: ArtistResumeInput; draft?: boolean; openItems?: string[] }
   | { doc: "bio"; card: BioCardInput; draft?: boolean; openItems?: string[] }
-  | { doc: "cv"; model: CvInput; draft?: boolean; openItems?: string[] };
+  | { doc: "cv"; model: CvInput; draft?: boolean; openItems?: string[] }
+  | { doc: "performer"; model: PerformerInput; trim?: PerformerTrim; draft?: boolean; openItems?: string[] };
 
 export function buildCreative(req: CreativeRenderRequest): Built {
   const m = fontMeasurer();
@@ -129,6 +132,12 @@ export function buildCreative(req: CreativeRenderRequest): Built {
     const { layout, fit } = layoutArtistResume(req.model, m, { draft });
     const who = req.model.header.name;
     return { layout, fit, checklist, kind: "resume", title: who ? `${who} artist resume` : "Artist resume" };
+  }
+  if (req.doc === "performer") {
+    // One page, on 8x10 (the back of a headshot) or US Letter. The to-do page of a draft stays Letter.
+    const { layout, fit } = layoutPerformer(req.model, m, { draft, trim: req.trim });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} performer resume` : "Performer resume" };
   }
   if (req.doc === "cv") {
     const { layout, fit } = layoutCv(req.model, m, { draft });
@@ -158,5 +167,5 @@ export function renderCreativeHtml(req: CreativeRenderRequest): string {
 export function renderCreativeScreen(req: CreativeRenderRequest, fontUrl: (face: FaceKey) => string): { fit: FitInfo; pagesHtml: string; css: string; pages: number; title: string } {
   const b = buildCreative(req);
   const pages = pagesHtml(b.layout, b.kind) + (b.checklist ? "\n" + checklistHtml(b.checklist) : "");
-  return { fit: b.fit, pagesHtml: pages, css: resumeCss(b.layout.level, { fontUrls: fontUrl }), pages: b.layout.pages.length, title: b.title };
+  return { fit: b.fit, pagesHtml: pages, css: resumeCss(b.layout.level, { fontUrls: fontUrl, page: b.layout.page }), pages: b.layout.pages.length, title: b.title };
 }

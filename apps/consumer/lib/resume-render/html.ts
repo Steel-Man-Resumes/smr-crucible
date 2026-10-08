@@ -15,16 +15,18 @@
  */
 
 import { escapeHtml as esc } from "../escape-html";
-import { COLORS, FACE_CSS, PAGE_H, PAGE_W, SHAPE, fontFaceCss, type FaceKey, type Level } from "./style";
-import type { BlockSpec, Layout, Run } from "./layout";
+import { COLORS, CREDIT_COLS, CREDIT_GAP, CREDIT_YEAR_COL, FACE_CSS, PAGE_H, PAGE_W, SHAPE, fontFaceCss, type FaceKey, type Level } from "./style";
+import type { BlockSpec, Layout, PageSize, Run } from "./layout";
 
 function pt(n: number): string {
   return `${Math.round(n * 100) / 100}pt`;
 }
 
 /** CSS for the resume pages, scoped under .rr. */
-export function resumeCss(level: Level, opts: { fontUrls: (face: FaceKey) => string; standalone?: boolean }): string {
+export function resumeCss(level: Level, opts: { fontUrls: (face: FaceKey) => string; standalone?: boolean; page?: PageSize }): string {
   const L = level;
+  const PW = opts.page?.w ?? PAGE_W;
+  const PH = opts.page?.h ?? PAGE_H;
   const serif = "ResumeSerif,Cambria,Caladea,Georgia,serif";
   const sans = "ResumeSans,Calibri,Carlito,Arial,sans-serif";
   const body = L.body;
@@ -32,7 +34,7 @@ export function resumeCss(level: Level, opts: { fontUrls: (face: FaceKey) => str
 ${fontFaceCss(opts.fontUrls)}
 .rr{font-family:${serif};font-size:${pt(body)};line-height:${L.lineHeight};color:${COLORS.ink};font-kerning:none;font-variant-ligatures:none;text-rendering:optimizeSpeed;-webkit-print-color-adjust:exact;print-color-adjust:exact;hyphens:manual;-webkit-text-size-adjust:100%}
 .rr *{box-sizing:border-box}
-.rr .page{background:#fff;width:${pt(PAGE_W)};min-height:${pt(PAGE_H)};padding:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(L.marginBottom)} ${pt(L.marginSide)};margin:0 auto 14px auto;box-shadow:0 1px 6px rgba(0,0,0,.18)}
+.rr .page{background:#fff;width:${pt(PW)};min-height:${pt(PH)};padding:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(L.marginBottom)} ${pt(L.marginSide)};margin:0 auto 14px auto;box-shadow:0 1px 6px rgba(0,0,0,.18)}
 .rr p,.rr h1,.rr h2,.rr h3,.rr ul{margin:0;padding:0}
 .rr header{padding-bottom:6pt;border-bottom:${SHAPE.accentRule}pt solid ${COLORS.accent};margin-bottom:4pt}
 .rr h1{font:700 ${pt(L.nameSize)}/1.12 ${serif}}
@@ -63,7 +65,11 @@ ${fontFaceCss(opts.fontUrls)}
 .rr .ey{font:700 ${pt(SHAPE.metaSize)}/${L.lineHeight} ${sans};color:${COLORS.ink};white-space:nowrap;padding-top:${pt(Math.max(0, (body - SHAPE.metaSize) * 0.6))}}
 .rr .et{margin:0}
 .rr .et i{font-style:italic}
-${opts.standalone ? `@page{size:Letter;margin:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(Math.max(0, L.marginBottom - 5))} ${pt(L.marginSide)}}\n` : ""}@media print{
+.rr .cr{display:grid;grid-template-columns:${CREDIT_COLS.map((f) => `${f}fr`).join(" ")};column-gap:${pt(CREDIT_GAP)};margin:0 0 ${pt(L.bulletAfter + 1.5)} 0;break-inside:avoid}
+.rr .cr.y{grid-template-columns:${pt(CREDIT_YEAR_COL)} ${CREDIT_COLS.map((f) => `${f}fr`).join(" ")};column-gap:${pt(CREDIT_GAP)}}
+.rr .cr span{display:block}
+.rr .cr i{font-style:italic}
+${opts.standalone ? `@page{size:${opts.page ? `${pt(PW)} ${pt(PH)}` : "Letter"};margin:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(Math.max(0, L.marginBottom - 5))} ${pt(L.marginSide)}}\n` : ""}@media print{
 .rr .page{width:auto;min-height:0;padding:0;margin:0;box-shadow:none;break-after:page}
 .rr .page:last-child{break-after:auto}
 }
@@ -140,6 +146,13 @@ function blockHtml(b: BlockSpec, letter: boolean): string {
         .join(" ");
       return `<div class="en"><span class="ey">${esc(s.years)}</span><p class="et">${text}</p></div>`;
     }
+    case "credit": {
+      // Three columns; the years column only when the lane shows years.
+      const col = (ps: { text: string; italic?: boolean; after?: string }[]) =>
+        ps.map((p) => (p.italic ? `<i>${esc(p.text)}</i>` : esc(p.text)) + (p.after ? esc(p.after) : "")).join(" ");
+      const cells = s.cols.map((c) => `<span>${col(c)}</span>`).join("");
+      return s.years ? `<div class="cr y"><span class="ey">${esc(s.years)}</span>${cells}</div>` : `<div class="cr">${cells}</div>`;
+    }
     default:
       return letter ? "" : "";
   }
@@ -189,7 +202,7 @@ export interface StandaloneInput {
 }
 
 export function standaloneHtml(inp: StandaloneInput): string {
-  const css = resumeCss(inp.layout.level, { fontUrls: inp.fontDataUris, standalone: true });
+  const css = resumeCss(inp.layout.level, { fontUrls: inp.fontDataUris, standalone: true, page: inp.layout.page });
   const pages = pagesHtml(inp.layout, inp.kind ?? "resume") + (inp.checklist ? "\n" + checklistHtml(inp.checklist) : "");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

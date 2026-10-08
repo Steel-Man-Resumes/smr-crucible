@@ -169,3 +169,73 @@ test("CV: house look, years at the left margin, sections in order; a paragraph s
   const r = cleanCreativeRequest({ doc: "cv", model: { header: { name: "R" }, sections: [{ heading: "X", text: "y".repeat(2000) }] } });
   assert.ok(r && r.doc === "cv" && (r.model.sections[0].text ?? "").length === 700);
 });
+
+test("performer page: 8x10 trim and US Letter, three columns, years only when turned on, one page", async () => {
+  const { buildPerformerModel } = await import("@crucible/core/src/performerShared");
+  const { layoutPerformer } = await import("../resume-render/creative");
+  const { CREDIT_YEAR_COL } = await import("../resume-render/style");
+  const play = entry({ section: "credit", title: "Our Town", venue: "Example Street Theatre", city: "Chicago", state: "IL", year: 2024, details: { medium: "theater", role: "Emily Webb", director: "J. Sample" } });
+  const film = entry({ section: "credit", title: "Night Bus", venue: "Example Pictures", year: 2023, details: { medium: "film", billing: "supporting" } });
+  const cls = entry({ section: "training", title: "Scene Study", venue: "Example Acting Studio", year: 2023, end_year: 2024, details: { teacher: "R. Coach" } });
+  const union = entry({ section: "union", title: "SAG-AFTRA", year: 2024, details: { status: "member" } });
+  const settings = { displayName: "Ray Example", discipline: "Actor / Singer", email: "ray@example.com", height: "5'10\"", ageRange: "25-35", skills: [{ text: "Stage combat", confirmed: true }] };
+  const model = buildPerformerModel([play, film, cls, union], settings);
+  const m = fontMeasurer();
+
+  const small = layoutPerformer(model, m).layout;
+  assert.deepEqual(small.page, { w: 576, h: 720 });
+  assert.equal(small.pages.length, 1);
+  const letter = layoutPerformer(model, m, { trim: "letter" }).layout;
+  assert.equal(letter.page, undefined, "Letter is the default page");
+
+  // Three columns: the production, the role and the company start at three different x positions on one line.
+  const row = small.pages[0].lines.find((l) => l.runs.some((r) => r.text.includes("Our Town")))!;
+  const xs = row.runs.map((r) => Math.round(r.x));
+  assert.ok(new Set(xs).size >= 3, JSON.stringify(row.runs.map((r) => [r.text, r.x])));
+  assert.ok(!row.runs.some((r) => r.text === "2024"), "credit years hidden by default");
+  const withYears = layoutPerformer(buildPerformerModel([play, film, cls, union], { ...settings, showYears: true }), m).layout;
+  const yrow = withYears.pages[0].lines.find((l) => l.runs.some((r) => r.text.includes("Our Town")))!;
+  assert.equal(yrow.runs[0].text, "2024");
+  assert.ok(yrow.runs[1].x - yrow.runs[0].x >= CREDIT_YEAR_COL);
+
+  // PDF: the 8x10 MediaBox and every word; Letter on request.
+  const pageSize = async (bytes: Uint8Array) => {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true, isEvalSupported: false, disableFontFace: true }).promise;
+    const view = (await doc.getPage(1)).view;
+    await doc.destroy();
+    return view.map((v: number) => Math.round(v));
+  };
+  const pdfBytes = await renderCreativePdf({ doc: "performer", model });
+  assert.deepEqual(await pageSize(pdfBytes), [0, 0, 576, 720]);
+  const pdf = await pdfText(pdfBytes);
+  assert.equal(pdf.pages, 1);
+  const flat = pdf.text.replace(/\s+/g, " ");
+  for (const w of ["RAY EXAMPLE", "SAG-AFTRA Member", "Our Town", "Emily Webb", "Dir. J. Sample", "Supporting", "Scene Study", "Stage combat", "Age range 25-35"]) assert.ok(flat.includes(w), `${w} in ${flat}`);
+  assert.deepEqual(await pageSize(await renderCreativePdf({ doc: "performer", model, trim: "letter" })), [0, 0, 612, 792]);
+
+  // Word: a borderless table per credit and the 8x10 page.
+  const xml = docxXml(await renderCreativeDocx({ doc: "performer", model }));
+  assert.match(xml, /<w:pgSz w:w="11520" w:h="14400"/);
+  assert.match(xml, /<w:tbl>/);
+  assert.match(xml, /Emily Webb/);
+
+  // HTML: the credit grid, the trim in @page, and no photo anywhere.
+  const html = renderCreativeHtml({ doc: "performer", model });
+  assert.match(html, /<div class="cr"><span><i>Our Town<\/i><\/span><span>Emily Webb<\/span><span>Example Street Theatre, Chicago, IL, Dir\. J\. Sample<\/span><\/div>/);
+  assert.match(html, /@page\{size:576pt 720pt/);
+  assert.doesNotMatch(html, /<img/);
+
+  // The layout route rebuilds the request from known fields only.
+  const r = cleanCreativeRequest({ doc: "performer", trim: "huge", model: { header: { name: "R", unions: ["A", 3] }, credits: [{ heading: "Theater", rows: [{ years: "2024", cols: [[{ text: "x" }], [], [], [{ text: "extra" }]] }] }], showYears: "yes" } });
+  assert.ok(r && r.doc === "performer" && r.trim === "8x10" && r.model.showYears === false && r.model.credits[0].rows[0].cols.length === 3);
+  assert.deepEqual(r && r.doc === "performer" ? r.model.header.unions : null, ["A"]);
+});
+
+test("performer page: a long record runs past one page and says so", async () => {
+  const { buildPerformerModel } = await import("@crucible/core/src/performerShared");
+  const { layoutPerformer } = await import("../resume-render/creative");
+  const many = Array.from({ length: 60 }, (_, i) => entry({ section: "credit", title: `Example Play ${i}`, venue: "Example Street Theatre", year: 2000 + (i % 25), details: { medium: "theater", role: `Role ${i}` } }));
+  const { layout } = layoutPerformer(buildPerformerModel(many, { displayName: "Ray Example" }), fontMeasurer());
+  assert.ok(layout.pages.length > 1);
+});

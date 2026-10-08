@@ -89,6 +89,11 @@ export const SHAPE = {
   sepMargin: 0.4, // em on each side of a "|"
 } as const;
 
+/** Performer credits: three column shares (production | role | company), the gap between them, and the years column when shown. */
+export const CREDIT_COLS = [36, 26, 38] as const;
+export const CREDIT_GAP = 8;
+export const CREDIT_YEAR_COL = 40;
+
 export const SECTION_SKILLS_RE = /COMPETENC|SKILL|QUALIFICATION|EXPERTISE/;
 
 /** CSS for @font-face, given a url for each face. */
