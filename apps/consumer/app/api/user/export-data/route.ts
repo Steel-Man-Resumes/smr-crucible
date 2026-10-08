@@ -63,7 +63,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -226,12 +226,20 @@ export async function POST(req: Request) {
         hybrid_uneven_history: l.hybrid_uneven_history,
         hybrid_field_change: l.hybrid_field_change,
         length_pref: l.length_pref,
+        // 075: what the lane makes, its path, its pair, its choices and plan card.
+        kind: l.kind ?? "resume",
+        path: l.path ?? null,
+        pair_lane_id: l.pair_lane_id ?? null,
+        kind_settings: l.kind_settings ?? {},
+        pair_plan: l.pair_plan ?? null,
         first_lane_from_forge: l.is_first === true,
         created_at: l.created_at,
         updated_at: l.updated_at,
         archived_at: l.archived_at,
       }));
       payload.laneToolNotesDismissed = await listDismissedIntros(userId);
+      // The practice record (075): every entry, in the person's own words.
+      payload.practiceRecord = await listPracticeEntries(userId);
     }
     if (want("applications")) payload.jobApplications = jobApplicationRows;
     if (want("chat")) payload.coachConversation = coachConversationRows;

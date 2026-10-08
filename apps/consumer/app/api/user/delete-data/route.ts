@@ -6,6 +6,7 @@
  *   underlying R2 ciphertext, via the deletion_task retry ledger
  * - refinery_artifact (resumes, disclosure plans, etc.)
  * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
+ * - practice_entry (the practice record behind creative lanes)
  * - forge_session
  * - consumer_profile
  * - job_application
@@ -134,6 +135,8 @@ export async function DELETE(req: Request) {
     // tables, so deleted AS the person; the lane screens only ever archive.
     await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
+    // The practice record (075): owner only, deleted as the person.
+    await queryAsUser(userId, "DELETE FROM practice_entry WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);

@@ -308,6 +308,18 @@ export function isOneWordSwap(prev: string, next: string, mark: SpellingMark): b
   return false;
 }
 
+/** The offered marks whose word still appears in the text (what the screen shows). */
+export function marksStillInText(marks: SpellingMark[], text: string): SpellingMark[] {
+  const words = new Set(wordsOf(text));
+  const seen = new Set<string>();
+  return marks.filter((m) => {
+    const k = `${m.word}>${m.suggestion}`;
+    if (!words.has(m.word) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 /** Apply one accepted mark to the first matching whole word. Returns the text unchanged if absent. */
 export function applySpellingMark(text: string, mark: SpellingMark): string {
   const re = new RegExp(`(?<![A-Za-z'’])${mark.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z'’])`);
