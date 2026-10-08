@@ -162,25 +162,49 @@ export async function getArtifact(
 }
 
 /**
- * List artifacts for a user, optionally filtered by type.
+ * THE example rule (D12), in one place. A person's old sample resumes are
+ * marked is_demo by 073/074 and tucked away; nothing is deleted. Anything that
+ * lists, counts, or draws profile or contact details from a person's resumes
+ * adds this condition, so a sample can never feed the page, the profile, the
+ * phone number or the journey. Only the Library's explicit "Show examples"
+ * asks for them (examples: "only"). The column comes from 073; before 074 runs
+ * every row is false and nothing is hidden. Pass the table alias when the
+ * query uses one.
  */
-export async function listArtifacts(
+export const ARTIFACT_NOT_DEMO_SQL = "is_demo = false";
+export function artifactNotDemoSql(alias?: string): string {
+  return alias ? `${alias}.${ARTIFACT_NOT_DEMO_SQL}` : ARTIFACT_NOT_DEMO_SQL;
+}
+
+/**
+ * List artifacts for a user, optionally filtered by type. `examples: "hide"`
+ * leaves out example resumes (D12); omitted lists everything.
+ */
+export function listArtifactsSql(
   userId: string,
-  opts?: { type?: ArtifactType; limit?: number }
-): Promise<RefineryArtifact[]> {
+  opts?: { type?: ArtifactType; limit?: number; examples?: "hide" }
+): { sql: string; params: unknown[] } {
   const typeClause = opts?.type ? ` AND artifact_type = $2` : "";
+  const demoClause = opts?.examples === "hide" ? ` AND ${ARTIFACT_NOT_DEMO_SQL}` : "";
   const limit = opts?.limit ?? 50;
   const params: unknown[] = [userId];
   if (opts?.type) params.push(opts.type);
   params.push(limit);
-
-  return queryAsUser<RefineryArtifact>(userId, 
-    `SELECT * FROM refinery_artifact
-     WHERE user_id = $1${typeClause}
+  return {
+    sql: `SELECT * FROM refinery_artifact
+     WHERE user_id = $1${typeClause}${demoClause}
      ORDER BY updated_at DESC
      LIMIT $${params.length}`,
-    params
-  );
+    params,
+  };
+}
+
+export async function listArtifacts(
+  userId: string,
+  opts?: { type?: ArtifactType; limit?: number; examples?: "hide" }
+): Promise<RefineryArtifact[]> {
+  const { sql, params } = listArtifactsSql(userId, opts);
+  return queryAsUser<RefineryArtifact>(userId, sql, params);
 }
 
 /**
@@ -318,6 +342,8 @@ export async function listArtifactsPaged(
     group?: "masters" | "company" | "other";
     laneId?: string;
     examples?: "hide" | "only";
+    /** "recent" = newest edit first, ignoring the pinned current resume. */
+    order?: "recent";
     limit?: number;
     offset?: number;
   } = {}
@@ -347,7 +373,7 @@ export async function listArtifactsPaged(
     where.push(`lane_id = $${i++}::uuid`);
     params.push(opts.laneId);
   }
-  if (opts.examples === "hide") where.push(`is_demo = false`);
+  if (opts.examples === "hide") where.push(ARTIFACT_NOT_DEMO_SQL);
   if (opts.examples === "only") where.push(`is_demo = true`);
 
   const whereSql = where.join(" AND ");
@@ -364,7 +390,7 @@ export async function listArtifactsPaged(
   const items = await queryAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
       WHERE ${whereSql}
-      ORDER BY is_current DESC, updated_at DESC
+      ORDER BY ${opts.order === "recent" ? "" : "is_current DESC, "}updated_at DESC
       LIMIT $${i++} OFFSET $${i}`,
     pageParams
   );
@@ -372,17 +398,63 @@ export async function listArtifactsPaged(
   return { items, total };
 }
 
+/** Counts by type for the dashboard. Examples (D12) are not counted as the person's work. */
+export const ARTIFACT_COUNTS_SQL = `SELECT artifact_type, COUNT(*)::text AS count
+     FROM refinery_artifact
+     WHERE user_id = $1 AND ${ARTIFACT_NOT_DEMO_SQL}
+     GROUP BY artifact_type`;
+
 /**
- * Get artifact counts grouped by type for a user.
+ * The person's last five resumes for t.ROY's context (/api/user/context).
+ * Examples (D12) are left out, so a sample is never read as their history.
+ */
+export const RECENT_RESUMES_FOR_CONTEXT_SQL = `SELECT id, target_context, content, created_at
+     FROM refinery_artifact
+     WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+     ORDER BY created_at DESC LIMIT 5`;
+
+/**
+ * The resume the profile contact falls back on (/api/user/profile) when the
+ * person never saved their own contact. Examples (D12) are left out: a sample's
+ * 555-01xx phone must never become the person's phone.
+ */
+export const PROFILE_CONTACT_RESUME_SQL = `SELECT content FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+       ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
+       LIMIT 1`;
+
+/**
+ * The phone from the person's newest resume, for the profile-complete check
+ * (getUserProfile) when they never re-saved Settings. Examples (D12) are left
+ * out, so a sample's 555-01xx phone cannot make a profile look complete.
+ */
+export const PROFILE_ARTIFACT_PHONE_SQL = `SELECT content->'contact'->>'phone' AS phone
+       FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+         AND COALESCE(content->'contact'->>'phone', '') <> ''
+       ORDER BY updated_at DESC LIMIT 1`;
+
+/**
+ * Journey unlock: is there a job-targeted resume? Examples (D12) never unlock
+ * a step the person has not earned.
+ */
+export const JOURNEY_JOB_TARGETED_RESUME_SQL = `SELECT id FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+         AND (
+           target_context->>'source' = 'job'
+           OR (COALESCE(target_context->>'targetJob', '') <> ''
+               AND COALESCE(target_context->>'source', '') <> 'forge')
+         )
+       LIMIT 1`;
+
+/**
+ * Get artifact counts grouped by type for a user (examples left out, D12).
  */
 export async function getArtifactCounts(
   userId: string
 ): Promise<Record<string, number>> {
   const rows = await queryAsUser<{ artifact_type: string; count: string }>(userId, 
-    `SELECT artifact_type, COUNT(*)::text AS count
-     FROM refinery_artifact
-     WHERE user_id = $1
-     GROUP BY artifact_type`,
+    ARTIFACT_COUNTS_SQL,
     [userId]
   );
   const counts: Record<string, number> = {};

@@ -15,6 +15,7 @@
 import { getOne, queryAsUser, getOneAsUser } from "./db";
 import type { UserTier } from "./userTier";
 import { TAILORED_PROVENANCES } from "./applicationEvents";
+import { PROFILE_ARTIFACT_PHONE_SQL } from "./refineryArtifact";
 
 export interface NextStepResult {
   stage: number;
@@ -182,11 +183,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   // full_access users back to needs_profile (review finding, 2026-08-10).
   if (!contactPhone) {
     const artifactPhone = await getOneAsUser<{ phone: string }>(userId, 
-      `SELECT content->'contact'->>'phone' AS phone
-       FROM refinery_artifact
-       WHERE user_id = $1 AND artifact_type = 'resume'
-         AND COALESCE(content->'contact'->>'phone', '') <> ''
-       ORDER BY updated_at DESC LIMIT 1`,
+      PROFILE_ARTIFACT_PHONE_SQL,
       [userId]
     );
     contactPhone = (artifactPhone?.phone || "").trim();
