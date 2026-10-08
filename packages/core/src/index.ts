@@ -70,3 +70,6 @@ export * from './orgStaffPerformance';
 export * from './orgStaffAdmin';
 export * from './joinSharingPrompt';
 export * from './orgVisibilityShared';
+
+// Premium tools by entitlement, never payment (migration 078).
+export * from './premium';
