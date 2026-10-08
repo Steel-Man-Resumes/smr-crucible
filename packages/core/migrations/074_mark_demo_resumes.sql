@@ -50,9 +50,8 @@ UPDATE refinery_artifact
          OR lower(COALESCE(content->>'text', '')) ~ '@([a-z0-9-]+\.)*(example\.(com|org|net)|[a-z0-9-]+\.(test|example|invalid))(?![a-z0-9-]|\.[a-z0-9])'
         ))
    )
-   -- DEMO ACCOUNTS ARE LEFT ALONE (pending Troy's decision; drop this clause
-   -- if he decides demo accounts should start with everything under "Show
-   -- examples"). An account whose own sign-in email is itself a reserved
+   -- DEMO ACCOUNTS ARE LEFT ALONE (decided 2026-10-07: demo and persona
+   -- accounts keep their resumes visible). An account whose own sign-in email is itself a reserved
    -- example address (the demo cohort, the personas) exists to show its
    -- resumes, so they stay visible there. "Examples" here means samples left
    -- inside a real person's account.
