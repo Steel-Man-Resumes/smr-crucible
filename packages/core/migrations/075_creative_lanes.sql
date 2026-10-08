@@ -249,7 +249,8 @@ DECLARE
   pat text := '\(' || col || ' = ANY|' || col || ' IN';
 BEGIN
   FOR c IN SELECT oid FROM pg_constraint WHERE conrelid = tbl AND contype = 'c' AND pg_get_constraintdef(oid) ~ pat LOOP
-    have := have || ARRAY(SELECT m[1] FROM regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m);
+    -- Every quoted literal, kept exactly (case, digits, any character; '' is a quote).
+    have := have || ARRAY(SELECT replace(m[1], '''''', '''') FROM regexp_matches(pg_get_constraintdef(c.oid), '''((?:[^'']|'''')*)''', 'g') m);
     n := n + 1;
   END LOOP;
   allv := ARRAY(SELECT DISTINCT v FROM unnest(have || want) v ORDER BY v);
