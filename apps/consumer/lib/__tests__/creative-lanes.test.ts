@@ -159,3 +159,24 @@ test("CV lanes: the export route builds the CV from the database with safe to-do
   assert.ok(!/birth|photo upload|headshot|marital|nationality/i.test(view.replace(/No photo, birth date, age, family status or nationality\. A CV here never asks for them\./, "")));
   assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "cv"\)/);
 });
+
+test("slice 2 review LOWs: creative lanes refuse doc=cv; file names use the printed name; assist can't write the person's own words; GET counts pages; resume work stays in resume lanes", () => {
+  const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
+  const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
+  const docs = exp.match(/const DOCS = \[([^\]]*)\]/)![1];
+  assert.ok(!/"cv"/.test(docs), "a creative lane never answers doc=cv");
+  assert.match(exp, /const name = v\.model\.header\.name/);
+  assert.match(exp, /const name = c\.model\.header\.name/);
+  assert.ok(!/settings\.displayName/.test(exp), "never the raw typed name");
+  const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
+  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference"\]/);
+  assert.match(lane, /if \(g\.impersonating && OWNER_ONLY_FIELDS\.some/);
+  assert.match(lane, /buildCreative\(\{ doc: "cv", model: v\.model \}\)\.layout\.pages\.length/);
+  assert.match(lane, /loadCvContext\(g\.userId, lane, pages\)/);
+  for (const p of [["app", "api", "artifacts", "route.ts"], ["app", "api", "artifacts", "[id]", "fork", "route.ts"]]) {
+    assert.match(rd(...p), /if \(!target \|\| laneKindOf\(target\) !== "resume"\)/);
+  }
+  const view = rd("components", "creative", "CvLaneView.tsx");
+  assert.match(view, /data-testid="cv-lead-reference"/);
+  assert.match(view, /settings: \{ leadReference: r\.entryId \}/);
+});

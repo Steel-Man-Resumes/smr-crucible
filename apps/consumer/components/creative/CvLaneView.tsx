@@ -95,6 +95,8 @@ export function CvLaneView({ laneId }: { laneId: string }) {
   const draft = status.blockCount > 0;
   const cap = cvPageCap(ctx.cvType);
   const shownIds = model.sections.flatMap((x) => (x.rows ?? []).map((r) => r.entryId));
+  // References on the page right now, as they print (the person picks who leads; never by date).
+  const refRows = model.sections.find((x) => x.key === "reference")?.rows ?? [];
 
   return (
     <section className="mt-6" data-testid="cv-lane" aria-label={`${ctx.lane.name} CV lane`}>
@@ -177,6 +179,27 @@ export function CvLaneView({ laneId }: { laneId: string }) {
               <button type="submit" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright" data-testid="cv-top-save">Save</button>
               <span aria-live="polite" className="ml-3 text-sm text-t-phos">{msg}</span>
             </form>
+
+            {refRows.length >= 2 && (
+              <fieldset className="border border-t-line bg-t-panel p-3" data-testid="cv-lead-reference">
+                <legend className="px-1 text-sm text-t-white">Your first reference</legend>
+                <p className="text-xs text-t-phos-dim">You pick who leads. A teacher, supervisor or colleague who knows your work is the strongest start.</p>
+                <div className="mt-2 space-y-1">
+                  {refRows.map((r) => (
+                    <label key={r.entryId} className="flex gap-2 text-sm text-t-white cursor-pointer">
+                      <input
+                        type="radio"
+                        name="cv-lead-reference"
+                        checked={(ctx.settings.leadReference ?? "").toLowerCase() === r.entryId.toLowerCase()}
+                        data-testid={`cv-lead-${r.entryId}`}
+                        onChange={() => put({ settings: { leadReference: r.entryId } }, (s) => ({ ...s, leadReference: r.entryId.toLowerCase() }))}
+                      />
+                      <span>{r.parts.map((p) => p.text + (p.after ?? "")).join(" ")}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
             <FacilityChoices entries={ctx.entries.filter((e) => e.section !== "work")} settings={ctx.settings} onTitleMode={onTitleMode} only="pages" />
 

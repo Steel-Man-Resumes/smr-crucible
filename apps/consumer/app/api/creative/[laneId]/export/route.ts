@@ -25,7 +25,8 @@ interface RouteContext {
   params: Promise<{ laneId: string }>;
 }
 
-const DOCS = ["artist_resume", "bio", "statement", "work_samples", "cv"] as const;
+// A creative lane never answers doc=cv (review s2 LOW 2): the CV has its own lane.
+const DOCS = ["artist_resume", "bio", "statement", "work_samples"] as const;
 type Doc = (typeof DOCS)[number];
 const FORMATS = ["pdf", "docx", "html", "txt", "csv"] as const;
 type Format = (typeof FORMATS)[number];
@@ -61,7 +62,8 @@ export async function GET(request: Request, context: RouteContext) {
     const pages = buildCreative({ doc: "artist_resume", model: c.model }).layout.pages.length;
     c = await loadCreativeContext(g.userId, lane, pages);
   }
-  const name = c.settings.displayName ?? "";
+  // The name as the page prints it: a name field the lane holds back never reaches the file name.
+  const name = c.model.header.name ?? "";
   const checkDoc: CreativeDoc = doc === "work_samples" ? "work_samples" : doc === "statement" ? "statement" : doc === "bio" ? "bio" : "artist_resume";
   const items = c.status.openItems.filter((x) => x.doc === checkDoc || x.doc === "record");
   const draft = items.some((x) => x.severity === "BLOCK");
@@ -98,7 +100,7 @@ export async function GET(request: Request, context: RouteContext) {
       return { label: `${BIO_LIMITS[len].label} bio`, text: t, words: countWords(t), chars: countChars(t) };
     }).filter((b) => b.text);
     if (format === "txt") return text(bios.map((b) => `${b.label.toUpperCase()} (${b.words} words, ${b.chars} characters with spaces)\n${b.text}`).join("\n\n"), "bio");
-    req = { doc: "bio", card: { name, discipline: c.settings.discipline ?? "", bios }, draft, openItems };
+    req = { doc: "bio", card: { name, discipline: c.model.header.discipline, bios }, draft, openItems };
   }
   if (format === "csv") return NextResponse.json({ error: "Pick PDF, Word, HTML or plain text." }, { status: 400 });
 
@@ -141,7 +143,8 @@ async function exportCv(userId: string, lane: CareerLane, url: URL): Promise<Nex
   v = await loadCvContext(userId, lane, pages);
   const draft = v.status.blockCount > 0;
   const openItems = exportOpenItemLines(v.status, v.entries, v.settings, "cv");
-  const name = v.settings.displayName ?? "";
+  // The file name uses the header as printed, so a detail CV-03 kept off the page never rides along in it.
+  const name = v.model.header.name ?? "";
   const headers = (type: string, ext: string) => ({ "Content-Type": type, "Content-Disposition": `attachment; filename="${fileName(name, "CV", ext)}"`, "Cache-Control": "no-store" });
   if (format === "txt") return new NextResponse((draft ? "DRAFT\n\n" : "") + cvPlainText(v.model), { headers: headers("text/plain; charset=utf-8", "txt") });
   const req: CreativeRenderRequest = { doc: "cv", model: v.model, draft, openItems };

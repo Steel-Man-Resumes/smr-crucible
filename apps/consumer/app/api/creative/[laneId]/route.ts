@@ -11,6 +11,12 @@ import {
   HURDLES_NOT_A_VERDICT,
 } from "@crucible/core";
 import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext, ownerOnly, readJson } from "@/lib/creative-server";
+import { buildCreative } from "@/lib/resume-render";
+
+export const runtime = "nodejs";
+
+/** Paragraphs printed as the person's own words, and the lead reference: the person's alone, never an assist session. */
+const OWNER_ONLY_FIELDS = ["interests", "languages", "leadReference"] as const;
 
 const SETTINGS_CHANGED = { error: "changed_elsewhere", message: "These choices changed in another tab or window. Refresh the page, then try again." };
 
@@ -38,7 +44,10 @@ export async function GET(request: Request, context: RouteContext) {
   if (!lane) return laneNotFound();
   if (laneKindOf(lane) === "cv") {
     // A CV lane: the record, this lane's choices and the CV's open items.
-    const v = await loadCvContext(g.userId, lane);
+    // The page count comes from the real layout, so the two-page rule (STD-F07) holds here as in the export.
+    let v = await loadCvContext(g.userId, lane);
+    const pages = buildCreative({ doc: "cv", model: v.model }).layout.pages.length;
+    v = await loadCvContext(g.userId, lane, pages);
     return NextResponse.json({ lane: v.lane, cvType: v.cvType, entries: v.entries, settings: v.settings, settingsRev: settingsRev(v.settings), status: v.status });
   }
   const c = await loadCreativeContext(g.userId, lane);
@@ -81,7 +90,7 @@ export async function PUT(request: Request, context: RouteContext) {
   // Every settings save names the revision it was based on. No revision, or an old one: refused.
   const current = cleanKindSettings({}, lane.kind_settings ?? {});
   if (typeof body.rev !== "number" || body.rev !== settingsRev(current)) return NextResponse.json(SETTINGS_CHANGED, { status: 409 });
-  let next;
+  let next: ReturnType<typeof cleanKindSettings> | null;
   if (body.titleMode && typeof body.titleMode === "object") {
     // A facility choice: one entry at a time, the person's alone (never an assist session).
     if (g.impersonating) return ownerOnly();
@@ -91,6 +100,7 @@ export async function PUT(request: Request, context: RouteContext) {
     if (!next) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   } else {
     next = cleanKindSettings(body.settings, current);
+    if (g.impersonating && OWNER_ONLY_FIELDS.some((f) => JSON.stringify(next?.[f] ?? null) !== JSON.stringify(current[f] ?? null))) return ownerOnly();
   }
   let saved;
   try {
