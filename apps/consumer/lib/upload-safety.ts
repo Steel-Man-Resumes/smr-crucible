@@ -483,6 +483,12 @@ interface StreamDict {
   /** /Predictor (in this dictionary) and the largest one in /DecodeParms or /DP (r7 M1). */
   predictor: number | "indirect" | null;
   decodePredictor: number | "indirect" | null;
+  /** A predictor's /Columns, /Colors and /BitsPerComponent (in this dictionary). */
+  columns: unknown;
+  colors: unknown;
+  bpc: unknown;
+  /** The largest predictor row size in /DecodeParms, or "bad" when its parameters are not plain positive whole numbers (r8 M1). */
+  decodeRow: number | "bad" | null;
 }
 
 const newFacts = (): StreamDict => ({
@@ -501,6 +507,10 @@ const newFacts = (): StreamDict => ({
   length: null,
   predictor: null,
   decodePredictor: null,
+  columns: undefined,
+  colors: undefined,
+  bpc: undefined,
+  decodeRow: null,
 });
 
 /** A value, as far as the checks need it. */
@@ -630,6 +640,12 @@ function readDictBody(p: Parser, depth: number, collect: boolean): StreamDict | 
       out.predictor = v.k === "num" ? v.v : v.k === "ref" ? "indirect" : null;
     } else if (key === "DecodeParms" || key === "DP") {
       out.decodePredictor = predictorOf(v);
+      out.decodeRow = predictorRowOf(v);
+    } else if (key === "Columns" || key === "Colors" || key === "BitsPerComponent" || key === "BPC") {
+      const n = v.k === "num" ? v.v : v.k === "ref" ? "indirect" : "other";
+      if (key === "Columns") out.columns = n;
+      else if (key === "Colors") out.colors = n;
+      else out.bpc = n;
     }
   }
   // pdf.js reads "stream" after ANY dictionary as a stream (inside arrays and
@@ -657,6 +673,35 @@ function predictorOf(v: Val): number | "indirect" | null {
     return best;
   }
   return null;
+}
+
+/**
+ * The largest row a predictor in this /DecodeParms value would allocate, the
+ * way pdf.js's PredictorStream sizes it: ceil(Columns * Colors * BPC / 8),
+ * with pdf.js's defaults 1, 1 and 8. "bad" when a parameter is not a plain
+ * positive whole number (r8 M1). Null when no predictor above 1 is there.
+ */
+function predictorRowOf(v: Val): number | "bad" | null {
+  if (v.k === "dict") {
+    const f = v.facts;
+    if (!f) return "bad";
+    const p = f.predictor;
+    if (p === null || (typeof p === "number" && p <= 1)) return null;
+    const ok = (x: unknown, dflt: number) => (x === undefined ? dflt : typeof x === "number" && Number.isSafeInteger(x) && x > 0 ? x : NaN);
+    const row = Math.ceil((ok(f.columns, 1) * ok(f.colors, 1) * ok(f.bpc, 8)) / 8);
+    return Number.isSafeInteger(row) && row > 0 ? row : "bad";
+  }
+  if (v.k === "arr") {
+    if (!v.items) return "bad";
+    let best: number | "bad" | null = null;
+    for (const x of v.items) {
+      const r = predictorRowOf(x);
+      if (r === "bad") return r;
+      if (r !== null && (best === null || r > best)) best = r;
+    }
+    return best;
+  }
+  return v.k === "ref" ? "bad" : null;
 }
 
 function filterNames(v: Val): StreamDict["filters"] {
@@ -1338,8 +1383,13 @@ function scanPdf(buf: Buffer): PdfScan {
     // on them, and a predictor never makes the output larger, so the cap holds).
     const pred = dict.decodePredictor;
     if (pred !== null && !(typeof pred === "number" && pred <= 1)) {
-      const allowed = dict.type === "XRef" || (dict.isImage && !plan.codec && !dict.keys.has("First"));
+      // r8 M2: never on a stream with /First (it is checked as an object stream).
+      const allowed = !dict.keys.has("First") && (dict.type === "XRef" || (dict.isImage && !plan.codec));
       if (!allowed) throw malformed();
+      // r8 M1: pdf.js sizes a buffer from the predictor's row, whatever data
+      // backs it: the row must be plain and within the stream's own cap.
+      const row = dict.decodeRow;
+      if (row === "bad" || row === null || row > streamCap(dict)) throw malformed();
     }
     const cap = streamCap(dict);
     const room = () => Math.min(cap, PDF_MAX_TOTAL_BYTES - scan.decodedBytes);
