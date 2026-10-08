@@ -86,13 +86,37 @@ test("creative documents save only through the creative routes", () => {
   assert.match(idRoute, /creative_doc/);
   const docs = readFileSync(join(APP, "app", "api", "creative", "[laneId]", "docs", "route.ts"), "utf8");
   assert.match(docs, /checkStatementSave\(/);
-  assert.match(docs, /checkBioSave\(/);
+  assert.match(docs, /validMark: isValidSpellingMark/);
+  // Bio origin is decided on the server from the record; the request's labels are ignored.
+  assert.match(docs, /classifyBio\(body\.bio, c\.entries, c\.settings\)/);
+  // Owner-only writes: never under an assist session.
+  assert.equal((docs.match(/if \(g\.impersonating\) return ownerOnly\(\);/g) ?? []).length, 2);
 });
 
-test("the coach route stores fingerprints of the raw reply and returns only questions and marks", () => {
-  const src = readFileSync(join(APP, "app", "api", "creative", "coach", "route.ts"), "utf8");
-  assert.match(src, /modelFingerprints\(raw, text\)/);
-  assert.match(src, /parseCoachOutput\(raw, text\)/);
-  const ret = src.slice(src.lastIndexOf("return NextResponse.json({"));
-  assert.ok(!/\braw\b/.test(ret.split("});")[0]), "the raw reply never goes back to the screen");
+test("generic paths refuse creative documents: fork, fine-tune, lane move (review M3)", () => {
+  const fork = readFileSync(join(APP, "app", "api", "artifacts", "[id]", "fork", "route.ts"), "utf8");
+  assert.match(fork, /result\.status === "creative_doc"/);
+  const ft = readFileSync(join(APP, "app", "api", "resume-fine-tune", "route.ts"), "utf8");
+  assert.match(ft, /isCreativeType\(source\.artifact_type\)/);
+  assert.match(ft, /write\.status !== "updated"/);
+  const idRoute = readFileSync(join(APP, "app", "api", "artifacts", "[id]", "route.ts"), "utf8");
+  assert.match(idRoute, /Creative documents stay in their own lane/);
+});
+
+test("v1 creative tools call no model: coach and bio-draft never import the AI client", () => {
+  for (const r of [["coach", "route.ts"], ["bio-draft", "route.ts"]]) {
+    const src = readFileSync(join(APP, "app", "api", "creative", ...r), "utf8");
+    assert.ok(!/ai-call|callAI|anthropic|openai/i.test(src), `${r[0]} must not call a model`);
+  }
+  const coach = readFileSync(join(APP, "app", "api", "creative", "coach", "route.ts"), "utf8");
+  assert.ok(!/saveCreativeDoc|queryAsUser/.test(coach), "the coach writes nothing");
+});
+
+test("exports and copy boxes honour the lane's facility choices and DRAFT (review H3, M5)", () => {
+  const exp = readFileSync(join(APP, "app", "api", "creative", "[laneId]", "export", "route.ts"), "utf8");
+  assert.match(exp, /bioTextForLane\(/);
+  assert.match(exp, /DRAFT: open items remain on this list/);
+  const plain = readFileSync(join(APP, "components", "creative", "PlainTextPanel.tsx"), "utf8");
+  assert.match(plain, /bioTextForLane\(/);
+  assert.match(plain, /plain-draft-/);
 });
