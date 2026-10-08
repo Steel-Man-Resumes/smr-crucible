@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getTenantConfig } from "@/lib/tenant-config";
-import { checkPremium } from "@/lib/premium";
+import { checkPremium } from "@/lib/premium-server";
 
 export const maxDuration = 15;
 

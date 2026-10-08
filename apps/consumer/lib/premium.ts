@@ -6,7 +6,9 @@
  * "Ask your organization" or "Ask SMR for access". It never shows a price,
  * and asking sends no email (Troy sees the request in admin).
  *
- * Client-safe except checkPremium (server only, imported dynamically there).
+ * Client-safe: no server imports here. The server gate, checkPremium, lives in
+ * lib/premium-server.ts (importing @crucible/core from a file the browser also
+ * loads pulls Node-only modules into the client bundle).
  */
 
 export const PREMIUM_TOOL_IDS = ["resources", "interview_coaching", "one_click_apply"] as const;
@@ -65,39 +67,4 @@ export interface PremiumStatus {
 export function toolIsOpen(status: PremiumStatus | null, tool: PremiumToolId): boolean | null {
   if (!status) return null;
   return !status.gate || status.open.includes(tool);
-}
-
-let warnedNotReady = false;
-
-/**
- * Server gate for a premium route. Returns null when the tool is open, or the
- * 403 response to send. Migration 078 not applied yet: open (the tools
- * worked that way before), with one warning per process. Any other database
- * error propagates to the route's own handling.
- */
-export async function checkPremium(
-  userId: string,
-  tool: PremiumToolId,
-  read?: (userId: string) => Promise<{ open: readonly string[] }>,
-  gateRaw?: string | null
-): Promise<Response | null> {
-  if (!premiumGateOn(gateRaw === undefined ? undefined : gateRaw)) return null;
-  const reader = read ?? (await import("@crucible/core")).getPremiumAccess;
-  try {
-    const access = await reader(userId);
-    if (access.open.includes(tool)) return null;
-  } catch (e) {
-    if ((e as { premiumNotReady?: boolean } | null)?.premiumNotReady) {
-      if (!warnedNotReady) {
-        warnedNotReady = true;
-        console.warn("[premium] migration 078 is not applied; premium tools are open until it is.");
-      }
-      return null;
-    }
-    throw e;
-  }
-  return new Response(
-    JSON.stringify({ error: premiumLockedMessage(tool), code: "premium_locked", tool }),
-    { status: 403, headers: { "Content-Type": "application/json" } }
-  );
 }

@@ -14,12 +14,12 @@ import {
   PREMIUM_ASK_SMR_LINE,
   PREMIUM_NEVER_PAY_LINE,
   PREMIUM_TOOL_IDS,
-  checkPremium,
   premiumGateOn,
   premiumLockedLine,
   premiumLockedMessage,
   toolIsOpen,
 } from "../premium";
+import { checkPremium } from "../premium-server";
 
 const CONSUMER = join(__dirname, "..", "..");
 const read = (...p: string[]) => readFileSync(join(CONSUMER, ...p), "utf8");
@@ -167,6 +167,17 @@ describe("a locked tool's words: plain, no price, no dashes", () => {
     }
     for (const f of ["components/premium/PremiumGate.tsx", "components/premium/PremiumToolsSection.tsx"]) {
       assert.doesNotMatch(code(read(f)), PRICE, f);
+    }
+  });
+});
+
+describe("client bundles stay clean", () => {
+  it("lib/premium.ts, which client components import, never reaches @crucible/core", () => {
+    const src = code(read("lib", "premium.ts"));
+    assert.doesNotMatch(src, /@crucible\/core/);
+    assert.doesNotMatch(src, /checkPremium/);
+    for (const f of [["components", "premium", "PremiumGate.tsx"], ["components", "premium", "PremiumToolsSection.tsx"], ["components", "apply", "ApplyActions.tsx"]]) {
+      assert.doesNotMatch(read(...f), /premium-server/, f.join("/"));
     }
   });
 });

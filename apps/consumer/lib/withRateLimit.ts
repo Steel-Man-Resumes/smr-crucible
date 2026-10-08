@@ -27,7 +27,8 @@ import type { UserTier } from "@crucible/core";
 import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
 import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
 import { codeSeats, decideSignedInCall, planForgeLimit } from "./forge-rate-limit";
-import { checkPremium, type PremiumToolId } from "./premium";
+import type { PremiumToolId } from "./premium";
+import { checkPremium } from "./premium-server";
 import {
   LIVE_TEST_BUCKET,
   LIVE_TEST_DAILY_LIMIT,
