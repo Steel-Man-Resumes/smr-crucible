@@ -160,73 +160,182 @@ export function titleModeFor(entry: Pick<PracticeEntry, "id" | "names_facility">
   return s?.titleModes?.[entry.id.toLowerCase()] ?? "unset";
 }
 
-/** Lowercase words joined by single spaces, padded, so phrase checks match whole words only. */
+/**
+ * Lowercase words joined by single spaces, padded, so phrase checks match
+ * whole words only. Case, punctuation, accents and apostrophes never matter
+ * ("Riker's" and "RIKERS" are the same word).
+ */
 function wordsOf(text: string): string {
-  return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const plain = text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/['`‘’ʼ]/g, "");
+  return ` ${plain.replace(/[^a-z0-9]+/g, " ").trim()} `;
 }
 
 const RUN_STOPWORDS = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
-/** Every run of 3+ words inside a hidden title or venue (at least two real words), so part of a name still counts. */
+/**
+ * Words that say what KIND of place a facility is, not WHICH one (review s2r2
+ * N-H1). Directions and numbers count as generic too. Every other word of a
+ * hidden name is distinctive: "San Quentin State Prison" leaves "san" and
+ * "quentin".
+ */
+export const FACILITY_GENERIC_WORDS: ReadonlySet<string> = new Set([
+  "state", "county", "federal", "city", "department",
+  "correctional", "correction", "corrections", "prison", "prisons", "jail", "jails", "penitentiary", "penitentiaries",
+  "facility", "facilities", "institution", "institutions", "center", "centers", "centre", "centres",
+  "detention", "unit", "units", "camp", "camps", "complex",
+  "north", "south", "east", "west", "northern", "southern", "eastern", "western",
+  "northeast", "northwest", "southeast", "southwest", "central",
+]);
+/** A word that names a kind of facility: a title carrying one is treated like a place name. */
+const FACILITY_KIND_WORDS = new Set(["correctional", "correction", "corrections", "prison", "prisons", "jail", "jails", "penitentiary", "penitentiaries", "facility", "facilities", "institution", "institutions", "detention"]);
+const isNumberWord = (w: string) => /^\d+(?:st|nd|rd|th)?$/.test(w) || /^(?=[ivx]+$)x{0,3}(?:ix|iv|v?i{0,3})$/.test(w);
+const isRealWord = (w: string) => !RUN_STOPWORDS.has(w) && !isNumberWord(w);
+
+/** Every run of 2+ words inside a hidden name (at least two real words, not "of the"), so part of a name still counts. */
 function wordRuns(term: string): string[] {
   const w = wordsOf(term).trim().split(" ").filter(Boolean);
   const out: string[] = [];
-  for (let len = 3; len < w.length; len++) {
+  for (let len = 2; len < w.length; len++) {
     for (let i = 0; i + len <= w.length; i++) {
       const run = w.slice(i, i + len);
-      if (run.filter((x) => !RUN_STOPWORDS.has(x) && !/^\d+$/.test(x)).length >= 2) out.push(run.join(" "));
+      if (run.filter(isRealWord).length >= 2) out.push(run.join(" "));
     }
   }
   return out;
 }
 
+/** The words of a name that pick out WHICH place it is: not generic, not a number, not "of", three letters or more. */
+export function distinctiveWords(term: string): string[] {
+  return Array.from(new Set(wordsOf(term).trim().split(" ").filter((w) => w.length >= 3 && isRealWord(w) && !FACILITY_GENERIC_WORDS.has(w))));
+}
+
+/**
+ * The pieces of a title that name a facility: "Theater program, Example State
+ * Prison" gives "Example State Prison"; "Shakespeare at San Quentin State
+ * Prison" gives "San Quentin State Prison". The rest of the title is the
+ * work, not the place, so its single words stay free to use.
+ */
+function facilityParts(title: string): string[] {
+  return title
+    .split(/[,;:()[\]|/\u2013\u2014]+|\s-\s|\s(?:at|in|inside)\s/i)
+    .filter((p) => wordsOf(p).trim().split(" ").some((w) => FACILITY_KIND_WORDS.has(w)));
+}
+
+/**
+ * The text of a row to check against hidden names: everything that comes
+ * from the record. A venue-only row's leading kind word ("Arts program",
+ * "Teaching") is the page's own label, never the person's text.
+ */
+export function rowCheckText(r: { parts: Part[]; mode: "true_title" | "venue_only" }): string {
+  return rowText(r.mode === "venue_only" ? r.parts.slice(1) : r.parts);
+}
+
+/** The ids of the entries a built page prints (its rows), for hiddenFacilityTerms. */
+export function shownEntryIds(model: { sections: { rows?: { entryId: string }[] }[] }): string[] {
+  return model.sections.flatMap((s) => (s.rows ?? []).map((r) => r.entryId));
+}
+
 /**
  * The facility text a sentence may not carry on this lane: the title of each
  * facility-named entry not shown with its true title, and the venue of each
- * one left off (or not yet chosen). Lowercased. Each also counts in part: any
- * run of three or more of its words (two of them real words), unless that run
- * is already on the page through something this lane shows. Exact words, no
- * guessing.
+ * one left off (or not yet chosen). Lowercased. Each also counts in part
+ * (review s2r2 N-H1): any run of two or more of its real words, and any single
+ * distinctive word of a venue (or of a title or earlier name that itself
+ * names a kind of facility). A part does not count when it is already on the
+ * page through an entry this page prints with its true title.
+ *
+ * `shownIds` are the entries THIS page prints (review s2r2 N-M1): an entry
+ * that is not on the page (a reference without an OK, an exhibition on a CV,
+ * a row held for a status) never makes a hidden name public. Without it, the
+ * lane's shown entries are used (picked, confirmed, true title).
  */
-export function hiddenFacilityTerms(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): string[] {
+export function hiddenFacilityTerms(
+  entries: PracticeEntry[],
+  s: CreativeKindSettings | null | undefined,
+  shownIds?: Iterable<string> | null
+): string[] {
   const out: string[] = [];
-  // A venue that a SHOWN, non-facility entry also uses is public on this lane
-  // anyway: shown means confirmed (not "need to find") and, when the lane
-  // picks entries, picked.
   const picked = Array.isArray(s?.selection) ? new Set(s!.selection!.map((x) => x.toLowerCase())) : null;
-  const isShown = (e: PracticeEntry) =>
-    (!picked || picked.has(e.id.toLowerCase())) &&
-    (e.names_facility
-      ? // a facility entry the person chose to show WITH its venue makes that venue public on this lane
-        titleModeFor(e, s) === "true_title" || titleModeFor(e, s) === "venue_only"
-      : e.proof !== "need_to_find");
-  const shownVenues = new Set(entries.filter((e) => e.venue && isShown(e)).map((e) => (e.venue as string).toLowerCase()));
-  // Text already public on this lane: shown titles (true title only) and shown venues.
-  const publicText = entries
-    .filter(isShown)
-    .map((e) => `${!e.names_facility || titleModeFor(e, s) === "true_title" ? e.title : ""} | ${e.venue ?? ""}`)
-    .map(wordsOf)
-    .join(" | ");
+  const onPage = shownIds ? new Set(Array.from(shownIds, (x) => x.toLowerCase())) : null;
+  // On this page: only an entry the page prints (or, without shownIds, the
+  // lane's picked and confirmed entries).
+  const printed = (e: PracticeEntry) =>
+    onPage ? onPage.has(e.id.toLowerCase()) : (!picked || picked.has(e.id.toLowerCase())) && (e.names_facility || e.proof !== "need_to_find");
+  // A hidden VENUE is public only through an entry on this page shown with its
+  // TRUE title (review s2r2 N-M1); a venue-only line or a held entry never
+  // makes it public.
+  const shown = entries.filter((e) => titleModeFor(e, s) === "true_title" && printed(e));
+  const shownVenues = new Set(shown.filter((e) => e.venue).map((e) => wordsOf(e.venue as string)));
+  // Words already on this page (so a PART of a hidden name found here is no
+  // secret): true titles and venues of shown entries, and the venue a
+  // venue-only line prints (its own hidden title never holds it).
+  const venueOnly = entries.filter((e) => titleModeFor(e, s) === "venue_only" && printed(e));
+  const publicText = [...shown.map((e) => `${wordsOf(e.title)}|${wordsOf(e.venue ?? "")}`), ...venueOnly.map((e) => wordsOf(e.venue ?? ""))].join("|");
   const full: string[] = [];
+  /** Names whose single distinctive words count too. */
+  const placeNames: string[] = [];
   for (const e of entries) {
     if (!e.names_facility) continue;
     const mode = titleModeFor(e, s);
-    if (mode !== "true_title" && e.title.trim().length >= 4) full.push(e.title.toLowerCase());
+    if (mode !== "true_title" && e.title.trim().length >= 4) {
+      full.push(e.title.toLowerCase());
+      placeNames.push(...facilityParts(e.title));
+    }
     const venue = e.venue?.toLowerCase();
-    if ((mode === "leave_out" || mode === "unset") && venue && venue.trim().length >= 4 && !shownVenues.has(venue)) full.push(venue);
+    if ((mode === "leave_out" || mode === "unset") && venue && venue.trim().length >= 4 && !shownVenues.has(wordsOf(venue))) {
+      full.push(venue);
+      placeNames.push(venue);
+    }
     // Earlier names of the entry are never shown on a lane that keeps it off.
-    if (mode !== "true_title") for (const f of e.details.formerNames ?? []) if (f.trim().length >= 4) full.push(f.toLowerCase());
+    if (mode !== "true_title") {
+      for (const f of e.details.formerNames ?? []) {
+        if (f.trim().length >= 4) {
+          full.push(f.toLowerCase());
+          // An earlier venue ("San Quentin") counts whole; an earlier title only where it names the facility.
+          const parts = facilityParts(f);
+          placeNames.push(...(parts.length ? parts : [f]));
+        }
+      }
+    }
   }
-  out.push(...full);
-  for (const t of full) for (const r of wordRuns(t)) if (!publicText.includes(` ${r} `) && !out.includes(r)) out.push(r);
+  for (const t of full) if (!out.includes(t)) out.push(t);
+  const add = (part: string) => {
+    if (!publicText.includes(` ${part} `) && !out.includes(part)) out.push(part);
+  };
+  for (const t of full) for (const r of wordRuns(t)) add(r);
+  for (const t of placeNames) for (const w of distinctiveWords(t)) add(w);
   return out;
 }
 
-/** The hidden term a text names (whole words), or null. */
+/**
+ * The hidden term a text names (whole words; case, punctuation and
+ * apostrophes ignored), or null. A possessive reads both ways: "Riker's"
+ * matches "Rikers", and "Stateville's" matches "Stateville".
+ */
 export function namesHiddenFacility(text: string, terms: string[]): string | null {
   const t = wordsOf(text);
-  return terms.find((x) => wordsOf(x).trim() !== "" && t.includes(wordsOf(x))) ?? null;
+  const bare = wordsOf(text.replace(/['\u2019\u02bc]s\b/gi, ""));
+  return terms.find((x) => {
+    const w = wordsOf(x);
+    return w.trim() !== "" && (t.includes(w) || bare.includes(w));
+  }) ?? null;
 }
 
+
+/**
+ * How an education entry's title prints (review s2r2 N-M3). Study the person
+ * marked as classes without a degree reads "Coursework toward <degree>" or
+ * "Coursework in <field>", never as the degree itself. A title that already
+ * says so ("Coursework toward an Associate of Arts") prints as typed.
+ */
+export function studyTitle(e: Pick<PracticeEntry, "section" | "title" | "details">): string {
+  const kind = e.section === "education" ? e.details.study : undefined;
+  if (!kind || /^\s*(?:course ?work|classes|credits?|non-?degree)\b/i.test(e.title)) return e.title;
+  return kind === "toward_degree" ? `Coursework toward ${e.title}` : `Coursework in ${e.title}`;
+}
 
 /** The credential kind and status words (D4), shared by every page that prints a credential. */
 export const CREDENTIAL_KIND_WORD: Record<string, string> = {
@@ -426,7 +535,7 @@ export function artistRowParts(e: PracticeEntry, mode: "true_title" | "venue_onl
       return commaJoin([{ text: e.title }, { text: e.venue ?? "" }, { text: place }, { text: d.level ?? "" }]);
     case "education": {
       const status = d.status === "in_progress" ? (d.expected ? `in progress, expected ${d.expected}` : "in progress") : "";
-      const row = commaJoin([{ text: e.title }, { text: e.venue ?? "" }, { text: place }]);
+      const row = commaJoin([{ text: studyTitle(e) }, { text: e.venue ?? "" }, { text: place }]);
       if (status) row.push({ text: `(${status})` });
       return row;
     }
@@ -461,18 +570,14 @@ function sortNewestFirst(a: PracticeEntry, b: PracticeEntry): number {
  */
 export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKindSettings | null | undefined): ArtistResumeModel {
   const settings = s ?? {};
-  const hidden = hiddenFacilityTerms(entries, settings);
-  const heldFields: string[] = [];
-  const keep = (field: keyof CreativeKindSettings): string | undefined => {
-    const t = settings[field] as string | undefined;
-    if (t && namesHiddenFacility(t, hidden)) return void heldFields.push(field);
-    return t;
-  };
   const selection = Array.isArray(settings.selection) ? new Set(settings.selection.map((x) => x.toLowerCase())) : null;
   const omitted: ArtistResumeModel["omitted"] = [];
   const needsChoice: string[] = [];
   const sections: ArtistSection[] = [];
   let trimmedAny = false;
+  // First pass: the rows this page would print. Only those can make a hidden
+  // name public (review s2r2 N-M1); then every row and typed field is checked.
+  const pending: { sec: (typeof ARTIST_SECTIONS)[number]; rows: ArtistRow[]; trimmedHere: boolean }[] = [];
 
   for (const sec of ARTIST_SECTIONS) {
     const all = entries.filter(sec.take).sort(sortNewestFirst);
@@ -495,13 +600,24 @@ export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKind
         omitted.push({ entryId: e.id, reason: "leave_out" });
         continue;
       }
-      const parts = artistRowParts(e, mode);
-      if (namesHiddenFacility(rowText(parts), hidden)) {
-        omitted.push({ entryId: e.id, reason: "names_hidden" });
-        continue;
-      }
-      rows.push({ entryId: e.id, years: yearsOf(e), parts, mode });
+      rows.push({ entryId: e.id, years: yearsOf(e), parts: artistRowParts(e, mode), mode });
     }
+    pending.push({ sec, rows, trimmedHere });
+  }
+
+  const hidden = hiddenFacilityTerms(entries, settings, pending.flatMap((p) => p.rows.map((r) => r.entryId)));
+  const heldFields: string[] = [];
+  const keep = (field: keyof CreativeKindSettings): string | undefined => {
+    const t = settings[field] as string | undefined;
+    if (t && namesHiddenFacility(t, hidden)) return void heldFields.push(field);
+    return t;
+  };
+  for (const { sec, rows: all, trimmedHere } of pending) {
+    const rows = all.filter((r) => {
+      if (!namesHiddenFacility(rowCheckText(r), hidden)) return true;
+      omitted.push({ entryId: r.entryId, reason: "names_hidden" });
+      return false;
+    });
     if (trimmedHere) trimmedAny = true;
     if (rows.length) {
       sections.push({ key: sec.key, heading: trimmedHere ? `Selected ${sec.heading}` : sec.heading, rows });

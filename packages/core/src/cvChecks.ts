@@ -24,17 +24,26 @@ import type { CvType } from "./careerLaneShared";
 import type { PracticeEntry } from "./practiceRecordShared";
 import { yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
-import { type CvModel, LICENSE_NUMBER_RE, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts, isPersonalDetail } from "./cvShared";
+import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
 import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine } from "./creativeChecks";
 
 export const CV_RULES_VERSION = `cv-1 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
 
-/** A supervision or corrections officer, by role, name line or workplace. Exact phrases, no guessing. */
-const OFFICER_STRONG = /\b(parole|probation|department of corrections|corrections? officer|correctional officer|community supervision|supervision officer|reentry (?:officer|agent))\b/i;
+/**
+ * A supervision or corrections officer, by role, name line or workplace.
+ * Exact phrases on word boundaries, no guessing (review s2r2 N-M2 widened
+ * it: plurals, the Bureau of Prisons, pretrial services, residential reentry
+ * centers and halfway houses, community corrections).
+ */
+const OFFICER_STRONG = /\b(parole|probation|department of corrections|corrections? officer|correctional officer|community supervision|supervision officer|reentry (?:officer|agent)|pretrial services?(?: officer| agent)?|probation and parole agent)\b/i;
 const OFFICER_PO = /\bP\.?O\.?(?=\s|$|,)/;
-/** "Officer", "agent" or "case manager" counts only next to a corrections word (a loan officer or a teacher's case manager does not). */
-const OFFICER_WORD = /\b(officer|agent|case ?manager)\b/i;
-const CORRECTIONS_CTX = /\b(corrections?|correctional|parole|probation|jail|prison|sheriff|doc|supervision|detention|penitentiary)\b/i;
+/** "Officer", "agent", "case manager", "counselor" or "unit manager" counts only next to a corrections word (a loan officer or a school counselor does not). */
+const OFFICER_WORD = /\b(officers?|agents?|case ?managers?|counsell?ors?|unit managers?)\b/i;
+const CORRECTIONS_CTX = new RegExp(
+  String.raw`\b(corrections?|correctional|parole|probation|jails?|prisons?|sheriffs?|doc|bop|bureau of prisons|pretrial|supervision|detention|penitentiar(?:y|ies)|` +
+    String.raw`residential re-?entry(?: centers?| centres?)?|rrc|halfway houses?|community corrections|department of corrections)\b`,
+  "i"
+);
 export function looksLikeOfficer(e: PracticeEntry): boolean {
   const role = `${e.details.role ?? ""} ${e.title}`;
   const all = `${role} ${e.venue ?? ""}`;
@@ -101,15 +110,23 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
     if (o.reason === "needs_status") {
       items.push({
         rule: "CV-05", severity: "BLOCK", line: entryLine(e, settings), doc: "cv", entryId: e.id,
-        question: "Is this a degree? If so, was it conferred, or is it still in progress (and when do you expect to finish)?",
+        question: "Is this a degree? If so, was it conferred, or is it still in progress (and when do you expect to finish)? If it was classes without a degree, mark it that way.",
         why: "A degree shows exactly as it stands. It stays off the page until you say.",
       });
     } else if (o.reason === "license_number") {
-      items.push({
-        rule: "CV-02", severity: "BLOCK", line: `${yearsOf(e)}  A credential in your record`, doc: "cv", entryId: e.id,
-        question: "This looks like it has a license or certificate number in it. Take the number out? A reader can ask for it.",
-        why: "A number opens a public lookup. It stays off the page.",
-      });
+      items.push(
+        e.section === "license"
+          ? {
+              rule: "CV-02", severity: "BLOCK", line: `${yearsOf(e)}  A credential in your record`, doc: "cv", entryId: e.id,
+              question: "This looks like it has a license or certificate number in it. Take the number out? A reader can ask for it.",
+              why: "A number opens a public lookup. It stays off the page.",
+            }
+          : {
+              rule: "CV-02", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc: "cv", entryId: e.id,
+              question: "This looks like it has a member number or ID number in it. Take the number out? A reader can ask for it.",
+              why: "A number like that can be looked up. It stays off the page.",
+            }
+      );
     } else if (o.reason === "personal") {
       items.push({
         rule: "CV-03", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc: "cv", entryId: e.id,
@@ -200,10 +217,12 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
     });
   }
 
-  // Backstop: no open item's line may carry a personal detail or a credential number.
+  // Backstop: no open item's line may carry a personal detail or an ID number.
+  // An entry's line is judged by the entry's own fields (the same fields the
+  // page judges), so a true title of a talk is never blanked.
   for (const it of items) {
     const e = it.entryId ? byId.get(it.entryId.toLowerCase()) : undefined;
-    if (isPersonalDetail(it.line) || (e?.section === "license" && LICENSE_NUMBER_RE.test(it.line))) {
+    if (e ? rowHasPersonalDetail(e) || rowHasIdNumber(e) : isPersonalDetail(it.line)) {
       it.line = e ? `${yearsOf(e)}  A line in your record` : "A line in your record";
     }
   }

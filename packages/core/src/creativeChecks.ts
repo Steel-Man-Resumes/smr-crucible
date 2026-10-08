@@ -164,7 +164,8 @@ export function checkRecord(entries: PracticeEntry[], settings: CreativeKindSett
       });
     }
     if (e.section === "education") {
-      if (e.details.degree !== true && DEGREE_RE.test(e.title)) {
+      // Study the person marked as classes without a degree has answered this (review s2r2 N-M3).
+      if (e.details.degree !== true && !e.details.study && DEGREE_RE.test(e.title)) {
         out.push({
           rule: "STD-T03", severity: "FIX", line, doc: "record", entryId: e.id,
           question: "Is this a degree a college conferred on you? A certificate or coursework is not a degree. Say which it is.",
@@ -573,8 +574,10 @@ export function exportOpenItemLines(
   status: CreativeStatus,
   entries: PracticeEntry[],
   settings: CreativeKindSettings | null | undefined,
-  doc?: CreativeDoc
+  doc?: CreativeDoc,
+  /** The entries the exported page prints (shownEntryIds of its model): only those make a hidden name public. */
+  shownIds?: Iterable<string> | null
 ): string[] {
-  const hidden = hiddenFacilityTerms(entries, settings);
+  const hidden = hiddenFacilityTerms(entries, settings, shownIds);
   return creativeOpenItemLines(status, doc).map((l) => (namesHiddenFacility(l, hidden) ? HIDDEN_ITEM_LINE : l));
 }

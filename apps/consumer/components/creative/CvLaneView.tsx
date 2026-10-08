@@ -13,7 +13,7 @@ import type { CreativeKindSettings } from "@crucible/core/src/creativeLaneShared
 import { buildCvModel, cvPageCap, cvPlainText, CV_TYPE_COPY } from "@crucible/core/src/cvShared";
 import { getCvStatus } from "@crucible/core/src/cvChecks";
 import { exportOpenItemLines } from "@crucible/core/src/creativeChecks";
-import { stillNeedsProof, NEEDS_PROOF_NOTE } from "@crucible/core/src/creativeLaneShared";
+import { stillNeedsProof, NEEDS_PROOF_NOTE, shownEntryIds } from "@crucible/core/src/creativeLaneShared";
 import { CREATIVE_ERRORS, CV_TABS, sendJson } from "@/lib/creative";
 import { PracticeRecordPanel, CV_SECTION_ORDER } from "./PracticeRecordPanel";
 import { FacilityChoices } from "./FacilityChoices";
@@ -211,7 +211,7 @@ export function CvLaneView({ laneId }: { laneId: string }) {
             <OpenItems status={status} doc="cv" testId="cv-open-items" />
 
             <CreativePage
-              request={{ doc: "cv", model, draft, openItems: exportOpenItemLines(status, ctx.entries, ctx.settings, "cv") }}
+              request={{ doc: "cv", model, draft, openItems: exportOpenItemLines(status, ctx.entries, ctx.settings, "cv", shownEntryIds(model)) }}
               onPages={setPages}
               fallbackText={cvPlainText(model)}
             />

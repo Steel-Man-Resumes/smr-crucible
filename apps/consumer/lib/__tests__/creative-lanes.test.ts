@@ -154,10 +154,11 @@ test("CV lanes: the export route builds the CV from the database with safe to-do
   const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
   const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
   assert.match(exp, /if \(laneKindOf\(lane\) === "cv"\) return exportCv\(/);
-  assert.match(exp, /exportOpenItemLines\(v\.status, v\.entries, v\.settings, "cv"\)/);
+  // Only what the CV prints makes a hidden name public (review s2r2 N-M1).
+  assert.match(exp, /exportOpenItemLines\(v\.status, v\.entries, v\.settings, "cv", shownEntryIds\(v\.model\)\)/);
   const view = rd("components", "creative", "CvLaneView.tsx");
   assert.ok(!/birth|photo upload|headshot|marital|nationality/i.test(view.replace(/No photo, birth date, age, family status or nationality\. A CV here never asks for them\./, "")));
-  assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "cv"\)/);
+  assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "cv", shownEntryIds\(model\)\)/);
 });
 
 test("slice 2 review LOWs: creative lanes refuse doc=cv; file names use the printed name; assist can't write the person's own words; GET counts pages; resume work stays in resume lanes", () => {

@@ -12,6 +12,7 @@ import {
   exportOpenItemLines,
   laneKindOf,
   cvPlainText,
+  shownEntryIds,
   type CreativeDoc,
 } from "@crucible/core";
 import { buildCreative, renderCreativeDocx, renderCreativeHtml, renderCreativePdf, type CreativeRenderRequest } from "@/lib/resume-render";
@@ -142,7 +143,7 @@ async function exportCv(userId: string, lane: CareerLane, url: URL): Promise<Nex
   const pages = buildCreative({ doc: "cv", model: v.model }).layout.pages.length;
   v = await loadCvContext(userId, lane, pages);
   const draft = v.status.blockCount > 0;
-  const openItems = exportOpenItemLines(v.status, v.entries, v.settings, "cv");
+  const openItems = exportOpenItemLines(v.status, v.entries, v.settings, "cv", shownEntryIds(v.model));
   // The file name uses the header as printed, so a detail CV-03 kept off the page never rides along in it.
   const name = v.model.header.name ?? "";
   const headers = (type: string, ext: string) => ({ "Content-Type": type, "Content-Disposition": `attachment; filename="${fileName(name, "CV", ext)}"`, "Cache-Control": "no-store" });

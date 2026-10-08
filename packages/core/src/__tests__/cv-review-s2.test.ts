@@ -148,14 +148,17 @@ describe("H2: every typed field and record row is checked against what the lane 
     assert.ok(m.omitted.some((o) => o.entryId === award.id && o.reason === "names_hidden"));
     assert.ok(getCvStatus({ entries: [BA, inside, award], settings: hide, cvType: "academic", model: m }).openItems.some((x) => x.severity === "BLOCK" && x.entryId === award.id));
   });
-  it("part of a hidden title counts (3+ whole words), but a phrase already on the page does not", () => {
+  it("part of a hidden title counts (2+ real words, s2r2 N-H1), but a phrase already on the page does not", () => {
     const tutor = entry({ section: "teaching", title: "Inside Teaching Program GED tutor", venue: "Example State Correctional Facility", year: 2019, names_facility: true });
     const s = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: "Spanish; tutoring (Inside Teaching Program)" };
     const m = buildCvModel([BA, tutor], s, "teaching");
     assert.doesNotMatch(cvPlainText(m), /Inside Teaching Program/);
     assert.ok(getCvStatus({ entries: [BA, tutor], settings: s, cvType: "teaching", model: m }).openItems.some((x) => x.severity === "BLOCK"));
-    // Two words, stopword runs, and mid-word overlaps never count.
-    for (const ok of ["Spanish; GED tutoring", "Teaching program design", "Restart in prison reform research"]) {
+    // Two real words of it count now (review s2r2 N-H1).
+    const s1 = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: "Teaching program design" };
+    assert.doesNotMatch(cvPlainText(buildCvModel([BA, tutor], s1, "teaching")), /Teaching program/);
+    // Stopword runs and mid-word overlaps never count.
+    for (const ok of ["Spanish; GED tutoring", "Restart in prison reform research"]) {
       const s2 = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: ok };
       assert.match(cvPlainText(buildCvModel([BA, tutor], s2, "teaching")), new RegExp(ok.split(";")[0]), ok);
     }
