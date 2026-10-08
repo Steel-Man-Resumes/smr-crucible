@@ -88,12 +88,13 @@ test("B3: a confirmed credential in a long sentence moves to its own line under 
   const r = `${HEAD()}\n- ${line}`;
   const res = apply({ resume: r, letter: "" }, "Certified Forklift Operator", "card", "2021")!;
   assert.match(res.resume, /\nCERTIFICATIONS\n- Forklift Operator card, 2021$/);
-  assert.match(res.resume, /^- who supervised a crew of night loaders and trained every new hire on dock safety$/m);
+  // Round 4: no orphan "who" at the start; the leftover is held until reworded or cut.
+  assert.match(res.resume, /^- Supervised a crew of night loaders and trained every new hire on dock safety$/m);
   assert.doesNotMatch(res.resume, /\(OSHA\)/);
   const v = view(res.resume, { confirmedCredentials: [res.confirm], written: { resume: r, letter: "" } });
-  const generic = recordAnswer([], "- who supervised a crew of night loaders and trained every new hire on dock safety", "I did that at the diner most shifts, the owner can say so.", "stands");
+  const generic = recordAnswer([], "- Supervised a crew of night loaders and trained every new hire on dock safety", "I did that at the diner most shifts, the owner can say so.", "stands");
   assert.equal(view(res.resume, { confirmedCredentials: [res.confirm], defendAnswers: generic, written: { resume: r, letter: "" } }).state, "draft");
-  assert.ok(v.openItems.some((i) => /who supervised/.test(i.line)));
+  assert.ok(v.openItems.some((i) => /Supervised a crew/.test(i.line) && i.kind === "credential_remnant"));
 });
 
 test("B3: a writer's status word left in the sentence goes with the move, or is flagged", () => {
@@ -101,7 +102,8 @@ test("B3: a writer's status word left in the sentence goes with the move, or is 
   const r = `${HEAD()}\n- Kept my ServSafe Food Handler valid and active through every inspection at the diner`;
   const res = apply({ resume: r, letter: "" }, "ServSafe Food Handler", "card", "expired")!;
   const v = view(res.resume, { confirmedCredentials: [res.confirm], written: { resume: r, letter: "" } });
-  assert.ok(v.openItems.some((i) => i.kind === "credential_status_left"), JSON.stringify(v.openItems));
+  // Round 4: every line the move changed is held until the person rewords it or cuts it.
+  assert.ok(v.openItems.some((i) => i.kind === "credential_remnant" && !v.groups.find((g) => g.line === i.line)?.answerable), JSON.stringify(v.openItems));
   assert.equal(v.state, "draft");
 });
 

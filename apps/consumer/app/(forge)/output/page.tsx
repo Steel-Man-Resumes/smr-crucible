@@ -365,7 +365,7 @@ export default function OutputPage() {
       if (!r) return "unchanged";
       setResumeText(r.resume);
       setCoverLetterText(r.letter);
-      setConfirmedCredentials((c) => [...c.filter((x) => x.name.toLowerCase() !== r.confirm.name.toLowerCase()), r.confirm]);
+      setConfirmedCredentials((c) => [...c.filter((x) => (x.key ?? x.name.toLowerCase()) !== (r.confirm.key ?? r.confirm.name.toLowerCase())), r.confirm]);
       return "ok";
     },
     onCutCredential: (group) => {
