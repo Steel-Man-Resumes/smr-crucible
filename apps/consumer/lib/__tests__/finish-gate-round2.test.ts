@@ -95,14 +95,16 @@ test("R2-B6 (control): a letter in the person's words, with a courtesy close, ra
   assert.deepEqual(v.openItems.filter((i) => i.target === "letter"), []);
 });
 
-test("R2-B6: a scope sentence in the letter is settled only by an answer about that scope", () => {
+test("R2-B6 (round 5): a scope sentence in the letter is settled only by a rewrite or a cut, never by an answer", () => {
   const letter = "Dear Hiring Manager,\n\nI cooked at Harbor Street Diner. I supervised the kitchen staff on weekends.\n\nMorgan Sample";
   const line = "I cooked at Harbor Street Diner. I supervised the kitchen staff on weekends.";
   const r = page(BASE);
-  const generic = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: recordAnswer([], line, GOOD, "stands"), coverLetterText: letter });
-  assert.ok(generic.groups.some((g) => g.target === "letter"));
-  const real = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: recordAnswer([], line, "On Sundays I supervised the two dishwashers when the owner was out.", "stands"), coverLetterText: letter });
-  assert.ok(!real.groups.some((g) => g.target === "letter"), JSON.stringify(real.openItems));
+  for (const ans of [GOOD, "On Sundays I supervised the two dishwashers when the owner was out."]) {
+    const v = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: recordAnswer([], line, ans, "stands"), coverLetterText: letter });
+    assert.ok(v.groups.some((g) => g.target === "letter" && g.blocking && !g.answerable), ans);
+  }
+  const cut = buildFinishView({ resumeText: r, ownWords: SOURCE, defendAnswers: [], coverLetterText: cutLine(letter, line) });
+  assert.ok(!cut.groups.some((g) => g.target === "letter"), JSON.stringify(cut.openItems));
 });
 
 test("R2-B6: a credential is asked once across the resume and the letter", () => {

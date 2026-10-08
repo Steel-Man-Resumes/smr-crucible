@@ -73,15 +73,15 @@ test("D3: keeping a term never sources a number in it", () => {
   assert.equal(confirmedWords(["Forty-two point inspections", "Pallet jack 3000"]).match(/\d|forty/gi), null);
 });
 
-test("D3: a skill with a scope word stays its own card, settled by saying what they did", () => {
+test("D3 (round 5): a skill with a scope word stays its own card, settled only by cutting it", () => {
   const v = view(SKILLS);
   const scope = v.groups.find((g) => g.target === "skill" && g.line === "Kitchen supervision");
-  assert.ok(scope && scope.answerable && scope.blocking);
-  assert.match(scope!.items[0].question, /Say what you did/);
-  const generic = recordAnswer([], "Kitchen supervision", "I did that at the diner most shifts, the owner can say so.", "stands");
-  assert.ok(view(SKILLS, { defendAnswers: generic }).groups.some((g) => g.line === "Kitchen supervision"));
-  const real = recordAnswer([], "Kitchen supervision", "I handled kitchen supervision on Sunday nights when the owner was out.", "stands");
-  assert.ok(!view(SKILLS, { defendAnswers: real }).groups.some((g) => g.line === "Kitchen supervision"));
+  assert.ok(scope && !scope.answerable && scope.blocking);
+  for (const ans of ["I did that at the diner most shifts, the owner can say so.", "I handled kitchen supervision on Sunday nights when the owner was out."]) {
+    const a = recordAnswer([], "Kitchen supervision", ans, "stands");
+    assert.ok(view(SKILLS, { defendAnswers: a }).groups.some((g) => g.line === "Kitchen supervision"), ans);
+  }
+  assert.ok(!view(cutTerm(SKILLS, "Kitchen supervision")).groups.some((g) => g.line === "Kitchen supervision"));
 });
 
 // ---- D4 --------------------------------------------------------------------------

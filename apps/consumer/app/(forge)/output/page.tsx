@@ -252,9 +252,11 @@ export default function OutputPage() {
 
   // ---- the gate ----------------------------------------------------------------
   const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
+  // The licenses-and-training answer: a credential line exactly as typed there is not asked about.
+  const credentialsAnswer = session.challengeNarratives?.[CREDENTIALS_KEY];
   const view = useMemo(
-    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written]
+    () => buildFinishView({ resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer }),
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer]
   );
   const ready = docState === "done" && !!resumeText;
   const finished = ready && view.state === "finished";

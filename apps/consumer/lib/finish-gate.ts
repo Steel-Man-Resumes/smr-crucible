@@ -24,6 +24,9 @@ import {
   getResumeStatus,
   introducedWords,
   questionForFinding,
+  credentialPromptWhy,
+  scopeWhy,
+  Q_SCOPE,
   type DefendAnswer,
   type OpenItem,
   type ResumeStatus,
@@ -31,9 +34,16 @@ import {
 import { hasCredentialStatus, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
-import { scopeNotTheirs, answerTalksScope } from "@crucible/core/src/scopeWords";
+import { scopeNotTheirs } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
-import { checkCredentials, credentialHomes, credentialKeyOf, credentialMentionsOf } from "@crucible/core/src/credentialMentions";
+import {
+  credentialHomes,
+  credentialKeyOf,
+  credentialMentionsOf,
+  credentialsToAsk,
+  removeCredentialPart,
+  sameCredential,
+} from "@crucible/core/src/credentialMentions";
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
@@ -438,14 +448,19 @@ const ANY_HEADING_RE = /^[A-Z][A-Z &/]{3,}:?$/;
 
 /** The indexes of the lines in the skills section (a term is cut only there, never from a job header). */
 function skillsLineIndexes(lines: string[]): Set<number> {
-  const out = new Set<number>();
-  let inSkills = false;
+  return new Set(listLineKinds(lines).keys());
+}
+
+/** Each list line's index and its list: a skills list, or a credentials list (round 4: terms live in both). */
+function listLineKinds(lines: string[]): Map<number, "skills" | "credentials"> {
+  const out = new Map<number, "skills" | "credentials">();
+  let list: "skills" | "credentials" | null = null;
   lines.forEach((l, i) => {
     const t = l.trim();
-    // A skills list, or a credentials line that lists several credentials (round 4): terms live in both.
-    if (SKILLS_HEADING_RE.test(t) || CERT_HEADING_RE.test(t)) { inSkills = true; return; }
-    if (ANY_HEADING_RE.test(t) && !t.includes("|")) { inSkills = false; return; }
-    if (inSkills && t) out.add(i);
+    if (SKILLS_HEADING_RE.test(t)) { list = "skills"; return; }
+    if (CERT_HEADING_RE.test(t)) { list = "credentials"; return; }
+    if (ANY_HEADING_RE.test(t) && !t.includes("|")) { list = null; return; }
+    if (list && t) out.set(i, list);
   });
   return out;
 }
@@ -456,10 +471,18 @@ export function cutTerm(text: string, term: string): string {
   if (!t) return text;
   const re = termRe(term);
   const lines = text.split("\n");
-  const skills = skillsLineIndexes(lines);
+  const kinds = listLineKinds(lines);
   return lines
     .map((l, i) => {
-      if (!skills.has(i) || !re.test(l)) return l;
+      if (!kinds.has(i) || !re.test(l)) return l;
+      // A credentials line is split the one way the checker reads it, and a
+      // part's year or status goes with it.
+      if (kinds.get(i) === "credentials") {
+        const bullet = l.match(/^\s*(?:[-•*]\s*)?/)?.[0] ?? "";
+        const rest = removeCredentialPart(l, term);
+        if (rest === l) return l;
+        return rest ? bullet + rest : "";
+      }
       const m = l.match(/^(\s*(?:[-•*]\s*)?(?:[A-Za-z &/]+:\s*)?)(.*)$/);
       const prefix = m?.[1] ?? "";
       const parts = (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\/(?=[A-Za-z])|\band\b)\s*/i);
@@ -474,11 +497,25 @@ export function cutTerm(text: string, term: string): string {
 
 // ---- credentials the person confirmed (D4) ---------------------------------------
 
-const CLAIM_WORDS_RE = /\b(?:certified|certification|certificate|licensed|license|licence|card|training|course|class)\b/gi;
+// The writer's type and status words never survive a confirmation: the line
+// is rebuilt from the name the person said yes to, the kind they picked, and
+// their own year or status. A class letter they confirmed stays ("CDL Class A").
+const CLAIM_WORDS_RE =
+  /\b(?:certified|certification|certifications|certificate|cert|licensed|license|licence|card|cards|training|course|program|endorsement|permit|registry|registered|holder|class(?![\s-]*[a-d0-9]\b))\b/gi;
+const NAME_STATUS_RE =
+  /\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|in progress|enrolled|completed|finished|passed|renewed|suspended|revoked|in good standing|up to date|good for|through|until|since)\b|\b(?:19|20)\d{2}\b/gi;
 
-/** The credential's name without the claim words ("Forklift Certified" is "Forklift"). */
+/** The credential's name without the writer's type or status words ("Forklift Certified" is "Forklift"). */
 function bareName(name: string): string {
-  return name.replace(CLAIM_WORDS_RE, " ").replace(/\s{2,}/g, " ").replace(/[,\s]+$/, "").trim() || name.trim();
+  return (
+    name
+      .replace(CLAIM_WORDS_RE, " ")
+      .replace(NAME_STATUS_RE, " ")
+      .replace(/[()]/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[,\s-]+|[,\s-]+$/g, "")
+      .trim() || name.trim()
+  );
 }
 
 /** The line as the person confirmed it: the name, the kind they picked, and their own year or status. */
@@ -498,7 +535,8 @@ export function isCredentialWhen(when: string): boolean {
 // Words next to a credential's name that go with it when it moves: who holds
 // it and how it is held ("I hold a current ... certification (OSHA)").
 const MOVE_LEFT_RE = /(?:\b(?:i|hold|holds|holding|have|has|a|an|the|my|our|current|currently|valid|active|fully|certified|licensed|am|is|also|with|earned|obtained|passed|completed|got|and)\s+)+$/i;
-const MOVE_RIGHT_RE = /^(?:\s+(?:certification|certificate|card|license|licence|certified|licensed|endorsement|permit|registry|status|holder))*(?:\s*\([^)]{1,15}\))?/i;
+const MOVE_RIGHT_RE =
+  /^(?:\s+(?:certification|certificate|card|license|licence|certified|licensed|endorsement|permit|registry|status|holder))*(?:\s*\([^)]{1,15}\))?(?:,?\s*(?:(?:that\s+is|which\s+is|is|and\s+is)\s+)?(?:(?:current|valid|active|expired|lapsed|renewed)(?:\s+(?:through|until|since|in)\s+(?:19|20)\d{2})?|in good standing|up to date|(?:since|from|in|through|until|valid through|current through|expires?|exp\.?)\s+(?:19|20)\d{2}))*/i;
 // A leftover may not start or end on a joining word.
 const ORPHAN_START_RE = /^(?:and|or|but|so|who|which|that|as|with|while|plus)\b[\s,]*/i;
 const ORPHAN_END_RE = /[\s,]*\b(?:and|or|but|so|who|which|that|as|with|while|plus)$/i;
@@ -530,15 +568,28 @@ function removeFromSentence(sentence: string, raw: string): string {
     .replace(/^[a-z]/, (c) => c.toUpperCase());
 }
 
-/** Drop every sentence of a letter paragraph that names the credential. Returns the paragraph without them. */
+// A sentence that only carries the dropped sentence's status ("It is current and in good standing.").
+const STATUS_FOLLOW_RE = /^(?:it|this|that|which|both|they|these|each|all|mine|my card|the card)\b/i;
+const STATUS_ANY_RE = /\b(?:current|currently|valid|active|expired|expires|renewed|renew|lapsed|in good standing|up to date|good for|good through|through|until)\b/i;
+
+/**
+ * Drop every sentence of a letter paragraph that names the credential, and a
+ * sentence right after one that only carries its status. Returns the
+ * paragraph without them.
+ */
 function dropSentences(paragraph: string, raw: string): string {
   const pattern = new RegExp(escapeRe(raw.trim()).replace(/\s+/g, "\\s+"), "i");
-  return paragraph
-    .split(/(?<=[.!?])\s+/)
-    .filter((sent) => !pattern.test(sent))
-    .join(" ")
-    .replace(/\.{2,}/g, ".")
-    .trim();
+  const kept: string[] = [];
+  let dropped = false;
+  for (const sent of paragraph.split(/(?<=[.!?])\s+/)) {
+    if (pattern.test(sent) || (dropped && STATUS_FOLLOW_RE.test(sent.trim()) && STATUS_ANY_RE.test(sent))) {
+      dropped = true;
+      continue;
+    }
+    dropped = false;
+    kept.push(sent);
+  }
+  return kept.join(" ").replace(/\.{2,}/g, ".").trim();
 }
 
 const CERT_HEADING_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?):?$/i;
@@ -572,7 +623,9 @@ interface MovedResult {
 function applyToDocument(text: string, key: string | undefined, name: string, confirmed: string, isLetter: boolean): MovedResult & { droppedSentence: boolean } {
   const remnants: string[] = [];
   let droppedSentence = false;
-  const mentions = credentialMentionsOf(text).filter((m) => (key ? m.key === key : squash(m.name) === squash(name)));
+  // A letter sentence wrapped across lines is one sentence: join it first, so it goes whole.
+  if (isLetter) text = joinWrappedLines(text);
+  const mentions = credentialMentionsOf(text).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
   const header = headerBlockLines(text);
   let next = text;
   let placed = false;
@@ -609,6 +662,17 @@ function applyToDocument(text: string, key: string | undefined, name: string, co
   return { text: next, remnants, droppedSentence };
 }
 
+/** Join a paragraph's hard-wrapped lines: a line that does not end a sentence, followed by one that starts in lower case. */
+function joinWrappedLines(text: string): string {
+  const out: string[] = [];
+  for (const l of text.split("\n")) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && prev.trim() && !/[.!?:,;]\s*$/.test(prev) && /^\s*[a-z]/.test(l)) out[out.length - 1] = `${prev.trimEnd()} ${l.trim()}`;
+    else out.push(l);
+  }
+  return out.join("\n");
+}
+
 /** The lines above the first section heading, after the name line. */
 function headerBlockLines(text: string): Set<string> {
   const out = new Set<string>();
@@ -637,11 +701,12 @@ export function applyConfirmation(
   const confirmed = confirmedCredentialText(name, type, when);
   const key = credentialKeyOf(name);
   // Nothing to confirm when neither page names this credential.
-  const named = (t: string) => credentialMentionsOf(t).some((m) => (key ? m.key === key : squash(m.name) === squash(name)));
+  const named = (t: string) => credentialMentionsOf(t).some((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
   if (!named(docs.resume) && !named(docs.letter)) return null;
   const r = applyToDocument(docs.resume, key, name, confirmed, false);
   const l = applyToDocument(docs.letter, key, name, confirmed, true);
-  if (r.text === docs.resume && l.text === docs.letter) return null;
+  // The line may already read exactly as confirmed: the confirmation still counts.
+  if (r.text === docs.resume && l.text === docs.letter && !pageLineSet(docs.resume).has(squash(confirmed))) return null;
   return {
     resume: r.text,
     letter: l.text,
@@ -751,9 +816,22 @@ export interface FinishView {
 
 /** Items an answer in the person's own words can settle. A second-check item is settled only by a change or a fresh check. */
 const ANSWERABLE = (i: OpenItem) =>
-  i.from !== "second_check" &&
-  i.kind !== "credential_remnant" &&
-  (i.rule === "STD-C04" || i.rule === "STD-C03" || (i.rule === "STD-T03" && (i.severity === "FIX" || i.kind === "credential_status_claimed")));
+  i.from !== "second_check" && i.kind !== "credential_remnant" && i.kind !== "scope_unsaid" && (i.rule === "STD-C04" || i.rule === "STD-C03");
+
+// Words that start a fragment, not a sentence: a joining word or a relative pronoun.
+const FRAGMENT_START_RE = /^(?:and|or|but|so|nor|yet|plus|who|whom|whose|which|that|where|while|as|with|because|since|although|though|than)\b/i;
+const IRREGULAR_VERB_RE =
+  /\b(?:ran|run|runs|led|lead|leads|made|make|makes|kept|keep|keeps|built|build|builds|drove|drive|drives|took|take|takes|did|do|does|got|get|gets|went|go|goes|set|sets|held|hold|holds|fed|feed|met|meet|sold|sell|taught|teach|put|cut|cuts|brought|bring|bought|buy|caught|dug|fixed|fix|fixes|ate|wrote|write|writes|read|reads|spoke|speak|swept|sweep|stood|stand|told|tell|found|find|gave|give|gives|left|lift|lifts|load|loads|cook|cooks|clean|cleans|open|opens|close|closes|serve|serves|stock|stocks|pack|packs|help|helps|work|works|is|was|are|were|am|has|have|had)\b/i;
+
+/** True when a leftover reads as a fragment: it starts lower case, starts on a joining word, or has no verb. */
+export function readsAsFragment(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (/^[a-z]/.test(t)) return true;
+  if (FRAGMENT_START_RE.test(t)) return true;
+  const hasVerb = /\b[a-z]{2,}(?:ed|ing)\b/i.test(t) || IRREGULAR_VERB_RE.test(t);
+  return !hasVerb;
+}
 
 type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown };
 
@@ -818,6 +896,24 @@ export function confirmedMismatchQuestion(text: string): string {
 }
 /** New (round 3): writer's status words left in a sentence after the credential moved out. */
 export const Q_STATUS_LEFT = "This line still has a status word that went with the credential you confirmed. If an interviewer asked, it would point at nothing. Change the line or cut it.";
+// Long names and their short forms, only to notice two confirmations that may
+// be one credential. Never used to decide a credential is said or held.
+const SAME_NAME: Array<[RegExp, string]> = [
+  [/\bcommercial driver'?s?\b(?:\s+licen[cs]e)?/gi, "cdl"],
+  [/\b(?:certified\s+)?nursing\s+assistant\b/gi, "cna"],
+  [/\bemergency\s+medical\s+technician\b/gi, "emt"],
+  [/\bbasic\s+life\s+support\b/gi, "bls"],
+  [/\bcardiopulmonary\s+resuscitation\b/gi, "cpr"],
+  [/\b(\d+)[\s-]*hour\b/gi, "$1"],
+];
+function sameNameWords(name: string): string {
+  return SAME_NAME.reduce((t, [re, to]) => t.replace(re, to), name);
+}
+
+/** New (round 5): two confirmations that may be one credential, told two ways. */
+export function confirmedConflictQuestion(a: string, b: string): string {
+  return `You told us "${a}" and "${b}". If they are the same one, cut the one that is wrong.`;
+}
 /** New (round 4): a line the move changed. Only the person's own rewrite or a cut clears it. */
 export const Q_REMNANT = "This line changed when the credential moved. Read it again: reword it in your own words, or cut it.";
 /** New (round 4): a sentence about a credential was taken out of the letter. */
@@ -852,68 +948,52 @@ function letterSentences(letter: string): Array<{ line: string; sentence: string
  * defend line. Credentials in the letter are checked by name, once, skipping
  * any the resume already asks about.
  */
-function letterItems(letter: string, resumeText: string, source: string, answers: DefendAnswer[]): GateItem[] {
+function letterItems(
+  letter: string,
+  resumeText: string,
+  source: string,
+  answers: DefendAnswer[],
+  credentialsAnswer: string | undefined,
+  askedOnResume: Set<string>
+): GateItem[] {
   const items: GateItem[] = [];
   const against = `${source}\n${resumeText}`;
-  const srcWords = (source.toLowerCase().match(/[a-z]+/g) ?? []);
   for (const { line, sentence } of letterSentences(letter)) {
-    const far = distanceFromSource(sentence, against) > LETTER_FAR;
+    // A scope claim the person never made: only their own rewrite or a cut settles it.
     const hit = scopeNotTheirs(sentence, source);
-    const scope = hit?.word.toLowerCase();
-    if (!far && !scope) continue;
-    // Settled by an answer; a scope word only by an answer that talks about
-    // that scope ("I supervised the two dishwashers on Sundays").
-    const a = answerFor(answers, line);
-    if (answerStands(a, line, source) && (!scope || answerTalksScope(a!.answer))) continue;
-    if (items.some((i) => i.line === line && i.rule === "STD-C04")) continue;
+    if (hit && !items.some((i) => i.line === line && i.kind === "scope_unsaid")) {
+      items.push({ rule: "STD-C04", severity: "BLOCK", line, target: "letter", kind: "scope_unsaid", why: scopeWhy(hit.word), question: Q_SCOPE });
+    }
+    // A sentence far from the person's words: settled by an answer, like a defend line.
+    if (distanceFromSource(sentence, against) <= LETTER_FAR) continue;
+    if (answerStands(answerFor(answers, line), line, source)) continue;
+    if (items.some((i) => i.line === line && i.rule === "STD-C04" && i.kind !== "scope_unsaid")) continue;
     items.push({
       rule: "STD-C04",
       severity: "BLOCK",
       line,
       target: "letter",
-      why: scope
-        ? `"${scope}" isn't a word you used about your work. The letter says what you did at the size you did it.`
-        : "Most of this sentence isn't in anything you told us.",
+      why: "Most of this sentence isn't in anything you told us.",
       question: "Tell me in one sentence how you'd describe this line.",
     });
   }
-  // Every letter credential is checked, including one the resume also names.
-  // A shared one is asked once, on the resume; the letter item points there.
-  const resumeKeys = new Set(credentialHomes(credentialMentionsOf(resumeText)).map((m) => m.key));
-  for (const c of checkCredentials(letter, source)) {
-    if (c.issue === "status") continue; // a missing status is asked on the resume card
-    const shared = resumeKeys.has(c.mention.key);
-    if (c.issue === "unsaid" && !shared) {
-      items.push({
-        rule: "STD-T03",
-        severity: "BLOCK",
-        line: c.mention.line,
-        target: "letter",
-        kind: "credential_unsaid",
-        subject: c.mention.name,
-        why: `"${c.mention.name.slice(0, 50)}" was added for you. It stays only if you hold it and tell us what kind it is and when.`,
-        question: credentialMemoryPrompt(c.mention.name),
-      });
-      continue;
-    }
+  // Every letter credential is a memory prompt (round 5), unless it is
+  // exactly a line the person typed. One the resume also names is asked
+  // once, on the resume; the letter item points there and the letter
+  // follows the confirmation.
+  // The resume's card is the one place a shared credential is asked. While it
+  // is open the page is a draft; confirming it takes the letter's sentence
+  // out, and cutting it leaves the letter's mention to be asked here.
+  for (const m of credentialsToAsk(letter, credentialsAnswer, askedOnResume)) {
     items.push({
       rule: "STD-T03",
       severity: "BLOCK",
-      line: c.mention.line,
+      line: m.line,
       target: "letter",
-      kind: c.issue === "upgrade" ? "credential_upgrade" : "credential_letter_shared",
-      why:
-        c.issue === "upgrade"
-          ? "Your words describe a class or training for this, not a certification or license. A class is listed as training."
-          : c.issue === "unsaid"
-            ? "Your resume asks about this credential too. Answer it there, and the letter changes to match."
-            : "The letter gives this credential a status or year you didn't give us.",
-      question:
-        c.issue === "upgrade"
-          ? questionForFinding({ rule: "STD-T03", line: c.mention.line, why: "" })
-          : c.issue === "unsaid"
-            ? Q_LETTER_SHARED
-            : Q_LETTER_STATUS,
+      kind: "credential_unsaid",
+      subject: m.name,
+      why: credentialPromptWhy(m.name),
+      question: credentialMemoryPrompt(m.name),
     });
   }
   return items;
@@ -936,6 +1016,8 @@ export function buildFinishView(input: {
   grounding?: unknown;
   /** The second check's findings, only when it ran. */
   secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
+  /** What the person typed in the Forge's licenses-and-training answer (the one exact-match exception). */
+  credentialsAnswer?: string;
 }): FinishView {
   const letter = input.coverLetterText ?? "";
   const answers = input.defendAnswers;
@@ -963,6 +1045,7 @@ export function buildFinishView(input: {
     sourceText: source,
     defendAnswers: answers,
     secondCheckFindings: input.secondCheckFindings,
+    credentialsAnswer: input.credentialsAnswer,
   });
 
   const resumeLines = pageLineSet(input.resumeText);
@@ -975,10 +1058,9 @@ export function buildFinishView(input: {
       items.push({ ...i, severity: "BLOCK", target: "skillset" });
       continue;
     }
-    // A skills term with a scope word is a claim: its own card, settled by
-    // saying what they did.
+    // A skills term with a scope word is a claim: its own card, settled
+    // only by cutting it (round 5: an answer never settles a scope claim).
     if (i.kind === "grid_scope_term") {
-      if (skillAnswerStands(answerFor(answers, i.line), i.line, source)) continue;
       items.push({ ...i, severity: "BLOCK", target: "skill" });
       continue;
     }
@@ -995,7 +1077,8 @@ export function buildFinishView(input: {
     for (const f of runMintCheck({ output: letter, source, kind: "cover_letter" }).findings) {
       items.push({ rule: f.rule, severity: f.severity, line: f.line, why: f.why, question: questionForFinding(f), target: "letter" });
     }
-    items.push(...letterItems(letter, input.resumeText, source, answers));
+    const askedOnResume = new Set(credentialsToAsk(resumeForChecks, input.credentialsAnswer).map((m) => m.key));
+    items.push(...letterItems(letter, input.resumeText, source, answers, input.credentialsAnswer, askedOnResume));
   }
 
   // Skills added from a posting go on the same keep-or-cut card.
@@ -1016,11 +1099,11 @@ export function buildFinishView(input: {
 
   // Every other mention of a confirmed credential must say what the person
   // confirmed. A leftover writer's status after a move is flagged.
-  const confirmedKeys = new Map(confirms.filter((c) => c.key).map((c) => [c.key as string, c]));
+  const keyed = confirms.filter((c) => c.key);
   const mismatchLines = new Set<string>();
   for (const [doc, target] of [[resumeForChecks, "resume"], [letter, "letter"]] as const) {
     for (const m of credentialMentionsOf(doc)) {
-      const c = confirmedKeys.get(m.key);
+      const c = keyed.find((x) => sameCredential(x.key as string, m.key));
       if (!c) continue;
       const t: GroupTarget = m.term ? "skill" : target;
       mismatchLines.add(`${t}\u0000${m.line}`);
@@ -1044,13 +1127,49 @@ export function buildFinishView(input: {
       if (credentialItem && mismatchLines.has(`${it.target}\u0000${it.line}`)) items.splice(k, 1);
     }
   }
+  // Two confirmations that may be one credential spelled two ways ("OSHA 10"
+  // and "10-hour OSHA") must not tell two stories. When one name's words are
+  // all in the other's and the kind or the year or status differ, the later
+  // line is held until the person cuts the one that is wrong.
+  const tokensOf = (c: (typeof confirms)[number]) =>
+    new Set(
+      (credentialKeyOf(sameNameWords(c.name)) ?? "")
+        .split(/\s+/)
+        .map((w) => w.replace(/'s$|s$/, ""))
+        .filter((w) => w.length > 0 && w !== "class")
+    );
+  for (let a = 0; a < confirms.length; a++) {
+    for (let b = a + 1; b < confirms.length; b++) {
+      const [x, y] = [confirms[a], confirms[b]];
+      if (x.type === y.type && x.when.trim().toLowerCase() === y.when.trim().toLowerCase()) continue;
+      const tx = tokensOf(x);
+      const ty = tokensOf(y);
+      const within = (p: Set<string>, q: Set<string>) => p.size > 0 && Array.from(p).every((w) => q.has(w));
+      if (!within(tx, ty) && !within(ty, tx)) continue;
+      const line = linesOf(input.resumeText).find((l) => squash(stripBullet(l)) === squash(y.text));
+      if (!line) continue;
+      items.push({
+        rule: "STD-T03",
+        severity: "BLOCK",
+        line,
+        target: "resume",
+        kind: "credential_confirmed_conflict",
+        subject: y.name,
+        why: `You told us "${x.text}" and "${y.text}".`,
+        question: confirmedConflictQuestion(x.text, y.text),
+      });
+    }
+  }
   // What is left of a sentence the credential moved out of is held until the
-  // person rewords it in their own words or cuts it: a fragment never ships.
+  // person rewords it in their own words or cuts it, when it reads as a
+  // fragment or is not their own words. A clean leftover in their own words
+  // is not held: every other check still reads it.
   for (const c of validConfirms) {
     for (const rem of c.remnants ?? []) {
       for (const [doc, target] of [[input.resumeText, "resume"], [letter, "letter"]] as const) {
         const line = linesOf(doc).find((l) => squash(stripBullet(l)) === squash(stripBullet(rem)));
         if (!line) continue;
+        if (!readsAsFragment(stripBullet(line)) && distanceFromSource(stripBullet(line), source) === 0) continue;
         items.push({ rule: "STD-C04", severity: "BLOCK", line, target, kind: "credential_remnant", why: "This line changed when the credential moved.", question: Q_REMNANT });
       }
     }
@@ -1097,7 +1216,7 @@ export function buildFinishView(input: {
       target: its[0].target,
       items: its,
       blocking: its.some((i) => i.severity === "BLOCK"),
-      answerable: its[0].target !== "skillset" && !unsaid && its.every((i) => ANSWERABLE(i) || i.kind === "grid_scope_term"),
+      answerable: its[0].target !== "skillset" && !unsaid && its.every((i) => ANSWERABLE(i)),
       checked: false,
       answer: its[0].target === "skillset" ? undefined : answerFor(answers, its[0].line),
       ...(its[0].target === "skillset"

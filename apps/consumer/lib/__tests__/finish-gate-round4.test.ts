@@ -45,11 +45,11 @@ test("S2: the letter drops the whole sentence the credential was in, and says so
   }
 });
 
-test("S2: a resume line the move changed is held until the person rewords it or cuts it", () => {
-  const line = "Earned my OSHA 10 card and loaded trucks at the dock at the Front Street warehouse on weekends";
+test("S2: a resume line the move changed is held until the person rewords it or cuts it (round 5: when it is not their words)", () => {
+  const line = "Earned my OSHA 10 card and safely moved freight trucks at the Front Street dock on weekends";
   const r = HEAD(`\n- ${line}`);
   const res = applyConfirmation({ resume: r, letter: "" }, "OSHA 10", "card", "2019")!;
-  const remnant = "- Loaded trucks at the dock at the Front Street warehouse on weekends";
+  const remnant = "- Safely moved freight trucks at the Front Street dock on weekends";
   assert.ok(res.resume.includes(remnant), res.resume);
   const written = { resume: r, letter: "" };
   const v = view(res.resume, { confirmedCredentials: [res.confirm], written });
@@ -63,6 +63,20 @@ test("S2: a resume line the move changed is held until the person rewords it or 
   assert.ok(!view(rw.text, { confirmedCredentials: [res.confirm], written, defendAnswers: rw.answers }).openItems.some((i) => i.kind === "credential_remnant"));
   // So does a cut.
   assert.ok(!view(cutLine(res.resume, remnant), { confirmedCredentials: [res.confirm], written }).openItems.some((i) => i.kind === "credential_remnant"));
+});
+
+test("S6 (round 5): a clean leftover that is already the person's own words is not held", () => {
+  const line = "OSHA 10 certified and loaded trucks at the dock at the Front Street warehouse";
+  const r = HEAD(`\n- ${line}`);
+  const res = applyConfirmation({ resume: r, letter: "" }, "OSHA 10", "card", "2019")!;
+  assert.match(res.resume, /^- Loaded trucks at the dock at the Front Street warehouse$/m, res.resume);
+  const v = view(res.resume, { confirmedCredentials: [res.confirm], written: { resume: r, letter: "" } });
+  assert.ok(!v.openItems.some((i) => i.kind === "credential_remnant"), JSON.stringify(v.openItems));
+  // A fragment is always held, even in their words.
+  assert.equal(gate.readsAsFragment("and loaded trucks at the dock"), true);
+  assert.equal(gate.readsAsFragment("Who loaded trucks at the dock"), true);
+  assert.equal(gate.readsAsFragment("The Front Street warehouse dock"), true);
+  assert.equal(gate.readsAsFragment("Loaded trucks at the dock"), false);
 });
 
 test("S2: what remains never starts or ends on a joining word, and has no double period", () => {
@@ -79,6 +93,8 @@ test("S5: 'Forklift Certified' on the resume and 'Certified Forklift Operator' i
   assert.equal(v.groups.filter((g) => g.credentialName).length, 1, JSON.stringify(v.groups.map((g) => [g.target, g.credentialName])));
   const res = applyConfirmation({ resume: r, letter }, "Forklift Certified", "training course", "expired")!;
   assert.doesNotMatch(res.letter, /Forklift/);
+  // The line is written only from the confirmation: no writer's type or status word survives.
+  assert.match(res.resume, /CERTIFICATIONS\n- Forklift training course, expired$/);
   const after = view(res.resume, { coverLetterText: res.letter, confirmedCredentials: [res.confirm], written: { resume: r, letter } });
   assert.ok(!after.groups.some((g) => g.credentialName), "no second prompt for the same credential");
 });
