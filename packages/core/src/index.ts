@@ -63,6 +63,14 @@ export * from './pageFitShared';
 export * from './pageFit';
 // Career lanes under one account (migration 073).
 export * from './careerLane';
+// Creative lanes, the practice record and the realistic/dream pair (075).
+export * from './practiceRecord';
+export * from './creativeLaneShared';
+export * from './creativeBio';
+export * from './creativeStatement';
+export * from './creativeChecks';
+export * from './creativeDocs';
+export * from './twoPathPlan';
 
 // Org authorization (2026-09-19): capabilities answer the verb, reach answers
 // the rows. Replaces inline tier-string comparisons in routes.
