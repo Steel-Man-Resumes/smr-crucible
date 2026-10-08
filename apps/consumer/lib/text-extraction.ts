@@ -13,6 +13,17 @@
  */
 
 import { UnsafeUploadError, assertSafePdf, safeDocxForMammoth } from "./upload-safety";
+import { ExtractAborted, extractInWorker } from "./extract-worker";
+
+/**
+ * pdf.js and mammoth run in a worker with a heap limit, terminated when these
+ * budgets run out (lib/extract-worker.ts, security review 3a r5). The checks in
+ * lib/upload-safety.ts still run first either way. FORGE_EXTRACT_IN_THREAD=1 is
+ * an emergency switch back to reading in the request's own thread.
+ */
+const PDF_TEXT_BUDGET_MS = 20_000;
+const DOCX_TEXT_BUDGET_MS = 15_000;
+const inThread = () => process.env.FORGE_EXTRACT_IN_THREAD === "1";
 
 const MIN_EXTRACTED_CHARS = 10;
 const MIN_MEANINGFUL_CHARS = 20;
@@ -62,6 +73,14 @@ export class UnreadableDocumentError extends Error {
   }
 }
 
+/** The worker ran out of time or memory: refused, never retried another way (no OCR). */
+export class ReadAbortedError extends UnreadableDocumentError {
+  constructor() {
+    super("That file took too long to read. Try a PDF or Word file, or paste the text.");
+    this.name = "ReadAbortedError";
+  }
+}
+
 /** Buffers already scanned and found safe, so each PDF is scanned once (hotfix F8). */
 const scannedSafe = new WeakSet<Buffer>();
 
@@ -108,6 +127,7 @@ export async function extractTextFromBuffer(
         if (hasMeaningfulText(text)) return text;
         console.log("PDF text minimal, trying OCR fallback...");
       } catch (error) {
+        if (error instanceof ReadAbortedError) throw error;
         console.log("PDF extraction failed, falling back to OCR:", error);
       }
       return await extractFromPDFWithOCR(buffer);
@@ -132,6 +152,7 @@ export async function extractTextFromBuffer(
           // A Word file that fails the safety check is refused, never read as
           // loose text (security review 3a r2, H1).
           if (error instanceof UnsafeUploadError) throw new UnreadableDocumentError(error.message);
+          if (error instanceof ReadAbortedError) throw error;
           console.log("DOCX extraction failed:", error);
         }
       }
@@ -218,6 +239,24 @@ function ensurePdfjsPolyfills() {
 async function extractFromPDF(buffer: Buffer): Promise<string> {
   if (buffer.length === 0) throw new Error("PDF file is empty");
   assertPdfSafe(buffer);
+  let out: string;
+  if (inThread()) out = await extractFromPDFInThread(buffer);
+  else {
+    try {
+      out = await extractInWorker("pdf", buffer, { budgetMs: PDF_TEXT_BUDGET_MS });
+    } catch (e) {
+      if (e instanceof ExtractAborted) throw new ReadAbortedError();
+      throw e;
+    }
+  }
+  const text = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (!text) throw new Error("PDF contains no extractable text");
+  console.log(`PDF: ${text.length} chars`);
+  return text;
+}
+
+/** The same read in this thread (FORGE_EXTRACT_IN_THREAD=1 only). Keeps pdf.js traced into the build. */
+async function extractFromPDFInThread(buffer: Buffer): Promise<string> {
   ensurePdfjsPolyfills();
 
   // Use pdfjs legacy directly (zero new dep -- pdfjs-dist is already installed).
@@ -244,12 +283,7 @@ async function extractFromPDF(buffer: Buffer): Promise<string> {
     page.cleanup();
   }
   await doc.destroy();
-
-  const text = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  if (!text) throw new Error("PDF contains no extractable text");
-
-  console.log(`PDF: ${text.length} chars, ${numPages} pages`);
-  return text;
+  return out;
 }
 
 async function extractFromPDFWithOCR(buffer: Buffer): Promise<string> {
@@ -305,16 +339,23 @@ async function extractFromDOCX(buffer: Buffer): Promise<string> {
   // mammoth never sees the upload: only a new zip of its checked text parts
   // (lib/upload-safety.ts). Throws UnsafeUploadError when the file fails.
   const safe = safeDocxForMammoth(buffer).zip;
-  const mammoth = await import("mammoth");
-  const result = await mammoth.extractRawText({
-    buffer: safe,
-  });
+  let value: string;
+  if (inThread()) {
+    const mammoth = await import("mammoth");
+    value = (await mammoth.extractRawText({ buffer: safe })).value;
+  } else {
+    try {
+      value = await extractInWorker("docx", safe, { budgetMs: DOCX_TEXT_BUDGET_MS });
+    } catch (e) {
+      if (e instanceof ExtractAborted) throw new ReadAbortedError();
+      throw e;
+    }
+  }
 
-  if (!result.value?.trim())
-    throw new Error("Word document contains no extractable text");
+  if (!value?.trim()) throw new Error("Word document contains no extractable text");
 
-  console.log(`DOCX: ${result.value.length} chars`);
-  return result.value;
+  console.log(`DOCX: ${value.length} chars`);
+  return value;
 }
 
 async function extractFromImageBuffer(
