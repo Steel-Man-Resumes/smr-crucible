@@ -162,7 +162,7 @@ for (const ans of ["I did this every day at work.", "That was part of my job dut
 
 test("S1 (control): an answer about the line, or with a concrete detail, stands", () => {
   const lines = pickDefendLines(P4, SOURCE);
-  const a = lines.map((d) => ({ line: d.line, verdict: "stands" as const, answer: /inventory/.test(d.line) ? "I counted the walk-in and called the produce guy every Monday." : "I set up the catering trays for the insurance office lunches on Fridays." }));
+  const a = lines.map((d) => ({ line: d.line, verdict: "stands" as const, answer: /inventory/.test(d.line) ? "I managed the walk-in counts and called the produce guy every Monday." : "I coordinated the catering trays for the insurance office lunches on Fridays." }));
   assert.equal(status(P4, a).state, "finished");
 });
 

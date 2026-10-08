@@ -297,17 +297,25 @@ MAINTENANCE HELPER | Lakeside Apartments | 2018 - 2022
   assert.deepEqual(flags("Helped with boiler blowdown under the operator."), []);
 });
 
-test("status: a credential with no type or status asks about it, without supplying one", () => {
+test("status: a credential the person only drove past (no card, class or certification in their words) is a memory prompt (round 3)", () => {
   const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: CREDENTIAL_NO_STATUS.source });
+  const cred = s.openItems.find((i) => i.rule === "STD-T03");
+  assert.ok(cred && cred.kind === "credential_unsaid", JSON.stringify(s.openItems));
+  assert.equal(cred!.severity, "BLOCK");
+});
+
+test("status: a credential with no type or status asks about it, without supplying one", () => {
+  const source = `${CREDENTIAL_NO_STATUS.source}\nI have a forklift operator card from the warehouse.`;
+  const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source });
   const cred = s.openItems.find((i) => i.rule === "STD-T03");
   assert.ok(cred, JSON.stringify(s.openItems));
   assert.equal(cred!.severity, "FIX");
   assert.equal(cred!.question, credentialQuestion("Forklift Operator"));
   // The defend step asks about it too, and its answer settles the status.
-  const answers = answerAll(CREDENTIAL_NO_STATUS.resume, CREDENTIAL_NO_STATUS.source).map((a) =>
+  const answers = answerAll(CREDENTIAL_NO_STATUS.resume, source).map((a) =>
     /Forklift Operator$/.test(a.line) ? { ...a, answer: "It was the warehouse's forklift training, passed in 2021, expired now." } : a
   );
-  const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: CREDENTIAL_NO_STATUS.source, defendAnswers: answers });
+  const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source, defendAnswers: answers });
   assert.ok(!after.openItems.some((i) => i.rule === "STD-T03"), JSON.stringify(after.openItems));
 });
 

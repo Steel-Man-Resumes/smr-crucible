@@ -24,6 +24,7 @@
 
 import { normalizeDigits, numberTokens, numberValues } from "./numberRead";
 import { stemOf } from "./wordStem";
+import { isCredentialTerm } from "./credentialWords";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
@@ -36,7 +37,7 @@ export interface MintFinding {
   /** Plain words for the person. */
   why: string;
   /** Which check inside a rule raised it, when a rule has more than one. */
-  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "grid_scope_term" | "dateless_page";
+  kind?: "grid_term" | "sole_actor" | "missing_title" | "empty_section" | "added_number" | "dropped_number" | "credential_status" | "credential_upgrade" | "credential_unsaid" | "title_unsaid" | "grid_scope_term" | "credential_status_claimed" | "dateless_page";
 }
 
 export interface MintCheckInput {
@@ -384,8 +385,8 @@ export function skillTermsOf(line: string): string[] {
 // true-scope rule, applied to skills).
 const SCOPE_STEMS = ["supervis", "lead", "led", "manag", "train", "schedul", "plan", "budget", "negotiat", "forecast", "direct", "oversee", "oversaw", "coordinat", "mentor"];
 const scopeOf = (w: string) => SCOPE_STEMS.find((s) => w.startsWith(s) || (s === "led" && w === "led"));
-// A credential term is checked as a credential (credentialMentions), never as a skill.
-const SKILL_CREDENTIAL_RE = /\b(?:certif\w*|licen[cs]\w*|OSHA[\s-]*\d+|CDL|CNA|STNA|LPN|EMT|ServSafe|EPA\s*608|CPR|BLS|first aid|forklift card|AWS\s+D\d)/i;
+// A credential term is checked as a credential (credentialMentions), never as
+// a skill. One shared test (credentialWords), so nothing is both.
 
 function checkGrid(out: string, src: string, f: MintFinding[]) {
   const ls = linesOf(out);
@@ -398,7 +399,7 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
     const l = ls[i];
     if (isSectionEnd(l)) break;
     for (const term of skillTermsOf(l)) {
-      if (SKILL_CREDENTIAL_RE.test(term)) continue;
+      if (isCredentialTerm(term)) continue;
       const words = (term.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !STOP.has(w) && w.length > 2);
       if (!words.length) continue;
       // The whole term as the person wrote it passes.

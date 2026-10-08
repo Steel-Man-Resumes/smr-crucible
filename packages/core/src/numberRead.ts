@@ -135,6 +135,8 @@ export function numberTokens(text: string): NumberToken[] {
       }
       continue;
     }
+    // "Six Sigma" is a credential's name, not a count.
+    if (w === "six" && at(k + 1) === "sigma") continue;
     if (MULT[w]) {
       out.push({ value: MULT[w], index: i, length: w.length });
       continue;

@@ -72,6 +72,8 @@ export interface OpenItem {
   from?: "second_check";
   /** The checker's finding kind, when it has one (for example "grid_term" for a skills term). */
   kind?: string;
+  /** For a credential finding: the credential's full name as found on the page (never clipped). */
+  subject?: string;
 }
 
 export interface DefendAnswer {
@@ -330,16 +332,21 @@ function titleOf(header: string): string {
   return header.split(/\s*\|\s*|\s+(?:at|@)\s+/i)[0].trim();
 }
 
-/** The job titles on the page's own entry headers, below the first heading. */
+/**
+ * The job titles on the page's own entry headers under an experience heading.
+ * The name line is never a heading (an all-caps name looks like one), so a
+ * pipe headline under it is never mistaken for a job header.
+ */
 function pageJobTitles(resumeText: string): Set<string> {
   const titles = new Set<string>();
-  let seenHeading = false;
-  for (const l of linesOf(resumeText)) {
-    if (isSectionEnd(l)) { seenHeading = true; continue; }
-    if (!seenHeading || !isEntryHeader(l)) continue;
+  let inExperience = false;
+  linesOf(resumeText).forEach((l, i) => {
+    if (i === 0) return;
+    if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); return; }
+    if (!inExperience || !isEntryHeader(l)) return;
     const t = titleOf(l);
     if (t) titles.add(squash(t));
-  }
+  });
   return titles;
 }
 
@@ -364,6 +371,18 @@ function titlesNotTheirs(resumeText: string, sourceText: string): string[] {
     if (t && !titleInOwnWords(t, sourceText)) out.push(l);
   }
   return out;
+}
+
+const SCOPE_WORD_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\w*|mentor\w*|coordinat\w*)\b/gi;
+
+/** The first scope word on a line that the person never used about their work, if any ("led" reads as "lead"). */
+export function scopeNotTheirs(line: string, sourceText: string): string | undefined {
+  const norm = (w: string) => stemOf(w.toLowerCase() === "led" ? "lead" : w);
+  const said = new Set((sourceText.toLowerCase().match(/[a-z]+/g) ?? []).map(norm));
+  for (const m of stripBullet(line).matchAll(SCOPE_WORD_RE)) {
+    if (!said.has(norm(m[1]))) return m[1].toLowerCase() === "led" ? "lead" : m[1].toLowerCase();
+  }
+  return undefined;
 }
 
 /** The lines above the first section heading (after the name): the header block. */
@@ -400,7 +419,7 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
   let inSkills = false;
   let seenHeading = false;
   ls.forEach((l, i) => {
-    if (i === 0) return; // the name
+    if (i === 0) return; // the name (never a heading, even in capitals)
     if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; return; }
     if (isSectionEnd(l)) { inSkills = false; seenHeading = true; return; }
     if (CONTACT_LINE_RE.test(l) || isDateLine(l)) return;
@@ -535,7 +554,13 @@ function pickDefend(
   const minFurthest = opts.minFurthest ?? 2;
   const body = bodyLines(resumeText || "", sourceText || "");
   const mentions = credentialMentionsOf(resumeText || "");
-  const credLines = new Set(mentions.filter((m) => !m.term).map((m) => m.line));
+  // A short credential line is asked about as a credential; a longer sentence
+  // that also carries one is still read like any other line.
+  const credLines = new Set(
+    mentions
+      .filter((m) => !m.term && (m.where === "credentials" || m.line.replace(/^[-•*]\s*/, "").split(/\s+/).length <= 8))
+      .map((m) => m.line)
+  );
   // Each credential is asked about once, by its own name, at its home line
   // (or its skills term). Not at all when the person's words already give its
   // type and a year or status.
@@ -625,6 +650,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     if (credentialLine.has(squash(line)) && a!.kind !== "rewrite" && !answerGivesCredentialType(a!.answer)) return undefined;
     // A headline is answered only by talking about what it says.
     if (picks.header.has(line) && a!.kind !== "rewrite" && !answerMentions(a!.answer, line)) return undefined;
+    // A scope word the person never used ("supervised", "managed", "led") is
+    // answered only by an answer about that scope.
+    const scope = scopeNotTheirs(line, sourceText);
+    if (scope && a!.kind !== "rewrite" && !answerMentions(a!.answer, scope)) return undefined;
     return a;
   };
 
@@ -638,8 +667,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // with no year or status from anyone (FIX, settled by an answer that
     // gives one).
     const credentialFindings: MintFinding[] = [];
+    const credentialSubject = new Map<string, string>();
     for (const c of checkCredentials(resumeText, sourceText)) {
       const { mention: m } = c;
+      credentialSubject.set(m.line, m.name);
       if (c.issue === "unsaid") {
         credentialFindings.push({
           rule: "STD-T03",
@@ -655,6 +686,17 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
           line: m.line,
           why: "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
           kind: "credential_upgrade",
+        });
+      } else if (c.issue === "status_claimed") {
+        // The page gives a status or year the person never gave: an answer with their own status settles it.
+        const a = standingFor(m.line);
+        if (a && hasCredentialStatus(a.answer)) continue;
+        credentialFindings.push({
+          rule: "STD-T03",
+          severity: "BLOCK",
+          line: m.line,
+          why: `The page gives "${clip(m.name, 50)}" a status or year you didn't give us.`,
+          kind: "credential_status_claimed",
         });
       } else {
         const a = standingFor(m.line);
@@ -685,8 +727,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       }));
     const findings = [...mint.findings, ...credentialFindings, ...titleFindings];
     for (const f of findings) {
-      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? credentialMemoryPrompt(credentialNameOf(f)) : questionForFinding(f));
+      const subject = f.kind?.startsWith("credential_") ? credentialSubject.get(f.line) : undefined;
+      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? credentialMemoryPrompt(subject ?? credentialNameOf(f)) : questionForFinding(f));
       if (f.kind) items[items.length - 1].kind = f.kind;
+      if (subject) items[items.length - 1].subject = subject;
     }
 
     if (requireDefend) {
