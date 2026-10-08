@@ -26,7 +26,7 @@
 
 import { linesOf, isSectionEnd, isEntryHeader, skillTermsOf, CONTACT_LINE_RE, STATUS_WORD_RE } from "./resumeMintCheckShared";
 import { isCredentialTerm, namedCredentialRe, credentialInitialsRe, isShortInitialTerm } from "./credentialWords";
-import { isWorkAcronym } from "./workAcronyms";
+import { isWorkAcronym, needsHoldingWord } from "./workAcronyms";
 import { isStrictCredentialWhen } from "./credentialStatus";
 
 export interface CredentialMention {
@@ -59,10 +59,112 @@ export interface CredentialMention {
 
 const CRED_SECTION_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?)$/i;
 const SKILLS_RE = /^(?:core competencies|skills|key skills|competencies|core skills|technical skills)$/i;
-const EDUCATION_RE = /^(?:education|education and training|education & training|education\/training|schooling|academic background|training and education)$/i;
+// Round 9: combined headings too ("EDUCATION & CERTIFICATIONS", "Training and Education"; pageFitShared knows them).
+const EDU_WITH = String.raw`(?:training|certifications?|certificates?|credentials?|licen[cs]es?)`;
+const EDUCATION_RE = new RegExp(
+  String.raw`^(?:(?:education|schooling|academic background)(?:\s*(?:and|&|\/|,)\s*${EDU_WITH})*|${EDU_WITH}\s*(?:and|&|\/|,)\s*education)$`,
+  "i"
+);
+// A heading that holds credentials as well as schooling ("EDUCATION & CERTIFICATIONS"): a line that is not schooling is a credentials line.
+const COMBINED_HEADING_RE = /certific|credential|licen[cs]/i;
 // Round 8: an education line is a credential too (GED, HSE, HiSET, a diploma, a degree, a certificate).
-const EDUCATION_CREDENTIAL_RE =
-  /\b(?:GED|HSE|HiSET|TASC|equivalency|diploma|degree|graduate|associate(?:'s)?|bachelor(?:'s)?|master(?:'s)?|doctorate|certificate|certification|A\.A\.S?\.?|B\.S\.?|B\.A\.?|M\.S\.?|M\.?B\.?A\.?)(?![\w])/i;
+// Round 9: HSED, dotted G.E.D., and a page "certificate" are read too; the trailing (?![\w]) keeps "graduate" off "graduated".
+const EDUCATION_CORE_RE =
+  /\b(?:GED|G\.E\.D\.?|HSED|HSE|HiSET|TASC|equivalency|diploma|degree|graduate|associate(?:'s)?|bachelor(?:'s)?|master(?:'s)?|doctorate|certificate|A\.A\.S?\.?|B\.S\.?|B\.A\.?|M\.S\.?|M\.?B\.?A\.?)(?![\w])/i;
+// A status the writer may supply on an education line: settled only by the person's confirmation.
+const EDUCATION_STATUS_RE = /\b(?:graduated|graduating|completed|completion|finished|class\s+of)\b/i;
+/** Everything that makes an education line a claim to ask about (round 9: and the holding words, read by the claim readers too). */
+export const EDUCATION_CREDENTIAL_RE = new RegExp(
+  String.raw`${EDUCATION_CORE_RE.source}|${EDUCATION_STATUS_RE.source}|\b(?:certified|certification|licensed|license|qualified|registered)\b`,
+  "i"
+);
+// A school or program on an education line.
+const SCHOOL_RE = /\b(?:college|school|academy|institute|university|center|centre|tech|technical|polytechnic|campus|adult\s+(?:ed|education)|job\s+corps|program|programme)\b/i;
+const EDU_PART_SPLIT_RE = /\s*(?:\||,|;|\s[-\u2013\u2014]\s)\s*/;
+const YEARISH_RE = /^(?:(?:class\s+of\s+)?(?:19|20)\d{2}(?:\s*[-\u2013]\s*(?:(?:19|20)\d{2}|present))?|present)$/i;
+const STATE_PART_RE = /^[A-Z]{2}$/;
+
+/** An education part without its year, its status or a bracketed aside ("Graduated 2008" is "", "High School Equivalency (GED)" is "High School Equivalency"). */
+function cleanEducationPart(p: string): string {
+  return p
+    .replace(/\(([^)]*)\)/g, " ")
+    .replace(/\b(?:graduated|graduating|completed|finished)(?:\s+(?:from|at|in))?\b/gi, " ")
+    .replace(/\bclass\s+of\b/gi, " ")
+    .replace(/\b(?:19|20)\d{2}\b/g, " ")
+    .replace(/\b(?:in progress|current|currently|enrolled|expected|anticipated|present)\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,.:-]+|[\s,:-]+$/g, "")
+    .trim();
+}
+
+const EDU_REST_STATUS_RE = /\b(?:19|20)\d{2}\b|\b(?:graduated|graduating|completed|completion|finished|class\s+of|in progress|current|currently|enrolled|expected|anticipated|present|earned|passed)\b/i;
+
+/**
+ * Round 9 (r9-N4): an education line rewritten from the person's
+ * confirmation. Only the part the prompt named changes: it becomes what they
+ * confirmed ("GED, in progress"), first; the line's other parts (the school,
+ * the place) stay after a bar, with every year and status of the writer's
+ * taken off ("GED | Toledo Adult Education | 2023" is "GED, in progress |
+ * Toledo Adult Education").
+ */
+export function educationLineRewrite(line: string, raw: string, confirmed: string): string {
+  const bullet = line.match(/^\s*[-•*]\s*/)?.[0] ?? "";
+  const parts = line
+    .slice(bullet.length)
+    .split(EDU_PART_SPLIT_RE)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const rest = parts
+    .filter((p) => p !== raw.trim())
+    .map((p) => (EDU_REST_STATUS_RE.test(p) ? cleanEducationPart(p) : p))
+    .filter((p) => p && !YEARISH_RE.test(p) && !EDU_REST_STATUS_RE.test(p));
+  return `${bullet}${confirmed}${rest.length ? ` | ${rest.join(", ")}` : ""}`;
+}
+
+/** True when a page line is a confirmed education line: the confirmed text, then only parts with no year or status ("GED, in progress | Toledo Adult Education"). */
+export function isConfirmedEducationLine(line: string, confirmed: string): boolean {
+  const body = line.replace(/^\s*[-•*]\s*/, "").trim();
+  const c = confirmed.trim();
+  if (body === c) return true;
+  if (!body.startsWith(`${c} | `)) return false;
+  const rest = body.slice(c.length + 3);
+  return !!rest.trim() && !EDU_REST_STATUS_RE.test(rest) && !rest.includes("|");
+}
+
+/**
+ * Round 9: the part of an education line a prompt names (decision D4 asks
+ * about the credential, never the school): the part with GED, HSED, a
+ * diploma, a degree or a certificate; else the program ("Welding Program",
+ * "12th grade"); else the school. "Graduated", "Completed" and years come off
+ * the name: they are what the person confirms.
+ */
+export function educationPartOf(body: string): { name: string; raw: string } | undefined {
+  const parts = body
+    .replace(/^\s*[-•*]\s*/, "")
+    .split(EDU_PART_SPLIT_RE)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const clean = cleanEducationPart;
+  const named = parts.filter((p) => clean(p) && !YEARISH_RE.test(p) && !STATE_PART_RE.test(p));
+  const core = named.find((p) => EDUCATION_CORE_RE.test(p));
+  if (core) return { name: clean(core) || core, raw: core };
+  // A city before a state ("Toledo" in "Toledo, OH") is a place, not a program.
+  const isPlace = (p: string) => /^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?$/.test(p) && STATE_PART_RE.test(parts[parts.indexOf(p) + 1] ?? "");
+  const candidates = named.filter((p) => !isPlace(p));
+  // A program or a grade ("Welding Program", "Welding Technology", "12th grade") before the school.
+  const program = candidates.find((p) => /\bprogram(?:me)?\b/i.test(p)) ?? candidates.find((p) => !SCHOOL_RE.test(p));
+  if (program) return { name: clean(program) || program, raw: program };
+  const school = candidates.find((p) => SCHOOL_RE.test(p)) ?? candidates[0];
+  return school ? { name: clean(school) || school, raw: school } : undefined;
+}
+
+// A schooling credential by name, on any line.
+const EDU_NAMED_RE = /^(?:GED|G\.E\.D\.?|HSED|HiSET|High\s+School\s+(?:Diploma|Equivalency(?:\s+Diploma)?|Graduate|Degree))$/i;
+
+/** True when an education line is an entry to ask about: a school or program, a year, or a "graduated / completed" status. */
+function isEducationEntry(body: string): boolean {
+  return EDUCATION_CORE_RE.test(body) || EDUCATION_STATUS_RE.test(body) || SCHOOL_RE.test(body) || /\b(?:19|20)\d{2}\b/.test(body);
+}
 
 // Holding claims: "Forklift Certified", "AWS D1.1 Structural Welding Certification", "Welding Certificate".
 // Words may carry a dot only between digits ("D1.1"), so a match never runs across a sentence end.
@@ -92,7 +194,8 @@ const NOT_A_NAME_RE = /^(?:since|through|throughout|until|by|from|hand|hands|to|
 // word never does ("CDL driver" is the person), and "as a", "I am a" or "a" before it make it theirs.
 const OTHERS_BEFORE = /\b(?:to\s+the|under(?:\s+the)?|reported\s+to(?:\s+the)?|assist(?:ed|ing)(?:\s+the)?|support(?:ed|ing)(?:\s+the)?|help(?:ed|ing)(?:\s+the)?)\s+$/i;
 const OTHERS_AFTER = /^\s+(?:drivers|staff|teams|nurses|aides|crews|workers|employees|operators|technicians|techs|colleagues|coworkers|co-workers|on\s+duty)\b/i;
-const OWN_BEFORE = /\b(?:as\s+an?|i\s+am\s+an?|i'm\s+an?|am\s+an?|an?)\s+$/i;
+// Round 9: a member of the group holds it too ("Member of the CNA staff", "moved up to the CDL team", "joined the CNA staff").
+const OWN_BEFORE = /\b(?:as\s+an?|i\s+am\s+an?|i'm\s+an?|am\s+an?|an?|(?:member|members|part|one)\s+of(?:\s+(?:the|a|an|our|their))?|joined(?:\s+(?:the|a|an|our|their))?|(?:moved|stepped|came)\s+up\s+to(?:\s+(?:the|a|an))?|promoted\s+to(?:\s+(?:the|a|an))?)\s+$/i;
 
 /** True when a credential at this spot is someone else's ("the RN on duty", "for CDL drivers"), never the person's own. */
 export function isOthersCredential(text: string, index: number, length: number): boolean {
@@ -322,58 +425,29 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
     if (!nameWords.length) return;
     const key = credentialKey(name) || name.toLowerCase();
     if (!key || out.some((m) => m.line === line && m.key === key)) return;
-    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}), ...(opts.education ? { education: true } : {}) });
+    // Round 9: a GED, HSED or high school diploma is education wherever it is ("I earned my G.E.D.").
+    const education = opts.education || EDU_NAMED_RE.test(name);
+    out.push({ line, term, name, key, nameWords, where, raw, named: namedIn(name).length > 0, context, unit, part, ...(opts.title ? { title: true } : {}), ...(education ? { education: true } : {}) });
   };
 
   let seenHeading = false;
   let inEducation = false;
-  ls.forEach((l, i) => {
-    if (EDUCATION_RE.test(l.replace(/:$/, ""))) { section = "other"; inEducation = true; seenHeading = true; return; }
-    if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) inEducation = false;
-    else if (SKILLS_RE.test(l.replace(/:$/, "")) || isSectionEnd(l)) inEducation = false;
-    if (CRED_SECTION_RE.test(l.replace(/:$/, ""))) { section = "credentials"; seenHeading = true; return; }
-    if (SKILLS_RE.test(l.replace(/:$/, ""))) { section = "skills"; seenHeading = true; return; }
-    if (isSectionEnd(l)) { section = "other"; seenHeading = true; return; }
-    if (i === 0 || CONTACT_LINE_RE.test(l)) return;
-    context = l;
-    const body = l.replace(/^\s*[-•*]\s*/, "");
+  let combined = false;
 
-    // An education line: its first part is the credential ("GED", "High School Diploma", "Associate Degree in ...").
-    if (inEducation) {
-      if (EDUCATION_CREDENTIAL_RE.test(body) || namedIn(body).length) {
-        const first = credentialUnitsOf(body)[0] ?? { part: body, unit: body };
-        const part = body.includes("|") ? titleOfHeader(body) : first.part;
-        push(l, part, "credentials", false, part, body.includes("|") ? body : first.unit, part, { anyName: true, education: true });
-      }
+  // A credentials-section line: every part of it is a credential to ask about, each on its own.
+  const readCredentialsLine = (l: string, body: string) => {
+    const units = credentialUnitsOf(l);
+    if (units.length >= 2) {
+      for (const u of units) push(u.part, u.part, "credentials", true, u.part, u.unit, u.part, { anyName: true });
       return;
     }
-    // A dated job header: its title is asked about only when it claims a credential
-    // ("CERTIFIED NURSING ASSISTANT", "LICENSED ELECTRICIAN", "JOURNEYMAN ELECTRICIAN").
-    if (section === "other" && seenHeading && isDatedHeader(l)) {
-      const title = titleOfHeader(l);
-      if (title && (isCredentialTerm(title) || TITLE_CREDENTIAL_RE.test(title))) push(l, title, "other", false, title, title, title, { title: true });
-      return;
-    }
+    if (units.length === 1) push(l, units[0].part, "credentials", false, body, units[0].unit, units[0].part, { anyName: true });
+  };
 
-    if (section === "credentials") {
-      // Every part of a credentials line is a credential to ask about, each on its own.
-      const units = credentialUnitsOf(l);
-      if (units.length >= 2) {
-        for (const u of units) push(u.part, u.part, "credentials", true, u.part, u.unit, u.part, { anyName: true });
-        return;
-      }
-      if (units.length === 1) push(l, units[0].part, "credentials", false, body, units[0].unit, units[0].part, { anyName: true });
-      return;
-    }
-    if (section === "skills") {
-      for (const t of skillTermsOf(l)) {
-        if (isCredentialTerm(t)) push(t, namedIn(t)[0] ?? t, "skills", true, t, t, t);
-      }
-      return;
-    }
-    // Any other line: every named credential, licensure initial and holding claim in it.
-    // Round 7: a hyphen inside a word is read as a space, so "forklift-certified" is "forklift certified".
-    // The line itself stays as written; a credential's words are found again across the hyphen when moved or cut.
+  // Any other line: every named credential, licensure initial and holding claim in it.
+  // Round 7: a hyphen inside a word is read as a space, so "forklift-certified" is "forklift certified".
+  // The line itself stays as written; a credential's words are found again across the hyphen when moved or cut.
+  const readOtherLine = (l: string, body: string) => {
     const lf = dehyphenate(l);
     const units = credentialUnitsOf(body);
     const lone = units.length === 1 ? units[0] : null;
@@ -415,6 +489,68 @@ export function credentialMentionsOf(text: string): CredentialMention[] {
       if (claimWordAt.has(m.index!)) continue;
       push(l, `${m[1]} ${m[2]}`, "other", false, m[0], at(m[0]).unit, at(m[0]).part);
     }
+  };
+
+  // An education line: the credential it names (GED, HSED, a diploma, a degree), else its program or school.
+  const pushEducation = (l: string, body: string) => {
+    const e = educationPartOf(body);
+    if (e) push(l, e.name, "credentials", false, e.raw, body, e.raw, { anyName: true, education: true });
+  };
+
+  ls.forEach((l, i) => {
+    const heading = l.replace(/:$/, "");
+    if (EDUCATION_RE.test(heading)) {
+      section = "other";
+      inEducation = true;
+      combined = COMBINED_HEADING_RE.test(heading);
+      seenHeading = true;
+      return;
+    }
+    if (CRED_SECTION_RE.test(heading)) inEducation = false;
+    else if (SKILLS_RE.test(heading) || isSectionEnd(l)) inEducation = false;
+    if (CRED_SECTION_RE.test(heading)) { section = "credentials"; seenHeading = true; return; }
+    if (SKILLS_RE.test(heading)) { section = "skills"; seenHeading = true; return; }
+    if (isSectionEnd(l)) { section = "other"; seenHeading = true; return; }
+    if (i === 0 || CONTACT_LINE_RE.test(l)) return;
+    context = l;
+    const body = l.replace(/^\s*[-•*]\s*/, "");
+
+    // Round 9: an education line is asked about as education (GED, HSED, a diploma, a degree, or a school
+    // or program with a year or a "graduated / completed" status), and never returns early: a holding claim
+    // in it ("Toledo Tech | Forklift Certified | 2019") is read by the claim readers like any line.
+    if (inEducation) {
+      const before = out.length;
+      if (EDUCATION_CORE_RE.test(body)) pushEducation(l, body);
+      readOtherLine(l, body);
+      if (out.length > before) return;
+      // Under "EDUCATION & CERTIFICATIONS", a line that is not schooling is a credentials line ("- Welding, 2019").
+      if (combined && !EDUCATION_STATUS_RE.test(body) && !SCHOOL_RE.test(body)) {
+        readCredentialsLine(l, body);
+        if (out.length > before) return;
+      }
+      if (isEducationEntry(body)) pushEducation(l, body);
+      else if (EDUCATION_CREDENTIAL_RE.test(body)) push(l, body, "credentials", false, body, body, body, { anyName: true });
+      return;
+    }
+    // A dated job header: its title is asked about only when it claims a credential
+    // ("CERTIFIED NURSING ASSISTANT", "LICENSED ELECTRICIAN", "JOURNEYMAN ELECTRICIAN").
+    if (section === "other" && seenHeading && isDatedHeader(l)) {
+      const title = titleOfHeader(l);
+      if (title && (isCredentialTerm(title) || TITLE_CREDENTIAL_RE.test(title))) push(l, title, "other", false, title, title, title, { title: true });
+      return;
+    }
+
+    if (section === "credentials") {
+      readCredentialsLine(l, body);
+      return;
+    }
+    if (section === "skills") {
+      for (const t of skillTermsOf(l)) {
+        if (isCredentialTerm(t)) push(t, namedIn(t)[0] ?? t, "skills", true, t, t, t);
+      }
+      return;
+    }
+    readOtherLine(l, body);
   });
   // One credential, one mention: a name inside a longer one on the same line ("ASE" in "ASE Master Technician") is that one.
   return out.filter(
@@ -620,6 +756,102 @@ function deadRowKeys(rows: ReadonlyArray<CredentialRow> | undefined): Set<string
   return new Set((rows ?? []).filter((r) => r.kind === "permit" || r.kind === "training course" || DEAD_WHEN_RE.test(r.when)).map((r) => credentialFamilyKey(r.name)));
 }
 
+// ---- round 9: a live credential covers its plain mentions in sentences --------------------
+
+// A status that says the person holds it now.
+const LIVE_WHEN_RE = /\b(?:current|currently|active|valid|in good standing|good standing)\b/i;
+
+/** True when a kind and a year-or-status say the person holds it now: current, active or valid, and not a permit or a course. */
+export function isLiveCredential(kind: string, when: string): boolean {
+  return kind !== "permit" && kind !== "training course" && LIVE_WHEN_RE.test(when) && !DEAD_WHEN_RE.test(when);
+}
+
+const SHOWN_KIND_WORDS_RE = /^(?:\s*[-\u2010-\u2015]?\s*(?:certification|certificate|cert|card|license|licence|licensed|certified|permit|endorsement|registry|course|training|program|holder|status))+/i;
+const SHOWN_STATUS_AFTER_RE =
+  /^\s*(?:\([^)]{0,20}\)|,?\s*(?:(?:that\s+is|which\s+is|is|and\s+is|currently)\s+)?(?:active|current|currently|valid|expired|expires|expiring|inactive|lapsed|renewed|suspended|revoked|pending|in\s+progress|in\s+good\s+standing|up\s+to\s+date)\b|,?\s*(?:since|from|in|through|until|exp\.?|expires?|issued|earned|obtained|valid\s+through|current\s+through)?\s*(?:19|20)\d{2}\b)/i;
+const SHOWN_STATUS_BEFORE_RE =
+  /\b(?:active|current|currently|valid|expired|inactive|lapsed|suspended|revoked|pending|former|formerly|ex|retired|previous|previously|past|once|future|aspiring|prospective|student|trainee|in-training|soon-to-be)[\s-]+(?:(?:a|an|the|state|registered)\s+)?$/i;
+
+/**
+ * What the page shows right at a mention: a kind word in or after its name
+ * ("CNA certification", "Certified nursing assistant"), and a status or year
+ * attached to it ("CNA (current)", "CNA, expired", "former CNA"). A year or
+ * place that belongs to the sentence ("at Meadowbrook since 2016") is not the
+ * credential's.
+ */
+function shownAt(m: CredentialMention): { kind?: string; statuses: Set<string>; years: Set<string>; dead: boolean } {
+  const line = dehyphenate(m.context);
+  const raw = dehyphenate(m.raw || m.name);
+  const at = line.toLowerCase().indexOf(raw.toLowerCase());
+  const before = at >= 0 ? line.slice(0, at) : "";
+  let after = at >= 0 ? line.slice(at + raw.length) : "";
+  const kindAfter = after.match(SHOWN_KIND_WORDS_RE)?.[0] ?? "";
+  after = after.slice(kindAfter.length);
+  let statusText = "";
+  for (let k = 0, m2 = after.match(SHOWN_STATUS_AFTER_RE); m2 && k < 3; k++, m2 = after.match(SHOWN_STATUS_AFTER_RE)) {
+    statusText += ` ${m2[0]}`;
+    after = after.slice(m2[0].length);
+  }
+  const statusBefore = before.match(SHOWN_STATUS_BEFORE_RE)?.[0] ?? "";
+  const kind = NAME_KIND.find(([re]) => re.test(`${raw} ${kindAfter}`))?.[1];
+  const words = `${statusBefore} ${statusText}`;
+  return {
+    kind,
+    statuses: new Set((words.toLowerCase().match(STATUS_TOKEN_RE) ?? []).map((w) => w.replace(/^good standing$/, "in good standing"))),
+    years: new Set(words.match(YEAR_TOKEN_RE) ?? []),
+    dead: !!statusBefore && !/^(?:active|current|currently|valid)\b/i.test(statusBefore.trim()),
+  };
+}
+
+/**
+ * Round 9 (r9-S2): a live credential of the person's (a complete row, or a
+ * confirmation, that says current, active or valid, and is not a permit or a
+ * course) covers a plain mention of it in a sentence (the summary, a bullet,
+ * the letter: "Certified nursing assistant with eight years", "I have worked
+ * as a certified nursing assistant at Meadowbrook") when the page shows
+ * exactly its kind and status, or none. The same family of name only
+ * ("Certified Nursing Assistant" is "CNA"). Never a title, a list term, a
+ * credentials or education line; never an expired, lapsed or permit row.
+ */
+export function liveCredentialCovers(m: CredentialMention, held: { name: string; kind: string; when: string }): boolean {
+  if (m.where !== "other" || m.title || m.term || m.education) return false;
+  if (!isLiveCredential(held.kind, held.when)) return false;
+  if (credentialFamilyKey(held.name) !== credentialFamilyKey(m.name)) return false;
+  const shown = shownAt(m);
+  if (shown.dead) return false;
+  if (shown.kind && shown.kind !== held.kind) return false;
+  const heldStatuses = statusSet(held.when);
+  if (Array.from(shown.statuses).some((s) => !heldStatuses.has(s))) return false;
+  const heldYears = yearsOf(held.when);
+  if (Array.from(shown.years).some((y) => !heldYears.has(y))) return false;
+  return true;
+}
+
+/**
+ * Round 9: an education line is theirs when every part of it is a part of
+ * one line they wrote ("High School Diploma | Lincoln High School | 2022"
+ * covers "Lincoln High School | 2022"). A line of theirs that says they do
+ * not hold it covers nothing.
+ */
+function educationIsTheirs(m: CredentialMention, person: PersonLine[]): boolean {
+  if (!m.education || m.where !== "credentials") return false;
+  const partsOf = (t: string) =>
+    new Set(
+      t
+        .replace(/^\s*[-•*]\s*/, "")
+        .split(EDU_PART_SPLIT_RE)
+        .map(normalizeTyped)
+        .filter(Boolean)
+    );
+  const page = partsOf(m.context);
+  if (!page.size) return false;
+  return person.some((p) => {
+    if (p.notHeld) return false;
+    const theirs = partsOf(p.text);
+    return Array.from(page).every((x) => theirs.has(x));
+  });
+}
+
 /** Kept for older callers: the person's lines, whole and normalised. */
 export function typedCredentialEntries(answer: string | undefined): Set<string> {
   return new Set(personCredentialLines(answer).map((p) => p.whole));
@@ -770,7 +1002,9 @@ export function backstopMentionsOf(text: string, personText: string | undefined)
     for (const m of l.matchAll(CAPS_TOKEN_RE)) {
       const tok = m[0];
       // Round 8: a work word next to a holding or training word is a claim ("OSHA trained", "RF certified").
-      if (isWorkAcronym(tok) && !CLAIM_CONTEXT_RE.test(nearWords(l, m.index!, tok.length))) continue;
+      // Round 9: AED and ESL only with a holding word ("AED certified"), not a training word ("AED in training drills").
+      const claimNear = (needsHoldingWord(tok) ? HOLDING_CONTEXT_RE : CLAIM_CONTEXT_RE).test(nearWords(l, m.index!, tok.length));
+      if (isWorkAcronym(tok) && !claimNear) continue;
       // "in compliance with OSHA standards", "OSHA Safety Standards", "followed HACCP rules": the rules, not a card.
       if (RULES_AFTER_RE.test(afterWords(l, m.index!, tok.length)) && !CLAIM_CONTEXT_RE.test(nearWords(l, m.index!, tok.length))) continue;
       // "Boston, MA": a state after a city.
@@ -792,10 +1026,11 @@ export function backstopMentionsOf(text: string, personText: string | undefined)
 }
 
 const CLAIM_CONTEXT_RE = /\b(?:trained|training|certified|certification|certificate|authori[sz]ed|qualified|card|course|class|license|licensed|completed)\b/i;
+const HOLDING_CONTEXT_RE = /\b(?:certified|certification|certificate|authori[sz]ed|qualified|card|license|licensed)\b/i;
 const RULES_AFTER_RE = /\b(?:guidelines?|standards?|rules?|regulations?|requirements?|procedures?|compliance|protocols?|practices?|policies|policy|codes?|logs?|checklists?)\b/i;
-/** The two words after a token. */
+/** The three words after a token (round 9: "HACCP food safety rules" reads the rules word). */
 function afterWords(l: string, index: number, length: number): string {
-  return (l.slice(index + length).match(/[A-Za-z'-]+/g) ?? []).slice(0, 2).join(" ");
+  return (l.slice(index + length).match(/[A-Za-z'-]+/g) ?? []).slice(0, 3).join(" ");
 }
 
 /** The two words on each side of a token. */
@@ -835,6 +1070,10 @@ export function credentialsToAsk(
     if (mentionMatchesRow(m, rows)) return false;
     // Round 8: a credential their row marks expired, lapsed, suspended or not yet held is covered by nothing else.
     if (dead.has(m.key) || dead.has(credentialFamilyKey(m.name))) return true;
+    // Round 9: a current row covers its plain mentions in sentences ("Certified nursing assistant with eight years").
+    if (rows?.some((r) => isCompleteCredentialRow(r) && liveCredentialCovers(m, r))) return false;
+    // Round 9: an education line made only of parts of one line they wrote.
+    if (educationIsTheirs(m, person)) return false;
     // A job title covers the title itself only: when the whole title is in one of their own job header lines.
     if (m.title) return !headerTitles.has(normalizeTyped(m.raw));
     return !mentionIsTheirs(m, person);

@@ -43,6 +43,15 @@ const STATES = [
 
 const SKIP = new Set([...WORK, ...STATES]);
 
+// Round 9: words a training word next to them does not make a claim ("Used an AED in training drills",
+// "Completed ESL classes"). Only a holding word does ("AED certified", "ESL certificate").
+const HOLDING_ONLY = new Set(["AED", "ESL"]);
+
+/** True when only a holding word (certified, card, license...), never a training word, makes this listed word a claim. */
+export function needsHoldingWord(token: string): boolean {
+  return HOLDING_ONLY.has(token.toUpperCase());
+}
+
 /** True when an all-caps word is ordinary work vocabulary or a place code, never asked about as a credential. */
 export function isWorkAcronym(token: string): boolean {
   return SKIP.has(token.toUpperCase());

@@ -542,10 +542,20 @@ export function credentialMemoryPrompt(name: string): string {
   return `Do you hold ${clip(name, 50)}? Many people forget a card or class they earned.`;
 }
 
-/** New (round 8): an education line the person has not given us. Kept only when they say earned (with the year) or in progress. */
+/**
+ * New (round 8): an education line the person has not given us. Kept only
+ * when they say earned (with the year) or in progress. Round 9: it names the
+ * credential ("Do you have a GED?"); a school or program with no credential
+ * named is "Did you finish ...?".
+ */
 export function educationMemoryPrompt(name: string): string {
   const n = clip(name, 50);
-  return `Do you have ${/^[aeiou]/i.test(n) ? "an" : "a"} ${n}? Say if you earned it, and the year, or if you are still working on it.`;
+  const grad = n.match(/^(.*?)\s+graduate$/i);
+  if (grad) return `Did you finish ${grad[1].toLowerCase()}? Say the year you finished, or if you are still working on it.`;
+  if (/\b(?:GED|G\.E\.D|HSED|HSE|HiSET|TASC|equivalency|diploma|degree|certificate|associate|bachelor|master|doctorate|A\.A\.S?|B\.S|B\.A|M\.S|M\.?B\.?A)\b/i.test(n)) {
+    return `Do you have ${/^(?:[aeiou]|HSED|HSE\b|HiSET)/i.test(n) ? "an" : "a"} ${n}? Say if you earned it, and the year, or if you are still working on it.`;
+  }
+  return `Did you finish ${n}? Say the year you finished, or if you are still working on it.`;
 }
 
 /** Why a credential is asked about (round 5: every credential, until the person confirms it). */

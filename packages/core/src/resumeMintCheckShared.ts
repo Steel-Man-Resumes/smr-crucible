@@ -267,7 +267,7 @@ const SECTION_RE = /^(?:professional experience|work experience|experience|emplo
 const NEXT_SECTION_RE = /^[A-Z][A-Z &/]{3,}$/;
 // Standard resume headings in any case ("Work Experience", "Education:"), so a
 // Title Case page ends a section where an ALL CAPS page would.
-const KNOWN_HEADING_RE = /^(?:(?:professional |work |relevant |volunteer )?experience|employment(?: history)?|work history|education(?: (?:and|&) training)?|training|certifications?(?: (?:and|&) licenses?)?|licenses?(?: (?:and|&) certifications?)?|volunteer(?: work)?|projects|awards|references|(?:career |professional )?summary|profile|objective|(?:core |key )?(?:skills|competencies)|languages|additional information):?$/i;
+const KNOWN_HEADING_RE = /^(?:(?:professional |work |relevant |volunteer )?experience|employment(?: history)?|work history|education(?: (?:and|&) (?:training|certifications?|credentials?|licen[cs]es?))?|(?:training|certifications?) (?:and|&) education|training|certifications?(?: (?:and|&) licenses?)?|licenses?(?: (?:and|&) certifications?)?|volunteer(?: work)?|projects|awards|references|(?:career |professional )?summary|profile|objective|(?:core |key )?(?:skills|competencies)|languages|additional information):?$/i;
 
 export const isSectionEnd = (l: string) => (NEXT_SECTION_RE.test(l) && !l.includes("|")) || KNOWN_HEADING_RE.test(l);
 const isBullet = (l: string) => /^[-•*]/.test(l);
