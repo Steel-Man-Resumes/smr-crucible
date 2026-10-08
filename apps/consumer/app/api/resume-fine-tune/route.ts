@@ -25,6 +25,7 @@ import {
   getArtifact,
   forkArtifact,
   updateArtifact,
+  isCreativeType,
   snapshotApplicationDocument,
 } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
@@ -109,6 +110,10 @@ async function handlePost(request: Request) {
     if (!source) {
       return NextResponse.json({ error: "source_not_found" }, { status: 404 });
     }
+    // Creative documents (statements, bios) are never forked or rewritten here.
+    if (isCreativeType(source.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+    }
 
     // (2) Fork it server-side into a company-named fork. Idempotent per
     // (source, application-or-company) so a repeat fine-tune reuses the fork.
@@ -125,7 +130,10 @@ async function handlePost(request: Request) {
         source: "job",
       },
     });
-    if (fork.status === "not_found") {
+    if (fork.status === "creative_doc") {
+      return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+    }
+    if (fork.status !== "forked") {
       return NextResponse.json({ error: "source_not_found" }, { status: 404 });
     }
     const forkId = fork.artifact.id;
@@ -270,6 +278,10 @@ Return this exact JSON structure (same content, re-emphasized, never expanded):
     }
     if (write.status === "not_found") {
       return NextResponse.json({ error: "fork_not_found" }, { status: 404 });
+    }
+    // Anything but a real write is a failure (never a 200 over content that did not save).
+    if (write.status !== "updated") {
+      return NextResponse.json({ error: write.status === "creative_doc" ? "creative_doc" : "write_failed" }, { status: 409 });
     }
 
     // (5) Link the fork to the application via a provenance snapshot -- this is

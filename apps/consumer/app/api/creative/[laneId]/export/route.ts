@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   BIO_LENGTHS,
   BIO_LIMITS,
-  bioText,
+  bioTextForLane,
   countChars,
   countWords,
   currentStatementText,
@@ -73,7 +73,11 @@ export async function GET(request: Request, context: RouteContext) {
     return text(currentStatementText(c.statement), "statement");
   }
   if (doc === "work_samples") {
-    if (format === "csv") return text(workSampleListCsv(c.samples), "work-samples", "csv", "text/csv; charset=utf-8");
+    if (format === "csv") {
+      const csv = workSampleListCsv(c.samples);
+      // A spreadsheet has no DRAFT line, so the first row says it.
+      return text(draft ? `DRAFT: open items remain on this list\r\n${csv}` : csv, "work-samples", "csv", "text/csv; charset=utf-8");
+    }
     if (format !== "txt") return NextResponse.json({ error: "The sample list downloads as plain text or CSV." }, { status: 400 });
     return text(workSampleListPlainText(c.samples), "work-samples");
   }
@@ -84,7 +88,8 @@ export async function GET(request: Request, context: RouteContext) {
     req = { doc: "artist_resume", model: c.model, draft, openItems };
   } else {
     const bios = BIO_LENGTHS.map((len) => {
-      const t = bioText(c.bio.lengths[len]);
+      // The lane's current choices: a sentence naming a facility it keeps off never prints.
+      const t = bioTextForLane(c.bio.lengths[len], c.entries, c.settings);
       return { label: `${BIO_LIMITS[len].label} bio`, text: t, words: countWords(t), chars: countChars(t) };
     }).filter((b) => b.text);
     if (format === "txt") return text(bios.map((b) => `${b.label.toUpperCase()} (${b.words} words, ${b.chars} characters with spaces)\n${b.text}`).join("\n\n"), "bio");

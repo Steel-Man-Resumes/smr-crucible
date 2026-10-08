@@ -10,6 +10,7 @@ import {
   unlockBaseline,
   setArtifactLane,
   setArtifactDemo,
+  isCreativeType,
 } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
 import { parseLaneIdBody } from "@/lib/lanes";
@@ -82,6 +83,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     const laneId = parseLaneIdBody(body.laneId);
     if (laneId === "bad" || laneId === undefined) {
       return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+    }
+    // Creative documents belong to their lane and never move (075).
+    const current = await getArtifact(id, userId);
+    if (current && isCreativeType(current.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Creative documents stay in their own lane." }, { status: 409 });
     }
     const ok = await setArtifactLane(userId, id, laneId);
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });

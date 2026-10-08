@@ -57,7 +57,10 @@ export async function POST(request: Request, context: RouteContext) {
     targetContext,
   });
 
-  if (result.status === "not_found") {
+  if (result.status === "creative_doc") {
+    return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+  }
+  if (result.status !== "forked") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

@@ -15,9 +15,9 @@ interface RouteContext {
 /**
  * GET /api/creative/[laneId]
  *   Everything the creative lane screens read: the lane and its pair, the
- *   practice record, the saved bio and statement (versions and the marks t.ROY
- *   offered; never the stored fingerprints), the sample order, the open items,
- *   and the pair's plan card with its general hurdles and help links.
+ *   practice record, the saved bio and statement (with the revision each save
+ *   must be based on), the sample order, the open items, and the pair's plan
+ *   card with its general hurdles and help links.
  * PUT /api/creative/[laneId] { settings }
  *   This lane's choices (name on the page, contact lines, page cap, how each
  *   title that names a facility shows, bio disclosure and pronoun).
@@ -37,8 +37,11 @@ export async function GET(request: Request, context: RouteContext) {
     entries: c.entries,
     settings: c.settings,
     bio: c.bio,
-    statement: { versions: c.statement.versions, offeredMarks: c.statement.offeredMarks },
+    bioRev: c.bioRev,
+    statement: { versions: c.statement.versions },
+    statementRev: c.statementRev,
     sampleOrder: c.sampleOrder,
+    sampleRev: c.sampleRev,
     status: c.status,
     plan: c.plan
       ? {
@@ -62,7 +65,16 @@ export async function PUT(request: Request, context: RouteContext) {
   const body = await readJson(request, 40_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });
   const next = cleanKindSettings(body.settings, lane.kind_settings ?? {});
-  const saved = await setLaneKindSettings(g.userId, lane.id, next as Record<string, unknown>);
+  let saved;
+  try {
+    saved = await setLaneKindSettings(g.userId, lane.id, next as Record<string, unknown>);
+  } catch (err) {
+    // The database's size check (075). The app's caps keep under it; this is the plain answer if not.
+    if ((err as { code?: string } | null)?.code === "23514") {
+      return NextResponse.json({ error: "too_big", message: "That's too many choices for one lane. Pick fewer entries." }, { status: 400 });
+    }
+    throw err;
+  }
   if (!saved) return laneNotFound();
   return NextResponse.json({ settings: cleanKindSettings(saved.kind_settings ?? {}) });
 }
