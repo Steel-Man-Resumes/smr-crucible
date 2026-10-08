@@ -1,0 +1,338 @@
+"use client";
+
+/**
+ * The practice record: every show, program, award and work the person adds,
+ * in their own words, each with its year and a proof mark. Questions use the
+ * interviewer's voice for titles, venues and years ("What was the show
+ * called? Where? What year?").
+ */
+
+import { useState } from "react";
+import {
+  PRACTICE_SECTIONS,
+  SECTION_COPY,
+  EXHIBITION_KINDS,
+  PERFORMANCE_KINDS,
+  PUBLICATION_STATUSES,
+  AWARD_KINDS,
+  EDUCATION_STATUSES,
+  looksLikeFacilityName,
+  yearsOf,
+  placeOf,
+  type PracticeEntry,
+  type PracticeSection,
+  type PracticeDetails,
+  type ProofMark,
+} from "@crucible/core/src/practiceRecordShared";
+import { PROOF_COPY, sendJson } from "@/lib/creative";
+
+const inputCls =
+  "t-focus w-full min-h-touch bg-t-bg border border-t-line px-3 py-2 text-sm text-t-white focus:border-t-steel focus:outline-none";
+
+const KIND_LABEL: Record<string, string> = {
+  solo: "Solo show", two_person: "Two-person show", group: "Group show",
+  performance: "Performance", screening: "Screening", reading: "Reading",
+  published: "Published", in_press: "In press", accepted: "Accepted", submitted: "Submitted",
+  award: "Award", grant: "Grant", fellowship: "Fellowship",
+  conferred: "Degree conferred", completed: "Completed", in_progress: "In progress",
+};
+
+function Choice({ name, value, options, onChange, legend }: { name: string; value: string | undefined; options: readonly string[]; onChange: (v: string) => void; legend: string }) {
+  return (
+    <fieldset>
+      <legend className="text-sm text-t-white">{legend}</legend>
+      <div className="mt-1 flex flex-wrap gap-2">
+        {options.map((o) => (
+          <label key={o} className={`min-h-touch flex items-center gap-2 border px-3 text-sm cursor-pointer ${value === o ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos-dim"}`}>
+            <input type="radio" name={name} value={o} checked={value === o} onChange={() => onChange(o)} className="sr-only" />
+            {KIND_LABEL[o] ?? o}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function Check({ label, checked, onChange, testId }: { label: string; checked: boolean; onChange: (v: boolean) => void; testId?: string }) {
+  return (
+    <label className="flex min-h-touch items-center gap-2 text-sm text-t-white">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} data-testid={testId} />
+      {label}
+    </label>
+  );
+}
+
+function Text({ label, value, onChange, placeholder, max = 200, testId, hint }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; max?: number; testId?: string; hint?: string }) {
+  return (
+    <label className="block text-sm text-t-white">
+      {label}
+      {hint && <span className="block text-xs text-t-phos-dim">{hint}</span>}
+      <input className={`${inputCls} mt-1`} value={value} maxLength={max} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} data-testid={testId} />
+    </label>
+  );
+}
+
+interface Draft {
+  section: PracticeSection;
+  title: string;
+  venue: string;
+  city: string;
+  state: string;
+  year: string;
+  endYear: string;
+  details: PracticeDetails;
+  proof: ProofMark;
+  namesFacility: boolean;
+  facilityTouched: boolean;
+}
+
+function draftOf(e?: PracticeEntry, section: PracticeSection = "exhibition"): Draft {
+  return {
+    section: e?.section ?? section,
+    title: e?.title ?? "",
+    venue: e?.venue ?? "",
+    city: e?.city ?? "",
+    state: e?.state ?? "",
+    year: e ? String(e.year) : "",
+    endYear: e?.end_year ? String(e.end_year) : "",
+    details: { ...(e?.details ?? {}) },
+    proof: e?.proof ?? "remembered",
+    namesFacility: e?.names_facility ?? false,
+    facilityTouched: !!e,
+  };
+}
+
+function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone: () => void; onCancel: () => void }) {
+  const [d, setD] = useState<Draft>(draftOf(entry));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const copy = SECTION_COPY[d.section];
+  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
+  const setDetail = (p: Partial<PracticeDetails>) => setD((x) => ({ ...x, details: { ...x.details, ...p } }));
+  // Facility words pre-tick the box until the person decides for themselves.
+  const hint = looksLikeFacilityName(d.title, d.venue);
+  const namesFacility = d.facilityTouched ? d.namesFacility : hint;
+
+  return (
+    <form
+      data-testid="practice-form"
+      className="border border-t-line bg-t-panel p-4 space-y-4"
+      onSubmit={async (ev) => {
+        ev.preventDefault();
+        if (busy) return;
+        setBusy(true);
+        setError("");
+        const body = {
+          section: d.section, title: d.title, venue: d.venue, city: d.city, state: d.state,
+          year: d.year, endYear: d.endYear || null, details: d.details, proof: d.proof, namesFacility,
+        };
+        const r = entry ? await sendJson(`/api/practice/${entry.id}`, "PATCH", body) : await sendJson("/api/practice", "POST", body);
+        setBusy(false);
+        if (r.ok) onDone();
+        else setError(r.data.message || "That didn't save. Try again.");
+      }}
+    >
+      {!entry && (
+        <label className="block text-sm text-t-white">
+          What are you adding?
+          <select className={`${inputCls} mt-1`} value={d.section} data-testid="practice-section" onChange={(e) => set({ section: e.target.value as PracticeSection, details: {} })}>
+            {PRACTICE_SECTIONS.map((s) => (
+              <option key={s} value={s}>
+                {SECTION_COPY[s].label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {d.section === "exhibition" && <Choice name="ex-kind" legend="Was it a solo show, two-person, or group?" value={d.details.kind} options={EXHIBITION_KINDS} onChange={(v) => setDetail({ kind: v })} />}
+      {d.section === "performance" && <Choice name="pf-kind" legend="Was it a performance, a screening, or a reading?" value={d.details.kind} options={PERFORMANCE_KINDS} onChange={(v) => setDetail({ kind: v })} />}
+      {d.section === "publication" && <Choice name="pub-status" legend="Where does it stand?" value={d.details.status} options={PUBLICATION_STATUSES} onChange={(v) => setDetail({ status: v })} />}
+      {d.section === "award" && <Choice name="aw-kind" legend="Award, grant, or fellowship?" value={d.details.kind} options={AWARD_KINDS} onChange={(v) => setDetail({ kind: v })} />}
+
+      <Text label={copy.title} value={d.title} onChange={(v) => set({ title: v })} placeholder={copy.example} max={300} testId="practice-title" />
+      {copy.venue && <Text label={copy.venue} value={d.venue} onChange={(v) => set({ venue: v })} testId="practice-venue" />}
+      {d.section !== "work" && (
+        <div className="grid grid-cols-2 gap-3">
+          <Text label="City" value={d.city} onChange={(v) => set({ city: v })} max={100} testId="practice-city" />
+          <Text label="State" value={d.state} onChange={(v) => set({ state: v })} max={60} testId="practice-state" />
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <Text label="What year?" value={d.year} onChange={(v) => set({ year: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2023" max={4} testId="practice-year" />
+        {copy.hasRange && <Text label="Until (optional)" value={d.endYear} onChange={(v) => set({ endYear: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2024" max={4} testId="practice-end-year" />}
+      </div>
+
+      {d.section === "exhibition" && (
+        <div className="space-y-1">
+          <Check label="It was juried" checked={!!d.details.juried} onChange={(v) => setDetail({ juried: v })} />
+          <Check label="It was invitational" checked={!!d.details.invitational} onChange={(v) => setDetail({ invitational: v })} />
+          <Text label="Curator (only if there was one)" value={d.details.curator ?? ""} onChange={(v) => setDetail({ curator: v })} />
+        </div>
+      )}
+      {d.section === "performance" && (
+        <div className="space-y-1">
+          <Text label="Your role (optional)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} />
+          <Check label="It toured" checked={!!d.details.touring} onChange={(v) => setDetail({ touring: v })} />
+        </div>
+      )}
+      {d.section === "commission" && (
+        <div className="space-y-1">
+          <Check label="They paid me for it" checked={!!d.details.paid} onChange={(v) => setDetail({ paid: v })} />
+          <Check label="OK to name who commissioned it" checked={!!d.details.consent} onChange={(v) => setDetail({ consent: v })} />
+        </div>
+      )}
+      {d.section === "publication" && d.details.status === "submitted" && (
+        <Text label="When did you submit it?" value={d.details.submittedWhen ?? ""} onChange={(v) => setDetail({ submittedWhen: v })} placeholder="March 2026" max={40} />
+      )}
+      {d.section === "press" && (
+        <div className="space-y-1">
+          <Text label="Who wrote it (optional)" value={d.details.author ?? ""} onChange={(v) => setDetail({ author: v })} />
+          <Text label="Date it ran" value={d.details.date ?? ""} onChange={(v) => setDetail({ date: v })} placeholder="May 4, 2024" max={40} />
+          <label className="block text-sm text-t-white">
+            A quote from it (optional, word for word)
+            <textarea className={`${inputCls} mt-1`} rows={2} value={d.details.quote ?? ""} onChange={(e) => setDetail({ quote: e.target.value })} />
+          </label>
+        </div>
+      )}
+      {d.section === "collection" && (
+        <div className="space-y-1">
+          <Choice name="holder" legend="Who holds it?" value={d.details.holder} options={["public", "private"] as const} onChange={(v) => setDetail({ holder: v })} />
+          {d.details.holder === "private" && <Check label="They said OK to name them" checked={!!d.details.consent} onChange={(v) => setDetail({ consent: v })} />}
+        </div>
+      )}
+      {d.section === "teaching" && (
+        <div className="space-y-1">
+          <Text label="Ages or level (optional)" value={d.details.level ?? ""} onChange={(v) => setDetail({ level: v })} placeholder="Adults, ages 12 to 16" />
+          <Check label="I was the instructor of record" checked={!!d.details.instructorOfRecord} onChange={(v) => setDetail({ instructorOfRecord: v })} />
+        </div>
+      )}
+      {d.section === "arts_program" && (
+        <div className="space-y-1">
+          <Text label="What you did there (optional)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} placeholder="Printmaker, peer facilitator" />
+          <Choice name="ap-status" legend="Where does it stand?" value={d.details.status} options={["completed", "in_progress"] as const} onChange={(v) => setDetail({ status: v })} />
+        </div>
+      )}
+      {d.section === "education" && (
+        <div className="space-y-1">
+          <Check label="This is a degree the school gave me (not a certificate or classes)" checked={!!d.details.degree} onChange={(v) => setDetail({ degree: v })} />
+          <Choice name="ed-status" legend="Where does it stand?" value={d.details.status} options={EDUCATION_STATUSES} onChange={(v) => setDetail({ status: v })} />
+          {d.details.status === "in_progress" && <Text label="When do you expect to finish?" value={d.details.expected ?? ""} onChange={(v) => setDetail({ expected: v })} placeholder="2027" max={40} />}
+        </div>
+      )}
+      {d.section === "work" && (
+        <div className="space-y-1">
+          <Text label="What is it made of?" value={d.details.medium ?? ""} onChange={(v) => setDetail({ medium: v })} placeholder="Acrylic on panel" testId="practice-medium" />
+          <div className="grid grid-cols-2 gap-3">
+            <Text label="Size" value={d.details.dimensions ?? ""} onChange={(v) => setDetail({ dimensions: v })} placeholder="24 x 36 in" max={120} testId="practice-size" />
+            <Text label="Or length" value={d.details.duration ?? ""} onChange={(v) => setDetail({ duration: v })} placeholder="4 min" max={60} />
+          </div>
+          <Text label="One line about it, in your words (optional)" value={d.details.description ?? ""} onChange={(v) => setDetail({ description: v })} max={300} testId="practice-description" />
+          <Text label="File name (optional)" value={d.details.fileName ?? ""} onChange={(v) => setDetail({ fileName: v })} max={160} />
+        </div>
+      )}
+
+      <fieldset>
+        <legend className="text-sm text-t-white">Can you back it up?</legend>
+        <div className="mt-1 grid gap-2 sm:grid-cols-3">
+          {(Object.keys(PROOF_COPY) as ProofMark[]).map((p) => (
+            <label key={p} className={`flex gap-2 border p-2 cursor-pointer ${d.proof === p ? "border-t-amber" : "border-t-line"}`}>
+              <input type="radio" name="proof" value={p} checked={d.proof === p} onChange={() => set({ proof: p })} className="mt-1" data-testid={`practice-proof-${p}`} />
+              <span>
+                <span className="block text-sm font-semibold text-t-white">{PROOF_COPY[p].label}</span>
+                <span className="block text-xs text-t-phos-dim">{PROOF_COPY[p].body}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="border border-t-line p-3">
+        <Check
+          label="The title or the place names a prison, jail or other facility"
+          checked={namesFacility}
+          onChange={(v) => set({ namesFacility: v, facilityTouched: true })}
+          testId="practice-names-facility"
+        />
+        <p className="text-xs text-t-phos-dim">You'll choose how it shows on each lane: the real title, just the venue, or not at all.</p>
+      </div>
+
+      {error && <p className="text-sm text-t-red" role="alert">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} data-testid="practice-save" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50">
+          {busy ? "Saving..." : entry ? "Save" : "Add it"}
+        </button>
+        <button type="button" onClick={onCancel} className="t-focus min-h-touch px-3 text-sm text-t-phos-dim hover:text-t-white">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function PracticeRecordPanel({ entries, onChanged }: { entries: PracticeEntry[]; onChanged: () => void }) {
+  const [adding, setAdding] = useState(entries.length === 0);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  const groups = PRACTICE_SECTIONS.map((s) => ({ s, list: entries.filter((e) => e.section === s) })).filter((g) => g.list.length);
+
+  return (
+    <div className="space-y-4" data-testid="practice-record">
+      <p className="text-sm text-t-phos-dim">Shows, gigs, programs, awards, classes you taught, and the work itself. Your words, your years.</p>
+      {!adding && (
+        <button type="button" data-testid="practice-add" onClick={() => { setAdding(true); setEditing(null); }} className="t-focus min-h-touch w-full border border-dashed border-t-line bg-t-panel px-4 text-left text-sm font-medium text-t-white hover:border-t-phos-dim">
+          + Add to your record
+        </button>
+      )}
+      {adding && <EntryForm onDone={() => { setAdding(false); onChanged(); }} onCancel={() => setAdding(false)} />}
+      <p aria-live="polite" className="text-sm text-t-phos">{msg}</p>
+      {groups.map(({ s, list }) => (
+        <section key={s}>
+          <h3 className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">{SECTION_COPY[s].label}</h3>
+          <ul className="mt-1 divide-y divide-t-line border border-t-line bg-t-panel">
+            {list.map((e) =>
+              editing === e.id ? (
+                <li key={e.id} className="p-2">
+                  <EntryForm entry={e} onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
+                </li>
+              ) : (
+                <li key={e.id} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between" data-testid="practice-entry">
+                  <div className="min-w-0">
+                    <p className="text-sm text-t-white">
+                      <span className="mr-2 font-mono text-xs text-t-phos">{yearsOf(e)}</span>
+                      <span className="font-semibold break-words">{e.title}</span>
+                      {e.venue ? <span className="text-t-phos-dim">, {e.venue}</span> : null}
+                      {placeOf(e) ? <span className="text-t-phos-dim">, {placeOf(e)}</span> : null}
+                    </p>
+                    <p className="text-xs text-t-phos-dim">
+                      {e.details.kind ? `${KIND_LABEL[e.details.kind] ?? e.details.kind}. ` : ""}
+                      {PROOF_COPY[e.proof].label}.{e.names_facility ? " Names a facility." : ""}
+                    </p>
+                  </div>
+                  <div className="flex gap-3 text-sm">
+                    <button type="button" className="t-focus text-t-steel underline" onClick={() => { setEditing(e.id); setAdding(false); }}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="t-focus text-t-phos-dim underline"
+                      aria-label={`Remove ${e.title}`}
+                      onClick={async () => {
+                        if (!window.confirm(`Remove "${e.title}" from your record?`)) return;
+                        const r = await sendJson(`/api/practice/${e.id}`, "DELETE");
+                        setMsg(r.ok ? "Removed." : r.data.message || "That didn't work. Try again.");
+                        if (r.ok) onChanged();
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              )
+            )}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
