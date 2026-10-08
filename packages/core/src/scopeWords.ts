@@ -162,11 +162,22 @@ const ROLE_GROUP: Record<string, string> = { cook: "kitchen", dishwasher: "dish"
 // ..."), "~plural" when more than one person is ("the new cooks").
 const GROUP_MARK = "~group";
 const PLURAL_MARK = "~plural";
+// Round 9: "~all" when the claim takes in everyone ("all", "entire", "whole", "every"); "~subset" when it
+// counts them ("two", "a couple of", "a few"); "~new" when it names only the new ones.
+const ALL_MARK = "~all";
+const SUBSET_MARK = "~subset";
+const NEW_MARK = "~new";
+const SUBSET_WORD_RE = /^(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+|couple|few|some|several|handful|pair|most|many)$/;
 
 function peopleClasses(words: string[], re: RegExp): string[] {
   const out = new Set<string>();
   const marks = new Set<string>();
-  if (words.some((w) => /^(?:all|entire|whole|every)$/.test(w))) marks.add(GROUP_MARK);
+  if (words.some((w) => /^(?:all|entire|whole|every)$/.test(w))) {
+    marks.add(GROUP_MARK);
+    marks.add(ALL_MARK);
+  }
+  if (words.some((w) => SUBSET_WORD_RE.test(w))) marks.add(SUBSET_MARK);
+  if (words.some((w) => /^(?:new|newer)$/.test(w))) marks.add(NEW_MARK);
   words.forEach((w, i) => {
     if (!re.test(w)) return;
     const s = stemNoun(w);
@@ -188,11 +199,27 @@ function peopleClasses(words: string[], re: RegExp): string[] {
 }
 
 /**
+ * How many people a claim takes in (round 9): 0 one person ("a new cook"), 1
+ * some people ("new cooks", "the new guys", "two new guys"), 2 a whole group
+ * ("the dock crew", "nursing staff"), 3 everyone ("all new hires", "the
+ * entire staff").
+ */
+function scopeLevel(classes: string[]): number {
+  if (classes.includes(ALL_MARK)) return 3;
+  if (classes.includes(GROUP_MARK) && !classes.includes(SUBSET_MARK) && !classes.includes(NEW_MARK)) return 2;
+  return classes.includes(PLURAL_MARK) ? 1 : 0;
+}
+
+/**
  * Round 8: the person's claim covers the page's people only when every people
- * class on the page is in theirs, and a group on the page ("all kitchen
- * staff", "the crew") needs a group or more than one person on theirs (one
- * new cook is not the kitchen staff). A role never stands for another role:
+ * class on the page is in theirs. A role never stands for another role:
  * "nurses" are not "aides".
+ *
+ * Round 9: quantities agree. The person's words must take in as many people
+ * as the page or more: one new cook never sources "new cooks", "new aides"
+ * never source "nursing staff" or "the entire nursing staff". "all / entire / whole / every" on
+ * the page needs the same word, or a whole group with no number or "new" on
+ * theirs ("I trained the crew").
  */
 function peopleCovered(page: string[], theirs: string[]): boolean {
   const real = page.filter((n) => !n.startsWith("~"));
@@ -200,7 +227,14 @@ function peopleCovered(page: string[], theirs: string[]): boolean {
   if (!real.every((n) => mine.includes(n))) return false;
   // A role on the page needs that very role on theirs, not only its group.
   if (real.some((n) => ROLE_GROUP[n]) && !real.filter((n) => ROLE_GROUP[n]).every((n) => mine.includes(n))) return false;
-  if (page.includes(GROUP_MARK) && !theirs.includes(GROUP_MARK) && !theirs.includes(PLURAL_MARK)) return false;
+  const page_ = scopeLevel(page);
+  const mine_ = scopeLevel(theirs);
+  // Everyone ("all new hires", "the entire staff"): their words name everyone, or a whole group.
+  if (page_ === 3) return mine_ >= 2;
+  // A whole group ("the dish crew", "nursing staff"): more than one person, and not only the new ones.
+  if (page_ === 2) return mine_ >= 2 || (mine_ === 1 && !theirs.includes(NEW_MARK));
+  // Some people ("new cooks"): more than one.
+  if (page_ === 1) return mine_ >= 1;
   return true;
 }
 
@@ -218,14 +252,38 @@ function firstPeopleRun(after: string, re: RegExp): string | undefined {
 
 // "under the store manager", "helped the shift supervisor": someone else's role, not a claim.
 const OTHER_ROLE_BEFORE = /\b(?:under|for|with|by|alongside|assisted|assisting|helped|helping|supported|supporting|reported\s+to|reporting\s+to|told|asked|from)\s+(?:(?:the|a|an|my|our|their|his|her)\s+)?(?:[a-z-]+\s+){0,2}$/i;
+const DETERMINER_BEFORE = /\b(?:the|a|an|my|our|their|his|her|its)\s+$/i;
+
+/**
+ * Round 9: true when a hit is a noun (someone's role or a thing), never a
+ * verb: a role noun ("the store manager"), a noun form ("the care
+ * coordination team"), "lead" or "head" used as a role ("the shift lead",
+ * "the head cook"), or a word after a determiner ("the training team"). Only
+ * a noun is skipped after "under / for / with / by ..."; a verb ("Chosen by
+ * the manager to supervise", "Known for training", "Stepped in for the
+ * supervisor and led") is always a claim.
+ */
+function isNounUse(text: string, m: RegExpMatchArray): boolean {
+  if (isRoleUse(text, m) || NOUN_FORM_RE.test(m[0])) return true;
+  const before = text.slice(0, m.index);
+  const prev = before.toLowerCase().match(/([a-z]+)\s*$/)?.[1];
+  // "the head cook", "a crew head": head as a noun, not "headed the crew".
+  if (/^head\s/i.test(m[0]) && !!prev && (ARTICLE.has(prev) || ROLE_PREV.has(prev))) return true;
+  if (/\shead$/i.test(m[0])) return true;
+  return DETERMINER_BEFORE.test(before);
+}
 
 /** Every scope claim in a page line. */
-export function scopeHits(text: string): ScopeHit[] {
+export function scopeHits(line: string): ScopeHit[] {
+  // Round 9: a known credential's name is not a scope claim ("I hold a current ServSafe Food Protection
+  // Manager certification"); the credential is asked about on its own.
+  const text = (line || "").replace(namedCredentialRe(), (x) => (/\b(?:manager|master|supervisor|lead)\b/i.test(x) ? "x".repeat(x.length) : x));
   const found: Array<ScopeHit & { at: number; end: number; role: boolean }> = [];
   for (const [re, family] of PATTERNS) {
-    for (const m of (text || "").matchAll(new RegExp(re.source, "gi"))) {
+    for (const m of text.matchAll(new RegExp(re.source, "gi"))) {
       // Someone else's role or work: "under the head cook", "for the care coordination team".
-      if (OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
+      // Round 9: a noun only. A verb after "by / for / with / asked" is still the page's claim.
+      if (isNounUse(text, m) && OTHER_ROLE_BEFORE.test(text.slice(0, m.index))) continue;
       found.push({ family, word: m[0], noun: nounFor(text, m), nouns: peopleFor(text, m), objects: objectWords(text, m), at: m.index!, end: m.index! + m[0].length, role: isRoleUse(text, m) });
     }
   }
@@ -252,7 +310,11 @@ const NEGATION_BEFORE = /\b(?:never|not|no|didn['’]?t|did not|don['’]?t|wasn
 // "was supervised by", "got trained", "were hired and fired by": the person is not the one doing it.
 const PASSIVE_BEFORE = /\b(?:was|were|been|being|got|get|gets|getting|is|are|am|be)\s+(?:(?:also|just|always|often|first|then|all)\s+)?$/i;
 // Credential names hold scope words that are not claims ("ServSafe Manager", "Certified Kitchen Supervisor card").
-const CLAIM_NAME_RE = /\b(?:[A-Za-z0-9][\w&'-]*\s+){1,3}(?:certification|certificate|card|license|licence|certified|course|class|training)\b/gi;
+// Round 9: "training" followed by people is the verb ("in charge of training the new hires"), not a course name.
+const CLAIM_NAME_RE = new RegExp(
+  String.raw`\b(?:[A-Za-z0-9][\w&'-]*\s+){1,3}(?:certification|certificate|card|license|licence|certified|course|class|training(?!\s+${DET}${PEOPLE}\b))\b`,
+  "gi"
+);
 
 const ROLE_NOUN_RE = /^(?:manager|managers|leader|leaders|leadership|supervisor|supervisors|director|directors|mentor|mentors|coordinator|coordinators|foreman|foremen|captain)$/i;
 // A role at the start of a line is the person's own job title ("Shift Lead | Midwest Distribution").
@@ -273,12 +335,22 @@ interface Claim {
 // "hand-eye coordination", "my mentor", "my lead's directions"); a role noun counts only as their own role.
 const NOUN_FORM_RE = /^(?:supervision|supervisions|management|coordination|coordinations|direction|directions|oversight|leadership|mentorship|lead's|leads'|mentor|mentors)$/i;
 // The person as the subject: the sentence starts with the verb, "I (also) verb", or "(I) verbed X and verb".
-const SELF_SUBJECT_BEFORE = /^\s*(?:[-•*]\s*)?$|\b(?:I|we)\s+(?:[a-z']+\s+){0,2}$|^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+(?:ed|ran|led|did|took|ran)\b[^.;!?]*\band\s+$/i;
-// "I helped manage", "I assisted with training", "I tried to lead": shared work stays shared (round 8).
-const SHARED_BEFORE = /\b(?:help(?:ed|s|ing)?|assist(?:ed|s|ing)?(?:\s+with)?|tried|tries|attempted|learned|learning|wanted)\s+(?:to\s+)?$/i;
+// Round 9: between "I" and the verb only helpers and adverbs ("I would", "I used to", "I also"), never
+// another verb or person ("I watched him train", "I think Mike trained", "I know he supervised").
+const SELF_HELPERS = String.raw`(?:would|used|to|also|always|sometimes|then|often|usually|still|even|really|personally|actually|regularly|mostly|eventually|later|soon|was|were|am|had|have|has|did|do|will|could|can|'d|'ve|'m|just|first|once|each|every|day|night|both|myself|ourselves)`;
+const SELF_SUBJECT_BEFORE = new RegExp(
+  String.raw`^\s*(?:[-•*]\s*)?$|\b(?:I|we)(?:'d|'ve|'m)?\s+(?:${SELF_HELPERS}\s+){0,2}$|^\s*(?:[-•*]\s*)?(?:I\s+)?[A-Za-z]+(?:ed|ran|led|did|took|ran)\b[^.;!?]*\band\s+$`,
+  "i"
+);
+// "I helped manage", "I helped him train", "I assisted with training", "I tried to lead": shared work stays shared (round 8; round 9: one object between).
+const SHARED_BEFORE = /\b(?:[Hh]elp(?:ed|s|ing)?|[Aa]ssist(?:ed|s|ing)?(?:\s+with)?|[Tt]ried|[Tt]ries|[Aa]ttempted|[Ll]earned|[Ll]earning|[Ww]anted)\s+(?:(?:him|her|them|us|[A-Z][a-z]+|the\s+[a-z]+|my\s+[a-z]+|our\s+[a-z]+)\s+)?(?:to\s+)?$/;
 // Resume style: "Proven record of leading large teams", "experience in managing crews" (no other subject named).
-const GERUND_SELF_BEFORE = /^(?:(?!\b(?:he|she|they|my|our|his|her|their|the)\b)[\w\s,'-])*\b(?:of|in|at)\s+$/i;
-const isSelf = (before: string) => (SELF_SUBJECT_BEFORE.test(before) || GERUND_SELF_BEFORE.test(before)) && !SHARED_BEFORE.test(before);
+// Round 9: never with a pronoun anywhere before, or a named subject ("Darnell was in charge of", "Rick was good at").
+const GERUND_SELF_BEFORE = /^(?:(?!\b(?:he|she|they|him|them|my|our|his|her|their|the)\b)[\w\s,'-])*\b(?:of|in|at)\s+$/i;
+const NAMED_SUBJECT_RE = /^\s*(?:[-•*]\s*)?(?!I\b|We\b)[A-Z][a-z]+\s+(?:was|is|were|are|has|had|got|did|does|would|will|can|could|used|became|stayed|seemed)\b/;
+const CAPITAL_NAME_INSIDE_RE = /\s(?!I\b)[A-Z][a-z]+\b/;
+const isGerundSelf = (before: string) => GERUND_SELF_BEFORE.test(before) && !NAMED_SUBJECT_RE.test(before) && !CAPITAL_NAME_INSIDE_RE.test(before.replace(/^\s*(?:[-•*]\s*)?\S+/, ""));
+const isSelf = (before: string) => (SELF_SUBJECT_BEFORE.test(before) || isGerundSelf(before)) && !SHARED_BEFORE.test(before);
 
 /** The scope claims the person makes in their own words, one per sentence hit, active and not denied. */
 function personClaims(sourceText: string): Claim[] {
