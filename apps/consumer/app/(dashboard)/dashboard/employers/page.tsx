@@ -6,7 +6,7 @@
  * roles, why they're a fit, honest caveats, and a direct apply link.
  */
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { TierGate } from "@/components/TierGate";
 
@@ -22,23 +22,61 @@ interface Employer {
   lastVerified: string | null;
 }
 
+const PAGE_SIZE = 25;
+
 function EmployersList() {
   const searchParams = useSearchParams();
-  const q = (searchParams.get("q") || "").trim().toLowerCase();
-  const [employers, setEmployers] = useState<Employer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const laneQ = (searchParams.get("q") || "").trim();
+  // The search runs on the server, one page at a time (lib/employer-paging.ts).
+  const [query, setQuery] = useState(laneQ);
+  const [draft, setDraft] = useState(laneQ);
   const [industry, setIndustry] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const [employers, setEmployers] = useState<Employer[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [industries, setIndustries] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [me, setMe] = useState<{ name?: string; email?: string; city?: string; state?: string; hasResume?: boolean } | null>(null);
   const [openApply, setOpenApply] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    fetch("/api/employers")
-      .then((r) => (r.ok ? r.json() : { employers: [] }))
-      .then((d) => setEmployers(d.employers || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    const params = new URLSearchParams({ page: String(page) });
+    if (query) params.set("q", query);
+    if (industry !== "all") params.set("industry", industry);
+    let live = true;
+    setLoading(true);
+    setError("");
+    fetch(`/api/employers?${params.toString()}`)
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!live) return;
+        if (!r.ok) {
+          setError(d.error || "The list didn't load. Try again.");
+          return;
+        }
+        setEmployers(Array.isArray(d.employers) ? d.employers : []);
+        setHasMore(d.hasMore === true);
+        if (Array.isArray(d.industries)) setIndustries(d.industries);
+      })
+      .catch(() => live && setError("The list didn't load. Try again."))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [query, industry, page]);
+
+  function search(e: React.FormEvent) {
+    e.preventDefault();
+    setQuery(draft.trim());
+    setPage(0);
+  }
+
+  function pickIndustry(ind: string) {
+    setIndustry(ind);
+    setPage(0);
+  }
 
   // Phase 4B: the user's own details + whether they have a resume, so applying
   // to an external site is one-click-easy (paste details, grab resume, apply).
@@ -70,30 +108,6 @@ function EmployersList() {
     } catch {}
   }
 
-  const industries = useMemo(() => {
-    const set = new Set<string>();
-    employers.forEach((e) => e.industry && set.add(e.industry));
-    return Array.from(set).sort();
-  }, [employers]);
-
-  const shown = useMemo(() => {
-    let list = industry === "all" ? employers : employers.filter((e) => e.industry === industry);
-    if (q) {
-      list = list.filter((e) =>
-        [e.name, e.industry, e.location, e.roleTypes, e.whyGoodFit]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(q)
-      );
-    }
-    return list;
-  }, [employers, industry, q]);
-
-  if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading employers...</div>;
-  }
-
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">Employers That Hire People With Records</h1>
@@ -113,58 +127,81 @@ function EmployersList() {
         </p>
       </div>
 
-      {q && (
+      <form onSubmit={search} className="mb-4 flex gap-2" role="search" data-testid="employer-search">
+        <label htmlFor="employer-q" className="sr-only">Search employers</label>
+        <input
+          id="employer-q"
+          type="search"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={80}
+          placeholder="Search by name, town or kind of work"
+          className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-3 py-2 text-sm text-t-white placeholder:text-t-phos-dim"
+        />
+        <button type="submit" className="t-focus min-h-touch shrink-0 bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright">
+          Search
+        </button>
+      </form>
+
+      {query && (
         <div className="mb-5 flex items-center justify-between gap-3 border border-t-amber bg-t-panel-2 px-4 py-3">
           <p className="text-sm text-t-amber-bright">
             Showing employers matching{" "}
-            <span className="font-semibold">&ldquo;{searchParams.get("q")}&rdquo;</span> from your lane.
+            <span className="font-semibold">&ldquo;{query}&rdquo;</span>
+            {query === laneQ && laneQ ? " from your lane" : ""}.
           </p>
-          <a
-            href="/dashboard/employers"
+          <button
+            type="button"
+            onClick={() => {
+              setDraft("");
+              setQuery("");
+              setPage(0);
+            }}
             className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
           >
             Show all
-          </a>
+          </button>
         </div>
       )}
 
-      {employers.length === 0 ? (
+      {industries.length > 1 && (
+        <div className="mb-5 flex flex-wrap gap-2">
+          <button
+            onClick={() => pickIndustry("all")}
+            className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+          >
+            All
+          </button>
+          {industries.map((ind) => (
+            <button
+              key={ind}
+              onClick={() => pickIndustry(ind)}
+              className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === ind ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+            >
+              {ind}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="mb-5 border border-t-red bg-t-panel px-4 py-3 text-sm text-t-red">
+          {error}
+        </p>
+      )}
+
+      {loading && employers.length === 0 ? (
+        <div className="text-t-phos-dim py-8">Loading employers...</div>
+      ) : employers.length === 0 && !error ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
-          No employers carry the mark here yet. Check back soon.
+          {query || industry !== "all"
+            ? "No checked employers match that yet. Try another word, or show all."
+            : "No employers carry the mark here yet. Check back soon."}
         </div>
       ) : (
         <>
-          {industries.length > 1 && (
-            <div className="mb-5 flex flex-wrap gap-2">
-              <button
-                onClick={() => setIndustry("all")}
-                className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
-              >
-                All ({employers.length})
-              </button>
-              {industries.map((ind) => (
-                <button
-                  key={ind}
-                  onClick={() => setIndustry(ind)}
-                  className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === ind ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
-                >
-                  {ind}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div className="space-y-3">
-            {shown.length === 0 && (
-              <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-10">
-                No checked employers match this path yet.{" "}
-                <a href="/dashboard/employers" className="text-t-amber-bright font-medium hover:text-t-amber">
-                  Show all
-                </a>
-                .
-              </div>
-            )}
-            {shown.map((e) => (
+            {employers.map((e) => (
               <div key={e.id} className="bg-t-panel border border-t-line p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -273,6 +310,28 @@ function EmployersList() {
               </div>
             ))}
           </div>
+
+          {(page > 0 || hasMore) && (
+            <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Employer pages" data-testid="employer-pager">
+              <button
+                type="button"
+                disabled={page === 0 || loading}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm text-t-white disabled:opacity-40"
+              >
+                Previous {PAGE_SIZE}
+              </button>
+              <span className="text-xs text-t-phos-dim">Page {page + 1}</span>
+              <button
+                type="button"
+                disabled={!hasMore || loading}
+                onClick={() => setPage((p) => p + 1)}
+                className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm text-t-white disabled:opacity-40"
+              >
+                Next {PAGE_SIZE}
+              </button>
+            </nav>
+          )}
 
           <p className="text-xs text-t-phos-dim mt-6">
             Verified by the Steel Man team. Always confirm current openings directly with the employer.
