@@ -32,6 +32,10 @@ import {
   buildFinishView,
   canEmailPackage,
   applyRewrite,
+  applyScopeHelped,
+  recordScopeYes,
+  scopeYesResult,
+  cutScopeSentences,
   countWord,
   cutLine,
   cutTerm,
@@ -378,22 +382,40 @@ export default function OutputPage() {
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== group.line.toLowerCase()));
       return;
     }
-    if (group.target === "letter") setCoverLetterText((t) => cutLine(t, group.line));
+    // Round 11: "Take it off" on a scope claim in the letter takes out the sentences that make it, whole.
+    if (group.target === "letter" && group.scope) setCoverLetterText((t) => cutScopeSentences(t, group.line, view.source, defendAnswers));
+    else if (group.target === "letter") setCoverLetterText((t) => cutLine(t, group.line));
     else setResumeText((t) => cutLine(t, group.line));
     setDefendAnswers((a) => recordAnswer(a, group.line, "", "cut"));
   };
 
   const confirmedLineSet = new Set(confirmedCredentials.flatMap((c) => [c.text, ...(c.line ? [c.line] : [])]));
   const cardActions: CardActions = {
+    onScopeYes: (group, typed) => {
+      if (!group.scope) return "empty";
+      const doc = group.target === "letter" ? { target: "letter" as const, text: coverLetterText } : { target: "resume" as const, text: resumeText };
+      const r = scopeYesResult(doc, group.line, group.scope.family, typed, view.source, defendAnswers);
+      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.family, typed));
+      return r;
+    },
+    onScopeHelped: (group) => {
+      if (!group.scope?.helped) return;
+      const text = group.target === "letter" ? coverLetterText : resumeText;
+      const r = applyScopeHelped(text, defendAnswers, group.line, group.scope.helped);
+      if (!r.changed) return;
+      if (group.target === "letter") setCoverLetterText(r.text);
+      else setResumeText(r.text);
+      setDefendAnswers(r.answers);
+    },
     onKeepTerm: (term) => setKeptTerms((t) => (t.some((x) => x.toLowerCase() === term.toLowerCase()) ? t : [...t, term])),
     onCutTerm: (term) => {
       setResumeText((t) => cutTerm(t, term));
       setAddedTerms((terms) => terms.filter((x) => x.toLowerCase() !== term.toLowerCase()));
     },
-    onConfirmCredential: (group, type, when) => {
+    onConfirmCredential: (group, type, when, school) => {
       if (!isConfirmWhen(type, when)) return "when";
       // Round 10: the person's own words, so a school they named themselves stays on an education line.
-      const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when, { personText: view.source });
+      const r = applyConfirmation({ resume: resumeText, letter: coverLetterText }, group.credentialName ?? group.line, type, when, { personText: view.source, school });
       if (!r) return "unchanged";
       setResumeText(r.resume);
       setCoverLetterText(r.letter);

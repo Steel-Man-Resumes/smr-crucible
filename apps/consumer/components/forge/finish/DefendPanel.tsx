@@ -23,7 +23,7 @@ import {
   type OpenItem,
 } from "@/lib/finish-gate";
 
-type Mode = "idle" | "answer" | "change" | "cut";
+type Mode = "idle" | "answer" | "change" | "cut" | "scopeYes";
 
 const BTN =
   "t-focus min-h-touch border px-3 py-2 text-xs font-semibold transition-colors";
@@ -41,10 +41,14 @@ export interface CardActions {
   onKeepTerm: (term: string) => void;
   onCutTerm: (term: string) => void;
   /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
-  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string) => "ok" | "when" | "unchanged";
+  onConfirmCredential: (group: LineGroup, type: CredentialType, when: string, school?: string) => "ok" | "when" | "unchanged";
   onCutCredential: (group: LineGroup) => void;
   /** Round 8: the lines "No, take it off" would change, shown before it does. */
   onPreviewCut?: (group: LineGroup) => Array<{ target: "resume" | "letter"; before: string; after: string | null }>;
+  /** Round 11: "Yes, I did this" with who or what in their words. "empty": names no one; "unmatched": does not cover the line. */
+  onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
+  /** Round 11: "I helped with it": the line becomes its shared form. */
+  onScopeHelped?: (group: LineGroup) => void;
 }
 
 /** D3: one card for every skill the person never said. One tap each. */
@@ -87,6 +91,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
   const changes = mode === "no" && actions.onPreviewCut ? actions.onPreviewCut(group) : [];
   const [type, setType] = useState<CredentialType | null>(null);
   const [when, setWhen] = useState("");
+  const [school, setSchool] = useState("");
   const [notice, setNotice] = useState("");
   const firstType = useRef<HTMLButtonElement>(null);
   const name = group.credentialName ?? editableLine(group.line);
@@ -178,6 +183,21 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
           />
             </>
           )}
+          {type === "did not finish" && !group.schoolKnown && (
+            // Round 11 (SF-3): a school the writer named never stays; the person says which school, or leaves it empty.
+            <>
+              <label htmlFor={`cred-school-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
+                What school? Leave it empty to take the line off.
+              </label>
+              <input
+                id={`cred-school-${index}`}
+                value={school}
+                onChange={(e) => setSchool(e.target.value)}
+                placeholder="In your own words"
+                className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+              />
+            </>
+          )}
           {notice && (
             <p role="status" className="mt-1 text-xs text-t-amber-bright">
               {notice}
@@ -188,7 +208,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             <button
               onClick={() => {
                 if (!type) return setNotice("Pick what kind it is.");
-                const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when);
+                const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when, type === "did not finish" ? school : undefined);
                 if (result === "when") {
                   setNotice(
                     type === "did not finish"
@@ -227,6 +247,7 @@ function GroupCard({
   onAnswer,
   onChange,
   onCut,
+  actions,
 }: {
   group: LineGroup;
   index: number;
@@ -234,8 +255,11 @@ function GroupCard({
   onAnswer: GroupHandler;
   onChange: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
+  actions?: CardActions;
 }) {
   const [mode, setModeState] = useState<Mode>("idle");
+  const [who, setWho] = useState("");
+  const scope = group.scope && !group.checked && actions?.onScopeYes ? group.scope : undefined;
   const [answer, setAnswer] = useState(group.answer?.verdict === "stands" && group.answer.kind !== "rewrite" ? group.answer.answer : "");
   const [rewrite, setRewrite] = useState(() => prefillRewrite(group.line, source));
   const [notice, setNotice] = useState("");
@@ -253,7 +277,7 @@ function GroupCard({
   useEffect(() => {
     if (!moved.current) return;
     moved.current = false;
-    if (mode === "answer" || mode === "change") field.current?.focus();
+    if (mode === "answer" || mode === "change" || mode === "scopeYes") field.current?.focus();
     else if (mode === "cut") cardRef.current?.querySelector<HTMLButtonElement>("[data-cut-confirm]")?.focus();
     else (firstAction.current ?? cardRef.current)?.focus();
   }, [mode]);
@@ -306,7 +330,39 @@ function GroupCard({
           {reasons.map((r) => (
             <p key={r} className="mt-1 text-xs text-t-amber-bright">{r}</p>
           ))}
-          {mode === "idle" && (
+          {mode === "idle" && scope && (
+            // Round 11: one tap for an honest scope claim, a shared form, or take it off.
+            <div className="mt-3 flex flex-wrap gap-2" data-testid="scope-card">
+              <button
+                ref={firstAction}
+                onClick={() => {
+                  setNotice("");
+                  setMode("scopeYes");
+                }}
+                className={BTN_MAIN}
+              >
+                Yes, I did this
+              </button>
+              {scope.helped && (
+                <button onClick={() => actions?.onScopeHelped?.(group)} className={BTN_SOFT}>
+                  I helped with it
+                </button>
+              )}
+              <button onClick={() => setMode("cut")} className={BTN_SOFT}>
+                Take it off
+              </button>
+              <button
+                onClick={() => {
+                  setNotice("");
+                  setMode("change");
+                }}
+                className={BTN_SOFT}
+              >
+                Say it my way
+              </button>
+            </div>
+          )}
+          {mode === "idle" && !scope && (
             <div className="mt-3 flex flex-wrap gap-2">
               {group.answerable && (
                 <button ref={firstAction} onClick={() => setMode("answer")} className={BTN_MAIN}>
@@ -366,6 +422,52 @@ function GroupCard({
         </div>
       )}
 
+      {mode === "scopeYes" && scope && (
+        <div className="mt-3">
+          <label htmlFor={`${id}-who`} className="block text-xs font-semibold text-t-white">
+            {scope.question}
+          </label>
+          <textarea
+            ref={field}
+            id={`${id}-who`}
+            value={who}
+            onChange={(e) => setWho(e.target.value)}
+            rows={2}
+            placeholder="In your own words"
+            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+          />
+          {notice && (
+            <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="scope-notice">
+              {notice}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                const r = actions?.onScopeYes?.(group, who) ?? "empty";
+                if (r === "empty") {
+                  setNotice("Say who or what, in a few words.");
+                  field.current?.focus();
+                  return;
+                }
+                if (r === "unmatched") {
+                  setNotice("Your words don't cover this line. Say it the way it happened, or pick another answer.");
+                  field.current?.focus();
+                  return;
+                }
+                setMode("idle");
+              }}
+              className={BTN_MAIN}
+            >
+              Save
+            </button>
+            <button onClick={() => setMode("idle")} className={BTN_SOFT}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
       {mode === "change" && (
         <div className="mt-3">
           <label htmlFor={`${id}-rewrite`} className="block text-xs font-semibold text-t-white">
@@ -417,7 +519,11 @@ function GroupCard({
       {mode === "cut" && (
         <div className="mt-3">
           <p className="text-sm text-t-white">
-            {group.target === "letter" ? "Take this line out of your cover letter?" : `Take this ${noun} off your resume?`}
+            {scope && group.target === "letter"
+              ? "Take this sentence out of your cover letter?"
+              : group.target === "letter"
+                ? "Take this line out of your cover letter?"
+                : `Take this ${noun} off your resume?`}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -473,6 +579,7 @@ function Groups({
           onAnswer={onAnswer}
           onChange={onChange}
           onCut={onCut}
+          actions={actions}
         />
         )
       )}

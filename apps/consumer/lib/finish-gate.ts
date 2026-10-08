@@ -26,6 +26,7 @@ import {
   questionForFinding,
   credentialPromptWhy,
   scopeWhy,
+  scopeNotTheirsAnswered,
   Q_SCOPE,
   type DefendAnswer,
   type OpenItem,
@@ -35,7 +36,7 @@ import { hasCredentialStatus, linesOf, numbersIn, runMintCheck } from "@crucible
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
-import { scopeNotTheirs, straightQuotes } from "@crucible/core/src/scopeWords";
+import { scopeNotTheirs, straightQuotes, isScopeWhoAnswer, helpedForm, scopeWhoQuestion } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
 import {
   credentialHomes,
@@ -53,6 +54,9 @@ import {
   attendedYears,
   isConfirmedAttendedLine,
   withoutEducationPart,
+  credentialPartsOnly,
+  attendedSchoolOf,
+  typedSchoolName,
   isConfirmedEducationLine,
   isLiveCredential,
   liveCredentialCovers,
@@ -129,6 +133,8 @@ export interface CredentialConfirm {
   line?: string;
   /** Round 10 (SF-7): a line already on the page that shows this confirmation ("- AWS D1.1 certification, 2019" for "AWS, certification, 2019"). */
   coveredBy?: string;
+  /** Round 11 (SF-3): for "did not finish", the school the person typed on the card (their words). */
+  school?: string;
 }
 
 export const CREDENTIAL_TYPES = ["license", "certification", "card", "training course", "permit"] as const;
@@ -211,8 +217,11 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
             a.replaced.trim() !== "" &&
             (!d.written || writtenHasLine(d.written as WrittenDocs, a.replaced)) &&
             squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
-              ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "rewrite" as const, replaced: a.replaced }
-              : { line: a.line, answer: a.answer, verdict: a.verdict }
+              ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "rewrite" as const, replaced: a.replaced, ...(a.scopeHelp === true ? { scopeHelp: true } : {}) }
+              : // Round 11: a "Yes, I did this" answer keeps its family; it settles only that claim on its line.
+                a.kind === "scope_yes" && typeof a.family === "string"
+                ? { line: a.line, answer: a.answer, kind: "scope_yes" as const, family: a.family }
+                : { line: a.line, answer: a.answer, verdict: a.verdict }
           )
       : [],
     addedTerms: Array.isArray(s.addedTerms) ? s.addedTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
@@ -247,6 +256,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
             // An education line and a covering line are re-checked against the page and the person's words in buildFinishView.
             ...(typeof c.line === "string" && isEducationKind(c.type) ? { line: c.line } : {}),
             ...(typeof c.coveredBy === "string" && !isEducationKind(c.type) ? { coveredBy: c.coveredBy } : {}),
+            ...(typeof c.school === "string" && c.type === "did not finish" ? { school: c.school } : {}),
           }))
       : [],
   };
@@ -311,7 +321,8 @@ export function recordAnswer(
 ): DefendAnswer[] {
   const k = squash(line);
   const next: DefendAnswer = { line, answer: answer.trim(), verdict };
-  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite"), next];
+  // A rewrite and a "Yes, I did this" answer stay: they settle other items on the line (round 11).
+  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite" || a.kind === "scope_yes"), next];
 }
 
 /** The lines on a page, without bullets, squashed, for "is this line still here". */
@@ -336,6 +347,7 @@ export function rewritesOf(answers: DefendAnswer[], pages: string | string[], wr
     .filter(
       (a) =>
         a.kind === "rewrite" &&
+        !a.scopeHelp &&
         a.verdict === "stands" &&
         typeof a.replaced === "string" &&
         a.replaced.trim() !== "" &&
@@ -396,7 +408,8 @@ export function prefillRewrite(line: string, ownWords: string): string {
 /** The answer on file for a line (the latest one that is not a rewrite record), if any. */
 export function answerFor(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
   const k = squash(line);
-  const mine = answers.filter((a) => squash(a.line) === k);
+  // Round 11: a "Yes, I did this" answer belongs to its scope claim only, never the line's other questions.
+  const mine = answers.filter((a) => squash(a.line) === k && a.kind !== "scope_yes");
   return [...mine].reverse().find((a) => a.kind !== "rewrite") ?? mine[mine.length - 1];
 }
 
@@ -664,14 +677,16 @@ const CERT_HEADING_RE = /^(?:certifications?|licenses?|licences?|credentials?|ce
 export function coveringCertificationLine(text: string, name: string, type: string, when: string): string | undefined {
   const want = (credentialKeyOf(name) ?? "").split(" ").filter(Boolean);
   if (!want.length) return undefined;
-  const kindWord = type === "certification" ? "certif" : type === "training course" ? "course" : type;
+  void type;
   const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const whenWords = words(when).split(" ").filter(Boolean);
   for (const m of credentialMentionsOf(text)) {
     if (m.where !== "credentials" || m.education) continue;
     const have = (credentialKeyOf(m.name) ?? "").split(" ");
     const shown = words(m.unit);
-    if (want.every((w) => have.includes(w)) && shown.includes(kindWord) && whenWords.every((w) => shown.split(" ").includes(w))) return m.line;
+    // Round 11 (SF-9): the kind word need not be there; a bigger credential ("OSHA 10 Trainer") never shows the smaller one.
+    if (/\b(?:trainer|instructor|inspector|evaluator|assessor|examiner|proctor|outreach|master|supervisor|manager|authorized)\b/i.test(m.unit) && !/\b(?:trainer|instructor|inspector|evaluator|assessor|examiner|proctor|outreach|master|supervisor|manager|authorized)\b/i.test(name)) continue;
+    if (want.every((w) => have.includes(w)) && whenWords.every((w) => shown.split(" ").includes(w))) return m.line;
   }
   return undefined;
 }
@@ -740,8 +755,11 @@ function applyToDocument(
         next = cutLine(next, m.line);
         continue;
       }
-      const rewritten = educationLineRewrite(m.line, m.raw || m.name, confirmed, opts.personText);
-      next = changeLine(next, m.line, rewritten.line);
+      // Round 11 (SF-4): another credential on the line keeps its own card, asked under CERTIFICATIONS.
+      const split = splitOffCredentials(next, m.line, credentialMentionsOf(text));
+      next = split.text;
+      const rewritten = educationLineRewrite(split.line, m.raw || m.name, confirmed, opts.personText);
+      next = changeLine(next, split.line, rewritten.line);
       // Round 10 (SF-3): what the writer added beside it (honors, a program, a training) stays on its own line, checked like any line.
       if (rewritten.rest) next = insertLineAfter(next, rewritten.line, rewritten.rest);
       educationLine = stripBullet(rewritten.line);
@@ -796,6 +814,25 @@ function applyToDocument(
 }
 
 const EDUCATION_HEADING_RE = /^(?:education|schooling|academic background)\b.*$|^(?:training|certifications?)\s*(?:and|&)\s*education:?$/i;
+
+/**
+ * Round 11 (SF-4): the other credentials on an education line ("OSHA 10" in
+ * "GED | Toledo Adult Education | OSHA 10 | 2015") come off it, with its
+ * years, onto their own line under CERTIFICATIONS, where they are asked about
+ * on their own. Returns the text and the education line that is left.
+ */
+function splitOffCredentials(text: string, line: string, mentions: ReturnType<typeof credentialMentionsOf>): { text: string; line: string } {
+  const raws = mentions.filter((x) => x.line === line && x.onEducationLine).map((x) => x.raw || x.name);
+  if (!raws.length) return { text, line };
+  const creds = credentialPartsOnly(line, raws);
+  if (!creds) return { text, line };
+  let left = line;
+  for (const r of raws) left = withoutEducationPart(left, r) || left;
+  if (left === line) return { text, line };
+  let next = changeLine(text, line, left);
+  next = ensureCertificationLine(next, stripBullet(creds).replace(/\s*\|\s*/g, ", "));
+  return { text: next, line: linesOf(next).find((l) => stripBullet(l) === stripBullet(left)) ?? left };
+}
 
 /** Put a new line right under one line (found by its words). */
 function insertLineAfter(text: string, after: string, line: string): string {
@@ -853,7 +890,7 @@ export function applyConfirmation(
   type: CredentialType,
   when: string,
   /** Round 10 (SF-3): the person's own words, so a school they named themselves may ride on an education line. */
-  opts: { personText?: string } = {}
+  opts: { personText?: string; /** Round 11: "did not finish": the school they typed on the card. */ school?: string } = {}
 ): { resume: string; letter: string; confirm: CredentialConfirm } | null {
   if (!ALL_KINDS.includes(type) || !isConfirmWhen(type, when)) return null;
   const confirmed = confirmedCredentialText(name, type, when);
@@ -866,7 +903,7 @@ export function applyConfirmation(
   // Round 10 (SF-2): the mention of this kind is the one confirmed, whatever else shares its line.
   const all = [...mentionsIn(docs.resume), ...mentionsIn(docs.letter)];
   if (all.length && !all.some((m) => !!m.education === isEducationKind(type))) return null;
-  if (type === "did not finish") return applyDidNotFinish(docs, name, when, opts.personText);
+  if (type === "did not finish") return applyDidNotFinish(docs, name, when, opts.personText, opts.school);
   const held = isLiveCredential(type, when) ? { name, kind: type, when } : undefined;
   // Round 10 (SF-7): a credentials line already showing it ("AWS D1.1 certification, 2019") is not written twice.
   const covered = isEducationKind(type) ? undefined : coveringCertificationLine(docs.resume, name, type, when);
@@ -897,14 +934,25 @@ export function applyConfirmation(
  * attended 2011 - 2014"), or comes off when there is no school to keep; every
  * other mention of the credential comes off both pages.
  */
-function applyDidNotFinish(docs: { resume: string; letter: string }, name: string, when: string, personText?: string): { resume: string; letter: string; confirm: CredentialConfirm } | null {
+function applyDidNotFinish(
+  docs: { resume: string; letter: string },
+  name: string,
+  when: string,
+  personText?: string,
+  typedSchool?: string
+): { resume: string; letter: string; confirm: CredentialConfirm } | null {
   const key = credentialKeyOf(name);
-  const edu = credentialMentionsOf(docs.resume).find((m) => m.education && m.where === "credentials" && (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+  const all = credentialMentionsOf(docs.resume);
+  const edu = all.find((m) => m.education && m.where === "credentials" && (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
   let resume = docs.resume;
   let line: string | undefined;
+  const school = typedSchoolName(typedSchool);
   if (edu) {
-    const attended = educationAttendedLine(edu.line, edu.raw || edu.name, name, when, personText);
-    resume = attended ? changeLine(resume, edu.line, attended) : cutLine(resume, edu.line);
+    // Round 11 (SF-4): another credential on the line keeps its own card, asked under CERTIFICATIONS.
+    const split = splitOffCredentials(resume, edu.line, all);
+    resume = split.text;
+    const attended = educationAttendedLine(split.line, edu.raw || edu.name, name, when, personText, school);
+    resume = attended ? changeLine(resume, split.line, attended) : cutLine(resume, split.line);
     line = attended ? stripBullet(attended) : undefined;
   }
   const rest = cutCredentialEverywhere({ resume, letter: docs.letter }, name, { keepLines: new Set(line ? [line] : []) });
@@ -921,6 +969,7 @@ function applyDidNotFinish(docs: { resume: string; letter: string }, name: strin
       remnants: rest.remnants,
       letterSentenceDropped: rest.changes.some((c) => c.target === "letter"),
       ...(line ? { line } : {}),
+      ...(school ? { school } : {}),
     },
   };
 }
@@ -1045,8 +1094,15 @@ export function cutCredentialEverywhere(
     // credential on the same line is asked on its own: then only the schooling part comes off.
     if ((m.education && m.where === "credentials") || m.onEducationLine) {
       const others = credentialMentionsOf(resume).filter((x) => x.line === m.line && x.key !== m.key && (x.education || x.onEducationLine));
-      const rest = others.length ? withoutEducationPart(m.line, m.raw || m.name) : "";
-      const next = rest && rest !== m.line ? changeLine(resume, m.line, rest) : cutLine(resume, m.line);
+      // Round 11 (SF-4): "No" on the schooling takes its school with it; another credential keeps its own line.
+      let next: string;
+      if (m.education && others.length && others.every((x) => x.onEducationLine)) {
+        const split = splitOffCredentials(resume, m.line, credentialMentionsOf(resume));
+        next = cutLine(split.text, split.line);
+      } else {
+        const rest = others.length ? withoutEducationPart(m.line, m.raw || m.name) : "";
+        next = rest && rest !== m.line ? changeLine(resume, m.line, rest) : cutLine(resume, m.line);
+      }
       if (next === resume) break;
       record("resume", resume, next);
       resume = next;
@@ -1069,7 +1125,8 @@ export function cutCredentialEverywhere(
       credentialMentionsOf(`x\n${sent}`).some((x) => (key ? sameCredential(x.key, key) : squash(x.name) === squash(name))) || mentionsOfName(`x\n${sent}`, name).length > 0;
     // A sentence that claims it goes whole; a duty sentence ("I followed ServSafe rules") keeps itself without the credential's word.
     const kept = splitSentences(current)
-      .map((sent) => (!sentenceHasIt(sent) ? sent : CLAIM_WORD_RE.test(sent) ? "" : removeFromSentence(sent, m.raw || m.name)))
+      // Round 11 (SF-5): a sentence about schooling ("I finished high school and went to work") goes whole.
+      .map((sent) => (!sentenceHasIt(sent) ? sent : CLAIM_WORD_RE.test(sent) || m.education ? "" : removeFromSentence(sent, m.raw || m.name)))
       .filter((sent) => sent.trim());
     const rest = kept.join(" ").trim();
     const next = rest ? changeLine(letter, m.line, rest) : cutLine(letter, m.line);
@@ -1094,6 +1151,60 @@ export const SKILLS_CARD_TEXT = "These skills were added for you. Keep the ones 
 /** The credential name a memory-prompt item is about: its full name from the check, never a clipped one. */
 function unsaidName(i: OpenItem): string {
   return i.subject ?? i.why.match(/"([^"]+)"/)?.[1] ?? stripBullet(i.line);
+}
+
+const scopeItem = (its: GateItem[]) => its.find((i) => i.kind === "scope_unsaid" && i.scopeFamily);
+
+// ---- round 11: the one-tap scope card ------------------------------------------------------
+
+/** "Yes, I did this": their typed who or what, kept for this line's scope claim only. */
+export function recordScopeYes(answers: DefendAnswer[], line: string, family: string, typed: string): DefendAnswer[] {
+  const k = squash(line);
+  return [...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && a.family === family)), { line, answer: typed.trim(), kind: "scope_yes", family }];
+}
+
+/**
+ * What "Yes, I did this" with these words would do: "empty" when they name
+ * nobody and nothing, "unmatched" when the words do not cover the line
+ * (fewer people, other people, another thing), "ok" when this claim is
+ * settled.
+ */
+export function scopeYesResult(
+  doc: { target: "resume" | "letter"; text: string },
+  line: string,
+  family: string,
+  typed: string,
+  source: string,
+  answers: DefendAnswer[]
+): "ok" | "empty" | "unmatched" {
+  if (!isScopeWhoAnswer(typed)) return "empty";
+  const next = recordScopeYes(answers, line, family, typed);
+  const still = (text: string) => {
+    const own = next.map((a) => (squash(a.line) === squash(line) ? { ...a, line: text } : a));
+    return scopeNotTheirsAnswered(text, source, own)?.family === family;
+  };
+  if (doc.target === "letter") return splitSentences(line).some((sent) => still(sent)) ? "unmatched" : "ok";
+  return still(line) ? "unmatched" : "ok";
+}
+
+/** "I helped with it": the line becomes its shared form, as the person's own choice (never added to their words). */
+export function applyScopeHelped(text: string, answers: DefendAnswer[], line: string, helped: string): RewriteResult {
+  const r = applyRewrite(text, answers, line, helped);
+  if (!r.changed) return r;
+  return { ...r, answers: r.answers.map((a) => (a.kind === "rewrite" && squash(a.line) === squash(stripBullet(helped)) ? { ...a, scopeHelp: true } : a)) };
+}
+
+/**
+ * "Take it off" on a scope claim in the letter: the sentences that make a
+ * claim the person never made come out whole (round 11, SF-5); the rest of
+ * the paragraph stays.
+ */
+export function cutScopeSentences(letter: string, line: string, source: string, answers: DefendAnswer[] = []): string {
+  const current = linesOf(letter).find((l) => l === line);
+  if (!current) return letter;
+  const kept = splitSentences(current).filter((sent) => !scopeNotTheirsAnswered(sent, source, answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sent } : a))));
+  const rest = kept.join(" ").trim();
+  return rest ? changeLine(letter, line, rest) : cutLine(letter, line);
 }
 
 /** One line (or added skill) and everything open about it. */
@@ -1121,6 +1232,10 @@ export interface LineGroup {
   credentialName?: string;
   /** On a memory prompt for an education line: confirmed as earned or in progress. */
   education?: boolean;
+  /** Round 11 (SF-3): on an education card, true when the line's school is one the person named (no need to ask "What school?"). */
+  schoolKnown?: boolean;
+  /** Round 11: an unmatched scope claim: its family (for "Who did you train?") and the line's shared form. */
+  scope?: { family: string; question: string; helped?: string };
 }
 
 /** An open item with the document it is in. */
@@ -1319,13 +1434,26 @@ function letterItems(
   const items: GateItem[] = [];
   const against = `${source}\n${resumeText}`;
   for (const { line, sentence } of letterSentences(letter)) {
-    // A scope claim the person never made: only their own rewrite or a cut settles it.
-    const hit = scopeNotTheirs(sentence, source);
+    // A scope claim the person never made: settled by "Yes, I did this" with their own words, "I helped
+    // with it", their own rewrite, or a cut (round 11). The paragraph's answers count for its sentences only.
+    const own = answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sentence } : a));
+    const hit = scopeNotTheirsAnswered(sentence, source, own);
     // A scope word the person typed into the line themselves (their rewrite) is their claim.
     const rw = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
     const theirWord = !!hit && !!rw && !new RegExp(`\\b${(hit.word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
     if (hit && !theirWord && !items.some((i) => i.line === line && i.kind === "scope_unsaid")) {
-      items.push({ rule: "STD-C04", severity: "BLOCK", line, target: "letter", kind: "scope_unsaid", why: scopeWhy(hit.word), question: Q_SCOPE });
+      const helpedSentence = helpedForm(sentence, hit.word);
+      items.push({
+        rule: "STD-C04",
+        severity: "BLOCK",
+        line,
+        target: "letter",
+        kind: "scope_unsaid",
+        why: scopeWhy(hit.word),
+        question: Q_SCOPE,
+        scopeFamily: hit.family,
+        ...(helpedSentence ? { helped: line.replace(sentence, helpedSentence) } : {}),
+      });
     }
     // A sentence far from the person's words: settled by an answer, like a defend line.
     if (distanceFromSource(sentence, against) <= LETTER_FAR) continue;
@@ -1405,7 +1533,7 @@ export function buildFinishView(input: {
       // Round 10: only school names the person used ride on it (SF-3); "did not finish" keeps the school and their years only (SF-1).
       const line =
         typeof c.line === "string" &&
-        (c.type === "did not finish" ? isConfirmedAttendedLine(c.line, c.name, c.when, source) : isEducationKind(c.type) && isConfirmedEducationLine(c.line, text, source))
+        (c.type === "did not finish" ? isConfirmedAttendedLine(c.line, c.name, c.when, source, c.school) : isEducationKind(c.type) && isConfirmedEducationLine(c.line, text, source))
           ? c.line
           : undefined;
       // Round 10 (SF-7): a credentials line already on the page that shows exactly this confirmation.
@@ -1639,7 +1767,16 @@ export function buildFinishView(input: {
       ...(its[0].target === "skillset"
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
-      ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true } : {}) } : {}),
+      ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
+      ...(!unsaid && scopeItem(its)
+        ? {
+            scope: {
+              family: scopeItem(its)!.scopeFamily as string,
+              question: scopeWhoQuestion(scopeItem(its)!.scopeFamily as string),
+              ...(scopeItem(its)!.helped ? { helped: scopeItem(its)!.helped } : {}),
+            },
+          }
+        : {}),
     };
   });
   groups.sort(
