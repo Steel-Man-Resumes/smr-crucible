@@ -151,3 +151,21 @@ test("layout route input is rebuilt from known fields and bounded", () => {
   assert.ok(html.includes("&lt;b&gt;x&lt;/b&gt;"), "text is escaped");
   assert.equal(cleanCreativeRequest({ doc: "nope" }), null);
 });
+
+test("CV: house look, years at the left margin, sections in order; a paragraph section prints as typed", async () => {
+  const { buildCvModel } = await import("@crucible/core/src/cvShared");
+  const ed = entry({ section: "education", title: "BA, Sociology", venue: "Lakeshore University", city: "Toledo", state: "OH", year: 2024, details: { degree: true } });
+  const ta = entry({ section: "teaching", title: "Teaching Assistant", venue: "Lakeshore University", year: 2023 });
+  const model = buildCvModel([ed, ta], { displayName: "Ray Example", email: "ray@example.com", interests: "Adult literacy." }, "academic");
+  const html = renderCreativeHtml({ doc: "cv", model });
+  assert.match(html, /<h2>EDUCATION<\/h2><div class="en"><span class="ey">2024<\/span><p class="et">BA, Sociology, Lakeshore University, Toledo, OH<\/p><\/div>/);
+  assert.match(html, /<h2>INTERESTS<\/h2><p class="para">Adult literacy\.<\/p>/);
+  assert.ok(html.indexOf("EDUCATION") < html.indexOf("INTERESTS") && html.indexOf("INTERESTS") < html.indexOf("TEACHING"));
+  const pdf = await pdfText(await renderCreativePdf({ doc: "cv", model }));
+  assert.equal(pdf.pages, 1);
+  assert.ok(pdf.text.includes("RAY EXAMPLE") && pdf.text.includes("Teaching Assistant"));
+  const xml = docxXml(await renderCreativeDocx({ doc: "cv", model }));
+  assert.match(xml, /Teaching Assistant/);
+  const r = cleanCreativeRequest({ doc: "cv", model: { header: { name: "R" }, sections: [{ heading: "X", text: "y".repeat(2000) }] } });
+  assert.ok(r && r.doc === "cv" && (r.model.sections[0].text ?? "").length === 700);
+});

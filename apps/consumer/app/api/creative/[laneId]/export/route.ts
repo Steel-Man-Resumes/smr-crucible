@@ -10,10 +10,13 @@ import {
   workSampleListPlainText,
   workSampleListCsv,
   exportOpenItemLines,
+  laneKindOf,
+  cvPlainText,
   type CreativeDoc,
 } from "@crucible/core";
 import { buildCreative, renderCreativeDocx, renderCreativeHtml, renderCreativePdf, type CreativeRenderRequest } from "@/lib/resume-render";
-import { creativeLane, gate, laneNotFound, loadCreativeContext } from "@/lib/creative-server";
+import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext } from "@/lib/creative-server";
+import type { CareerLane } from "@crucible/core";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -22,7 +25,7 @@ interface RouteContext {
   params: Promise<{ laneId: string }>;
 }
 
-const DOCS = ["artist_resume", "bio", "statement", "work_samples"] as const;
+const DOCS = ["artist_resume", "bio", "statement", "work_samples", "cv"] as const;
 type Doc = (typeof DOCS)[number];
 const FORMATS = ["pdf", "docx", "html", "txt", "csv"] as const;
 type Format = (typeof FORMATS)[number];
@@ -44,9 +47,10 @@ export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await creativeLane(g.userId, laneId);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
   if (!lane) return laneNotFound();
   const url = new URL(request.url);
+  if (laneKindOf(lane) === "cv") return exportCv(g.userId, lane, url);
   const doc = (DOCS as readonly string[]).includes(url.searchParams.get("doc") ?? "") ? (url.searchParams.get("doc") as Doc) : null;
   const format = (FORMATS as readonly string[]).includes(url.searchParams.get("format") ?? "") ? (url.searchParams.get("format") as Format) : null;
   if (!doc || !format) return NextResponse.json({ error: "Pick a document and a format." }, { status: 400 });
@@ -118,4 +122,32 @@ export async function GET(request: Request, context: RouteContext) {
   return new NextResponse(renderCreativeHtml(req), {
     headers: { "Content-Type": "text/html; charset=utf-8", "Content-Disposition": `attachment; filename="${fileName(name, what, "html")}"`, "Cache-Control": "no-store" },
   });
+}
+
+
+/**
+ * A CV lane's export: the CV only, built from the database with this lane's
+ * current choices. DRAFT (with its to-do page, safe lines only) while a BLOCK
+ * is open; the page count feeds the international two-page rule.
+ */
+async function exportCv(userId: string, lane: CareerLane, url: URL): Promise<NextResponse> {
+  const doc = url.searchParams.get("doc");
+  const format = url.searchParams.get("format");
+  if (doc !== "cv" || !["pdf", "docx", "html", "txt"].includes(format ?? "")) {
+    return NextResponse.json({ error: "Pick the CV and PDF, Word, HTML or plain text." }, { status: 400 });
+  }
+  let v = await loadCvContext(userId, lane);
+  const pages = buildCreative({ doc: "cv", model: v.model }).layout.pages.length;
+  v = await loadCvContext(userId, lane, pages);
+  const draft = v.status.blockCount > 0;
+  const openItems = exportOpenItemLines(v.status, v.entries, v.settings, "cv");
+  const name = v.settings.displayName ?? "";
+  const headers = (type: string, ext: string) => ({ "Content-Type": type, "Content-Disposition": `attachment; filename="${fileName(name, "CV", ext)}"`, "Cache-Control": "no-store" });
+  if (format === "txt") return new NextResponse((draft ? "DRAFT\n\n" : "") + cvPlainText(v.model), { headers: headers("text/plain; charset=utf-8", "txt") });
+  const req: CreativeRenderRequest = { doc: "cv", model: v.model, draft, openItems };
+  if (format === "pdf") return new NextResponse(Buffer.from(await renderCreativePdf(req)), { headers: headers("application/pdf", "pdf") });
+  if (format === "docx") {
+    return new NextResponse(new Uint8Array(await renderCreativeDocx(req)), { headers: headers("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx") });
+  }
+  return new NextResponse(renderCreativeHtml(req), { headers: headers("text/html; charset=utf-8", "html") });
 }

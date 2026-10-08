@@ -172,3 +172,43 @@ export function bioBlocks(m: Measurer, card: BioCardInput, L: Level): BlockSpec[
 export function layoutBioCard(card: BioCardInput, m: Measurer, opts: { draft?: boolean } = {}): { layout: Layout; fit: FitInfo } {
   return pickLayout((L) => paginate(m, bioBlocks(m, card, L), L, card.name, !!opts.draft));
 }
+
+// ---------------------------------------------------------------- the CV --
+
+export interface CvInput {
+  header: { name: string; discipline: string; contact: string[] };
+  sections: { heading: string; text?: string; rows?: { years: string; parts: { text: string; italic?: boolean; after?: string }[] }[] }[];
+}
+
+/**
+ * The CV: the house header, then each section in the sub-type's order. Dated
+ * rows put the years at the left margin with the entry hanging beside them;
+ * a paragraph section (interests, languages) is the person's words as typed.
+ * Page 2 on carries "Name, page N", as every SMR page does.
+ */
+export function cvBlocks(m: Measurer, model: CvInput, L: Level): BlockSpec[] {
+  const W = PAGE_W - 2 * L.marginSide;
+  const out: BlockSpec[] = [];
+  let id = 0;
+  const hb = headerBlock(m, header(model.header.name, model.header.discipline, model.header.contact), L, W, id);
+  if (hb) {
+    out.push(hb);
+    id++;
+  }
+  for (const sec of model.sections) {
+    out.push(sectionBlock(m, sec.heading.toUpperCase(), L, id++));
+    if (sec.text) {
+      const text = plainDashes(sec.text);
+      out.push({
+        id: id++, src: { kind: "para", text, role: "body" }, before: 0, after: L.paraAfter, keepNext: false,
+        lines: textLines(m, text, "serif", L.body, COLORS.ink, W, L.lineHeight),
+      });
+    }
+    for (const r of sec.rows ?? []) out.push(entryBlock(m, { kind: "entry", years: r.years, parts: r.parts }, L, W, id++));
+  }
+  return out;
+}
+
+export function layoutCv(model: CvInput, m: Measurer, opts: { draft?: boolean } = {}): { layout: Layout; fit: FitInfo } {
+  return pickLayout((L) => paginate(m, cvBlocks(m, model, L), L, model.header.name, !!opts.draft));
+}

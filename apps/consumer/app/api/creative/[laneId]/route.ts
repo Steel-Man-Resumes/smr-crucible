@@ -4,12 +4,13 @@ import {
   applyTitleMode,
   settingsRev,
   listPracticeEntries,
+  laneKindOf,
   setLaneKindSettings,
   hurdlesFor,
   HELP_SOURCES,
   HURDLES_NOT_A_VERDICT,
 } from "@crucible/core";
-import { creativeLane, gate, laneNotFound, loadCreativeContext, ownerOnly, readJson } from "@/lib/creative-server";
+import { docLane, gate, laneNotFound, loadCreativeContext, loadCvContext, ownerOnly, readJson } from "@/lib/creative-server";
 
 const SETTINGS_CHANGED = { error: "changed_elsewhere", message: "These choices changed in another tab or window. Refresh the page, then try again." };
 
@@ -33,8 +34,13 @@ export async function GET(request: Request, context: RouteContext) {
   const g = await gate(request);
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await creativeLane(g.userId, laneId);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
   if (!lane) return laneNotFound();
+  if (laneKindOf(lane) === "cv") {
+    // A CV lane: the record, this lane's choices and the CV's open items.
+    const v = await loadCvContext(g.userId, lane);
+    return NextResponse.json({ lane: v.lane, cvType: v.cvType, entries: v.entries, settings: v.settings, settingsRev: settingsRev(v.settings), status: v.status });
+  }
   const c = await loadCreativeContext(g.userId, lane);
   const dream = lane.path === "dream" ? lane : c.partner?.path === "dream" ? c.partner : null;
   const realistic = lane.path === "realistic" ? lane : c.partner?.path === "realistic" ? c.partner : null;
@@ -68,7 +74,7 @@ export async function PUT(request: Request, context: RouteContext) {
   const g = await gate(request, { write: true });
   if (!g.ok) return g.res;
   const { laneId } = await context.params;
-  const lane = await creativeLane(g.userId, laneId);
+  const lane = await docLane(g.userId, laneId, ["creative", "cv"]);
   if (!lane) return laneNotFound();
   const body = await readJson(request, 40_000);
   if (!body) return NextResponse.json({ error: "Invalid data" }, { status: 400 });

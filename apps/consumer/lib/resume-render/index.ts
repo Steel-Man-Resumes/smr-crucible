@@ -113,11 +113,12 @@ export { type FitInfo } from "./layout";
 // fonts and builders as the resume.
 // ---------------------------------------------------------------------------
 
-import { layoutArtistResume, layoutBioCard, type ArtistResumeInput, type BioCardInput } from "./creative";
+import { layoutArtistResume, layoutBioCard, layoutCv, type ArtistResumeInput, type BioCardInput, type CvInput } from "./creative";
 
 export type CreativeRenderRequest =
   | { doc: "artist_resume"; model: ArtistResumeInput; draft?: boolean; openItems?: string[] }
-  | { doc: "bio"; card: BioCardInput; draft?: boolean; openItems?: string[] };
+  | { doc: "bio"; card: BioCardInput; draft?: boolean; openItems?: string[] }
+  | { doc: "cv"; model: CvInput; draft?: boolean; openItems?: string[] };
 
 export function buildCreative(req: CreativeRenderRequest): Built {
   const m = fontMeasurer();
@@ -128,6 +129,11 @@ export function buildCreative(req: CreativeRenderRequest): Built {
     const { layout, fit } = layoutArtistResume(req.model, m, { draft });
     const who = req.model.header.name;
     return { layout, fit, checklist, kind: "resume", title: who ? `${who} artist resume` : "Artist resume" };
+  }
+  if (req.doc === "cv") {
+    const { layout, fit } = layoutCv(req.model, m, { draft });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} CV` : "CV" };
   }
   const { layout, fit } = layoutBioCard(req.card, m, { draft });
   const who = req.card.name;

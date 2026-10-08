@@ -26,6 +26,11 @@ import {
   buildArtistResumeModel,
   buildWorkSampleList,
   getCreativeStatus,
+  getCvStatus,
+  buildCvModel,
+  isCvType,
+  type CvType,
+  type CvModel,
   revOf,
   type PracticeEntry,
   type CreativeKindSettings,
@@ -76,11 +81,40 @@ export function ownerOnly(): NextResponse {
   );
 }
 
-/** An open creative lane of this person's, or null. */
-export async function creativeLane(userId: string, laneId: unknown): Promise<CareerLane | null> {
+/** An open lane of this person's of one of these kinds, or null. */
+export async function docLane(userId: string, laneId: unknown, kinds: Array<"creative" | "cv">): Promise<CareerLane | null> {
   if (!isUuid(laneId)) return null;
   const lane = await getOpenLane(userId, laneId.toLowerCase());
-  return lane && laneKindOf(lane) === "creative" ? lane : null;
+  return lane && (kinds as string[]).includes(laneKindOf(lane)) ? lane : null;
+}
+
+/** An open creative lane of this person's, or null. */
+export async function creativeLane(userId: string, laneId: unknown): Promise<CareerLane | null> {
+  return docLane(userId, laneId, ["creative"]);
+}
+
+/** An open CV lane of this person's, or null. */
+export async function cvLane(userId: string, laneId: unknown): Promise<CareerLane | null> {
+  return docLane(userId, laneId, ["cv"]);
+}
+
+export interface CvContext {
+  lane: CareerLane;
+  cvType: CvType;
+  entries: PracticeEntry[];
+  settings: CreativeKindSettings;
+  model: CvModel;
+  status: CreativeStatus;
+}
+
+/** A CV lane's record, choices, assembled CV and open items, from the database, as the person. */
+export async function loadCvContext(userId: string, lane: CareerLane, pages?: number): Promise<CvContext> {
+  const entries = await listPracticeEntries(userId);
+  const settings = readKindSettings(lane.kind_settings ?? {});
+  const cvType: CvType = isCvType(lane.cv_type) ? lane.cv_type : "academic";
+  const model = buildCvModel(entries, settings, cvType);
+  const status = getCvStatus({ entries, settings, cvType, model, pages });
+  return { lane, cvType, entries, settings, model, status };
 }
 
 export function laneNotFound(): NextResponse {

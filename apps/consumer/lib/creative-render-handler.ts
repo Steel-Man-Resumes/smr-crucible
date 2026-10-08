@@ -59,6 +59,37 @@ export function cleanCreativeRequest(body: unknown): CreativeRenderRequest | nul
     };
     return { doc: "artist_resume", model, draft, openItems };
   }
+  if (b.doc === "cv") {
+    const m = (b.model && typeof b.model === "object" ? b.model : {}) as Record<string, unknown>;
+    const h = (m.header && typeof m.header === "object" ? m.header : {}) as Record<string, unknown>;
+    let rows = 0;
+    const sections = (Array.isArray(m.sections) ? m.sections : []).slice(0, 20).map((s) => {
+      const sec = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
+      return {
+        heading: str(sec.heading, 80),
+        text: str(sec.text, 700) || undefined,
+        rows: (Array.isArray(sec.rows) ? sec.rows : []).filter(() => rows++ < MAX_ROWS).map((r) => {
+          const row = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+          return {
+            years: str(row.years, 20),
+            parts: (Array.isArray(row.parts) ? row.parts : []).slice(0, 12).map((p) => {
+              const part = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+              return { text: str(part.text), italic: part.italic === true, after: str(part.after, 3) || undefined };
+            }),
+          };
+        }),
+      };
+    });
+    return {
+      doc: "cv",
+      model: {
+        header: { name: str(h.name, 120), discipline: str(h.discipline, 120), contact: (Array.isArray(h.contact) ? h.contact : []).slice(0, 6).map((x) => str(x, 200)).filter(Boolean) },
+        sections,
+      },
+      draft,
+      openItems,
+    };
+  }
   if (b.doc === "bio") {
     const cd = (b.card && typeof b.card === "object" ? b.card : {}) as Record<string, unknown>;
     const card: BioCardInput = {
@@ -80,7 +111,7 @@ export async function handleCreativeLayoutPost(request: Request): Promise<Respon
     const len = request.headers.get("content-length");
     if (len && parseInt(len, 10) > 400_000) return NextResponse.json({ error: "Request too large" }, { status: 413 });
     const req = cleanCreativeRequest(await request.json().catch(() => null));
-    if (!req) return NextResponse.json({ error: "Pick the artist resume or the bio" }, { status: 400 });
+    if (!req) return NextResponse.json({ error: "Pick the artist resume, the bio or the CV" }, { status: 400 });
     const s = renderCreativeScreen(req, (face) => `/fonts/resume/${FACE_FILES[face]}`);
     return NextResponse.json({ pages: s.pages, words: s.fit.words, pagesHtml: s.pagesHtml, css: s.css });
   } catch (error) {
