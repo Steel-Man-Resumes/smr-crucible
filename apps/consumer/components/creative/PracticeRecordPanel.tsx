@@ -16,6 +16,9 @@ import {
   PUBLICATION_STATUSES,
   AWARD_KINDS,
   EDUCATION_STATUSES,
+  PRESENTATION_KINDS,
+  CREDENTIAL_KINDS,
+  CREDENTIAL_STATUSES,
   looksLikeFacilityName,
   yearsOf,
   placeOf,
@@ -35,6 +38,9 @@ const KIND_LABEL: Record<string, string> = {
   published: "Published", in_press: "In press", accepted: "Accepted", submitted: "Submitted",
   award: "Award", grant: "Grant", fellowship: "Fellowship",
   conferred: "Degree conferred", completed: "Completed", in_progress: "In progress",
+  talk: "Talk", poster: "Poster", panel: "Panel", workshop: "Workshop",
+  license: "License", certification: "Certification", certificate: "Certificate", card: "Card", training: "Training",
+  active: "Active", inactive: "Inactive", expired: "Expired", eligible: "Eligible to test",
 };
 
 function Choice({ name, value, options, onChange, legend }: { name: string; value: string | undefined; options: readonly string[]; onChange: (v: string) => void; legend: string }) {
@@ -102,8 +108,8 @@ function draftOf(e?: PracticeEntry, section: PracticeSection = "exhibition"): Dr
   };
 }
 
-function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone: () => void; onCancel: () => void }) {
-  const [d, setD] = useState<Draft>(draftOf(entry));
+function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; onDone: () => void; onCancel: () => void; order: readonly PracticeSection[] }) {
+  const [d, setD] = useState<Draft>(draftOf(entry, order[0]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const copy = SECTION_COPY[d.section];
@@ -136,7 +142,7 @@ function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone:
         <label className="block text-sm text-t-white">
           What are you adding?
           <select className={`${inputCls} mt-1`} value={d.section} data-testid="practice-section" onChange={(e) => set({ section: e.target.value as PracticeSection, details: {} })}>
-            {PRACTICE_SECTIONS.map((s) => (
+            {order.map((s) => (
               <option key={s} value={s}>
                 {SECTION_COPY[s].label}
               </option>
@@ -149,17 +155,18 @@ function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone:
       {d.section === "performance" && <Choice name="pf-kind" legend="Was it a performance, a screening, or a reading?" value={d.details.kind} options={PERFORMANCE_KINDS} onChange={(v) => setDetail({ kind: v })} />}
       {d.section === "publication" && <Choice name="pub-status" legend="Where does it stand?" value={d.details.status} options={PUBLICATION_STATUSES} onChange={(v) => setDetail({ status: v })} />}
       {d.section === "award" && <Choice name="aw-kind" legend="Award, grant, or fellowship?" value={d.details.kind} options={AWARD_KINDS} onChange={(v) => setDetail({ kind: v })} />}
+      {d.section === "presentation" && <Choice name="pr-kind" legend="Was it a talk, a poster, a panel, or a workshop?" value={d.details.kind} options={PRESENTATION_KINDS} onChange={(v) => setDetail({ kind: v })} />}
 
       <Text label={copy.title} value={d.title} onChange={(v) => set({ title: v })} placeholder={copy.example} max={300} testId="practice-title" />
       {copy.venue && <Text label={copy.venue} value={d.venue} onChange={(v) => set({ venue: v })} testId="practice-venue" />}
-      {d.section !== "work" && (
+      {!["work", "membership", "reference"].includes(d.section) && (
         <div className="grid grid-cols-2 gap-3">
           <Text label="City" value={d.city} onChange={(v) => set({ city: v })} max={100} testId="practice-city" />
           <Text label="State" value={d.state} onChange={(v) => set({ state: v })} max={60} testId="practice-state" />
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Text label="What year?" value={d.year} onChange={(v) => set({ year: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2023" max={4} testId="practice-year" />
+        <Text label={d.section === "reference" ? "Since what year do they know you?" : "What year?"} value={d.year} onChange={(v) => set({ year: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2023" max={4} testId="practice-year" />
         {copy.hasRange && <Text label="Until (optional)" value={d.endYear} onChange={(v) => set({ endYear: v.replace(/[^0-9]/g, "").slice(0, 4) })} placeholder="2024" max={4} testId="practice-end-year" />}
       </div>
 
@@ -220,6 +227,28 @@ function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone:
           {d.details.status === "in_progress" && <Text label="When do you expect to finish?" value={d.details.expected ?? ""} onChange={(v) => setDetail({ expected: v })} placeholder="2027" max={40} />}
         </div>
       )}
+      {d.section === "publication" && (
+        <Text label="Authors, the way the piece lists them (optional)" value={d.details.authors ?? ""} onChange={(v) => setDetail({ authors: v })} placeholder="R. Example and J. Sample" testId="practice-authors" />
+      )}
+      {d.section === "presentation" && <Check label="I was invited to give it" checked={!!d.details.invited} onChange={(v) => setDetail({ invited: v })} />}
+      {d.section === "research" && <Text label="Your role (optional)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} placeholder="Research assistant" />}
+      {d.section === "clinical" && (
+        <Text label="Hours (optional, your own count)" value={d.details.hours ?? ""} onChange={(v) => setDetail({ hours: v.replace(/[^0-9,]/g, "").slice(0, 8) })} max={8} testId="practice-hours" />
+      )}
+      {d.section === "license" && (
+        <div className="space-y-2" data-testid="practice-credential">
+          <Choice name="cr-kind" legend="What kind is it? (You pick; nothing is guessed.)" value={d.details.credentialKind} options={CREDENTIAL_KINDS} onChange={(v) => setDetail({ credentialKind: v })} />
+          <Choice name="cr-status" legend="Where does it stand now?" value={d.details.credentialStatus} options={CREDENTIAL_STATUSES} onChange={(v) => setDetail({ credentialStatus: v })} />
+          <p className="text-xs text-t-phos-dim">Never put a license number here.</p>
+        </div>
+      )}
+      {d.section === "reference" && (
+        <div className="space-y-1">
+          <Text label="How they know you (their role)" value={d.details.role ?? ""} onChange={(v) => setDetail({ role: v })} placeholder="Course instructor" />
+          <Text label="How to reach them (as they agreed)" value={d.details.contact ?? ""} onChange={(v) => setDetail({ contact: v })} max={200} />
+          <Check label="They said OK to be listed" checked={!!d.details.consent} onChange={(v) => setDetail({ consent: v })} />
+        </div>
+      )}
       {d.section === "work" && (
         <div className="space-y-1">
           <Text label="What is it made of?" value={d.details.medium ?? ""} onChange={(v) => setDetail({ medium: v })} placeholder="Acrylic on panel" testId="practice-medium" />
@@ -270,11 +299,17 @@ function EntryForm({ entry, onDone, onCancel }: { entry?: PracticeEntry; onDone:
   );
 }
 
-export function PracticeRecordPanel({ entries, onChanged }: { entries: PracticeEntry[]; onChanged: () => void }) {
+/** The kinds a CV page offers first (the record is one set of facts; every kind stays available). */
+export const CV_SECTION_ORDER: PracticeSection[] = [
+  "education", "appointment", "teaching", "research", "publication", "presentation", "clinical", "license", "award",
+  "service", "membership", "reference", "arts_program", "exhibition", "performance", "residency", "commission", "press", "collection", "work",
+];
+
+export function PracticeRecordPanel({ entries, onChanged, order = PRACTICE_SECTIONS }: { entries: PracticeEntry[]; onChanged: () => void; order?: readonly PracticeSection[] }) {
   const [adding, setAdding] = useState(entries.length === 0);
   const [editing, setEditing] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
-  const groups = PRACTICE_SECTIONS.map((s) => ({ s, list: entries.filter((e) => e.section === s) })).filter((g) => g.list.length);
+  const groups = order.map((s) => ({ s, list: entries.filter((e) => e.section === s) })).filter((g) => g.list.length);
 
   return (
     <div className="space-y-4" data-testid="practice-record">
@@ -284,7 +319,7 @@ export function PracticeRecordPanel({ entries, onChanged }: { entries: PracticeE
           + Add to your record
         </button>
       )}
-      {adding && <EntryForm onDone={() => { setAdding(false); onChanged(); }} onCancel={() => setAdding(false)} />}
+      {adding && <EntryForm order={order} onDone={() => { setAdding(false); onChanged(); }} onCancel={() => setAdding(false)} />}
       <p aria-live="polite" className="text-sm text-t-phos">{msg}</p>
       {groups.map(({ s, list }) => (
         <section key={s}>
@@ -293,7 +328,7 @@ export function PracticeRecordPanel({ entries, onChanged }: { entries: PracticeE
             {list.map((e) =>
               editing === e.id ? (
                 <li key={e.id} className="p-2">
-                  <EntryForm entry={e} onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
+                  <EntryForm entry={e} order={order} onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
                 </li>
               ) : (
                 <li key={e.id} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between" data-testid="practice-entry">

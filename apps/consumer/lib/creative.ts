@@ -18,6 +18,14 @@ export const CREATIVE_TABS = [
 ] as const;
 export type CreativeTab = (typeof CREATIVE_TABS)[number]["key"];
 
+export const CV_TABS = [
+  { key: "record", label: "Your record" },
+  { key: "cv", label: "CV" },
+] as const;
+
+export const CV_INTRO =
+  "Your schooling, teaching, research, talks, clinical work and licenses, in one record. Your CV is built from it, dated line by line.";
+
 export const CREATIVE_INTRO =
   "Your shows, gigs, programs and work, in one record. Your artist resume, bio and sample list are built from it. Your statement stays yours.";
 
@@ -32,7 +40,7 @@ export const PROOF_COPY: Record<ProofMark, { label: string; body: string }> = {
 
 export const TITLE_MODE_COPY: Record<TitleMode, { label: string; body: string }> = {
   true_title: { label: "Show the real title", body: "Exactly as it was. Some people want it seen." },
-  venue_only: { label: "Just the venue", body: "\"Group exhibition, the venue, the city.\" The title stays off every page on this lane." },
+  venue_only: { label: "Just the venue", body: "Only the kind of entry and the venue, like \"Teaching, the venue\". The title stays off every page on this lane." },
   leave_out: { label: "Leave it off", body: "Not on any page in this lane. It stays in your record." },
 };
 

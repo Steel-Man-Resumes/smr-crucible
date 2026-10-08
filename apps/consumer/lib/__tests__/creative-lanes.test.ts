@@ -149,3 +149,13 @@ test("review r3: the on-screen preview prints the same safe to-do lines as the d
   const bio = readFileSync(join(APP, "components", "creative", "BioPanel.tsx"), "utf8");
   assert.match(bio, /it\.sentenceId/);
 });
+
+test("CV lanes: the export route builds the CV from the database with safe to-do lines; the screen shows no personal fields", () => {
+  const rd = (...p: string[]) => readFileSync(join(APP, ...p), "utf8");
+  const exp = rd("app", "api", "creative", "[laneId]", "export", "route.ts");
+  assert.match(exp, /if \(laneKindOf\(lane\) === "cv"\) return exportCv\(/);
+  assert.match(exp, /exportOpenItemLines\(v\.status, v\.entries, v\.settings, "cv"\)/);
+  const view = rd("components", "creative", "CvLaneView.tsx");
+  assert.ok(!/birth|photo upload|headshot|marital|nationality/i.test(view.replace(/No photo, birth date, age, family status or nationality\. A CV here never asks for them\./, "")));
+  assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "cv"\)/);
+});
