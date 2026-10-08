@@ -61,9 +61,37 @@ export const CREDENTIAL_KINDS = ["license", "certification", "certificate", "car
 export const CREDENTIAL_STATUSES = ["active", "inactive", "expired", "in_progress", "eligible"] as const;
 
 export const MAX_PRACTICE_ENTRIES = 300;
+/** Study without a degree, as the person names it (review s2r2 N-M3): classes toward a degree, or classes in a subject. */
+export const STUDY_KINDS = ["toward_degree", "coursework"] as const;
 
 /** A license or certificate number: letters with 5+ digits, a long digit run, or "#" / "No." / "number" before digits. */
 export const LICENSE_NUMBER_SHAPE = /#\s*[A-Z]{0,4}-?\d|\b(?:no\.?|num\.?|number)\s*:?\s*[A-Z]{0,4}-?\d|\b[A-Z]{1,6}[-\s]?\d{5,}\b|\b\d{5,}\b/i;
+/** Standard and code names that carry a number but are not a license number: "ISO 27001", "ISO/IEC 17024", "ANSI/ASME B31.3", "NFPA 70E", "OSHA 30". */
+const STANDARD_NAME_RE = /\b(?:ISO(?:\s*\/\s*IEC)?|IEC|ANSI(?:\s*\/\s*ASME)?|ASME|NFPA|OSHA)\s*[A-Z]?\d{1,6}(?:[.:\-]\d+)*[A-Z]?\b/gi;
+/** An NCCER module code ("00101", "00101-15"), only when the text names NCCER. */
+const NCCER_CODE_RE = /\b\d{5}(?:-\d{2})?\b/g;
+/** A ZIP code in an address: after a comma or a state's two letters ("Libby, MT 59923", "Example County Health, 59923"). */
+const ZIP_RE = /(?:,\s*|\b[A-Z]{2}\s+)\d{5}(?:-\d{4})?(?=\s*(?:$|,))/g;
+
+/**
+ * True when a text carries a license, certificate, member or ID number
+ * (review s2r2 N-L2, N-L3). Digit groups joined by hyphens or spaces count as
+ * one number ("123-4567", "12 345 67"), unless every group is a year
+ * ("2019-2021"). Standard and code names are not numbers, and with
+ * `address`, neither is a ZIP code.
+ */
+export function hasLicenseNumber(text: string | null | undefined, opts: { address?: boolean } = {}): boolean {
+  if (!text) return false;
+  let t = text.replace(STANDARD_NAME_RE, " ");
+  if (/\bNCCER\b/i.test(text)) t = t.replace(NCCER_CODE_RE, " ");
+  if (opts.address) t = t.replace(ZIP_RE, " ");
+  if (LICENSE_NUMBER_SHAPE.test(t)) return true;
+  for (const m of t.matchAll(/\d+(?:[\s-]+\d+)+/g)) {
+    const groups = m[0].split(/[\s-]+/);
+    if (groups.join("").length >= 6 && !groups.every((g) => /^(?:19|20)\d{2}$/.test(g))) return true;
+  }
+  return false;
+}
 export const PRACTICE_WRITES_PER_DAY = 400;
 
 const TITLE_MAX = 300;
@@ -101,6 +129,8 @@ export interface PracticeDetails {
   instructorOfRecord?: boolean;
   /** education: a degree the college conferred (true) or study without a degree (false). */
   degree?: boolean;
+  /** education: study without a degree, as the person picked it: classes toward a degree, or classes in a subject. Never prints as a degree. */
+  study?: string;
   /** education in progress: the year the person expects to finish, in their words. */
   expected?: string;
   /** arts program / performance: the person's role, as they say it. */
@@ -275,6 +305,9 @@ export function cleanDetails(section: PracticeSection, raw: unknown): PracticeDe
       break;
     case "education":
       put("degree", bool(d.degree));
+      put("study", oneOf(STUDY_KINDS, d.study));
+      // Study without a degree is never also a degree.
+      if (out.study) out.degree = false;
       put("status", oneOf(EDUCATION_STATUSES, d.status));
       put("expected", cleanLine(d.expected, 40));
       break;
@@ -399,7 +432,8 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
 
   const venue = pick(input.venue, (v) => cleanLine(v, VENUE_MAX), current?.venue ?? null);
   // A license or certificate number is never kept with the entry (a public lookup key).
-  if (section === "license" && (LICENSE_NUMBER_SHAPE.test(title) || LICENSE_NUMBER_SHAPE.test(venue ?? ""))) {
+  const state = pick(input.state, (v) => cleanLine(v, STATE_MAX), current?.state ?? null);
+  if (section === "license" && (hasLicenseNumber(title) || hasLicenseNumber(venue, { address: true }) || hasLicenseNumber(state))) {
     return { ok: false, error: "license_number" };
   }
   const namesFacility =
@@ -421,7 +455,7 @@ export function resolvePracticeEntry(input: PracticeEntryInput, current?: Practi
       title,
       venue,
       city: pick(input.city, (v) => cleanLine(v, CITY_MAX), current?.city ?? null),
-      state: pick(input.state, (v) => cleanLine(v, STATE_MAX), current?.state ?? null),
+      state,
       year,
       end_year: endYear,
       details,

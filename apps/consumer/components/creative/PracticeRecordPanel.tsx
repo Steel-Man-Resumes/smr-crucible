@@ -41,6 +41,7 @@ const KIND_LABEL: Record<string, string> = {
   talk: "Talk", poster: "Poster", panel: "Panel", workshop: "Workshop",
   license: "License", certification: "Certification", certificate: "Certificate", card: "Card", training: "Training",
   active: "Active", inactive: "Inactive", expired: "Expired", eligible: "Eligible to test",
+  toward_degree: "Classes toward a degree", coursework: "Classes in a subject", other_study: "A certificate or training",
 };
 
 function Choice({ name, value, options, onChange, legend }: { name: string; value: string | undefined; options: readonly string[]; onChange: (v: string) => void; legend: string }) {
@@ -157,7 +158,9 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
       {d.section === "award" && <Choice name="aw-kind" legend="Award, grant, or fellowship?" value={d.details.kind} options={AWARD_KINDS} onChange={(v) => setDetail({ kind: v })} />}
       {d.section === "presentation" && <Choice name="pr-kind" legend="Was it a talk, a poster, a panel, or a workshop?" value={d.details.kind} options={PRESENTATION_KINDS} onChange={(v) => setDetail({ kind: v })} />}
 
-      <Text label={copy.title} value={d.title} onChange={(v) => set({ title: v })} placeholder={copy.example} max={300} testId="practice-title" />
+      <Text
+        label={d.section === "education" && d.details.study === "toward_degree" ? "Which degree were the classes toward? (exactly as the school names it)" : d.section === "education" && d.details.study === "coursework" ? "What subject were the classes in?" : copy.title}
+        value={d.title} onChange={(v) => set({ title: v })} placeholder={copy.example} max={300} testId="practice-title" />
       {copy.venue && <Text label={copy.venue} value={d.venue} onChange={(v) => set({ venue: v })} testId="practice-venue" />}
       {!["work", "membership", "reference"].includes(d.section) && (
         <div className="grid grid-cols-2 gap-3">
@@ -222,7 +225,16 @@ function EntryForm({ entry, onDone, onCancel, order }: { entry?: PracticeEntry; 
       )}
       {d.section === "education" && (
         <div className="space-y-1">
-          <Check label="This is a degree the school gave me (not a certificate or classes)" checked={!!d.details.degree} onChange={(v) => setDetail({ degree: v })} />
+          <Check label="This is a degree the school gave me (not a certificate or classes)" checked={!!d.details.degree} onChange={(v) => setDetail({ degree: v, study: v ? undefined : d.details.study })} />
+          {!d.details.degree && (
+            <Choice
+              name="ed-study"
+              legend="Not a degree? Then what was it? Classes print as coursework, never as a degree."
+              value={d.details.study ?? "other_study"}
+              options={["toward_degree", "coursework", "other_study"] as const}
+              onChange={(v) => setDetail({ study: v === "other_study" ? undefined : v, degree: false })}
+            />
+          )}
           <Choice name="ed-status" legend="Where does it stand?" value={d.details.status} options={EDUCATION_STATUSES} onChange={(v) => setDetail({ status: v })} />
           {d.details.status === "in_progress" && <Text label="What year do you expect to finish?" value={d.details.expected ?? ""} onChange={(v) => setDetail({ expected: v })} placeholder="2027" max={40} />}
         </div>
