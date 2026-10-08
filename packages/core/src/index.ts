@@ -71,6 +71,9 @@ export * from './creativeStatement';
 export * from './creativeChecks';
 export * from './creativeDocs';
 export * from './twoPathPlan';
+// CV lanes (076).
+export * from './cvShared';
+export * from './cvChecks';
 
 // Org authorization (2026-09-19): capabilities answer the verb, reach answers
 // the rows. Replaces inline tier-string comparisons in routes.

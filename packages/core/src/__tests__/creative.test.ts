@@ -101,7 +101,7 @@ describe("lane kind and path (075)", () => {
   it("kind is fixed after create; bad kind and path are refused, never guessed", () => {
     const cur = { name: "Painting", target_role: null, format: "chronological" as const, hybrid_uneven_history: false, hybrid_field_change: false, length_pref: "auto" as const, kind: "creative" as const, path: null };
     assert.deepEqual(resolveLaneSettings({ kind: "resume" }, cur), { ok: false, error: "kind_is_fixed" });
-    assert.deepEqual(resolveLaneSettings({ name: "x", kind: "cv" }, null), { ok: false, error: "bad_kind" });
+    assert.deepEqual(resolveLaneSettings({ name: "x", kind: "portfolio" }, null), { ok: false, error: "bad_kind" });
     assert.deepEqual(resolveLaneSettings({ name: "x", path: "someday" }, null), { ok: false, error: "bad_path" });
     assert.deepEqual(resolveLaneSettings({ name: "x", kind: "creative", format: "hybrid", hybridUnevenHistory: true, hybridFieldChange: true }, null), { ok: false, error: "bad_format" });
   });
@@ -752,7 +752,7 @@ describe("migration 075", () => {
   it("kind is resume | creative with resume the default; new artifact types are allowed", () => {
     assert.match(sql, /kind TEXT NOT NULL DEFAULT 'resume'/);
     assert.match(sql, /CHECK \(kind IN \('resume', 'creative'\)\)/);
-    for (const t of CREATIVE_ARTIFACT_TYPES) assert.ok(sql.includes(`'${t}'`), t);
+    for (const t of CREATIVE_ARTIFACT_TYPES.filter((x) => x !== "cv")) assert.ok(sql.includes(`'${t}'`), t);
   });
   it("practice_entry is in the one list of protected tables", () => {
     assert.ok((RLS_PROTECTED_TABLES as readonly string[]).includes("practice_entry"));

@@ -72,7 +72,7 @@ import { type StatementContent, auditStatementHistory } from "./creativeStatemen
 export const CREATIVE_RULES_VERSION = "creative-1 (2026-10-07)";
 
 export type CreativeSeverity = "BLOCK" | "FIX";
-export type CreativeDoc = "record" | "artist_resume" | "bio" | "statement" | "work_samples";
+export type CreativeDoc = "record" | "artist_resume" | "bio" | "statement" | "work_samples" | "cv";
 
 export interface CreativeOpenItem {
   /** CR-* or STD-* rule id. */
