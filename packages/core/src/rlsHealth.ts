@@ -36,6 +36,8 @@ export const RLS_PROTECTED_TABLES = [
   "consumer_profile",
   "refinery_artifact",
   "job_application",
+  // D11 (migration 079): saved record checks, owner only
+  "record_check_saved",
 ] as const;
 
 export interface RlsHealth {
