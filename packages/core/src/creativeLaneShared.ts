@@ -631,6 +631,9 @@ function nearMarks(toks: Tok[]): number[] {
 
 const RELEASE_WORDS = RELEASE_PHRASES.map((p) => p.split(" "));
 /** Token positions that are part of release or custody wording ("released from", "paroled", "held at"). */
+/** A count of time: digits, a number word, or "a", "few", "several". */
+const NUMBER_TOKEN = /^(?:\d+|a|few|several|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)$/;
+
 function softMarks(toks: Tok[]): number[] {
   const out: number[] = [];
   // "was at" counts with a length of time in the same piece ("was at lee 6 years", "was at the bay for 8 yrs").
@@ -640,6 +643,9 @@ function softMarks(toks: Tok[]): number[] {
       if (i + ph.length <= toks.length && ph.every((w, k) => toks[i + k].w === w)) for (let k = 0; k < ph.length; k++) out.push(i + k);
     }
     if (duration && toks[i].w === "was" && toks[i + 1]?.w === "at") out.push(i, i + 1);
+    // "eight months in", "8 yrs in", "a year in": time spent somewhere (review r4 F1). Keyed to its own line, so a
+    // lane-wide answer on a County or State run never clears it.
+    if (NUMBER_TOKEN.test(toks[i].w) && /^(?:yrs?|years?|months?|mos?|weeks?|wks?)$/.test(toks[i + 1]?.w ?? "") && toks[i + 2]?.w === "in") out.push(i, i + 1, i + 2);
     // "did 4 at", "did 3 in": a count of years or months without the unit.
     if (toks[i].w === "did" && /^\d+$/.test(toks[i + 1]?.w ?? "") && /^(?:at|in)$/.test(toks[i + 2]?.w ?? "")) out.push(i, i + 1, i + 2);
   }
