@@ -2,6 +2,22 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 Record check (a separate, consented step)
+
+- A new Refinery step helps a person work out which official sources to check for a job or license
+  they want, using their record in their own words, the state and the job. It gives a checklist of
+  where to look and questions to ask the board, never a ruling, and says it is not legal advice.
+- It has its own yes: a ticked box, stored with the time and wording version, that can be taken back.
+  Taking it back deletes every saved checklist. Staff working in someone's account cannot say yes.
+- Only those three typed fields are sent, to Anthropic only (no fallback provider). Nothing is kept
+  unless the person saves the checklist, and the typed record is kept only if they also tick a box for
+  it. Saved checklists are encrypted in the app, owner only under row-level security, included in
+  export and delete-my-data, and never shareable with a program. Nothing typed goes into the decision
+  log, usage rows, error logs or analytics.
+- Links come only from a dated source list in the repo (Montana, Wisconsin, Michigan, Missouri, Ohio
+  and federal), each labeled "verify before relying"; unverified entries are never shown.
+  Migration 079.
+
 ## 2026-10 Employer directory: Tier 3 working agreements
 
 - An employer that works with Steel Man to get people hired can now be recorded as Tier 3: a working
