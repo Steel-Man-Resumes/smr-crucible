@@ -13,6 +13,7 @@
  * - coach_conversation (AI coach memory -- full transcript erase)
  * - disclosure_rehearsal + interview_voice sessions/chunks (Phase 5.1
  *   encrypted, text-only transcripts, both purposes)
+ * - record_check_saved (D11, saved record checks, owner only)
  *
  * ACCOUNT vs DATA (Phase 7.4): by default this wipes the DATA above but KEEPS
  * the account/login, so the user can sign back in to an empty workspace. If the
@@ -65,6 +66,7 @@ import {
   listSecureObjectsForOwner,
   enqueueDeletion,
   deleteUserConversations,
+  deleteAllRecordChecks,
   leaveAllOrgs,
 } from "@crucible/core";
 
@@ -139,6 +141,9 @@ export async function DELETE(req: Request) {
     // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).
     // Chunks cascade off their session rows; this deletes the sessions.
     await deleteUserConversations(userId);
+    // D11: saved record checks (sealed checklists, and the offense where the
+    // person chose to keep it). Owner-only table, so deleted AS them.
+    await deleteAllRecordChecks(userId);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Progress events are the person's own activity history, and "delete my data"

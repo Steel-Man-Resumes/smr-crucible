@@ -60,6 +60,10 @@ export interface TokenUsage {
 export interface AiCallMeta {
   userId?: string | null;
   endpoint?: string;
+  /** Claude only: never fall back to OpenAI, and never log the provider's
+   *  error text here (the caller logs a fixed label). Used by the record check
+   *  (D11), whose consent names one provider. */
+  anthropicOnly?: boolean;
 }
 
 export function computeCostUsd(model: string, usage: TokenUsage): number {

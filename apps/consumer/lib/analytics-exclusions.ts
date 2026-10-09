@@ -6,6 +6,8 @@
 export const EXCLUDED_PREFIXES = [
   "/mini-forge",
   "/dashboard/disclosure",
+  // D11: the record check, where a person types their offense.
+  "/dashboard/record-check",
   "/dashboard/interview",
   "/dashboard/vault",
   "/dashboard/documents",

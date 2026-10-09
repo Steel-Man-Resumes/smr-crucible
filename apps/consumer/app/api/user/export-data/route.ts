@@ -43,6 +43,9 @@
  *                     suggestions staff sent you, and any placement on file.
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
+ *   "record_check"         -> saved record checks (D11), opened: the state,
+ *                            the job, the checklist, and the offense ONLY
+ *                            where the person ticked "keep what I typed".
  *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
  *                            source, dimensions, mime, size, sha256, dates --
  *                            NO bytes. The image is owner-only via its proxy.
@@ -62,7 +65,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, exportRecordChecks } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -232,6 +235,10 @@ export async function POST(req: Request) {
           (c) => c.purpose === "interview_voice"
         );
       }
+    }
+    // D11: saved record checks, opened for the owner. Owner-only table.
+    if (want("record_check")) {
+      payload.recordChecks = await exportRecordChecks(userId);
     }
     // Phase 6.2: vault inventory (metadata only, no bytes). Joined to
     // secure_object for real size/mime/sha and to job_application for the link.
