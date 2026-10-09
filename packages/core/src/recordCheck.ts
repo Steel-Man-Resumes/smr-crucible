@@ -74,9 +74,9 @@ export function recordCheckAad(userId: string, rowId: string, field: "picks" | "
 //
 // The insert is conditional in ONE statement (security r1 F5, F10): it writes
 // only while the person's current yes stands and they are under the cap. FOR
-// SHARE on the consent row makes a concurrent revoke wait for this insert (and
-// its delete then sees the new row), or makes this insert re-check after the
-// revoke commits (and write nothing).
+// SHARE on the consent row makes a concurrent revoke wait for this write, so
+// its delete then sees the new row; or it makes this write re-check after the
+// revoke commits, and write nothing.
 export const RECORD_CHECK_INSERT_SQL =
   `INSERT INTO record_check_saved (id, user_id, state, picks_sealed, typed_sealed)
    SELECT $1, $2, $3, $4, $5
