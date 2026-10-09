@@ -37,15 +37,20 @@ PROFESSIONAL EXPERIENCE
 LINE COOK | Harbor Street Diner | 2019 - 2023
 - Ran the grill on the breakfast line.
 - Prepped vegetables before open and closed the kitchen at night.
-- Asked by the owner to show new cooks the grill.
+- Showed incoming culinary staff the equipment.
 
 CORE COMPETENCIES
 Grill, Breakfast line, Vegetable prep, Kitchen closing`;
 
+// The finish gate (round 2 on) asks nothing about lines already in the
+// person's own words, so the fixture's last bullet is reworded away from
+// them: without an answer the page is a draft; explained, it is finished.
+const EXPLAINED = "Yes, I did that myself at that job, most shifts.";
+
 function allAnswered(resume = RESUME): DefendAnswer[] {
   let answers: DefendAnswer[] = [];
   const view = buildFinishView({ resumeText: resume, ownWords: SOURCE, defendAnswers: [] });
-  for (const d of view.status.defendLines) answers = recordAnswer(answers, d.line, "That is what I did, in my words.", "stands");
+  for (const d of view.status.defendLines) answers = recordAnswer(answers, d.line, EXPLAINED, "stands");
   return answers;
 }
 
@@ -180,7 +185,12 @@ test("idempotent: the same finished version is never sent twice, even days apart
 test("a changed finished resume is a new version and is sent", async () => {
   const w = world();
   await sendFinishedPackage(UID, finishedBody(), w.deps);
-  const edited = RESUME.replace("Grill, Breakfast line", "Grill, Breakfast line, Food safety");
+  // Still all theirs: one bullet split into two lines in their own words.
+  const edited = RESUME.replace(
+    "- Prepped vegetables before open and closed the kitchen at night.",
+    "- Prepped vegetables before open.\n- Closed the kitchen at night."
+  );
+  assert.notEqual(edited, RESUME);
   const r = await sendFinishedPackage(UID, finishedBody({ resumeText: edited, defendAnswers: allAnswered(edited) }), w.deps);
   assert.equal(r.sent, true);
   assert.equal(w.sent.length, 2);
