@@ -1284,7 +1284,10 @@ export function isRejectedSchool(typed: string | undefined): boolean {
  */
 export function titleYesResult(line: string, typed: string, current?: string): "ok" | "empty" | "unmatched" {
   if (!typed.trim()) return "empty";
-  const title = current ?? titleOfHeader(stripBullet(line));
+  // Round 15: with no title passed, a line that is not a job header asks about its role's title, so the card
+  // settles that exact phrase and never loops.
+  const role = !line.includes("|") ? scopeHits(stripBullet(line)).find((h) => h.role && h.title)?.title : undefined;
+  const title = current ?? role ?? titleOfHeader(stripBullet(line));
   return squash(typed) === squash(title) || sameTitle(typed, title) ? "ok" : "unmatched";
 }
 
@@ -1551,12 +1554,18 @@ const SCOPE_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\
 const LETTER_FAR = 0.5;
 
 /** The claim sentences of a letter, each with the letter line it is on. */
-function letterSentences(letter: string): Array<{ line: string; sentence: string }> {
-  const out: Array<{ line: string; sentence: string }> = [];
+function letterSentences(letter: string): Array<{ line: string; sentence: string; courtesy?: true }> {
+  const out: Array<{ line: string; sentence: string; courtesy?: true }> = [];
   for (const line of linesOf(letter)) {
     for (const sentence of splitSentences(line)) {
       const t = sentence.trim();
-      if (!t || t.split(/\s+/).length < 4 || COURTESY_RE.test(t)) continue;
+      if (!t || t.split(/\s+/).length < 4) continue;
+      // Round 15 (R15-B4): a courtesy sentence ("I am eager to bring my experience as a shift supervisor ...") is
+      // still read for a title it claims; nothing else in it is asked.
+      if (COURTESY_RE.test(t)) {
+        if (scopeHits(t).some((h) => h.role && h.title)) out.push({ line, sentence: t, courtesy: true });
+        continue;
+      }
       out.push({ line, sentence: t });
     }
   }
@@ -1581,7 +1590,7 @@ function letterItems(
 ): GateItem[] {
   const items: GateItem[] = [];
   const against = `${source}\n${resumeText}`;
-  for (const { line, sentence } of letterSentences(letter)) {
+  for (const { line, sentence, courtesy } of letterSentences(letter)) {
     // A scope claim the person never made: settled by "Yes, I did this" with their own words, "I helped
     // with it", their own rewrite, or a cut (round 11). The paragraph's answers count for its sentences only.
     const own = answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sentence } : a));
@@ -1603,6 +1612,7 @@ function letterItems(
         roleTitle: role.title,
       });
     }
+    if (courtesy) continue;
     const hits = all.filter((h) => !(h.role && h.title));
     const hit = hits[0];
     const existing = items.find((i) => i.line === line && i.kind === "scope_unsaid");
