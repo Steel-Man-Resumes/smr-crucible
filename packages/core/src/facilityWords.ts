@@ -5,14 +5,13 @@
  * A hidden facility name is split into words. Some words say what KIND of
  * place it is (generic), some say WHERE it is (state and big-city names,
  * place prefixes like "San" or "Fort"), and the rest say WHICH place it is
- * (distinctive). Only distinctive words can hold a line. A distinctive word
- * that also commonly names something else (a town, a person, a plain English
- * word) is only ASKED about when it stands alone, never held.
+ * (distinctive). Combined review rulings: a distinctive word alone is only
+ * ASKED about (one tap, the page is a draft until answered), in any field.
+ * It is held when it sits within four words of a facility word or an
+ * incarceration phrase, or in a run of two naming words ("San Quentin").
  *
- * These lists are a hint, not a gazetteer. A word missing from COMMON is
- * treated as rare: alone and capitalized in free text it is held, which keeps
- * the lean toward no leaks. The person's own name and home place are never
- * held (only asked about).
+ * These lists are a hint, not a gazetteer. COMMON_WORDS is kept as a record
+ * of words known to name other things too; it no longer changes the tier.
  */
 
 const set = (s: string) => new Set(s.trim().split(/\s+/));
@@ -30,6 +29,7 @@ export const FACILITY_GENERIC_WORDS: ReadonlySet<string> = set(`
   fci fcc fpc fdc usp mcc mdc smu cf ci cc ccf sci mci doc cdcr tdcj bop dc cdc
   north south east west northern southern eastern western northeast northwest southeast southwest central
   upper lower old the
+  college colleges university universities school schools academy
 `);
 
 /** A word that names a kind of facility. A word of a hidden name within three words of one holds the line ("Folsom prison"). */
@@ -38,6 +38,18 @@ export const FACILITY_NEAR_WORDS: ReadonlySet<string> = set(`
   penitentiary penitentiaries unit units camp camps yard yards detention
   fci fcc fpc fdc usp mcc mdc sci mci ci cf cc ccf
 `);
+
+/**
+ * Words and phrases that say someone was held somewhere (combined review
+ * C-H2). A kept-off name's word within four words of one of these, or of a
+ * facility word, is held outright: "I served time at Folsom", "inmates at
+ * Attica". Each phrase is matched word by word, case and punctuation aside.
+ */
+export const INCARCERATION_PHRASES: readonly string[] = [
+  "served time", "did time", "doing time", "do time", "inmate", "inmates", "incarcerated", "incarceration",
+  "prisoner", "prisoners", "locked up", "behind bars", "while inside", "on the inside", "the yard", "my bid",
+  "state time", "county time", "federal time",
+];
 
 /** US state names (each word), and the two-letter codes. Never distinctive. */
 export const STATE_WORDS: ReadonlySet<string> = set(`

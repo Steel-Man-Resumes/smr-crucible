@@ -19,7 +19,7 @@
 
 import type { PracticeEntry } from "./practiceRecordShared";
 import { placeOf } from "./practiceRecordShared";
-import { type BioPronoun, type CreativeKindSettings, type FacilityHit, type HiddenTerms, countChars, countWords, titleModeFor, hiddenFacilityTerms, facilityCheck, settleShown } from "./creativeLaneShared";
+import { type BioPronoun, type CreativeKindSettings, type FacilityHit, type HiddenTerms, countChars, countWords, titleModeFor, hiddenFacilityTerms, facilityCheck, settleShown, chosenOf } from "./creativeLaneShared";
 
 export const BIO_LENGTHS = ["short", "medium", "long"] as const;
 export type BioLength = (typeof BIO_LENGTHS)[number];
@@ -332,7 +332,10 @@ export function bioFacilityCheck(
   return settleShown(
     approved,
     (x) => (x.origin === "fact" ? x.sourceEntryId ?? null : null),
-    (x, t) => facilityCheck(x.text, t, "text"),
+    (x, t) => {
+      const src = x.origin === "fact" && x.sourceEntryId ? entries.find((e) => e.id === x.sourceEntryId) : undefined;
+      return facilityCheck(x.text, t, "text", src?.id ?? null, src ? chosenOf(src, titleModeFor(src, s)) : undefined);
+    },
     (ids) => hiddenFacilityTerms(entries, s, ids)
   );
 }

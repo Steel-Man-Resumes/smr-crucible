@@ -26,12 +26,10 @@ import {
 } from "./practiceRecordShared";
 import {
   BIG_CITY_WORDS,
-  COMMON_WORDS,
   FACILITY_GENERIC_WORDS,
   FACILITY_NEAR_WORDS,
+  INCARCERATION_PHRASES,
   PLACE_WORDS,
-  STATE_CODES,
-  STATE_NAMES,
   STATE_WORDS,
 } from "./facilityWords";
 
@@ -303,17 +301,28 @@ export function distinctiveWords(term: string): string[] {
   return Array.from(new Set(wordsOf(term).trim().split(" ").filter(isDistinctive)));
 }
 
-/** Every run of 2+ words inside a hidden name with at least two real words and one distinctive word ("state prison" alone never counts). */
-function wordRuns(term: string): string[] {
+/** A real word that is not a facility-kind word ("San", "Island" and "Quentin" are; "State" and "County" are not). */
+const isNamingWord = (w: string) => isRealWord(w) && !FACILITY_GENERIC_WORDS.has(w);
+
+/**
+ * Every run of 2+ words inside a hidden name with at least two naming words,
+ * one of them distinctive (combined review rulings): "san quentin", "rikers
+ * island", "pelican bay". A distinctive word with only kind words beside it
+ * ("Dane County", "Folsom State") is read as the single word, and is asked
+ * about, never held.
+ */
+function wordRuns(term: string): { strong: string[]; weak: string[] } {
   const w = wordsOf(term).trim().split(" ").filter(Boolean);
-  const out: string[] = [];
+  const strong: string[] = [];
+  const weak: string[] = [];
   for (let len = 2; len <= w.length; len++) {
     for (let i = 0; i + len <= w.length; i++) {
       const run = w.slice(i, i + len);
-      if (run.filter(isRealWord).length >= 2 && run.some(isDistinctive)) out.push(run.join(" "));
+      if (!isRealWord(run[0]) || !isRealWord(run[run.length - 1]) || !run.some(isDistinctive) || run.filter(isRealWord).length < 2) continue;
+      (run.filter(isNamingWord).length >= 2 ? strong : weak).push(run.join(" "));
     }
   }
-  return out;
+  return { strong, weak };
 }
 
 /**
@@ -325,7 +334,7 @@ function wordRuns(term: string): string[] {
  */
 function placeParts(title: string): string[] {
   const out: string[] = [];
-  for (const seg of title.split(/[,;:()[\]|/\u2013\u2014]+|\s-\s/)) {
+  for (const seg of title.split(/[,;:()[\]|/–—]+|\s-\s/)) {
     seg.split(/\s(?:at|in|inside)\s/i).forEach((p, i) => {
       if (!p.trim()) return;
       if (i > 0 || wordsOf(p).trim().split(" ").some((w) => FACILITY_NEAR_WORDS.has(w))) out.push(p);
@@ -354,19 +363,35 @@ export type PhraseAnswer = "yes" | "no";
 export interface HiddenTerms {
   /** Whole names: titles and venues kept off, and earlier names. Held in every field. */
   fullNames: string[];
-  /** Names people use for the place ("the Q", "SQ"): held in free text, asked about in a name or place field. */
+  /** Names people use for the place ("the Q", "SQ"), typed by the person. Held in every field. */
   names: string[];
-  /** Runs of 2+ words of a name with a distinctive word in them. */
+  /** Runs of 2+ naming words of a name with a distinctive word in them. Held. */
   runs: string[];
-  /** Distinctive words: alone, a rare one holds, a common one is asked about. */
+  /** Runs of a distinctive word with only kind words ("Dane County", "Teaching Program"): one tap, never held. */
+  weakRuns: string[];
+  /** Distinctive words: alone, one tap (tier 2). */
   words: string[];
-  /** Words that hold within three words of a facility word (distinctive words; for a name with none, its city words). */
+  /** Words that hold within four words of a facility or incarceration word (distinctive words; for a name with none, its city words). */
   anchors: string[];
+  /**
+   * What each printed entry shows (its true title and venue, or a venue-only
+   * line's venue), by entry id. A run found in ANOTHER printed line only turns
+   * its hold into a one-tap card; it never clears it, and a line never makes
+   * its own words public (combined review C-H1).
+   */
+  publicBy: { id: string; text: string }[];
+  /**
+   * What the person chose to show of each facility-named entry on this page
+   * (the true title and venue, or a venue-only line's venue), by entry id. A word next to a
+   * facility word whose exact span is in ANOTHER chosen line turns into a card,
+   * never nothing.
+   */
+  chosenBy: { id: string; text: string }[];
   /** The person's answers on this lane, by phrase key. */
   answers: Record<string, PhraseAnswer>;
-  /** The person's own name and home place for this lane: in other text, never held. */
+  /** The person's own name for this lane (when it names nothing held): in other text, never counted. */
   own: string[];
-  /** The words of the person's own name: alone in any text, at most asked about ("R. Example"). */
+  /** The words of the person's own name. */
   ownWords: string[];
 }
 
@@ -374,11 +399,12 @@ export interface HiddenTerms {
  * What a page may not name on this lane: the title of each facility-named
  * entry not shown with its true title, the venue of each one left off (or not
  * yet chosen), earlier names, and names people use for it. Each counts in
- * part too (see HiddenTerms). A part does not count when it is already on the
- * page through an entry this page prints with its true title.
+ * part too (see HiddenTerms).
  *
- * `shownIds` are the entries THIS page prints (review s2r2 N-M1). Without
- * them nothing is public: every hidden venue stays hidden (review s2r3 N3-M1).
+ * `shownIds` are the entries THIS page prints (review s2r2 N-M1). A hidden
+ * venue is left out of the names only when the person chose the TRUE title
+ * for another facility-named entry at that same venue on this page. Without
+ * the ids nothing is printed, so every hidden venue stays hidden (s2r3 N3-M1).
  */
 export function hiddenFacilityTerms(
   entries: PracticeEntry[],
@@ -387,21 +413,26 @@ export function hiddenFacilityTerms(
 ): HiddenTerms {
   const onPage = new Set(Array.from(shownIds ?? [], (x) => x.toLowerCase()));
   const printed = (e: PracticeEntry) => onPage.has(e.id.toLowerCase());
-  // A hidden VENUE is public only through an entry on this page shown with its
-  // TRUE title; a venue-only line or a held entry never makes it public.
-  const shown = entries.filter((e) => titleModeFor(e, s) === "true_title" && printed(e));
-  const shownVenues = new Set(shown.filter((e) => e.venue).map((e) => wordsOf(e.venue as string)));
-  // Words already on this page (a PART of a hidden name found here is no
-  // secret): true titles and venues of shown entries, and the venue a
-  // venue-only line prints.
-  const venueOnly = entries.filter((e) => titleModeFor(e, s) === "venue_only" && printed(e));
-  const publicText = [...shown.map((e) => `${wordsOf(e.title)}|${wordsOf(e.venue ?? "")}`), ...venueOnly.map((e) => wordsOf(e.venue ?? ""))].join("|");
-  const isPublic = (part: string) => publicText.includes(` ${part} `);
+  // The person's own choice: a facility-named entry shown with its true title
+  // makes its venue public. An unflagged line that happens to name the place
+  // never does (combined review C-H1); it is judged like any other line.
+  const chosen = entries.filter((e) => e.names_facility && titleModeFor(e, s) === "true_title" && printed(e));
+  const shownVenues = new Set(chosen.filter((e) => e.venue).map((e) => wordsOf(e.venue as string)));
+  const chosenBy = entries
+    .filter((e) => e.names_facility && printed(e) && (titleModeFor(e, s) === "true_title" || titleModeFor(e, s) === "venue_only"))
+    .map((e) => ({ id: e.id.toLowerCase(), text: titleModeFor(e, s) === "true_title" ? `${wordsOf(e.title)}|${wordsOf(e.venue ?? "")}` : wordsOf(e.venue ?? "") }));
+  const publicBy: HiddenTerms["publicBy"] = [];
+  for (const e of entries) {
+    if (!printed(e)) continue;
+    const mode = titleModeFor(e, s);
+    if (mode === "true_title") publicBy.push({ id: e.id.toLowerCase(), text: `${wordsOf(e.title)}|${wordsOf(e.venue ?? "")}` });
+    else if (mode === "venue_only") publicBy.push({ id: e.id.toLowerCase(), text: wordsOf(e.venue ?? "") });
+  }
 
   const fullNames: string[] = [];
   const names: string[] = [];
   const sources: string[] = [];
-  /** Titles with no piece naming the place: their 2+ word runs count, never a single word ("GED" stays free). */
+  /** Titles with no piece naming the place: their 2+ word runs are one tap, never a single word ("GED" stays free). */
   const runOnly: string[] = [];
   const addName = (t: string, min = 4, list = fullNames) => {
     const w = wordsOf(t).trim();
@@ -437,26 +468,41 @@ export function hiddenFacilityTerms(
     if (mode !== "true_title" && !placeShown) for (const o of e.details.otherNames ?? []) addName(o, 2, names);
   }
   const runs: string[] = [];
+  const weakRuns: string[] = [];
   const words: string[] = [];
   const anchors: string[] = [];
   const add = (list: string[], x: string) => {
-    if (!isPublic(x) && !list.includes(x)) list.push(x);
+    if (!list.includes(x)) list.push(x);
   };
-  for (const src of runOnly) for (const r of wordRuns(src)) add(runs, r);
+  const addRuns = (src: string, place: boolean) => {
+    const r = wordRuns(src);
+    for (const x of r.strong) add(place ? runs : weakRuns, x);
+    for (const x of r.weak) add(weakRuns, x);
+  };
+  // A title with no piece naming the place describes the work: its runs are one tap, never a hold.
+  for (const src of runOnly) addRuns(src, false);
   for (const src of sources) {
-    for (const r of wordRuns(src)) add(runs, r);
+    addRuns(src, true);
     const d = distinctiveWords(src);
     for (const w of d) add(words, w);
     for (const w of d.length ? d : wordsOf(src).trim().split(" ").filter(isCityWord)) add(anchors, w);
   }
-  const own = [s?.displayName, s?.basedIn].filter((x): x is string => !!x && !!x.trim()).map((x) => wordsOf(x).trim());
   const ownWords = s?.displayName ? wordsOf(s.displayName).trim().split(" ").filter((w) => w.length >= 2) : [];
-  return { fullNames, names, runs, words, anchors, answers: { ...(s?.phraseAnswers ?? {}) }, own, ownWords };
+  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
+  // The person's own name is blanked out of other text, so a word it shares
+  // with a place costs one card on the name itself, never one per line. Never
+  // the home place, and never a name that itself holds a run, a nickname or a
+  // whole name until the person answers (combined review C-M2).
+  if (s?.displayName && s.displayName.trim()) {
+    const h = facilityCheck(s.displayName, terms, "name");
+    if (!h || h.tier === 2) terms.own = [wordsOf(s.displayName).trim()];
+  }
+  return terms;
 }
 
 /** True when nothing is kept off (the common case: no work to do). */
 function noTerms(t: HiddenTerms): boolean {
-  return !t.fullNames.length && !t.names.length && !t.runs.length && !t.words.length && !t.anchors.length;
+  return !t.fullNames.length && !t.names.length && !t.runs.length && !t.weakRuns.length && !t.words.length && !t.anchors.length;
 }
 
 /** The longest phrase a card quotes and a key is built from. */
@@ -480,43 +526,40 @@ export function phraseKey(phrase: string): string {
   return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0").slice(0, 4);
 }
 
-/** How a field is read: free text, or the person's own name or home place (asked about, never held). */
+/** How a field is read: free text, or the person's own name or home place (held only until they answer). */
 export type FacilityFieldKind = "text" | "name" | "place";
 
 export interface FacilityHit {
-  /** 1: held off the page. 2: asked about, one tap. */
+  /** 1: held off the page. 2: prints, and the page stays a draft until the person answers. */
   tier: 1 | 2;
   /** The hidden word or name it matched (never printed). */
   term: string;
   /** The piece of the person's text it is in, for the card and the stored answer. */
   phrase: string;
+  /**
+   * The person gets a one-tap card for it. Always for tier 2; for tier 1 only
+   * in a name or place field (held until they answer). A hold in free text
+   * from a whole name, a nickname, a run or a word next to a facility or
+   * incarceration word has no card: the person changes the text or the choice.
+   */
+  ask: boolean;
 }
 
-const STATE_PLACE_RE = new RegExp(
-  String.raw`^\s*,\s*(?:(?:${Array.from(STATE_CODES).map((c) => c.toUpperCase()).join("|")})\b|(?:${STATE_NAMES.join("|")})\b)`
-);
 const OWN_MARK = "xownx";
 
 interface Tok {
   w: string;
-  /** The word as typed starts with a lowercase letter (used as a plain word). */
-  lower: boolean;
-  /** What follows it in the folded text, up to the next word. */
-  after: string;
 }
 
 function tokensOf(folded: string): Tok[] {
   const out: Tok[] = [];
-  const re = /[A-Za-z0-9]+(?:['\u2019\u02bc][A-Za-z]+)*/g;
+  const re = /[A-Za-z0-9]+(?:['’ʼ][A-Za-z]+)*/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(folded))) {
-    const raw = m[0];
-    out.push({ w: raw.toLowerCase().replace(/['\u2019\u02bc]/g, ""), lower: /^[a-z]/.test(raw), after: folded.slice(m.index + raw.length, m.index + raw.length + 40) });
-  }
+  while ((m = re.exec(folded))) out.push({ w: m[0].toLowerCase().replace(/['’ʼ]/g, "") });
   return out;
 }
 
-/** The person's own name and home place, blanked out of other text so they never hold it. */
+/** The person's own name, blanked out of other text so it never counts there. */
 function maskOwn(toks: Tok[], own: string[]): Tok[] {
   const out = toks.map((t) => ({ ...t }));
   for (const o of own) {
@@ -529,74 +572,115 @@ function maskOwn(toks: Tok[], own: string[]): Tok[] {
   return out;
 }
 
+const INCARCERATION_WORDS = INCARCERATION_PHRASES.map((p) => p.split(" "));
+/** Token positions that are a facility word or part of an incarceration phrase. */
+function nearMarks(toks: Tok[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    if (FACILITY_NEAR_WORDS.has(toks[i].w)) out.push(i);
+    for (const ph of INCARCERATION_WORDS) {
+      if (i + ph.length <= toks.length && ph.every((w, k) => toks[i + k].w === w)) for (let k = 0; k < ph.length; k++) out.push(i + k);
+    }
+  }
+  return out;
+}
+
 /** The pieces of a text a phrase is cut from: sentences, and parts split by ; | or a line break. Commas stay ("Folsom, CA" is one phrase). */
 function piecesOf(text: string): string[] {
   return text.split(/[;|\n]+|(?<=[.!?])\s+/).map((p) => p.trim()).filter(Boolean);
 }
 
-function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind): { tier: 1 | 2; term: string } | null {
-  const strong = (term: string) => ({ tier: kind === "text" ? (1 as const) : (2 as const), term });
-  let ask: { tier: 2; term: string } | null = null;
+/** How near a kept-off word must sit to a facility or incarceration word to hold (combined review rulings). */
+const ANCHOR_WINDOW = 4;
+
+function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId: string | null): { tier: 1 | 2; term: string; fixed: boolean } | null {
+  // In free text a hold is fixed; in the person's own name or place it lasts until they answer.
+  const hold = (term: string) => ({ tier: 1 as const, term, fixed: kind === "text" });
+  const isPublic = (run: string) => t.publicBy.some((p) => p.id !== selfId && p.text.includes(` ${run} `));
+  let ask: { tier: 2; term: string; fixed: false } | null = null;
   // A possessive reads both ways: "Riker's" matches "Rikers", "Stateville's" matches "Stateville".
   // A word split by a hyphen and a space (a line break someone flattened, "Quen- tin") is read joined too.
-  const joined = piece.replace(/([A-Za-z])[-\u2010\u2011]\s+(?=[a-z])/g, "$1");
-  for (const v of [piece, piece.replace(/['\u2019\u02bc]s\b/gi, ""), joined]) {
-    const folded = foldText(v);
-    const all = tokensOf(folded);
+  const joined = piece.replace(/([A-Za-z])[-‐‑]\s+(?=[a-z])/g, "$1");
+  for (const v of [piece, piece.replace(/['’ʼ]s\b/gi, ""), joined]) {
+    const all = tokensOf(foldText(v));
     const whole = ` ${all.map((x) => x.w).join(" ")} `;
-    // A whole hidden name is held in any field, the person's own words included.
-    for (const n of t.fullNames) if (whole.includes(` ${n} `)) return { tier: 1, term: n };
-    // Names people use for it: held in free text; in a name or place field, asked about.
-    for (const n of t.names) if (whole.includes(` ${n} `)) return strong(n);
+    // A whole hidden name, or a name people use for the place: held in any field.
+    for (const n of t.fullNames) if (whole.includes(` ${n} `)) return hold(n);
+    for (const n of t.names) if (whole.includes(` ${n} `)) return hold(n);
     const toks = kind === "text" ? maskOwn(all, t.own) : all;
-    const str = ` ${toks.map((x) => x.w).join(" ")} `;
-    for (const r of t.runs) if (str.includes(` ${r} `)) return strong(r);
+    // A kept-off word next to a facility or incarceration word: held, whatever else is on the page.
+    const marks = nearMarks(toks);
     for (let i = 0; i < toks.length; i++) {
       if (!t.anchors.includes(toks[i].w)) continue;
-      for (let j = Math.max(0, i - 3); j <= Math.min(toks.length - 1, i + 3); j++) {
-        if (j !== i && FACILITY_NEAR_WORDS.has(toks[j].w)) return strong(`${toks[i].w} ${toks[j].w}`);
+      for (const m of marks.filter((j) => j !== i && Math.abs(j - i) <= ANCHOR_WINDOW)) {
+        // The same words, in the same order, as another line the person chose to show with its true title: one tap.
+        const span = toks.slice(Math.min(i, m), Math.max(i, m) + 1).map((x) => x.w).join(" ");
+        if (!t.chosenBy.some((p) => p.id !== selfId && p.text.includes(` ${span} `))) return hold(`${toks[i].w} ${toks[m].w}`);
+        if (!ask) ask = { tier: 2, term: `${toks[i].w} ${toks[m].w}`, fixed: false };
       }
     }
-    for (let i = 0; i < toks.length; i++) {
-      const tk = toks[i];
-      if (!t.words.includes(tk.w)) continue;
-      // Alone: a word that also names a town, a person or a plain thing (or is
-      // typed as a plain word, or reads as a place, "Folsom, CA") is asked about.
-      if (COMMON_WORDS.has(tk.w) || tk.lower || STATE_PLACE_RE.test(tk.after) || t.ownWords.includes(tk.w)) { if (!ask) ask = { tier: 2, term: tk.w }; }
-      else return strong(tk.w);
+    // A run of the name: held, unless ANOTHER printed line shows that run (then one tap, never nothing).
+    const str = ` ${toks.map((x) => x.w).join(" ")} `;
+    for (const r of t.runs) {
+      if (!str.includes(` ${r} `)) continue;
+      if (!isPublic(r)) return hold(r);
+      if (!ask) ask = { tier: 2, term: r, fixed: false };
     }
+    // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field.
+    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `)) { ask = { tier: 2, term: r, fixed: false }; break; }
+    if (!ask) for (const tk of toks) if (t.words.includes(tk.w)) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
   }
   return ask;
 }
 
 /**
- * The facility hit a text carries on this lane, or null. Tier 1 is held off
- * the page; tier 2 prints and is asked about. A "name" or "place" field (the
- * person's own name, email and home place, a row's city and state, a
- * reference's name) is never tier 1. The person's stored answer for the
- * phrase wins: "yes" holds it, "no" clears a tier 2 ask for good.
+ * The facility hit a text carries on this lane, or null (combined review
+ * rulings, every lane):
+ *   Tier 1, held: a whole hidden or earlier name, a name people use for it, a
+ *     run of 2+ naming words of it, or a kept-off word within four words of a
+ *     facility or incarceration word. In the person's own name, email,
+ *     website or home place (and a row's place or a person's name) it is held
+ *     only until they answer the card.
+ *   Tier 2: any other single kept-off word, in any field. It prints, and the
+ *     page stays a draft until the person answers.
+ * "Yes" holds the phrase for good; "No" is stored and never asked again (it
+ * never clears a tier 1 hold in free text). `selfId` is the entry whose line
+ * this is: a line never makes its own words public.
  */
-export function facilityCheck(text: string | null | undefined, terms: HiddenTerms, kind: FacilityFieldKind = "text"): FacilityHit | null {
+export function facilityCheck(
+  text: string | null | undefined,
+  terms: HiddenTerms,
+  kind: FacilityFieldKind = "text",
+  selfId?: string | null,
+  /** The line's own true title and venue, when the person chose to show them: never judged. */
+  chosen?: (string | null | undefined)[]
+): FacilityHit | null {
+  // The line's own chosen title and venue are not judged, unless another choice on this lane keeps that very name off.
+  if (chosen) for (const c of chosen) if (c && c.trim().length >= 2 && text && !terms.fullNames.includes(wordsOf(c).trim())) text = text.split(c).join(" ");
   if (!text || !text.trim() || noTerms(terms)) return null;
+  const self = selfId ? selfId.toLowerCase() : null;
+  let pending: FacilityHit | null = null;
   let ask: FacilityHit | null = null;
   // Soft hyphens and a word broken at a line end are joined before the text is cut into pieces.
   const pre = text
-    .replace(/[\u00ad\u200b-\u200d\u2060\ufeff]/g, "")
-    .replace(/([A-Za-z\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff])[-\u2010\u2011]\s*\r?\n\s*(?=[A-Za-z\u00c0-\u024f\u0370-\u03ff\u0400-\u04ff])/g, "$1");
-  // An email address, a web address or a domain is read like a name: at most asked about, never held.
+    .replace(/[­​-‍⁠﻿]/g, "")
+    .replace(/([A-Za-zÀ-ɏͰ-ϿЀ-ӿ])[-‐‑]\s*\r?\n\s*(?=[A-Za-zÀ-ɏͰ-ϿЀ-ӿ])/g, "$1");
+  // An email address, a web address or a domain is read like a name.
   const web: [string, FacilityFieldKind][] = [];
   const free = kind === "text" ? pre.replace(WEB_RE, (m) => (web.push([m, "name"]), " ")) : pre;
   const pieces: [string, FacilityFieldKind][] = [...piecesOf(free).map((p): [string, FacilityFieldKind] => [p, kind]), ...web];
   for (const [piece, k] of pieces) {
-    const hit = pieceHit(piece, terms, k);
+    const hit = pieceHit(piece, terms, k, self);
     if (!hit) continue;
     const phrase = piece.slice(0, PHRASE_MAX);
+    if (hit.tier === 1 && hit.fixed) return { tier: 1, term: hit.term, phrase, ask: false };
     const answer = terms.answers[phraseKey(phrase)];
-    if (answer === "yes") return { tier: 1, term: hit.term, phrase };
-    if (hit.tier === 1) return { tier: 1, term: hit.term, phrase };
-    if (answer !== "no" && !ask) ask = { tier: 2, term: hit.term, phrase };
+    if (answer === "yes") return { tier: 1, term: hit.term, phrase, ask: false };
+    if (answer === "no") continue;
+    if (hit.tier === 1) pending = pending ?? { tier: 1, term: hit.term, phrase, ask: true };
+    else ask = ask ?? { tier: 2, term: hit.term, phrase, ask: true };
   }
-  return ask;
+  return pending ?? ask;
 }
 
 /** Email addresses, web addresses and bare domains. */
@@ -620,6 +704,8 @@ export interface FacilityAsk {
   entryId?: string;
   sentenceId?: string;
   phrase: string;
+  /** The line is off the page until the person answers (tier 1 in a name or place). */
+  held?: boolean;
 }
 
 /** The strongest hit on a page row: its own words as free text; its city, state and a reference's name as place and name fields. */
@@ -627,15 +713,33 @@ export function rowFacilityHit(r: { parts: Part[]; mode: "true_title" | "venue_o
   const parts = r.mode === "venue_only" ? r.parts.slice(1) : r.parts;
   const place = e ? placeOf(e) : "";
   const isPlace = (p: Part) => !!e && !!p.text && (p.text === place || p.text === e.city || p.text === e.state);
-  // Names of people: a reference, a publication's authors, a press piece's author. Asked about, never held.
+  // Names of people: a reference, a publication's authors, a press piece's author.
   const isName = (p: Part) =>
     !!e && !!p.text && ((e.section === "reference" && p.text === e.title) || p.text === e.details.authors || p.text === e.details.author);
-  const hits = [
-    facilityCheck(rowText(parts.filter((p) => !isPlace(p) && !isName(p))), terms, "text"),
-    ...parts.filter(isPlace).map((p) => facilityCheck(p.text, terms, "place")),
-    ...parts.filter(isName).map((p) => facilityCheck(p.text, terms, "name")),
-  ].filter((h): h is FacilityHit => !!h);
-  return hits.find((h) => h.tier === 1) ?? hits[0] ?? null;
+  const self = e?.id ?? null;
+  return strongestHit([
+    facilityCheck(rowText(parts.filter((p) => !isPlace(p) && !isName(p))), terms, "text", self, chosenOf(e, r.mode)),
+    ...parts.filter(isPlace).map((p) => facilityCheck(p.text, terms, "place", self)),
+    ...parts.filter(isName).map((p) => facilityCheck(p.text, terms, "name", self)),
+  ]);
+}
+
+/**
+ * A facility-named entry the person chose to show on this lane: its own true
+ * title and venue (or, venue only, its venue) are that choice, never judged.
+ * The rest of its line is. Nothing for any other line.
+ */
+export function chosenOf(e: Pick<PracticeEntry, "names_facility" | "title" | "venue"> | undefined, mode: "true_title" | "venue_only" | string): string[] | undefined {
+  if (!e || !e.names_facility) return undefined;
+  if (mode === "true_title") return [e.title, e.venue ?? ""].filter(Boolean);
+  if (mode === "venue_only") return [e.venue ?? ""].filter(Boolean);
+  return undefined;
+}
+
+/** Of several hits on one line: a fixed hold, then a hold until answered, then a card. */
+export function strongestHit(list: (FacilityHit | null)[]): FacilityHit | null {
+  const hits = list.filter((h): h is FacilityHit => !!h);
+  return hits.find((h) => h.tier === 1 && !h.ask) ?? hits.find((h) => h.tier === 1) ?? hits[0] ?? null;
 }
 
 /**
@@ -990,18 +1094,18 @@ export function buildArtistResumeModel(entries: PracticeEntry[], s: CreativeKind
     const t = settings[field] as string | undefined;
     if (!t) return t;
     const h = facilityCheck(t, hidden, ARTIST_FIELD_KIND[field as string] ?? "text");
+    if (h?.ask) asks.push({ field, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h?.tier === 1) return void heldFields.push(field);
-    if (h) asks.push({ field, phrase: h.phrase });
     return t;
   };
   for (const { sec, rows: all, trimmedHere } of pending) {
     const rows = all.filter((r) => {
       const h = settled.hits.get(r);
+      if (h?.ask) asks.push({ entryId: r.entryId, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
       if (h?.tier === 1) {
         omitted.push({ entryId: r.entryId, reason: "names_hidden" });
         return false;
       }
-      if (h) asks.push({ entryId: r.entryId, phrase: h.phrase });
       return true;
     });
     if (trimmedHere) trimmedAny = true;
@@ -1096,7 +1200,7 @@ export function workSampleCheck(entries: PracticeEntry[], s?: CreativeKindSettin
   return settleShown(
     candidates,
     (e) => e.id,
-    (e, t) => facilityCheck(workText(e), t, "text"),
+    (e, t) => facilityCheck(workText(e), t, "text", e.id, chosenOf(e, "true_title")),
     (ids) => hiddenFacilityTerms(entries, s, ids)
   );
 }

@@ -71,7 +71,7 @@ import {
 } from "./creativeBio";
 import { type StatementContent, auditStatementHistory } from "./creativeStatement";
 
-export const CREATIVE_RULES_VERSION = "creative-1 (2026-10-07)";
+export const CREATIVE_RULES_VERSION = "creative-2 (2026-10-09)";
 
 export type CreativeSeverity = "BLOCK" | "FIX";
 export type CreativeDoc = "record" | "artist_resume" | "bio" | "statement" | "work_samples" | "cv" | "performer";
@@ -104,18 +104,31 @@ export interface CreativeOpenItem {
 
 /** The one-tap card for a line that shares a word with a place this lane keeps off (review s2r3 N3-H1). */
 export const FACILITY_ASK_QUESTION = "Does this name the place you chose to leave off?";
-export const FACILITY_ASK_WHY = "It shares a word with a place you keep off this lane. If it's that place, it comes off the page. If not, it stays, and you won't be asked about it again.";
+export const FACILITY_ASK_WHY =
+  "It shares a word with a place you keep off this lane. Until you answer, the page stays a draft. If it's that place, it comes off the page. If not, it stays, and you won't be asked about it again.";
+/** The why for a line that is off the page until the person answers (part of a kept-off name in their own name or place, combined review C-M2). */
+export const FACILITY_ASK_HELD_WHY =
+  "It has part of the name of a place you keep off this lane, so it's off the page until you answer. If it's that place, it stays off. If not, it goes back on, and you won't be asked about it again.";
 export const FACILITY_ASK_YES = "Yes, take it out";
 export const FACILITY_ASK_NO = "No, that's something else";
 
-/** The open item for one facility ask. */
-export function facilityAskItem(doc: CreativeDoc, line: string, ask: { phrase: string; entryId?: string; sentenceId?: string }): CreativeOpenItem {
+/**
+ * The open item for one facility ask. A BLOCK (combined review rulings): an
+ * unanswered card keeps the page a draft, and one tap clears it.
+ */
+export function facilityAskItem(doc: CreativeDoc, line: string, ask: { phrase: string; entryId?: string; sentenceId?: string; held?: boolean }): CreativeOpenItem {
   return {
-    rule: "STD-R03", severity: "FIX", line, doc, question: FACILITY_ASK_QUESTION, why: FACILITY_ASK_WHY,
+    rule: "STD-R03", severity: "BLOCK", line, doc, question: FACILITY_ASK_QUESTION, why: ask.held ? FACILITY_ASK_HELD_WHY : FACILITY_ASK_WHY,
     answer: "facility_word", phrase: ask.phrase,
     ...(ask.entryId ? { entryId: ask.entryId } : {}),
     ...(ask.sentenceId ? { sentenceId: ask.sentenceId } : {}),
   };
+}
+
+/** The fields and entries a card holds until answered: their card replaces the generic "names something" item. */
+export function heldByAsk(asks: { field?: string; entryId?: string; held?: boolean }[] | undefined): { fields: Set<string>; entries: Set<string> } {
+  const held = (asks ?? []).filter((a) => a.held);
+  return { fields: new Set(held.flatMap((a) => (a.field ? [a.field] : []))), entries: new Set(held.flatMap((a) => (a.entryId ? [a.entryId.toLowerCase()] : []))) };
 }
 
 /** One key per open item: two cards about different phrases on the same line are both kept. */
@@ -263,7 +276,9 @@ export function checkArtistResume(
   const secByKey = new Map(ARTIST_SECTIONS.map((s) => [s.key, s]));
 
   // Typed fields and rows that name something this lane keeps off: off the page, and a BLOCK with a neutral line.
+  const byAsk = heldByAsk(model.asks);
   for (const f of model.heldFields ?? []) {
+    if (byAsk.fields.has(f)) continue;
     out.push({
       rule: "STD-R03", severity: "BLOCK", line: "(top of the page)", doc: "artist_resume",
       question: `What you typed for the top of the page names something you chose to keep off this lane. It's kept off. Change it, or change that choice?`,
@@ -271,7 +286,7 @@ export function checkArtistResume(
     });
   }
   for (const o of model.omitted) {
-    if (o.reason !== "names_hidden") continue;
+    if (o.reason !== "names_hidden" || byAsk.entries.has(o.entryId.toLowerCase())) continue;
     const e = byId.get(o.entryId.toLowerCase());
     out.push({
       rule: "STD-R03", severity: "BLOCK", line: e ? `${yearsOf(e)}  A line in your record` : "A line in your record", doc: "artist_resume", entryId: o.entryId,

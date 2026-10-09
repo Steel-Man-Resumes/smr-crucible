@@ -405,8 +405,8 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
     if (!t) return undefined;
     if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
     const h = facilityCheck(t, hidden, FIELD_KIND[field]);
+    if (h?.ask) asks.push({ field, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h?.tier === 1) return void heldFields.push({ field, reason: "names_hidden" });
-    if (h) asks.push({ field, phrase: h.phrase });
     return t;
   };
   const sections: CvSection[] = [];
@@ -419,11 +419,11 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
     }
     const rows = all.filter((r) => {
       const h = settled.hits.get(r);
+      if (h?.ask) asks.push({ entryId: r.entryId, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
       if (h?.tier === 1) {
         omitted.push({ entryId: r.entryId, reason: "names_hidden" });
         return false;
       }
-      if (h) asks.push({ entryId: r.entryId, phrase: h.phrase });
       return true;
     });
     // References: the person's chosen lead first; never picked by year.

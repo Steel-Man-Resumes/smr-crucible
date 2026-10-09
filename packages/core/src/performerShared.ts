@@ -39,7 +39,9 @@ import {
   hiddenFacilityTerms,
   rowFacilityHit,
   rowText,
+  chosenOf,
   settleShown,
+  strongestHit,
   titleModeFor,
 } from "./creativeLaneShared";
 import { isPersonalDetail, rowHasPersonalDetail } from "./cvShared";
@@ -159,30 +161,31 @@ export function creditText(cols: [Part[], Part[], Part[]]): string {
  * A performer row's facility hit (review s2r3 N3-H1), from the parts the row
  * prints minus the page's own label: its own words as free text, its city and
  * state as a place, and a director or teacher as a name (a person's name is
- * asked about, never held). Tier 1 wins over tier 2.
+ * held only until the person answers). A line never makes its own words
+ * public. A fixed hold wins, then a hold until answered, then a card.
  */
-export function performerPartsHit(parts: Part[], e: PracticeEntry | undefined, terms: HiddenTerms): FacilityHit | null {
+export function performerPartsHit(parts: Part[], e: PracticeEntry | undefined, terms: HiddenTerms, mode: "true_title" | "venue_only" = "true_title"): FacilityHit | null {
   const place = e ? placeOf(e) : "";
   const d = e?.details;
   const isPlace = (p: Part) => !!e && !!p.text && (p.text === place || p.text === e.city || p.text === e.state);
   const nameOf = (p: Part): string | null =>
     !d || !p.text ? null : d.director && p.text === `Dir. ${d.director}` ? d.director : d.teacher && p.text === `with ${d.teacher}` ? d.teacher : null;
-  const hits = [
-    facilityCheck(rowText(parts.filter((p) => !isPlace(p) && nameOf(p) === null)), terms, "text"),
-    ...parts.filter(isPlace).map((p) => facilityCheck(p.text, terms, "place")),
-    ...parts.map(nameOf).filter((n): n is string => !!n).map((n) => facilityCheck(n, terms, "name")),
-  ].filter((h): h is FacilityHit => !!h);
-  return hits.find((h) => h.tier === 1) ?? hits[0] ?? null;
+  const self = e?.id ?? null;
+  return strongestHit([
+    facilityCheck(rowText(parts.filter((p) => !isPlace(p) && nameOf(p) === null)), terms, "text", self, chosenOf(e, mode)),
+    ...parts.filter(isPlace).map((p) => facilityCheck(p.text, terms, "place", self)),
+    ...parts.map(nameOf).filter((n): n is string => !!n).map((n) => facilityCheck(n, terms, "name", self)),
+  ]);
 }
 
 /** A credit row's facility hit: all three columns, minus a venue-only row's label column. */
 export function creditFacilityHit(r: { cols: [Part[], Part[], Part[]]; mode: "true_title" | "venue_only" }, e: PracticeEntry | undefined, terms: HiddenTerms): FacilityHit | null {
-  return performerPartsHit((r.mode === "venue_only" ? r.cols.slice(1) : r.cols).flat(), e, terms);
+  return performerPartsHit((r.mode === "venue_only" ? r.cols.slice(1) : r.cols).flat(), e, terms, r.mode);
 }
 
 /** A training row's facility hit, minus a venue-only row's "Training" label. */
 export function trainingFacilityHit(r: { parts: Part[]; mode: "true_title" | "venue_only" }, e: PracticeEntry | undefined, terms: HiddenTerms): FacilityHit | null {
-  return performerPartsHit(r.mode === "venue_only" ? r.parts.slice(1) : r.parts, e, terms);
+  return performerPartsHit(r.mode === "venue_only" ? r.parts.slice(1) : r.parts, e, terms, r.mode);
 }
 
 /** "SAG-AFTRA Member": the union as named, and the status exactly as held. */
@@ -281,7 +284,7 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
   const byId = new Map(entries.map((e) => [e.id.toLowerCase(), e]));
   const entryOf = (id: string) => byId.get(id.toLowerCase());
   type Line = { entryId: string; check: (t: HiddenTerms) => FacilityHit | null };
-  const unionLines = new Map(pendingUnions.map((u) => [u, { entryId: u.entryId, check: (t: HiddenTerms) => facilityCheck(u.line, t, "text") } as Line]));
+  const unionLines = new Map(pendingUnions.map((u) => [u, { entryId: u.entryId, check: (t: HiddenTerms) => facilityCheck(u.line, t, "text", u.entryId) } as Line]));
   const creditLines = new Map(pendingCredits.flatMap((c) => c.rows).map((r) => [r, { entryId: r.entryId, check: (t: HiddenTerms) => creditFacilityHit(r, entryOf(r.entryId), t) } as Line]));
   const trainingLines = new Map(pendingTraining.map((r) => [r, { entryId: r.entryId, check: (t: HiddenTerms) => trainingFacilityHit(r, entryOf(r.entryId), t) } as Line]));
   const awardLines = new Map(pendingAwards.map((r) => [r, { entryId: r.entryId, check: (t: HiddenTerms) => rowFacilityHit(r, entryOf(r.entryId), t) } as Line]));
@@ -296,11 +299,11 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
   const keep = (line: Line | undefined): boolean => {
     const h = line ? settled.hits.get(line) : undefined;
     if (!line || !h) return true;
+    if (h.ask) asks.push({ entryId: line.entryId, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h.tier === 1) {
       omitted.push({ entryId: line.entryId, reason: "names_hidden" });
       return false;
     }
-    asks.push({ entryId: line.entryId, phrase: h.phrase });
     return true;
   };
   const heldFields: PerformerModel["heldFields"] = [];
@@ -311,8 +314,8 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
     if (!t) return undefined;
     if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
     const h = facilityCheck(t, hidden, PERFORMER_FIELD_KIND[field]);
+    if (h?.ask) asks.push({ field, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h?.tier === 1) return void heldFields.push({ field, reason: "names_hidden" });
-    if (h) asks.push({ field, phrase: h.phrase });
     return t;
   };
 
@@ -344,11 +347,11 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
       continue;
     }
     const h = facilityCheck(sk.text, hidden, "text");
+    if (h?.ask) asks.push({ field: "skills", phrase: h.phrase });
     if (h?.tier === 1) {
       skillHeld = skillHeld ?? "names_hidden";
       continue;
     }
-    if (h) asks.push({ field: "skills", phrase: h.phrase });
     skills.push(sk.text);
   }
   if (skillHeld) heldFields.push({ field: "skills", reason: skillHeld });

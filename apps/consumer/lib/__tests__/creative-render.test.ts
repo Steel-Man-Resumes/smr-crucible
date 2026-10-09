@@ -240,19 +240,19 @@ test("performer page: a long record runs past one page and says so", async () =>
   assert.ok(layout.pages.length > 1);
 });
 
-test("performer page (s2r3): a two-word part of a hidden name, a name people use for it and a lone town word, in every format, metadata and to-do page included", async () => {
+test("performer page (s2r3, combined review): the place's word next to a facility or incarceration word, a name people use for it and a lone town word, in every format, metadata and to-do page included", async () => {
   const { buildPerformerModel, performerShownIds } = await import("@crucible/core/src/performerShared");
   const { getPerformerStatus } = await import("@crucible/core/src/performerChecks");
   const { exportOpenItemLines } = await import("@crucible/core/src/creativeChecks");
   const { applyTitleMode, applyPhraseAnswer } = await import("@crucible/core/src/creativeLaneShared");
   const play = entry({ section: "credit", title: "Our Town", venue: "Example Street Theatre", year: 2024, details: { medium: "theater", role: "Emily Webb" } });
   const fol = entry({ section: "credit", title: "Inside Voices Showcase", venue: "Folsom State Prison", year: 2018, details: { medium: "theater", role: "Narrator", otherNames: ["Greystone"] }, names_facility: true });
-  const two = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom State guard" } });
+  const two = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom prison guard" } });
   const nick = entry({ section: "training", title: "Voice", venue: "Greystone Studio", year: 2021 });
   const lake = entry({ section: "credit", title: "Lake Songs", venue: "Lakeside Hall", year: 2023, details: { medium: "music", role: "Townie from Folsom" } });
   const entries = [play, fol, two, nick, lake];
   // The whole hidden name in the name field: held, so the title metadata (built from the printed name) never carries it.
-  const s0 = { ...applyTitleMode({ displayName: "Ray Example, Folsom State Prison", email: "ray@example.com" }, fol.id, "leave_out")!, agent: "Rep since the Folsom State days" };
+  const s0 = { ...applyTitleMode({ displayName: "Ray Example, Folsom State Prison", email: "ray@example.com" }, fol.id, "leave_out")!, agent: "Rep since I did time at Folsom" };
   const allParts = (buf: Buffer) => {
     const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
     let p = buf.readUInt32LE(eocd + 16);
@@ -308,5 +308,7 @@ test("performer page (s2r3): a two-word part of a hidden name, a name people use
   // "No, that's something else": it prints, and is never asked again.
   const n = await formats({ ...s0, ...applyPhraseAnswer(s0, ask.phrase, "no")! });
   for (const [k, v] of Object.entries(n.out)) assert.match(v, /Townie from Folsom/, k);
-  assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word"));
+  assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word" && x.entryId === lake.id));
+  // The whole hidden name in the name field is its own card, held until answered (combined C-M2).
+  assert.ok(a.status.openItems.some((x) => x.answer === "facility_word" && x.line === "(top of the page)" && x.why.includes("off the page until you answer")));
 });

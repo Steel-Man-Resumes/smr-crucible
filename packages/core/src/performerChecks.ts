@@ -19,7 +19,7 @@
 
 import { type PracticeEntry, yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor, artistRowParts } from "./creativeLaneShared";
-import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, openItemKey } from "./creativeChecks";
+import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, heldByAsk, openItemKey } from "./creativeChecks";
 import { isPersonalDetail } from "./cvShared";
 import {
   type PerformerModel,
@@ -32,7 +32,7 @@ import {
   unionLine,
 } from "./performerShared";
 
-export const PERFORMER_RULES_VERSION = `performer-2 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
+export const PERFORMER_RULES_VERSION = `performer-3 (2026-10-09); ${CREATIVE_RULES_VERSION}`;
 
 const FIELD_LINE: Record<string, string> = {
   displayName: "(top of the page)", discipline: "(top of the page)", agent: "(top of the page)", basedIn: "(top of the page)",
@@ -60,7 +60,8 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
   // Record checks every lane runs, for the entries a performer page reads.
   for (const it of checkRecord(entries.filter((e) => PERFORMER_SECTIONS.includes(e.section)), settings)) items.push({ ...it, doc });
 
-  if (!model.header.name) {
+  const byAsk = heldByAsk(model.asks);
+  if (!model.header.name && !model.heldFields.some((h) => h.field === "displayName")) {
     items.push({ rule: "STD-F05", severity: "FIX", line: "(top of the page)", doc, question: "What name do you want at the top?", why: "The page needs your name, the way you work under it." });
   }
   if (!model.header.contact.length) {
@@ -74,6 +75,7 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
 
   // Typed lines held off the page. The line names the field, never its text.
   for (const h of model.heldFields) {
+    if (h.reason === "names_hidden" && byAsk.fields.has(h.field)) continue;
     if (h.reason === "not_a_range") {
       items.push({
         rule: "CR-08", severity: "BLOCK", line: FIELD_LINE[h.field], doc,
@@ -115,7 +117,7 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
         question: "A line in your record looks like it has a birth date, age, family status or nationality in it. It's kept off the page. Take that part out?",
         why: "A performer page never carries those.",
       });
-    } else if (o.reason === "names_hidden") {
+    } else if (o.reason === "names_hidden" && !byAsk.entries.has(e.id.toLowerCase())) {
       items.push({
         rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc, entryId: e.id,
         question: "A line in your record names something you chose to keep off this lane. It's kept off the page. Change it, or change that choice?",
