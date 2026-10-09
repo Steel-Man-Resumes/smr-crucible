@@ -3,7 +3,7 @@ import { listPracticeEntries, createPracticeEntry, PRACTICE_ERROR_COPY } from "@
 import { gate, ownerOnlyRecord, readJson } from "@/lib/creative-server";
 
 /**
- * The practice record (migration 075): the person's shows, programs, awards
+ * The practice record (migration 076): the person's shows, programs, awards
  * and works, in their own words. Owner only; every statement runs as the
  * person.
  *

@@ -1,5 +1,5 @@
 /**
- * Premium tools by entitlement (migration 078). The rules are pure, so they
+ * Premium tools by entitlement (migration 079). The rules are pure, so they
  * are proven here with no database. The row-level security itself is proven
  * against the migration in PGlite (lane 3a Part 2 probe, outside the repo).
  */
@@ -103,8 +103,8 @@ describe("the admin grant form", () => {
 });
 
 describe("the migration and the code agree on the allowlist", () => {
-  it("078's CHECKs name exactly PREMIUM_TOOLS", () => {
-    const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+  it("079's CHECKs name exactly PREMIUM_TOOLS", () => {
+    const sql = readFileSync(join(__dirname, "..", "..", "migrations", "079_premium_and_package_email.sql"), "utf8");
     const lists = sql.match(/ARRAY\['resources', 'interview_coaching', 'one_click_apply'\]/g) ?? [];
     assert.ok(lists.length >= 2, "the default and the CHECK");
     assert.match(sql, /tool IN \('resources', 'interview_coaching', 'one_click_apply'\)/);
@@ -117,8 +117,8 @@ describe("the migration and the code agree on the allowlist", () => {
   });
 });
 
-describe("078 part 2: one automatic package email per finished version", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+describe("079 part 2: one automatic package email per finished version", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "079_premium_and_package_email.sql"), "utf8");
   it("the sent table is owner-only, forced, and never updated", () => {
     assert.match(sql, /CREATE TABLE IF NOT EXISTS forge_package_email_sent/);
     assert.match(sql, /PRIMARY KEY \(user_id, version\)/);
@@ -136,8 +136,8 @@ describe("078 part 2: one automatic package email per finished version", () => {
   });
 });
 
-describe("078 parts 3 and 4 (security review 3a Part 2 r1: M2, M1, L4)", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
+describe("079 parts 3 and 4 (security review 3a Part 2 r1: M2, M1, L4)", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "079_premium_and_package_email.sql"), "utf8");
   it("proof source: add-only, known values, real proofs after 068 kept, backfill left NULL", () => {
     assert.match(sql, /ADD COLUMN IF NOT EXISTS email_proof_source TEXT/);
     assert.match(sql, /IN \('email_link', 'google', 'password_reset', 'recorded'\)/);
@@ -165,8 +165,8 @@ describe("the person sees the sponsoring organization, not a reason", () => {
 });
 
 describe("r2 N1: the 'recorded' marking trusts the ledger only at a real backfill instant", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_premium_and_package_email.sql"), "utf8");
-  const pre = readFileSync(join(__dirname, "..", "..", "migrations", "dry-run", "078_proof_source_preflight.sql"), "utf8");
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "079_premium_and_package_email.sql"), "utf8");
+  const pre = readFileSync(join(__dirname, "..", "..", "migrations", "dry-run", "079_proof_source_preflight.sql"), "utf8");
   it("marks only when some account's email_proven_at equals the ledger time", () => {
     assert.match(sql, /IF backfill_at IS NOT NULL\s+AND EXISTS \(SELECT 1 FROM users WHERE email_proven_at = backfill_at\) THEN/);
   });

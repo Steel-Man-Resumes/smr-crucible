@@ -1,4 +1,4 @@
--- 076_cv_lanes.sql
+-- 077_cv_lanes.sql
 -- CV lanes (slice 2 of the creative and CV build).
 --
 -- WHAT THIS ADDS
@@ -19,18 +19,18 @@
 -- other lane reads. No fact is stored per lane. The lane keeps choices only.
 --
 -- OWNERSHIP. No new table. practice_entry and career_lane keep their forced,
--- owner-only row-level security from 073 and 075 unchanged.
+-- owner-only row-level security from 074 and 076 unchanged.
 --
--- POSTGRES 15 OR LATER, as for 075.
+-- POSTGRES 15 OR LATER, as for 076.
 --
 -- LOCKS. Each CHECK swap scans its table once under the lock it takes; the
 -- new column is a metadata change. lock_timeout gives up after 5 seconds
 -- instead of queueing requests behind a long query. If it times out, run it
 -- again: every statement is idempotent.
 --
--- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1 -f 076_cv_lanes.sql,
+-- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1 -f 077_cv_lanes.sql,
 -- or the runner's BEGIN): SET LOCAL lock_timeout only holds inside one.
--- Apply 075 first. Re-running either file later never narrows a list.
+-- Apply 076 first. Re-running either file later never narrows a list.
 --
 -- ROLLBACK, in this order:
 --   1. Revert the CV lane CODE first and deploy that (it reads cv_type, the
@@ -59,7 +59,7 @@
 --          CHECK (artifact_type IN ('resume', 'cover_letter', 'follow_up', 'disclosure_plan',
 --            'interview_prep', 'resource_list', 'job_match',
 --            'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list'));
---        DELETE FROM _migrations WHERE filename = '076_cv_lanes.sql';
+--        DELETE FROM _migrations WHERE filename = '077_cv_lanes.sql';
 
 SET LOCAL lock_timeout = '5s';
 

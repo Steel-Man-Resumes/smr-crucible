@@ -105,7 +105,7 @@ export const SKILL_MAX = 60;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Caps that keep the cleaned settings under the database's 16,000-byte check
- * (075): 150 selected ids and 120 title choices, about 12 KB at most.
+ * (076): 150 selected ids and 120 title choices, about 12 KB at most.
  */
 const MAX_SELECTION = 150;
 const MAX_TITLE_MODES = 120;

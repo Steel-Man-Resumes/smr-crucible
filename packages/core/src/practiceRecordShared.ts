@@ -12,7 +12,7 @@
  * what to show (and, for a title that names a facility, HOW: the true title,
  * a venue-only line, or leave it out), never a different version of the fact.
  *
- * Migration 075 holds the same shape in the database (sections, the year
+ * Migration 076 holds the same shape in the database (sections, the year
  * range, proof marks, sizes); this module checks the details JSON.
  */
 
@@ -29,7 +29,7 @@ export const PRACTICE_SECTIONS = [
   "award",
   "education",
   "work",
-  // CV record kinds (076)
+  // CV record kinds (077)
   "appointment",
   "research",
   "presentation",
@@ -38,7 +38,7 @@ export const PRACTICE_SECTIONS = [
   "service",
   "membership",
   "reference",
-  // Performer record kinds (077)
+  // Performer record kinds (078)
   "credit",
   "training",
   "union",
@@ -63,7 +63,7 @@ export const PRESENTATION_KINDS = ["talk", "poster", "panel", "workshop"] as con
 export const CREDENTIAL_KINDS = ["license", "certification", "certificate", "card", "training"] as const;
 /** Where a credential stands, as held. Never upgraded on the page. */
 export const CREDENTIAL_STATUSES = ["active", "inactive", "expired", "in_progress", "eligible"] as const;
-/** Performer credits (077): the medium sets the column block it sits in. */
+/** Performer credits (078): the medium sets the column block it sits in. */
 export const CREDIT_MEDIA = ["theater", "film", "tv", "voice", "music", "other"] as const;
 /** Billing as credited, when the person gives it (CR-08). Never inferred from the role. */
 export const CREDIT_BILLINGS = ["lead", "supporting", "series_regular", "recurring", "guest_star", "co_star", "featured", "ensemble", "understudy", "swing", "background"] as const;

@@ -90,7 +90,7 @@ describe("the server gate", () => {
     assert.equal(read, 0);
   });
 
-  it("078 not applied yet: open, as before; any other error is not swallowed", async () => {
+  it("079 not applied yet: open, as before; any other error is not swallowed", async () => {
     const notReady = async () => { throw Object.assign(new Error("x"), { premiumNotReady: true }); };
     assert.equal(await checkPremium(person, "resources", notReady, "on"), null);
     await assert.rejects(checkPremium(person, "resources", async () => { throw new Error("db down"); }, "on"), /db down/);

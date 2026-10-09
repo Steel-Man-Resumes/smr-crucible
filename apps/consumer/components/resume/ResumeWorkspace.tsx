@@ -52,7 +52,7 @@ export function ResumeWorkspace() {
   const ownerUidRef = useRef(ownerUid);
   ownerUidRef.current = ownerUid;
 
-  // Career lanes (073): the Tailor works in one lane at a time. New work is
+  // Career lanes (074): the Tailor works in one lane at a time. New work is
   // saved into it; "Main" is work outside any named lane.
   const lanes = useLanes();
   const laneIdForNewWork = laneIdForSave(lanes.active);
@@ -1094,7 +1094,7 @@ export function ResumeWorkspace() {
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
-        {/* Career lanes (073): which lane this tool is working in. */}
+        {/* Career lanes (074): which lane this tool is working in. */}
         <div className="mb-4 space-y-3">
           <LaneSwitcher lanes={lanes} value={lanes.active} onChange={(c) => lanes.setActive(c)} />
           <LaneIntro lanes={lanes} tool="tailor" laneId={laneIdForNewWork} />

@@ -47,7 +47,7 @@ const KIND_LABEL: Record<string, string> = {
   toward_degree: "Classes toward a degree", coursework: "Classes in a subject", other_study: "A certificate or training",
 };
 
-/** Performer choices (077). Their own labels: "eligible" means eligible to JOIN for a union. */
+/** Performer choices (078). Their own labels: "eligible" means eligible to JOIN for a union. */
 const MEDIUM_LABEL: Record<string, string> = { theater: "Theater", film: "Film", tv: "TV", voice: "Voice", music: "Music", other: "Other" };
 const BILLING_LABEL: Record<string, string> = {
   lead: "Lead", supporting: "Supporting", series_regular: "Series regular", recurring: "Recurring", guest_star: "Guest star",

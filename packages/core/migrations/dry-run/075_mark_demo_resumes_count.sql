@@ -1,15 +1,15 @@
--- DRY RUN for 074_mark_demo_resumes.sql. READ ONLY: counts only, no names,
+-- DRY RUN for 075_mark_demo_resumes.sql. READ ONLY: counts only, no names,
 -- no contact details, no content. Not a migration (this folder is not read by
 -- the migration runner). Run as the owner role (FORCE row-level security
 -- hides every row from the app role).
 --
 -- One row per (owner_is_demo_account, artifact_type):
---   owner_is_demo_account = false  -> rows 074 WILL mark (samples inside real
+--   owner_is_demo_account = false  -> rows 075 WILL mark (samples inside real
 --                                     people's accounts). Look at this count
 --                                     before applying anywhere real.
---   owner_is_demo_account = true   -> rows 074 SKIPS (demo cohort and persona
+--   owner_is_demo_account = true   -> rows 075 SKIPS (demo cohort and persona
 --                                     accounts keep their resumes visible).
--- The predicate below is 074's, word for word, without the account clause.
+-- The predicate below is 075's, word for word, without the account clause.
 
 BEGIN TRANSACTION READ ONLY;
 

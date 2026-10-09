@@ -1,7 +1,7 @@
--- 075_creative_lanes.sql
+-- 076_creative_lanes.sql
 -- Creative lanes, the practice record, and the realistic/dream pair.
 --
--- A lane (073) aims at one kind of work. This adds a lane KIND: 'resume' (every
+-- A lane (074) aims at one kind of work. This adds a lane KIND: 'resume' (every
 -- lane so far) or 'creative' (an artist resume, a bio, the person's own
 -- statement and a work-sample list, for one practice). More kinds come later
 -- (a CV, a performer page): each is one more value in career_lane_kind_check,
@@ -34,12 +34,12 @@
 -- THE PAIR. A realistic lane and a dream lane can point at each other. The
 -- database keeps the pair honest: both rows point at each other, one is
 -- realistic and the other is dream, both belong to the same person (composite
--- key, as in 073), and a lane is in at most one pair. The two-sided check is a
+-- key, as in 074), and a lane is in at most one pair. The two-sided check is a
 -- deferred constraint trigger, so the app links both rows in one statement and
 -- the check runs at commit.
 --
 -- OWNERSHIP. practice_entry is owner only for every command, the same policy
--- shape as career_lane (073). FORCE row-level security, so even the table
+-- shape as career_lane (074). FORCE row-level security, so even the table
 -- owner's app role is held to it. The pair trigger runs as the caller, under
 -- the same policies, and only ever looks at the caller's own lanes.
 --
@@ -55,7 +55,7 @@
 -- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1, or the runner's
 -- BEGIN). Before applying by hand, check what the target already holds:
 --   SELECT filename FROM _migrations WHERE filename LIKE '07%';
--- 075 was corrected in place before it was applied anywhere (the plan-card
+-- 076 was corrected in place before it was applied anywhere (the plan-card
 -- CHECK); a database that ran an earlier copy needs that CHECK replaced.
 --
 -- ROLLBACK, in this order:
@@ -82,7 +82,7 @@
 --        ALTER TABLE career_lane DROP COLUMN IF EXISTS pair_lane_id;
 --        ALTER TABLE career_lane DROP COLUMN IF EXISTS path;
 --        ALTER TABLE career_lane DROP COLUMN IF EXISTS kind;
---        DELETE FROM _migrations WHERE filename = '075_creative_lanes.sql';
+--        DELETE FROM _migrations WHERE filename = '076_creative_lanes.sql';
 --      (The rollback CHECK keeps follow_up; leave it in. Dropping it would
 --      refuse a value the app already sends.)
 
@@ -120,7 +120,7 @@ BEGIN
       CHECK (pair_plan IS NULL OR (path IS NOT NULL AND path = 'dream' AND jsonb_typeof(pair_plan) = 'object'
                                    AND octet_length(pair_plan::text) <= 8000));
   END IF;
-  -- Same composite owner key as 073: a lane can only pair with a lane its own
+  -- Same composite owner key as 074: a lane can only pair with a lane its own
   -- owner holds. If the other lane is ever removed, this side simply unpairs.
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'career_lane_pair_owner_fk') THEN
     ALTER TABLE career_lane ADD CONSTRAINT career_lane_pair_owner_fk
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS practice_entry (
 CREATE INDEX IF NOT EXISTS idx_practice_entry_user
   ON practice_entry (user_id, section, year DESC);
 
--- Owner only, every command (same shape as 073 / 059).
+-- Owner only, every command (same shape as 074 / 059).
 DO $$
 DECLARE t text := 'practice_entry';
 BEGIN
@@ -265,7 +265,7 @@ BEGIN
 END
 $fn$;
 
--- Never narrows: re-running 075 after a later migration keeps the later values.
+-- Never narrows: re-running 076 after a later migration keeps the later values.
 SELECT pg_temp.smr_widen_list_check('refinery_artifact', 'artifact_type', 'refinery_artifact_artifact_type_check',
   ARRAY['resume', 'cover_letter', 'follow_up', 'disclosure_plan', 'interview_prep', 'resource_list', 'job_match',
         'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list']);

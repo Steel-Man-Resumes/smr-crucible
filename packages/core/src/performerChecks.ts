@@ -1,5 +1,5 @@
 /**
- * Performer page checks (077). Same shape as getResumeStatus and getCvStatus:
+ * Performer page checks (078). Same shape as getResumeStatus and getCvStatus:
  * BLOCK items keep the page a DRAFT, FIX items are worth doing.
  *
  *   CR-01  every credit, training and award line is the record's entry as this

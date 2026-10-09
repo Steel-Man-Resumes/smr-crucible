@@ -36,12 +36,12 @@ export const RLS_PROTECTED_TABLES = [
   "consumer_profile",
   "refinery_artifact",
   "job_application",
-  // career lanes (073), owner only
+  // career lanes (074), owner only
   "career_lane",
   "lane_tool_intro",
-  // practice record (075), owner only
+  // practice record (076), owner only
   "practice_entry",
-  // D11 (migration 079): saved record checks, owner only
+  // D11 (migration 080): saved record checks, owner only
   "record_check_saved",
 ] as const;
 

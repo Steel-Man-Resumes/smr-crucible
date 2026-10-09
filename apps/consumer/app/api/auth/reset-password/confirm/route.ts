@@ -97,7 +97,7 @@ export async function POST(request: Request) {
           await client.query("ROLLBACK TO SAVEPOINT inbox_proof");
         }
         // A reset by email proves the inbox: record how, for an address that
-        // is proven (078, M2; e.g. one 068 only backfilled). Before 078 the
+        // is proven (079, M2; e.g. one 068 only backfilled). Before 079 the
         // column is missing and this is skipped.
         await client.query("SAVEPOINT proof_source");
         try {

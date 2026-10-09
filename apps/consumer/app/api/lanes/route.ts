@@ -5,7 +5,7 @@ import { createLane, listLanes, listDismissedIntros, laneOfNewestResume, increme
 import { LANE_ERROR_COPY } from "@/lib/lanes";
 
 /**
- * Career lanes (migration 073). Every read and write runs AS the person; the
+ * Career lanes (migration 074). Every read and write runs AS the person; the
  * owner-only policies decide what exists for them.
  *
  * GET  /api/lanes  -> { lanes (open), archived, introsSeen: ["<laneKey>:<tool>"],

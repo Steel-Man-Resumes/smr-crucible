@@ -81,7 +81,7 @@ export async function countPinTry(
 }
 
 export interface PlanState {
-  /** Present (a number) only once 078 is applied; undefined means the columns are missing. */
+  /** Present (a number) only once 079 is applied; undefined means the columns are missing. */
   pin_failures?: unknown;
   locked_at?: unknown;
   imported_at?: unknown;
@@ -99,7 +99,7 @@ export function planStateBlock(
   opts: { needReady: boolean; me?: string | null }
 ): "not_found" | "unavailable" | "locked" | "imported" | "not_ready" | null {
   if (!p) return "not_found";
-  // Code that ships before 078: a plan read with SELECT * has no lock or
+  // Code that ships before 079: a plan read with SELECT * has no lock or
   // import columns. Say so plainly instead of erroring (review r2, deploy order).
   if (p.pin_failures === undefined) return "unavailable";
   // Imported into ANOTHER account. The same account may finish its own

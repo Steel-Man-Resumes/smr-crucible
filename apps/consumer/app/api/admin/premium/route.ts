@@ -1,5 +1,5 @@
 /**
- * Admin: premium access (migration 078). Platform admins only, with a
+ * Admin: premium access (migration 079). Platform admins only, with a
  * two-step sign-in (requirePlatformAdmin). Every write runs AS the admin, so
  * the database names them on the row.
  *

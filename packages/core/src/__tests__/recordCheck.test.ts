@@ -1,6 +1,6 @@
 /**
  * Saved record checks (D11): sealing and binding, pure (no DB). The PGlite
- * suite runs the SQL constants against migration 079. Invented data only.
+ * suite runs the SQL constants against migration 080. Invented data only.
  */
 
 import { test } from "node:test";

@@ -1,4 +1,4 @@
--- 078_premium_and_package_email.sql
+-- 079_premium_and_package_email.sql
 -- Two additive parts (lane 3a, Part 2):
 --   1. Premium tools come by entitlement, never by payment.
 --   2. users.forge_package_email: whether a finished Forge package is emailed
@@ -61,7 +61,7 @@
 --   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;
 --   DROP TABLE IF EXISTS forge_package_email_sent;
 --   ALTER TABLE users DROP COLUMN IF EXISTS forge_package_email;
---   DELETE FROM _migrations WHERE filename = '078_premium_and_package_email.sql';
+--   DELETE FROM _migrations WHERE filename = '079_premium_and_package_email.sql';
 
 CREATE TABLE IF NOT EXISTS premium_access_request (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -314,7 +314,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email_proof_source TEXT
 -- the backfill, or a zone-less applied_at all fail that test, and then
 -- nothing is marked. Everything not marked stays NULL, which only means the
 -- person is asked to confirm their address once before the first automatic
--- email. Run migrations/dry-run/078_proof_source_preflight.sql (read-only)
+-- email. Run migrations/dry-run/079_proof_source_preflight.sql (read-only)
 -- first to see which case a database is in.
 DO $$
 DECLARE backfill_at TIMESTAMPTZ;

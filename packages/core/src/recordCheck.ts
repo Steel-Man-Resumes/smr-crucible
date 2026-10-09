@@ -1,5 +1,5 @@
 /**
- * Saved record checks (decision D11, migration 079). Server only.
+ * Saved record checks (decision D11, migration 080). Server only.
  *
  * The record check is a separate, consented step. This module is the ONLY
  * code that reads or writes `record_check_saved`. No prompt builder imports

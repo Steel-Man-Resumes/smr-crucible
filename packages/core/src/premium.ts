@@ -1,5 +1,5 @@
 /**
- * Premium tools by entitlement, never by payment (migration 078).
+ * Premium tools by entitlement, never by payment (migration 079).
  *
  * Troy's rule: individuals never pay. Three tools are premium: local
  * resources, interview coaching and one-click apply. One opens for a person
@@ -108,7 +108,7 @@ export function resolvePremiumAccess(input: {
   };
 }
 
-/** Postgres "relation does not exist": 078 is not applied on this database yet. */
+/** Postgres "relation does not exist": 079 is not applied on this database yet. */
 export function isMissingTable(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === "42P01";
 }
@@ -135,7 +135,7 @@ const OPEN_REQUEST_SQL = `SELECT tool, created_at FROM premium_access_request
 
 /**
  * This person's premium access, read AS the person (their own rows only).
- * Throws { premiumNotReady: true } when 078 is not applied yet, so the caller
+ * Throws { premiumNotReady: true } when 079 is not applied yet, so the caller
  * can decide; any other database error propagates.
  */
 export async function getPremiumAccess(userId: string): Promise<PremiumAccess> {
@@ -189,7 +189,7 @@ export async function requestPremiumAccess(
 }
 
 // ---- admin ---------------------------------------------------------------------
-// Every admin call runs AS the admin: the 078 policies admit platform admins
+// Every admin call runs AS the admin: the 079 policies admit platform admins
 // only, and name them on the row (granted_by, revoked_by, handled_by).
 
 export interface AdminPremiumRequest {

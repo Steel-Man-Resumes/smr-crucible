@@ -41,7 +41,7 @@ export async function POST(request: Request, context: RouteContext) {
       ? body.targetContext
       : null;
 
-  // Career lanes (073): a fork stays in its source's lane unless the caller
+  // Career lanes (074): a fork stays in its source's lane unless the caller
   // starts a lane's first resume from the base ("laneId": the new lane).
   const laneId = parseLaneIdBody(body?.laneId);
   if (laneId === "bad") return NextResponse.json({ error: "Invalid lane" }, { status: 400 });

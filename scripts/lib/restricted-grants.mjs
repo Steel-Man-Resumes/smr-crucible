@@ -66,7 +66,7 @@ export const RESTRICTED_GRANTS = {
   employer_working_agreement: ["SELECT", "INSERT", "UPDATE"],
   employer_agreement_activity: ["SELECT", "INSERT"],
   directory_tier_v: [],
-  // D11 record check (079). Owner-only saved checks: never edited, so no
+  // D11 record check (080). Owner-only saved checks: never edited, so no
   // UPDATE; deleted by the owner, by revoking the yes, or by delete-my-data.
   record_check_saved: ["SELECT", "INSERT", "DELETE"],
 };

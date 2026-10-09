@@ -130,7 +130,7 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     saved = await setLaneKindSettings(g.userId, lane.id, next as Record<string, unknown>, settingsRev(current));
   } catch (err) {
-    // The database's size check (075). The app's caps keep under it; this is the plain answer if not.
+    // The database's size check (076). The app's caps keep under it; this is the plain answer if not.
     if ((err as { code?: string } | null)?.code === "23514") {
       return NextResponse.json({ error: "too_big", message: "That's too many choices for one lane. Pick fewer entries." }, { status: 400 });
     }

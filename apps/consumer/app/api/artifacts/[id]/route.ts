@@ -75,7 +75,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ data: artifact });
   }
 
-  // Career lanes (073): move this work into one of the person's open lanes,
+  // Career lanes (074): move this work into one of the person's open lanes,
   // or back to main with null. Not a content edit, so a locked baseline can
   // move too. The lane must be theirs and open (the SQL checks; the composite
   // foreign key is the hard guard).
@@ -84,7 +84,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (laneId === "bad" || laneId === undefined) {
       return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
     }
-    // Creative documents belong to their lane and never move (075).
+    // Creative documents belong to their lane and never move (076).
     const current = await getArtifact(id, userId);
     if (current && isCreativeType(current.artifact_type)) {
       return NextResponse.json({ error: "creative_doc", message: "Creative documents stay in their own lane." }, { status: 409 });

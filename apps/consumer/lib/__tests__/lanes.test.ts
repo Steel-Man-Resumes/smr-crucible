@@ -1,7 +1,7 @@
 /**
  * Lane 3b: career lanes under one account, and examples hidden behind
  * "Show examples". Pure helpers, copy rules, and the guards each route keeps.
- * The database half (owner-only policies, the composite key, migration 074's
+ * The database half (owner-only policies, the composite key, migration 075's
  * WHERE clause) is proven against a scratch Postgres.
  */
 import { describe, it } from "node:test";

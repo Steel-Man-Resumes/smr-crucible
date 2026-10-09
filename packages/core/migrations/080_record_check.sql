@@ -1,4 +1,4 @@
--- 079_record_check.sql
+-- 080_record_check.sql
 -- The record check: a separate, consented step where t.ROY helps a person work
 -- out which official sources to check for the job or license they want, using
 -- the offense they choose to type (decision D11, 2026-10-07).
@@ -23,7 +23,7 @@
 -- the state code and the date.
 --
 -- OWNERSHIP. Owner only, FORCE row-level security (same policy shape as
--- 059 / 073 / 075, without UPDATE: a saved check is never edited). No staff
+-- 059 / 074 / 076, without UPDATE: a saved check is never edited). No staff
 -- path, no sharing scope, no view. The app role is REVOKEd first and then
 -- given SELECT, INSERT, DELETE only; scripts/lib/restricted-grants.mjs holds
 -- the same list so a later blanket grant cannot widen it.
@@ -52,7 +52,7 @@
 --        DROP TABLE IF EXISTS record_check_saved;
 --        DELETE FROM consumer_consent_event WHERE consent_layer = 'record_check';
 --        DELETE FROM consumer_consent WHERE consent_layer = 'record_check';
---        DELETE FROM _migrations WHERE filename = '079_record_check.sql';
+--        DELETE FROM _migrations WHERE filename = '080_record_check.sql';
 --      (Leave the widened CHECKs in place. An extra allowed value refuses
 --      nothing the app sends.)
 
@@ -111,7 +111,7 @@ END $$;
 
 -- -------------------------------------------------- consent layer values --
 -- Widen a "column IN (list)" CHECK without ever narrowing it (same helper as
--- 075): read the values every matching CHECK allows now, union them with this
+-- 076): read the values every matching CHECK allows now, union them with this
 -- file's list, and put back exactly one CHECK under the known name.
 -- Session-temporary: dropped again at the end of this file.
 CREATE OR REPLACE FUNCTION pg_temp.smr_widen_list_check(tbl regclass, col text, cname text, want text[])

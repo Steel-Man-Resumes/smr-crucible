@@ -1,4 +1,4 @@
--- 074_mark_demo_resumes.sql
+-- 075_mark_demo_resumes.sql
 -- Data migration: mark example and test resumes and letters as examples.
 --
 -- Demos and test runs left resumes for made-up people inside real accounts.
@@ -18,7 +18,7 @@
 -- who typed a placeholder address on purpose. Their resume is hidden, not
 -- lost, and comes back with one tap.
 --
--- COUNT FIRST. migrations/dry-run/074_mark_demo_resumes_count.sql returns
+-- COUNT FIRST. migrations/dry-run/075_mark_demo_resumes_count.sql returns
 -- counts only (no names, no content). Run it before applying, and keep the
 -- marked id list afterwards (SELECT id FROM refinery_artifact WHERE is_demo)
 -- as the rollback record.
@@ -34,7 +34,7 @@ SET LOCAL lock_timeout = '5s';
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolbypassrls OR rolsuper)) THEN
-    RAISE EXCEPTION '074 must run as the owner role; as % row-level security would hide every row and nothing would be marked', current_user;
+    RAISE EXCEPTION '075 must run as the owner role; as % row-level security would hide every row and nothing would be marked', current_user;
   END IF;
 END $$;
 

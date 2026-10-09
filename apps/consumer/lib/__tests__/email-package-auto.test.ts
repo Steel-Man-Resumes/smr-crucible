@@ -244,7 +244,7 @@ test("the existing per-address daily cap applies, and a capped send is given bac
   assert.equal(w.claims.size, 0, "given back: tomorrow it can still go out");
 });
 
-test("before 078 is applied: once a day by the durable counter", async () => {
+test("before 079 is applied: once a day by the durable counter", async () => {
   const w = world({ claimTable: "missing" });
   assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, true);
   assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "already", to: OWN });

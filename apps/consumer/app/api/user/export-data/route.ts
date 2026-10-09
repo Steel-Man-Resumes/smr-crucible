@@ -218,7 +218,7 @@ export async function POST(req: Request) {
       payload.consumerProfile = consumerProfileRows;
       payload.forgeSessions = forgeSessionRows;
       payload.refineryArtifacts = refineryArtifactRows;
-      // Career lanes (073), archived ones included: they are the person's too.
+      // Career lanes (074), archived ones included: they are the person's too.
       // Everything a lane holds, including the person's own answers about
       // their history (the two hybrid conditions).
       payload.careerLanes = (await listLanes(userId, { includeArchived: true })).map((l) => ({
@@ -229,7 +229,7 @@ export async function POST(req: Request) {
         hybrid_uneven_history: l.hybrid_uneven_history,
         hybrid_field_change: l.hybrid_field_change,
         length_pref: l.length_pref,
-        // 075: what the lane makes, its path, its pair, its choices and plan card.
+        // 076: what the lane makes, its path, its pair, its choices and plan card.
         kind: l.kind ?? "resume",
         path: l.path ?? null,
         pair_lane_id: l.pair_lane_id ?? null,
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
         archived_at: l.archived_at,
       }));
       payload.laneToolNotesDismissed = await listDismissedIntros(userId);
-      // The practice record (075): every entry, in the person's own words.
+      // The practice record (076): every entry, in the person's own words.
       payload.practiceRecord = await listPracticeEntries(userId);
     }
     if (want("applications")) payload.jobApplications = jobApplicationRows;
@@ -380,7 +380,7 @@ export async function POST(req: Request) {
         `SELECT * FROM access_code_redemption WHERE user_id = $1`,
         [userId]
       );
-      // Premium access (078): grants made for this person and what they asked.
+      // Premium access (079): grants made for this person and what they asked.
       const { exportPremiumRows } = await import("@crucible/core");
       payload.premiumAccess = await exportPremiumRows(userId);
     }

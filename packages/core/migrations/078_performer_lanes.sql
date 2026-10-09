@@ -1,4 +1,4 @@
--- 077_performer_lanes.sql
+-- 078_performer_lanes.sql
 -- Performer lanes (slice 3 of the creative and CV build).
 --
 -- WHAT THIS ADDS
@@ -15,7 +15,7 @@
 --                          through the creative document routes).
 --
 -- YEARS (decision C2). Every credit carries a year in the record (year is NOT
--- NULL for every entry since 075). The page hides credit years by default;
+-- NULL for every entry since 076). The page hides credit years by default;
 -- the person can turn them on per lane. Training stays dated.
 --
 -- ONE SET OF FACTS. The performer page is assembled from the same practice
@@ -24,17 +24,17 @@
 -- typed for the top of the page.
 --
 -- OWNERSHIP. No new table. practice_entry and career_lane keep their forced,
--- owner-only row-level security from 073 and 075 unchanged.
+-- owner-only row-level security from 074 and 076 unchanged.
 --
--- POSTGRES 15 OR LATER, as for 075.
+-- POSTGRES 15 OR LATER, as for 076.
 --
 -- LOCKS. Each CHECK swap scans its table once under the lock it takes.
 -- lock_timeout gives up after 5 seconds instead of queueing requests behind a
 -- long query. If it times out, run it again: every statement is idempotent.
 --
--- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1 -f 077_performer_lanes.sql,
+-- APPLY: in ONE transaction (psql -1 -v ON_ERROR_STOP=1 -f 078_performer_lanes.sql,
 -- or the runner's BEGIN): SET LOCAL lock_timeout only holds inside one.
--- Apply 075 and 076 first. Re-running any of them later never narrows a list.
+-- Apply 076 and 077 first. Re-running any of them later never narrows a list.
 --
 -- ROLLBACK, in this order:
 --   1. Revert the performer lane CODE first and deploy that (it reads the
@@ -62,7 +62,7 @@
 --          CHECK (artifact_type IN ('resume', 'cover_letter', 'follow_up', 'disclosure_plan',
 --            'interview_prep', 'resource_list', 'job_match',
 --            'artist_resume', 'artist_bio', 'artist_statement', 'work_sample_list', 'cv'));
---        DELETE FROM _migrations WHERE filename = '077_performer_lanes.sql';
+--        DELETE FROM _migrations WHERE filename = '078_performer_lanes.sql';
 
 SET LOCAL lock_timeout = '5s';
 

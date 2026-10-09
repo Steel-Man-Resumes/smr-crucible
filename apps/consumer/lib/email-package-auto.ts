@@ -7,13 +7,13 @@
  *  - finished: the finish gate (lib/finish-gate.ts) is run again on what was
  *    sent, and a draft sends nothing;
  *  - only to the account's own address, and only once a REAL proof of it is
- *    on record (078 email_proof_source: an email link, a verified Google
+ *    on record (079 email_proof_source: an email link, a verified Google
  *    sign-in, or a reset by email; 068's backfill does not count). The
  *    request carries no address at all; nothing in it can choose a recipient;
- *  - the person can turn it off (users.forge_package_email, 078);
+ *  - the person can turn it off (users.forge_package_email, 079);
  *  - once per finished version: the version is claimed in the database
- *    (forge_package_email_sent, 078) before anything is sent and given back
- *    if the email does not go out; before 078 is applied, once a day;
+ *    (forge_package_email_sent, 079) before anything is sent and given back
+ *    if the email does not go out; before 079 is applied, once a day;
  *  - the same per-address daily cap as the package box
  *    (lib/email-package-guard.ts);
  *  - the transport is passed in, so tests never reach a real provider.
@@ -66,7 +66,7 @@ export function finishedVersion(userId: string, resumeText: string): string {
   return createHash("sha256").update(`${userId}\n${resumeText}`).digest("hex");
 }
 
-/** The daily fallback key (078 not applied yet): the same resume once a day. */
+/** The daily fallback key (079 not applied yet): the same resume once a day. */
 export function autoRunKey(userId: string, resumeText: string): string {
   return "auto:" + finishedVersion(userId, resumeText).slice(0, 32);
 }

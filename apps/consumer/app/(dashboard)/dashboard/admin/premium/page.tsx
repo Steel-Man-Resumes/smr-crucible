@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Admin: premium access (migration 078). Troy's side of "Ask SMR for access":
+ * Admin: premium access (migration 079). Troy's side of "Ask SMR for access":
  * open requests, live grants, and a grant form with a required reason and an
  * optional end date. The server checks platform admin and two-step on every
  * call (requirePlatformAdmin). Nothing here sends email.
@@ -77,7 +77,7 @@ export default function AdminPremiumPage() {
           Grant them here, case by case. A reason is required; an end date is optional. Nobody is emailed.
         </p>
       </div>
-      {notReady && <p className="border border-t-amber p-3 text-sm text-t-amber-bright">Migration 078 is not applied on this database, so premium tools are open to everyone here.</p>}
+      {notReady && <p className="border border-t-amber p-3 text-sm text-t-amber-bright">Migration 079 is not applied on this database, so premium tools are open to everyone here.</p>}
       {error && <p className="text-sm text-t-red">{error}</p>}
       {msg && <p role="status" className="text-sm text-t-phos">{msg}</p>}
 

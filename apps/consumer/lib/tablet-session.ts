@@ -42,7 +42,7 @@ export interface TabletSession {
   processed_at: Date | null;
   claimed_at: Date | null;
   expires_at: Date;
-  /** 078: wrong PINs in total, the lock, and the single-use import. */
+  /** 079: wrong PINs in total, the lock, and the single-use import. */
   pin_failures?: number;
   locked_at?: Date | null;
   imported_at?: Date | null;
@@ -53,7 +53,7 @@ export interface TabletSession {
   unlocked_by?: string | null;
 }
 
-/** Postgres "column does not exist": 078 is not applied here yet. */
+/** Postgres "column does not exist": 079 is not applied here yet. */
 export function tabletColumnsMissing(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === "42703";
 }
@@ -164,7 +164,7 @@ export async function getTabletSessionByCodeOnly(importCode: string): Promise<Ta
 
 /**
  * One wrong PIN, counted on the plan itself. At `lockAfter` in total the plan
- * locks (locked_at) until an admin clears it. Throws when 078 is missing.
+ * locks (locked_at) until an admin clears it. Throws when 079 is missing.
  */
 export async function recordPinFailure(id: string, lockAfter: number): Promise<{ failures: number; locked: boolean }> {
   const row = await getOne<{ pin_failures: number; locked: boolean }>(

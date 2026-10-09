@@ -152,7 +152,7 @@ export default function VaultPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState("");
 
-  // Career lanes (073): the Library holds every lane; the switcher narrows it.
+  // Career lanes (074): the Library holds every lane; the switcher narrows it.
   const lanes = useLanes();
   // Opens in the lane the person is working in (the lane holding their newest
   // resume until they pick one); "All lanes" is one tap away. Null until the
@@ -757,7 +757,7 @@ ${body}
         and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Vault</Link>.
       </p>
 
-      {/* Career lanes (073): which lane's work is shown. */}
+      {/* Career lanes (074): which lane's work is shown. */}
       <div className="mb-6 space-y-3">
         <LaneSwitcher
           lanes={lanes}

@@ -1,5 +1,5 @@
 /**
- * CV lanes (076): the CV assembled from the practice record, its section
+ * CV lanes (077): the CV assembled from the practice record, its section
  * order and length rule by sub-type, the lane's facility choices, D4 for
  * credentials, and the CV truth checks. Every person and place is invented.
  */
@@ -39,7 +39,7 @@ const ALL = [BA, INSIDE_COLLEGE, CERT, PEER, TA, RA, PUB, TALK, LIC_OK, LIC_NO_K
 const BASE: CreativeKindSettings = { displayName: "Ray Example", basedIn: "Toledo, OH", email: "ray@example.com", interests: "Adult literacy and education inside prisons." };
 const withModes = (m: "true_title" | "venue_only" | "leave_out"): CreativeKindSettings => applyTitleMode(applyTitleMode(BASE, INSIDE_COLLEGE.id, m), PEER.id, m)!;
 
-describe("CV lane kind and sub-type (076)", () => {
+describe("CV lane kind and sub-type (077)", () => {
   it("a CV lane always has a sub-type (academic by default); other lanes never do", () => {
     const r = resolveLaneSettings({ name: "CV", kind: "cv" }, null);
     assert.ok(r.ok && r.value.cv_type === "academic");
@@ -181,8 +181,8 @@ describe("CV truth checks", () => {
   });
 });
 
-describe("migration 076", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "076_cv_lanes.sql"), "utf8");
+describe("migration 077", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "077_cv_lanes.sql"), "utf8");
   it("sets lock_timeout, keeps owner-only tables, carries a rollback note", () => {
     assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
     assert.match(sql, /ROLLBACK, in this order/);

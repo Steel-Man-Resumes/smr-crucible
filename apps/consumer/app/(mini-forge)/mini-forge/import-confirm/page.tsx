@@ -70,7 +70,7 @@ async function clearTabletCookie() {
 }
 
 /**
- * Code that ships before 078: the lock and import columns are missing. Every
+ * Code that ships before 079: the lock and import columns are missing. Every
  * write that needs them goes through here, so the person sees "isn't
  * available right now", never a raw error page (review r2, deploy order).
  */

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Premium tools in the Refinery (lib/premium.ts, migration 078).
+ * Premium tools in the Refinery (lib/premium.ts, migration 079).
  *
  * usePremium()   the person's status (one fetch, shared by every gate on a page).
  * PremiumGate    shows the tool when it is open, and the locked card when not.

@@ -8,7 +8,7 @@
  * a lane never stores a copy of them. Work outside any named lane is the
  * "main" lane (lane_id NULL), which is where every existing account starts.
  *
- * Migration 073 enforces the same rules in the database: hybrid needs both
+ * Migration 074 enforces the same rules in the database: hybrid needs both
  * confirmed conditions, a dateless functional format is not a value at all,
  * and a resume can only sit in a lane its own owner holds.
  */
@@ -20,15 +20,15 @@ export const LANE_LENGTHS = ["auto", "one_page", "two_pages"] as const;
 export type LaneLength = (typeof LANE_LENGTHS)[number];
 
 /**
- * What a lane makes (migration 075). "resume": resumes and letters (every lane
- * before 075). "creative": an artist resume, a bio, the person's own statement
- * and a work-sample list, for one practice. "cv" (076): a CV by sub-type.
- * "performer" (077): one performer page (credits, training, skills).
+ * What a lane makes (migration 076). "resume": resumes and letters (every lane
+ * before 076). "creative": an artist resume, a bio, the person's own statement
+ * and a work-sample list, for one practice. "cv" (077): a CV by sub-type.
+ * "performer" (078): one performer page (credits, training, skills).
  */
 export const LANE_KINDS = ["resume", "creative", "cv", "performer"] as const;
 export type LaneKind = (typeof LANE_KINDS)[number];
 
-/** CV sub-types (076): they set the section order and the length rule. */
+/** CV sub-types (077): they set the section order and the length rule. */
 export const CV_TYPES = ["academic", "teaching", "clinical", "international"] as const;
 export type CvType = (typeof CV_TYPES)[number];
 
@@ -72,12 +72,12 @@ export interface CareerLane {
   archived_at: string | null;
   /** The lane made automatically from the first Forge resume. */
   is_first?: boolean;
-  /** 075. Absent on rows read before 075 is applied; treat as "resume". */
+  /** 076. Absent on rows read before 076 is applied; treat as "resume". */
   kind?: LaneKind;
   path?: LanePath | null;
   /** The other lane of a realistic/dream pair. */
   pair_lane_id?: string | null;
-  /** 076: the CV sub-type, on a CV lane only. */
+  /** 077: the CV sub-type, on a CV lane only. */
   cv_type?: CvType | null;
   /** Per-lane choices for a non-resume kind (see creativeLaneShared). Never facts. */
   kind_settings?: Record<string, unknown>;
@@ -107,7 +107,7 @@ export function isLanePath(v: unknown): v is LanePath {
   return typeof v === "string" && (LANE_PATHS as readonly string[]).includes(v);
 }
 
-/** A lane's kind, reading rows from before 075 as "resume". */
+/** A lane's kind, reading rows from before 076 as "resume". */
 export function laneKindOf(lane: { kind?: unknown } | null | undefined): LaneKind {
   return isLaneKind(lane?.kind) ? lane.kind : "resume";
 }
@@ -290,7 +290,7 @@ export function resolveLaneSettings(
  * Contact details reserved for fiction and documentation, so they cannot be a
  * real person's: a US number 555-0100 to 555-0199, or an email at
  * example.com/.org/.net or under .test, .example or .invalid. The same rule as
- * migration 074, kept here so it is tested and can be reused.
+ * migration 075, kept here so it is tested and can be reused.
  */
 const FICTIONAL_DOMAIN = "@([a-z0-9-]+\\.)*(example\\.(com|org|net)|[a-z0-9-]+\\.(test|example|invalid))";
 const FICTIONAL_EMAIL_RE = new RegExp(`${FICTIONAL_DOMAIN}$`);
@@ -309,13 +309,13 @@ export function isFictionalEmail(email: unknown): boolean {
   return FICTIONAL_EMAIL_RE.test(email.trim().toLowerCase());
 }
 
-/** Would migration 074 mark this cover letter's text as an example? */
+/** Would migration 075 mark this cover letter's text as an example? */
 export function looksLikeExampleLetterText(text: unknown): boolean {
   if (typeof text !== "string") return false;
   return FICTIONAL_PHONE_IN_TEXT_RE.test(text) || FICTIONAL_EMAIL_IN_TEXT_RE.test(text.toLowerCase());
 }
 
-/** Would migration 074 mark this resume's content as an example? */
+/** Would migration 075 mark this resume's content as an example? */
 export function looksLikeExampleResume(content: unknown): boolean {
   const contact = (content as { contact?: { phone?: unknown; email?: unknown } } | null)?.contact;
   if (!contact || typeof contact !== "object") return false;

@@ -1,5 +1,5 @@
 /**
- * The signed-in person's premium tools (lib/premium.ts, migration 078).
+ * The signed-in person's premium tools (lib/premium.ts, migration 079).
  *
  * GET  -> which premium tools are open, and any open request.
  * POST -> "Ask SMR for access": { tool, note? }. Files one row Troy sees in
@@ -44,7 +44,7 @@ export async function GET() {
     };
     return NextResponse.json({ data });
   } catch (e) {
-    // 078 not applied yet: the tools stay open, as before (lib/premium.ts).
+    // 079 not applied yet: the tools stay open, as before (lib/premium.ts).
     if ((e as { premiumNotReady?: boolean } | null)?.premiumNotReady) return NextResponse.json({ data: ALL_OPEN() });
     console.error("[premium] status read failed:", (e as { code?: string })?.code || "error");
     return NextResponse.json({ error: "We couldn't check your tools right now." }, { status: 503 });

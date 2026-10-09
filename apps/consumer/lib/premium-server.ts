@@ -10,7 +10,7 @@ let warnedNotReady = false;
 
 /**
  * Server gate for a premium route. Returns null when the tool is open, or the
- * 403 response to send. Migration 078 not applied yet: open (the tools
+ * 403 response to send. Migration 079 not applied yet: open (the tools
  * worked that way before), with one warning per process. Any other database
  * error propagates to the route's own handling.
  */
@@ -29,7 +29,7 @@ export async function checkPremium(
     if ((e as { premiumNotReady?: boolean } | null)?.premiumNotReady) {
       if (!warnedNotReady) {
         warnedNotReady = true;
-        console.warn("[premium] migration 078 is not applied; premium tools are open until it is.");
+        console.warn("[premium] migration 079 is not applied; premium tools are open until it is.");
       }
       return null;
     }

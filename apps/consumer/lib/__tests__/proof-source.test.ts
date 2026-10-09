@@ -1,7 +1,7 @@
 /**
  * The automatic package email needs a REAL proof of the address (security
  * review 3a Part 2 r1, M2). 068 backfilled email_proven_at on every older
- * account, typed addresses included, so 078 adds users.email_proof_source,
+ * account, typed addresses included, so 079 adds users.email_proof_source,
  * written only by a real proof: an email link, a Google sign-in Google
  * verified, or a password reset by email. One test per case.
  */
@@ -58,7 +58,7 @@ describe("one case each", () => {
   it("backfilled by 068 only: no source, so not proven for the automatic email", () => {
     const sql = readFileSync(join(ROOT, "packages", "core", "src", "packageEmail.ts"), "utf8");
     assert.match(sql, /\(email_proven_at IS NOT NULL AND email_proof_source IS NOT NULL\) AS proven/);
-    assert.match(sql, /SELECT email, false AS proven FROM users/, "before 078: nobody is proven for it");
+    assert.match(sql, /SELECT email, false AS proven FROM users/, "before 079: nobody is proven for it");
     assert.equal(autoResultLine({ sent: false, reason: "unproven" }), UNPROVEN_LINE);
     assert.equal(UNPROVEN_LINE, "Want it by email? Confirm your address first.");
   });
@@ -89,7 +89,7 @@ describe("one case each", () => {
     assert.equal(w.row.email_proof_source, "google");
   });
 
-  it("before 078 the source column is missing and the old proof still works", async () => {
+  it("before 079 the source column is missing and the old proof still works", async () => {
     const w = usersDb({ email_proven_at: null, email_proof_source: null }, { sourceColumnMissing: true });
     await markEmailProven(w.db, "u1", "email_link");
     assert.ok(w.row.email_proven_at);
@@ -119,8 +119,8 @@ describe("one case each", () => {
     assert.match(line, /data-testid="finished-email-confirm"/);
   });
 
-  it("078 adds the column add-only and keeps real proofs made between 068 and 078", () => {
-    const sql = readFileSync(join(ROOT, "packages", "core", "migrations", "078_premium_and_package_email.sql"), "utf8");
+  it("079 adds the column add-only and keeps real proofs made between 068 and 079", () => {
+    const sql = readFileSync(join(ROOT, "packages", "core", "migrations", "079_premium_and_package_email.sql"), "utf8");
     assert.match(sql, /ADD COLUMN IF NOT EXISTS email_proof_source TEXT/);
     assert.match(sql, /email_proven_at > backfill_at \+ interval '1 minute'/);
     assert.match(sql, /WHERE filename = '068_email_proven\.sql'/);

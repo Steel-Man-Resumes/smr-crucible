@@ -100,7 +100,7 @@ export const EMAIL_PROOF_NEEDED = {
 } as const;
 
 /**
- * HOW the inbox was proven (078, users.email_proof_source; security review 3a
+ * HOW the inbox was proven (079, users.email_proof_source; security review 3a
  * Part 2 r1, M2). 068 backfilled email_proven_at on every older account, so
  * email_proven_at alone cannot tell a proof from the backfill. The source is
  * written only by a real proof, and the automatic package email needs it.
@@ -116,7 +116,7 @@ export function proofSourceFor(provider: unknown): ProofSource | null {
 
 /**
  * Mark an account's email proven, and record how (when `source` is given).
- * Never overwrites an earlier proof time or source. Before 078 the source
+ * Never overwrites an earlier proof time or source. Before 079 the source
  * column is missing and only email_proven_at is set; before 068 nothing is.
  */
 export async function markEmailProven(db: Db, userId: string, source: ProofSource | null = null): Promise<void> {

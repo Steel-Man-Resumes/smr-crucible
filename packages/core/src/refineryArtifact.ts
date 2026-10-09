@@ -24,9 +24,9 @@ export interface RefineryArtifact {
   lane: string | null;
   /** R6: an approved, locked per-lane baseline resume. Multiple are allowed. */
   is_locked: boolean;
-  /** 073: the career lane this belongs to. Null = the main lane. */
+  /** 074: the career lane this belongs to. Null = the main lane. */
   lane_id: string | null;
-  /** 073/074: an example or test resume, hidden by default behind "Show examples". */
+  /** 074/075: an example or test resume, hidden by default behind "Show examples". */
   is_demo: boolean;
   /** Phase 1A: the immediate artifact this one was forked from. Null if never forked. */
   parent_artifact_id: string | null;
@@ -55,7 +55,7 @@ export type ArtifactType =
   | CreativeArtifactType;
 
 /**
- * Creative lane documents (migration 075). Written ONLY through the creative
+ * Creative lane documents (migration 076). Written ONLY through the creative
  * routes (core/creativeDocs.ts), which run the authorship and trace checks
  * first. The generic content write below refuses them, so no other path can
  * put text into a statement.
@@ -95,7 +95,7 @@ export async function createArtifact(
     content: JSON.stringify(content),
     iteration_number: nextIter,
     scaffold_level: scaffoldLevel,
-    // 073: the caller has checked the lane is this person's and open; the
+    // 074: the caller has checked the lane is this person's and open; the
     // composite foreign key (lane_id, user_id) refuses anything else.
     ...(opts.laneId ? { lane_id: opts.laneId } : {}),
   });
@@ -181,11 +181,11 @@ export async function getArtifact(
 
 /**
  * THE example rule (D12), in one place. A person's old sample resumes are
- * marked is_demo by 073/074 and tucked away; nothing is deleted. Anything that
+ * marked is_demo by 074/075 and tucked away; nothing is deleted. Anything that
  * lists, counts, or draws profile or contact details from a person's resumes
  * adds this condition, so a sample can never feed the page, the profile, the
  * phone number or the journey. Only the Library's explicit "Show examples"
- * asks for them (examples: "only"). The column comes from 073; before 074 runs
+ * asks for them (examples: "only"). The column comes from 074; before 075 runs
  * every row is false and nothing is hidden. Pass the table alias when the
  * query uses one.
  */
@@ -345,7 +345,7 @@ export interface ArtifactPage {
  *              derived from target_context, so this is the title/target search
  *   - lane   : exact lane label
  *   - group  : masters | company | other (a resume sub-group predicate)
- *   - laneId : a career lane id, or "main" for work outside any lane (073)
+ *   - laneId : a career lane id, or "main" for work outside any lane (074)
  *   - examples : "hide" leaves out example resumes, "only" lists just them,
  *                omitted lists everything (the old behaviour)
  *   - limit / offset : pagination (limit clamped to [1,100])
@@ -520,7 +520,7 @@ export type ForkResult =
  * The fork starts unlocked, unpinned, and without the R6 lane LABEL
  * (is_locked / is_current / lane are NOT copied) -- a fork is a fresh draft,
  * not a second approved baseline. It does stay in its source's career lane
- * (lane_id, migration 073): a copy tailored from the Warehouse resume is
+ * (lane_id, migration 074): a copy tailored from the Warehouse resume is
  * Warehouse work. An archived lane takes no new work, so a fork of work in an
  * archived lane goes to the person's newest open lane, or main when there is
  * none. iteration_number is source + 1.

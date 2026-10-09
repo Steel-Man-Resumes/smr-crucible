@@ -1,4 +1,4 @@
--- 073_career_lanes.sql
+-- 074_career_lanes.sql
 -- Career lanes under one account.
 --
 -- One person can aim at several kinds of work at once: warehouse, kitchen,
@@ -17,7 +17,7 @@
 --   refinery_artifact.lane_id  optional; NULL means the "main" lane, so every
 --                            existing resume and letter keeps working untouched.
 --   refinery_artifact.is_demo  examples and test resumes, hidden by default
---                            behind "Show examples". Set by 074, never deleted.
+--                            behind "Show examples". Set by 075, never deleted.
 --
 -- FORMAT RULE IN THE DATABASE. A lane's format is 'chronological' (dated
 -- history first, the default) or 'hybrid' (a short skills block above the
@@ -54,7 +54,7 @@
 --        ALTER TABLE refinery_artifact DROP COLUMN IF EXISTS is_demo;
 --        DROP TABLE IF EXISTS lane_tool_intro;
 --        DROP TABLE IF EXISTS career_lane;
---        DELETE FROM _migrations WHERE filename IN ('073_career_lanes.sql', '074_mark_demo_resumes.sql');
+--        DELETE FROM _migrations WHERE filename IN ('074_career_lanes.sql', '075_mark_demo_resumes.sql');
 
 SET LOCAL lock_timeout = '5s';
 

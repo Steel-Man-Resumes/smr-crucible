@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       keepSid: ((session?.user as any)?.sid as string | undefined) || null,
       userAgent: req.headers.get("user-agent") || null,
     });
-    // The person proved the inbox with this sign-in: record how (078, M2).
+    // The person proved the inbox with this sign-in: record how (079, M2).
     if (outcome === "wiped") await markEmailProven(client, userId, proofSourceFor((session?.user as any)?.via));
   } finally {
     client.release();

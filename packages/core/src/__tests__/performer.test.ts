@@ -1,5 +1,5 @@
 /**
- * Performer lanes (077): the one-page performer resume assembled from the
+ * Performer lanes (078): the one-page performer resume assembled from the
  * practice record (credits by medium in three columns, training, awards,
  * confirmed special skills), credit years stored and checked but hidden by
  * default (C2), union status exactly as held, an age range never an age
@@ -38,7 +38,7 @@ const ALL = [PLAY, FILM, TV, INSIDE, CLASS, UNION, AWARD];
 const BASE: CreativeKindSettings = { displayName: "Ray Example", discipline: "Actor / Singer", email: "ray@example.com", height: "5'10\"", hair: "Brown", eyes: "Green", ageRange: "25-35" };
 const withInside = (m: "true_title" | "venue_only" | "leave_out", s: CreativeKindSettings = BASE) => applyTitleMode(s, INSIDE.id, m)!;
 
-describe("performer lane kind and record kinds (077)", () => {
+describe("performer lane kind and record kinds (078)", () => {
   it("a performer lane is a lane kind, dated format, no CV sub-type", () => {
     assert.ok((LANE_KINDS as readonly string[]).includes("performer"));
     const r = resolveLaneSettings({ name: "Acting", kind: "performer", path: "dream", cvType: "academic" }, null);
@@ -181,8 +181,8 @@ describe("no model anywhere on the performer path", () => {
   });
 });
 
-describe("migration 077", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "077_performer_lanes.sql"), "utf8");
+describe("migration 078", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_performer_lanes.sql"), "utf8");
   const code = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
   it("widens only (kind, sections, artifact types), in one transaction, with a rollback that frees performer-lane rows first", () => {
     assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
@@ -324,10 +324,10 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
   });
 });
 
-describe("migration 077 widen helper", () => {
-  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "077_performer_lanes.sql"), "utf8");
-  const sql76 = readFileSync(join(__dirname, "..", "..", "migrations", "076_cv_lanes.sql"), "utf8");
-  it("is the same quote-exact helper as 076 (keeps every existing value, s2r2 N-L4)", () => {
+describe("migration 078 widen helper", () => {
+  const sql = readFileSync(join(__dirname, "..", "..", "migrations", "078_performer_lanes.sql"), "utf8");
+  const sql76 = readFileSync(join(__dirname, "..", "..", "migrations", "077_cv_lanes.sql"), "utf8");
+  it("is the same quote-exact helper as 077 (keeps every existing value, s2r2 N-L4)", () => {
     const fn = (s: string) => s.slice(s.indexOf("CREATE OR REPLACE FUNCTION pg_temp.smr_widen_list_check"), s.indexOf("$fn$;", s.indexOf("CREATE OR REPLACE FUNCTION pg_temp.smr_widen_list_check")));
     assert.equal(fn(sql), fn(sql76));
     assert.doesNotMatch(sql, /\[a-z_\]\+/);

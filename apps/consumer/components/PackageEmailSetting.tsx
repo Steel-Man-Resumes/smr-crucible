@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Settings: "Email me my finished resume" (078, users.forge_package_email).
+ * Settings: "Email me my finished resume" (079, users.forge_package_email).
  * On by default. Only ever the account's own address, and only once it is
  * confirmed. Turning it off stops the automatic email; nothing else changes.
  */

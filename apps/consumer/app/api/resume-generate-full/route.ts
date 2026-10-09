@@ -65,7 +65,7 @@ async function handlePost(request: Request) {
 
     const body = await request.json();
     const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId, laneId } = body;
-    // Career lanes (073): the lane's own length choice, read from the
+    // Career lanes (074): the lane's own length choice, read from the
     // database (never from the request body), only for the person's open lane.
     const lane = userId && isUuid(laneId) ? await getOpenLane(userId, laneId) : null;
 

@@ -1,5 +1,5 @@
 /**
- * The finished-package email switch (078, users.forge_package_email).
+ * The finished-package email switch (079, users.forge_package_email).
  * GET  -> { on, email, proven }
  * POST -> { on: boolean } (same-origin JSON, signed in)
  * Sends nothing.

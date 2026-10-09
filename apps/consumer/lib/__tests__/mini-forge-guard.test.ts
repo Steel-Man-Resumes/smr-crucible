@@ -115,7 +115,7 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
     assert.match(lib, /WHERE t\.id = prev\.id AND \(t\.imported_at IS NULL OR t\.imported_by = \$2\)/);
   });
 
-  it("before 078 (no lock columns on the row): 'unavailable', never an error (r2 deploy order)", () => {
+  it("before 079 (no lock columns on the row): 'unavailable', never an error (r2 deploy order)", () => {
     assert.equal(planStateBlock({ forge_output: { x: 1 } }, { needReady: true }), "unavailable");
     assert.match(MINI_FORGE_MESSAGES.unavailable, /isn't available right now/);
     const page = code(read("app", "(mini-forge)", "mini-forge", "import-confirm", "page.tsx"));

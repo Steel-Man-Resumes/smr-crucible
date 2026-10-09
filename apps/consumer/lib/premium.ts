@@ -1,6 +1,6 @@
 /**
  * Premium tools in the app: the switch, the plain words, and the server gate.
- * The rules themselves live in packages/core/src/premium.ts (migration 078).
+ * The rules themselves live in packages/core/src/premium.ts (migration 079).
  *
  * Individuals never pay. A locked tool says plainly why and how to get it:
  * "Ask your organization" or "Ask SMR for access". It never shows a price,

@@ -1,7 +1,7 @@
 /**
  * Career lanes: the database half. Every statement runs AS the person
  * (queryAsUser), so the owner-only policies on career_lane and
- * lane_tool_intro (migration 073) decide what is visible; the WHERE user_id
+ * lane_tool_intro (migration 074) decide what is visible; the WHERE user_id
  * clauses are a second, explicit layer, never the only one.
  *
  * The SQL lives in exported constants so the scratch-database test can run
@@ -81,7 +81,7 @@ export const LANE_UPDATE_SQL = `UPDATE career_lane
  * Pair two open lanes of one person in ONE statement: $1 takes path $4, $2
  * takes the other path, and each points at the other. Neither may already be
  * in a pair. Returns both rows, or none when refused. The composite key and
- * the deferred pair trigger (075) hold the same rules in the database.
+ * the deferred pair trigger (076) hold the same rules in the database.
  */
 export const LANE_PAIR_SQL = `UPDATE career_lane l
   SET pair_lane_id = CASE WHEN l.id = $1::uuid THEN $2::uuid ELSE $1::uuid END,
@@ -232,7 +232,7 @@ export async function updateLane(
     return rows[0] ? { status: "ok", lane: rows[0] } : { status: "not_found" };
   } catch (err) {
     if (isUniqueViolation(err)) return { status: "duplicate_name" };
-    // A dream lane that holds a plan card cannot become realistic (075 CHECK).
+    // A dream lane that holds a plan card cannot become realistic (076 CHECK).
     if (isCheckViolation(err)) return { status: "has_plan" };
     throw err;
   }

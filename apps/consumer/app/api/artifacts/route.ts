@@ -81,7 +81,7 @@ export async function GET(request: Request) {
   const lane = searchParams.get("lane");
   const groupParam = searchParams.get("group");
   const offsetParam = searchParams.get("offset");
-  // Career lanes (073): ?laneId=<id>|main and ?examples=hide|only.
+  // Career lanes (074): ?laneId=<id>|main and ?examples=hide|only.
   const laneIdParam = searchParams.get("laneId");
   const examplesParam = searchParams.get("examples");
   // ?order=recent: newest edit first, without the pinned current resume on top.
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Career lanes (073): new work may be saved into one of the person's open
+  // Career lanes (074): new work may be saved into one of the person's open
   // lanes. A lane that is not theirs, or archived, is refused rather than
   // quietly saved to main, so the screen never shows the wrong lane.
   const laneId = parseLaneIdBody(body.laneId);

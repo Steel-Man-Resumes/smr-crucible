@@ -133,11 +133,11 @@ export async function DELETE(req: Request) {
     // Delete in dependency order (children first)
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
-    // Career lanes (073): after the artifacts that point at them. Owner-only
+    // Career lanes (074): after the artifacts that point at them. Owner-only
     // tables, so deleted AS the person; the lane screens only ever archive.
     await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
-    // The practice record (075): owner only, deleted as the person.
+    // The practice record (076): owner only, deleted as the person.
     await queryAsUser(userId, "DELETE FROM practice_entry WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
@@ -158,9 +158,9 @@ export async function DELETE(req: Request) {
     // never removed them unless the whole account went too. Row-level protected,
     // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.
     await queryAsUser(userId, "DELETE FROM user_progress_event WHERE user_id = $1", [userId]);
-    // "Ask SMR for access" requests hold the person's own words (078). Grants
+    // "Ask SMR for access" requests hold the person's own words (079). Grants
     // are Troy's record of a decision and stay until revoked or the account
-    // goes (they cascade then). Before 078 is applied the table is missing.
+    // goes (they cascade then). Before 079 is applied the table is missing.
     await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
       if ((e as { code?: string })?.code !== "42P01") throw e;
     });
@@ -168,14 +168,14 @@ export async function DELETE(req: Request) {
     // plan can never be loaded again, into any account (security review 3a
     // Part 2 r3, R3-1). Runs for data-only and account deletion alike, and
     // before the account row goes (that would set imported_by to NULL).
-    // Before 078 the column is missing (42703) and there is nothing to mark.
+    // Before 079 the column is missing (42703) and there is nothing to mark.
     {
       const { expireImportedPlans } = await import("@/lib/tablet-session");
       await expireImportedPlans(userId).catch((e) => {
         if ((e as { code?: string })?.code !== "42703") throw e;
       });
     }
-    // Which finished resumes were already emailed (078, hashes only). Without
+    // Which finished resumes were already emailed (079, hashes only). Without
     // them a resume finished after this delete is emailed again, as it should be.
     await queryAsUser(userId, "DELETE FROM forge_package_email_sent WHERE user_id = $1", [userId]).catch((e) => {
       if ((e as { code?: string })?.code !== "42P01") throw e;

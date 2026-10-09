@@ -1,5 +1,5 @@
 /**
- * Career lanes (073): the pure rules every route and screen shares, and the
+ * Career lanes (074): the pure rules every route and screen shares, and the
  * shape of the SQL the database half sends. The policies themselves are
  * proven against a scratch Postgres in the lane's database check; these keep
  * the rules from drifting.
@@ -111,7 +111,7 @@ describe("first lane from the Forge target", () => {
   });
   it("two tabs cannot make two first lanes, even with different targets (is_first marker, unique per person)", () => {
     assert.match(LANE_ENSURE_FIRST_SQL, /is_first\)\s+SELECT \$1, \$2, \$3, true/);
-    const sql = readFileSync(join(MIGRATIONS, "073_career_lanes.sql"), "utf8");
+    const sql = readFileSync(join(MIGRATIONS, "074_career_lanes.sql"), "utf8");
     assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS career_lane_one_first_uniq\s+ON career_lane \(user_id\) WHERE is_first/);
   });
   it("a screen opens in the open lane holding the newest resume, examples left out", () => {
@@ -132,7 +132,7 @@ describe("lane keys and tools", () => {
   });
 });
 
-describe("examples (074 mirror)", () => {
+describe("examples (075 mirror)", () => {
   it("reserved fictional numbers 555-0100 to 555-0199 only", () => {
     assert.equal(isFictionalPhone("(414) 555-0192"), true);
     assert.equal(isFictionalPhone("+1 262 555 0147"), true);
@@ -150,7 +150,7 @@ describe("examples (074 mirror)", () => {
     assert.equal(isFictionalEmail("  Morgan@Example.com  "), true);
     assert.equal(isFictionalPhone(4145550192), true);
     assert.equal(isFictionalPhone(4145551234), false);
-    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+    const sql = readFileSync(join(MIGRATIONS, "075_mark_demo_resumes.sql"), "utf8");
     assert.match(sql, /btrim\(lower\(COALESCE\(content->'contact'->>'email', ''\)\)\)/);
   });
   it("in a letter, the address must END at the reserved name; real domains that contain one are left", () => {
@@ -160,20 +160,20 @@ describe("examples (074 mirror)", () => {
     for (const t of ["jane@hr.test.com", "jo@example.com.au", "x@mail.invalid.org", "Call 414-867-5309.", "ref 1555-01234"]) {
       assert.equal(looksLikeExampleLetterText(t), false, t);
     }
-    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+    const sql = readFileSync(join(MIGRATIONS, "075_mark_demo_resumes.sql"), "utf8");
     assert.match(sql, /\(\?!\[a-z0-9-\]\|\\\.\[a-z0-9\]\)/);
   });
-  it("074 leaves demo accounts alone, in its own clause (sign-in email is itself a reserved address)", () => {
-    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+  it("075 leaves demo accounts alone, in its own clause (sign-in email is itself a reserved address)", () => {
+    const sql = readFileSync(join(MIGRATIONS, "075_mark_demo_resumes.sql"), "utf8");
     assert.match(sql, /DEMO ACCOUNTS ARE LEFT ALONE/);
     assert.match(sql, /AND NOT EXISTS \(\s+SELECT 1 FROM users u\s+WHERE u\.id = refinery_artifact\.user_id/);
-    const dry = readFileSync(join(MIGRATIONS, "dry-run", "074_mark_demo_resumes_count.sql"), "utf8");
+    const dry = readFileSync(join(MIGRATIONS, "dry-run", "075_mark_demo_resumes_count.sql"), "utf8");
     assert.match(dry, /BEGIN TRANSACTION READ ONLY/);
     assert.match(dry, /count\(\*\)/);
     assert.doesNotMatch(dry.replace(/--.*$/gm, ""), /\b(UPDATE|DELETE|INSERT)\b/);
   });
   it("both migrations give up on a lock after 5 seconds rather than queue every request", () => {
-    for (const f of ["073_career_lanes.sql", "074_mark_demo_resumes.sql"]) {
+    for (const f of ["074_career_lanes.sql", "075_mark_demo_resumes.sql"]) {
       assert.match(readFileSync(join(MIGRATIONS, f), "utf8"), /SET LOCAL lock_timeout = '5s';/, f);
     }
   });
@@ -182,8 +182,8 @@ describe("examples (074 mirror)", () => {
     assert.equal(looksLikeExampleResume(null), false);
     assert.equal(looksLikeExampleResume({ contact: { phone: "608-555-0110" } }), true);
   });
-  it("074 marks and never deletes, and refuses a role that RLS would blind", () => {
-    const sql = readFileSync(join(MIGRATIONS, "074_mark_demo_resumes.sql"), "utf8");
+  it("075 marks and never deletes, and refuses a role that RLS would blind", () => {
+    const sql = readFileSync(join(MIGRATIONS, "075_mark_demo_resumes.sql"), "utf8");
     const code = sql.replace(/--.*$/gm, "");
     assert.doesNotMatch(code, /\bDELETE\b/i);
     assert.match(code, /UPDATE refinery_artifact\s+SET is_demo = true/);
@@ -191,8 +191,8 @@ describe("examples (074 mirror)", () => {
   });
 });
 
-describe("073 schema", () => {
-  const sql = readFileSync(join(MIGRATIONS, "073_career_lanes.sql"), "utf8");
+describe("074 schema", () => {
+  const sql = readFileSync(join(MIGRATIONS, "074_career_lanes.sql"), "utf8");
   it("both new tables are owner-only, forced, and listed as protected", () => {
     assert.match(sql, /ARRAY\['career_lane', 'lane_tool_intro'\]/);
     assert.match(sql, /FORCE ROW LEVEL SECURITY/);
@@ -217,7 +217,7 @@ describe("073 schema", () => {
   it("lanes are archived by the app, not deleted; archived lanes take no new work", () => {
     assert.doesNotMatch(LANE_ARCHIVE_SQL, /DELETE/);
     assert.match(ARTIFACT_SET_LANE_SQL, /archived_at IS NULL/);
-    // Review s2 LOW 1: resume work never moves into a creative or CV lane (the 076 rollback stays clean).
+    // Review s2 LOW 1: resume work never moves into a creative or CV lane (the 077 rollback stays clean).
     assert.match(ARTIFACT_SET_LANE_SQL, /COALESCE\(l\.kind, 'resume'\) = 'resume'/);
     assert.match(LANE_LIST_SQL, /archived_at IS NULL/);
   });

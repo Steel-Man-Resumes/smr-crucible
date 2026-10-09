@@ -1,7 +1,7 @@
 /**
  * The example rule (D12) everywhere a person's resumes are listed, counted, or
  * used as a source of profile or contact data. Sample resumes marked is_demo by
- * 073/074 are tucked away, never deleted, and must never feed the dashboard,
+ * 074/075 are tucked away, never deleted, and must never feed the dashboard,
  * the profile, the phone number, t.ROY's context or the journey. The rule is
  * ONE condition (ARTIFACT_NOT_DEMO_SQL). The rows themselves are proven against
  * a scratch Postgres in the lane's database check; these keep the SQL from

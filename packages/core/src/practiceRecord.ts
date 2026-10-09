@@ -1,6 +1,6 @@
 /**
  * The practice record: the database half. Every statement runs AS the person
- * (queryAsUser), so the owner-only policies on practice_entry (migration 075)
+ * (queryAsUser), so the owner-only policies on practice_entry (migration 076)
  * decide what is visible; the WHERE user_id clauses are a second, explicit
  * layer, never the only one.
  *

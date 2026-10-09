@@ -99,7 +99,7 @@ export async function persistForgeSession(
           resumeContent as unknown as Record<string, unknown>,
           1.0
         );
-        // Career lanes (073): the first finished Forge resume becomes the
+        // Career lanes (074): the first finished Forge resume becomes the
         // person's first lane, named from their target ("Warehouse"). Only a
         // NEW forge resume does this, and only for someone who has never had
         // a lane, so existing accounts keep working in main until they act.

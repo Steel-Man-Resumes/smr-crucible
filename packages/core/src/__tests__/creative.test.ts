@@ -1,5 +1,5 @@
 /**
- * Creative lanes (075): the practice record, the artist resume, the bio, the
+ * Creative lanes (076): the practice record, the artist resume, the bio, the
  * statement coach and its authorship guard, the work-sample list, the
  * realistic/dream plan, and the truth checks. Pure modules only; the policies
  * and the exact SQL are proven against a scratch Postgres separately.
@@ -87,7 +87,7 @@ const SETTINGS: CreativeKindSettings = {
 };
 
 // ------------------------------------------------------------------ lanes --
-describe("lane kind and path (075)", () => {
+describe("lane kind and path (076)", () => {
   it("a new lane is a resume lane unless it says creative; path is optional", () => {
     const r = resolveLaneSettings({ name: "Warehouse" }, null);
     assert.ok(r.ok);
@@ -105,7 +105,7 @@ describe("lane kind and path (075)", () => {
     assert.deepEqual(resolveLaneSettings({ name: "x", path: "someday" }, null), { ok: false, error: "bad_path" });
     assert.deepEqual(resolveLaneSettings({ name: "x", kind: "creative", format: "hybrid", hybridUnevenHistory: true, hybridFieldChange: true }, null), { ok: false, error: "bad_format" });
   });
-  it("rows read before 075 count as resume lanes", () => {
+  it("rows read before 076 count as resume lanes", () => {
     assert.equal(laneKindOf({}), "resume");
     assert.equal(laneKindOf({ kind: "creative" }), "creative");
     assert.equal(laneKindOf({ kind: "nonsense" }), "resume");
@@ -742,8 +742,8 @@ describe("review r3: claim words toned down (LOW)", () => {
 });
 
 // -------------------------------------------------------------- migration --
-describe("migration 075", () => {
-  const sql = readFileSync(join(MIGRATIONS, "075_creative_lanes.sql"), "utf8");
+describe("migration 076", () => {
+  const sql = readFileSync(join(MIGRATIONS, "076_creative_lanes.sql"), "utf8");
   it("sets lock_timeout, forces RLS on the practice record, carries a rollback note", () => {
     assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
     assert.match(sql, /FORCE ROW LEVEL SECURITY/);
@@ -751,7 +751,7 @@ describe("migration 075", () => {
   });
   it("kind is resume | creative with resume the default; new artifact types are allowed", () => {
     assert.match(sql, /kind TEXT NOT NULL DEFAULT 'resume'/);
-    // Review s2 M5: lists only ever widen (a re-run after 076 keeps 'cv').
+    // Review s2 M5: lists only ever widen (a re-run after 077 keeps 'cv').
     assert.match(sql, /smr_widen_list_check\('career_lane', 'kind', 'career_lane_kind_check', ARRAY\['resume', 'creative'\]\)/);
     assert.match(sql, /IF n = 1 AND have @> want THEN/);
     const code = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
