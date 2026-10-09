@@ -67,6 +67,14 @@ const BANNED_PHRASES = [
   "captures every ai recommendation",
   "every ai recommendation is logged",
   "every ai recommendation logged",
+  // 2026-10-09 D11: the record check sends the offense a person types to
+  // Anthropic, after its own yes. These absolutes are no longer true.
+  "no model ever sees the offense",
+  "the ai never sees your offense",
+  "your offense never reaches the ai",
+  "the offense never reaches ai",
+  "offense is never sent to the ai",
+  "never sent to an ai provider",
 ];
 
 function* walk(dir: string): Generator<string> {

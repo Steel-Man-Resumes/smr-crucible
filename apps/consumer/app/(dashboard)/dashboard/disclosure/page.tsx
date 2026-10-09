@@ -32,6 +32,7 @@ import {
   type HurdleType,
 } from "@/lib/hurdle-guidance";
 import { CheckCircle2 } from "lucide-react";
+import { RECORD_CHECK_COPY } from "@/lib/record-check/copy";
 
 type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
 
@@ -642,6 +643,21 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               onChange={(e) => setTargetCompany(e.target.value)}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
+          </div>
+        )}
+
+        {/* D11: the record check is its own screen with its own yes. This is
+            only a plain choice that opens it; nothing typed here goes there. */}
+        {isRecord && (
+          <div className="bg-t-panel p-5 border border-t-line mb-6" data-testid="record-check-entry">
+            <h3 className="font-semibold text-t-white mb-2">{RECORD_CHECK_COPY.entryQuestion}</h3>
+            <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{RECORD_CHECK_COPY.entryBody}</p>
+            <a
+              href="/dashboard/record-check"
+              className="t-focus inline-block px-4 py-2.5 border border-t-steel text-t-steel text-sm font-bold min-h-touch"
+            >
+              {RECORD_CHECK_COPY.entryButton}
+            </a>
           </div>
         )}
 

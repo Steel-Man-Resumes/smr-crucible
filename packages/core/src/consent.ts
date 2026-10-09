@@ -20,7 +20,11 @@ export type ConsentLayer =
   // encrypted, text-only rehearsal/interview transcript is a data-retention
   // decision, so both default to declined (see consentDefaultFor).
   | "disclosure_transcript"
-  | "interview_transcript";
+  | "interview_transcript"
+  // D11 (migration 079): the record check step, where the offense a person
+  // types is sent to the AI to build a checklist. Its own yes, separate from
+  // every other layer; default declined.
+  | "record_check";
 
 export interface ConsumerConsent {
   id: string;

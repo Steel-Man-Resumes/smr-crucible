@@ -152,6 +152,13 @@ export async function callAI(
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
+  // One provider, named in the person's consent (record check, D11): no
+  // fallback, and no console line carrying the provider's error text.
+  if (meta?.anthropicOnly) {
+    if (!hasAnthropic) throw new Error("ANTHROPIC_API_KEY not set");
+    return await callAnthropic(system, messages, maxTokens, model, meta, signal);
+  }
+
   if (hasAnthropic) {
     try {
       return await callAnthropic(system, messages, maxTokens, model, meta, signal);

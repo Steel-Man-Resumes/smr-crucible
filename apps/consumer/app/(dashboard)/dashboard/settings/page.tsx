@@ -67,6 +67,7 @@ export default function SettingsPage() {
     consent: true,
     usage: true,
     progress: true,
+    record_check: true,
     sharing: true,
   });
   // Phase 1C reauth gate: export and delete both require the current
@@ -646,6 +647,7 @@ interface ExportCats {
   consent: boolean;
   usage: boolean;
   progress: boolean;
+  record_check: boolean;
   sharing: boolean;
 }
 
@@ -686,6 +688,7 @@ function DataSection({
     { key: "consent", label: "Consent records" },
     { key: "usage", label: "Usage totals" },
     { key: "progress", label: "Your activity history" },
+    { key: "record_check", label: "Saved record checks" },
     { key: "sharing", label: "What you share, who opened it, and what your organization has on file about you" },
   ];
   const anyChecked = Object.values(exportCats).some(Boolean);
@@ -708,6 +711,14 @@ function DataSection({
               <span className="text-t-amber flex-shrink-0">&bull;</span>
               Conversations with t.ROY are saved to your account so he can
               remember your recent work. Deleting your data clears them.
+            </li>
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              In the record check, what you type about your record goes to
+              the AI only after you say yes on that screen. A saved checklist
+              keeps the list and the state. What you typed is kept only if
+              you tick the box for it. Taking back your yes deletes your
+              saved checklists.
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>

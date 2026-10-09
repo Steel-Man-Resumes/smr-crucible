@@ -91,7 +91,8 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <BulletItem>
             <Lead>No program can read these through sharing:</Lead> your
             record plan (what you make in the Disclosure Planner), your
-            interview practice, or your vault files.
+            saved record checks, your interview practice, or your vault
+            files.
           </BulletItem>
           <BulletItem>
             <Lead>Stop any time in Settings.</Lead> That ends new viewing. It
@@ -155,6 +156,16 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             recent chats so he can pick up where you left off. You can delete
             that history anytime. Without an account, t.ROY does not save your
             chats.
+          </BulletItem>
+          <BulletItem>
+            The record check is the only screen that asks for your offense,
+            and it asks for your yes first. What you type there goes to
+            Anthropic, which picks items for your checklist from our own
+            list. If you type your record somewhere else, like the chat or
+            the disclosure planner, the AI sees it there too. A saved
+            checklist keeps the list and the state, and keeps what you typed
+            only if you tick the box for it. Taking back your yes deletes
+            your saved checklists.
           </BulletItem>
           <BulletItem>
             The AI never shares your information with other users
@@ -338,6 +349,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
           <p>Sensitive actions: export and delete require re-authentication (password or typed confirmation)</p>
           <p>AI writing and coaching: Anthropic Claude. For the writing tools (resumes, cover letters, interview practice and the other single-answer steps), when Claude fails the same request goes to OpenAI (gpt-4o) instead. The t.ROY chat and the Refinery coach run on Claude only. If Claude fails or declines there, you get an error or a short message, and the chat does not switch to OpenAI. Job search is different: when t.ROY or the coach looks up jobs for you, the step that puts the listings in plain words can fall back to OpenAI (gpt-4o). That step sends the listings and the search location, not your messages. Reading an uploaded or pasted resume uses OpenAI (gpt-4o-mini). Both are used through their business APIs, which do not train on this data by default.</p>
           <p>AI fact checking: OpenAI (gpt-4o-mini, and gpt-4.1-mini for staff answers). A second model re-reads what the first one wrote and flags anything it cannot trace back to what you told us. This means your resume, your answers (including what you told us about your record) and our draft all pass through OpenAI on that check. For organization staff, each t.ROY answer is checked by OpenAI (gpt-4.1-mini) before it is shown. That check sees the answer, the staff member&apos;s message, caseload counts, the first names of the participants that person can see, and the first names of the organization&apos;s staff.</p>
+          <p>Record check: only after its own yes (a ticked box, stored with the time and wording version, taken back any time), the record, state and job the person types are sent to Anthropic (Claude) only. There is no OpenAI fallback and no OpenAI fact check on this step. Nothing else from the account is added. The model only picks items, by id, from our dated source list and our question bank: every line the person sees is ours, apart from the job and any link the person typed, and the model&apos;s own text is never shown or stored. Anthropic deletes API inputs and outputs within 30 days. If its safety systems flag them, or the law requires it, it can keep them longer, up to 2 years for flagged content. The typed text is not stored by us, and is not in the decision log, usage records or error logs. A saved checklist holds the state, the picked ids and the date, sealed with AES-256-GCM tied to the account; the typed job and record are kept only if the person ticks the box for it. Taking back the yes deletes saved checklists in the same step. Staff working in an account cannot say yes for the person.</p>
           <p>Voice practice: audio streamed to OpenAI; retained by them up to 30 days for abuse monitoring, not stored by us. Each call also sends OpenAI a SHA-256 hash of your account ID, not the ID itself, as a safety identifier that helps them spot misuse.</p>
           <p>Hosting: Vercel (SOC 2 compliant, automatic HTTPS)</p>
           <p>Rate Limiting: daily limits per account, and per IP address for people not signed in (stored as a keyed HMAC that changes daily, never the raw address; counts deleted after 30 days), with atomic enforcement</p>

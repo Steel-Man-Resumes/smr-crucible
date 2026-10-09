@@ -53,6 +53,7 @@ export * from './jobDescriptionStore';
 export * from './uiPrefs';
 export * from './supportRequest';
 export * from './conversationStore';
+export * from './recordCheck';
 export * from './libraryGroupingShared';
 export * from './vaultDocumentShared';
 export * from './vaultDocument';

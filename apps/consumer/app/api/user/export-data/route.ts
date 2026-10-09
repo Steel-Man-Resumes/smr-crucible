@@ -44,6 +44,9 @@
  *                     suggestions staff sent you, and any placement on file.
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
+ *   "record_check"         -> saved record checks (D11), opened: the state,
+ *                            the checklist lines, and the job and record
+ *                            ONLY where the person ticked "Keep what I typed".
  *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
  *                            source, dimensions, mime, size, sha256, dates --
  *                            NO bytes. The image is owner-only via its proxy.
@@ -63,7 +66,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -258,6 +261,29 @@ export async function POST(req: Request) {
           (c) => c.purpose === "interview_voice"
         );
       }
+    }
+    // D11: saved record checks, opened for the owner. Owner-only table.
+    if (want("record_check")) {
+      // Every saved check, no limit. Lines are rebuilt from the question bank
+      // and the source list; what they typed appears only where they kept it.
+      // A row that cannot be opened is counted, never failing the export.
+      const { renderChecklist } = await import("@/lib/record-check/handler");
+      const { checks, unreadable } = await exportRecordChecks(userId);
+      payload.recordChecks = {
+        unreadable,
+        checks: checks.map((c) => {
+          const view = renderChecklist(c.state, c.picks, { job: c.typed?.job ?? null });
+          return {
+            savedAt: c.createdAt,
+            state: view.stateName,
+            keptWhatYouTyped: c.keptTyped,
+            whatYouTyped: c.typed,
+            steps: view.steps.map((s) => s.text),
+            questions: view.questions.map((q) => q.text),
+            sources: view.sources.map((s) => ({ title: s.title, url: s.url, asOf: s.asOf, label: s.label })),
+          };
+        }),
+      };
     }
     // Phase 6.2: vault inventory (metadata only, no bytes). Joined to
     // secure_object for real size/mime/sha and to job_application for the link.

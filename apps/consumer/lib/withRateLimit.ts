@@ -65,6 +65,10 @@ interface RateLimitOptions {
    * counted, so a locked tool never uses up anyone's daily calls.
    */
   premium?: PremiumToolId;
+  /** Log the partner usage row with NO user id: the org's code, the endpoint
+   *  and the time only (D11 record check, security r1 F7). Nothing then ties
+   *  a person to having used this step, and nothing outlives their delete. */
+  partnerUsageWithoutUser?: boolean;
 }
 
 const RATE_LIMIT_MESSAGE =
@@ -145,7 +149,11 @@ export function withRateLimit(
       const authedCode = getAccessCodeCookie(request);
       if (authedCode) {
         void ensureUserAttribution(userId, authedCode).catch(() => {});
-        void logPartnerUsage({ code: authedCode, userId, endpoint: opts.endpoint });
+        void logPartnerUsage({
+          code: authedCode,
+          ...(opts.partnerUsageWithoutUser ? {} : { userId }),
+          endpoint: opts.endpoint,
+        });
       }
 
       return handler(request);
