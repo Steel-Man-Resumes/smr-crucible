@@ -7,15 +7,20 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 - A new Refinery step helps a person work out which official sources to check for a job or license
   they want, using their record in their own words, the state and the job. It gives a checklist of
   where to look and questions to ask the board, never a ruling, and says it is not legal advice.
+- The AI only picks items, by id, from a dated source list and a fixed question bank in the repo.
+  Every line the person sees is written by us; the AI's own words are never shown or stored. If it
+  picks nothing usable, or takes longer than 20 seconds, the person gets a fixed plain checklist.
 - It has its own yes: a ticked box, stored with the time and wording version, that can be taken back.
-  Taking it back deletes every saved checklist. Staff working in someone's account cannot say yes.
-- Only those three typed fields are sent, to Anthropic only (no fallback provider). Nothing is kept
-  unless the person saves the checklist, and the typed record is kept only if they also tick a box for
-  it. Saved checklists are encrypted in the app, owner only under row-level security, included in
-  export and delete-my-data, and never shareable with a program. Nothing typed goes into the decision
-  log, usage rows, error logs or analytics.
-- Links come only from a dated source list in the repo (Montana, Wisconsin, Michigan, Missouri, Ohio
-  and federal), each labeled "verify before relying"; unverified entries are never shown.
+  Taking it back deletes every saved checklist in the same database transaction. Staff working in
+  someone's account cannot say yes, and every write must come from the app's own pages.
+- Only those three typed fields are sent, to Anthropic only (no fallback provider). A saved checklist
+  keeps the state, the picked items and the date. The job and the record are kept only if the person
+  also ticks "Keep what I typed". Saved checklists are encrypted in the app, owner only under
+  row-level security (the app role can read, add and delete, never edit), capped at 50 per person,
+  included in export and delete-my-data, and never shareable with a program. The decision log gets
+  counts only; partner usage for this step is counted without the person's id.
+- Links come only from the dated source list (Montana, Wisconsin, Michigan, Missouri, Ohio and
+  federal), each labeled "verify before relying"; unverified entries are never shown.
   Migration 079.
 
 ## 2026-10 Employer directory: Tier 3 working agreements
