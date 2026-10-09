@@ -51,6 +51,17 @@ export const INCARCERATION_PHRASES: readonly string[] = [
   "state time", "county time", "federal time",
 ];
 
+/**
+ * Release and custody wording (combined review r2, C2-H1): a kept-off word
+ * within four words of one of these is held until the person answers (one
+ * tap; "No" puts it back), never a fixed hold, because "released from Cook
+ * County Hospital" can be a true fact.
+ */
+export const RELEASE_PHRASES: readonly string[] = [
+  "released from", "paroled", "parole", "sentenced to", "transferred to", "transferred from", "in custody",
+  "booked into", "held at", "did my time", "came home from",
+];
+
 /** US state names (each word), and the two-letter codes. Never distinctive. */
 export const STATE_WORDS: ReadonlySet<string> = set(`
   alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho

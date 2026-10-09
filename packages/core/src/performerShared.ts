@@ -41,6 +41,7 @@ import {
   rowText,
   chosenOf,
   settleShown,
+  typedFieldChecker,
   strongestHit,
   titleModeFor,
 } from "./creativeLaneShared";
@@ -335,11 +336,12 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
   const heldFields: PerformerModel["heldFields"] = [];
   // Every typed field: a personal detail or a name this lane keeps off stays
   // off the page; a line that only shares a word with it prints and is asked about.
+  const typed = typedFieldChecker(settings, hidden, (f) => PERFORMER_FIELD_KIND[f as PerformerField] ?? "text");
   const safe = (field: Exclude<PerformerField, "skills">): string | undefined => {
     const t = settings[field];
     if (!t) return undefined;
     if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
-    const h = facilityCheck(t, hidden, PERFORMER_FIELD_KIND[field]);
+    const h = typed(field, t);
     if (h?.ask) asks.push({ field, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h?.tier === 1) return void heldFields.push({ field, reason: "names_hidden" });
     return t;

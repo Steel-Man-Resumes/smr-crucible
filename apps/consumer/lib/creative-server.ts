@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { withCommonWords } from "@crucible/core/src/facilityDictionary";
+import { cleanEntryText } from "@crucible/core/src/practiceRecordShared";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import {
@@ -157,7 +158,8 @@ export async function loadCvContext(userId: string, lane: CareerLane, pages?: nu
  * (server only, never stored; combined review burden ruling).
  */
 async function listMarkedEntries(userId: string): Promise<PracticeEntry[]> {
-  return withCommonWords(await listPracticeEntries(userId));
+  // Invisible format characters read and print as spaces between words (C2-L2), even in rows saved before the clean.
+  return withCommonWords((await listPracticeEntries(userId)).map(cleanEntryText));
 }
 
 export function laneNotFound(): NextResponse {

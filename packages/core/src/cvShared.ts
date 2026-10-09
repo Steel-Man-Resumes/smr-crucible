@@ -32,6 +32,7 @@ import {
   rowFacilityHit,
   settleShown,
   studyTitle,
+  typedFieldChecker,
   titleModeFor,
 } from "./creativeLaneShared";
 
@@ -400,11 +401,12 @@ export function buildCvModel(entries: PracticeEntry[], s: CreativeKindSettings |
   const hidden = settled.terms;
   const heldFields: CvModel["heldFields"] = [];
   const asks: FacilityAsk[] = [];
+  const typed = typedFieldChecker(settings, hidden, (f) => FIELD_KIND[f as CvField] ?? "text");
   const safe = (field: CvField): string | undefined => {
     const t = settings[field];
     if (!t) return undefined;
     if (isPersonalDetail(t)) return void heldFields.push({ field, reason: "personal" });
-    const h = facilityCheck(t, hidden, FIELD_KIND[field]);
+    const h = typed(field, t);
     if (h?.ask) asks.push({ field, phrase: h.phrase, ...(h.tier === 1 ? { held: true } : {}) });
     if (h?.tier === 1) return void heldFields.push({ field, reason: "names_hidden" });
     return t;

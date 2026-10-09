@@ -18,7 +18,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { cleanDetails, type PracticeEntry } from "../practiceRecordShared";
+import { cleanDetails, cleanEntryText, cleanLine, type PracticeEntry } from "../practiceRecordShared";
 import { applyPhraseAnswer, applyTitleMode, cleanKindSettings, type CreativeKindSettings } from "../creativeLaneShared";
 import { buildCvModel, cvPlainText } from "../cvShared";
 import { getCvStatus } from "../cvChecks";
@@ -74,7 +74,6 @@ describe("C-H2: a prison-town word with an incarceration or facility word is hel
   const asked: [string, string][] = [
     ["Folsom State Prison", "Theater at Folsom."],
     ["USP Leavenworth", "Ten years inside Leavenworth."],
-    ["Soledad State Prison", "Released from Soledad in 2019."],
   ];
   for (const [venue, text] of asked) {
     it(`${venue}: "${text}" prints with one card and the CV is a DRAFT until answered; "No" finishes it`, () => {
@@ -294,14 +293,14 @@ describe("CC rulings after round 1 (burden and the last three calls)", () => {
     }
   });
   it("ruling 4: a common English word never asks on its own; a town or proper name still does", () => {
+    // Round 2 (C2-H1): the cut applies only where the name has a non-dictionary word to carry it.
     const quiet: [string, string][] = [
-      ["Valley State Prison", "Central Valley farmworker history"],
-      ["Mountain View Correctional Facility", "Point of view in documentary film"],
-      ["Green Haven Correctional Facility", "Green building; urban gardens"],
-      ["Coffee Creek Correctional Facility", "Spanish; coffee roasting"],
-      ["Great Meadow Correctional Facility", "The Great Migration"],
-      ["Lee Correctional Institution", "Spike Lee films"],
-      ["Example River Correctional Center", "River restoration"],
+      ["Folsom Valley State Prison", "Central Valley farmworker history"],
+      ["Soledad Mountain View Correctional Facility", "Point of view in documentary film"],
+      ["Attica Green Correctional Facility", "Green building; urban gardens"],
+      ["Corcoran Coffee Creek Annex", "Spanish; coffee roasting"],
+      ["Folsom Great Meadow Unit", "The Great Migration"],
+      ["Soledad River Correctional Center", "River restoration"],
     ];
     for (const [venue, text] of quiet) {
       const { e, s } = hide(venue);
@@ -355,5 +354,95 @@ describe("a hidden name split over a line break", () => {
       assert.ok(r.model.heldFields.some((h) => h.field === "interests"), JSON.stringify(text));
       assert.doesNotMatch(r.text, /Quentin/);
     }
+  });
+});
+
+describe("combined review r2 (C2-H1 and the LOWs)", () => {
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  it("C2-H1: a place whose naming words are all dictionary words still asks about each one alone", () => {
+    for (const [venue, text] of [
+      ["Lee Correctional Institution", "Spike Lee films"],
+      ["Valley State Prison", "Central Valley farmworker history"],
+      ["Pelican Bay State Prison", "Bay Area art collective"],
+      ["Green Haven Correctional Facility", "Green building"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && !a.held), `${venue}: ${text}`);
+      assert.equal(r.status.state, "draft");
+      assert.equal(cv(mark([DEG, e]), noAll(mark([DEG, e]), { ...s, interests: text })).status.state, "finished");
+    }
+  });
+  it("C2-H1: release and custody wording near the short name is held until answered; 'No' puts it back", () => {
+    for (const [venue, text] of [
+      ["Cook County Jail", "Released from Cook County in 2019."],
+      ["Lee Correctional Institution", "Paroled from Lee in 2020."],
+      ["Lee Correctional Institution", "Sentenced to Lee in 2015."],
+      ["Pelican Bay State Prison", "Paroled from the Bay in 2019."],
+      ["Valley State Prison", "Released from Valley in 2019."],
+      ["Orange County Jail", "Paroled out of Orange County."],
+      ["Lee Correctional Institution", "Transferred to Lee in 2016."],
+      ["Cook County Jail", "Booked into Cook County twice."],
+      ["Soledad State Prison", "Released from Soledad in 2019."],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const set = { ...s, interests: text };
+      const r = cv(mark([DEG, e]), set);
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), `${venue}: ${text} has its card`);
+      assert.ok(!r.text.includes(text));
+      const n2 = cv(mark([DEG, e]), applyPhraseAnswer(set, text, "no")!);
+      assert.ok(n2.text.includes(text), `${venue}: 'No' puts it back`);
+    }
+    // A true fact costs one tap, never a dead hold.
+    const { e, s } = hide("Cook County Jail");
+    const hosp = { ...s, interests: "Released from Cook County Hospital after surgery" };
+    assert.ok(cv(mark([DEG, e]), hosp).model.asks.some((a) => a.held));
+    const n3 = cv(mark([DEG, e]), applyPhraseAnswer(hosp, hosp.interests, "no")!);
+    assert.match(n3.text, /Cook County Hospital/);
+  });
+  it("C2-H1: a '<word> County' run always asks, even when the word is common", () => {
+    const { e, s } = hide("Cook County Jail");
+    const r = cv(mark([DEG, e]), { ...s, interests: "Cook County farmers market" });
+    assert.ok(r.model.asks.some((a) => a.field === "interests"));
+    assert.equal(cv(mark([DEG, e]), noAll(mark([DEG, e]), { ...s, interests: "Cook County farmers market" })).status.state, "finished");
+    // A carried name's common word still stays quiet alone.
+    const f = hide("Folsom Lake Correctional Center");
+    assert.equal(cv(mark([DEG, f.e]), { ...f.s, interests: "Lake restoration" }).status.state, "finished");
+  });
+  it("C2-L1: a name split by ; | / or , is read joined", () => {
+    const { e, s } = hide("Green Haven Correctional Facility");
+    for (const text of ["Ten years at Green | Haven", "Ten years at Green; Haven", "Ten years at Green/Haven", "Ten years at Green, Haven"]) {
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), text);
+    }
+    const sq = hide("San Quentin State Prison");
+    assert.ok(cv([DEG, sq.e], { ...sq.s, interests: "Theater at San | Quentin" }).model.heldFields.some((h) => h.field === "interests"));
+  });
+  it("C2-L2: an invisible format character between words reads and prints as a space", () => {
+    const sq = hide("San Quentin State Prison");
+    const r = cv([DEG, sq.e], { ...sq.s, interests: "Theater at San\u200bQuentin" });
+    assert.ok(r.model.heldFields.some((h) => h.field === "interests"));
+    assert.equal(cleanLine("Ray\u200bExample\u00ad\u2060", 50), "Ray Example");
+    assert.equal(cleanEntryText({ ...DEG, title: "Bachelor\u200bof Science" }).title, "Bachelor of Science");
+  });
+  it("C2-L3: a nickname counts only as whole words: 'the Q-tip' is a different word", () => {
+    const { e, s } = hide("San Quentin State Prison");
+    const nick = { ...e, details: { otherNames: ["the Q"] } };
+    assert.deepEqual(cv([DEG, nick], { ...s, interests: "The Q-tip collection" }).model.heldFields, []);
+    assert.ok(cv([DEG, nick], { ...s, interests: "Shakespeare in the Q" }).model.heldFields.some((h) => h.field === "interests"));
+    assert.ok(cv([DEG, nick], { ...s, interests: "Shakespeare in the Q, 2015" }).model.heldFields.some((h) => h.field === "interests"));
+  });
+  it("C2-L4: one card per word across the person's name, email and website", () => {
+    const { e, s } = hide("San Quentin State Prison");
+    const set = { ...s, displayName: "Quentin Jones", email: "quentin.jones@sample.test", website: "quentinjones.art" };
+    const r = cv([DEG, e], set);
+    assert.deepEqual(r.model.asks.map((a) => a.field), ["displayName"]);
+    assert.match(r.text, /quentin\.jones@sample\.test/);
+    const no = cv([DEG, e], applyPhraseAnswer(set, "Quentin Jones", "no")!);
+    assert.deepEqual(no.model.asks, []);
+    assert.equal(no.status.state, "finished");
+    const yes = cv([DEG, e], applyPhraseAnswer(set, "Quentin Jones", "yes")!);
+    assert.deepEqual(yes.model.heldFields.map((h) => h.field).sort(), ["displayName", "email"]);
   });
 });

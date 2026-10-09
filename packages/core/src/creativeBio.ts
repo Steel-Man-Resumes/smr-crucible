@@ -18,7 +18,7 @@
  */
 
 import type { PracticeEntry } from "./practiceRecordShared";
-import { placeOf } from "./practiceRecordShared";
+import { cleanFormatChars, placeOf } from "./practiceRecordShared";
 import { type BioPronoun, type CreativeKindSettings, type FacilityHit, type HiddenTerms, countChars, countWords, titleModeFor, hiddenFacilityTerms, facilityCheck, settleShown, chosenOf } from "./creativeLaneShared";
 
 export const BIO_LENGTHS = ["short", "medium", "long"] as const;
@@ -66,7 +66,7 @@ export function readBio(content: unknown): BioContent {
       .slice(0, BIO_MAX_SENTENCES)
       .map((s, i): BioSentence => ({
         id: typeof s.id === "string" && s.id ? s.id.slice(0, 60) : `s${i}`,
-        text: s.text.replace(/\s+/g, " ").trim().slice(0, BIO_SENTENCE_MAX),
+        text: cleanFormatChars(s.text).replace(/\s+/g, " ").trim().slice(0, BIO_SENTENCE_MAX),
         origin: s.origin === "fact" ? "fact" : "person_written",
         sourceEntryId: typeof s.sourceEntryId === "string" ? s.sourceEntryId : null,
         approved: s.approved === true,
