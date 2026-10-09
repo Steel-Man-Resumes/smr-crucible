@@ -46,8 +46,8 @@ Line cook
 PROFESSIONAL EXPERIENCE
 LINE COOK | Harbor Street Diner | 2019 - 2023
 - Ran the grill on the breakfast line.
-- Spearheaded the kitchen sanitation program.
-- Mentored incoming culinary staff on equipment.
+- Scrubbed the hood vents every Friday.
+- Kept the walk-in stocked for the dinner crowd.
 
 CORE COMPETENCIES
 Grill, Breakfast line, Vegetable prep, Kitchen closing`;
@@ -189,7 +189,7 @@ test("user-facing copy has no em or en dashes", () => {
 test("cut and change touch one line only and keep its bullet", () => {
   const cut = cutLine(RESUME, "- Ran the grill on the breakfast line.");
   assert.doesNotMatch(cut, /Ran the grill/);
-  assert.match(cut, /Spearheaded the kitchen/);
+  assert.match(cut, /Scrubbed the hood vents/);
   assert.equal(cutLine(RESUME, "- not on the page"), RESUME);
   const changed = changeLine(RESUME, "- Ran the grill on the breakfast line.", "Cooked on the grill for the breakfast rush.");
   assert.match(changed, /^- Cooked on the grill for the breakfast rush\.$/m);

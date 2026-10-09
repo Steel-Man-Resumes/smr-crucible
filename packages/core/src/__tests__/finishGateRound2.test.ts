@@ -11,7 +11,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getResumeStatus, pickDefendLines, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, Q_TITLE, type DefendAnswer } from "../resumeStatus";
 import { runMintCheck, numbersIn } from "../resumeMintCheckShared";
 
 const SOURCE = `Morgan Sample
@@ -72,17 +72,23 @@ test("R2-B3: a job title the person never had raises STD-C03; an answer about th
   const s = status(r, answerEvery(r));
   const c03 = s.openItems.find((i) => i.rule === "STD-C03");
   assert.ok(c03 && c03.severity === "BLOCK", JSON.stringify(s.openItems));
-  assert.equal(c03!.question, "Was this your title on the paperwork?");
+  assert.equal(c03!.question, Q_TITLE);
   const header = "KITCHEN MANAGER | Harbor Street Diner | 2019 - 2023";
   const generic = [...answerEvery(r), { line: header, answer: GOOD, verdict: "stands" as const }];
   assert.equal(status(r, generic).state, "draft", "a generic answer is not about the title");
   const real = [...answerEvery(r), { line: header, answer: "My pay stubs from Harbor say kitchen manager for the last year.", verdict: "stands" as const }];
-  assert.equal(status(r, real).state, "finished");
+  // Round 6: a title that is not theirs is settled only by their own rewrite or a cut, never by an answer.
+  assert.ok(status(r, real).openItems.every((i) => i.line === header && (i.kind === "scope_unsaid" || i.kind === "title_unsaid")), JSON.stringify(status(r, real).openItems));
+  assert.ok(status(r, real).openItems.some((i) => i.kind === "title_unsaid"));
+  // A title that is one of their own whole titles is not asked.
+  const r2 = page(BASE).replace("LINE COOK |", "SOUS CHEF |");
+  assert.ok(!status(r2, answerEvery(r2), `${SOURCE}\nSous chef at Harbor Street Diner for the last year.`).openItems.some((i) => i.rule === "STD-C03"));
 });
 
-test("R2-B3 (control): a title in the person's words in any order is not asked ('cook, line')", () => {
+test("R2-B3 (round 6): a title counts only as the person's whole title, never as scattered words ('cook, line' is asked)", () => {
   const src = SOURCE.replace("Line cook at Harbor Street Diner", "Cook, line, at Harbor Street Diner");
-  assert.ok(!status(page(BASE), [], src).openItems.some((i) => i.rule === "STD-C03"));
+  assert.ok(status(page(BASE), [], src).openItems.some((i) => i.rule === "STD-C03"));
+  assert.ok(!status(page(BASE), [], SOURCE).openItems.some((i) => i.rule === "STD-C03"), "'Line cook at Harbor Street Diner' is their title");
 });
 
 // ---- R2-B4 ---------------------------------------------------------------------------
@@ -140,15 +146,13 @@ test("R2-B5: a credential the person never mentioned is a BLOCK no answer settle
   }
 });
 
-test("R2-B5: a credential question is answered only by saying what kind it is", () => {
+test("R2-B5 (round 5): a credential is never a defend question; it is a memory prompt no answer settles", () => {
   const src = `${SOURCE}\nI have a food handler card.`;
   const r = page(BASE, "\n\nCERTIFICATIONS\n- Food handler card");
   const line = "- Food handler card";
-  assert.ok(pickDefendLines(r, src).some((d) => d.line === line && d.reasons.includes("credential")));
-  const generic = [...answerEvery(r, src), { line, answer: GOOD, verdict: "stands" as const }];
-  assert.ok(status(r, generic, src).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  assert.ok(!pickDefendLines(r, src).some((d) => d.line === line));
   const typed = [...answerEvery(r, src), { line, answer: "It is a card from the county health office, current until next spring.", verdict: "stands" as const }];
-  assert.ok(!status(r, typed, src).openItems.some((i) => i.line === line && i.rule === "STD-C04"));
+  assert.ok(status(r, typed, src).openItems.some((i) => i.line === line && i.kind === "credential_unsaid"));
 });
 
 // ---- S1 ------------------------------------------------------------------------------
@@ -162,8 +166,10 @@ for (const ans of ["I did this every day at work.", "That was part of my job dut
 
 test("S1 (control): an answer about the line, or with a concrete detail, stands", () => {
   const lines = pickDefendLines(P4, SOURCE);
-  const a = lines.map((d) => ({ line: d.line, verdict: "stands" as const, answer: /inventory/.test(d.line) ? "I counted the walk-in and called the produce guy every Monday." : "I set up the catering trays for the insurance office lunches on Fridays." }));
-  assert.equal(status(P4, a).state, "finished");
+  const a = lines.map((d) => ({ line: d.line, verdict: "stands" as const, answer: /inventory/.test(d.line) ? "I managed the walk-in counts and called the produce guy every Monday." : "I coordinated the catering trays for the insurance office lunches on Fridays." }));
+  // Round 5: the answers settle the defend questions; only the scope claims are left, for a rewrite or a cut.
+  const open = status(P4, a).openItems;
+  assert.ok(open.length > 0 && open.every((i) => i.kind === "scope_unsaid"), JSON.stringify(open));
 });
 
 // ---- burden --------------------------------------------------------------------------
@@ -190,7 +196,9 @@ CERTIFICATIONS
   const names = creds.map((d) => d.question.match(/"([^"]+)"/)?.[1]);
   assert.equal(new Set(names).size, names.length, JSON.stringify(names));
   assert.ok(!names.some((n) => /Patient care/.test(n ?? "")), "never named by another term on the line");
-  assert.equal(names.filter((n) => /nursing assistant/i.test(n ?? "")).length, 1);
+  // Round 4: "Nursing assistant" as a job is not the CNA credential, so it is one memory prompt (D4), still asked once.
+  const prompts = getResumeStatus({ resumeText: r, sourceText: src }).openItems.filter((i) => i.kind === "credential_unsaid").map((i) => i.subject ?? "");
+  assert.equal([...names, ...prompts].filter((n) => /nursing assistant/i.test(n ?? "")).length, 1, JSON.stringify([names, prompts]));
 });
 
 test("burden: a credential the person gave with a type and a year is not asked", () => {
@@ -211,7 +219,7 @@ test("burden: the two-line minimum fills only with lines that differ from the pe
 test("burden: skills pass only on a real stem or phrase, and never on a scope word the person never used", () => {
   const welder = "Dana Example\nWelded steel for commercial construction projects.";
   const r = `DANA EXAMPLE\n\nSKILLS\nCommunication, Commercial welding, Kitchen supervision\n\nPROFESSIONAL EXPERIENCE\nWELDER | Shop | 2019 - 2023\n- Welded steel.`;
-  const terms = runMintCheck({ output: r, source: `${welder}\nI ran the kitchen at night.`, kind: "resume" }).findings.filter((f) => f.kind === "grid_term").map((f) => f.line);
+  const terms = runMintCheck({ output: r, source: `${welder}\nI ran the kitchen at night.`, kind: "resume" }).findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
   assert.ok(terms.includes("Communication"), "commercial is not communication");
   assert.ok(!terms.includes("Commercial welding"));
   assert.ok(terms.includes("Kitchen supervision"), "a scope word they never used");

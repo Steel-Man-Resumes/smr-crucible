@@ -193,19 +193,20 @@ export function plantFlaw(page: string, source: string, flaw: PlantedFlaw): Plan
 // ---- scoring ---------------------------------------------------------------------
 
 /** What a checker returns for one page: the open items the person would see. */
-export type Checker = (page: string, source: string) => Promise<OpenItem[]>;
+export type Checker = (page: string, source: string, ownResumeText?: string) => Promise<OpenItem[]>;
 
 /** The mint check alone, as the status contract runs it (no defend step in the harness). */
-export const mintChecker: Checker = async (page, source) =>
-  getResumeStatus({ resumeText: page, sourceText: source, requireDefend: false }).openItems.filter((i) => i.line);
+export const mintChecker: Checker = async (page, source, ownResumeText) =>
+  getResumeStatus({ resumeText: page, sourceText: source, requireDefend: false, ownResumeText }).openItems.filter((i) => i.line);
 
 /** The mint check plus second-check findings from `second` (a provider run, or a stub in tests). */
 export function withSecondCheck(second: (page: string, source: string) => Promise<SecondCheckFinding[]>): Checker {
-  return async (page, source) =>
+  return async (page, source, ownResumeText) =>
     getResumeStatus({
       resumeText: page,
       sourceText: source,
       requireDefend: false,
+      ownResumeText,
       secondCheckFindings: await second(page, source),
     }).openItems.filter((i) => i.line);
 }
@@ -254,6 +255,8 @@ export interface CheckerScore {
 export interface Pair {
   source: string;
   page: string;
+  /** The person's own uploaded resume lines, when the pair has them (a whole line of theirs is not asked about). */
+  ownResumeText?: string;
 }
 
 const emptyTally = (): FlawTally => ({ planted: 0, caughtBlock: 0, caughtFixOnly: 0, missed: 0, notApplicable: 0 });
@@ -268,8 +271,8 @@ export async function scoreChecker(pairs: Pair[], checker: Checker): Promise<Che
   const clean: CleanTally = {
     pages: 0, items: 0, block: 0, fix: 0, byRule: {}, fromSecondCheck: 0, secondCheckBlock: 0, secondCheckFix: 0, offPage: 0,
   };
-  for (const { source, page } of pairs) {
-    const base = await checker(page, source);
+  for (const { source, page, ownResumeText } of pairs) {
+    const base = await checker(page, source, ownResumeText);
     const pageLines = linesOf(page);
     clean.pages++;
     for (const i of base) {
@@ -290,7 +293,7 @@ export async function scoreChecker(pairs: Pair[], checker: Checker): Promise<Che
       if (!p) { t.notApplicable++; continue; }
       t.planted++;
       const before = new Set(base.filter((i) => onLine(i, p.original)).map((i) => i.rule));
-      const hits = (await checker(p.page, source)).filter((i) => onLine(i, p.line) && !before.has(i.rule));
+      const hits = (await checker(p.page, source, ownResumeText)).filter((i) => onLine(i, p.line) && !before.has(i.rule));
       if (hits.some((i) => i.severity === "BLOCK")) t.caughtBlock++;
       else if (hits.length) t.caughtFixOnly++;
       else t.missed++;

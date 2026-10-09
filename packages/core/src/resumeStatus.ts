@@ -40,16 +40,10 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
+import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf, withoutGoalText } from "./scopeWords";
+import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
-import {
-  answerGivesCredentialType,
-  checkCredentials,
-  credentialAlreadyKnown,
-  credentialHomes,
-  credentialMentionsOf,
-  saidAbout,
-  type CredentialMention,
-} from "./credentialMentions";
+import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
 import {
   SECOND_CHECK_RULE,
   validateSecondCheckFindings,
@@ -72,6 +66,18 @@ export interface OpenItem {
   from?: "second_check";
   /** The checker's finding kind, when it has one (for example "grid_term" for a skills term). */
   kind?: string;
+  /** For a credential finding: the credential's full name as found on the page (never clipped). */
+  subject?: string;
+  /** For a credential finding on an education line (GED, diploma, degree): confirmed as earned or in progress. */
+  education?: boolean;
+  /** Round 11: for a scope claim, its family ("train"), so the card can ask "Who did you train?". */
+  scopeFamily?: string;
+  /** Round 11: for a scope claim, the line's shared form ("Helped train new hires"), when there is one. */
+  helped?: string;
+  /** Round 12: every scope family on the line still open (one card asks about all of them). */
+  scopeFamilies?: string[];
+  /** Round 13 (SF-4): a role used as a job title in the summary or letter ("shift supervisor"), asked on a title card. */
+  roleTitle?: string;
 }
 
 export interface DefendAnswer {
@@ -89,7 +95,16 @@ export interface DefendAnswer {
    * one). The caller may add rewrites to the person's own words; an ordinary
    * answer is never added to the source (no anchoring path, DEC-45).
    */
-  kind?: "rewrite";
+  kind?: "rewrite" | "scope_yes" | "title_yes";
+  /** Round 13 (SF-4): a rewrite made by "Use my title" on a role in the summary or letter: the title they typed. */
+  ownTitle?: string;
+  /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
+  family?: string;
+  /** Round 11: a rewrite made by "I helped with it": the line is their shared form; never joins their words. */
+  scopeHelp?: boolean;
+  /** Round 12: the claim "I helped with it" was made for, and the sentence it changed (it settles only that one). */
+  scopeHelpFamily?: string;
+  scopeHelpText?: string;
   /**
    * For a rewrite: the line it replaced, as first written (the writer's line,
    * never an earlier rewrite). Only words and numbers the rewrite INTRODUCED
@@ -117,6 +132,18 @@ export interface ResumeStatusInput {
    * Leave out when it did not run: the status is then the mint check alone.
    */
   secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
+  /**
+   * What the person typed in the Forge's licenses-and-training answer. A
+   * credential line on the page exactly as they typed it there is theirs and
+   * is not asked about. Every other credential is a memory prompt.
+   */
+  credentialsAnswer?: string;
+  /** Keys of credentials the person confirmed (D4): never asked again, and a title's credential word is theirs. */
+  confirmedKeys?: string[];
+  /** The person's structured credentials from the Forge's training step (round 7): the one typed exception. */
+  credentialRows?: ReadonlyArray<CredentialRow>;
+  /** The person's own uploaded resume (record lines held back as they chose): whole lines of it may cover a credential. */
+  ownResumeText?: string;
 }
 
 export interface ResumeStatus {
@@ -297,6 +324,11 @@ export function introducedWords(rewrite: string, replaced: string, writerText = 
   return words.sort((a, b) => a.i - b.i).map((w) => w.s).join(" ");
 }
 
+/** The credential's own name for a credential finding (quoted in its why), else the line's. */
+function credentialNameOf(f: Pick<MintFinding, "line" | "why">): string {
+  return quoted(f.why) ?? credentialName(f.line);
+}
+
 function credentialName(line: string): string {
   return clip(stripBullet(line).split(/[,(|]/)[0].trim() || stripBullet(line), 50);
 }
@@ -325,16 +357,21 @@ function titleOf(header: string): string {
   return header.split(/\s*\|\s*|\s+(?:at|@)\s+/i)[0].trim();
 }
 
-/** The job titles on the page's own entry headers, below the first heading. */
+/**
+ * The job titles on the page's own entry headers under an experience heading.
+ * The name line is never a heading (an all-caps name looks like one), so a
+ * pipe headline under it is never mistaken for a job header.
+ */
 function pageJobTitles(resumeText: string): Set<string> {
   const titles = new Set<string>();
-  let seenHeading = false;
-  for (const l of linesOf(resumeText)) {
-    if (isSectionEnd(l)) { seenHeading = true; continue; }
-    if (!seenHeading || !isEntryHeader(l)) continue;
+  let inExperience = false;
+  linesOf(resumeText).forEach((l, i) => {
+    if (i === 0) return;
+    if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); return; }
+    if (!inExperience || !isEntryHeader(l)) return;
     const t = titleOf(l);
     if (t) titles.add(squash(t));
-  }
+  });
   return titles;
 }
 
@@ -348,17 +385,126 @@ export function titleInOwnWords(title: string, sourceText: string): boolean {
   return words.every((w) => src.has(stemOf(w)));
 }
 
-/** The experience entry headers whose title is not in the person's words. */
-function titlesNotTheirs(resumeText: string, sourceText: string): string[] {
+// A title's credential word ("CERTIFIED", "LICENSED", "JOURNEYMAN"): once the person confirms that credential, it is theirs.
+const TITLE_CREDENTIAL_WORDS_RE = /\b(?:certified|licensed|registered|journeyman|master|bonded|accredited|credentialed|apprentice)\b/gi;
+
+/**
+ * The experience entry headers whose title is not one of the person's own
+ * job titles (round 6: the whole title, as in one of their own job headers
+ * or "X at Y" in their words; never scattered or denied words). A title
+ * credential the person confirmed (`confirmedKeys`) is theirs: only the rest
+ * of the title is checked.
+ */
+function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: Set<string> = new Set(), answers: DefendAnswer[] = []): string[] {
   const out: string[] = [];
   let inExperience = false;
   for (const l of linesOf(resumeText)) {
     if (isSectionEnd(l)) { inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, "")); continue; }
     if (!inExperience || !isEntryHeader(l)) continue;
-    const t = titleOf(l);
-    if (t && !titleInOwnWords(t, sourceText)) out.push(l);
+    const full = titleOf(l);
+    if (!full) continue;
+    // Round 7: the person's own whole title is theirs, and so is a title whose credential they
+    // confirmed ("CNA | Meadowbrook" for a person who holds the CNA).
+    if (titleIsTheirs(full, sourceText) && !titleOfAnotherJob(l, full, sourceText)) continue;
+    // Only a title that names a credential ("CNA", "CERTIFIED NURSING ASSISTANT") is sourced by confirming it.
+    const credentialTitle = isCredentialTerm(full) || new RegExp(TITLE_CREDENTIAL_WORDS_RE.source, "i").test(full);
+    if (credentialTitle && confirmedKeys.has(credentialKey(full))) continue;
+    // A title the person typed themselves (their own rewrite of the header) is theirs.
+    if (rewriteOf(answers, l)) continue;
+    // Round 12 (SF-2): "Yes, that was my title", typed by them and matching the title on the line.
+    // Round 13 (SF-9): their short form counts ("Customer Service Rep" for "CUSTOMER SERVICE REPRESENTATIVE").
+    if (answers.some((a) => a.kind === "title_yes" && squash(a.line) === squash(l) && (squash(a.answer) === squash(full) || sameTitle(a.answer, full)))) continue;
+    const rest = full.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
+    if (confirmedKeys.size && rest && rest !== full && titleIsTheirs(rest, sourceText)) continue;
+    out.push(l);
   }
   return out;
+}
+
+/** Round 13 (SF-4): why a role used as a title is open, and its question. */
+export function roleTitleWhy(title: string): string {
+  return `"${clip(title, 50)}" isn't a title in anything you told us. A title that doesn't match your paperwork comes up at the background check.`;
+}
+export function roleTitleQuestion(title: string): string {
+  return `Was "${clip(title, 50)}" your job title?`;
+}
+
+/**
+ * Round 14 (F3): true when this job header is one of the person's own jobs (same employer, or the same years)
+ * and none of their headers for that job carries this title: a title from another of their jobs never covers it.
+ */
+function titleOfAnotherJob(pageHeader: string, title: string, sourceText: string): boolean {
+  const words = (t: string) => (t || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !/^(?:inc|llc|co|corp|the|of|and|company|services?)$/.test(w));
+  const years = (t: string) => (t.match(/\b(?:19|20)\d{2}\b/g) ?? []).join("-");
+  const parts = pageHeader.replace(/^\s*[-•*]\s*/, "").split("|").map((x) => x.trim());
+  const employer = words(parts[1] ?? "").join(" ");
+  const span = years(pageHeader);
+  const own = withoutGoalText(sourceText)
+    .split("\n")
+    .filter((x) => x.includes("|"))
+    .map((x) => x.replace(/^\s*[-•*]\s*/, "").split("|").map((y) => y.trim()))
+    .filter((ps) => ps.length >= 2);
+  const sameJob = own.filter((ps) => (employer && words(ps[1]).join(" ") === employer) || (span && years(ps.join(" | ")) === span));
+  if (!sameJob.length) return false;
+  return !sameJob.some((ps) => sameTitle(ps[0], title) || squash(ps[0]) === squash(title));
+}
+
+/** The person's rewrite of this line, when they typed it themselves. */
+function rewriteOf(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
+  return answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && a.replaced.trim() !== "" && squash(a.line) === squash(line));
+}
+
+const stripBulletText = (l: string) => l.replace(/^\s*[-•*]\s*/, "");
+
+/** True when the person typed this scope word themselves: the line is their rewrite and the word was not in the line it replaced. */
+function personIntroduced(answers: DefendAnswer[], line: string, word: string): boolean {
+  const rw = rewriteOf(answers, line);
+  if (!rw) return false;
+  const head = (word.match(/[A-Za-z]+/) ?? [""])[0].toLowerCase();
+  return !!head && !new RegExp(`\\b${head}\\b`, "i").test(rw.replaced as string);
+}
+
+/**
+ * Round 11: the first scope claim on a line that is not theirs, reading their
+ * "Yes, I did this" answers for this line only (each as "I trained <their
+ * words>"), and a shared page claim on a line they turned into its shared
+ * form ("I helped with it"). Nothing typed here joins their words elsewhere.
+ */
+export function scopeNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): ReturnType<typeof scopeNotTheirs> {
+  return scopeAllNotTheirsAnswered(line, sourceText, answers)[0];
+}
+
+/** Every scope claim on a line still not theirs after their answers on that line (round 12: one card per line). */
+export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): NonNullable<ReturnType<typeof scopeNotTheirs>>[] {
+  const own = answers.filter(
+    (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && isScopeWhoAnswer(a.answer) && !isScopeCopy(a.answer, line)
+  );
+  const extra = own.map((a) => scopeYesText(a.family as string, a.answer)).join("\n");
+  const help = rewriteOf(answers, line);
+  const k = (h: { family: string; word: string }) => `${h.family}\u0000${h.word.toLowerCase()}`;
+  const withYes = new Set(scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).map(k));
+  const titleYes = answers.filter((a) => a.kind === "title_yes" && squash(a.line) === squash(line));
+  const employers = employerWordsOf(sourceText);
+  return scopeHitsNotTheirs(line, sourceText).filter((h) => {
+    // Round 13 (SF-4): a title in the summary or letter is settled only by its title card ("Yes, that was my
+    // title", "Use my title") or their own words, never by a "Yes, I did this" on the line.
+    if (h.role) {
+      if (h.title && titleYes.some((a) => sameTitle(a.answer, h.title as string))) return false;
+      if (h.title && help?.ownTitle && sameTitle(help.ownTitle, h.title)) return false;
+      return true;
+    }
+    // Round 12 (SF-4): typed words that name people, a count or names cover an uncounted group. Round 13 (SF-7):
+    // typed words that name a different group are refused, and the sentence reading does not get a second go.
+    const verdicts = own.filter((a) => a.family === h.family).map((a) => typedCoversHit(h, a.answer, line, employers));
+    if (verdicts.some((v) => v === true)) return false;
+    if (verdicts.length && verdicts.every((v) => v === false)) return true;
+    if (!withYes.has(k(h))) return false;
+    // Their "I helped with it": only the claim it was made for, in its own sentence.
+    if (help?.scopeHelp && h.shared && (!help.scopeHelpFamily || help.scopeHelpFamily === h.family)) {
+      if (!help.scopeHelpText || squash(line).includes(squash(help.scopeHelpText))) return false;
+    }
+    return true;
+  });
 }
 
 /** The lines above the first section heading (after the name): the header block. */
@@ -395,7 +541,7 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
   let inSkills = false;
   let seenHeading = false;
   ls.forEach((l, i) => {
-    if (i === 0) return; // the name
+    if (i === 0) return; // the name (never a heading, even in capitals)
     if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; return; }
     if (isSectionEnd(l)) { inSkills = false; seenHeading = true; return; }
     if (CONTACT_LINE_RE.test(l) || isDateLine(l)) return;
@@ -421,11 +567,9 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
   const word = quoted(f.why);
   switch (f.rule) {
     case "STD-T02":
-      return f.kind === "dropped_number"
-        ? "You gave us a number here and it is not on the page. Should it go back on, the way you said it?"
-        : "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
+      return f.kind === "dropped_number" ? Q_NUMBER_DROPPED : Q_NUMBER_UNSOURCED;
     case "STD-T05":
-      return "This year is not in what you told us. What years did you do this, as best you know? If you're not sure, say so and we'll mark it to check.";
+      return "This year isn't in what you told us. What years did you do this, as best you know?";
     case "STD-T07":
       return `Would you say "${word ?? "this"}" about yourself or this work? If not, it comes off.`;
     case "STD-C05":
@@ -448,33 +592,88 @@ export function questionForFinding(f: Pick<MintFinding, "rule" | "line" | "why" 
       if (f.kind === "sole_actor") {
         return "Your words say you helped with this. Did you do it on your own, or with someone? Tell me in one sentence how you'd describe it.";
       }
+      if (f.kind === "grid_scope_term") return `"${clip(f.line, 40)}" says you ran or led something. Say what you did, in one sentence.`;
       return `Can you tell me one time you did "${clip(f.line, 40)}" at work? If not, it comes off.`;
     case "STD-T03":
-      return `Was "${credentialName(f.line)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+      return credentialQuestion(credentialName(f.line));
     case "STD-C03":
-      return "Was this your title on the paperwork?";
+      return Q_TITLE;
     default:
       return DESCRIBE;
   }
 }
 
-/** New question (round 2): a credential the person never mentioned. Only a change or a cut settles it. */
-export const CREDENTIAL_UNSAID_QUESTION =
-  "We can't find this credential in anything you told us. If you hold it, change the line to say it the way your card or papers do. If you don't, cut it.";
+// ---- question voice (decision D6) ----------------------------------------
+// Numbers, credentials and titles are asked the way an interviewer would ask
+// them. Everything else is plain and short.
 
-const DESCRIBE_UNSOURCED =
-  "This line has a number you didn't give us. In one sentence, how would you say this line? If you don't know a number, the line stays true without one.";
+/** A number on the page the person never gave. */
+export const Q_NUMBER_UNSOURCED =
+  "If an interviewer asked where this number came from, could you say? It isn't one you gave us. Change it to a number you know. If you don't know a number, the line stays true without one.";
+/** A number the person gave that did not make it onto the page. */
+export const Q_NUMBER_DROPPED =
+  "You gave us this number and it isn't on the page. An interviewer remembers a real number. Put it back the way you said it?";
+/** One of the person's own numbers, asked once. */
+export const Q_NUMBER_OWN = "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
+/** A job title the person never used. */
+export const Q_TITLE =
+  "If an interviewer called to check this job, would they find this title on your paperwork? Change it to the title your paperwork shows.";
+
+/** A credential's type and status. */
+export function credentialQuestion(name: string): string {
+  return `If an interviewer asked about "${clip(name, 50)}", what would you say it is: a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+}
+
+/**
+ * A credential on the page the person never mentioned (decision D4): a
+ * memory prompt, not a claim. It stays only when they say yes and type its
+ * type and its year or status themselves.
+ */
+export function credentialMemoryPrompt(name: string): string {
+  return `Do you hold ${clip(name, 50)}? Many people forget a card or class they earned.`;
+}
+
+/**
+ * New (round 8): an education line the person has not given us. Kept only
+ * when they say earned (with the year) or in progress. Round 9: it names the
+ * credential ("Do you have a GED?"); a school or program with no credential
+ * named is "Did you finish ...?".
+ */
+export function educationMemoryPrompt(name: string): string {
+  const n = clip(name, 50);
+  const grad = n.match(/^(.*?)\s+graduate$/i);
+  if (grad) return `Did you finish ${grad[1].toLowerCase()}? Say the year you finished, or if you are still working on it.`;
+  if (/\b(?:GED|G\.E\.D|HSED|HSE|HiSET|TASC|equivalency|diploma|degree|certificate|associate|bachelor|master|doctorate|A\.A\.S?|B\.S|B\.A|M\.S|M\.?B\.?A)\b/i.test(n)) {
+    return `Do you have ${/^(?:[aeiou]|HSED|HSE\b|HiSET)/i.test(n) ? "an" : "a"} ${n}? Say if you earned it, and the year, or if you are still working on it.`;
+  }
+  return `Did you finish ${n}? Say the year you finished, or if you are still working on it.`;
+}
+
+/** Why a credential is asked about (round 5: every credential, until the person confirms it). */
+export function credentialPromptWhy(name: string): string {
+  return `"${clip(name, 50)}" stays on the page only when you tell us you hold it, what kind it is, and when.`;
+}
+
+/** New (round 5): a scope claim the person never made. Only their own rewrite or a cut settles it. */
+export const Q_SCOPE = "Is this true? An interviewer will ask you about it.";
+
+/** Why a scope claim is held. */
+export function scopeWhy(word: string): string {
+  return `"${clip(word, 40)}" says you ran, led or answered for other people, and that isn't in anything you told us.`;
+}
+
+const DESCRIBE_UNSOURCED = Q_NUMBER_UNSOURCED;
 
 function questionForDefend(line: string, reasons: DefendReason[], sourceText: string, credName?: string): string {
   if (reasons.includes("credential")) {
-    return `Was "${clip(credName || credentialName(line), 50)}" a license, a certification, or a training course? Is it current, expired, or still in progress?`;
+    return credentialQuestion(credName || credentialName(line));
   }
   if (reasons.includes("number")) {
     // Never ask a person to defend a number they did not give: that plants it.
     const src = numbersIn(sourceText);
     const unsourced = Array.from(numbersIn(line)).some((n) => !src.has(n));
     if (unsourced) return DESCRIBE_UNSOURCED;
-    return "If an interviewer asked how you know this number, what would you say? Tell me in one sentence.";
+    return Q_NUMBER_OWN;
   }
   return DESCRIBE;
 }
@@ -506,24 +705,23 @@ function pickDefend(
   const minFurthest = opts.minFurthest ?? 2;
   const body = bodyLines(resumeText || "", sourceText || "");
   const mentions = credentialMentionsOf(resumeText || "");
-  const credLines = new Set(mentions.filter((m) => !m.term).map((m) => m.line));
-  // Each credential is asked about once, by its own name, at its home line
-  // (or its skills term). Not at all when the person's words already give its
-  // type and a year or status.
-  const credHome = new Map<string, CredentialMention>();
-  for (const m of credentialHomes(mentions)) {
-    if (credentialAlreadyKnown(m, sourceText || "")) continue;
-    // Never mentioned: its BLOCK asks for a change or a cut; a type question would be noise.
-    if (!saidAbout(m, sourceText || "").length) continue;
-    if (!credHome.has(m.line)) credHome.set(m.line, m);
-  }
+  // A short credential line is asked about as a credential; a longer sentence
+  // that also carries one is still read like any other line.
+  const credLines = new Set([
+    ...mentions
+      .filter((m) => !m.term && (m.where === "credentials" || m.line.replace(/^[-•*]\s*/, "").split(/\s+/).length <= 8))
+      .map((m) => m.line),
+    // A credentials line that lists several credentials is read part by part, never as a line far from their words.
+    ...mentions.filter((m) => m.term && m.where === "credentials").map((m) => m.context),
+  ]);
+  // Round 5: a credential is never a defend line. It is a memory prompt
+  // (getResumeStatus), confirmed with its kind and year or status.
   const picked = new Map<string, Set<DefendReason>>();
   const add = (l: string, r: DefendReason) => {
     if (!picked.has(l)) picked.set(l, new Set());
     picked.get(l)!.add(r);
   };
 
-  for (const m of credHome.values()) add(m.line, "credential");
   for (const { line, inSkills } of body) {
     if (!inSkills && !credLines.has(line) && numbersIn(line).size > 0) add(line, "number");
   }
@@ -549,7 +747,7 @@ function pickDefend(
     .sort((a, b) => posOf(a[0]) - posOf(b[0]) || order.indexOf(a[0]) - order.indexOf(b[0]))
     .map(([line, reasons]) => {
       const rs = Array.from(reasons);
-      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "", credHome.get(line)?.name) };
+      return { line, reasons: rs, question: questionForDefend(line, rs, sourceText || "") };
     });
   return { lines, allOwn: candidates.length > 0 && candidates.every((c) => c.d === 0), header: headerLinesOf(resumeText || "") };
 }
@@ -585,15 +783,13 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
 
   const picks = resumeText.trim() ? pickDefend(resumeText, sourceText) : { lines: [] as DefendLine[], allOwn: false, header: new Set<string>() };
   const defendLines = picks.lines;
-  const credentialLine = new Set(defendLines.filter((d) => d.reasons.includes("credential")).map((d) => squash(d.line)));
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
-  const byLine = new Map(answers.map((a) => [squash(a.line), a]));
+  // Round 11: a "Yes, I did this" answer settles only its own scope claim, never the line's other questions.
+  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes" && a.kind !== "title_yes").map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
     if (!answerStands(a, line, sourceText)) return undefined;
-    // A credential question is answered only by saying what kind it is.
-    if (credentialLine.has(squash(line)) && a!.kind !== "rewrite" && !answerGivesCredentialType(a!.answer)) return undefined;
     // A headline is answered only by talking about what it says.
     if (picks.header.has(line) && a!.kind !== "rewrite" && !answerMentions(a!.answer, line)) return undefined;
     return a;
@@ -601,52 +797,69 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
 
   if (resumeText.trim() && sourceText.trim()) {
     const mint = runMintCheck({ output: resumeText, source: sourceText, kind: "resume" });
-    // A credential's missing status is settled only by that line's own
-    // standing answer. A course written up as a certification is never
-    // settled by an answer: the line changes, or the person's words do.
-    // Credentials, one at a time by name: never mentioned by the person
-    // (BLOCK, only a change or a cut), written up from a class (BLOCK), or
-    // with no year or status from anyone (FIX, settled by an answer that
-    // gives one).
+    // Round 5: every credential on the page is a memory prompt (decision
+    // D4), never settled by reading the person's free text. The one
+    // exception is a line exactly as they typed it in their
+    // licenses-and-training answer. The prompt is settled only by a
+    // confirmation (the line is rewritten from it) or a cut.
     const credentialFindings: MintFinding[] = [];
-    for (const c of checkCredentials(resumeText, sourceText)) {
-      const { mention: m } = c;
-      if (c.issue === "unsaid") {
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "BLOCK",
-          line: m.line,
-          why: `"${clip(m.name, 50)}" isn't in anything you told us. A credential goes on the page only the way your card or papers say it.`,
-          kind: "credential_unsaid",
-        });
-      } else if (c.issue === "upgrade") {
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "BLOCK",
-          line: m.line,
-          why: "Your words describe a class or training for this, not a certification or license. A class is listed as training.",
-          kind: "credential_upgrade",
-        });
-      } else {
-        const a = standingFor(m.line);
-        if (a && hasCredentialStatus(a.answer)) continue;
-        credentialFindings.push({
-          rule: "STD-T03",
-          severity: "FIX",
-          line: m.line,
-          why: "We don't know this credential's type or status yet: license, certification or training, and current, expired or in progress.",
-          kind: "credential_status",
-        });
-      }
+    // Round 10 (SF-2): each credential finding carries its own name and kind, never its line's.
+    const credentialOf = new Map<MintFinding, { name: string; education: boolean }>();
+    const confirmedKeys = new Set(input.confirmedKeys ?? []);
+    // Round 7: the whole-line exception reads only the person's uploaded resume (never the free-text
+    // licenses answer); their structured credential rows are the other exception.
+    const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+    const personText = input.ownResumeText ?? sourceText.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
+    const backstopText = `${sourceText}\n\n${input.credentialsAnswer ?? ""}`;
+    for (const m of credentialsToAsk(resumeText, personText, confirmedKeys, input.credentialRows, backstopText)) {
+      const finding: MintFinding = {
+        rule: "STD-T03",
+        severity: "BLOCK",
+        line: m.line,
+        why: credentialPromptWhy(m.name),
+        kind: "credential_unsaid",
+      };
+      credentialOf.set(finding, { name: m.name, education: !!m.education });
+      credentialFindings.push(finding);
     }
-    // A job title on the page that the person never used.
+    // A scope claim (ran, led, supervised, trained people...) the person
+    // never made is settled only by their own rewrite or a cut, never by an
+    // answer.
+    const scopeFindings: MintFinding[] = [];
+    const scopeOf = new Map<MintFinding, { family: string; families?: string[]; helped?: string }>();
+    const roleTitleOf = new Map<MintFinding, string>();
+    // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
+    const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
+    for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
+      if (inSkills || credentialSectionLines.has(line)) continue;
+      // Round 12: ONE card per line, for every claim on it the person has not made.
+      const all = scopeAllNotTheirsAnswered(line, sourceText, answers).filter((h) => !personIntroduced(answers, line, h.word));
+      // Round 13 (SF-4): a role used as a title ("Shift supervisor with ...") gets its own title card.
+      const role = all.find((h) => h.role && h.title);
+      if (role) {
+        const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: roleTitleWhy(role.title as string), kind: "title_unsaid" };
+        roleTitleOf.set(finding, role.title as string);
+        scopeFindings.push(finding);
+      }
+      const hits = all.filter((h) => !(h.role && h.title));
+      const hit = hits[0];
+      if (!hit) continue;
+      const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
+      const families = Array.from(new Set(hits.map((h) => h.family)));
+      // Round 13 (SF-3): never "I helped with it" for a title.
+      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 && !hit.role ? helpedForm(line, hit.word) : undefined });
+      scopeFindings.push(finding);
+    }
+    // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
+    for (const line of titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers)) {
+      const hit = scopeNotTheirs(titleOf(line), sourceText);
+      // Round 12 (SF-2): a job title is settled on its own title card, never by "Yes, I did this".
+      if (hit) scopeFindings.push({ rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" });
+    }
+    // A job title on the page that the person never used (round 6: settled
+    // only by their own rewrite or a cut, never by an answer).
     // Asked like a defend line, so only where there is a defend step.
-    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText) : [])
-      // Settled by an answer about the title itself ("my pay stubs say kitchen manager").
-      .filter((l) => {
-        const a = standingFor(l);
-        return !(a && answerMentions(a.answer, titleOf(l)));
-      })
+    const titleFindings: MintFinding[] = (requireDefend ? titlesNotTheirs(resumeText, sourceText, confirmedKeys, answers) : [])
       .map((l) => ({
         rule: "STD-C03",
         severity: "BLOCK" as const,
@@ -654,10 +867,37 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
         why: `"${clip(titleOf(l), 50)}" isn't a title in anything you told us. A title that doesn't match your paperwork comes up at the background check.`,
         kind: "title_unsaid",
       }));
-    const findings = [...mint.findings, ...credentialFindings, ...titleFindings];
+    const findings = [...mint.findings, ...credentialFindings, ...scopeFindings, ...titleFindings];
     for (const f of findings) {
-      push(f.rule, f.severity, f.line, f.why, f.kind === "credential_unsaid" ? CREDENTIAL_UNSAID_QUESTION : questionForFinding(f));
+      const cred = credentialOf.get(f);
+      const subject = cred?.name;
+      push(
+        f.rule,
+        f.severity,
+        f.line,
+        f.why,
+        f.kind === "credential_unsaid"
+          ? cred?.education
+            ? educationMemoryPrompt(subject ?? credentialNameOf(f))
+            : credentialMemoryPrompt(subject ?? credentialNameOf(f))
+          : f.kind === "scope_unsaid"
+            ? Q_SCOPE
+            : questionForFinding(f)
+      );
       if (f.kind) items[items.length - 1].kind = f.kind;
+      if (subject) items[items.length - 1].subject = subject;
+      if (f.kind === "credential_unsaid" && cred?.education) items[items.length - 1].education = true;
+      const roleTitle = roleTitleOf.get(f);
+      if (roleTitle) {
+        items[items.length - 1].roleTitle = roleTitle;
+        items[items.length - 1].question = roleTitleQuestion(roleTitle);
+      }
+      const sc = scopeOf.get(f);
+      if (sc) {
+        items[items.length - 1].scopeFamily = sc.family;
+        if (sc.families && sc.families.length > 1) items[items.length - 1].scopeFamilies = sc.families;
+        if (sc.helped) items[items.length - 1].helped = sc.helped;
+      }
     }
 
     if (requireDefend) {

@@ -96,7 +96,7 @@ export function numberTokens(text: string): NumberToken[] {
   const lower = t.toLowerCase();
 
   // Digits, with a scale or multiplier right after ("12k", "1.5 million", "3x").
-  const DIGIT_RE = /(?<![\w.$])(?:\$\s?)?(\d[\d,]*(?:\.\d+)?|\.\d+)(?:\s?(k|m|million|thousand|hundred|billion)\b|(x)(?![a-z]))?(st|nd|rd|th)?%?/gi;
+  const DIGIT_RE = /(?<![\w.$])(?:\$\s?)?(\d{1,3}(?:,\d{3})+(?!\d)(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:\s?(k|m|million|thousand|hundred|billion)\b|(x)(?![a-z]))?(st|nd|rd|th)?%?/gi;
   for (const m of lower.matchAll(DIGIT_RE)) {
     const raw = m[1].replace(/,(?=\d{3}\b)/g, "");
     let n = Number(raw);
@@ -135,6 +135,8 @@ export function numberTokens(text: string): NumberToken[] {
       }
       continue;
     }
+    // "Six Sigma" is a credential's name, not a count.
+    if (w === "six" && at(k + 1) === "sigma") continue;
     if (MULT[w]) {
       out.push({ value: MULT[w], index: i, length: w.length });
       continue;

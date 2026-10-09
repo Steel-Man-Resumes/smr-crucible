@@ -15,7 +15,7 @@ import {
 } from "../resumeRules";
 import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
 import { checkCredentialUpgrade } from "../resumeMintCheckShared";
-import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, type DefendAnswer } from "../resumeStatus";
+import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, credentialQuestion, credentialMemoryPrompt, type DefendAnswer } from "../resumeStatus";
 import { computeFitPlan } from "../pageFit";
 import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
 
@@ -94,7 +94,7 @@ CORE COMPETENCIES
 Equipment: Forklift, RF scanner
 Inventory forecasting`;
   const r = runMintCheck({ output: out, source: src, kind: "resume" });
-  const terms = r.findings.filter((f) => f.kind === "grid_term").map((f) => f.line);
+  const terms = r.findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
   assert.deepEqual(terms, ["Inventory forecasting"]);
 });
 
@@ -119,8 +119,8 @@ test("status: a clean, defended page with no numbers is finished", () => {
 
 // The same page with two lines the writer reworded away from the person's words.
 const FAR = NO_NUMBERS.resume
-  .replace("Ran the grill on the breakfast line.", "Spearheaded the breakfast grill operation.")
-  .replace("Asked by the owner to show new cooks the grill.", "Mentored incoming culinary staff on equipment.");
+  .replace("Ran the grill on the breakfast line.", "Operated the breakfast grill station with precision.")
+  .replace("Asked by the owner to show new cooks the grill.", "Showed incoming culinary staff the equipment.");
 
 test("status: a page entirely in the person's own words asks nothing extra (round 2)", () => {
   const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source });
@@ -259,7 +259,7 @@ test("defend: a line with an unsourced number gets the describe-it question, nev
   const d = pickDefendLines(resume, NO_NUMBERS.source).find((x) => /80/.test(x.line));
   assert.ok(d);
   assert.doesNotMatch(d!.question, /\d|how you know this number/i);
-  assert.match(d!.question, /in one sentence, how would you say this line/i);
+  assert.match(d!.question, /the line stays true without one/i);
   const s = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source });
   for (const i of s.openItems.filter((x) => /80/.test(x.line))) assert.doesNotMatch(i.question, /\d|how you know this number/i);
 });
@@ -297,22 +297,34 @@ MAINTENANCE HELPER | Lakeside Apartments | 2018 - 2022
   assert.deepEqual(flags("Helped with boiler blowdown under the operator."), []);
 });
 
-test("status: a credential with no type or status asks about it, without supplying one", () => {
+test("status: a credential the person only drove past (no card, class or certification in their words) is a memory prompt (round 3)", () => {
   const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: CREDENTIAL_NO_STATUS.source });
   const cred = s.openItems.find((i) => i.rule === "STD-T03");
-  assert.ok(cred, JSON.stringify(s.openItems));
-  assert.equal(cred!.severity, "FIX");
-  assert.equal(cred!.question, `Was "Forklift Operator" a license, a certification, or a training course? Is it current, expired, or still in progress?`);
-  // The defend step asks about it too, and its answer settles the status.
-  const answers = answerAll(CREDENTIAL_NO_STATUS.resume, CREDENTIAL_NO_STATUS.source).map((a) =>
+  assert.ok(cred && cred.kind === "credential_unsaid", JSON.stringify(s.openItems));
+  assert.equal(cred!.severity, "BLOCK");
+});
+
+test("status (round 5): a credential the person named in free text is still a memory prompt, and no answer settles it", () => {
+  const source = `${CREDENTIAL_NO_STATUS.source}\nI have a forklift operator card from the warehouse.`;
+  const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source });
+  const cred = s.openItems.find((i) => i.rule === "STD-T03");
+  assert.ok(cred && cred.kind === "credential_unsaid" && cred.severity === "BLOCK", JSON.stringify(s.openItems));
+  assert.equal(cred!.question, credentialMemoryPrompt("Forklift Operator"));
+  assert.doesNotMatch(cred!.question, /\b(?:19|20)\d{2}\b|current|expired/, "the prompt never supplies a status");
+  const answers = answerAll(CREDENTIAL_NO_STATUS.resume, source).map((a) =>
     /Forklift Operator$/.test(a.line) ? { ...a, answer: "It was the warehouse's forklift training, passed in 2021, expired now." } : a
   );
-  const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: CREDENTIAL_NO_STATUS.source, defendAnswers: answers });
-  assert.ok(!after.openItems.some((i) => i.rule === "STD-T03"), JSON.stringify(after.openItems));
+  const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source, defendAnswers: answers });
+  assert.ok(after.openItems.some((i) => i.kind === "credential_unsaid"), JSON.stringify(after.openItems));
 });
 
 test("status: thin history with a dated class is not penalized for thinness", () => {
-  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: THIN.source, defendAnswers: answerAll(THIN.resume, THIN.source) });
+  // Round 5: the class line is theirs only when it is exactly what they typed in the licenses-and-training answer.
+  const typed = "Forklift training, county job center (2023), passed the driving test";
+  // Round 6: a job title counts only as the person's own whole title (their job header).
+  const source = `${THIN.source}\nYard worker | Neighbors in Dayton | 2021 - 2024`;
+  // Round 7: the class line is theirs as a whole line of their own uploaded resume.
+  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: source, defendAnswers: answerAll(THIN.resume, source), ownResumeText: `${source}\n${typed}` });
   assert.equal(s.state, "finished", JSON.stringify(s.openItems));
 });
 
@@ -373,7 +385,7 @@ test("defend: a thin page in the person's own words, with a dated class they nam
 test("two-page fixture really runs to two pages and stays finished once defended", () => {
   const plan = computeFitPlan(TWO_PAGE.resume, {});
   assert.equal(plan.result.pageCount, 2);
-  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source) });
+  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialRows: [{ name: "OSHA 10", kind: "card", when: "2017" }], ownResumeText: "GED, Columbus Adult Learning Center | 2005" });
   assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
   assert.equal(s.state, "finished");
 });
