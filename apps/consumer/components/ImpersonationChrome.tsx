@@ -12,10 +12,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
-
-/** Set while an impersonation is active in this browser (see settle, below). */
-export const IMPERSONATION_SEEN_KEY = "smr_impersonation_seen";
+import { useSession } from "next-auth/react";
+import { clearForgeBrowserKeysEverywhere, impersonationSeenFor, IMPERSONATION_SEEN_KEY } from "@/lib/refinery-guards";
 
 interface Status {
   active: boolean;
@@ -29,18 +27,23 @@ export function ImpersonationChrome() {
   const [now, setNow] = useState(Date.now());
   const [ending, setEnding] = useState(false);
 
-  // Whether this browser has seen the session active (kept in storage too, so
-  // a reload or a new page after it ran out still knows). When the status is
-  // then inactive (it expired, or was ended anywhere), the keys the person's
+  // Whether this browser has seen the session active, FOR THIS ADMIN (kept
+  // in storage too, so a reload or a new page after it ran out still knows;
+  // the stored value is the admin's own id, so a flag left by anyone else is
+  // dropped, never acted on: review r3, I4). When the status is then
+  // inactive (it expired, or was ended anywhere), the keys the person's
   // session left in this browser are cleared once, the same as the End
   // button does (security review 3a Part 2 r2, N3).
+  const { data: authData } = useSession();
+  const adminId = (authData?.user as { id?: string } | undefined)?.id ?? null;
   const wasActive = useRef(false);
   const cleared = useRef(false);
   const settle = useCallback((active: boolean) => {
+    if (!adminId) return;
     let seen = wasActive.current;
     try {
-      if (active) localStorage.setItem(IMPERSONATION_SEEN_KEY, "1");
-      else seen = seen || localStorage.getItem(IMPERSONATION_SEEN_KEY) === "1";
+      if (active) localStorage.setItem(IMPERSONATION_SEEN_KEY, adminId);
+      else seen = seen || impersonationSeenFor(adminId);
     } catch {
       // storage unavailable: this tab's own memory still applies
     }
@@ -50,14 +53,14 @@ export function ImpersonationChrome() {
     } else if (seen && !cleared.current) {
       cleared.current = true;
       wasActive.current = false;
-      clearForgeBrowserKeysEverywhere();
+      clearForgeBrowserKeysEverywhere(adminId);
       try {
         localStorage.removeItem(IMPERSONATION_SEEN_KEY);
       } catch {
         // ignore
       }
     }
-  }, []);
+  }, [adminId]);
 
   const load = useCallback(async () => {
     try {
@@ -105,7 +108,7 @@ export function ImpersonationChrome() {
       });
     } finally {
       // Whatever the person's session left in this browser goes with it (M3).
-      clearForgeBrowserKeysEverywhere();
+      clearForgeBrowserKeysEverywhere(adminId);
       window.location.href = "/dashboard/admin/users";
     }
   }

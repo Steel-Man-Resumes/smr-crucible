@@ -178,9 +178,6 @@ export function isForgeSessionExpired(
 /** Read the stored run, migrating and expiring it. Exported for tests. */
 export function loadSession(): ForgeSessionData {
   if (typeof window === "undefined") return {};
-  // A clear marked on the other host (an impersonation started, ended or ran
-  // out there) applies here before the run is read (lib/refinery-guards.ts).
-  applyForgeClearMark();
   try {
     const stored = localStorage.getItem("forge_session");
     if (!stored) return {};
@@ -260,6 +257,16 @@ export function ForgeProvider({ children }: { children: ReactNode }) {
   const auth = useRunAuth();
   const userIdRef = useRef<string | null>(null);
   userIdRef.current = auth.status === "authenticated" ? auth.userId : null;
+
+  // A clear the other host marked for THIS signed-in admin (an impersonation
+  // started, ended or ran out there) applies here, once per account, during
+  // render so no page reads the stale run first. Never for a signed-out
+  // visitor or a mark for anyone else (lib/refinery-guards.ts; r3, R3-2).
+  const clearCheckedFor = useRef<string | null>(null);
+  if (auth.status === "authenticated" && clearCheckedFor.current !== auth.userId) {
+    clearCheckedFor.current = auth.userId;
+    if (applyForgeClearMark(auth.userId) && Object.keys(session).length > 0) setSession({});
+  }
 
   const updateSession = useCallback((updates: Partial<ForgeSessionData>) => {
     setSession((prev) => {

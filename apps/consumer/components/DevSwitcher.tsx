@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
 import {
   useRealTier,
@@ -45,6 +46,8 @@ function groupByOrg(personas: Persona[]): Array<[string, Persona[]]> {
 }
 
 export function DevSwitcher() {
+  const { data: clearAuth } = useSession();
+  const clearAdminId = (clearAuth?.user as { id?: string } | undefined)?.id ?? null;
   const realTier = useRealTier();
   const [open, setOpen] = useState(false);
   const [viewAs, setViewAsState] = useState<ViewAs | null>(null);
@@ -91,7 +94,7 @@ export function DevSwitcher() {
       });
       if (res.ok) {
         // Clear this browser's Forge and Refinery keys first (M3).
-        clearForgeBrowserKeysEverywhere();
+        clearForgeBrowserKeysEverywhere(clearAdminId);
         // Their real landing, inside the blue read-only frame
         window.location.assign("/dashboard");
         return;

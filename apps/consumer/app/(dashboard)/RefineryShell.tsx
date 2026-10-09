@@ -43,6 +43,7 @@ import {
   forgeSyncAllowed,
   settleDerivedKeys,
   applyForgeClearMark,
+  IMPERSONATION_SEEN_KEY,
 } from "@/lib/refinery-guards";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
@@ -205,6 +206,8 @@ const PERSONAL_LS_KEYS = [
   "forge_last_synced_run",
   "interview_struggle_tags",
   DERIVED_OWNER_KEY,
+  // r3 I4: the "impersonation seen" flag never outlives the sign-in.
+  IMPERSONATION_SEEN_KEY,
 ];
 
 /**
@@ -381,7 +384,7 @@ export function RefineryShell({
   if (authStatus === "authenticated" && shellUid && derivedSettledFor.current !== shellUid) {
     const uid = shellUid;
     // A clear marked on the other host applies here first (N3).
-    applyForgeClearMark();
+    applyForgeClearMark(uid);
     settleDerivedKeys(uid);
     derivedSettledFor.current = uid;
   }

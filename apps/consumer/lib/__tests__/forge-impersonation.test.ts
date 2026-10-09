@@ -36,7 +36,7 @@ describe("M3: impersonation never moves a Forge run between accounts", () => {
 
   it("clearing runs when an impersonation starts (both start points) and when it ends", () => {
     for (const f of [["app", "(dashboard)", "dashboard", "admin", "users", "page.tsx"], ["components", "DevSwitcher.tsx"], ["components", "ImpersonationChrome.tsx"]]) {
-      assert.match(code(read(...f)), /clearForgeBrowserKeysEverywhere\(\);/, f.join("/"));
+      assert.match(code(read(...f)), /clearForgeBrowserKeysEverywhere\((adminId|clearAdminId)\);/, f.join("/"));
     }
   });
 
@@ -97,25 +97,72 @@ describe("premium notes", () => {
 });
 
 describe("r2 N3: impersonation ending any way clears the keys, on both hosts as far as the browser allows", () => {
-  it("clearing also leaves a mark the other host acts on once", async () => {
+  const ADMIN_ID = "00000000-0000-4000-8000-0000000000ad";
+  const OTHER_ID = "00000000-0000-4000-8000-0000000000aa";
+  const NOW = 1_800_000_000_000;
+
+  it("clearing also leaves a mark, for this admin, that the other host acts on once", async () => {
     const { clearForgeBrowserKeysEverywhere, applyForgeClearMark, FORGE_CLEAR_SEEN_KEY } = await import("../refinery-guards");
     const here = store({ saved_jobs: "[1]" });
     const doc = { cookie: "", location: { hostname: "refinery.steelmanresumes.com", protocol: "https:" } };
-    clearForgeBrowserKeysEverywhere(here, doc, 1_000);
+    clearForgeBrowserKeysEverywhere(ADMIN_ID, here, doc, NOW);
     assert.equal(here.getItem("saved_jobs"), null);
-    assert.match(doc.cookie, /^smr_forge_clear=1000; Path=\/; Max-Age=\d+; SameSite=Lax; Domain=\.steelmanresumes\.com; Secure$/);
-    assert.equal(here.getItem(FORGE_CLEAR_SEEN_KEY), "1000");
-    // The other host: its own storage, the shared cookie.
+    assert.match(doc.cookie, new RegExp(`^smr_forge_clear=${NOW}\\.${ADMIN_ID}; Path=/; Max-Age=\\d+; SameSite=Lax; Domain=\\.steelmanresumes\\.com; Secure$`));
+    assert.equal(here.getItem(FORGE_CLEAR_SEEN_KEY), String(NOW));
+    // The other host: its own storage, the shared cookie, the same admin signed in.
     const there = store({ [RUN_KEY]: JSON.stringify({ _ownerUserId: "person", resumeText: "x" }), hidden_jobs: "[2]" });
-    const otherDoc = { cookie: "a=b; smr_forge_clear=1000", location: { hostname: "forge.steelmanresumes.com", protocol: "https:" } };
-    assert.equal(applyForgeClearMark(there, otherDoc), true);
+    const otherDoc = { cookie: `a=b; smr_forge_clear=${NOW}.${ADMIN_ID}`, location: { hostname: "forge.steelmanresumes.com", protocol: "https:" } };
+    assert.equal(applyForgeClearMark(ADMIN_ID, there, otherDoc, NOW + 1000), true);
     assert.equal(there.getItem(RUN_KEY), null);
     assert.equal(there.getItem("hidden_jobs"), null);
-    // Acted on once: a new run after that is left alone.
-    there.setItem(RUN_KEY, JSON.stringify({ _ownerUserId: "admin" }));
-    assert.equal(applyForgeClearMark(there, otherDoc), false);
+    there.setItem(RUN_KEY, JSON.stringify({ _ownerUserId: ADMIN_ID }));
+    assert.equal(applyForgeClearMark(ADMIN_ID, there, otherDoc, NOW + 2000), false, "acted on once");
     assert.ok(there.getItem(RUN_KEY));
   });
+
+  it("r3 R3-2: a mark never touches a signed-out visitor, someone else, or comes from the future", async () => {
+    const { applyForgeClearMark, FORGE_CLEAR_SEEN_KEY } = await import("../refinery-guards");
+    const run = () => store({ [RUN_KEY]: JSON.stringify({ resumeText: "my only copy" }) });
+    const doc = (v: string) => ({ cookie: `smr_forge_clear=${v}` });
+    let s1 = run();
+    assert.equal(applyForgeClearMark(null, s1, doc(`${NOW}.${ADMIN_ID}`), NOW), false, "signed out");
+    assert.ok(s1.getItem(RUN_KEY));
+    assert.equal(applyForgeClearMark(OTHER_ID, s1, doc(`${NOW}.${ADMIN_ID}`), NOW), false, "a mark for another account");
+    assert.equal(applyForgeClearMark(ADMIN_ID, s1, doc("1"), NOW), false, "the old bare format (any host could write it)");
+    assert.equal(applyForgeClearMark(ADMIN_ID, s1, doc(`${NOW + 60 * 60 * 1000}.${ADMIN_ID}`), NOW), false, "from the future");
+    assert.ok(s1.getItem(RUN_KEY));
+    // A far-future "seen" cannot switch the clear off, and none is ever stored.
+    s1 = run();
+    s1.setItem(FORGE_CLEAR_SEEN_KEY, "9999999999999999");
+    assert.equal(applyForgeClearMark(ADMIN_ID, s1, doc(`${NOW - 1000}.${ADMIN_ID}`), NOW), true);
+    assert.ok(Number(s1.getItem(FORGE_CLEAR_SEEN_KEY)) <= NOW);
+    // A mark a little ahead (clock skew) counts, but "seen" stays at now.
+    s1 = run();
+    assert.equal(applyForgeClearMark(ADMIN_ID, s1, doc(`${NOW + 60_000}.${ADMIN_ID}`), NOW), true);
+    assert.equal(s1.getItem(FORGE_CLEAR_SEEN_KEY), String(NOW));
+  });
+
+  it("r3 R3-2: the Forge applies the mark only for the signed-in account, never in loadSession", () => {
+    const ctx = code(read("lib", "forge-context.tsx"));
+    assert.match(ctx, /if \(auth\.status === "authenticated" && clearCheckedFor\.current !== auth\.userId\) \{/);
+    assert.match(ctx, /applyForgeClearMark\(auth\.userId\)/);
+    const load = ctx.slice(ctx.indexOf("export function loadSession"), ctx.indexOf("export function loadSession") + 600);
+    assert.doesNotMatch(load, /applyForgeClearMark/);
+  });
+
+  it("r3 I4: the impersonation flag belongs to one admin, and goes at sign-out", async () => {
+    const { impersonationSeenFor, IMPERSONATION_SEEN_KEY } = await import("../refinery-guards");
+    const s1 = store({ [IMPERSONATION_SEEN_KEY]: ADMIN_ID });
+    assert.equal(impersonationSeenFor(ADMIN_ID, s1), true);
+    assert.equal(impersonationSeenFor(OTHER_ID, s1), false, "another person signed in: not theirs");
+    assert.equal(s1.getItem(IMPERSONATION_SEEN_KEY), null, "and the stale flag is dropped");
+    const s2 = store({ [IMPERSONATION_SEEN_KEY]: "1" });
+    assert.equal(impersonationSeenFor(ADMIN_ID, s2), false, "the old bare flag is dropped too");
+    assert.match(code(read("app", "(dashboard)", "RefineryShell.tsx")), /DERIVED_OWNER_KEY,\s+IMPERSONATION_SEEN_KEY,\s*\];/);
+    assert.match(code(read("components", "forge", "ForgeAccountBar.tsx")), /localStorage\.removeItem\(IMPERSONATION_SEEN_KEY\)/);
+    assert.match(code(read("components", "ImpersonationChrome.tsx")), /localStorage\.setItem\(IMPERSONATION_SEEN_KEY, adminId\)/);
+  });
+
   it("on localhost and previews the mark is host-only (there is one host)", async () => {
     const { forgeClearCookieAttrs } = await import("../refinery-guards");
     assert.doesNotMatch(forgeClearCookieAttrs("localhost", "http:"), /Domain|Secure/);
@@ -124,18 +171,14 @@ describe("r2 N3: impersonation ending any way clears the keys, on both hosts as 
   it("the chrome clears once when the status turns inactive or the countdown runs out", () => {
     const src = code(read("components", "ImpersonationChrome.tsx"));
     assert.match(src, /settle\(!!s\.active && !!s\.mode\)/);
-    assert.match(src, /if \(active\) localStorage\.setItem\(IMPERSONATION_SEEN_KEY, "1"\)/);
-    assert.match(src, /else seen = seen \|\| localStorage\.getItem\(IMPERSONATION_SEEN_KEY\) === "1"/, "a reload or new page after it ran out still knows");
-    assert.match(src, /\} else if \(seen && !cleared\.current\) \{[\s\S]*?clearForgeBrowserKeysEverywhere\(\);/);
+    assert.match(src, /else seen = seen \|\| impersonationSeenFor\(adminId\)/, "a reload or new page after it ran out still knows");
+    assert.match(src, /\} else if \(seen && !cleared\.current\) \{[\s\S]*?clearForgeBrowserKeysEverywhere\(adminId\);/);
     assert.match(src, /if \(runOut\) settle\(false\);/);
   });
-  it("both hosts apply a pending mark before reading: the Forge run load and the Refinery keys", () => {
-    const ctx = code(read("lib", "forge-context.tsx"));
-    assert.ok(ctx.indexOf("applyForgeClearMark();") > 0 && ctx.indexOf("applyForgeClearMark();") < ctx.indexOf('localStorage.getItem("forge_session")'));
+  it("the Refinery applies a pending mark for its signed-in account before settling keys; both start points pass the admin id", () => {
     const shell = code(read("app", "(dashboard)", "RefineryShell.tsx"));
-    assert.ok(shell.indexOf("applyForgeClearMark();") < shell.indexOf("settleDerivedKeys(uid);"));
-    for (const f of [["app", "(dashboard)", "dashboard", "admin", "users", "page.tsx"], ["components", "DevSwitcher.tsx"]]) {
-      assert.match(code(read(...f)), /clearForgeBrowserKeysEverywhere\(\);/, f.join("/"));
-    }
+    assert.ok(shell.indexOf("applyForgeClearMark(uid);") > 0 && shell.indexOf("applyForgeClearMark(uid);") < shell.indexOf("settleDerivedKeys(uid);"));
+    assert.match(code(read("app", "(dashboard)", "dashboard", "admin", "users", "page.tsx")), /clearForgeBrowserKeysEverywhere\(adminId\);/);
+    assert.match(code(read("components", "DevSwitcher.tsx")), /clearForgeBrowserKeysEverywhere\(clearAdminId\);/);
   });
 });
