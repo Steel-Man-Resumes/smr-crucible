@@ -62,6 +62,8 @@ export const RELEASE_PHRASES: readonly string[] = [
   "booked into", "held at", "did my time", "came home from",
   // Combined review r3 (R3-L1): how people say it on a phone.
   "got out of", "got out", "yrs at", "years at", "time at", "months at", "did time at",
+  // CC's ruling after r3: more of the same.
+  "back from", "left", "went to", "shu at", "transferred out of", "out of",
 ];
 
 /** US state names (each word), and the two-letter codes. Never distinctive. */

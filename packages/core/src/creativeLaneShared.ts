@@ -640,6 +640,8 @@ function softMarks(toks: Tok[]): number[] {
       if (i + ph.length <= toks.length && ph.every((w, k) => toks[i + k].w === w)) for (let k = 0; k < ph.length; k++) out.push(i + k);
     }
     if (duration && toks[i].w === "was" && toks[i + 1]?.w === "at") out.push(i, i + 1);
+    // "did 4 at", "did 3 in": a count of years or months without the unit.
+    if (toks[i].w === "did" && /^\d+$/.test(toks[i + 1]?.w ?? "") && /^(?:at|in)$/.test(toks[i + 2]?.w ?? "")) out.push(i, i + 1, i + 2);
   }
   return out;
 }
@@ -690,7 +692,17 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
     const all = tokensOf(foldText(v));
     const whole = ` ${all.map((x) => x.w).join(" ")} `;
     // A whole hidden name: held for good in any field, the person's own name included (it is never a true fact there).
-    for (const n of t.fullNames) if (whole.includes(` ${n} `)) return fixedHold(n);
+    // One made only of dictionary words with no facility word in it (a venue typed as "Three Rivers") is held
+    // until the person answers, unless it sits next to a facility, incarceration or release word (CC after r3).
+    for (const n of t.fullNames) {
+      if (!whole.includes(` ${n} `)) continue;
+      const nw = n.split(" ");
+      if (!nw.every((w) => t.dictWords.includes(w)) || nw.some((w) => FACILITY_NEAR_WORDS.has(w))) return fixedHold(n);
+      const at = all.findIndex((_, i) => nw.every((w, k) => all[i + k]?.w === w));
+      const near = [...nearMarks(all), ...softMarks(all)].some((j) => (j < at && at - j <= ANCHOR_WINDOW) || (j >= at + nw.length && j - (at + nw.length - 1) <= ANCHOR_WINDOW));
+      if (near) return fixedHold(n);
+      soft = soft ?? { tier: 1, term: n, fixed: false };
+    }
     // A name people use for the place: held (in the person's own name or place, until they answer).
     const lowered = foldText(v).toLowerCase().replace(/['`\u2018\u2019\u02bc]/g, "");
     for (const n of t.names) if (hasNickname(lowered, n)) return hold(n);
@@ -728,6 +740,18 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
         if (!t.anchors.includes(toks[i].w)) continue;
         const m = smarks.find((j) => j !== i && Math.abs(j - i) <= ANCHOR_WINDOW);
         if (m !== undefined) soft = { tier: 1, term: `${toks[i].w} ${toks[m].w}`, fixed: false };
+      }
+    }
+    // A dictionary-only place's word right before or after a year or a year range ("lee 2014-2020",
+    // "2015 valley state"): held until the person answers (CC after r3).
+    if (!soft) {
+      const year = (x?: Tok) => !!x && /^(?:19|20)\d{2}$/.test(x.w);
+      for (let i = 0; i < toks.length && !soft; i++) {
+        if (!t.dictOnly.includes(toks[i].w)) continue;
+        // The place's words may run together ("valley state 2015"): look past the rest of its name.
+        let j = i;
+        while (j + 1 < toks.length && (t.dictOnly.includes(toks[j + 1].w) || FACILITY_GENERIC_WORDS.has(toks[j + 1].w))) j++;
+        if (year(toks[i - 1]) || year(toks[j + 1])) soft = { tier: 1, term: `${toks[i].w} year`, fixed: false };
       }
     }
     // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field,

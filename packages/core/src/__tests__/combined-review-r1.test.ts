@@ -585,3 +585,49 @@ describe("combined review r3 (R3-M1, R3-L1, R3-L2)", () => {
     assert.equal(rv.status.openItems.filter((x) => x.answer === "facility_word").length, 1);
   });
 });
+
+describe("CC rulings after combined review r3: more release wording; dictionary-only full names", () => {
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  it("the rows that still printed are now held until answered, each with a card", () => {
+    for (const [venue, text] of [
+      ["Green Haven Correctional Facility", "back from haven in 2019"],
+      ["Lee Correctional Institution", "left lee in 2020"],
+      ["Lee Correctional Institution", "went to lee in 2014"],
+      ["Lee Correctional Institution", "lee 2014-2020"],
+      ["Valley State Prison", "did 4 at valley"],
+      ["Valley State Prison", "2015 valley state"],
+      ["Pelican Bay State Prison", "shu at the bay"],
+      ["Lee Correctional Institution", "transferred out of lee"],
+      ["Lee Correctional Institution", "out of lee since 2020"],
+      ["Great Meadow Correctional Facility", "did 3 in meadow"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), `${venue}: ${text} has a card`);
+    }
+    // Plain prose with those words stays finished.
+    for (const [venue, text] of [["Lee Correctional Institution", "left the band in 2020"], ["Valley State Prison", "went to the river"], ["Green Haven Correctional Facility", "back from a beach vacation"]] as const) {
+      const { e, s } = hide(venue);
+      assert.equal(cv(mark([DEG, e]), { ...s, interests: text }).status.state, "finished", text);
+    }
+  });
+  it("a full hidden name made only of dictionary words is held until answered; next to facility, incarceration or release wording it stays fixed", () => {
+    for (const [venue, text] of [["Three Rivers", "Three Rivers Arts Festival"], ["Big Sandy", "Big Sandy Superstore"], ["Big Spring", "Big Spring water bottling"]] as const) {
+      const e = entry({ section: "teaching", title: "Literacy Tutor", venue, year: 2019, names_facility: true });
+      const s = applyTitleMode(BASE, e.id, "leave_out")!;
+      const set = { ...s, interests: text };
+      const r = cv(mark([DEG, e]), set);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), `${venue}: ${text}`);
+      assert.ok(cv(mark([DEG, e]), applyPhraseAnswer(set, text, "no")!).text.includes(text), `${venue}: 'No' puts it back`);
+      for (const t2 of [`Did time at ${venue}`, `released from ${venue.toLowerCase()} in 2019`, `${venue} prison choir`]) {
+        const f = cv(mark([DEG, e]), { ...s, interests: t2 });
+        assert.ok(f.model.heldFields.some((h) => h.field === "interests"), t2);
+        assert.ok(!f.model.asks.some((a) => a.field === "interests"), `${t2}: fixed, no card`);
+      }
+    }
+    // A full name with a facility word in it stays fixed.
+    const { e, s } = hide("Mountain View Correctional Facility");
+    assert.ok(!cv(mark([DEG, e]), { ...s, interests: "Mountain View Correctional Facility alumni" }).model.asks.some((a) => a.field === "interests"));
+  });
+});
