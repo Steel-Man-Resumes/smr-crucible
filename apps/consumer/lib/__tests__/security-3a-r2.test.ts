@@ -226,8 +226,9 @@ describe("L2: refused calls cost the person nothing; unlimited tiers never use a
   it("an unlimited account carrying an org's code never draws from that org's pool", async () => {
     const { c } = ctr();
     const code = { code: "ORG", seats: codeSeats(50) };
-    for (let i = 0; i < 300; i++) await call(c, "unlimited", 0, "1.1.1.1", code);
-    assert.equal(await call(c, "member", 30, "2.2.2.2", code), "ok");
+    // net-a, net-b: Fictional tokens, not addresses: the public-repo guard keeps IP literals out of this repo.
+    for (let i = 0; i < 300; i++) await call(c, "unlimited", 0, "net-a", code);
+    assert.equal(await call(c, "member", 30, "net-b", code), "ok");
   });
 });
 

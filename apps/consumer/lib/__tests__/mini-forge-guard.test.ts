@@ -25,6 +25,8 @@ const read = (...p: string[]) => readFileSync(join(CONSUMER, ...p), "utf8");
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0fa1b2c3d4";
+// Network values below (net-a, client-a, proxy-b): Fictional tokens, not
+// addresses: the public-repo guard keeps IP literals out of this repo.
 
 function counters(): TryCounters & { keys: Map<string, number> } {
   const keys = new Map<string, number>();
@@ -57,7 +59,7 @@ describe("try limits (M1, L3)", () => {
     const results: boolean[] = [];
     for (let i = 0; i < 6; i++) {
       // A different network and account each time: the plan's own count still holds.
-      results.push((await countPinTry(c, { plan: ID, ip: `203.0.113.${i}`, userId: `u${i}` })).allowed);
+      results.push((await countPinTry(c, { plan: ID, ip: `net-${i}`, userId: `u${i}` })).allowed);
     }
     assert.deepEqual(results, [true, true, true, true, true, false]);
     assert.equal(MINI_FORGE_TRIES.perPlan, 5);
@@ -66,25 +68,30 @@ describe("try limits (M1, L3)", () => {
     const c = counters();
     let lastNet = true;
     for (let i = 0; i < MINI_FORGE_TRIES.perNetwork + 1; i++) {
-      lastNet = (await countPinTry(c, { plan: `plan-${i}`, ip: "203.0.113.9", userId: null })).allowed;
+      lastNet = (await countPinTry(c, { plan: `plan-${i}`, ip: "net-a", userId: null })).allowed;
     }
     assert.equal(lastNet, false, "the network floor");
     const d = counters();
     let lastAcct = true;
     for (let i = 0; i < MINI_FORGE_TRIES.perAccount + 1; i++) {
-      lastAcct = (await countPinTry(d, { plan: `plan-${i}`, ip: `198.51.100.${i}`, userId: "u1" })).allowed;
+      lastAcct = (await countPinTry(d, { plan: `plan-${i}`, ip: `net-b-${i}`, userId: "u1" })).allowed;
     }
     assert.equal(lastAcct, false, "the account limit");
   });
   it("every counter is bumped on every try (no short-circuit to split tries across)", async () => {
     const c = counters();
-    await countPinTry(c, { plan: ID, ip: "203.0.113.1", userId: "u1" });
+    await countPinTry(c, { plan: ID, ip: "net-a", userId: "u1" });
     assert.equal(c.keys.size, 3);
   });
-  it("the client IP follows the same rule as the auth limits", () => {
+  it("the client IP follows the same rule as the auth limits (header shape and order)", () => {
     const h = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null });
-    assert.equal(ipFromHeaders(h({ "x-real-ip": "203.0.113.5", "x-forwarded-for": "1.1.1.1" })), "203.0.113.5");
-    assert.equal(ipFromHeaders(h({ "x-forwarded-for": "1.1.1.1, 203.0.113.6" })), "203.0.113.6");
+    // x-real-ip wins when present (trimmed); otherwise the LAST x-forwarded-for
+    // hop, the one closest to our edge, as lib/auth-rate-limit getClientIp does.
+    assert.equal(ipFromHeaders(h({ "x-real-ip": " client-a ", "x-forwarded-for": "client-b" })), "client-a");
+    assert.equal(ipFromHeaders(h({ "x-forwarded-for": "client-a, proxy-b" })), "proxy-b");
+    assert.equal(ipFromHeaders(h({ "x-forwarded-for": "  proxy-b  " })), "proxy-b");
+    assert.equal(ipFromHeaders(h({ "x-real-ip": "", "x-forwarded-for": "client-a" })), "client-a", "an empty x-real-ip falls through");
+    assert.equal(ipFromHeaders(h({ "x-forwarded-for": "client-a, " })), "unknown", "an empty last hop is not a client");
     assert.equal(ipFromHeaders(h({})), "unknown");
   });
 });
