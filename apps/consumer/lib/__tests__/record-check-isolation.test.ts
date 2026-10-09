@@ -44,6 +44,7 @@ const ALLOWED: Record<string, string> = {
   "apps/consumer/app/api/user/export-data/route.ts": "data rights: export to the owner",
   "apps/consumer/app/api/user/delete-data/route.ts": "data rights: delete my data",
   "apps/consumer/app/(dashboard)/dashboard/settings/page.tsx": "the export checkbox label",
+  "apps/consumer/app/(dashboard)/dashboard/disclosure/page.tsx": "the plain entry link (copy only)",
   "packages/core/src/recordCheck.ts": "the only reader and writer of the table",
   "packages/core/src/index.ts": "re-export",
   "packages/core/src/consent.ts": "the consent layer name",
@@ -108,6 +109,13 @@ test("no reuse: the writer, t.ROY chat, coach, interview, tailor and planner can
   // The tailor's routes, wherever they live.
   for (const f of touching) assert.ok(!/tailor|interview|assistant|coach|resume-|rush|forge\//.test(f), f);
   assert.ok(found >= 20, `checked ${found} prompt builders (paths moved?)`);
+});
+
+test("no reuse: the disclosure planner only links to the step", () => {
+  const src = readFileSync(join(REPO, "apps/consumer/app/(dashboard)/dashboard/disclosure/page.tsx"), "utf8");
+  const imports = Array.from(src.matchAll(/from "([^"]*record-check[^"]*)"/g)).map((m) => m[1]);
+  assert.deepEqual(imports, ["@/lib/record-check/copy"]);
+  assert.ok(!/\/api\/record-check/.test(src));
 });
 
 test("no reuse: the shell sends t.ROY only the page name on this screen", () => {
