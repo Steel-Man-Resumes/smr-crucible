@@ -495,3 +495,93 @@ describe("all-dictionary place names: a lone word asks only when written like a 
     assert.ok(cv(mark([DEG, ck.e]), { ...ck.s, interests: "cook county farmers market" }).model.asks.some((a) => a.field === "interests"));
   });
 });
+
+describe("combined review r3 (R3-M1, R3-L1, R3-L2)", () => {
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  const answerAll = (es: PracticeEntry[], s: CreativeKindSettings, a: "yes" | "no") => {
+    let cur = s;
+    for (let i = 0; i < 6; i++) for (const k of buildCvModel(es, cur, "academic").asks) cur = applyPhraseAnswer(cur, k.phrase, a)!;
+    return cur;
+  };
+  it("R3-M1: a run made only of dictionary words is held until answered in free text, with one card; 'No' puts it back", () => {
+    for (const [venue, text] of [
+      ["Mountain View Correctional Facility", "Software job in Mountain View, CA"],
+      ["Snake River Correctional Institution", "Rafting guide on the Snake River"],
+      ["Coffee Creek Correctional Facility", "Coffee Creek trail cleanup"],
+      ["Great Meadow Correctional Facility", "a great meadow of wildflowers"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const set = { ...s, interests: text };
+      const es = mark([DEG, e]);
+      const r = cv(es, set);
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), `${venue}: ${text} has a card`);
+      const n2 = cv(es, answerAll(es, set, "no"));
+      assert.ok(n2.text.includes(text), `${venue}: 'No' puts it back`);
+      assert.equal(n2.status.state, "finished");
+    }
+  });
+  it("R3-M1: next to a facility or incarceration word, a whole name, or a run with a non-dictionary word, it stays a fixed hold", () => {
+    for (const [venue, text] of [
+      ["Mountain View Correctional Facility", "Mountain View prison choir"],
+      ["Mountain View Correctional Facility", "I did time at Mountain View"],
+      ["Mountain View Correctional Facility", "Mountain View Correctional Facility"],
+      ["San Quentin State Prison", "Shakespeare at San Quentin"],
+      ["Rikers Island Correctional Center", "Poetry on Rikers Island"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+      assert.ok(!r.model.asks.some((a) => a.field === "interests"), `${venue}: ${text} has no card`);
+    }
+  });
+  it("R3-L1: phone-typed stay and release wording near a dictionary-only short name is held until answered", () => {
+    for (const [venue, text] of [
+      ["Lee Correctional Institution", "my time at lee"],
+      ["Lee Correctional Institution", "6 yrs at lee"],
+      ["Lee Correctional Institution", "got out of lee in 2020"],
+      ["Lee Correctional Institution", "was at lee 6 years"],
+      ["Pelican Bay State Prison", "8 yrs at the bay"],
+      ["Green Haven Correctional Facility", "6 years at haven"],
+      ["Great Meadow Correctional Facility", "2 months at meadow"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), `${venue}: ${text} has a card`);
+    }
+  });
+  it("R3-L1: a '<word> State' run always asks, in any case; plain prose stays finished", () => {
+    const vs = hide("Valley State Prison");
+    for (const text of ["valley state 2015", "4 yrs at valley state", "Valley State alumni"]) {
+      const r = cv(mark([DEG, vs.e]), { ...vs.s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests") || r.model.heldFields.some((h) => h.field === "interests"), text);
+      assert.equal(r.status.state, "draft", text);
+    }
+    const ss = hide("Sing Sing Correctional Facility");
+    assert.equal(cv(mark([DEG, ss.e]), { ...ss.s, interests: "I sing at church." }).status.state, "finished");
+    const gh = hide("Green Haven Correctional Facility");
+    assert.equal(cv(mark([DEG, gh.e]), { ...gh.s, interests: "interested in green building" }).status.state, "finished");
+  });
+  it("R3-L2: one answer on a County or State run covers every line on the lane that carries it", () => {
+    const { e, s } = hide("Cook County Jail");
+    const lib = entry({ section: "appointment", title: "Library aide", venue: "Cook County Library", year: 2021 });
+    const set = { ...s, interests: "Cook County farmers market", languages: "Spanish (Cook County classes)" };
+    const es = mark([DEG, e, lib]);
+    const r = cv(es, set);
+    const cards = r.status.openItems.filter((x) => x.answer === "facility_word");
+    assert.equal(cards.length, 1, JSON.stringify(cards));
+    assert.equal(cards[0].phrase, "Cook County");
+    const no = cv(es, applyPhraseAnswer(set, "Cook County", "no")!);
+    assert.equal(no.status.state, "finished");
+    assert.match(no.text, /Cook County Library/);
+    assert.match(no.text, /Cook County farmers market/);
+    const yes = cv(es, applyPhraseAnswer(set, "Cook County", "yes")!);
+    assert.doesNotMatch(yes.text, /Cook County/);
+    // The State run works the same way.
+    const vs = hide("Valley State Prison");
+    const v2 = { ...vs.s, interests: "Valley State alumni", languages: "Spanish (Valley State night classes)" };
+    const rv = cv(mark([DEG, vs.e]), v2);
+    assert.equal(rv.status.openItems.filter((x) => x.answer === "facility_word").length, 1);
+  });
+});

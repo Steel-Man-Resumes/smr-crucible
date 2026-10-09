@@ -56,6 +56,7 @@ import {
   rowText,
   titleModeFor,
   workSampleCheck,
+  phraseKey,
 } from "./creativeLaneShared";
 import {
   type BioContent,
@@ -133,6 +134,8 @@ export function heldByAsk(asks: { field?: string; entryId?: string; held?: boole
 
 /** One key per open item: two cards about different phrases on the same line are both kept. */
 export function openItemKey(x: CreativeOpenItem): string {
+  // One card per phrase on a document: its answer covers every line that carries the same phrase (R3-L2).
+  if (x.answer === "facility_word" && x.phrase) return `facility|${x.doc}|${phraseKey(x.phrase)}`;
   return `${x.rule}|${x.line}|${x.question}|${x.entryId ?? ""}|${x.sentenceId ?? ""}|${x.phrase ?? ""}`;
 }
 

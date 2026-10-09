@@ -60,6 +60,8 @@ export const INCARCERATION_PHRASES: readonly string[] = [
 export const RELEASE_PHRASES: readonly string[] = [
   "released from", "paroled", "parole", "sentenced to", "transferred to", "transferred from", "in custody",
   "booked into", "held at", "did my time", "came home from",
+  // Combined review r3 (R3-L1): how people say it on a phone.
+  "got out of", "got out", "yrs at", "years at", "time at", "months at", "did time at",
 ];
 
 /** US state names (each word), and the two-letter codes. Never distinctive. */

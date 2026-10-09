@@ -405,6 +405,8 @@ export interface HiddenTerms {
    * like a name (capitalized), or in a name or place field or a record line.
    */
   dictOnly: string[];
+  /** Every dictionary word of the kept-off names (server-marked): a run made only of these is held until answered (R3-M1). */
+  dictWords: string[];
   /** The person's answers on this lane, by phrase key. */
   answers: Record<string, PhraseAnswer>;
   /** The person's own name for this lane (when it names nothing held): in other text, never counted. */
@@ -526,8 +528,9 @@ export function hiddenFacilityTerms(
   });
   const common = Array.from(cuttable).filter((w) => !blocked.has(w));
   const dictOnly = Array.from(blocked);
+  const dictWords = Array.from(new Set(entries.flatMap((e) => (e.names_facility && Array.isArray(e.details.commonWords) ? e.details.commonWords : []))));
   const ownWords = s?.displayName ? wordsOf(s.displayName).trim().split(" ").filter((w) => w.length >= 2) : [];
-  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, common, dictOnly, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
+  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, common, dictOnly, dictWords, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
   // The person's own name is blanked out of other text, so a word it shares
   // with a place costs one card on the name itself, never one per line. Never
   // the home place, and never a name that itself holds a run, a nickname or a
@@ -630,10 +633,13 @@ const RELEASE_WORDS = RELEASE_PHRASES.map((p) => p.split(" "));
 /** Token positions that are part of release or custody wording ("released from", "paroled", "held at"). */
 function softMarks(toks: Tok[]): number[] {
   const out: number[] = [];
+  // "was at" counts with a length of time in the same piece ("was at lee 6 years", "was at the bay for 8 yrs").
+  const duration = toks.some((x, i) => /^\d+$/.test(x.w) && /^(?:yrs?|years?|months?|mos?)$/.test(toks[i + 1]?.w ?? ""));
   for (let i = 0; i < toks.length; i++) {
     for (const ph of RELEASE_WORDS) {
       if (i + ph.length <= toks.length && ph.every((w, k) => toks[i + k].w === w)) for (let k = 0; k < ph.length; k++) out.push(i + k);
     }
+    if (duration && toks[i].w === "was" && toks[i + 1]?.w === "at") out.push(i, i + 1);
   }
   return out;
 }
@@ -653,7 +659,14 @@ function piecesOf(text: string): string[] {
 /** How near a kept-off word must sit to a facility or incarceration word to hold (combined review rulings). */
 const ANCHOR_WINDOW = 4;
 
-function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId: string | null): { tier: 1 | 2; term: string; fixed: boolean } | null {
+/** The run as the person typed it ("Cook County"), for a card shared by every line that carries it. */
+function runAsTyped(piece: string, run: string): string {
+  const words = run.split(" ").map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const m = new RegExp(`(?<![A-Za-z0-9])${words.join("[^A-Za-z0-9]+")}(?![A-Za-z0-9])`, "i").exec(foldText(piece));
+  return m ? m[0] : run;
+}
+
+function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId: string | null): { tier: 1 | 2; term: string; fixed: boolean; phrase?: string } | null {
   /** A record line (it has an entry id): a run of the name there is held only until the person answers. */
   const row = !!selfId;
   // In free text a hold is fixed; in the person's own name or place it lasts until they answer.
@@ -667,7 +680,7 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
    */
   const mayAsk = (w: string, toks: Tok[]) => rare(w) || (t.dictOnly.includes(w) && (kind !== "text" || row || toks.some((x) => x.w === w && x.cap)));
   const isPublic = (run: string) => t.publicBy.some((p) => p.id !== selfId && p.text.includes(` ${run} `));
-  let ask: { tier: 2; term: string; fixed: false } | null = null;
+  let ask: { tier: 2; term: string; fixed: false; phrase?: string } | null = null;
   /** A hold that lasts until the person answers (a run in a record line, release wording). Fixed holds win. */
   let soft: { tier: 1; term: string; fixed: false } | null = null;
   // A possessive reads both ways: "Riker's" matches "Rikers", "Stateville's" matches "Stateville".
@@ -699,7 +712,9 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
     for (const r of t.runs) {
       if (!str.includes(` ${r} `)) continue;
       if (!isPublic(r)) {
-        if (!row) return hold(r);
+        // A run made only of dictionary words ("Mountain View", "Snake River") is more often a real place or
+        // plain English: held until the person answers, in free text too (R3-M1). Others are fixed.
+        if (!row && !r.split(" ").every((w) => t.dictWords.includes(w))) return hold(r);
         soft = soft ?? { tier: 1, term: r, fixed: false };
         continue;
       }
@@ -718,7 +733,21 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
     // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field,
     // unless every such word is a common English word of a name another word carries. A "<word> County" or
     // "<word> Parish" run always asks (C2-H1).
-    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `) && (/(^| )(county|parish)( |$)/.test(r) || r.split(" ").some((w) => isDistinctive(w) && mayAsk(w, toks)))) { ask = { tier: 2, term: r, fixed: false }; break; }
+    if (!ask) {
+      for (const r of t.weakRuns) {
+        if (!str.includes(` ${r} `)) continue;
+        // A "<word> County", "<word> Parish" or "<word> State" run always asks (C2-H1, R3-L1), and its card quotes
+        // just the run, so one answer covers every line on the lane that carries it (R3-L2).
+        if (/(^| )(county|parish|state)( |$)/.test(r)) {
+          ask = { tier: 2, term: r, fixed: false, phrase: runAsTyped(piece, r) };
+          break;
+        }
+        if (r.split(" ").some((w) => isDistinctive(w) && mayAsk(w, toks))) {
+          ask = { tier: 2, term: r, fixed: false };
+          break;
+        }
+      }
+    }
     if (!ask) for (const tk of toks) if (t.words.includes(tk.w) && (rare(tk.w) || (t.dictOnly.includes(tk.w) && (kind !== "text" || row || tk.cap)))) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
   }
   return soft ?? ask;
@@ -777,7 +806,7 @@ export function facilityCheck(
   for (const [piece, k] of pieces) {
     const hit = pieceHit(piece, terms, k, self);
     if (!hit) continue;
-    const phrase = piece.slice(0, PHRASE_MAX);
+    const phrase = (hit.phrase ?? piece).slice(0, PHRASE_MAX);
     if (hit.tier === 1 && hit.fixed) return { tier: 1, term: hit.term, phrase, ask: false };
     const answer = terms.answers[phraseKey(phrase)];
     if (answer === "yes") return { tier: 1, term: hit.term, phrase, ask: false };
