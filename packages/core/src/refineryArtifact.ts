@@ -51,7 +51,22 @@ export type ArtifactType =
   | "disclosure_plan"
   | "interview_prep"
   | "resource_list"
-  | "job_match";
+  | "job_match"
+  | CreativeArtifactType;
+
+/**
+ * Creative lane documents (migration 075). Written ONLY through the creative
+ * routes (core/creativeDocs.ts), which run the authorship and trace checks
+ * first. The generic content write below refuses them, so no other path can
+ * put text into a statement.
+ */
+export const CREATIVE_ARTIFACT_TYPES = ["artist_resume", "artist_bio", "artist_statement", "work_sample_list", "cv", "performer_resume"] as const;
+export type CreativeArtifactType = (typeof CREATIVE_ARTIFACT_TYPES)[number];
+export const CREATIVE_TYPES_SQL = CREATIVE_ARTIFACT_TYPES.map((t) => `'${t}'`).join(", ");
+
+export function isCreativeType(t: unknown): boolean {
+  return typeof t === "string" && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(t);
+}
 
 /**
  * Create a new artifact. Iteration number auto-increments per user+type.
@@ -100,6 +115,7 @@ export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string) =>
   `UPDATE refinery_artifact
      SET content = $1, updated_at = now()${scaffoldClause}
      WHERE id = $2 AND user_id = $3 AND is_locked = false
+       AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})
      RETURNING *`;
 
 export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
@@ -109,6 +125,7 @@ export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
 export type ArtifactWriteResult =
   | { status: "updated"; artifact: RefineryArtifact }
   | { status: "locked" }
+  | { status: "creative_doc" }
   | { status: "not_found" };
 
 /**
@@ -140,10 +157,11 @@ export async function updateArtifact(
   );
   if (rows[0]) return { status: "updated", artifact: rows[0] };
   // Zero rows: distinguish a locked row from a missing/foreign one.
-  const existing = await getOneAsUser<{ is_locked: boolean }>(userId, 
-    `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+  const existing = await getOneAsUser<{ is_locked: boolean; artifact_type: string }>(userId, 
+    `SELECT is_locked, artifact_type FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
+  if (existing && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(existing.artifact_type)) return { status: "creative_doc" };
   return existing ? { status: "locked" } : { status: "not_found" };
 }
 
@@ -485,6 +503,7 @@ export function hashContent(content: Record<string, unknown>): string {
 
 export type ForkResult =
   | { status: "forked"; artifact: RefineryArtifact; deduped: boolean }
+  | { status: "creative_doc" }
   | { status: "not_found" };
 
 /**
@@ -552,6 +571,9 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        END
      FROM refinery_artifact src
      WHERE src.id = $1 AND src.user_id = $2
+       -- Creative documents are never forked: they live in their own lane and
+       -- are written only through the creative tools.
+       AND src.artifact_type NOT IN (${CREATIVE_TYPES_SQL})
      ON CONFLICT (user_id, parent_artifact_id, operation_key) WHERE operation_key IS NOT NULL
        DO NOTHING
      RETURNING *`;
@@ -586,5 +608,10 @@ export async function forkArtifact(opts: {
     );
     if (existing) return { status: "forked", artifact: existing, deduped: true };
   }
+  const src = await getOneAsUser<{ artifact_type: string }>(userId,
+    `SELECT artifact_type FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+    [sourceArtifactId, userId]
+  );
+  if (src && isCreativeType(src.artifact_type)) return { status: "creative_doc" };
   return { status: "not_found" };
 }

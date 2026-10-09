@@ -126,6 +126,11 @@ async function handlePost(request: Request) {
     if (!artifact) {
       return NextResponse.json({ error: "resume_not_found" }, { status: 404 });
     }
+    // Creative documents are never checked as a resume (and never sent to a model).
+    const { isCreativeType } = await import("@crucible/core");
+    if (isCreativeType(artifact.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Creative documents can't be checked as a resume." }, { status: 409 });
+    }
     const resumeContent: any = artifact.content || {};
     const resumeText = resumeTextFrom(resumeContent);
     const resumeHash = hashContent(resumeContent);

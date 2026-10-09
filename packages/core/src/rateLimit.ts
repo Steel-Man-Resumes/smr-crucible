@@ -44,6 +44,8 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // Page count and on-screen page from the layout model (pure compute, no AI).
   // The page asks once per change of text, so it needs a roomy cap.
   "resume-layout": 400,
+  // The same, for the artist resume and bio pages of a creative lane.
+  "creative-layout": 400,
   // "Email me my package" sends mail from SMR's domain to a typed address.
   // A person needs one or two sends; the route also caps per recipient.
   "email-package": 5,

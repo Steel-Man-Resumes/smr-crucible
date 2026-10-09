@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { forkArtifact, getOpenLane, setArtifactLane } from "@crucible/core";
+import { forkArtifact, getOpenLane, laneKindOf, setArtifactLane } from "@crucible/core";
 import { parseLaneIdBody } from "@/lib/lanes";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 
@@ -45,8 +45,10 @@ export async function POST(request: Request, context: RouteContext) {
   // starts a lane's first resume from the base ("laneId": the new lane).
   const laneId = parseLaneIdBody(body?.laneId);
   if (laneId === "bad") return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
-  if (laneId && !(await getOpenLane(userId, laneId))) {
-    return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
+  // Resume work goes to a resume lane only: a creative or CV lane never holds it (review s2 LOW 1).
+  if (laneId) {
+    const target = await getOpenLane(userId, laneId);
+    if (!target || laneKindOf(target) !== "resume") return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
   }
 
   const result = await forkArtifact({
@@ -57,7 +59,10 @@ export async function POST(request: Request, context: RouteContext) {
     targetContext,
   });
 
-  if (result.status === "not_found") {
+  if (result.status === "creative_doc") {
+    return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+  }
+  if (result.status !== "forked") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

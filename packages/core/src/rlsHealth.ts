@@ -39,6 +39,8 @@ export const RLS_PROTECTED_TABLES = [
   // career lanes (073), owner only
   "career_lane",
   "lane_tool_intro",
+  // practice record (075), owner only
+  "practice_entry",
 ] as const;
 
 export interface RlsHealth {

@@ -148,12 +148,28 @@ export function laneIntroLine(tool: LaneTool, laneName: string | null): string {
 }
 
 export const LANE_ERROR_COPY: Record<
-  LaneSettingsError | "duplicate_name" | "too_many" | "too_many_total" | "too_many_writes" | "not_found" | "failed",
+  | LaneSettingsError
+  | "duplicate_name"
+  | "too_many"
+  | "too_many_total"
+  | "too_many_writes"
+  | "not_found"
+  | "failed"
+  | "in_pair"
+  | "has_plan"
+  | "pair_refused",
   string
 > = {
   name_required: "Give the lane a name.",
   bad_format: "Pick one of the two formats.",
   bad_length: "Pick one of the length choices.",
+  bad_kind: "Pick a resume lane, a creative lane, a CV lane or a performer lane.",
+  bad_cv_type: "Pick academic, teaching, clinical or international.",
+  kind_is_fixed: "A lane keeps the kind it started with. Start a new lane for the other kind.",
+  bad_path: "Pick realistic, dream, or neither.",
+  in_pair: "This lane is paired. Unpair it first, then change its path.",
+  has_plan: "This dream lane holds your plan card. Keep it as your dream lane, or pair it again.",
+  pair_refused: "Those two lanes can't be paired. Each one has to be open and not in another pair.",
   hybrid_needs_both: "Skills on top needs both boxes checked. Otherwise dates first is the right call.",
   duplicate_name: "You already have a lane with that name.",
   too_many: "That's the most lanes at once. Archive one first.",

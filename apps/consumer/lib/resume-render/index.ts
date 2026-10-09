@@ -112,3 +112,66 @@ export function renderScreen(req: RenderRequest, fontUrl: (face: FaceKey) => str
 }
 
 export { type FitInfo } from "./layout";
+
+// ---------------------------------------------------------------------------
+// Creative lane documents: the artist resume and the bio card, from their
+// structured models (core assembles them from the practice record). Same page,
+// fonts and builders as the resume.
+// ---------------------------------------------------------------------------
+
+import { layoutArtistResume, layoutBioCard, layoutCv, layoutPerformer, type ArtistResumeInput, type BioCardInput, type CvInput, type PerformerInput, type PerformerTrim } from "./creative";
+
+export type { PerformerInput, PerformerTrim } from "./creative";
+
+export type CreativeRenderRequest =
+  | { doc: "artist_resume"; model: ArtistResumeInput; draft?: boolean; openItems?: string[] }
+  | { doc: "bio"; card: BioCardInput; draft?: boolean; openItems?: string[] }
+  | { doc: "cv"; model: CvInput; draft?: boolean; openItems?: string[] }
+  | { doc: "performer"; model: PerformerInput; trim?: PerformerTrim; draft?: boolean; openItems?: string[] };
+
+export function buildCreative(req: CreativeRenderRequest): Built {
+  const m = fontMeasurer();
+  const draft = !!req.draft;
+  const items = cleanOpenItems(req.openItems);
+  const checklist = draft && items.length ? layoutChecklist(items, m) : null;
+  if (req.doc === "artist_resume") {
+    const { layout, fit } = layoutArtistResume(req.model, m, { draft });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} artist resume` : "Artist resume" };
+  }
+  if (req.doc === "performer") {
+    // One page, on 8x10 (the back of a headshot) or US Letter. The to-do page of a draft stays Letter.
+    const { layout, fit } = layoutPerformer(req.model, m, { draft, trim: req.trim });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} performer resume` : "Performer resume" };
+  }
+  if (req.doc === "cv") {
+    const { layout, fit } = layoutCv(req.model, m, { draft });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} CV` : "CV" };
+  }
+  const { layout, fit } = layoutBioCard(req.card, m, { draft });
+  const who = req.card.name;
+  return { layout, fit, checklist, kind: "resume", title: who ? `${who} bio` : "Bio" };
+}
+
+export async function renderCreativePdf(req: CreativeRenderRequest): Promise<Uint8Array> {
+  const b = buildCreative(req);
+  return buildPdf({ layouts: b.checklist ? [b.layout, b.checklist] : [b.layout], title: b.title });
+}
+
+export async function renderCreativeDocx(req: CreativeRenderRequest): Promise<Buffer> {
+  const b = buildCreative(req);
+  return buildDocx({ layout: b.layout, kind: b.kind, checklist: b.checklist, title: b.title });
+}
+
+export function renderCreativeHtml(req: CreativeRenderRequest): string {
+  const b = buildCreative(req);
+  return standaloneHtml({ title: b.title, layout: b.layout, kind: b.kind, checklist: b.checklist, fontDataUris: fontDataUri });
+}
+
+export function renderCreativeScreen(req: CreativeRenderRequest, fontUrl: (face: FaceKey) => string): { fit: FitInfo; pagesHtml: string; css: string; pages: number; title: string } {
+  const b = buildCreative(req);
+  const pages = pagesHtml(b.layout, b.kind) + (b.checklist ? "\n" + checklistHtml(b.checklist) : "");
+  return { fit: b.fit, pagesHtml: pages, css: resumeCss(b.layout.level, { fontUrls: fontUrl, page: b.layout.page }), pages: b.layout.pages.length, title: b.title };
+}

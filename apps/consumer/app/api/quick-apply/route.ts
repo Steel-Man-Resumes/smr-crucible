@@ -60,6 +60,11 @@ async function handlePost(request: Request) {
     if (!artifact) {
       return NextResponse.json({ error: "resume_not_found" }, { status: 404 });
     }
+    // Creative documents (statement, bio, artist resume) are never sent as a resume.
+    const { isCreativeType } = await import("@crucible/core");
+    if (isCreativeType(artifact.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Creative documents can't be sent as a resume." }, { status: 409 });
+    }
     const content = (artifact.content || {}) as Record<string, unknown>;
 
     const { getOneAsUser, queryAsUser, invalidateNextStep } = await import("@crucible/core");

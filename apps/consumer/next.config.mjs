@@ -48,6 +48,9 @@ const nextConfig = {
     // with every function that renders a resume or measures its pages.
     "/api/forge/download": ["./public/fonts/resume/**/*"],
     "/api/resume/layout": ["./public/fonts/resume/**/*"],
+    // Creative lanes: the artist resume and bio card use the same renderer.
+    "/api/creative/layout": ["./public/fonts/resume/**/*"],
+    "/api/creative/[laneId]/export": ["./public/fonts/resume/**/*"],
     // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
     // worker/core files in the serverless function instead of relying on CDN
     // runtime downloads for executable assets. The pdfjs legacy build + its

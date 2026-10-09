@@ -217,6 +217,8 @@ describe("073 schema", () => {
   it("lanes are archived by the app, not deleted; archived lanes take no new work", () => {
     assert.doesNotMatch(LANE_ARCHIVE_SQL, /DELETE/);
     assert.match(ARTIFACT_SET_LANE_SQL, /archived_at IS NULL/);
+    // Review s2 LOW 1: resume work never moves into a creative or CV lane (the 076 rollback stays clean).
+    assert.match(ARTIFACT_SET_LANE_SQL, /COALESCE\(l\.kind, 'resume'\) = 'resume'/);
     assert.match(LANE_LIST_SQL, /archived_at IS NULL/);
   });
 });

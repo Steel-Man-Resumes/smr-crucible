@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:adversarial": "npx tsx test/adversarial.mts",
     "test:claims": "npx tsx test/banned-claims.mts",
+    "lint:rls": "cd ../.. && node scripts/lint-protected-tables.mjs",
     "test": "node --import tsx --test lib/__tests__/*.test.ts"
   },
   "dependencies": {
