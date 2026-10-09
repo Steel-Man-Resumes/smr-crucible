@@ -446,3 +446,52 @@ describe("combined review r2 (C2-H1 and the LOWs)", () => {
     assert.deepEqual(yes.model.heldFields.map((h) => h.field).sort(), ["displayName", "email"]);
   });
 });
+
+describe("all-dictionary place names: a lone word asks only when written like a name (CC ruling after r2)", () => {
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  it("plain lowercase prose never asks alone", () => {
+    for (const [venue, text] of [
+      ["Mountain View Correctional Facility", "a fresh point of view"],
+      ["Green Haven Correctional Facility", "interested in green building"],
+      ["Valley State Prison", "central valley crops and water"],
+      ["Lee Correctional Institution", "sheltered in the lee of the hill"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.deepEqual(r.model.asks, [], `${venue}: ${text}`);
+      assert.equal(r.status.state, "finished", `${venue}: ${text}`);
+    }
+  });
+  it("written like a name it asks: capitalized mid-sentence, at a sentence start, or as a title", () => {
+    for (const [venue, text] of [
+      ["Mountain View Correctional Facility", "Point of View"],
+      ["Green Haven Correctional Facility", "Green building certification"],
+      ["Valley State Prison", "Farm work in the Central Valley"],
+      ["Lee Correctional Institution", "Films by Spike Lee"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && !a.held), `${venue}: ${text}`);
+      assert.equal(r.status.state, "draft");
+    }
+  });
+  it("in a name or place field or a record line it asks even in lowercase", () => {
+    const { e, s } = hide("Green Haven Correctional Facility");
+    assert.ok(cv(mark([DEG, e]), { ...s, displayName: "jordan green" }).model.asks.some((a) => a.field === "displayName"));
+    assert.ok(cv(mark([DEG, e]), { ...s, email: "green.jordan@sample.test" }).model.asks.some((a) => a.field === "email"));
+    const job = entry({ section: "appointment", title: "Landscaper", venue: "green acres nursery", year: 2021 });
+    assert.ok(cv(mark([DEG, e, job]), s).model.asks.some((a) => a.entryId === job.id));
+  });
+  it("no hole: release, parole and facility wording, runs and whole names hold in lowercase too; county runs always ask", () => {
+    const gh = hide("Green Haven Correctional Facility");
+    for (const text of ["released from green haven", "released from green in 2019", "ten years at green haven", "the green haven yard", "green haven correctional facility"]) {
+      const r = cv(mark([DEG, gh.e]), { ...gh.s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), text);
+      assert.doesNotMatch(r.text, new RegExp(text, "i"));
+    }
+    const pb = hide("Pelican Bay State Prison");
+    assert.ok(cv(mark([DEG, pb.e]), { ...pb.s, interests: "paroled from the bay in 2019" }).model.heldFields.some((h) => h.field === "interests"));
+    const ck = hide("Cook County Jail");
+    assert.ok(cv(mark([DEG, ck.e]), { ...ck.s, interests: "cook county farmers market" }).model.asks.some((a) => a.field === "interests"));
+  });
+});

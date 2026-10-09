@@ -397,8 +397,14 @@ export interface HiddenTerms {
    * never nothing.
    */
   chosenBy: { id: string; text: string }[];
-  /** Kept-off words that are common English words (server-marked on the entries): alone they never ask. */
+  /** Kept-off words that are common English words of a name another word carries (server-marked): alone they never ask. */
   common: string[];
+  /**
+   * Common English words of a place whose naming words are ALL dictionary
+   * words (Green Haven, Lee, Valley State): alone they ask only when written
+   * like a name (capitalized), or in a name or place field or a record line.
+   */
+  dictOnly: string[];
   /** The person's answers on this lane, by phrase key. */
   answers: Record<string, PhraseAnswer>;
   /** The person's own name for this lane (when it names nothing held): in other text, never counted. */
@@ -519,8 +525,9 @@ export function hiddenFacilityTerms(
     for (const w of d) if (cw.includes(w)) (carried ? cuttable : blocked).add(w);
   });
   const common = Array.from(cuttable).filter((w) => !blocked.has(w));
+  const dictOnly = Array.from(blocked);
   const ownWords = s?.displayName ? wordsOf(s.displayName).trim().split(" ").filter((w) => w.length >= 2) : [];
-  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, common, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
+  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, common, dictOnly, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
   // The person's own name is blanked out of other text, so a word it shares
   // with a place costs one card on the name itself, never one per line. Never
   // the home place, and never a name that itself holds a run, a nickname or a
@@ -581,13 +588,15 @@ const OWN_MARK = "xownx";
 
 interface Tok {
   w: string;
+  /** Written with a capital first letter (like a name). */
+  cap: boolean;
 }
 
 function tokensOf(folded: string): Tok[] {
   const out: Tok[] = [];
   const re = /[A-Za-z0-9]+(?:['’ʼ][A-Za-z]+)*/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(folded))) out.push({ w: m[0].toLowerCase().replace(/['’ʼ]/g, "") });
+  while ((m = re.exec(folded))) out.push({ w: m[0].toLowerCase().replace(/['’ʼ]/g, ""), cap: /^[A-Z]/.test(m[0]) });
   return out;
 }
 
@@ -651,7 +660,12 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
   const hold = (term: string) => ({ tier: 1 as const, term, fixed: kind === "text" });
   const fixedHold = (term: string) => ({ tier: 1 as const, term, fixed: true });
   /** A word that may ask on its own: not a common English word (combined review burden ruling). */
-  const rare = (w: string) => !t.common.includes(w);
+  const rare = (w: string) => !t.common.includes(w) && !t.dictOnly.includes(w);
+  /**
+   * A dictionary word of an all-dictionary name asks alone only when written like a name: capitalized, or in
+   * a name or place field, or in a record line (employer, venue, school). Plain lowercase prose never asks.
+   */
+  const mayAsk = (w: string, toks: Tok[]) => rare(w) || (t.dictOnly.includes(w) && (kind !== "text" || row || toks.some((x) => x.w === w && x.cap)));
   const isPublic = (run: string) => t.publicBy.some((p) => p.id !== selfId && p.text.includes(` ${run} `));
   let ask: { tier: 2; term: string; fixed: false } | null = null;
   /** A hold that lasts until the person answers (a run in a record line, release wording). Fixed holds win. */
@@ -704,8 +718,8 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
     // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field,
     // unless every such word is a common English word of a name another word carries. A "<word> County" or
     // "<word> Parish" run always asks (C2-H1).
-    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `) && (/(^| )(county|parish)( |$)/.test(r) || r.split(" ").some((w) => isDistinctive(w) && rare(w)))) { ask = { tier: 2, term: r, fixed: false }; break; }
-    if (!ask) for (const tk of toks) if (t.words.includes(tk.w) && rare(tk.w)) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
+    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `) && (/(^| )(county|parish)( |$)/.test(r) || r.split(" ").some((w) => isDistinctive(w) && mayAsk(w, toks)))) { ask = { tier: 2, term: r, fixed: false }; break; }
+    if (!ask) for (const tk of toks) if (t.words.includes(tk.w) && (rare(tk.w) || (t.dictOnly.includes(tk.w) && (kind !== "text" || row || tk.cap)))) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
   }
   return soft ?? ask;
 }
