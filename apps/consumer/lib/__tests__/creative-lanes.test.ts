@@ -171,7 +171,7 @@ test("slice 2 review LOWs: creative lanes refuse doc=cv; file names use the prin
   assert.match(exp, /const name = c\.model\.header\.name/);
   assert.ok(!/settings\.displayName/.test(exp), "never the raw typed name");
   const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
-  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference", "skills"\]/);
+  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference", "skills"/);
   assert.match(lane, /if \(g\.impersonating && OWNER_ONLY_FIELDS\.some/);
   assert.match(lane, /buildCreative\(\{ doc: "cv", model: v\.model \}\)\.layout\.pages\.length/);
   assert.match(lane, /loadCvContext\(g\.userId, lane, pages\)/);
@@ -192,6 +192,8 @@ test("performer lanes: the export builds the page from the database (8x10 or Let
   assert.match(exp, /buildCreative\(\{ doc: "performer", model: v\.model, trim: "8x10" \}\)/);
   const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
   assert.match(lane, /buildCreative\(\{ doc: "performer", model: p\.model, trim: "8x10" \}\)\.layout\.pages\.length/);
+  // Combined C-L6: the description and the age range are the person's own; an assist session never types them.
+  assert.match(lane, /OWNER_ONLY_FIELDS = \["interests", "languages", "leadReference", "skills", "height", "hair", "eyes", "voice", "ageRange"\] as const/);
   const view = rd("components", "creative", "PerformerLaneView.tsx");
   assert.ok(!/<img|type="file"|upload|weight/i.test(view.replace(/No weight, no birth date, no age/, "")), "no photo, upload or weight field");
   assert.match(view, /if \(trim === "8x10"\) setPages\(n\)/);

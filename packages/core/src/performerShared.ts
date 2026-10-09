@@ -55,18 +55,35 @@ export const BILLING_WORD: Record<string, string> = {
   lead: "Lead", supporting: "Supporting", series_regular: "Series Regular", recurring: "Recurring", guest_star: "Guest Star",
   co_star: "Co-Star", featured: "Featured", ensemble: "Ensemble", understudy: "Understudy", swing: "Swing", background: "Background",
 };
-export const UNION_STATUS_WORD: Record<string, string> = { member: "Member", eligible: "Eligible", candidate: "Membership Candidate" };
+/** The status as printed after the union's name ("SAG-AFTRA, eligible"). */
+export const UNION_STATUS_WORD: Record<string, string> = { member: "member", eligible: "eligible", candidate: "membership candidate" };
+/** A union's name that already says a status ("SAG-AFTRA Member", "AEA (full member)", "EMC"): asked, never printed (C-L1). */
+const UNION_STATUS_IN_NAME = /\b(?:members?|membership|eligible|eligibility|candidates?|emc|fi-?core|financial core|full|associate)\b/i;
+export function unionNameHasStatus(title: string): boolean {
+  return UNION_STATUS_IN_NAME.test(title);
+}
 
 /** The record kinds a performer page reads. */
 export const PERFORMER_SECTIONS: readonly PracticeSection[] = ["credit", "training", "union", "award"];
 
-/** "25-35" or "25 to 35": a range the person plays. A single age is never a range. */
+/** The ages a playing range may use, and how wide it may be (combined review C-L2). */
+export const AGE_RANGE_MIN = 16;
+export const AGE_RANGE_MAX = 90;
+export const AGE_RANGE_SPAN_MIN = 3;
+export const AGE_RANGE_SPAN_MAX = 15;
+
+/**
+ * "25-35" or "25 to 35": a range the person plays. A single age is never a
+ * range, and neither is one too narrow to be anything but an age ("44-45")
+ * or too wide to mean anything ("1-99"): 16 to 90, three to fifteen years wide.
+ */
 export function ageRangeOf(text: string | null | undefined): { lo: number; hi: number } | null {
   const m = typeof text === "string" ? /^\s*(\d{1,2})\s*(?:-|to)\s*(\d{1,2})\s*$/i.exec(text) : null;
   if (!m) return null;
   const lo = parseInt(m[1], 10);
   const hi = parseInt(m[2], 10);
-  return lo >= 1 && hi <= 99 && lo < hi ? { lo, hi } : null;
+  const span = hi - lo;
+  return lo >= AGE_RANGE_MIN && hi <= AGE_RANGE_MAX && span >= AGE_RANGE_SPAN_MIN && span <= AGE_RANGE_SPAN_MAX ? { lo, hi } : null;
 }
 
 export type PerformerField =
@@ -110,7 +127,7 @@ export interface PerformerModel {
   /** C2: credit years on the page (off by default). Training and awards are always dated. */
   showYears: boolean;
   needsChoice: string[];
-  omitted: { entryId: string; reason: "not_selected" | "leave_out" | "needs_choice" | "needs_status" | "personal" | "names_hidden" }[];
+  omitted: { entryId: string; reason: "not_selected" | "leave_out" | "needs_choice" | "needs_status" | "union_name" | "personal" | "names_hidden" }[];
   heldFields: { field: PerformerField; reason: "personal" | "names_hidden" | "not_a_range" }[];
   /** Lines that print but share a word with a place this lane keeps off: one tap to answer (review s2r3 N3-H1). */
   asks: FacilityAsk[];
@@ -188,20 +205,25 @@ export function trainingFacilityHit(r: { parts: Part[]; mode: "true_title" | "ve
   return performerPartsHit(r.mode === "venue_only" ? r.parts.slice(1) : r.parts, e, terms, r.mode);
 }
 
-/** "SAG-AFTRA Member": the union as named, and the status exactly as held. */
+/** "SAG-AFTRA, eligible": the union as named, and the status exactly as held (combined review C-L1). */
 export function unionLine(e: PracticeEntry): string | null {
   const w = UNION_STATUS_WORD[e.details.status ?? ""];
-  return w ? `${e.title} ${w}` : null;
+  return w && !unionNameHasStatus(e.title) ? `${e.title}, ${w}` : null;
 }
+
+/** A role played as oneself: "Himself", "Herself", "Themselves", "Self", "as self" (documentary, reality, interview). */
+const SELF_ROLE = /^\s*(?:him|her|them|my|your)sel(?:f|ves)\b|^\s*self\b|\bas\s+(?:(?:him|her|them|my|your)sel(?:f|ves)|self)\b/i;
 
 /**
  * Personal details (CR-08) in the fields a person writes about themselves.
  * A credit's production and role are a work and a character, never the
- * person (review s2r2 N-M4), so a credit is never scanned; an award's name is
- * scanned as on a CV.
+ * person (review s2r2 N-M4), so a credit's title is never scanned. A role
+ * played as oneself IS the person, so that role is (combined review C-L5).
+ * An award's name is scanned as on a CV.
  */
 export function performerRowHasPersonalDetail(e: PracticeEntry): boolean {
-  return e.section !== "credit" && rowHasPersonalDetail(e);
+  if (e.section === "credit") return !!e.details.role && SELF_ROLE.test(e.details.role) && isPersonalDetail(e.details.role);
+  return rowHasPersonalDetail(e);
 }
 
 function newestFirst(a: PracticeEntry, b: PracticeEntry): number {
@@ -261,6 +283,10 @@ export function buildPerformerModel(entries: PracticeEntry[], s: CreativeKindSet
     // A union line is its name. A lane that keeps the name off has nothing left to show.
     if (mode === "venue_only") {
       omitted.push({ entryId: e.id, reason: "leave_out" });
+      continue;
+    }
+    if (unionNameHasStatus(e.title)) {
+      omitted.push({ entryId: e.id, reason: "union_name" });
       continue;
     }
     const line = unionLine(e);

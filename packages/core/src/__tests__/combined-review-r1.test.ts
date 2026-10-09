@@ -19,7 +19,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { PracticeEntry } from "../practiceRecordShared";
-import { applyPhraseAnswer, applyTitleMode, type CreativeKindSettings } from "../creativeLaneShared";
+import { applyPhraseAnswer, applyTitleMode, cleanKindSettings, type CreativeKindSettings } from "../creativeLaneShared";
 import { buildCvModel, cvPlainText } from "../cvShared";
 import { getCvStatus } from "../cvChecks";
 import { exportOpenItemLines } from "../creativeChecks";
@@ -184,5 +184,67 @@ describe("C-M2: the person's own name, email, website and home place", () => {
     assert.ok(m.asks.some((a) => a.field === "basedIn" && a.held));
     assert.equal(m.header.discipline, "");
     assert.doesNotMatch(performerPlainText(m), /Quentin/);
+  });
+});
+
+describe("combined review LOWs on the performer page", () => {
+  const ot = entry({ section: "credit", title: "Our Town", venue: "Example Street Theatre", year: 2024, details: { medium: "theater", role: "Emily Webb" } });
+  const S: CreativeKindSettings = { displayName: "Ray Example", email: "ray@example.com" };
+  it("C-L1: the status prints once, after the name; a name that says a status is asked, never printed", () => {
+    const u = entry({ section: "union", title: "SAG-AFTRA", year: 2024, details: { status: "eligible" } });
+    assert.deepEqual(buildPerformerModel([ot, u], S).header.unions, ["SAG-AFTRA, eligible"]);
+    for (const title of ["SAG-AFTRA Member", "AEA (full member)", "EMC"]) {
+      const bad = { ...u, title };
+      const m = buildPerformerModel([ot, bad], S);
+      assert.deepEqual(m.header.unions, [], title);
+      const st = getPerformerStatus({ entries: [ot, bad], settings: S, model: m, pages: 1 });
+      assert.ok(st.openItems.some((x) => x.entryId === bad.id && x.rule === "CR-08" && x.severity === "BLOCK"), title);
+    }
+  });
+  it("C-L2: an age range is 16 to 90, three to fifteen years wide", () => {
+    for (const [r, ok] of [["25-35", true], ["16-19", true], ["75-90", true], ["44-45", false], ["44-46", false], ["1-99", false], ["20-40", false], ["12-16", false], ["85-95", false]] as const) {
+      const m = buildPerformerModel([ot], { ...S, ageRange: r });
+      assert.equal(m.header.stats.some((x) => x.startsWith("Age range")), ok, r);
+      if (!ok) assert.ok(getPerformerStatus({ entries: [ot], settings: { ...S, ageRange: r }, model: m, pages: 1 }).openItems.some((x) => x.rule === "CR-08" && x.severity === "BLOCK" && /16 to 90/.test(x.question)), r);
+    }
+  });
+  it("C-L4: a credit added after the person trimmed shows a to-do line, never silence", () => {
+    const old = { ...ot, created_at: "2026-01-01T00:00:00.000Z" };
+    const later = entry({ section: "credit", title: "Night Bus", venue: "Example Pictures", year: 2025, details: { medium: "film" }, created_at: "2026-09-01T00:00:00.000Z" });
+    const s = cleanKindSettings({ selection: [old.id] }, S);
+    assert.ok(s.selectionAt, "the server stamps when the selection was made");
+    const stamped = { ...s, selectionAt: "2026-06-01T00:00:00.000Z" };
+    const st = getPerformerStatus({ entries: [old, later], settings: stamped, pages: 1 });
+    const item = st.openItems.find((x) => x.entryId === later.id)!;
+    assert.equal(item.severity, "FIX");
+    assert.match(item.question, /^New credit not on the page yet/);
+    // An entry the person left off when they picked is not asked about again.
+    const before = { ...later, created_at: "2026-05-01T00:00:00.000Z" };
+    assert.ok(!getPerformerStatus({ entries: [old, before], settings: stamped, pages: 1 }).openItems.some((x) => x.entryId === before.id));
+    // The stamp is the server's: a request can't set it, and a later save keeps it.
+    assert.equal(cleanKindSettings({ selectionAt: "2020-01-01T00:00:00.000Z" }, S).selectionAt, undefined);
+    assert.equal(cleanKindSettings({ phone: "555-0100" }, stamped).selectionAt, "2026-06-01T00:00:00.000Z");
+    assert.equal(cleanKindSettings({ selection: null }, stamped).selectionAt, undefined);
+  });
+  it("C-L5: a role played as oneself is scanned for personal details; a character never is", () => {
+    for (const role of ["Himself, age 45, father of two", "Herself (born 1980)", "Self, married with 2 kids", "Interview subject, as himself, 45 years old"]) {
+      const c = entry({ section: "credit", title: "Example Documentary", venue: "Example Pictures", year: 2023, details: { medium: "film", role } });
+      const m = buildPerformerModel([ot, c], S);
+      assert.ok(m.omitted.some((o) => o.entryId === c.id && o.reason === "personal"), role);
+      assert.doesNotMatch(performerPlainText(m), /45|1980|married/);
+    }
+    const ch = entry({ section: "credit", title: "Example Play", venue: "Example Rep", year: 2023, details: { medium: "theater", role: "Single mother, 45 years old" } });
+    assert.match(performerPlainText(buildPerformerModel([ot, ch], S)), /Single mother, 45 years old/);
+  });
+  it("C-L7: a tampered description or skill list is a BLOCK", () => {
+    const s = { ...S, ageRange: "25-35", skills: [{ text: "Stage combat", confirmed: true }, { text: "Fire breathing", confirmed: false }] };
+    const m = buildPerformerModel([ot], s);
+    assert.equal(getPerformerStatus({ entries: [ot], settings: s, model: m, pages: 1 }).state, "finished");
+    const t1 = structuredClone(m);
+    t1.header.stats.push("Age 45");
+    assert.ok(getPerformerStatus({ entries: [ot], settings: s, model: t1, pages: 1 }).openItems.some((x) => x.rule === "CR-08" && x.line === "(your description)" && x.severity === "BLOCK"));
+    const t2 = structuredClone(m);
+    t2.sections.find((x) => x.key === "skills")!.text = "Stage combat, Fire breathing";
+    assert.ok(getPerformerStatus({ entries: [ot], settings: s, model: t2, pages: 1 }).openItems.some((x) => x.rule === "CR-08" && x.line === "Special skills" && x.severity === "BLOCK"));
   });
 });

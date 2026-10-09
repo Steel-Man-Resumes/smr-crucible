@@ -23,6 +23,10 @@ import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, che
 import { isPersonalDetail } from "./cvShared";
 import {
   type PerformerModel,
+  AGE_RANGE_MAX,
+  AGE_RANGE_MIN,
+  AGE_RANGE_SPAN_MAX,
+  AGE_RANGE_SPAN_MIN,
   PERFORMER_SECTIONS,
   buildPerformerModel,
   creditCols,
@@ -79,8 +83,8 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
     if (h.reason === "not_a_range") {
       items.push({
         rule: "CR-08", severity: "BLOCK", line: FIELD_LINE[h.field], doc,
-        question: "Casting asks for an age range you can play, like 25-35, never your age. What range do you play?",
-        why: "An age is never on the page. A range is your call.",
+        question: `Casting asks for an age range you can play, like 25-35, never your age. What range do you play? Use ages ${AGE_RANGE_MIN} to ${AGE_RANGE_MAX}, ${AGE_RANGE_SPAN_MIN} to ${AGE_RANGE_SPAN_MAX} years wide.`,
+        why: "An age is never on the page. A range that narrow reads as an age, and one that wide says nothing. The range is your call.",
       });
     } else if (h.reason === "personal") {
       items.push({
@@ -110,6 +114,12 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
         rule: "CR-08", severity: "BLOCK", line: `${yearsOf(e)}  A union in your record`, doc, entryId: e.id,
         question: "Are you a member, eligible to join, or a membership candidate? It stays off the page until you say.",
         why: "Union status goes on the page exactly as you hold it.",
+      });
+    } else if (o.reason === "union_name") {
+      items.push({
+        rule: "CR-08", severity: "BLOCK", line: `${yearsOf(e)}  A union in your record`, doc, entryId: e.id,
+        question: "The union's name has a status in it. Type just the union's name (like SAG-AFTRA), and pick your status: member, eligible to join, or membership candidate.",
+        why: "Union status goes on the page once, exactly as you hold it. It stays off the page until then.",
       });
     } else if (o.reason === "personal") {
       items.push({
@@ -165,6 +175,39 @@ export function getPerformerStatus(input: PerformerStatusInput): CreativeStatus 
       trace(r.entryId, r.years, r.mode, rowText(r.parts), (e) =>
         s.key === "training" && e.section === "training" ? rowText(trainingParts(e, r.mode)) : s.key === "award" && e.section === "award" ? rowText(artistRowParts(e, r.mode)) : "\u0000"
       );
+    }
+  }
+
+  // CR-08 (C-L7): the description and the skills on the page are what the person gave, rebuilt from their settings.
+  const rebuilt = buildPerformerModel(entries, settings);
+  if (JSON.stringify(model.header.stats) !== JSON.stringify(rebuilt.header.stats)) {
+    items.push({
+      rule: "CR-08", severity: "BLOCK", line: "(your description)", doc,
+      question: "Your description on the page doesn't match what you gave. Check height, hair, eyes, voice and age range.",
+      why: "Only what you give goes on the page, and an age range, never an age.",
+    });
+  }
+  const skillText = (m: PerformerModel) => m.sections.find((x) => x.key === "skills")?.text ?? "";
+  if (skillText(model) !== skillText(rebuilt)) {
+    items.push({
+      rule: "CR-08", severity: "BLOCK", line: "Special skills", doc,
+      question: "The skills on the page don't match the ones you said you can do on request today. Check your skills.",
+      why: "Casting can ask you to show any skill on the spot. Only the ones you tick go on the page.",
+    });
+  }
+
+  // C-L4: a line added after the person picked what goes on the page is never left off silently.
+  if (Array.isArray(settings?.selection) && settings?.selectionAt) {
+    const picked = new Set(settings.selection.map((x) => x.toLowerCase()));
+    const at = Date.parse(settings.selectionAt);
+    const NEW_WORD: Record<string, string> = { credit: "credit", training: "class or training", award: "award" };
+    for (const e of entries) {
+      if (!NEW_WORD[e.section] || picked.has(e.id.toLowerCase()) || !(Date.parse(e.created_at) > at)) continue;
+      items.push({
+        rule: "STD-F07", severity: "FIX", line: entryLine(e, settings), doc, entryId: e.id,
+        question: `New ${NEW_WORD[e.section]} not on the page yet. Put it on this page? Tick it under "What goes on this page".`,
+        why: "You picked what goes on this page before you added it. If you want it left off, you can leave this as is.",
+      });
     }
   }
 

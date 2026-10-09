@@ -60,6 +60,11 @@ export interface CreativeKindSettings {
   titleModes?: Record<string, TitleMode>;
   /** null/absent: every entry. A list: only these ("Selected" headings). */
   selection?: string[] | null;
+  /**
+   * Set by the server when the person saves a selection (never taken from a
+   * request): an entry added after it is not silently left off (C-L4).
+   */
+  selectionAt?: string;
   bioPronoun?: BioPronoun;
   /** CV lanes: research or teaching interests, in the person's own words. */
   interests?: string;
@@ -191,6 +196,11 @@ export function cleanKindSettings(input: unknown, current?: unknown): CreativeKi
   if (Object.keys(answers).length) out.phraseAnswers = answers;
   const sel = v("selection");
   if (Array.isArray(sel)) out.selection = ids(sel);
+  // When the selection was made: stamped on a new selection, kept with an old one, gone with none.
+  if (out.selection) {
+    const at = "selection" in inp ? new Date().toISOString() : cur.selectionAt;
+    if (typeof at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(at)) out.selectionAt = at;
+  }
   const bp = v("bioPronoun");
   if (typeof bp === "string" && (BIO_PRONOUNS as readonly string[]).includes(bp)) out.bioPronoun = bp as BioPronoun;
   const rev = Number(cur.rev ?? 0);

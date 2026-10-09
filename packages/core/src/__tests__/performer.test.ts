@@ -84,7 +84,7 @@ describe("the performer page", () => {
   it("CR-08: union status exactly as held; an age range never an age; only confirmed skills", () => {
     const s: CreativeKindSettings = { ...withInside("true_title"), skills: [{ text: "Stage combat", confirmed: true }, { text: "Fire breathing", confirmed: false }] };
     const m = buildPerformerModel(ALL, s);
-    assert.deepEqual(m.header.unions, ["SAG-AFTRA Eligible"]);
+    assert.deepEqual(m.header.unions, ["SAG-AFTRA, eligible"]);
     assert.deepEqual(m.header.stats, ["Height 5'10\"", "Hair Brown", "Eyes Green", "Age range 25-35"]);
     const txt = performerPlainText(m);
     assert.match(txt, /SPECIAL SKILLS\nStage combat/);
@@ -99,7 +99,7 @@ describe("the performer page", () => {
     }
     for (const status of ["member", "candidate"] as const) {
       const u = { ...UNION, details: { status } };
-      assert.deepEqual(buildPerformerModel([PLAY, u], BASE).header.unions, [status === "member" ? "SAG-AFTRA Member" : "SAG-AFTRA Membership Candidate"]);
+      assert.deepEqual(buildPerformerModel([PLAY, u], BASE).header.unions, [status === "member" ? "SAG-AFTRA, member" : "SAG-AFTRA, membership candidate"]);
     }
     const noStatus = { ...UNION, details: {} };
     const m2 = buildPerformerModel([PLAY, noStatus], BASE);

@@ -211,7 +211,7 @@ test("performer page: 8x10 trim and US Letter, three columns, years only when tu
   const pdf = await pdfText(pdfBytes);
   assert.equal(pdf.pages, 1);
   const flat = pdf.text.replace(/\s+/g, " ");
-  for (const w of ["RAY EXAMPLE", "SAG-AFTRA Member", "Our Town", "Emily Webb", "Dir. J. Sample", "Supporting", "Scene Study", "Stage combat", "Age range 25-35"]) assert.ok(flat.includes(w), `${w} in ${flat}`);
+  for (const w of ["RAY EXAMPLE", "SAG-AFTRA, member", "Our Town", "Emily Webb", "Dir. J. Sample", "Supporting", "Scene Study", "Stage combat", "Age range 25-35"]) assert.ok(flat.includes(w), `${w} in ${flat}`);
   assert.deepEqual(await pageSize(await renderCreativePdf({ doc: "performer", model, trim: "letter" })), [0, 0, 612, 792]);
 
   // Word: a borderless table per credit and the 8x10 page.
@@ -311,4 +311,29 @@ test("performer page (s2r3, combined review): the place's word next to a facilit
   assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word" && x.entryId === lake.id));
   // The whole hidden name in the name field is its own card, held until answered (combined C-M2).
   assert.ok(a.status.openItems.some((x) => x.answer === "facility_word" && x.line === "(top of the page)" && x.why.includes("off the page until you answer")));
+});
+
+test("performer page (combined C-L3): a page that fits one 8x10 page finished still fits as a DRAFT, in PDF and Word", async () => {
+  const { buildPerformerModel } = await import("@crucible/core/src/performerShared");
+  const { layoutPerformer } = await import("../resume-render/creative");
+  const m = fontMeasurer();
+  // As many credits as fit one 8x10 page finished.
+  let n = 10;
+  const at = (k: number) => buildPerformerModel(Array.from({ length: k }, (_, i) => entry({ section: "credit", title: `Example Play ${i}`, venue: "Example Street Theatre", year: 2000 + (i % 25), details: { medium: "theater", role: `Role ${i}` } })), { displayName: "Ray Example", email: "ray@example.com" });
+  while (layoutPerformer(at(n + 1), m).layout.pages.length === 1) n++;
+  const model = at(n);
+  assert.equal(layoutPerformer(model, m).layout.pages.length, 1);
+  const draft = layoutPerformer(model, m, { draft: true }).layout;
+  assert.equal(draft.pages.length, 1, `a full page (${n} credits) stays one page as a draft`);
+  assert.ok(draft.draftInMargin);
+  const mark = draft.pages[0].lines.find((l) => l.runs[0]?.text === "DRAFT")!;
+  assert.ok(mark && mark.top + mark.height <= draft.level.marginTop, "the DRAFT mark sits in the top margin");
+  const pdf = await pdfText(await renderCreativePdf({ doc: "performer", model, draft: true, openItems: ["x"] }));
+  assert.equal(pdf.pages, 2, "the page plus its to-do page");
+  assert.match(pdf.text, /DRAFT/);
+  const docx = await renderCreativeDocx({ doc: "performer", model, draft: true, openItems: ["x"] });
+  const all = docx.toString("latin1");
+  assert.ok(all.includes("word/header"), "Word carries DRAFT in the page header");
+  const html = renderCreativeHtml({ doc: "performer", model, draft: true, openItems: ["x"] });
+  assert.match(html, /class="pageline draft dm">DRAFT</);
 });
