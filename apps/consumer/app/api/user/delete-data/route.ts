@@ -150,6 +150,28 @@ export async function DELETE(req: Request) {
     // never removed them unless the whole account went too. Row-level protected,
     // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.
     await queryAsUser(userId, "DELETE FROM user_progress_event WHERE user_id = $1", [userId]);
+    // "Ask SMR for access" requests hold the person's own words (078). Grants
+    // are Troy's record of a decision and stay until revoked or the account
+    // goes (they cascade then). Before 078 is applied the table is missing.
+    await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
+    // Mini Forge plans this person loaded: expired and emptied, so a deleted
+    // plan can never be loaded again, into any account (security review 3a
+    // Part 2 r3, R3-1). Runs for data-only and account deletion alike, and
+    // before the account row goes (that would set imported_by to NULL).
+    // Before 078 the column is missing (42703) and there is nothing to mark.
+    {
+      const { expireImportedPlans } = await import("@/lib/tablet-session");
+      await expireImportedPlans(userId).catch((e) => {
+        if ((e as { code?: string })?.code !== "42703") throw e;
+      });
+    }
+    // Which finished resumes were already emailed (078, hashes only). Without
+    // them a resume finished after this delete is emailed again, as it should be.
+    await queryAsUser(userId, "DELETE FROM forge_package_email_sent WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
     // Reset access codes and tier
     // Through the database function, not a DELETE: membership is row-level
     // protected (an unscoped delete would remove nothing and this route would

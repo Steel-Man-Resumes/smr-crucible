@@ -11,7 +11,9 @@
  * optional transparency note into the target's coach chat).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
+import { clearForgeBrowserKeysEverywhere, impersonationSeenFor, IMPERSONATION_SEEN_KEY } from "@/lib/refinery-guards";
 
 interface Status {
   active: boolean;
@@ -25,12 +27,51 @@ export function ImpersonationChrome() {
   const [now, setNow] = useState(Date.now());
   const [ending, setEnding] = useState(false);
 
+  // Whether this browser has seen the session active, FOR THIS ADMIN (kept
+  // in storage too, so a reload or a new page after it ran out still knows;
+  // the stored value is the admin's own id, so a flag left by anyone else is
+  // dropped, never acted on: review r3, I4). When the status is then
+  // inactive (it expired, or was ended anywhere), the keys the person's
+  // session left in this browser are cleared once, the same as the End
+  // button does (security review 3a Part 2 r2, N3).
+  const { data: authData } = useSession();
+  const adminId = (authData?.user as { id?: string } | undefined)?.id ?? null;
+  const wasActive = useRef(false);
+  const cleared = useRef(false);
+  const settle = useCallback((active: boolean) => {
+    if (!adminId) return;
+    let seen = wasActive.current;
+    try {
+      if (active) localStorage.setItem(IMPERSONATION_SEEN_KEY, adminId);
+      else seen = seen || impersonationSeenFor(adminId);
+    } catch {
+      // storage unavailable: this tab's own memory still applies
+    }
+    if (active) {
+      wasActive.current = true;
+      cleared.current = false;
+    } else if (seen && !cleared.current) {
+      cleared.current = true;
+      wasActive.current = false;
+      clearForgeBrowserKeysEverywhere(adminId);
+      try {
+        localStorage.removeItem(IMPERSONATION_SEEN_KEY);
+      } catch {
+        // ignore
+      }
+    }
+  }, [adminId]);
+
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/dev/impersonate");
-      if (res.ok) setStatus(await res.json());
+      if (res.ok) {
+        const s = (await res.json()) as Status;
+        setStatus(s);
+        settle(!!s.active && !!s.mode);
+      }
     } catch {}
-  }, []);
+  }, [settle]);
 
   useEffect(() => {
     load();
@@ -41,6 +82,12 @@ export function ImpersonationChrome() {
       clearInterval(tick);
     };
   }, [load]);
+
+  // The countdown reaching zero also ends it, before the next poll.
+  const runOut = status.active && status.expiresAt ? Date.parse(status.expiresAt) <= now : false;
+  useEffect(() => {
+    if (runOut) settle(false);
+  }, [runOut, settle]);
 
   if (!status.active || !status.mode) return null;
 
@@ -60,6 +107,8 @@ export function ImpersonationChrome() {
         body: JSON.stringify({ notify }),
       });
     } finally {
+      // Whatever the person's session left in this browser goes with it (M3).
+      clearForgeBrowserKeysEverywhere(adminId);
       window.location.href = "/dashboard/admin/users";
     }
   }

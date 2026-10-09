@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { deflateRawSync, deflateSync, crc32 } from "node:zlib";
 import {
+  streamCap,
   PDF_LOCKED_MESSAGE,
   PDF_MAX_IMAGE_STREAM_BYTES,
   PDF_MAX_STREAMS,
@@ -20,6 +21,7 @@ import {
   storedZip,
 } from "../upload-safety";
 import { extractTextFromBuffer, UnreadableDocumentError } from "../text-extraction";
+import * as us from "../upload-safety";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 
@@ -81,6 +83,8 @@ function pdf(contentDict: string, content: Buffer, opts: { mediabox?: string; pa
 const spaces = (n: number) => Buffer.alloc(n, 0x20);
 const refused = (fn: () => unknown, reason: string) =>
   assert.throws(fn, (e: any) => e instanceof UnsafeUploadError && e.reason === reason, reason);
+/** Work charged by the last scan (r5); missing on older code, which then fails the bound. */
+const scanWork = () => (typeof (us as any).lastPdfScanWork === "function" ? (us as any).lastPdfScanWork() : Infinity);
 
 /** A zip writer that can lie: entry count, duplicates, gaps, mismatched local headers. */
 function zip(
@@ -183,7 +187,8 @@ describe("PDF: checked before any reader opens it", () => {
     stored.writeUInt16LE(marker.length, 1);
     stored.writeUInt16LE(~marker.length & 0xffff, 3);
     const body = Buffer.concat([Buffer.from([0x78, 0x9c]), stored, marker, deflateRawSync(spaces(PDF_MAX_STREAM_BYTES + 1024))]);
-    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", body)), "pdf_stream_too_big");
+    // r6: refused before inflating, because its /Length runs past that "endstream" (was pdf_stream_too_big).
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", body)), "pdf_malformed");
   });
 
   it("the one allowed chain (ASCII85 then Flate) is decoded and capped like any other", () => {
@@ -479,7 +484,7 @@ describe("r4: linear object finding, lenient numbers, hidden streams, text codec
     refused(() => assertSafePdf(mini("5 0 obj<<>>stream\nq BI /W 100000 /Width 10 /H 100000 /Height 10 /BPC 8 /CS /G ID x EI Q")), "pdf_image_too_big");
   });
 
-  it("M1: 1 MB benign runs scan in under 50 ms each (no quadratic shape)", () => {
+  it("M1: 1 MB benign runs: work at most 12 units a byte plus a base (no quadratic shape); wall clock only a 2 s sanity cap", () => {
     const MB = 1024 * 1024;
     const runs: Record<string, string> = {
       digits: "1".repeat(MB),
@@ -492,6 +497,8 @@ describe("r4: linear object finding, lenient numbers, hidden streams, text codec
     };
     for (const [name, text] of Object.entries(runs)) {
       const b = Buffer.from("%PDF-1.7\n" + text, "latin1");
+      // r5: the instrumented work count is the bound (wall clock is flaky on a
+      // busy machine); the clock stays only as a generous sanity cap.
       const t0 = performance.now();
       try {
         assertSafePdf(b);
@@ -499,16 +506,374 @@ describe("r4: linear object finding, lenient numbers, hidden streams, text codec
         assert.ok(e instanceof UnsafeUploadError, name);
       }
       const ms = performance.now() - t0;
-      assert.ok(ms < 50, `${name}: ${ms.toFixed(1)} ms`);
+      assert.ok(scanWork() <= 12 * b.length + 2 * 1024 * 1024, `${name}: ${(scanWork() / b.length).toFixed(2)} units a byte`);
+      assert.ok(ms < 2000, `${name}: ${ms.toFixed(1)} ms`);
     }
   });
 
-  it("a shape that makes many candidates re-read one long run is refused by the work budget, quickly", () => {
+  it("a shape that makes many candidates re-read one long run is refused, quickly", () => {
     // "obj<</A(" opens a string at every candidate; one closing run at the end.
+    // r5: an object starting inside one already read is malformed (was: the work budget).
     const n = 20000;
     const text = "obj<</A(".repeat(n) + ")".repeat(n) + ">>";
     const t0 = performance.now();
-    assert.throws(() => assertSafePdf(Buffer.from(text, "latin1")), (e: any) => e instanceof UnsafeUploadError && e.reason === "pdf_too_complex");
-    assert.ok(performance.now() - t0 < 1000);
+    assert.throws(() => assertSafePdf(Buffer.from(text, "latin1")), (e: any) => e instanceof UnsafeUploadError && e.reason === "pdf_malformed");
+    assert.ok(performance.now() - t0 < 2000);
+    assert.ok(scanWork() <= 12 * text.length + 2 * 1024 * 1024);
+  });
+});
+
+/* ------------------------------- security review 3a r5 ----------------- */
+
+/** pdf.js 5.4.296's Ascii85Stream.readBlock, transcribed (an independent reference). */
+function pdfjsAscii85(src: Buffer): Buffer {
+  const out: number[] = [];
+  const ws = (c: number) => c === 0x20 || c === 0x09 || c === 0x0d || c === 0x0a;
+  let p = 0;
+  const get = () => (p < src.length ? src[p++] : -1);
+  for (;;) {
+    let c = get();
+    while (ws(c)) c = get();
+    if (c === -1 || c === 0x7e) break;
+    if (c === 0x7a) {
+      out.push(0, 0, 0, 0);
+      continue;
+    }
+    const input = [c, 0, 0, 0, 0];
+    let i: number;
+    for (i = 1; i < 5; ++i) {
+      c = get();
+      while (ws(c)) c = get();
+      input[i] = c;
+      if (c === -1 || c === 0x7e) break;
+    }
+    const n = i - 1;
+    let eof = false;
+    if (i < 5) {
+      for (; i < 5; ++i) input[i] = 0x21 + 84;
+      eof = true;
+    }
+    let t = 0;
+    for (i = 0; i < 5; ++i) t = t * 85 + (input[i] - 0x21);
+    const four = [0, 0, 0, 0];
+    for (i = 3; i >= 0; --i) {
+      four[i] = t & 0xff;
+      t >>= 8;
+    }
+    out.push(...four.slice(0, n));
+    if (eof) break;
+  }
+  return Buffer.from(out);
+}
+
+const wrapStream = (dict: string, data = "hello") => mini(`1 0 obj\n${dict}\nstream\n${data}`);
+const objstmFile = (dict: string, body: string) => mini(`2 0 obj\n<< /Type /ObjStm ${dict} >>\nstream\n${body}`);
+const best = (fn: () => unknown, runs = 3) => {
+  let ms = Infinity;
+  for (let r = 0; r < runs; r++) {
+    const t0 = performance.now();
+    try {
+      fn();
+    } catch (e) {
+      if (!(e instanceof UnsafeUploadError)) throw e;
+    }
+    ms = Math.min(ms, performance.now() - t0);
+  }
+  return ms;
+};
+
+describe("r5 H1: objects are read with pdf.js's grammar, and anything malformed is refused", () => {
+  const z = deflateSync(Buffer.from("BT ET"));
+
+  it("the reviewer's four malformed dictionaries are refused, at top level, for page boxes and in object streams", () => {
+    for (const d of [
+      "<< /A >> /Filter /LZWDecode >>", // a key with no value
+      "<< << /Filter /LZWDecode >>", // "<<" where a key belongs
+      "<< /A << /B [ >> ] >> /Filter /LZWDecode >>", // ">>" inside an array
+      "<< /A [ << ] >> ] /Filter /LZWDecode >>", // "]" inside a dictionary
+    ]) {
+      refused(() => assertSafePdf(wrapStream(d)), "pdf_malformed");
+    }
+    refused(() => assertSafePdf(mini("1 0 obj\n<< /Type /Page /A >> /MediaBox [0 0 99999 99999] >>\nendobj\nstream\n")), "pdf_malformed");
+    refused(() => assertSafePdf(objstmFile("/N 1 /First 4", "5 0 << /A >> /B 1 >> stream\nx\n")), "pdf_malformed");
+    refused(() => assertSafePdf(objstmFile("/N 1 /First 4", "5 0 << /A [ << ] >> ] >> stream\nx\n")), "pdf_malformed");
+    // The well-formed shapes still pass, and the refused filter is still seen.
+    assert.doesNotThrow(() => assertSafePdf(wrapStream("<< /A 1 /B [ << /C (x) >> 2 0 R ] /D << /E [ /F ] >> /Length 5 >>")));
+    refused(() => assertSafePdf(wrapStream("<< /A 1 /B [ << /C (x) >> ] /Filter /LZWDecode >>")), "pdf_filter");
+  });
+
+  it("other malformed shapes are refused: non-name keys, command words as values, unclosed strings, arrays and dictionaries, deep nesting", () => {
+    for (const d of [
+      "<< 5 /Filter /FlateDecode >>",
+      "<< /A obj /Filter /FlateDecode >>",
+      "<< /A (unclosed /Filter /FlateDecode >>",
+      "<< /A [ 1 2 /Filter /FlateDecode >>",
+      "<< /A <414243 /Filter /FlateDecode >>",
+      "<< /A ] /Filter /FlateDecode >>",
+      "<< /A " + "[".repeat(100) + "]".repeat(100) + " >>",
+    ]) {
+      refused(() => assertSafePdf(wrapStream(d)), "pdf_malformed");
+    }
+    refused(() => assertSafePdf(Buffer.from("%PDF-1.7\n1 0 obj\n<< /A 1 ", "latin1")), "pdf_malformed");
+    // true, false, null, references and numbers pdf.js reads leniently are values.
+    assert.doesNotThrow(() => assertSafePdf(wrapStream("<< /A true /B false /C null /D 1 0 R /E -.5 /G 1e-5 /H +3 >>")));
+  });
+
+  it("a stream after a dictionary nested in another object is refused (pdf.js would read it)", () => {
+    refused(() => assertSafePdf(mini("1 0 obj\n[ << /Filter /LZWDecode >> stream\nhello")), "pdf_hidden_stream");
+    refused(() => assertSafePdf(mini("1 0 obj\n<< /A << /Filter /LZWDecode >> stream\nhello")), "pdf_hidden_stream");
+  });
+
+  it("the final sweep: a 'stream' keyword the scan did not check is refused; one inside checked data is fine", () => {
+    refused(() => assertSafePdf(mini("1 0 obj\n[ 1 2 ]\nstream\nhello")), "pdf_malformed");
+    refused(() => assertSafePdf(mini("1 0 obj\n(x) stream\nhello")), "pdf_malformed");
+    assert.doesNotThrow(() => assertSafePdf(wrapStream("<< /Length 30 >>", "BT (a stream of words) Tj ET")));
+  });
+
+  it("objects never overlap: one inside another, or a stream inside another stream's data, is refused", () => {
+    refused(() => assertSafePdf(mini("1 0 obj << /T (2 0 obj << /Filter /LZWDecode >>) >>\nstream\nx")), "pdf_malformed");
+    refused(() => assertSafePdf(mini("1 0 obj <<>> stream\nxx 2 0 obj << /Filter /LZWDecode >> stream\nhello")), "pdf_malformed");
+  });
+
+  it("end to end: a page whose content dictionary is malformed never reaches pdf.js", async () => {
+    const b = pdf("/A >> /Filter /FlateDecode", z);
+    refused(() => assertSafePdf(b), "pdf_malformed");
+    await assert.rejects(extractTextFromBuffer(b, "r.pdf", "application/pdf"), UnreadableDocumentError);
+  });
+
+  it("object streams: header and offsets read as pdf.js reads them; anything else refused", () => {
+    assert.doesNotThrow(() => assertSafePdf(objstmFile("/N 2 /First 8", "5 0 6 12 << /A 1 >> [ 1 2 ]")));
+    refused(() => assertSafePdf(objstmFile("/N 2 /First 8", "5 0 6 x  << /A 1 >> [ 1 2 ]")), "pdf_malformed"); // not a number
+    refused(() => assertSafePdf(objstmFile("/N 2 /First 8", "5 9 6 0  << /A 1 >> [ 1 2 ]")), "pdf_malformed"); // offsets go back
+    refused(() => assertSafePdf(objstmFile("/N 3 0 R /First 8", "5 0 6 12 << /A 1 >> [ 1 2 ]")), "pdf_malformed"); // indirect /N
+    refused(() => assertSafePdf(objstmFile("/N 1 /First 4", "5 0 [ << /B 1 >> stream\nx ]")), "pdf_hidden_stream");
+  });
+
+  it("inline images in content are read from the content's start: a malformed one is refused, text that spells BI is not", () => {
+    const ok = (c: string) => assert.doesNotThrow(() => assertSafePdf(pdf("", Buffer.from(c, "latin1"))), c);
+    ok("q BI /W 10 /H 10 /BPC 8 /CS /G /D [0 1] /DP << /K -1 >> ID xxxxxxxxxx EI Q");
+    ok("BT /F1 12 Tf (BI Developer, Acme) Tj ET");
+    // The backup check reads every "BI", strings included, so text spelling a giant image is refused (as before r5).
+    refused(() => assertSafePdf(pdf("", Buffer.from("BT (BI /W 99999 /H 99999) Tj ET"))), "pdf_image_too_big");
+    refused(() => assertSafePdf(pdf("", Buffer.from("q BI 5 /W 10 ID x EI Q"))), "pdf_malformed");
+    refused(() => assertSafePdf(pdf("", Buffer.from("q BI /W 10 /H 10 ID xxxx"))), "pdf_malformed"); // no EI
+    refused(() => assertSafePdf(pdf("", Buffer.from("q BI /W 9 0 R /H 10 ID x EI Q"))), "pdf_image_too_big"); // size by reference
+    // In a stream typed as binary (a font), random bytes spelling BI are not refused, but sizes are still checked.
+    const font = (bytes: string) => pdf("/Length1 9", Buffer.from(bytes, "latin1"));
+    assert.doesNotThrow(() => assertSafePdf(font("\x01\x02 BI 5 ) ] >> garbage")));
+    refused(() => assertSafePdf(font("\x01 BI /X ] /W 99999 /H 99999 ID x EI")), "pdf_image_too_big");
+  });
+});
+
+describe("r5 M3: text codecs decode into bounded buffers, the way pdf.js decodes them", () => {
+  it("ASCII85 matches pdf.js on every byte class (z, digits out of range, NUL and FF as digits, partial groups)", () => {
+    const vectors = ["87cURD]i,\"Ebo80~>", "zz!!~>", "{{{{{~>", "\x00\x00\x00\x00\x00~>", "ab\x0ccd e~>", "a~>", "ab~>", "abcd", "z!!!", "5sdq,77I~>"];
+    for (const v of vectors) {
+      const b = Buffer.from(v, "latin1");
+      assert.deepEqual(decodeAscii85(b), pdfjsAscii85(b), JSON.stringify(v));
+    }
+  });
+
+  it("output past the limit is refused while decoding, before anything that size is built", () => {
+    const zs = Buffer.alloc(3 * 1024 * 1024, 0x7a); // 12 MB of zeros once decoded
+    const before = process.memoryUsage().arrayBuffers;
+    assert.throws(() => decodeAscii85(zs, PDF_MAX_STREAM_BYTES), (e: any) => e instanceof UnsafeUploadError && e.reason === "pdf_stream_too_big");
+    assert.ok(process.memoryUsage().arrayBuffers - before < 4 * 1024 * 1024, "no full-size buffer was made");
+    refused(() => assertSafePdf(wrapStream("<< /Filter /ASCII85Decode >>", "z".repeat(3 * 1024 * 1024) + "~>")), "pdf_stream_too_big");
+    refused(() => assertSafePdf(wrapStream("<< /Filter [/ASCII85Decode /FlateDecode] >>", "z".repeat(3 * 1024 * 1024) + "~>")), "pdf_stream_too_big");
+  });
+
+  it("a text codec's end mark must be in its own stream's data", () => {
+    refused(() => assertSafePdf(wrapStream("<< /Filter /ASCII85Decode >>", "zzzz")), "pdf_malformed");
+    refused(() => assertSafePdf(wrapStream("<< /Filter /ASCIIHexDecode >>", "414243")), "pdf_malformed");
+    assert.doesNotThrow(() => assertSafePdf(wrapStream("<< /Filter /ASCIIHexDecode >>", "414243>")));
+  });
+});
+
+describe("r5 M1, M2: one cursor, every byte charged, work linear in the file", () => {
+  const MB = 1024 * 1024;
+  const rep = (u: string, n: number) => u.repeat(Math.max(1, Math.floor(n / u.length)));
+  const shapes = (n: number): Record<string, string> => ({
+    "plain digits": rep("1", n),
+    "plain spaces": rep(" ", n),
+    "comment lines": rep("% a comment line\n", n),
+    "comment lines containing obj": rep("%obj\n", n),
+    "%obj run, one line": rep("%obj ", n),
+    "obj then comment": rep("obj %", n),
+    "obj then space": rep("obj ", n),
+    "1 0 obj repeated": rep("1 0 obj ", n),
+    "comment lines ending obj <<": rep("%" + "x".repeat(64) + " obj <<\n", n),
+    "5000 empty unfiltered streams, then spaces": rep("1 0 obj<<>>stream\n", 5000 * 18) + rep(" ", n - 5000 * 18),
+    "5000 closed empty streams, then spaces": rep("1 0 obj<<>>stream\nendstream\nendobj\n", 5000 * 35) + rep(" ", n - 5000 * 35),
+    "obj<< repeated": rep("obj<<", n),
+    "unclosed dictionaries": rep("obj << /A ", n),
+    "nested strings": rep("obj<</A(", n / 2) + ">>",
+    "endstream repeated": rep("endstream ", n),
+    "content: text operators": "1 0 obj <<>> stream\n" + rep("BT /F1 12 Tf (Hello) Tj ET\n", n) + "\nendstream\n",
+    "content: (BI runs": "1 0 obj <<>> stream\n" + rep("(BI ", n) + "\nendstream\n",
+  });
+
+  it("total work is at most 12 units a byte plus a fixed base, at 1 MB and at 10 MB, for every shape", () => {
+    for (const n of [MB, 10 * MB]) {
+      for (const [name, text] of Object.entries(shapes(n))) {
+        const b = Buffer.from("%PDF-1.7\n" + text, "latin1");
+        try {
+          assertSafePdf(b);
+        } catch (e) {
+          assert.ok(e instanceof UnsafeUploadError, name);
+        }
+        const w = scanWork();
+        assert.ok(w <= 12 * b.length + 2 * MB, `${name} at ${n / MB} MB: ${(w / b.length).toFixed(2)} units a byte`);
+      }
+    }
+  });
+
+  it("wall clock, as a sanity cap only: every shape finishes (or is refused) in under 2 s at 1 MB", () => {
+    for (const [name, text] of Object.entries(shapes(MB))) {
+      const b = Buffer.from("%PDF-1.7\n" + text, "latin1");
+      const ms = best(() => assertSafePdf(b), 1);
+      assert.ok(ms < 2000, `${name}: ${ms.toFixed(1)} ms`);
+    }
+  });
+
+  it("the r5 slow shapes at 200 KB: linear work, and well under the 2 s cap (they took 11 s and 0.7 s before)", () => {
+    const b1 = Buffer.from("%PDF-1.7\n" + "%obj\n".repeat(40000), "latin1");
+    const b2 = Buffer.from("%PDF-1.7\n" + "1 0 obj<<>>stream\n".repeat(5000) + " ".repeat(110000), "latin1");
+    for (const b of [b1, b2]) {
+      const ms = best(() => assertSafePdf(b), 1);
+      assert.ok(scanWork() <= 12 * b.length + 2 * 1024 * 1024);
+      assert.ok(ms < 2000, `${ms.toFixed(1)} ms`);
+    }
+  });
+});
+
+/* ------------------------------- security review 3a r6 ----------------- */
+
+describe("r6: zlib's verdict, object streams by what pdf.js reads, Flate input charged", () => {
+  const text = Buffer.from("BT /F1 12 Tf (Hello) Tj ET");
+  // A non-final stored block with LEN 0 and NLEN 0: zlib refuses it, pdf.js's decoder reads past it.
+  const zlibRefuses = (raw: Buffer) => Buffer.concat([Buffer.from([0x78, 0x9c, 0x00, 0x00, 0x00, 0x00, 0x00]), raw]);
+
+  it("H1: a Flate stream zlib refuses is refused, even when its content is plain text", () => {
+    assert.doesNotThrow(() => assertSafePdf(pdf("/Filter /FlateDecode", deflateSync(text))));
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", zlibRefuses(deflateRawSync(text)))), "pdf_malformed");
+    refused(() => assertSafePdf(pdf("/Filter /FlateDecode", zlibRefuses(deflateRawSync(spaces(PDF_MAX_STREAM_BYTES + 1024))))), "pdf_malformed");
+  });
+
+  it("H1: a cleanly truncated Flate stream is still read (pdf.js reads the same bytes)", () => {
+    const z = deflateSync(Buffer.from("BT /F1 12 Tf (" + "Hello ".repeat(400) + ") Tj ET"));
+    assert.doesNotThrow(() => assertSafePdf(pdf("/Filter /FlateDecode", z.subarray(0, z.length - 40))));
+  });
+
+  it("H2: a stream with /First is checked as an object stream whatever its labels; with an image label it is refused", () => {
+    const inner = "5 0 << /B 1 >> stream\nx\n";
+    const objstm = (d: string) => mini(`2 0 obj\n<< ${d} >>\nstream\n${inner}`);
+    refused(() => assertSafePdf(objstm("/Type /ObjStm /N 1 /First 4")), "pdf_hidden_stream");
+    refused(() => assertSafePdf(objstm("/N 1 /First 4")), "pdf_hidden_stream"); // no /Type
+    refused(() => assertSafePdf(objstm("/Type /XObject /N 1 /First 4")), "pdf_hidden_stream");
+    refused(() => assertSafePdf(objstm("/Type /XObject /Subtype /Image /Width 1 /Height 1 /N 1 /First 4")), "pdf_malformed");
+    // A colour profile has /N alone (pdf.js cannot read it as an object stream): still accepted.
+    assert.doesNotThrow(() => assertSafePdf(mini("2 0 obj\n<< /N 3 /Filter /FlateDecode >>\nstream\n", deflateSync(Buffer.alloc(300, 7)))));
+  });
+
+  it("M1: a Flate stream reads only its own data; a /Length past an inner 'endstream' is refused", () => {
+    const marker = Buffer.from("\nendstream\n");
+    const stored = Buffer.from([0x00, marker.length, 0, ~marker.length & 0xff, 0xff]);
+    const body = Buffer.concat([Buffer.from([0x78, 0x9c]), stored, marker, deflateRawSync(text)]);
+    const obj = (len: string) => mini(`5 0 obj<</Filter/FlateDecode${len}>>stream\n`, body);
+    refused(() => assertSafePdf(obj(`/Length ${body.length}`)), "pdf_malformed");
+    refused(() => assertSafePdf(obj("/Length 9 0 R")), "pdf_malformed");
+    // No /Length and data still running at "endstream": refused since r7 (was read as truncated in r6).
+    refused(() => assertSafePdf(obj("")), "pdf_malformed");
+  });
+
+  it("M1: the input zlib reads is charged to the work count", () => {
+    // 1 MB of empty stored deflate blocks (5 bytes each), then an empty final block: no output at all.
+    const empties = Buffer.concat([Buffer.from([0x78, 0x9c]), Buffer.alloc(5 * 200_000).fill(Buffer.from([0x00, 0x00, 0x00, 0xff, 0xff])), Buffer.from([0x01, 0x00, 0x00, 0xff, 0xff])]);
+    const img = (filter: string) => mini(`5 0 obj<</Subtype/Image/Width 1/Height 1${filter}>>stream\n`, empties);
+    assertSafePdf(img(""));
+    const plain = scanWork();
+    assertSafePdf(img("/Filter/FlateDecode"));
+    assert.ok(scanWork() - plain >= 0.9 * empties.length, `charged ${scanWork() - plain} for ${empties.length} bytes read`);
+  });
+});
+
+/* ------------------------------- security review 3a r7 ----------------- */
+
+describe("r7: numbers pdf.js reads differently, /Length after any spacing, predictors", () => {
+  const text = Buffer.from("BT /F1 12 Tf (Hello) Tj ET");
+  // Deflate data that still runs past an "endstream" written inside it (a stored block holding the word).
+  const marker = Buffer.from("\nendstream\n");
+  const runsOn = Buffer.concat([Buffer.from([0x78, 0x9c, 0x00, marker.length, 0, ~marker.length & 0xff, 0xff]), marker, deflateRawSync(text)]);
+
+  it("H1: a /Length past the first 'endstream' is found after any whitespace or comment", () => {
+    for (const gap of [" ".repeat(40), "\n% a comment\n", "\r\n\t \x00%c\r%d\n  "]) {
+      const b = Buffer.concat([Buffer.from(`%PDF-1.7\n5 0 obj<</Filter/FlateDecode/Length ${runsOn.length}>>stream\n`, "latin1"), runsOn, Buffer.from(gap + "endstream\nendobj\n", "latin1")]);
+      refused(() => assertSafePdf(b), "pdf_malformed");
+    }
+  });
+
+  it("H1: data still running at 'endstream' is refused unless a direct /Length ends there", () => {
+    const at = (len: string) => mini(`5 0 obj<</Filter/FlateDecode${len}>>stream\n`, runsOn);
+    refused(() => assertSafePdf(at("")), "pdf_malformed");
+    refused(() => assertSafePdf(at("/Length 9 0 R")), "pdf_malformed");
+    refused(() => assertSafePdf(at("/Length 1-0")), "pdf_malformed");
+    // A direct /Length that ends before the first "endstream": pdf.js stops there too (clean truncation).
+    const cut = deflateSync(Buffer.from("BT (" + "Hello ".repeat(300) + ") Tj ET"));
+    const part = cut.subarray(0, cut.length - 40);
+    assert.doesNotThrow(() => assertSafePdf(mini(`5 0 obj<</Filter/FlateDecode/Length ${part.length}>>stream\n`, part)));
+  });
+
+  it("H2: numbers that are not finite are refused; sizes that are not finite never lift the cap", () => {
+    for (const v of ["1-0", "--5", "1e999", "1".repeat(70)]) {
+      refused(() => assertSafePdf(mini(`5 0 obj<</Subtype/Image/Width ${v}/Height 5/Filter/FlateDecode>>stream\n`, deflateSync(Buffer.alloc(10)))), "pdf_malformed");
+    }
+    assert.equal(streamCap({ isImage: true, width: NaN, height: 5 }), PDF_MAX_STREAM_BYTES);
+    assert.equal(streamCap({ isImage: true, width: Infinity, height: 5 }), PDF_MAX_STREAM_BYTES);
+    // The lenient inline reader (binary-typed stream) keeps a NaN size: the pixel check refuses it.
+    refused(() => assertSafePdf(pdf("/Length1 9", Buffer.from("\x01 BI /W 1-0 /H 99 ID x EI", "latin1"))), "pdf_image_too_big");
+  });
+
+  it("M1: a /Predictor is refused outside cross-reference streams and plain images", () => {
+    const z = deflateSync(text);
+    const s1 = (d: string) => mini(`5 0 obj<<${d}/Filter/FlateDecode>>stream\n`, z);
+    refused(() => assertSafePdf(s1("/DecodeParms<</Predictor 12/Columns 5>>")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DP<</Predictor 2>>")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms[null<</Predictor 15/Columns 5>>]")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms 7 0 R")), "pdf_malformed");
+    refused(() => assertSafePdf(s1("/DecodeParms<</Predictor 9 0 R>>")), "pdf_malformed");
+    assert.doesNotThrow(() => assertSafePdf(s1("/DecodeParms null")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/DecodeParms<</Predictor 1>>")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>")));
+    assert.doesNotThrow(() => assertSafePdf(s1("/Subtype/Image/Width 5/Height 5/DecodeParms<</Predictor 15/Columns 5/Colors 1>>")));
+    refused(() => assertSafePdf(mini(`5 0 obj<</Subtype/Image/Width 5/Height 5/Filter[/FlateDecode/DCTDecode]/DecodeParms[<</Predictor 15>> null]>>stream\n`, z)), "pdf_malformed");
+  });
+});
+
+/* ------------------------------- security review 3a r8 ----------------- */
+
+describe("r8: predictors stay off object streams, and their rows are sized and capped", () => {
+  const z = deflateSync(Buffer.from("BT ET"));
+  const s1 = (d: string) => mini(`5 0 obj<<${d}/Filter/FlateDecode>>stream\n`, z);
+
+  it("M2: a cross-reference stream with /First may not use a predictor", () => {
+    assert.doesNotThrow(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>")));
+    // Object-stream data that reads cleanly, so only the predictor rule can refuse it.
+    const objstm = mini(`5 0 obj<</Type/XRef/N 1/First 4/W[1 2 1]/DecodeParms<</Predictor 12/Columns 4>>/Filter/FlateDecode>>stream\n`, deflateSync(Buffer.from("7 0 << /A 1 >>")));
+    refused(() => assertSafePdf(objstm), "pdf_malformed");
+  });
+
+  it("M1: Columns, Colors and BitsPerComponent must be plain positive whole numbers, and the row within the cap", () => {
+    const xref = (p: string) => s1(`/Type/XRef/W[1 2 1]/DecodeParms<</Predictor 12${p}>>`);
+    const img = (p: string) => s1(`/Subtype/Image/Width 500/Height 500/DecodeParms<</Predictor 15${p}>>`);
+    for (const p of ["", "/Columns 4", "/Columns 500/Colors 3/BitsPerComponent 8"]) {
+      assert.doesNotThrow(() => assertSafePdf(xref(p)), p);
+      assert.doesNotThrow(() => assertSafePdf(img(p)), p);
+    }
+    for (const p of ["/Columns 0", "/Columns -4", "/Columns 4.5", "/Columns 9 0 R", "/Colors (3)", "/BitsPerComponent 0", "/Columns 99999999/Colors 4/BitsPerComponent 16"]) {
+      refused(() => assertSafePdf(xref(p)), "pdf_malformed");
+      refused(() => assertSafePdf(img(p)), "pdf_malformed");
+    }
+    refused(() => assertSafePdf(s1("/Type/XRef/W[1 2 1]/DecodeParms[<</Predictor 12/Columns 99999999>>]")), "pdf_malformed");
   });
 });

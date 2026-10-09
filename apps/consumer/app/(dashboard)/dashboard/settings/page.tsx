@@ -31,6 +31,9 @@ import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { passwordProblem } from "@/lib/password-policy";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
+import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
+import { PackageEmailSetting } from "@/components/PackageEmailSetting";
+import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 
 interface UsageData {
   used: number;
@@ -188,6 +191,8 @@ export default function SettingsPage() {
         setCodeInput("");
         // Joined: the one-time "share your progress?" question can now be asked.
         window.dispatchEvent(new Event(ORG_JOINED_EVENT));
+        // A sponsoring organization opens the premium tools.
+        window.dispatchEvent(new Event(PREMIUM_CHANGED_EVENT));
         // Refresh codes and usage
         const [codesRes, usageRes] = await Promise.all([
           fetch("/api/access-code/mine"),
@@ -469,6 +474,8 @@ export default function SettingsPage() {
           hideBusy={hideBusy}
           unhideEmployer={unhideEmployer}
         />}
+        {!isOrgStaff && <PremiumToolsSection />}
+        {!isOrgStaff && <PackageEmailSetting />}
       </div>
 
       {/* ── 2. Coach & AI ──────────────────────────────────────────── */}

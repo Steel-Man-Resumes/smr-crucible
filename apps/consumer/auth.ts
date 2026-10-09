@@ -581,7 +581,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const state = await readProofState(pool, token.sub);
           if (state) {
             const owed = claimForInboxProof(state);
-            if (owed === "prove") await markEmailProven(pool, token.sub);
+            // "none" (already proven, possibly only by 068's backfill) and
+            // "prove" both record HOW: this sign-in is a real inbox proof.
+            const { proofSourceFor } = await import("@/lib/email-proof");
+            if (owed === "prove" || owed === "none") await markEmailProven(pool, token.sub, proofSourceFor(account?.provider));
             else if (owed === "2fa" || owed === "password") (token as any).claim = owed;
           }
         }

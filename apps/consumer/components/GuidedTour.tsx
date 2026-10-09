@@ -42,7 +42,7 @@ const COACH_SCREEN = SCREENS - 1;
 // The six plain steps, read from the one vocabulary the dashboard uses.
 const JOURNEY = JOURNEY_STAGES.filter((st) => st.stage >= 1).map((st) => st.short);
 
-export function GuidedTour() {
+export function GuidedTour({ held = false }: { held?: boolean } = {}) {
   const tier = useUserTier();
   const pathname = usePathname();
   const router = useRouter();
@@ -102,7 +102,8 @@ export function GuidedTour() {
     };
   }, [tier, onHome, requested]);
 
-  const visible = isTourVisible({ tier, onHome, closed, state, requested });
+  // Held while the shell's "Is it yours?" question is open: the card first.
+  const visible = isTourVisible({ tier, onHome, closed, state, requested, held });
   const canDefer = canDeferTour(state);
   const canClose = canCloseTour(state);
 

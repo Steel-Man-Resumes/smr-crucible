@@ -27,6 +27,8 @@ import type { UserTier } from "@crucible/core";
 import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
 import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
 import { codeSeats, decideSignedInCall, planForgeLimit } from "./forge-rate-limit";
+import type { PremiumToolId } from "./premium";
+import { checkPremium } from "./premium-server";
 import {
   LIVE_TEST_BUCKET,
   LIVE_TEST_DAILY_LIMIT,
@@ -58,6 +60,11 @@ interface RateLimitOptions {
    * where a pool would lift the cap by the code's seats (review 3a r1, L7).
    */
   poolable?: boolean;
+  /**
+   * user mode: a premium tool (lib/premium.ts). Checked before the call is
+   * counted, so a locked tool never uses up anyone's daily calls.
+   */
+  premium?: PremiumToolId;
 }
 
 const RATE_LIMIT_MESSAGE =
@@ -112,6 +119,12 @@ export function withRateLimit(
             { status: 403 }
           );
         }
+      }
+
+      // Premium tools open by entitlement (an organization or Troy's grant).
+      if (opts.premium) {
+        const locked = await checkPremium(userId, opts.premium);
+        if (locked) return locked;
       }
 
       // Atomic: increment first, then check if over limit

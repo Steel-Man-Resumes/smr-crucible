@@ -96,6 +96,21 @@ export async function POST(request: Request) {
           if (err?.code !== UNDEFINED_COLUMN) throw err;
           await client.query("ROLLBACK TO SAVEPOINT inbox_proof");
         }
+        // A reset by email proves the inbox: record how, for an address that
+        // is proven (078, M2; e.g. one 068 only backfilled). Before 078 the
+        // column is missing and this is skipped.
+        await client.query("SAVEPOINT proof_source");
+        try {
+          await client.query(
+            `UPDATE users SET email_proof_source = 'password_reset'
+              WHERE id = $1 AND email_proven_at IS NOT NULL AND email_proof_source IS NULL`,
+            [update.rows[0].id]
+          );
+          await client.query("RELEASE SAVEPOINT proof_source");
+        } catch (err: any) {
+          if (err?.code !== UNDEFINED_COLUMN) throw err;
+          await client.query("ROLLBACK TO SAVEPOINT proof_source");
+        }
       }
       await client.query("COMMIT");
 

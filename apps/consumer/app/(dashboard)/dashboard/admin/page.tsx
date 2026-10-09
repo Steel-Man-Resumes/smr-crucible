@@ -85,12 +85,26 @@ export default function AdminEvidenceDashboard() {
           <h1 className="text-2xl font-bold text-t-white">Evidence Dashboard</h1>
           <p className="text-t-phos-dim text-sm mt-1">Admin view of live outcomes + pilot data. Shows zeros until pilots run.</p>
         </div>
-        <Link
-          href="/dashboard/admin/health"
-          className="t-focus flex-shrink-0 px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10"
-        >
-          System Health
-        </Link>
+        <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row">
+          <Link
+            href="/dashboard/admin/mini-forge"
+            className="t-focus px-4 py-2 bg-transparent border border-t-line text-t-phos text-sm font-bold hover:bg-t-panel-2"
+          >
+            Locked Mini Forge plans
+          </Link>
+          <Link
+            href="/dashboard/admin/premium"
+            className="t-focus px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10"
+          >
+            Premium access
+          </Link>
+          <Link
+            href="/dashboard/admin/health"
+            className="t-focus px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10"
+          >
+            System Health
+          </Link>
+        </div>
       </div>
 
       {/* Mint access codes -- cohort seat codes + partner staff codes */}

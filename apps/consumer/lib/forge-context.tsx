@@ -7,6 +7,7 @@ import { readOwnForgeSession } from "@/lib/forge-carry";
 import type { ReactNode } from "react";
 import type { ResumeDocument } from "@/components/resume/resumeModel";
 import { migrateStoredSession, STORED_SESSION_VERSION } from "@/lib/forge-preferences";
+import { applyForgeClearMark } from "./refinery-guards";
 
 // --- Forge Session Context ---
 // Tracks user progress through the Forge flow without requiring auth.
@@ -262,6 +263,16 @@ export function ForgeProvider({ children }: { children: ReactNode }) {
   const auth = useRunAuth();
   const userIdRef = useRef<string | null>(null);
   userIdRef.current = auth.status === "authenticated" ? auth.userId : null;
+
+  // A clear the other host marked for THIS signed-in admin (an impersonation
+  // started, ended or ran out there) applies here, once per account, during
+  // render so no page reads the stale run first. Never for a signed-out
+  // visitor or a mark for anyone else (lib/refinery-guards.ts; r3, R3-2).
+  const clearCheckedFor = useRef<string | null>(null);
+  if (auth.status === "authenticated" && clearCheckedFor.current !== auth.userId) {
+    clearCheckedFor.current = auth.userId;
+    if (applyForgeClearMark(auth.userId) && Object.keys(session).length > 0) setSession({});
+  }
 
   const updateSession = useCallback((updates: Partial<ForgeSessionData>) => {
     setSession((prev) => {

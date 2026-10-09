@@ -77,3 +77,6 @@ export * from './orgVisibilityShared';
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).
 export * from './secondCheckShared';
 export * from './secondCheck';
+// Premium tools by entitlement, never payment (migration 078).
+export * from './premium';
+export * from './packageEmail';

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { findHudCounselors } from "@/lib/hud-counselors";
 import {
   getResourcesByCategory,
   getResourcesForBarriers,
@@ -59,17 +60,12 @@ async function handlePost(request: Request) {
     // If housing category, augment with live HUD data
     if (category === "housing") {
       try {
-        const hudUrl = new URL(
-          "/api/resources/hud-counselors",
-          request.url
-        );
-        if (location) hudUrl.searchParams.set("location", location);
-
-        const hudRes = await fetch(hudUrl.toString());
-        if (hudRes.ok) {
-          const { counselors } = await hudRes.json();
+        // A function call, not a fetch to our own URL (security review 3a
+        // Part 2 r1, L5): this route is already signed in and premium-gated.
+        const counselors = await findHudCounselors(location);
+        {
           // Convert HUD counselors to ResourceEntry format
-          const hudResources: ResourceEntry[] = (counselors || []).map(
+          const hudResources: ResourceEntry[] = counselors.map(
             (c: {
               name: string;
               address: string;
@@ -137,4 +133,5 @@ export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "resources",
   requiredTier: "client",
+  premium: "resources",
 });

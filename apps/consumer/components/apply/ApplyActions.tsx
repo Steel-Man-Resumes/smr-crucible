@@ -27,6 +27,9 @@
 
 import { useEffect, useState } from "react";
 import { classifyApplyUrl } from "@/lib/apply-destination";
+import Link from "next/link";
+import { usePremium } from "@/components/premium/PremiumGate";
+import { PREMIUM_TOOL_LABELS, toolIsOpen } from "@/lib/premium";
 
 interface ApplyActionsProps {
   applicationId: string;
@@ -108,6 +111,10 @@ export function ApplyActions({
     } catch {}
   }, [resumeArtifactId]);
   const resumeId = resumeArtifactId || baselineId;
+  // One-click apply is a premium tool (lib/premium.ts). Unknown status: show
+  // the button; the server checks every call.
+  const { status: premium } = usePremium();
+  const oneClickOpen = toolIsOpen(premium, "one_click_apply") !== false;
 
   const [checking, setChecking] = useState(false);
   const [fit, setFit] = useState<FitResult | null>(null);
@@ -335,6 +342,13 @@ export function ApplyActions({
           </button>
           {asIsDone ? (
             <span className="text-[11px] text-t-amber-bright">Your current resume is attached to this job.</span>
+          ) : !oneClickOpen ? (
+            <span className="text-[11px] text-t-phos-dim" data-testid="one-click-locked">
+              {PREMIUM_TOOL_LABELS.one_click_apply} isn&apos;t open for you yet.{" "}
+              <Link href="/dashboard/settings#premium" className="underline underline-offset-2 hover:text-t-white">
+                How to get it
+              </Link>
+            </span>
           ) : (
             <button
               onClick={applyAsIs}
@@ -385,7 +399,7 @@ export function ApplyActions({
           {/* One-click route to the recommended next step. */}
           <div className="flex items-center gap-2 flex-wrap mt-2">
             {fit.recommendation === "as_is" ? (
-              !asIsDone && (
+              !asIsDone && oneClickOpen && (
                 <button
                   onClick={applyAsIs}
                   disabled={applyingAsIs}

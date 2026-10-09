@@ -123,4 +123,5 @@ export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "interview",
   requiredTier: "client",
+  premium: "interview_coaching",
 });

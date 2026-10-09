@@ -99,8 +99,39 @@ export const EMAIL_PROOF_NEEDED = {
   needsEmailProof: true,
 } as const;
 
-/** Mark an account's email proven. Ignores a missing column. */
-export async function markEmailProven(db: Db, userId: string): Promise<void> {
+/**
+ * HOW the inbox was proven (078, users.email_proof_source; security review 3a
+ * Part 2 r1, M2). 068 backfilled email_proven_at on every older account, so
+ * email_proven_at alone cannot tell a proof from the backfill. The source is
+ * written only by a real proof, and the automatic package email needs it.
+ */
+export type ProofSource = "email_link" | "google" | "password_reset";
+
+/** The proof a sign-in provider gives: an email link, or Google (its own verified address). */
+export function proofSourceFor(provider: unknown): ProofSource | null {
+  if (provider === "resend") return "email_link";
+  if (provider === "google") return "google";
+  return null;
+}
+
+/**
+ * Mark an account's email proven, and record how (when `source` is given).
+ * Never overwrites an earlier proof time or source. Before 078 the source
+ * column is missing and only email_proven_at is set; before 068 nothing is.
+ */
+export async function markEmailProven(db: Db, userId: string, source: ProofSource | null = null): Promise<void> {
+  try {
+    await db.query(
+      `UPDATE users
+          SET email_proven_at = COALESCE(email_proven_at, now()),
+              email_proof_source = COALESCE(email_proof_source, $2)
+        WHERE id = $1 AND (email_proven_at IS NULL OR ($2::text IS NOT NULL AND email_proof_source IS NULL))`,
+      [userId, source]
+    );
+    return;
+  } catch (err: any) {
+    if (err?.code !== UNDEFINED_COLUMN) throw err;
+  }
   try {
     await db.query(
       `UPDATE users SET email_proven_at = now() WHERE id = $1 AND email_proven_at IS NULL`,

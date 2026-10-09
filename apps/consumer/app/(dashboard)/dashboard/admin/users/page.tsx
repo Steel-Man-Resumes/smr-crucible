@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealTier } from "@/lib/useUserTier";
+import { useSession } from "next-auth/react";
+import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -18,6 +20,8 @@ function usd(v: unknown): string {
 }
 
 export default function AdminUsersPage() {
+  const { data: authData } = useSession();
+  const adminId = (authData?.user as { id?: string } | undefined)?.id ?? null;
   const realTier = useRealTier();
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<any[] | null>(null);
@@ -92,6 +96,9 @@ export default function AdminUsersPage() {
         alert(d.error || "Could not start session.");
         return;
       }
+      // Nothing of the admin's own in this browser is read as the person's,
+      // and nothing of the person's stays behind (security review 3a Part 2 r1, M3).
+      clearForgeBrowserKeysEverywhere(adminId);
       window.location.href = "/dashboard";
     } finally {
       setStarting(false);

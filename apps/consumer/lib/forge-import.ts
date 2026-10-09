@@ -209,8 +209,12 @@ export function forgeRunView(run: Record<string, any>, auth: RunAuth): { visible
   const owner = typeof run?._ownerUserId === "string" ? run._ownerUserId : null;
   if (auth.status === "authenticated") {
     if (owner === auth.userId) return { visible: run, mayUse: true };
-    if (!owner && !runHasAnswers(run) && run?.isDemo !== true) return { visible: run, mayUse: true };
-    if (!owner && run?.isDemo === true) return { visible: run, mayUse: true }; // sample data, never saved
+    // Nothing anyone told us yet: safe to show, and it becomes this account's
+    // on its first write (stampOwnerOnWrite).
+    if (!owner && !runHasAnswers(run)) return { visible: run, mayUse: true };
+    // Everything else stays hidden, sample-data runs included: a demo run can
+    // hold what the last person typed into it (review R2). A demo this
+    // account starts is stamped as its own, so it still works.
     return empty;
   }
   if (auth.status === "unauthenticated") {
@@ -228,7 +232,9 @@ export function forgeRunView(run: Record<string, any>, auth: RunAuth): { visible
  * it here (the same rule as madeHere, at the moment of the write).
  */
 export function stampOwnerOnWrite(prev: Record<string, any>, next: Record<string, any>, userId: string | null): Record<string, any> {
-  if (!userId || next._ownerUserId || next.isDemo === true) return next;
+  // Demo runs are stamped too, so the account that started one sees it; they
+  // are still never saved (importDecision and the Refinery sync skip isDemo).
+  if (!userId || next._ownerUserId) return next;
   const prevOwner = prev?._ownerUserId;
   if (prevOwner === userId || (!prevOwner && !runHasAnswers(prev ?? {}))) return { ...next, _ownerUserId: userId };
   return next;
@@ -245,7 +251,8 @@ export function mayUseRunFor(
   view: { mayUse: boolean; isDemo?: unknown },
   readOwn: (userId: string) => unknown
 ): boolean {
-  if (auth.status === "authenticated") return !!readOwn(auth.userId) || (view.isDemo === true && view.mayUse);
+  // A demo run counts only when it is this account's (stamped on its first write).
+  if (auth.status === "authenticated") return !!readOwn(auth.userId);
   if (auth.status === "unauthenticated") return view.mayUse;
   return false;
 }

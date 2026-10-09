@@ -138,4 +138,5 @@ export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "quick-apply",
   requiredTier: "client",
+  premium: "one_click_apply",
 });

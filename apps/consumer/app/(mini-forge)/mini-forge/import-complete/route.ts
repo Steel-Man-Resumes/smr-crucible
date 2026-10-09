@@ -1,24 +1,21 @@
 /**
  * Mini Forge import-complete.
- * Reached after successful sign-in following a mini-forge import.
+ * Reached after sign-in following a mini-forge import.
  *
- * Reads the mf_session cookie (set by /mini-forge/import before auth),
- * copies forge_output from tablet_session → consumer_profile via saveForgeSession,
- * clears the cookie, redirects to /dashboard?welcome=mini-forge.
+ * It NEVER saves anything (shared-computer review, Mini Forge path 5). The
+ * mf_session cookie follows the BROWSER: if one person entered a code and PIN
+ * and walked away, the next person to sign in from that tab would have had the
+ * first person's plan saved into their account. So a signed-in person is sent
+ * to /mini-forge/import-confirm, which asks for the tablet PIN again and names
+ * the account. Only the person who made the PIN can say yes.
  *
- * A Route Handler, not a page (fix 2026-10-02). This step has to delete the
- * mf_session cookie, and Next.js only lets a Server Action or a Route Handler
- * change cookies. The old page.tsx called cookies().delete() during render,
- * which throws in a Server Component. Clearing the cookie on the redirect
- * response works the same on Next 14 and Next 15 (no cookies() call at all).
+ * A Route Handler, not a page: it may clear the cookie on a redirect.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { auth, isSessionRevoked } from "@/auth";
 import { getTabletSessionForImport, TABLET_COOKIE } from "@/lib/tablet-session";
-import { saveForgeSession } from "@crucible/core";
 import { sessionPending } from "@/lib/session-policy";
-import { nonEmptyList } from "@/lib/mini-forge-import";
 
 // Reads the session and a cookie, writes to the DB: never static, never cached.
 export const dynamic = "force-dynamic";
@@ -36,19 +33,6 @@ function go(request: NextRequest, path: string, clearCookie: boolean) {
     });
   }
   return res;
-}
-
-/**
- * Postgres needs a timestamp it can parse. The Neon driver hands created_at
- * back as a Date, and Date#toString() ("Fri Oct 02 2026 20:46:37 GMT+0000
- * (Coordinated Universal Time)") is rejected with 22007. ISO 8601 is what the
- * other saveForgeSession caller sends (lib/forge-persist.ts passes the
- * client's ISO startedAt). Unparseable -> undefined -> saveForgeSession uses now.
- */
-function toIsoTimestamp(value: Date | string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
 export async function GET(request: NextRequest) {
@@ -99,24 +83,6 @@ export async function GET(request: NextRequest) {
     return go(request, "/dashboard", true);
   }
 
-  const intake = (tabletSession.forge_intake ?? {}) as Record<string, unknown>;
-  const output = tabletSession.forge_output as Record<string, unknown>;
-
-  // Seed the Refinery profile with Mini Forge data.
-  // Uses the same saveForgeSession contract as the full Forge.
-  // If this throws, the cookie is left in place so a reload can retry.
-  await saveForgeSession(session.user.id, `mini-forge-${tabletSession.id}`, {
-    readinessStage: intake.readiness_stage as string | undefined,
-    goals: nonEmptyList(intake.goals),
-    challenges: nonEmptyList(intake.challenges),
-    preferences: intake.work_type
-      ? { work_type: intake.work_type as string }
-      : undefined,
-    forgeOutput: output,
-    pagesVisited: ["mini-forge-intake"],
-    startedAt: toIsoTimestamp(tabletSession.created_at),
-  });
-
-  // Clear the mini-forge cookie now that import is done.
-  return go(request, "/dashboard?welcome=mini-forge", true);
+  // The person confirms with the tablet PIN before anything is saved.
+  return go(request, "/mini-forge/import-confirm", false);
 }

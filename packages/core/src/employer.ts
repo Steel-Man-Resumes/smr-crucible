@@ -145,6 +145,178 @@ export async function listPublishedEmployers(opts: { limit?: number; industry?: 
   }));
 }
 
+// ---- the board, searched and paged on the server ----------------------------
+//
+// Troy's rule (lane 3a, FU2): the employer list is his data. A person looks
+// things up one page at a time; there is no "give me everything" call for an
+// individual. The search runs here, in SQL, and every answer is one page of
+// at most EMPLOYER_PAGE_SIZE rows. The route counts pages per account per day
+// (apps/consumer/lib/employer-paging.ts).
+
+export const EMPLOYER_PAGE_SIZE = 25;
+/** The deepest page anyone can ask for (pages are 0-based). */
+export const EMPLOYER_MAX_PAGE = 39;
+export const EMPLOYER_QUERY_MAX = 80;
+
+export interface EmployerPage {
+  employers: PublicEmployer[];
+  /** 0-based. */
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+/** The search text as the database sees it: trimmed, short, and with LIKE's wildcards made literal. */
+export function employerLikePattern(q: string | null | undefined): string | null {
+  const t = String(q ?? "").replace(/\s+/g, " ").trim().slice(0, EMPLOYER_QUERY_MAX);
+  if (!t) return null;
+  return "%" + t.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+}
+
+/** Clamp a page number to 0..EMPLOYER_MAX_PAGE. */
+export function clampEmployerPage(page: unknown): number {
+  const n = typeof page === "number" ? page : parseInt(String(page ?? "0"), 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.floor(n), EMPLOYER_MAX_PAGE);
+}
+
+/**
+ * The SQL for one page (pure, so it is unit tested). One row more than a page
+ * is fetched to tell whether another page exists; it is never returned.
+ */
+export function employerPageSql(
+  source: "table" | "directory",
+  opts: { q?: string | null; industry?: string | null; page?: number }
+): { sql: string; params: unknown[] } {
+  const params: unknown[] = [];
+  const page = clampEmployerPage(opts.page ?? 0);
+  const pattern = employerLikePattern(opts.q);
+  const industry = String(opts.industry ?? "").trim().slice(0, EMPLOYER_QUERY_MAX) || null;
+  const like = (cols: string[]) => {
+    params.push(pattern);
+    const n = params.length;
+    return "(" + cols.map((c) => `COALESCE(${c}, '') ILIKE $${n} ESCAPE '\\'`).join(" OR ") + ")";
+  };
+  params.push(EMPLOYER_PAGE_SIZE + 1);
+  const limitIdx = params.length;
+  params.push(page * EMPLOYER_PAGE_SIZE);
+  const offsetIdx = params.length;
+
+  if (source === "table") {
+    const where = ["published = true"];
+    if (industry) {
+      params.push(industry);
+      where.push(`industry = $${params.length}`);
+    }
+    if (pattern) where.push(like(["name", "industry", "primary_city", "county", "wi_region", "role_types", "evidence_summary"]));
+    return {
+      sql: `SELECT * FROM (
+       SELECT DISTINCT ON (lower(name))
+              id, name, industry, primary_city, county, wi_region, website, careers_url,
+              role_types, evidence_summary, caveats, last_verified, rank, confidence_score
+         FROM employer WHERE ${where.join(" AND ")}
+         ORDER BY lower(name), rank ASC NULLS LAST, confidence_score DESC NULLS LAST
+     ) d
+     ORDER BY d.rank ASC NULLS LAST, d.confidence_score DESC NULLS LAST, lower(d.name), d.id
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params,
+    };
+  }
+
+  const where = ["(p.earns_mark OR p.standing = 'says_yes_for_roles')"];
+  if (industry) {
+    params.push(industry);
+    where.push(`p.industry = $${params.length}`);
+  }
+  const outer = pattern ? `WHERE ${like(["x.canonical_name", "x.industry", "x.city", "x.county", "x.state", "x.excerpt", "x.role_titles"])}` : "";
+  return {
+    sql: `SELECT * FROM (
+       SELECT p.place_id, p.canonical_name, p.industry, p.careers_url, p.website, p.city, p.county, p.state, p.standing,
+              p.earns_mark, p.last_evidence_on::text AS last_evidence_on,
+              ev.excerpt, ev.limitations,
+              (SELECT string_agg(DISTINCT r.role_title, '; ') FROM directory_public_evidence_v r
+                WHERE r.org_id = p.org_id AND r.place_id = p.place_id AND r.claim_type = 'direct_role_signal') AS role_titles
+         FROM directory_public_v p
+         LEFT JOIN LATERAL (
+           SELECT e.excerpt, e.limitations FROM directory_public_evidence_v e
+            WHERE e.org_id = p.org_id AND (e.place_id = p.place_id OR e.place_id IS NULL) AND e.polarity = 'yes'
+            ORDER BY e.observed_on DESC NULLS LAST LIMIT 1) ev ON true
+        WHERE ${where.join(" AND ")}
+     ) x
+     ${outer}
+     ORDER BY x.earns_mark DESC, x.state, x.canonical_name, x.place_id
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    params,
+  };
+}
+
+type TableRow = Pick<Employer, "id" | "name" | "industry" | "primary_city" | "county" | "wi_region" | "website" | "careers_url" | "role_types" | "evidence_summary" | "caveats" | "last_verified">;
+type DirectoryRow = {
+  place_id: string; canonical_name: string; industry: string | null; careers_url: string | null; website: string | null;
+  city: string | null; county: string | null; state: string; standing: string; last_evidence_on: string | null;
+  excerpt: string | null; limitations: string | null; role_titles: string | null;
+};
+
+function fromTableRow(e: TableRow): PublicEmployer {
+  return {
+    id: e.id,
+    name: e.name,
+    industry: e.industry,
+    location: locationOf(e),
+    applyUrl: e.careers_url || e.website,
+    roleTypes: e.role_types,
+    whyGoodFit: e.evidence_summary,
+    caveats: e.caveats,
+    lastVerified: e.last_verified,
+  };
+}
+
+function fromDirectoryRow(r: DirectoryRow): PublicEmployer {
+  return {
+    id: r.place_id,
+    name: r.canonical_name,
+    industry: r.industry,
+    location: [r.city ?? r.county, r.state].filter(Boolean).join(", ") || null,
+    applyUrl: r.careers_url || r.website,
+    roleTypes: r.standing === "says_yes_for_roles" ? r.role_titles : null,
+    whyGoodFit: r.excerpt ? `What we found: ${r.excerpt}` : null,
+    caveats: publicCaveat(r.limitations),
+    lastVerified: r.last_evidence_on,
+  };
+}
+
+/** One page of the board, searched on the server. Never more than EMPLOYER_PAGE_SIZE rows. */
+export async function searchPublishedEmployers(opts: { q?: string | null; industry?: string | null; page?: number } = {}): Promise<EmployerPage> {
+  const page = clampEmployerPage(opts.page ?? 0);
+  const source = directoryMarkEnabled() ? "directory" : "table";
+  const { sql, params } = employerPageSql(source, { ...opts, page });
+  const rows = await query<Record<string, unknown>>(sql, params);
+  const hasMore = rows.length > EMPLOYER_PAGE_SIZE;
+  const kept = rows.slice(0, EMPLOYER_PAGE_SIZE);
+  return {
+    employers: source === "directory"
+      ? kept.map((r) => fromDirectoryRow(r as unknown as DirectoryRow))
+      : kept.map((r) => fromTableRow(r as unknown as TableRow)),
+    page,
+    pageSize: EMPLOYER_PAGE_SIZE,
+    hasMore,
+  };
+}
+
+/** The industries on the board, for the filter buttons (names only, at most 60). */
+export async function listEmployerIndustries(): Promise<string[]> {
+  const rows = directoryMarkEnabled()
+    ? await query<{ industry: string }>(
+        `SELECT DISTINCT p.industry FROM directory_public_v p
+          WHERE (p.earns_mark OR p.standing = 'says_yes_for_roles') AND p.industry IS NOT NULL AND p.industry <> ''
+          ORDER BY 1 LIMIT 60`
+      )
+    : await query<{ industry: string }>(
+        `SELECT DISTINCT industry FROM employer WHERE published = true AND industry IS NOT NULL AND industry <> '' ORDER BY 1 LIMIT 60`
+      );
+  return rows.map((r) => r.industry);
+}
+
 /**
  * Normalize an employer name into a key for EXACT fair-chance matching. Codex 12:
  * the old substring match flagged "Targeted Staffing" as fair-chance because the

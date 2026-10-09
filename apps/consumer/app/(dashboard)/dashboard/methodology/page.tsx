@@ -11,6 +11,7 @@
 import { useUserTier } from "@/lib/useUserTier";
 import { DisclosureSection } from "@/components/DisclosureSection";
 import { TBtn } from "@crucible/consumer-ui";
+import { WallText } from "@/components/forge/WallText";
 
 export default function MethodologyPage() {
   const tier = useUserTier();
@@ -55,8 +56,7 @@ export default function MethodologyPage() {
               {isPartnerOrAdmin ? "Before the session" : "Getting started"}
             </h3>
             <p className="text-t-phos-dim">
-              No prep needed. The Forge requires no login, no paperwork, and no
-              prior resume. {isPartnerOrAdmin
+              No prep needed. <WallText open="The Forge requires no login, no paperwork, and no prior resume." up="The Forge needs one free sign-in, and no paperwork and no prior resume." />{" "}{isPartnerOrAdmin
                 ? "Clients can start on any device with internet access. Point them to steelmanresumes.com and let t.ROY guide them."
                 : "Just start answering questions honestly. t.ROY guides you through every step."}
             </p>

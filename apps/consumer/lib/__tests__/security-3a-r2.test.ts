@@ -165,7 +165,9 @@ describe("L1: nothing reads a run before its owner is settled", () => {
     assert.equal(stampOwnerOnWrite({}, { readinessStage: "action" }, "b")._ownerUserId, "b");
     assert.equal(stampOwnerOnWrite({ _ownerUserId: "b" }, { _ownerUserId: "b", goals: ["x"] }, "b")._ownerUserId, "b");
     assert.equal(stampOwnerOnWrite(RUN, { ...RUN, goals: ["x"] }, "b")._ownerUserId, undefined);
-    assert.equal(stampOwnerOnWrite({}, { isDemo: true, readinessStage: "action" }, "b")._ownerUserId, undefined);
+    // Follow-up R2 (2026-10-08): a demo run is stamped too, so only the account
+    // that started it sees it; it is still never saved (importDecision).
+    assert.equal(stampOwnerOnWrite({}, { isDemo: true, readinessStage: "action" }, "b")._ownerUserId, "b");
   });
 
   it("before the build or the documents, the STORED run must be this account's (readOwnForgeSession)", () => {
@@ -224,6 +226,7 @@ describe("L2: refused calls cost the person nothing; unlimited tiers never use a
   it("an unlimited account carrying an org's code never draws from that org's pool", async () => {
     const { c } = ctr();
     const code = { code: "ORG", seats: codeSeats(50) };
+    // net-a, net-b: Fictional tokens, not addresses: the public-repo guard keeps IP literals out of this repo.
     for (let i = 0; i < 300; i++) await call(c, "unlimited", 0, "net-a", code);
     assert.equal(await call(c, "member", 30, "net-b", code), "ok");
   });

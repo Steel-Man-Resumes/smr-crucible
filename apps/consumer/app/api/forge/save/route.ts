@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { auth as realAuth } from "@/auth";
 import { persistForgeSession } from "@/lib/forge-persist";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { incrementUserUsage } from "@crucible/core";
@@ -30,6 +31,14 @@ export async function POST(request: Request) {
 
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // Never while an admin is viewing as someone (security review 3a Part 2
+  // r1, M3): the run in the admin's browser is the admin's, and this route
+  // writes to the effective account.
+  const real = await realAuth();
+  if (real?.user?.id !== userId) {
+    return NextResponse.json({ error: "Forge saves are off while viewing as someone." }, { status: 403 });
   }
 
   const saves = await incrementUserUsage(userId, "forge-save").catch(() => 0);

@@ -30,6 +30,7 @@ import { useLanes } from "@/components/lanes/useLanes";
 import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
 import { LaneIntro } from "@/components/lanes/LaneIntro";
 import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, FACTS_CARRY_COPY } from "@/lib/lanes";
+import { EDIT_RESUME_HREF } from "@/lib/refinery-guards";
 
 interface SavedResume {
   id: string;
@@ -1352,7 +1353,7 @@ export function ResumeWorkspace() {
                         : "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
                   </p>
                   <a
-                    href="/resume"
+                    href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
                   >
                     Rebuild my base resume in the Forge
@@ -1361,7 +1362,7 @@ export function ResumeWorkspace() {
               ) : (
                 <>
                   <a
-                    href="/resume"
+                    href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
                   >
                     Build your base resume in the Forge first

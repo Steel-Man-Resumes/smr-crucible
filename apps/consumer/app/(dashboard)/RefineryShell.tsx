@@ -35,6 +35,16 @@ import {
   readLocalForgeRunRaw,
 } from "@/lib/forge-carry";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
+import {
+  DERIVED_KEYS,
+  DERIVED_OWNER_KEY,
+  forgeQuestionHoldsBounce,
+  forgeQuestionOpen,
+  forgeSyncAllowed,
+  settleDerivedKeys,
+  applyForgeClearMark,
+  IMPERSONATION_SEEN_KEY,
+} from "@/lib/refinery-guards";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
@@ -194,6 +204,10 @@ const PERSONAL_LS_KEYS = [
   "active_baseline_id",
   "view_as",
   "forge_last_synced_run",
+  "interview_struggle_tags",
+  DERIVED_OWNER_KEY,
+  // r3 I4: the "impersonation seen" flag never outlives the sign-in.
+  IMPERSONATION_SEEN_KEY,
 ];
 
 /**
@@ -203,14 +217,7 @@ const PERSONAL_LS_KEYS = [
  * the new run. Everything here is derived from a run and goes stale the moment
  * a different person's intake lands in the same browser.
  */
-const RUN_SCOPED_LS_KEYS = [
-  "forge_preload",
-  "consumer_progress",
-  "saved_jobs",
-  "hidden_jobs",
-  "refinery_last_job_search",
-  "active_baseline_id",
-];
+const RUN_SCOPED_LS_KEYS = DERIVED_KEYS;
 
 /**
  * The last Forge run this browser synced. Deliberately NOT inside
@@ -352,6 +359,9 @@ export function RefineryShell({
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
   const [forgeSyncTick, setForgeSyncTick] = useState(0);
+  // N7: the onboarding load count when "Yes" finished saving. "saved" holds
+  // the bounce only until onboarding has loaded again after that.
+  const [savedAtLoads, setSavedAtLoads] = useState<number | null>(null);
   // The run the card asked about. "Yes" saves only that run (another tab may
   // replace it); a changed run is asked about again and nothing is saved.
   const askedRunRef = useRef<string | null>(null);
@@ -364,6 +374,23 @@ export function RefineryShell({
   }, [forgeNotice]);
   const prevState = useRef<string>("loading");
   const prevDisclosure = useRef(false);
+
+  // R6: keys an earlier account left in this browser (its saved jobs, last
+  // search, approved-resume pointer) are read by pages the moment they mount,
+  // before this shell's effects run. Settle them here, during render, and show
+  // the page only after. Idempotent, so a second render changes nothing.
+  const shellUid = sessionData?.user?.id ?? null;
+  const derivedSettledFor = useRef<string | null>(null);
+  if (authStatus === "authenticated" && shellUid && derivedSettledFor.current !== shellUid) {
+    const uid = shellUid;
+    // A clear marked on the other host applies here first (N3).
+    applyForgeClearMark(uid);
+    settleDerivedKeys(uid);
+    derivedSettledFor.current = uid;
+  }
+  const derivedReady =
+    authStatus === "unauthenticated" ||
+    (authStatus === "authenticated" && !!shellUid && derivedSettledFor.current === shellUid);
 
   // Show unlock toast when key milestones flip
   useEffect(() => {
@@ -397,12 +424,16 @@ export function RefineryShell({
   const effectiveRole = useEffectiveRole();
   useEffect(() => {
     // While the "Is it yours?" card is open (or its "Yes" is still landing),
-    // stay here: bouncing to the Forge would skip the person's answer.
-    const forgeQuestionOpen =
-      forgePrompt !== "none" ||
-      forgeSyncDecision(readLocalForgeRunRaw(), sessionData?.user?.id) === "ask";
+    // stay here: bouncing to the Forge would skip the person's answer. After
+    // a save, only until onboarding has re-read (N7).
+    const holds = forgeQuestionHoldsBounce({
+      prompt: forgePrompt,
+      askNow: forgeSyncDecision(readLocalForgeRunRaw(), sessionData?.user?.id) === "ask",
+      onboardingLoads: onboarding.loads,
+      savedAtLoads,
+    });
     if (
-      !forgeQuestionOpen &&
+      !holds &&
       authStatus === "authenticated" &&
       userTier === "client" &&
       getViewAs() === null &&
@@ -413,7 +444,7 @@ export function RefineryShell({
     ) {
       window.location.href = "https://forge.steelmanresumes.com";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, pathname, forgePrompt, sessionData?.user?.id]);
+  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
@@ -458,9 +489,13 @@ export function RefineryShell({
   // for an unowned run. An unowned run past the Forge's 24-hour idle limit is
   // erased, never offered. Impersonation never asks or claims: "Yes" would
   // save into the impersonated account.
+  const syncRoleKey = effectiveRole === null ? "loading" : effectiveRole.impersonating ? "impersonating" : "self";
   useEffect(() => {
     const uid = sessionData?.user?.id;
     if (authStatus !== "authenticated" || !uid) return; // wait for the signed-in user id
+    // N6: nothing while the role is loading or an admin is viewing as someone
+    // else (the save route writes to the effective account).
+    if (!forgeSyncAllowed(effectiveRole)) return;
     try {
       const stored = readLocalForgeRunRaw();
       const decision = forgeSyncDecision(stored, uid);
@@ -481,10 +516,8 @@ export function RefineryShell({
         // Clear what is DERIVED from any earlier run, so nothing from an
         // unverified run shows, then ask. Nothing is saved or claimed here.
         clearRunScopedLocalStorage();
-        if (!effectiveRole?.impersonating) {
-          if (askedRunRef.current === null) askedRunRef.current = stored;
-          setForgePrompt((p) => (p === "none" ? "ask" : p));
-        }
+        if (askedRunRef.current === null) askedRunRef.current = stored;
+        setForgePrompt((p) => (p === "none" || p === "saved" ? "ask" : p));
         return;
       }
       if (decision !== "owned" || !stored) return;
@@ -528,7 +561,14 @@ export function RefineryShell({
     } catch {
       // Silent
     }
-  }, [authStatus, sessionData?.user?.id, effectiveRole?.impersonating, forgeSyncTick]);
+  }, [authStatus, sessionData?.user?.id, syncRoleKey, forgeSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The welcome tour waits while the question is on screen: a brand-new
+  // account sees the card first, never the tour on top of it.
+  const tourHeld = forgeQuestionOpen({
+    prompt: forgePrompt,
+    askNow: !effectiveRole?.impersonating && forgeSyncDecision(readLocalForgeRunRaw(), shellUid) === "ask",
+  });
 
   // "Is it yours?" answers. Only "Yes" saves; "No" erases.
   async function answerForgePrompt(yes: boolean) {
@@ -566,6 +606,7 @@ export function RefineryShell({
       if (ok) {
         askedRunRef.current = null;
         setForgeRunChanged(false);
+        setSavedAtLoads(onboarding.loads);
         setForgePrompt("saved");
         setForgeNotice("Saved to your account.");
         setForgeSyncTick((t) => t + 1);
@@ -947,13 +988,13 @@ export function RefineryShell({
               viewing as someone else: the answer would be recorded for the admin. */}
           {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
-          {children}
+          {derivedReady ? children : null}
         </main>
       </div>
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
       <Suspense fallback={null}>
-        <GuidedTour />
+        <GuidedTour held={tourHeld} />
       </Suspense>
 
       {/* Developer impersonation frame (blue view / red assist) */}

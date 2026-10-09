@@ -71,6 +71,9 @@ import { completeCredentialRows, readCredentialRows } from "@/lib/credential-row
 import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
+import { FinishedEmailLine } from "@/components/forge/finish/FinishedEmailLine";
+import { useSession } from "next-auth/react";
+import { sessionPending } from "@/lib/session-policy";
 import { CheckSection } from "@/components/forge/finish/CheckSection";
 import { FinishTour, type TourStep } from "@/components/forge/finish/FinishTour";
 import { GroundingNote, groundingOpenCount, readGrounding } from "@/components/forge/finish/GroundingNote";
@@ -117,6 +120,11 @@ const thingWord = (n: number) => `${countWord(n).toLowerCase()} ${n === 1 ? "thi
 export default function OutputPage() {
   const router = useRouter();
   const { session, updateSession, runIsMine } = useForgeSession();
+  // Signed in (fully): a finished package is emailed to the account's own
+  // proven address by itself (lib/email-package-auto.ts). Signed out (the
+  // Forge before the wall): the person types an address, as before.
+  const { data: authData, status: authStatus } = useSession();
+  const signedIn = authStatus === "authenticated" && !!authData?.user && !sessionPending(authData.user as any);
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
@@ -201,8 +209,13 @@ export default function OutputPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, updateSession]);
 
+  const runIsMineRef = useRef(runIsMine);
+  runIsMineRef.current = runIsMine;
   const generateDocs = useCallback(async () => {
     if (hasStarted.current) return;
+    // Every caller, not only the effect below: never another person's run.
+    // Through a ref, so this memoized callback asks with the current sign-in.
+    if (!runIsMineRef.current()) return;
     if (docState === "generating" || docState === "done") return;
     hasStarted.current = true;
     setDocState("generating");
@@ -691,7 +704,17 @@ export default function OutputPage() {
               onCopy={() => handleCopy(resumeText, "resume")}
               copied={copied === "resume"}
             />
-            {canEmailPackage({ state: view.state, isDemo }) ? (
+            {canEmailPackage({ state: view.state, isDemo }) && authStatus === "loading" ? null : canEmailPackage({ state: view.state, isDemo }) && signedIn ? (
+              <FinishedEmailLine
+                resumeText={resumeText}
+                coverLetterText={coverLetterText}
+                narrativeHeadline={narrative.headline || ""}
+                narrativeSummary={narrative.summary || ""}
+                ownWords={ownWords}
+                defendAnswers={defendAnswers}
+                mayUse={runIsMine}
+              />
+            ) : canEmailPackage({ state: view.state, isDemo }) ? (
               <EmailPackageBox
                 resumeText={resumeText}
                 coverLetterText={coverLetterText}

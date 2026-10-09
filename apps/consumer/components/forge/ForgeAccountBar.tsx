@@ -14,11 +14,18 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { sessionPending } from "@/lib/session-policy";
+import { IMPERSONATION_SEEN_KEY } from "@/lib/refinery-guards";
 
 const RUN_KEYS = ["forge_session", "forge_preload", "forge_audience", "forge_last_synced_run"];
 
 /** Clear this browser's Forge run, then sign out and land on the public front door. */
 export async function signOutOfForge(opts: { clearRun: boolean } = { clearRun: true }) {
+  // r3 I4: the "impersonation seen" flag never outlives the sign-in.
+  try {
+    if (typeof window !== "undefined") localStorage.removeItem(IMPERSONATION_SEEN_KEY);
+  } catch {
+    // storage unavailable
+  }
   if (opts.clearRun && typeof window !== "undefined") {
     for (const k of RUN_KEYS) {
       try {
