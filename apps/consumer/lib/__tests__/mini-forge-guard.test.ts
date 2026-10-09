@@ -168,7 +168,7 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
 
   it("r3 R3-1: a saved import is final; release and give-back run only before the save", () => {
     const lib = code(read("lib", "tablet-session.ts"));
-    assert.match(lib, /SET import_saved_at = now\(\) WHERE id = \$1 AND imported_by = \$2/);
+    assert.match(lib, /SET import_saved_at = now\(\), imported_by = \$2, imported_at = COALESCE\(imported_at, now\(\)\)\s+WHERE id = \$1 AND \(imported_by = \$2 OR imported_by IS NULL\)/, "r4 I-c: a give-back that raced in is undone");
     assert.match(lib, /WHERE id = \$1 AND imported_by = \$2 AND import_saved_at IS NULL/, "give-back");
     assert.match(lib, /AND t\.imported_by IS NOT NULL\s+AND t\.import_saved_at IS NULL/, "admin release");
     assert.match(lib, /RETURNING \(prev\.imported_at IS NULL\) AS fresh/, "markImported says whether its claim is fresh");

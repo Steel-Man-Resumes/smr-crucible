@@ -200,9 +200,20 @@ export async function markImported(id: string, userId: string): Promise<{ fresh:
   return rows[0] ? { fresh: rows[0].fresh === true } : null;
 }
 
-/** The plan is now saved into the importer's account: the claim is final (r3, R3-1). */
+/**
+ * The plan is now saved into the importer's account: the claim is final (r3,
+ * R3-1). It also re-asserts the claim when it is empty (review r4, I-c): if a
+ * double submit's failed first save gave its fresh claim back after this
+ * request's save, the plan is still recorded as this account's, never left
+ * saved but unclaimed.
+ */
 export async function markImportSaved(id: string, userId: string): Promise<void> {
-  await query(`UPDATE tablet_session SET import_saved_at = now() WHERE id = $1 AND imported_by = $2`, [id, userId]);
+  await query(
+    `UPDATE tablet_session
+        SET import_saved_at = now(), imported_by = $2, imported_at = COALESCE(imported_at, now())
+      WHERE id = $1 AND (imported_by = $2 OR imported_by IS NULL)`,
+    [id, userId]
+  );
 }
 
 /**
