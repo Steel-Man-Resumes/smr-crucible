@@ -330,7 +330,7 @@ export function typedSchoolParts(typed: string | undefined): { school: string; g
 }
 
 /** Round 13 (SF-6): a school box that names a jail or prison: the person chooses to keep it, it is never printed silently. */
-export const SCHOOL_FACILITY_RE = /\b(?:jail|jails|prison|prisons|correctional|corrections|detention|juvenile\s+hall|juvie|county(?!\s+(?:community|college|career|technical|tech|vocational|public|schools?|high|academy|joint))|penitentiary|penal|inmate|lockup|reformatory|youth\s+(?:center|facility|services))\b/i;
+export const SCHOOL_FACILITY_RE = /\b(?:jail|jails|prison|prisons|correctional|corrections|detention|juvenile\s+hall|juvie|penitentiary|penal|inmate|lockup|reformatory|youth\s+(?:center|facility|services)|windham\s+school\s+district|correctional\s+education)\b|^(?!.*\b(?:schools?|high|middle|elementary|academy|college|community|career|technical|tech|vocational|alternative|adult|learning|education|department|district|esc|isd|line|public|joint|university|institute)\b).*\bcounty\b/i;
 
 const attendedTail = (years: string, grade?: string) => {
   const y = attendedYears(years);

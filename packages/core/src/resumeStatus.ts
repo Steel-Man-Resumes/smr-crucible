@@ -40,7 +40,7 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
-import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf } from "./scopeWords";
+import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf, withoutGoalText } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
 import { credentialMentionsOf, credentialsToAsk, credentialKey, titleIsTheirs, type CredentialRow } from "./credentialMentions";
@@ -405,7 +405,7 @@ function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: 
     if (!full) continue;
     // Round 7: the person's own whole title is theirs, and so is a title whose credential they
     // confirmed ("CNA | Meadowbrook" for a person who holds the CNA).
-    if (titleIsTheirs(full, sourceText)) continue;
+    if (titleIsTheirs(full, sourceText) && !titleOfAnotherJob(l, full, sourceText)) continue;
     // Only a title that names a credential ("CNA", "CERTIFIED NURSING ASSISTANT") is sourced by confirming it.
     const credentialTitle = isCredentialTerm(full) || new RegExp(TITLE_CREDENTIAL_WORDS_RE.source, "i").test(full);
     if (credentialTitle && confirmedKeys.has(credentialKey(full))) continue;
@@ -427,6 +427,26 @@ export function roleTitleWhy(title: string): string {
 }
 export function roleTitleQuestion(title: string): string {
   return `Was "${clip(title, 50)}" your job title?`;
+}
+
+/**
+ * Round 14 (F3): true when this job header is one of the person's own jobs (same employer, or the same years)
+ * and none of their headers for that job carries this title: a title from another of their jobs never covers it.
+ */
+function titleOfAnotherJob(pageHeader: string, title: string, sourceText: string): boolean {
+  const words = (t: string) => (t || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !/^(?:inc|llc|co|corp|the|of|and|company|services?)$/.test(w));
+  const years = (t: string) => (t.match(/\b(?:19|20)\d{2}\b/g) ?? []).join("-");
+  const parts = pageHeader.replace(/^\s*[-•*]\s*/, "").split("|").map((x) => x.trim());
+  const employer = words(parts[1] ?? "").join(" ");
+  const span = years(pageHeader);
+  const own = withoutGoalText(sourceText)
+    .split("\n")
+    .filter((x) => x.includes("|"))
+    .map((x) => x.replace(/^\s*[-•*]\s*/, "").split("|").map((y) => y.trim()))
+    .filter((ps) => ps.length >= 2);
+  const sameJob = own.filter((ps) => (employer && words(ps[1]).join(" ") === employer) || (span && years(ps.join(" | ")) === span));
+  if (!sameJob.length) return false;
+  return !sameJob.some((ps) => sameTitle(ps[0], title) || squash(ps[0]) === squash(title));
 }
 
 /** The person's rewrite of this line, when they typed it themselves. */

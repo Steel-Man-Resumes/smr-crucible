@@ -109,6 +109,7 @@ const TITLE_MODIFIER = new Set(["shift", "team", "crew", "line", "floor", "night
 
 // A role word that can be a job title ("supervisor", "shift lead"); "leadership", "managers" never are.
 const TITLE_ROLE_WORD = /^(?:manager|supervisor|director|coordinator|foreman|lead|leader)$/i;
+const TARGET_TITLE_BEFORE = /\b(?:seek|seeks|seeking|looking\s+(?:for|to)|look\s+(?:for|to)|aim(?:s|ing)?\s+(?:for|to)|toward|towards|ready\s+(?:for|to)|step(?:ping)?\s+into|move\s+into|moving\s+into|grow(?:ing)?\s+into|apply(?:ing)?\s+(?:for|to)|applied\s+for|interested\s+in|pursu(?:e|ing)|hop(?:e|ing)\s+(?:for|to)|want(?:s|ing)?\s+(?:a|an|the|to)|goal\s+(?:is|of)|next\s+step|eager\s+to|work(?:ing)?\s+toward|become|becoming|for\s+(?:a|an|the|your)\s+(?:[a-z-]+\s+){0,3}(?:opening|position|role|job))\b[^.;!?]*$/i;
 const SOMEONE_ELSES_ROLE_BEFORE = /\b(?:my|our|his|her|their|the|your|whose)\s+(?:[a-z-]+\s+){0,2}$/i;
 
 /** The role as a job title, as written: the role word with the title words before it ("Shift supervisor"), or "Lead X". */
@@ -147,20 +148,90 @@ export function sameTitle(a: string, b: string): boolean {
 }
 
 /** The job titles in the person's own job headers ("Lead Custodian | Maumee Valley | 2020 - present"). */
+/** Round 14 (F2): the person's lines that can name their own title: never a reference section or a line with a phone or email. */
+function ownTitleLines(sourceText: string): string[] {
+  let refs = false;
+  const out: string[] = [];
+  for (const l of withoutGoalText(sourceText).split("\n")) {
+    const t0 = l.trim();
+    if (t0 && !t0.includes("|") && t0.length <= 40 && /^[A-Za-z][A-Za-z &/]*:?$/.test(t0) && (t0 === t0.toUpperCase() || /:$/.test(t0) || t0.split(/\s+/).length <= 3)) {
+      if (/\b(?:references?|contacts?)\b/i.test(t0)) refs = true;
+      else if (/\b(?:work|experience|employment|history|jobs?)\b/i.test(t0)) refs = false;
+    }
+    if (refs || /@|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}/.test(l)) continue;
+    out.push(l);
+  }
+  return out;
+}
+
 function ownHeaderTitles(sourceText: string): string[] {
-  return withoutGoalText(sourceText)
-    .split("\n")
-    .filter((l) => l.includes("|"))
-    .map((l) => l.split("|")[0].replace(/^\s*[-•*]\s*/, "").trim())
-    .filter((t) => t && t.split(/\s+/).length <= 6 && !/@|\d{3}/.test(t))
-    .map((t) => titleWords(t).join(" "));
+  // Round 14 (F2): only job headers, never a reference or contact line ("Mike Jones, Shift Manager | Kroger | 419-555-0199").
+  const out: string[] = [];
+  for (const l of ownTitleLines(sourceText)) {
+    if (!l.includes("|")) continue;
+    const t = l.split("|")[0].replace(/^\s*[-•*]\s*/, "").trim();
+    if (!t || t.split(/\s+/).length > 6 || /\d{3}|,/.test(t)) continue;
+    out.push(titleWords(t).join(" "));
+  }
+  return out;
+}
+
+// Round 14 (F2): words that change a title's rank. A page title may leave off a header's department words
+// ("Night Shift Lead Custodian" holds "Lead custodian"), never these ("Assistant Manager" never holds "Manager").
+const RANK_WORDS = new Set(["assistant", "co", "deputy", "associate", "junior", "trainee", "training", "in", "apprentice", "interim", "acting", "vice", "sub", "under", "temporary", "temp", "provisional", "probationary", "intern", "student"]);
+
+/** Round 14 (F2): the title appears in their words at least once with no rank word before or after it. */
+function titleSaidPlain(title: string, sourceText: string): boolean {
+  return titleForms(title).some((t) => titleSaidPlainExact(t, sourceText));
+}
+// Round 14: a department word the writer put before their title ("Retail shift lead" for "Shift Lead") is not a
+// rank; "Lead", "Head", "Senior", "Assistant" and "General" are.
+const NOT_DEPARTMENT = new Set(["lead", "head", "senior", "junior", "assistant", "general", "chief"]);
+function titleForms(title: string): string[][] {
+  const w = titleWords(title);
+  const out = [w];
+  for (let i = 1; i < w.length; i++) {
+    if (!TITLE_MODIFIER.has(w[i - 1]) || NOT_DEPARTMENT.has(w[i - 1]) || RANK_WORDS.has(w[i - 1])) break;
+    out.push(w.slice(i));
+  }
+  return out.filter((x) => x.length);
+}
+function titleSaidPlainExact(t: string[], sourceText: string): boolean {
+  if (!t.length) return false;
+  for (const line of ownTitleLines(sourceText)) {
+    const w = titleWords(line);
+    for (let i = 0; i + t.length <= w.length; i++) {
+      if (w.slice(i, i + t.length).join(" ") !== t.join(" ")) continue;
+      // A rank word before it, even past department words ("Assistant Store Manager"), or after it ("Trainee").
+      let k = i - 1;
+      while (k >= 0 && TITLE_MODIFIER.has(w[k]) && !RANK_WORDS.has(w[k])) k--;
+      const prev = w[k] ?? "";
+      let n = i + t.length;
+      while (n < w.length && TITLE_MODIFIER.has(w[n]) && !RANK_WORDS.has(w[n])) n++;
+      const next = w[n] ?? "";
+      if (RANK_WORDS.has(prev) || /^(?:trainee|in|apprentice|intern|training)$/.test(next)) continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Round 13 (SF-3): a role on the page that is one of the person's own job titles, or part of one ("Lead custodian" for "Lead Custodian"). */
 export function titleInOwnHeaders(title: string, sourceText: string): boolean {
-  const t = titleWords(title).join(" ");
-  if (!t) return false;
-  return ownHeaderTitles(sourceText).some((h) => ` ${h} `.includes(` ${t} `));
+  return titleForms(title).some((t) => titleInOwnHeadersExact(t, sourceText));
+}
+function titleInOwnHeadersExact(t: string[], sourceText: string): boolean {
+  if (!t.length) return false;
+  const key = t.join(" ");
+  return ownHeaderTitles(sourceText).some((h) => {
+    const hw = h.split(" ");
+    for (let i = 0; i + t.length <= hw.length; i++) {
+      if (hw.slice(i, i + t.length).join(" ") !== key) continue;
+      const dropped = [...hw.slice(0, i), ...hw.slice(i + t.length)];
+      if (dropped.every((w) => !RANK_WORDS.has(w) && TITLE_MODIFIER.has(w))) return true;
+    }
+    return false;
+  });
 }
 
 /** True when the hit is a role ("kitchen manager", "a shift lead"), not a verb. */
@@ -407,7 +478,11 @@ export function scopeHits(line: string): ScopeHit[] {
       if (isNounUse(text, m) && OTHER_ROLE_BEFORE.test(text.slice(0, m.index)) && !isNominalClaim(text, m)) continue;
       const titleShaped = family === "lead" && /^lead$/i.test(m[0]) && TITLE_SHAPED_LEAD.test(text.slice(m.index!)) && !/\b(?:to|will|would|can|could|I|we|they|and|or|helped?|help)\s+$/i.test(text.slice(0, m.index));
       // Round 13 (SF-4): "My manager asked me", "when the lead was out": someone else's role, not a title of theirs.
-      if (isRoleUse(text, m) && SOMEONE_ELSES_ROLE_BEFORE.test(text.slice(0, m.index)) && !OWN_ROLE_BEFORE.test(text.slice(0, m.index)) && !/\b(?:promoted\s+to|made|named|became)\s+(?:the\s+)?(?:[a-z-]+\s+){0,2}$/i.test(text.slice(0, m.index))) continue;
+      // Round 14 (F7): "Held / covered / served as the shift lead role" is theirs.
+      if (isRoleUse(text, m) && SOMEONE_ELSES_ROLE_BEFORE.test(text.slice(0, m.index)) && !OWN_ROLE_BEFORE.test(text.slice(0, m.index)) && !/\b(?:promoted\s+to|made|named|became|held|hold|holds|covered|cover|covers|filled|fill|stepped\s+into|served\s+as|worked\s+as|acted\s+as|took\s+over|took\s+on)\s+(?:the\s+)?(?:[a-z-]+\s+){0,2}$/i.test(text.slice(0, m.index))) continue;
+      // Round 14 (F1): a title in a target ("seeking a shift supervisor position", "looking to grow into a team
+      // lead") is the job they want, not one they held: no claim, no card.
+      if ((isRoleUse(text, m) || (family === "lead" && /^lead$/i.test(m[0]) && TITLE_SHAPED_LEAD.test(text.slice(m.index!)))) && TARGET_TITLE_BEFORE.test(text.slice(0, m.index))) continue;
       const role = isRoleUse(text, m) || titleShaped;
       found.push({ family, word: m[0], noun: nounFor(text, m), nouns: peopleFor(text, m), objects: objectWords(text, m), at: m.index!, end: m.index! + m[0].length, role, shared: isSharedOnPage(text, m), ...(role && (titleShaped || TITLE_ROLE_WORD.test(m[0])) ? { title: titleOfHit(text, m.index!, m.index! + m[0].length, titleShaped) } : {}) });
     }
@@ -473,7 +548,7 @@ const NOUN_FORM_RE = /^(?:supervision|supervisions|management|coordination|coord
 // "We", "<name> and I", "me and <name>", "I helped (him) train" are SHARED: they clear only a shared page
 // line ("Helped train new hires", "Trained new hires with my lead"), never a solo claim. Anything else
 // ("would", "'d", "started", "kept", "got to", "ended up", any modal) is a one-tap card on the page.
-const ADVERBS = String.raw`(?:also|personally|mainly|basically|pretty\s+much|often|always|regularly|sometimes|usually|just|even|really|actually|mostly|then|first|later|eventually|finally|once|both|myself|still)`;
+const ADVERBS = String.raw`(?:currently|also|personally|mainly|basically|pretty\s+much|often|always|regularly|sometimes|usually|just|even|really|actually|mostly|then|first|later|eventually|finally|once|both|myself|still)`;
 const PAST_VERB_RE = /^(?:[a-z]+ed|ran|led|oversaw|taught|made|wrote|built|set|did|took|kept|showed|drove|bossed|head(?:ed)?)$/i;
 const SELF_PAST_BEFORE = new RegExp(String.raw`\bI(?:'ve|\s+have|\s+had)?\s+(?:${ADVERBS}\s+){0,3}$`, "i");
 const USED_TO_BEFORE = new RegExp(String.raw`\bI\s+(?:${ADVERBS}\s+){0,2}used\s+to\s+(?:${ADVERBS}\s+){0,1}$`, "i");
@@ -509,16 +584,19 @@ const SHARED_AFTER_RE = /^[^.;!?,]*?\b(?:with|alongside|together\s+with)\s+(?:hi
 type Doer = "self" | "shared" | "none";
 
 /** Who does the verb at this spot, by the strict shapes above. `verb` is the claim's first word. */
-function doerOf(before0: string, verb: string, after = "", goal = false): Doer {
+function doerOf(before0: string, verb: string, after = "", goal = false, next = ""): Doer {
   // Round 12: a clause starts again after "but" ("I wanted to quit but I trained the new guys").
   const before = before0.split(/\bbut\s+(?=I\b)/).pop() as string;
   const past = PAST_VERB_RE.test(verb);
   if (REFUSED_AFTER_RE.test(after)) return "none";
   if (NOT_DONE_BEFORE.test(before)) return "none";
   if (SHARED_BEFORE.test(before)) return /\bI\b|^\s*(?:[-•*]\s*)?(?:help|assist)/i.test(before) || LINE_START_BEFORE.test(before.replace(SHARED_BEFORE, "")) ? "shared" : "none";
-  if (COPULA_CLAIM_RE.test(verb) && COPULA_BEFORE.test(before)) return "self";
+  // Round 14 (R14-B1): "I'm / I am in charge of", "I'm the one who trains" are a present tense: the same goal,
+  // wish and frame check as "I train". "I was in charge of" is past and stays theirs.
+  const presentCopula = (re: RegExp) => /\bI(?:\s+am|'m)\b/i.test((before.match(re) ?? [""])[0]);
+  if (COPULA_CLAIM_RE.test(verb) && COPULA_BEFORE.test(before)) return presentCopula(COPULA_BEFORE) && presentHeld(before0, after, goal, next) ? "none" : "self";
   if (USED_TO_BEFORE.test(before)) return "self";
-  if (ONE_WHO_BEFORE.test(before)) return "self";
+  if (ONE_WHO_BEFORE.test(before)) return presentCopula(ONE_WHO_BEFORE) && presentHeld(before0, after, goal, next) ? "none" : "self";
   if (HAD_ME_BEFORE.test(before)) {
     // Round 13 (SF-8): the frame is read in the clause that holds the subject, after a past time clause is lifted out.
     const lifted = before.replace(PAST_TIME_CLAUSE, "");
@@ -532,14 +610,14 @@ function doerOf(before0: string, verb: string, after = "", goal = false): Doer {
   // paragraph about the job they want, and never with a future, condition, goal or reported-speech word anywhere
   // before the verb in the sentence, or a future or condition word after it.
   if (!past && PRESENT_SCOPE_RE.test(verb) && SELF_PAST_BEFORE.test(before) && !/\b(?:did|do|does|didn'?t|don'?t)\s+I\s+$/i.test(before)) {
-    if (goal || PRESENT_NOT_DONE.test(before0) || PRESENT_FRAME_AFTER.test(after)) return "none";
+    if (presentHeld(before0, after, goal, next)) return "none";
     return "self";
   }
   // Round 13: their own present-tense duty list, in work-history text only ("I lead a crew of 5, make the
   // cleaning schedule, show new people the floor machines"; "I take escalated calls ... and coach reps").
   if (!past && !goal && PRESENT_SCOPE_RE.test(verb)) {
     const pl = before.match(/\bI\s+([a-z]+)\b([^.;!?]*)(?:,|\band)\s+(?:and\s+)?$/);
-    if (pl && !PRESENT_LIST_NOT.test(pl[1]) && !/(?:ed|ing)$/i.test(pl[1]) && !/\bI\b/.test(pl[2]) && !OTHER_SUBJECT_IN_LIST.test(pl[2]) && !PRESENT_NOT_DONE.test(before0) && !PRESENT_FRAME_AFTER.test(after)) return "self";
+    if (pl && !PRESENT_LIST_NOT.test(pl[1]) && !/(?:ed|ing)$/i.test(pl[1]) && !/\bI\b/.test(pl[2]) && !OTHER_SUBJECT_IN_LIST.test(pl[2]) && !presentHeld(before0, after, goal, next)) return "self";
   }
   if (!past && !COPULA_CLAIM_RE.test(verb)) return "none";
   if (SHARED_SUBJECT_BEFORE.test(before)) return "shared";
@@ -560,11 +638,25 @@ function doerOf(before0: string, verb: string, after = "", goal = false): Doer {
 }
 
 // Round 13: "do / make / write the schedule" are read only as the verb before "the schedule".
-const PRESENT_LIST_NOT = /^(?:want|wants|will|would|can|could|should|might|may|hope|hopes|plan|plans|need|needs|like|likes|love|loves|wish|try|tries|am|is|are|was|were|be|used|get|gets|got|have|has|had|go|goes|watch|watches|see|sees|help|helps|let|lets|think|say|says|guess|bet|pretend|wonder|asked|don|didn|never)$/i;
+const PRESENT_LIST_NOT = /^(?:wanna|gotta|aim|aims|intend|intends|expect|expects|trying|planning|hoping|want|wants|will|would|can|could|should|might|may|hope|hopes|plan|plans|need|needs|like|likes|love|loves|wish|try|tries|am|is|are|was|were|be|used|get|gets|got|have|has|had|go|goes|watch|watches|see|sees|help|helps|let|lets|think|say|says|guess|bet|pretend|wonder|asked|don|didn|never)$/i;
 const PRESENT_SCOPE_RE = /^(?:make|makes|do|does|write|writes|build|builds|handle|handles|set|sets|train|trains|teach|teaches|coach|coaches|supervise|supervises|run|runs|lead|leads|manage|manages|oversee|oversees|direct|directs|mentor|mentors|coordinate|coordinates|schedule|schedules|onboard|onboards)$/i;
 // Round 13 (R13-B1): read on the whole sentence before the verb, not only the clause.
-const PRESENT_NOT_DONE = /\b(?:will|'ll|would|'d|can|can'?t|cannot|could|might|may|should|want|wants|wanted|wanting|hope|hopes|hoped|hoping|hopefully|wish|wished|wishing|plan|plans|planned|planning|going\s+to|gonna|if|whether|once|when|whenever|until|till|next|soon|someday|some\s+day|one\s+day|eventually|ideally|maybe|perhaps|tomorrow|ready|able|willing|where|that|which|so|as\s+soon\s+as|look|looks|looking|seek|seeking|interested|dream|ideal|goal|goals|picture|imagine|see\s+myself|starting|start|after|before|new\s+job|next\s+job|new\s+role|in\s+(?:a|an|the)\s+(?:[a-z]+\s+)?(?:role|job|position|spot)|as\s+(?:a|an)|hire\s+me|give\s+me|let\s+me|long[\s-]+term|in\s+(?:\d+|a|one|two|three|four|five|six|seven|eight|nine|ten|a\s+few|few)\s+(?:years?|months?|weeks?)|somewhere|something|anywhere|someplace|job|jobs|role|position|say|says|said|think|thinks|thought|pretend|pretends|claim|claims|believe|believes|guess|bet|suppose|wonder|asked|ask|not)\b/i;
-const PRESENT_FRAME_AFTER = /\b(?:starting|start|next|soon|tomorrow|this\s+(?:year|month|week|fall|summer|spring|winter)|if|when|whenever|once|after|as\s+soon\s+as|until|till|someday|some\s+day|one\s+day|eventually|hopefully|would|will|'ll|in\s+(?:\d+|a|one|two|three|four|five|six|ten|a\s+few)\s+(?:years?|months?|weeks?))\b|\bin\s+my\s+(?:next|new)\b|\bat\s+my\s+(?:next|new)\b|\bbut\s+I\s+(?:don'?t|do\s+not|didn'?t|never|just|only)\b|\?/i;
+const PRESENT_NOT_DONE = /\b(?:will|'ll|would|'d|can|can'?t|cannot|could|might|may|should|want|wants|wanted|wanting|hope|hopes|hoped|hoping|hopefully|wish|wished|wishing|plan|plans|planned|planning|going\s+to|gonna|if|whether|once|when|whenever|until|till|next|soon|someday|some\s+day|one\s+day|eventually|ideally|maybe|perhaps|tomorrow|ready|able|willing|where|that|which|so|as\s+soon\s+as|look|looks|looking|seek|seeking|interested|dream|ideal|goal|goals|picture|imagine|see\s+myself|starting|start|after|before|new\s+job|next\s+job|new\s+role|in\s+(?:a|an|the)\s+(?:[a-z]+\s+)?(?:role|job|position|spot)|as\s+(?:a|an)|hire\s+me|give\s+me|let\s+me|long[\s-]+term|in\s+(?:\d+|a|one|two|three|four|five|six|seven|eight|nine|ten|a\s+few|few)\s+(?:years?|months?|weeks?)|somewhere|something|anywhere|someplace|job|jobs|role|position|say|says|said|think|thinks|thought|pretend|pretends|claim|claims|believe|believes|guess|bet|suppose|wonder|asked|ask|not|wanna|gotta|aim|aims|aiming|intend|intends|intending|expect|expects|try|trying|plan\s+on|dreams?|future|given\s+the\s+chance|fingers\s+crossed|down\s+the\s+road|later\s+on|with\s+a\s+promotion)\b/i;
+const PRESENT_FRAME_AFTER = /\b(?:starting|start|next|soon|tomorrow|this\s+(?:year|month|week|fall|summer|spring|winter)|if|when|whenever|once|after|as\s+soon\s+as|until|till|someday|some\s+day|one\s+day|eventually|hopefully|would|will|'ll|in\s+(?:\d+|a|one|two|three|four|five|six|ten|a\s+few)\s+(?:years?|months?|weeks?)|in\s+(?:the\s+)?future|down\s+the\s+road|later\s+on|given\s+the\s+chance|fingers\s+crossed|with\s+a\s+promotion|or\s+so|not\s+yet|in\s+my\s+dreams?)\b|\bin\s+my\s+(?:next|new)\b|\bat\s+my\s+(?:next|new)\b|\bbut\s+I\s+(?:don'?t|do\s+not|didn'?t|never|just|only)\b|\?/i;
+// Round 14 (F5): a later duty in the same sentence takes its own frame ("..., cover the queue when we're short"
+// holds only "cover the queue"). The after-frame is read up to the next listed duty.
+const DUTY_VERB = String.raw`(?:take|takes|listen|listens|coach|coaches|help|helps|cover|covers|handle|handles|clean|cleans|run|runs|make|makes|do|does|show|shows|train|trains|teach|teaches|lead|leads|supervise|supervises|manage|manages|answer|answers|stock|stocks|load|loads|unload|unloads|pick|picks|pack|packs|drive|drives|cook|cooks|prep|preps|open|opens|close|closes|count|counts|order|orders|check|checks|fix|fixes|set|sets|wrap|wraps|ship|ships|receive|receives|sort|sorts|mop|mops|sweep|sweeps|serve|serves|greet|greets|ring|rings|schedule|schedules|write|writes|build|builds|watch|watches|keep|keeps|work|works|move|moves|operate|operates|use|uses|update|updates|enter|enters|file|files|call|calls|deliver|delivers|wash|washes|stack|stacks|label|labels|scan|scans|inspect|inspects|repair|repairs|install|installs|weld|welds|place|places|track|tracks|log|logs|assist|assists|mentor|mentors|onboard|onboards|oversee|oversees|direct|directs|coordinate|coordinates|process|processes|resolve|resolves|review|reviews)`;
+const NEXT_DUTY_RE = new RegExp(String.raw`(?:,|;|\band\b)\s+(?:also\s+)?${DUTY_VERB}\b`, "i");
+// Round 14 (F6): a bare frame in the next sentence ("I train new hires. Starting Monday.") holds the duty before it.
+const BARE_FRAME_NEXT = /^\s*(?:starting|start|next|if|once|when|whenever|after|as\s+soon\s+as|until|someday|some\s+day|one\s+day|eventually|soon|tomorrow|hopefully|maybe|not\s+yet|i\s+wish|in\s+the\s+future|in\s+(?:\d+|a|one|two|three|four|five|ten|a\s+few)\s+(?:years?|months?|weeks?)|down\s+the\s+road|later\s+on|given\s+the\s+chance|fingers\s+crossed|with\s+a\s+promotion|in\s+my\s+dreams?|or\s+so|at\s+my\s+(?:next|new)|in\s+my\s+(?:next|new))\b[^.;!?]{0,60}$/i;
+/** True when a present tense must not count: goal text, a wish or frame before it, or a frame in its own clause after it. */
+function presentHeld(before0: string, after: string, goal: boolean, next = ""): boolean {
+  if (goal || PRESENT_NOT_DONE.test(before0)) return true;
+  const cut = after.search(NEXT_DUTY_RE);
+  const clause = cut >= 0 ? after.slice(0, cut) : after;
+  if (PRESENT_FRAME_AFTER.test(clause)) return true;
+  return BARE_FRAME_NEXT.test(next);
+}
 // A line about the job they want: a present tense in it is a wish, not their work (R13-B1).
 const GOAL_PARAGRAPH_RE = /\b(?:looking\s+(?:for|to)|seeking|want(?:s|ed)?\s+(?:a|an|to|my|the)|would\s+(?:love|like)|'d\s+(?:love|like)|hop(?:e|es|ing)\s+(?:to|for|I)|dream\s+(?:job|role)|ideal\s+(?:job|role)|my\s+goals?|next\s+(?:job|role)|new\s+(?:job|role)|interested\s+in|see\s+myself|in\s+(?:\d+|five|ten|a\s+few)\s+years)\b|(?:^|[.!?:]\s+)(?:a\s+)?[A-Za-z]+\s+(?:job|role|position)\s*(?:[.!:]|$)/im;
 /** Round 13 (R13-B1): the goal box and other "what you're looking for" text, marked so a present tense in it never counts. */
@@ -601,7 +693,12 @@ export function straightQuotes(text: string): string {
 /** The scope claims the person makes in their own words, one per sentence hit, active and not denied. */
 function personClaims(sourceText: string): Claim[] {
   const out: Claim[] = [];
-  for (const para of paragraphs(sourceText)) for (const raw of straightQuotes(para.text).split(/[\n.;!?]+/)) {
+  for (const para of paragraphs(sourceText)) {
+  const parts = straightQuotes(para.text).split(/[\n.;!?]+/);
+  for (let si = 0; si < parts.length; si++) {
+    const raw = parts[si];
+    // Round 14 (F6): the next sentence, read only for a bare frame ("Starting Monday.").
+    const nextSentence = parts[si + 1] ?? "";
     const goal = para.goal;
     const sentence = raw.replace(namedCredentialRe(), (x) => "x".repeat(x.length)).replace(CLAIM_NAME_RE, (x) => "x".repeat(x.length));
     const ok = (m: RegExpMatchArray) => {
@@ -622,10 +719,10 @@ function personClaims(sourceText: string): Claim[] {
         if (!role && NOUN_FORM_RE.test(first)) continue;
         if (!role && /^lead$/i.test(first) && /\b(?:my|our|the|a|his|her|their)\s+$/i.test(sentence.slice(0, m.index))) continue;
         // Round 11: a role ("I was the shift lead") never clears a claim; only the strict verb shapes do.
-        let doer: Doer = role ? "none" : doerOf(sentence.slice(0, m.index), COPULA_CLAIM_RE.test(m[0]) ? m[0] : first, sentence.slice(m.index! + m[0].length), goal);
+        let doer: Doer = role ? "none" : doerOf(sentence.slice(0, m.index), COPULA_CLAIM_RE.test(m[0]) ? m[0] : first, sentence.slice(m.index! + m[0].length), goal, nextSentence);
         // Round 12 (SF-6): "I made the schedule for 8 cooks": the verb before "the schedule" is the one done.
         const madeIt = family === "schedule" && !role ? sentence.slice(0, m.index).match(/\b(made|did|wrote|built|set|handled|ran|put\s+together|make|makes|do|does|write|writes|build|builds|handle|handles|run|runs|sets)\s+(?:up\s+)?(?:the|a|our|my)?\s*(?:[a-z-]+\s+)?$/i) : null;
-        if (doer === "none" && madeIt) doer = doerOf(sentence.slice(0, (m.index ?? 0) - madeIt[0].length), madeIt[1].split(/\s+/)[0], sentence.slice(m.index! + m[0].length), goal);
+        if (doer === "none" && madeIt) doer = doerOf(sentence.slice(0, (m.index ?? 0) - madeIt[0].length), madeIt[1].split(/\s+/)[0], sentence.slice(m.index! + m[0].length), goal, nextSentence);
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
         out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared", ...(role ? { role: true } : {}) });
       }
@@ -634,11 +731,12 @@ function personClaims(sourceText: string): Claim[] {
       for (const m of sentence.matchAll(new RegExp(re.source, "gi"))) {
         if (!ok(m)) continue;
         const nouns = objectPeople(sentence.slice(m.index! + m[0].length), PEOPLE_RE);
-        let doer: Doer = doerOf(sentence.slice(0, m.index), m[0], sentence.slice(m.index! + m[0].length), goal);
+        let doer: Doer = doerOf(sentence.slice(0, m.index), m[0], sentence.slice(m.index! + m[0].length), goal, nextSentence);
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
         if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared" });
       }
     }
+  }
   }
   return out;
 }
@@ -687,7 +785,9 @@ export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[]
         if (c.family !== h.family) return false;
         // Round 11: shared work clears only a shared page line; a solo page line needs their solo verb.
         // A role on the page ("as a shift lead") is cleared by their own role of that name.
-        const doer = h.role && c.role ? true : h.shared ? c.self || c.shared : c.self;
+        // Round 14 (F2): their own role clears the page's title only when they used it without a rank word
+        // ("Assistant Manager" and "Supervisor Trainee" never make "Manager" or "Supervisor" theirs).
+        const doer = h.role && c.role ? !h.title || titleSaidPlain(h.title, sourceText) : h.shared ? c.self || c.shared : c.self;
         if (!doer) return false;
         // Round 12: "every week" alone is a time, not people; a claim with no people word reads its object.
         return h.nouns.some((n) => !n.startsWith("~"))
