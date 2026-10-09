@@ -38,7 +38,7 @@ export function BaselineSelector({ className = "" }: { className?: string }) {
 
   const loadBaselines = useCallback(async () => {
     try {
-      const res = await fetch("/api/artifacts?type=resume&limit=50");
+      const res = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
       if (res.ok) {
         const { data } = await res.json();
         const resumes: ResumeArtifact[] = (data || []).filter(Boolean);

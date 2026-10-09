@@ -351,6 +351,6 @@ IMPORTANT:
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "generate-docs",
 });

@@ -44,7 +44,7 @@ export function sessionForPath(path: PathOption) {
 }
 
 /** Routes that wear the workshop palette. */
-export const WORKSHOP_PATHS = ["/intro", "/overview", "/partner", "/get-listed"];
+export const WORKSHOP_PATHS = ["/intro", "/overview", "/partner", "/get-listed", "/check"];
 
 /** Routes that hide the shell chrome (quiet shell). */
 export const QUIET_PATHS: string[] = ["/processing"];

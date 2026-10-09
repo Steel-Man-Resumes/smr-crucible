@@ -4,19 +4,15 @@
  * Creates a new user account with email + password. For first-time users
  * arriving from the Forge who want an account without the magic-link friction.
  *
- * Also carries the handoff that localStorage cannot: the anonymous Forge session
- * (forgeOutput/resume/narrative) and the user's contact info (name + phone) are
- * persisted server-side at creation, so the user lands in the Refinery with
- * their work intact and profile complete -- not on a locked dashboard. The
- * forge_session lives in forge.* localStorage and is lost crossing to the authed
- * refinery.* origin, so the relay in the dashboard layout never sees it.
+ * Also persists the user's contact info (name + phone) at creation, so the user
+ * lands profile-complete. It does NOT carry a Forge run: see the note in POST.
  */
 
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
-import { persistForgeSession } from "@/lib/forge-persist";
+import { CONSENT_CONTEXT, CONSENT_EVENT_SQL, CONSENT_UPSERT_SQL, TERMS_VERSION } from "@/lib/terms";
 import { passwordProblem } from "@/lib/password-policy";
 import {
   checkAuthRateLimit,
@@ -34,10 +30,9 @@ function accessCodeFromCookie(request: Request): string | null {
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Version of the Terms/Privacy/AI-processing notice the user accepts at
-// registration. Bump when that notice materially changes so the immutable
-// consent-event history records which version each account agreed to.
-const TERMS_VERSION = "2026-08-21-v1";
+// The Terms/Privacy/AI-processing version accepted at registration lives in
+// lib/terms.ts, shared with the one-tap acceptance page for email-link and
+// Google accounts, so both write the same rows.
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -46,7 +41,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { email, password, name, phone, forge, turnstileToken, acceptedTerms } =
+    // A Forge run in the body (older clients sent one as `forge`) is IGNORED.
+    // On a shared computer the run in the browser may be someone else's, even
+    // one already saved to their account; carrying it here put it into the new
+    // account with no question asked (security review 3a r1, H1). A run enters
+    // an account only through the Forge's own import, which asks the person
+    // and names the account (components/forge/ForgeImport.tsx).
+    const { email, password, name, phone, turnstileToken, acceptedTerms } =
       await request.json();
 
     // Bot defense -- env-gated: enforced only when TURNSTILE_SECRET_KEY is set
@@ -195,38 +196,14 @@ export async function POST(request: Request) {
     // logged, never a reason to fail an account the user is waiting on.
     if (newUserId) {
       try {
-        await query(
-          `INSERT INTO consumer_consent
-             (user_id, consent_layer, status, consent_text_version, collection_context)
-           VALUES ($1, 'core', 'granted', $2, $3)
-           ON CONFLICT (user_id, consent_layer)
-           DO UPDATE SET status = 'granted', granted_at = now(),
-                         consent_text_version = $2, collection_context = $3`,
-          [newUserId, TERMS_VERSION, JSON.stringify({ via: "registration", terms: true, privacy: true, ai_processing: true })]
-        );
-        await query(
-          `INSERT INTO consumer_consent_event
-             (user_id, consent_layer, action, text_version, collection_method, context)
-           VALUES ($1, 'core', 'granted', $2, 'registration', $3)`,
-          [newUserId, TERMS_VERSION, JSON.stringify({ terms: true, privacy: true, ai_processing: true })]
-        );
+        await query(CONSENT_UPSERT_SQL, [
+          newUserId,
+          TERMS_VERSION,
+          JSON.stringify({ via: "registration", ...CONSENT_CONTEXT }),
+        ]);
+        await query(CONSENT_EVENT_SQL, [newUserId, TERMS_VERSION, "registration", JSON.stringify(CONSENT_CONTEXT)]);
       } catch (e: any) {
         console.error("[register] consent record failed:", e?.message || e);
-      }
-    }
-
-    // Best-effort: carry the anonymous Forge work onto the new account. Must run
-    // BEFORE the contact upsert so the contact merge reads (and preserves) the
-    // profile_data that saveForgeSession writes.
-    if (
-      forge &&
-      typeof forge === "object" &&
-      (forge.forgeOutput || forge.resumeText)
-    ) {
-      try {
-        await persistForgeSession(newUserId, forge);
-      } catch (e: any) {
-        console.error("[register] forge persist failed:", e?.message || e);
       }
     }
 

@@ -14,6 +14,11 @@ import { ClearThisComputerButton } from "@/components/ClearThisComputer";
 import { ShieldCheck, X } from "lucide-react";
 import { QuietShellProvider, useQuietShellState } from "./quiet-shell";
 import { WORKSHOP_PATHS, QUIET_PATHS, isQuiet, shellChrome } from "@/lib/forge-front-door";
+import { FORGE_PUBLIC_PAGES, isForgeSignInPage } from "@/lib/forge-access";
+import { useSession } from "next-auth/react";
+import { ForgeImport } from "@/components/forge/ForgeImport";
+import { SignInNotice } from "@/components/forge/SignInNotice";
+import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -82,6 +87,8 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
   const quiet = isQuiet({ quietProp, quietFromPage, pathname });
   const chrome = shellChrome(quiet);
   const workshop = WORKSHOP_PATHS.includes(pathname);
+  const { status: authStatus } = useSession();
+  const screenWaits = isForgeSignInPage(pathname) && authStatus === "loading";
 
   return (
     <>
@@ -117,7 +124,11 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
           </div>
         </div>
         {chrome.progress && <ForgeProgress />}
+        {/* Whose account this is, with a way out (shown whenever signed in). */}
+        <ForgeAccountBar />
       </header>
+      {/* The sign-in date notice: public pages only, and only while a date is set and ahead. */}
+      {(FORGE_PUBLIC_PAGES as readonly string[]).includes(pathname) && <SignInNotice />}
       <main
         id="main"
         className={`min-h-[calc(100vh-72px)] bg-t-bg ${quiet ? "pb-8" : "pb-32 sm:pb-8"} ${
@@ -127,7 +138,13 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
         {/* Signed-in people who just joined an organization are asked once
             whether it may see their progress. Renders nothing for anyone else. */}
         {chrome.sharingPrompt && <JoinSharingPrompt />}
-        {children}
+        {/* Signed in: the run in this browser is saved to the account (and,
+            when it is not provably theirs, the person is asked first). */}
+        {/* Shown on quiet screens too: a run that is not settled blocks the build. */}
+        <ForgeImport showPrompt />
+        {/* A Forge screen mounts only once the sign-in is known, so it never
+            reads (or starts from) a run before its owner is settled. */}
+        {screenWaits ? <div className="h-40" aria-busy="true" /> : children}
       </main>
 
       {/* AI Assistant: available on every Forge page except in quiet mode */}

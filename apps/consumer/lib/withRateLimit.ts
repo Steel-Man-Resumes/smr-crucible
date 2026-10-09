@@ -1,6 +1,8 @@
 /**
  * Rate limit wrapper for API route handlers.
- * Two modes: "user" (authenticated, per-user) and "ip" (Forge, per-IP).
+ * Three modes: "user" (authenticated, per-user), "ip" (per-IP), and "forge"
+ * (the Forge's routes: per-account when signed in with per-IP as the floor,
+ * per-IP when signed out; see lib/forge-rate-limit.ts).
  *
  * Security features:
  * - Atomic increment-then-check (no TOCTOU race condition)
@@ -15,12 +17,16 @@ import {
   getUserTier,
   incrementUserUsage,
   incrementIpUsage,
+  refundUserUsage,
   validateAccessCode,
   logPartnerUsage,
   ensureUserAttribution,
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
+import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
+import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
+import { codeSeats, decideSignedInCall, planForgeLimit } from "./forge-rate-limit";
 import {
   LIVE_TEST_BUCKET,
   LIVE_TEST_DAILY_LIMIT,
@@ -42,10 +48,16 @@ const TIER_RANK: Record<string, number> = {
 };
 
 interface RateLimitOptions {
-  mode: "user" | "ip";
+  mode: "user" | "ip" | "forge";
   endpoint: string;
   /** Minimum tier required to access this endpoint. */
   requiredTier?: UserTier;
+  /**
+   * ip mode: false keeps the fixed per-IP limit even for a request carrying a
+   * valid access code (no cohort pool). For public forms that email a person,
+   * where a pool would lift the cap by the code's seats (review 3a r1, L7).
+   */
+  poolable?: boolean;
 }
 
 const RATE_LIMIT_MESSAGE =
@@ -126,6 +138,76 @@ export function withRateLimit(
       return handler(request);
     }
 
+    // The Forge, signed in: count per account, with per-IP as the floor.
+    if (opts.mode === "forge") {
+      const path = new URL(request.url).pathname;
+      const userId = forgeUserId(await auth().catch(() => null)) ?? null;
+      const perPerson = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
+      const plan = planForgeLimit({
+        userId,
+        needsSession: forgeApiNeedsSession(path, forgeWallState() === "up"),
+        perPerson,
+        tierLimit: userId ? await getUserDailyLimit(userId) : perPerson,
+      });
+      if (plan.kind === "refuse") {
+        return NextResponse.json(
+          { error: FORGE_SIGN_IN_REQUIRED_MESSAGE, signInRequired: true },
+          { status: 401 }
+        );
+      }
+      if (plan.kind === "account") {
+        // The account first, then the code's seat pool or the network ceiling
+        // (lib/forge-rate-limit.ts, decideSignedInCall).
+        const authedCode = getAccessCodeCookie(request);
+        let code: { code: string; seats: number } | null = null;
+        if (authedCode) {
+          try {
+            const v = await validateAccessCode(authedCode);
+            if (v.valid && v.accessCode) {
+              code = { code: v.accessCode.code, seats: codeSeats(v.accessCode.max_redemptions) };
+            }
+          } catch {
+            code = null; // validation hiccup: the network ceiling applies
+          }
+        }
+        const verdict = await decideSignedInCall(
+          { plan, endpoint: opts.endpoint, perPerson, ip: getClientIp(request), code },
+          {
+            account: incrementUserUsage,
+            refundAccount: (u, e) => refundUserUsage(u, e).catch(() => {}),
+            bucket: incrementIpUsage,
+          }
+        );
+        if (verdict === "account") {
+          return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+        }
+        if (verdict === "code") {
+          return NextResponse.json(
+            {
+              error:
+                "Your organization's group has used today's shared calls for this tool. Try again tomorrow, or ask your coordinator to raise the code's limit.",
+            },
+            { status: 429 }
+          );
+        }
+        if (verdict === "network") {
+          return NextResponse.json(
+            {
+              error:
+                "This network has used today's limit for this tool. Try again tomorrow, or from another connection.",
+            },
+            { status: 429 }
+          );
+        }
+        if (authedCode) {
+          void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
+          void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
+        }
+        return handler(request);
+      }
+      // Signed out on an open route: the per-IP rules below, unchanged.
+    }
+
     // Live test calls from the team draw from their own bounded bucket, never
     // from a job seeker's IP allowance. See lib/live-test-key.ts.
     if (liveTestKeyAllowed(request.headers.get(LIVE_TEST_HEADER), process.env.FORGE_TEST_KEY)) {
@@ -148,14 +230,14 @@ export function withRateLimit(
     // bucket to a per-code pool sized by its seats. The code is org-shared by
     // design, so the pool is shared and bounded -- a leaked code grants a
     // bounded pool, never unlimited calls.
-    const code = getAccessCodeCookie(request);
+    const code = opts.poolable === false ? null : getAccessCodeCookie(request);
     if (code) {
       try {
         const v = await validateAccessCode(code);
         if (v.valid && v.accessCode) {
           const baseLimit = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
           // Pool = per-person limit x seats (default 10 seats, capped at 50).
-          const seats = Math.min(Math.max(v.accessCode.max_redemptions ?? 10, 1), 50);
+          const seats = codeSeats(v.accessCode.max_redemptions);
           const codeLimit = baseLimit * seats;
           const codeCount = await incrementIpUsage(`code:${v.accessCode.code}`, opts.endpoint);
           if (codeCount > codeLimit) {

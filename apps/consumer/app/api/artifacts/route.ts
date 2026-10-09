@@ -9,9 +9,12 @@ import {
   recordProgressEvent,
   isResumeGroup,
   queryAsUser,
+  getOpenLane,
 } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
+import { parseLaneIdParam, parseExamplesParam, parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 // Journey instrumentation: which artifact types link back to a target job
 // application, and into which (whitelisted) column. The column names are fixed
@@ -77,8 +80,14 @@ export async function GET(request: Request) {
   const lane = searchParams.get("lane");
   const groupParam = searchParams.get("group");
   const offsetParam = searchParams.get("offset");
+  // Career lanes (073): ?laneId=<id>|main and ?examples=hide|only.
+  const laneIdParam = searchParams.get("laneId");
+  const examplesParam = searchParams.get("examples");
+  // ?order=recent: newest edit first, without the pinned current resume on top.
+  const orderRecent = searchParams.get("order") === "recent";
   const usesPaged =
-    q !== null || lane !== null || groupParam !== null || offsetParam !== null;
+    q !== null || lane !== null || groupParam !== null || offsetParam !== null ||
+    laneIdParam !== null || examplesParam !== null;
 
   if (usesPaged) {
     if (groupParam && !isResumeGroup(groupParam)) {
@@ -93,6 +102,9 @@ export async function GET(request: Request) {
       q: q ?? undefined,
       lane: lane ?? undefined,
       group: groupParam && isResumeGroup(groupParam) ? groupParam : undefined,
+      laneId: parseLaneIdParam(laneIdParam),
+      examples: parseExamplesParam(examplesParam),
+      order: orderRecent ? "recent" : undefined,
       limit: parsedLimit ? Math.min(parsedLimit, 100) : undefined,
       offset,
     });
@@ -110,6 +122,10 @@ export async function GET(request: Request) {
 
 /** POST /api/artifacts — create a new artifact */
 export async function POST(request: Request) {
+  // CSRF: only a page on this app's own origin may write to the account.
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -149,6 +165,17 @@ export async function POST(request: Request) {
     }
   }
 
+  // Career lanes (073): new work may be saved into one of the person's open
+  // lanes. A lane that is not theirs, or archived, is refused rather than
+  // quietly saved to main, so the screen never shows the wrong lane.
+  const laneId = parseLaneIdBody(body.laneId);
+  if (laneId === "bad") {
+    return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+  }
+  if (laneId && !(await getOpenLane(userId, laneId))) {
+    return NextResponse.json({ error: "lane_not_found" }, { status: 404 });
+  }
+
   try {
     const targetContext =
       body.targetContext && typeof body.targetContext === "object" && !Array.isArray(body.targetContext)
@@ -160,7 +187,8 @@ export async function POST(request: Request) {
       body.type,
       targetContext,
       body.content,
-      typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0
+      typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0,
+      { laneId: laneId ?? null }
     );
 
     // Journey instrumentation: link a tailored resume / disclosure plan back to

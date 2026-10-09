@@ -24,6 +24,12 @@ import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { isSamePerson } from "@/lib/is-same-person";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
+import { useLanes } from "@/components/lanes/useLanes";
+import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
+import { LaneIntro } from "@/components/lanes/LaneIntro";
+import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, FACTS_CARRY_COPY } from "@/lib/lanes";
 
 interface SavedResume {
   id: string;
@@ -31,11 +37,33 @@ interface SavedResume {
   scaffold_level: number;
   iteration_number: number;
   updated_at: string;
+  lane_id?: string | null;
+  is_current?: boolean;
+  is_locked?: boolean;
 }
 
 export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // The local Forge run is read only when it is marked as this user's
+  // (shared-computer rule, lib/forge-carry.ts readOwnForgeSession).
+  const ownerUid = useSession().data?.user?.id;
+  const ownerUidRef = useRef(ownerUid);
+  ownerUidRef.current = ownerUid;
+
+  // Career lanes (073): the Tailor works in one lane at a time. New work is
+  // saved into it; "Main" is work outside any named lane.
+  const lanes = useLanes();
+  const laneIdForNewWork = laneIdForSave(lanes.active);
+  const laneIdRef = useRef<string | null>(laneIdForNewWork);
+  laneIdRef.current = laneIdForNewWork;
+  // The person's base resume, across every lane: a new lane starts from it.
+  const [baseResume, setBaseResume] = useState<SavedResume | null>(null);
+  const [startingLane, setStartingLane] = useState(false);
+  // The editor's own lane picker: switching saves this resume, then opens the
+  // other lane's Tailor (a resume belongs to one lane; "Move to" in the
+  // Library moves it).
+  const [showLanePicker, setShowLanePicker] = useState(false);
 
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
@@ -44,6 +72,7 @@ export function ResumeWorkspace() {
   // Persistence
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "locked">("idle");
   const lastSaved = useRef<string>("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,12 +196,30 @@ export function ResumeWorkspace() {
   }
 
   // --- Load saved resumes list ---
+  const laneParam = laneFilterParam(lanes.active);
   const loadSavedResumes = useCallback(() => {
-    fetch("/api/artifacts?type=resume&limit=20")
+    if (!lanes.loaded) return;
+    const lane = laneParam ? `&laneId=${encodeURIComponent(laneParam)}` : "";
+    fetch(`/api/artifacts?type=resume&limit=20&examples=hide${lane}`)
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((d) => setSavedResumes(d.data || []))
+      .catch(() => {})
+      .finally(() => setSavedLoaded(true));
+    // The base resume, wherever it sits: the pinned current one, else the
+    // Forge's, else the newest approved baseline.
+    fetch("/api/artifacts?type=resume&limit=50&examples=hide")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => {
+        const all: SavedResume[] = d.data || [];
+        setBaseResume(
+          all.find((a) => a.is_current) ||
+            all.find((a) => (a.target_context as any)?.source === "forge") ||
+            all.find((a) => a.is_locked) ||
+            null
+        );
+      })
       .catch(() => {});
-  }, []);
+  }, [lanes.loaded, laneParam]);
 
   useEffect(() => {
     loadSavedResumes();
@@ -188,16 +235,16 @@ export function ResumeWorkspace() {
 
   // --- Check for Forge data ---
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.forgeOutput || session.resumeText) {
-          setForgeAvailable(true);
-        }
+    const check = () => {
+      const session = readOwnForgeSession(ownerUid);
+      if (session && (session.forgeOutput || session.resumeText)) {
+        setForgeAvailable(true);
       }
-    } catch {}
-  }, []);
+    };
+    check();
+    window.addEventListener("forge-synced", check);
+    return () => window.removeEventListener("forge-synced", check);
+  }, [ownerUid]);
 
   // --- Load from URL param ?id= ---
   // A locked baseline must never be opened under its own id (Phase 0.1 keeps
@@ -232,6 +279,7 @@ export function ResumeWorkspace() {
               const { data: fork } = await forkRes.json();
               loadedIdRef.current = fork.id;
               setArtifactId(fork.id);
+              lanes.setActive(fork.lane_id || "main");
               const content = fork.content;
               if (content.formatVersion === 2 || content.formatVersion === 3) {
                 setDoc(upgradeToV3(content));
@@ -254,6 +302,8 @@ export function ResumeWorkspace() {
 
         loadedIdRef.current = data.data.id;
         setArtifactId(data.data.id);
+        // The lane shown is the lane this resume is in.
+        lanes.setActive(data.data.lane_id || "main");
         const content = data.data.content;
         if (content.formatVersion === 2 || content.formatVersion === 3) {
           setDoc(upgradeToV3(content));
@@ -264,7 +314,8 @@ export function ResumeWorkspace() {
         setShowSetup(false);
       })
       .catch(() => {});
-  }, [searchParams, router]);
+    // lanes.setActive is stable per account; the lane list is not a reason to reload the document.
+  }, [searchParams, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Recover the linked application when a tailored resume is opened directly
   // (?id=, or from "Your saved work") so the Apply CTA (R8) can appear even
@@ -324,7 +375,7 @@ export function ResumeWorkspace() {
   // application email (R8 rung 3). Never invents; empty is fine.
   function workspaceStrengths(): string[] {
     try {
-      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const s = readOwnForgeSession(ownerUidRef.current) || {};
       const raw = s?.forgeOutput?.strengths;
       if (Array.isArray(raw)) {
         return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);
@@ -438,9 +489,9 @@ export function ResumeWorkspace() {
 
         // Try localStorage first.
         //
-        // Cross-ACCOUNT isolation is enforced upstream: RefineryShell stamps
-        // `_ownerUserId` on sync and purges any blob belonging to a different
-        // account before this screen renders.
+        // Cross-ACCOUNT isolation: readOwnForgeSession returns the local run
+        // only when it is marked as this user's (`_ownerUserId`). An unowned
+        // run (a shared computer's previous person) is never read here.
         //
         // KNOWN LIMITATION, same account: if a newer Forge run was completed in
         // a different browser or origin, the database holds that run while this
@@ -451,9 +502,8 @@ export function ResumeWorkspace() {
         // (the login page clears prior-account state) or Settings -> delete my
         // data.
         try {
-          const stored = localStorage.getItem("forge_session");
-          if (stored) {
-            const session = JSON.parse(stored);
+          const session = readOwnForgeSession(ownerUidRef.current);
+          if (session) {
             forgeOutput = session.forgeOutput;
             resumeText = session.resumeText;
             challenges = session.challenges || [];
@@ -485,7 +535,7 @@ export function ResumeWorkspace() {
         // computers, common for this population).
         if (!baseDocContact) {
           try {
-            const artRes = await fetch("/api/artifacts?type=resume&limit=20");
+            const artRes = await fetch("/api/artifacts?type=resume&limit=20&examples=hide");
             if (artRes.ok) {
               const { data } = await artRes.json();
               const base = (data || []).find(
@@ -537,7 +587,7 @@ export function ResumeWorkspace() {
         // client never sends approved text.
         let approvedArtifactId: string | undefined;
         try {
-          const artRes = await fetch("/api/artifacts?type=resume&limit=50");
+          const artRes = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
           if (artRes.ok) {
             const { data } = await artRes.json();
             const resumes: any[] = data || [];
@@ -545,7 +595,9 @@ export function ResumeWorkspace() {
             try {
               activeId = localStorage.getItem("active_baseline_id");
             } catch {}
+            const laneNow = laneIdRef.current;
             const approvedBase =
+              (laneNow && resumes.find((a) => a.lane_id === laneNow && (a.is_locked || a.is_current))) ||
               (activeId && resumes.find((a) => a.id === activeId && (a.is_locked || a.is_current))) ||
               resumes.find((a) => a.is_current) ||
               null;
@@ -571,6 +623,8 @@ export function ResumeWorkspace() {
             challenges,
             criminalRecord,
             ...(approvedArtifactId ? { approvedArtifactId } : {}),
+            // The lane's own length choice is read on the server from this id.
+            ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
           }),
         });
 
@@ -667,6 +721,7 @@ export function ResumeWorkspace() {
                 },
                 content: { text: coverLetter, targetJob: job.title, targetCompany: job.company },
                 scaffoldLevel: 1.0,
+                ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
               }),
             });
           } catch {}
@@ -774,6 +829,7 @@ export function ResumeWorkspace() {
               },
               content,
               scaffoldLevel: 0.5,
+              ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
             }),
           });
           if (res.ok) {
@@ -917,6 +973,44 @@ export function ResumeWorkspace() {
     );
   }
 
+  // --- Start a lane's first resume from the base resume (no facts re-asked) ---
+  const [laneStartError, setLaneStartError] = useState<string | null>(null);
+  async function startLaneFromBase() {
+    const lane = lanes.activeLane;
+    if (!lane || !baseResume || startingLane) return;
+    setStartingLane(true);
+    setLaneStartError(null);
+    try {
+      const res = await fetch(`/api/artifacts/${baseResume.id}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: "lane-start",
+          operationKey: `lane-start:${lane.id}`,
+          laneId: lane.id,
+          targetContext: { targetJob: lane.target_role || lane.name, source: "lane" },
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const { data: fork } = await res.json();
+      // Same facts; only the aim changes. The copy's target line names this lane's job.
+      const content = fork?.content;
+      if (lane.target_role && content && typeof content === "object" && content.meta) {
+        await fetch(`/api/artifacts/${fork.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: { ...content, meta: { ...content.meta, targetJob: lane.target_role } } }),
+        }).catch(() => {});
+      }
+      setSavedResumes((prev) => [fork, ...prev]);
+      loadResume(fork.id);
+    } catch {
+      setLaneStartError("That didn't work. Try again in a moment.");
+    } finally {
+      setStartingLane(false);
+    }
+  }
+
   // --- Start fresh ---
   function startFresh() {
     const d = createEmptyResume();
@@ -999,6 +1093,29 @@ export function ResumeWorkspace() {
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
+        {/* Career lanes (073): which lane this tool is working in. */}
+        <div className="mb-4 space-y-3">
+          <LaneSwitcher lanes={lanes} value={lanes.active} onChange={(c) => lanes.setActive(c)} />
+          <LaneIntro lanes={lanes} tool="tailor" laneId={laneIdForNewWork} />
+          {lanes.activeLane && savedLoaded && savedResumes.length === 0 && baseResume && (
+            <div data-testid="lane-empty" className="border border-t-amber bg-t-panel p-4 space-y-2">
+              <p className="text-sm font-semibold text-t-white">
+                No resume in your {lanes.activeLane.name} lane yet.
+              </p>
+              <p className="text-xs text-t-phos-dim">{FACTS_CARRY_COPY}</p>
+              <button
+                type="button"
+                data-testid="lane-start-from-base"
+                onClick={startLaneFromBase}
+                disabled={startingLane}
+                className="t-focus w-full sm:w-auto min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
+              >
+                {startingLane ? "Starting..." : "Start it from my base resume"}
+              </button>
+              {laneStartError && <p className="text-xs text-t-red" role="alert">{laneStartError}</p>}
+            </div>
+          )}
+        </div>
         <p className="text-base text-t-phos-dim mb-2">
           Aim your base resume at a specific job. We use your Forge profile to
           tailor your resume, cover letter, and disclosure plan to the exact
@@ -1209,6 +1326,7 @@ export function ResumeWorkspace() {
         {(() => {
           const hasBaseResume =
             forgeAvailable ||
+            !!baseResume ||
             savedResumes.some(
               (r) =>
                 (r.target_context as any)?.source === "forge" ||
@@ -1277,6 +1395,19 @@ export function ResumeWorkspace() {
           {doc.meta.targetCompany && (
             <p className="text-xs text-t-phos-dim">at {doc.meta.targetCompany}</p>
           )}
+          <p className="text-xs text-t-phos-dim" data-testid="workspace-lane">
+            Lane: <span className="font-semibold text-t-phos">{lanes.activeLane?.name ?? MAIN_LANE_LABEL}</span>
+            {" "}
+            <button
+              type="button"
+              data-testid="workspace-switch-lane"
+              aria-expanded={showLanePicker}
+              onClick={() => setShowLanePicker((v) => !v)}
+              className="t-focus underline hover:text-t-white"
+            >
+              Switch lane
+            </button>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {saveStatus === "error" && (
@@ -1295,6 +1426,21 @@ export function ResumeWorkspace() {
           </button>
         </div>
       </div>
+
+      {showLanePicker && (
+        <div className="mb-4">
+          <LaneSwitcher
+            lanes={lanes}
+            value={lanes.active}
+            onChange={async (c) => {
+              await save();
+              setShowLanePicker(false);
+              lanes.setActive(c);
+              startNewResume();
+            }}
+          />
+        </div>
+      )}
 
       {/* What the truth check found in this tailored version */}
       {truthCheck && (

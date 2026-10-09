@@ -61,6 +61,8 @@ export * from './avatarAssetShared';
 export * from './avatarAsset';
 export * from './pageFitShared';
 export * from './pageFit';
+// Career lanes under one account (migration 073).
+export * from './careerLane';
 
 // Org authorization (2026-09-19): capabilities answer the verb, reach answers
 // the rows. Replaces inline tier-string comparisons in routes.

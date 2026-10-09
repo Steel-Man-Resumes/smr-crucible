@@ -4,11 +4,9 @@
  * Saves the forge_session / consumer_profile records and best-effort
  * auto-creates (or updates) the "forge" source resume artifact.
  *
- * Shared by:
- *  - /api/forge/save     (post-auth localStorage relay on the dashboard)
- *  - /api/auth/register  (so Forge work carries across the forge.* -> refinery.*
- *                         origin boundary at account creation, where the
- *                         localStorage relay can't reach it)
+ * Used by /api/forge/save only: the Forge's import (which asks the person and
+ * names the account) and the Refinery's sync of runs already marked for its
+ * account. Account creation no longer carries a run (security review 3a r1, H1).
  */
 
 import {
@@ -16,6 +14,9 @@ import {
   createArtifact,
   updateArtifact,
   listArtifacts,
+  ensureFirstLane,
+  setArtifactLane,
+  looksLikeExampleResume,
 } from "@crucible/core";
 import { buildForgeResumeContent } from "@/lib/forge-to-resume";
 
@@ -65,7 +66,7 @@ export async function persistForgeSession(
             forgeOutput: body.forgeOutput,
           });
 
-      const existing = await listArtifacts(userId, { type: "resume" });
+      const existing = await listArtifacts(userId, { type: "resume", examples: "hide" });
       const forgeResume = existing.find(
         (a) => (a.target_context as any)?.source === "forge"
       );
@@ -86,7 +87,7 @@ export async function persistForgeSession(
           );
         }
       } else {
-        await createArtifact(
+        const created = await createArtifact(
           userId,
           "resume",
           {
@@ -98,6 +99,15 @@ export async function persistForgeSession(
           resumeContent as unknown as Record<string, unknown>,
           1.0
         );
+        // Career lanes (073): the first finished Forge resume becomes the
+        // person's first lane, named from their target ("Warehouse"). Only a
+        // NEW forge resume does this, and only for someone who has never had
+        // a lane, so existing accounts keep working in main until they act.
+        // A sample or test resume (reserved fictional contact details) never
+        // names the person's first lane.
+        if (!looksLikeExampleResume(resumeContent)) {
+          await placeInFirstLane(userId, created?.id, firstLaneTarget(resumeContent, body));
+        }
       }
     } catch (artErr: any) {
       console.error(
@@ -106,5 +116,24 @@ export async function persistForgeSession(
       );
       // Non-fatal: the Forge save succeeded; artifact creation is best-effort.
     }
+  }
+}
+
+/** The target a first lane is named from: the resume's own target, else the Forge's first career path. */
+export function firstLaneTarget(resumeContent: any, body: Record<string, any>): string {
+  const own = typeof resumeContent?.meta?.targetJob === "string" ? resumeContent.meta.targetJob.trim() : "";
+  if (own) return own;
+  const path = body?.forgeOutput?.career_paths?.[0]?.title;
+  return typeof path === "string" ? path.trim() : "";
+}
+
+/** Best effort: a lane problem never fails the Forge save. */
+async function placeInFirstLane(userId: string, artifactId: string | undefined, target: string): Promise<void> {
+  if (!artifactId || !target) return;
+  try {
+    const lane = await ensureFirstLane(userId, target);
+    if (lane) await setArtifactLane(userId, artifactId, lane.id);
+  } catch (err: any) {
+    console.error("First lane not created:", err?.message || err);
   }
 }

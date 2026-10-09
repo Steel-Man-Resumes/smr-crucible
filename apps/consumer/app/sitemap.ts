@@ -11,5 +11,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 1.0,
     },
+    {
+      // The free checker: public, no sign-in (lib/forge-access.ts).
+      url: "https://forge.steelmanresumes.com/check",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
   ];
 }

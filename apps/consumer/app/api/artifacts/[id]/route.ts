@@ -8,8 +8,12 @@ import {
   clearCurrentResume,
   lockBaseline,
   unlockBaseline,
+  setArtifactLane,
+  setArtifactDemo,
 } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
+import { parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost, isSameOriginRequest } from "@/lib/same-origin";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -34,6 +38,10 @@ export async function GET(_request: Request, context: RouteContext) {
 
 /** PATCH /api/artifacts/[id] — update artifact content */
 export async function PATCH(request: Request, context: RouteContext) {
+  // CSRF: only a page on this app's own origin may change the person's work.
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -61,6 +69,30 @@ export async function PATCH(request: Request, context: RouteContext) {
     const ok = body.lock
       ? await lockBaseline(userId, id, typeof body.lane === "string" ? body.lane : null)
       : await unlockBaseline(userId, id);
+    if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
+  // Career lanes (073): move this work into one of the person's open lanes,
+  // or back to main with null. Not a content edit, so a locked baseline can
+  // move too. The lane must be theirs and open (the SQL checks; the composite
+  // foreign key is the hard guard).
+  if (body && typeof body === "object" && "laneId" in body && !body.content) {
+    const laneId = parseLaneIdBody(body.laneId);
+    if (laneId === "bad" || laneId === undefined) {
+      return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+    }
+    const ok = await setArtifactLane(userId, id, laneId);
+    if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
+  // FU2: mark an example or test resume (hidden behind "Show examples"), or
+  // bring it back. Nothing is deleted.
+  if (body && typeof body === "object" && "isDemo" in body && !body.content) {
+    const ok = await setArtifactDemo(userId, id, body.isDemo === true);
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const artifact = await getArtifact(id, userId);
     return NextResponse.json({ data: artifact });
@@ -108,7 +140,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 /** DELETE /api/artifacts/[id] — delete an artifact */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
+  if (!isSameOriginRequest(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {

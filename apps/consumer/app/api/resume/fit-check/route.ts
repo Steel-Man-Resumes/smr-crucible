@@ -104,6 +104,6 @@ async function handlePost(request: Request) {
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "resume-fit-check",
 });

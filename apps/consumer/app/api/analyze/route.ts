@@ -678,4 +678,4 @@ Return JSON:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "analyze" });
+export const POST = withRateLimit(handlePost, { mode: "forge", endpoint: "analyze" });

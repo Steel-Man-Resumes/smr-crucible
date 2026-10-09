@@ -19,6 +19,11 @@ import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
+import { safeLoginReturn } from "@/lib/session-policy";
+import { isForgeSignInPage } from "@/lib/forge-access";
+import { useForgeWall } from "@/components/forge/useForgeWall";
+import { TERMS_TICKED_KEY, tickedMark } from "@/lib/terms-ticked";
+import { TERMS_VERSION } from "@/lib/terms";
 import {
   AccountTypeChooser,
   AccountRouteNote,
@@ -48,6 +53,13 @@ function LoginForm() {
   const forPartner = (searchParams.get("callbackUrl") || "").includes(
     "/dashboard/partner"
   );
+  // Sent here from a Forge screen (the sign-in wall): this page brings them
+  // straight back there, and says so.
+  const forgeReturn = (() => {
+    const back = safeLoginReturn(searchParams.get("callbackUrl"));
+    return isForgeSignInPage(back.split(/[?#]/)[0]) ? back : null;
+  })();
+  const wall = useForgeWall();
 
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   // Seeded from ?as= so an invitation email or a partner page can send someone
@@ -109,7 +121,9 @@ function LoginForm() {
     if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
   }
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  // Checked here as well as by Auth.js: a same-site path only, never another
+  // site, never the login pages or an API route (lib/session-policy.ts).
+  const callbackUrl = safeLoginReturn(searchParams.get("callbackUrl"));
   // Mini Forge sends people here with callbackUrl=/mini-forge/import-complete,
   // the step that loads their tablet plan into the new account. Account
   // creation must honor it (see createCallback below) or the import never runs.
@@ -138,8 +152,8 @@ function LoginForm() {
 
   /**
    * Clear the PREVIOUS account's derived state when creating a new account in
-   * a browser that already has one, WITHOUT touching `forge_session` -- that
-   * blob is deliberately carried onto the new account below.
+   * a browser that already has one. `forge_session` is left for the Forge to
+   * ask about (it is never sent with the new account).
    *
    * This is the path used to give each demo persona its own clean account.
    */
@@ -250,19 +264,19 @@ function LoginForm() {
     if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
     setError(""); setSending(true); storeCode();
 
-    // Carry the Forge work onto the new account server-side. The forge_session
-    // lives in forge.* localStorage and is lost crossing to the authed origin,
-    // so we hand it to the register call to persist against the new user.
-    let forge: unknown = null;
+    // The Forge run in this browser is NOT sent with the new account (security
+    // review 3a r1, H1). On a shared computer it may be someone else's, already
+    // saved to their account. The Forge page this person lands on next asks
+    // them, naming the new account, before anything is saved
+    // (components/forge/ForgeImport.tsx); register ignores any run it is sent.
+    //
+    // Everything else in this browser belongs to whoever was signed in before
+    // and must not follow a brand-new account either: their saved jobs,
+    // progress counters and approved-resume pointer.
+    let hadRun = false;
     try {
-      const s = localStorage.getItem("forge_session");
-      forge = s ? JSON.parse(s) : null;
-    } catch { forge = null; }
-
-    // The Forge work above carries forward on purpose. Everything else in this
-    // browser belongs to whoever was signed in before and must not follow a
-    // brand-new account -- otherwise the previous person's saved jobs, progress
-    // counters and approved-resume pointer become this account's opening state.
+      hadRun = !!localStorage.getItem("forge_session");
+    } catch { hadRun = false; }
     clearPriorAccountState();
 
     try {
@@ -278,7 +292,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), forge, turnstileToken, acceptedTerms: true }),
+        body: JSON.stringify({ email: email.trim(), password, name: name.trim(), phone: phone.trim(), turnstileToken, acceptedTerms: true }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -287,15 +301,21 @@ function LoginForm() {
         return;
       }
       // Acquisition attribution only -- no PII, no product detail (GA doctrine).
-      trackGA("refinery_signup", { from_forge: !!forge });
+      trackGA("refinery_signup", { from_forge: hadRun });
       // New accounts with no Forge data go to /intro, not /dashboard
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
         if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
+        // Came from a Forge screen: back to it.
+        if (forgeReturn) return forgeReturn;
         try {
           const s = localStorage.getItem("forge_session");
           const session = s ? JSON.parse(s) : null;
-          return session?.forgeOutput ? callbackUrl : "/intro";
+          // A finished run waits on the Forge's finish page, where the person
+          // is asked whether to save it to this new account.
+          // Only an unmarked run is offered there; a run marked for another
+          // account is never this new account's.
+          return session?.forgeOutput && !session?._ownerUserId ? "/output" : "/intro";
         } catch { return "/intro"; }
       })();
       const result = await signIn("password-login", {
@@ -318,7 +338,15 @@ function LoginForm() {
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to continue."); return; }
     setError(""); setSending(true); storeCode();
+    // The box ticked here is recorded once the link signs them in, on this
+    // browser only (app/(auth)/login/terms).
+    try {
+      localStorage.setItem(TERMS_TICKED_KEY, JSON.stringify(tickedMark(email, TERMS_VERSION)));
+    } catch {
+      // storage blocked: the terms page asks with one tap instead
+    }
 
     try {
       const result = await signIn("resend", {
@@ -372,29 +400,40 @@ function LoginForm() {
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
     || (twoFactorStep && !totp.trim())
-    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms));
+    || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms))
+    || (mode === "magic-link" && !acceptedTerms);
 
   return (
     <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
       <div className="w-full max-w-md border border-t-line bg-t-panel p-6 shadow-[4px_4px_0_#000] sm:p-8">
         <div className="mb-6">
-          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">/refinery</p>
-          <h1 className="font-display text-2xl font-bold uppercase text-t-white">
-            {mode === "create"
-              ? "Create your Refinery account"
-              : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
-                 "Sign in to The Refinery")}
+          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
+            {forgeReturn ? "/forge" : "/refinery"}
+          </p>
+          <h1 className="font-display text-2xl font-bold uppercase text-t-white" data-testid="login-heading">
+            {forgeReturn
+              ? mode === "create"
+                ? "Make your free account"
+                : "Sign in to keep building"
+              : mode === "create"
+                ? "Create your Refinery account"
+                : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
+                   "Sign in to The Refinery")}
           </h1>
           <p className="mt-2 text-sm text-t-bone-dim">
-            {mode === "create"
-              ? "Save your Forge work and continue with the full toolset."
-              : mode === "magic-link"
-                ? "Sign in with a magic link"
-                : "Continue your career work where you left off."}
+            {forgeReturn
+              ? "It's free. One account for the Forge and the Refinery. You come right back to where you were."
+              : mode === "create"
+                ? "Save your Forge work and continue with the full toolset."
+                : mode === "magic-link"
+                  ? "Sign in with a magic link"
+                  : "Continue your career work where you left off."}
           </p>
         </div>
 
-        <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />
+        {/* Someone coming from a Forge screen is here to build their own
+            resume: the "who are you here as" choice would only slow them down. */}
+        {!forgeReturn && <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />}
 
         <AccountRouteNote route={accountRoute}>
           {accountRoute === "agency" && (
@@ -602,10 +641,11 @@ function LoginForm() {
             )}
           </div>
 
-          {/* Terms / Privacy / AI-processing consent -- create mode only.
-              Required before any account or Forge data persists (versioned
-              acceptance recorded server-side at registration). */}
-          {mode === "create" && (
+          {/* Terms / Privacy / AI-processing consent -- create and email-link
+              modes. Required before any account or Forge data persists:
+              recorded at registration, or on the terms page once an email link
+              signs the person in (app/(auth)/login/terms). */}
+          {(mode === "create" || mode === "magic-link") && (
             <label className="flex items-start gap-2 text-[12px] text-t-phos-dim">
               <input
                 type="checkbox"
@@ -772,7 +812,7 @@ function LoginForm() {
             <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
               Try The Forge
             </a>
-            . It&apos;s free, and you don&apos;t need an account.
+            {wall === null ? "." : wall === "up" ? ". It's free." : ". It's free, and you don't need an account."}
           </p>
         </div>
       </div>

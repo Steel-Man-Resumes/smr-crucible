@@ -11,6 +11,6 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export const POST = withRateLimit(handleDownloadPost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "forge-download",
 });

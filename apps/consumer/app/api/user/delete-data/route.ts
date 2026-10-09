@@ -5,6 +5,7 @@
  * - secure_object rows (Phase 1C vault/transcript/headshot platform) + the
  *   underlying R2 ciphertext, via the deletion_task retry ledger
  * - refinery_artifact (resumes, disclosure plans, etc.)
+ * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
  * - forge_session
  * - consumer_profile
  * - job_application
@@ -129,6 +130,10 @@ export async function DELETE(req: Request) {
     // Delete in dependency order (children first)
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
+    // Career lanes (073): after the artifacts that point at them. Owner-only
+    // tables, so deleted AS the person; the lane screens only ever archive.
+    await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
+    await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);

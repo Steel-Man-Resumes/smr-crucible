@@ -1,7 +1,9 @@
-import { auth } from "./auth";
+import { auth, isSessionRevoked } from "./auth";
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { forgeAnonymousRequestHeaders } from "@/lib/session-policy";
+import { forgeAnonymousRequestHeaders, headersWithoutSessionCookie, revocationCheck } from "@/lib/session-policy";
+import { forgeWallState } from "@/lib/forge-access";
+import { emailCallbackNeedsButton, interstitialUrlFor } from "@/lib/sign-in-link";
 
 /**
  * Middleware = next-auth gate + developer-impersonation write blocking.
@@ -12,6 +14,12 @@ import { forgeAnonymousRequestHeaders } from "@/lib/session-policy";
  * through. Invalid/forged cookies are ignored (effectiveAuth also re-verifies).
  */
 export default auth(async (req) => {
+  // Login CSRF: an email sign-in link reaches the callback only through our
+  // own "Finish signing in" button (lib/sign-in-link.ts).
+  if (emailCallbackNeedsButton(req.nextUrl.pathname, req.method, req.headers.get("sec-fetch-site"))) {
+    return NextResponse.redirect(interstitialUrlFor(req.nextUrl.toString()), 303);
+  }
+
   const token = req.cookies.get("smr_impersonate")?.value;
   if (
     token &&
@@ -43,9 +51,23 @@ export default auth(async (req) => {
   // Forge route that works signed out: the route runs as if signed out. The
   // session cookie is removed from the request the route sees (the browser
   // keeps it), so nothing is read from or attributed to that account.
-  const anonymousHeaders = forgeAnonymousRequestHeaders(req.nextUrl.pathname, req.auth?.user as any, req.headers);
+  const anonymousHeaders = forgeAnonymousRequestHeaders(
+    req.nextUrl.pathname,
+    req.auth?.user as any,
+    req.headers,
+    forgeWallState() === "up"
+  );
   if (anonymousHeaders) {
     return NextResponse.next({ request: { headers: anonymousHeaders } });
+  }
+
+  // A revoked session on a route that works signed out (the free checker,
+  // t.ROY's public chat): served as signed out, never refused (L2).
+  const user = req.auth?.user as { id?: string; sid?: string; sit?: unknown } | undefined;
+  if (user?.sid && revocationCheck(req.nextUrl.pathname) === "as-open") {
+    if (await isSessionRevoked(user.sid, user.id, user.sit)) {
+      return NextResponse.next({ request: { headers: headersWithoutSessionCookie(req.headers) } });
+    }
   }
 });
 
@@ -59,14 +81,27 @@ export const config = {
     "/jobs/:path*",
     "/resources/:path*",
     "/progress/:path*",
+    // The Forge question and build screens (FORGE_SIGN_IN_PAGES in
+    // lib/forge-access.ts; a test keeps the two lists equal). They need a
+    // session only once the wall is up; before that authorized() lets them
+    // through untouched. Exact paths: the public Forge pages, the free checker
+    // and every /mini-forge path are never matched.
+    "/welcome",
+    "/resume",
+    "/goals",
+    "/story",
+    "/preferences",
+    "/processing",
+    "/output",
+    "/rush",
+    "/carry",
     // All API routes pass through so view-mode write blocking is universal.
     // The authorized() callback still decides auth per-path exactly as before
     // (pre-auth Forge routes remain open -- it returns true for them).
     "/api/:path*",
   ],
-  // The Forge flow (/welcome, /resume, /goals, /story, /preferences,
-  // /processing, /output) is intentionally NOT protected.
-  // No login wall before value delivery.
+  // The Forge flow is walled by date (lib/forge-access.ts): before the date it
+  // works signed out as it always has; after it, sign-in first.
   // /api/assistant uses dual-mode: IP pre-auth, user post-auth.
   // Hostname routing (forge/refinery subdomains) handled in next.config.mjs redirects.
 };

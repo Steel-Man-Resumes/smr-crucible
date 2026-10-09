@@ -36,6 +36,9 @@ export const RLS_PROTECTED_TABLES = [
   "consumer_profile",
   "refinery_artifact",
   "job_application",
+  // career lanes (073), owner only
+  "career_lane",
+  "lane_tool_intro",
 ] as const;
 
 export interface RlsHealth {

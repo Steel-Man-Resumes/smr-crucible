@@ -17,7 +17,18 @@ import {
   sessionPending,
   revocationVerdict,
   sessionRowRequired,
+  forgeGateVerdict,
+  termsGateVerdict,
+  termsCurrent,
+  revocationCheck,
 } from "@/lib/session-policy";
+import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION, termsNeedsReread } from "@/lib/terms";
+import {
+  FORGE_SIGN_IN_REQUIRED_MESSAGE,
+  forgeSignInUrl,
+  forgeWallState,
+  isForgeSignInPage,
+} from "@/lib/forge-access";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -306,10 +317,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const path = request.nextUrl.pathname;
       const isApi = path.startsWith("/api/");
       const isDashboard = path.startsWith("/dashboard");
+      // The Forge wall (lib/forge-access.ts): once it is up, the Forge question
+      // and build screens and their API calls need a signed-in session. The
+      // public pages, the free checker and the Mini Forge are never matched here.
+      const wallUp = forgeWallState() === "up";
+      const isForgeScreen = wallUp && isForgeSignInPage(path);
+      const gate = forgeGateVerdict(path, !!session, wallUp);
+      // Before the wall these screens are open to everyone, exactly as when the
+      // middleware did not match them at all: no hold, no redirect (S1).
+      if (gate === "open") return true;
 
       // Dashboard pages: redirect to login if not authenticated
       if (isDashboard && !session) {
         return Response.redirect(new URL("/login", request.url));
+      }
+
+      // A Forge screen, signed out: sign in, then straight back to this page.
+      // Only the path and query of THIS request are carried, so the return
+      // address is always on this site (the login page checks it again).
+      if (gate === "sign-in") {
+        return Response.redirect(new URL(forgeSignInUrl(path + request.nextUrl.search), request.url));
+      }
+
+      // A walled Forge API route, signed out: 401, never a redirect.
+      if (gate === "refuse") {
+        return Response.json(
+          { error: FORGE_SIGN_IN_REQUIRED_MESSAGE, signInRequired: true },
+          { status: 401 }
+        );
       }
 
       // Protected API routes: return 401 (don't redirect)
@@ -339,12 +374,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // NextAuth's own actions (which keep /api/auth/session polling off the
       // DB) and the pre-sign-in routes skip it; see authRouteSkipsSessionChecks.
       const sid = (session?.user as any)?.sid as string | undefined;
-      if (session && sid && (isDashboard || (isApi && !authRouteSkipsSessionChecks(path)))) {
+      // L2: the signed-out allowlist is checked in the middleware instead, where
+      // a revoked session is served as signed out (revocationCheck).
+      if (session && sid && (isDashboard || isForgeScreen || isApi) && revocationCheck(path) === "here") {
         if (await isSessionRevoked(sid, session.user?.id, (session.user as any)?.sit)) {
           if (isApi) {
             return Response.json({ error: "Session revoked" }, { status: 401 });
           }
-          return Response.redirect(new URL("/login", request.url));
+          return Response.redirect(
+            new URL(isForgeScreen ? forgeSignInUrl(path + request.nextUrl.search) : "/login", request.url)
+          );
         }
       }
 
@@ -354,7 +393,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // F3: the same hold covers the first-proof choice (claim).
       // S1: the Forge routes that work signed out are not held; the middleware
       // serves them to a pending session as signed out (session-policy.ts).
-      if (session && pendingSessionTreatment(path, session.user as any) === "hold") {
+      if (session && pendingSessionTreatment(path, session.user as any, wallUp) === "hold") {
         if (isApi) {
           const passwordOwed = (session.user as any)?.claim === "password";
           return Response.json(
@@ -370,6 +409,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const verify = new URL(MFA_VERIFY_PAGE, request.url);
         verify.searchParams.set("callbackUrl", path + request.nextUrl.search);
         return Response.redirect(verify);
+      }
+
+      // Terms (security review 3a r1, M4): once the wall is up, an account that
+      // has not accepted the Terms, Privacy Policy and AI-processing notice
+      // (email-link and Google accounts never saw the sign-up checkbox) does it
+      // once, on a one-tap page, before any Forge screen or Forge API.
+      if (session) {
+        const terms = termsGateVerdict(path, wallUp, termsCurrent(session.user as any, TERMS_VERSION));
+        if (terms === "api") {
+          return Response.json(
+            { error: "Accept the terms to keep going. It takes one tap.", termsRequired: true },
+            { status: 401 }
+          );
+        }
+        if (terms === "page") {
+          const page = new URL(TERMS_PAGE, request.url);
+          page.searchParams.set("callbackUrl", path + request.nextUrl.search);
+          return Response.redirect(page);
+        }
       }
 
       // Admin powers (admin tools, impersonation) need a session that
@@ -506,6 +564,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // (claim): keep the two-step or password by entering it, or say "I
         // didn't set this" to remove it. Nothing is removed here.
         delete (token as any).claim;
+        // How this session signed in (for the consent ledger), and whether the
+        // account has accepted the current terms (lib/terms.ts).
+        (token as any).via = account?.provider ?? null;
+        try {
+          const t = await pool.query(CONSENT_LOOKUP_SQL, [token.sub, TERMS_VERSION]);
+          (token as any).terms = (t.rowCount ?? 0) > 0;
+          (token as any).termsVersion = TERMS_VERSION;
+          (token as any).termsAt = nowSeconds();
+        } catch {
+          delete (token as any).terms; // looked up again later
+        }
         // Google counts as proof only for its own address (checked above).
         if (account?.provider === "resend" || (account?.provider === "google" && googleMatched)) {
           const { readProofState, claimForInboxProof, markEmailProven } = await import("@/lib/email-proof");
@@ -572,6 +641,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Terms: read again on update() (the terms page), when never read, when
+      // read for an older TERMS_VERSION, and at least daily (lib/terms.ts
+      // termsNeedsReread). Only ever set from the database row, never from
+      // anything the client sent.
+      if (
+        token.sub &&
+        termsNeedsReread({
+          trigger,
+          terms: (token as any).terms,
+          termsVersion: (token as any).termsVersion,
+          termsAt: (token as any).termsAt,
+          now: nowSeconds(),
+        })
+      ) {
+        try {
+          const rows = (await sqlEdge`
+            SELECT 1 FROM consumer_consent
+             WHERE user_id = ${token.sub}::uuid AND consent_layer = 'core' AND status = 'granted'
+               AND consent_text_version = ${TERMS_VERSION}
+             LIMIT 1`) as any[];
+          (token as any).terms = rows.length > 0;
+          (token as any).termsVersion = TERMS_VERSION;
+          (token as any).termsAt = nowSeconds();
+        } catch {
+          // Left as it was. The gate needs the current version AND true, so a
+          // claim from an older version still fails closed; a daily re-read
+          // that cannot reach the database keeps the last answer.
+        }
+      }
+
       // Sessions signed in before F1 carry no `mfa` claim. One minted by an
       // email link into a two-step account never saw a code, so an older
       // session of a two-step account is asked for the code once. Edge-safe
@@ -598,6 +697,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).mfaAt = typeof (token as any).mfaAt === "number" ? (token as any).mfaAt : null;
         // F3: "2fa" or "password" while the first-proof choice is owed.
         (session.user as any).claim = (token as any).claim ?? null;
+        // M4: true once the account accepted the current terms (lib/terms.ts).
+        (session.user as any).terms = (token as any).terms === true;
+        (session.user as any).termsVersion = (token as any).termsVersion ?? null;
+        (session.user as any).via = (token as any).via ?? null;
       }
       return session;
     },

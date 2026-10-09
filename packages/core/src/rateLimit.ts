@@ -51,6 +51,11 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // person's words). A paid call; one or two runs per resume. Off unless
   // SECOND_CHECK_ENABLED, and also held by a daily dollar cap.
   "second-check": 5,
+  // The free checker's file upload: text extraction (and OCR for a scan or a
+  // photo), no AI call, nothing stored. OCR is CPU heavy, so it is bounded.
+  "check-extract": 30,
+  // The public "get listed" form for organizations (stores a request).
+  "org-listing": 5,
 };
 
 export interface RateLimitResult {
@@ -133,6 +138,19 @@ export async function incrementUserUsage(
     [userId, endpoint]
   );
   return row?.call_count ?? 1;
+}
+
+/**
+ * Give back one call counted for a user today (never below zero). For a call
+ * the account allowed but a shared limit (a network, an organization's seat
+ * pool) refused: the person's own allowance is not spent on it.
+ */
+export async function refundUserUsage(userId: string, endpoint: string): Promise<void> {
+  await query(
+    `UPDATE ai_usage SET call_count = GREATEST(call_count - 1, 0), updated_at = now()
+      WHERE user_id = $1 AND endpoint = $2 AND usage_date = CURRENT_DATE`,
+    [userId, endpoint]
+  );
 }
 
 /**

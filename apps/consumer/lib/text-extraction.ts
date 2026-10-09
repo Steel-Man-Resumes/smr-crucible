@@ -12,6 +12,19 @@
  * - Unknown formats (text sniff + OCR as last resort)
  */
 
+import { UnsafeUploadError, assertSafePdf, safeDocxForMammoth } from "./upload-safety";
+import { ExtractAborted, ExtractPdfTooLong, extractInWorker } from "./extract-worker";
+
+/**
+ * pdf.js and mammoth run in a worker with a heap limit, terminated when these
+ * budgets run out (lib/extract-worker.ts). FORGE_EXTRACT_IN_THREAD=1 is an
+ * emergency switch back to reading in the request's own thread (the checks in
+ * lib/upload-safety.ts still run either way).
+ */
+const PDF_TEXT_BUDGET_MS = 20_000;
+const DOCX_TEXT_BUDGET_MS = 15_000;
+const inThread = () => process.env.FORGE_EXTRACT_IN_THREAD === "1";
+
 const MIN_EXTRACTED_CHARS = 10;
 const MIN_MEANINGFUL_CHARS = 20;
 const MAX_PDF_OCR_PAGES = 5;
@@ -52,12 +65,46 @@ function withOcrTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
  * a friendly 422 that steers the user to paste or the guided builder -- never a
  * generic 500 "something went wrong."
  */
+/** Buffers already scanned and found safe, so each PDF is scanned once (hotfix F8). */
+const scannedSafe = new WeakSet<Buffer>();
+
+/** A PDF checked before any reader opens it (lib/upload-safety.ts); unsafe = unreadable. */
+function assertPdfSafe(buffer: Buffer) {
+  if (scannedSafe.has(buffer)) return;
+  try {
+    assertSafePdf(buffer);
+    scannedSafe.add(buffer);
+  } catch (e) {
+    if (e instanceof UnsafeUploadError) throw new UnreadableDocumentError(e.message);
+    throw e;
+  }
+}
+
 export class UnreadableDocumentError extends Error {
   readonly code = "UNREADABLE_DOCUMENT";
   constructor(message: string) {
     super(message);
     this.name = "UnreadableDocumentError";
   }
+}
+
+/** The worker ran out of time or memory: refused, never retried another way (no OCR). */
+export class ReadAbortedError extends UnreadableDocumentError {
+  constructor() {
+    super("That file took too long to read. Try a PDF or Word file, or paste the text.");
+    this.name = "ReadAbortedError";
+  }
+}
+
+/** A zip archive (a .docx), by its first bytes. */
+function isZip(buffer: Buffer): boolean {
+  return buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
+}
+
+/** The file's extension for logs, never its name. */
+function fileKindForLog(name: string): string {
+  const m = /\.([a-z0-9]{1,5})$/.exec(name);
+  return m ? `.${m[1]}` : "(no extension)";
 }
 
 export async function extractTextFromBuffer(
@@ -67,16 +114,20 @@ export async function extractTextFromBuffer(
 ): Promise<string> {
   const name = fileName.toLowerCase();
 
-  console.log(`Extracting text from: ${name} (${mimeType})`);
+  // Never the file's name: it is usually the person's full name (hotfix F7).
+  console.log(`Extracting text: ${fileKindForLog(name)} (${mimeType}), ${buffer.length} bytes`);
 
   try {
     // PDF
     if (mimeType === "application/pdf" || name.endsWith(".pdf")) {
+      // Before pdf.js or the OCR renderer sees it (security review 3a r2, H1).
+      assertPdfSafe(buffer);
       try {
         const text = await extractFromPDF(buffer);
         if (hasMeaningfulText(text)) return text;
         console.log("PDF text minimal, trying OCR fallback...");
       } catch (error) {
+        if (error instanceof ReadAbortedError) throw error;
         console.log("PDF extraction failed, falling back to OCR:", error);
       }
       return await extractFromPDFWithOCR(buffer);
@@ -90,11 +141,20 @@ export async function extractTextFromBuffer(
       name.endsWith(".docx") ||
       name.endsWith(".doc")
     ) {
-      try {
-        const text = await extractFromDOCX(buffer);
-        if (text.trim().length > MIN_EXTRACTED_CHARS) return text;
-      } catch (error) {
-        console.log("DOCX extraction failed:", error);
+      // Only a zip (a real .docx) goes to mammoth. HTML or RTF saved as
+      // .doc, and .rtf files labelled msword, are read as text below, as
+      // before (hotfix F2).
+      if (isZip(buffer)) {
+        try {
+          const text = await extractFromDOCX(buffer);
+          if (text.trim().length > MIN_EXTRACTED_CHARS) return text;
+        } catch (error) {
+          // A Word file that fails the safety check is refused, never read as
+          // loose text (security review 3a r2, H1).
+          if (error instanceof UnsafeUploadError) throw new UnreadableDocumentError(error.message);
+          if (error instanceof ReadAbortedError) throw error;
+          console.log("DOCX extraction failed:", error);
+        }
       }
       // Fallback: try as plain text
       const text = extractLikelyText(buffer);
@@ -144,6 +204,94 @@ export async function extractTextFromBuffer(
 }
 
 /**
+ * The free checker's reader (/api/check/extract). Same extractors as the
+ * Forge, plus the one fact the checker reports: whether the file carries real
+ * text a hiring system can read ("text"), or had to be read as a picture
+ * ("picture": a scan, a photo, or a PDF made of images). Never logs the file
+ * name.
+ *
+ * The file's bytes decide everything (lib/check-file-guard.ts, security review
+ * 3a r1, M3): its kind comes from its magic bytes, never its name or declared
+ * type; a Word file must be small once unpacked, proven before mammoth opens
+ * it; a photo must say its size and be under the pixel cap; a PDF is capped by
+ * pages, text and OCR pages. checkFileKind (name and type) is kept only so the
+ * page can say early which files it takes; it decides nothing here.
+ */
+export type CheckFileKind = "pdf" | "word" | "image" | "text";
+
+export function checkFileKind(fileName: string, mimeType: string): CheckFileKind | null {
+  const name = fileName.toLowerCase();
+  if (mimeType === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === "application/msword" ||
+    /\.docx?$/.test(name)
+  ) return "word";
+  if (mimeType.startsWith("image/") || /\.(png|jpe?g|heic|heif|webp|bmp|gif|tiff?)$/.test(name)) return "image";
+  if (mimeType === "text/plain" || mimeType === "application/rtf" || mimeType === "text/rtf" || /\.(txt|rtf)$/.test(name)) return "text";
+  return null;
+}
+
+/** Most text the checker reads out of one file (more than any resume). */
+export const CHECK_MAX_TEXT_CHARS = 50_000;
+
+export async function extractTextForCheck(
+  buffer: Buffer,
+  _declaredKind?: CheckFileKind,
+  _declaredType?: string
+): Promise<{ text: string; read: "text" | "picture" }> {
+  const guard = await import("./check-file-guard");
+  const kind = guard.sniffKind(buffer);
+  if (!kind) {
+    throw new guard.CheckFileRefused("unknown_kind", "Use a PDF, a Word file, a text file, or a photo of your resume.");
+  }
+  if (kind === "pdf") {
+    try {
+      assertSafePdf(buffer);
+      scannedSafe.add(buffer); // the reads below do not scan it again (F8)
+    } catch (e) {
+      if (e instanceof UnsafeUploadError) throw new guard.CheckFileRefused("too_big_inside", e.message);
+      throw e;
+    }
+    try {
+      const text = await extractFromPDF(buffer, { maxPages: guard.CHECK_PDF_MAX_PAGES, maxChars: CHECK_MAX_TEXT_CHARS });
+      if (hasMeaningfulText(text)) return { text, read: "text" };
+    } catch (e) {
+      if (e instanceof PdfTooLongError) {
+        throw new guard.CheckFileRefused("too_many_pages", "That file has more pages than a resume. Check the resume on its own.");
+      }
+      if (e instanceof ReadAbortedError) throw e;
+      // No text layer: read it as a picture below.
+    }
+    return { text: await extractFromPDFWithOCR(buffer, guard.CHECK_PDF_OCR_PAGES), read: "picture" };
+  }
+  if (kind === "word") {
+    let text: string;
+    try {
+      text = await extractFromDOCX(buffer);
+    } catch (e) {
+      if (e instanceof UnsafeUploadError) {
+        throw new guard.CheckFileRefused(e.reason === "zip_too_big" ? "too_big_inside" : "bad_zip", e.message);
+      }
+      throw e;
+    }
+    if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
+    throw new UnreadableDocumentError("We couldn't read text from that file.");
+  }
+  if (kind === "doc") {
+    // An old Word file: only the plain text inside it, bounded by the upload cap.
+    const text = extractLikelyText(buffer);
+    if (text.trim().length > MIN_EXTRACTED_CHARS) return { text, read: "text" };
+    throw new UnreadableDocumentError("We couldn't read text from that file.");
+  }
+  if (kind === "text") {
+    return { text: extractLikelyText(buffer), read: "text" };
+  }
+  guard.assertSmallImage(buffer, kind);
+  return { text: await extractFromImageBuffer(buffer, `image/${kind}`), read: "picture" };
+}
+
+/**
  * DOM/runtime polyfills so pdfjs text extraction works in the Node/serverless
  * runtime. pdfjs expects browser globals (DOMMatrix, Path2D, ImageData) and
  * Promise.withResolvers -- the last of which is missing on Node < 22 (local dev
@@ -176,13 +324,49 @@ function ensurePdfjsPolyfills() {
   }
 }
 
-async function extractFromPDF(buffer: Buffer): Promise<string> {
-  if (buffer.length === 0) throw new Error("PDF file is empty");
-  ensurePdfjsPolyfills();
+/** The free checker's limits on a PDF (the Forge's own reads pass none). */
+interface PdfLimits {
+  /** Refuse a PDF with more pages than this, before reading any. */
+  maxPages?: number;
+  /** Stop reading once this much text is in hand. */
+  maxChars?: number;
+}
 
-  // Use pdfjs legacy directly (zero new dep -- pdfjs-dist is already installed).
-  // The pdf-parse v2 wrapper runs pdfjs through a path that trips over missing
-  // DOM globals in serverless and 500s on every text PDF.
+export class PdfTooLongError extends Error {
+  constructor() {
+    super("PDF has more pages than the limit");
+    this.name = "PdfTooLongError";
+  }
+}
+
+async function extractFromPDF(buffer: Buffer, limits: PdfLimits = {}): Promise<string> {
+  if (buffer.length === 0) throw new Error("PDF file is empty");
+  assertPdfSafe(buffer);
+  let out: string;
+  if (inThread()) {
+    out = await extractFromPDFInThread(buffer, limits);
+  } else {
+    try {
+      out = await extractInWorker("pdf", buffer, {
+        budgetMs: PDF_TEXT_BUDGET_MS,
+        maxPages: limits.maxPages,
+        maxChars: limits.maxChars,
+      });
+    } catch (e) {
+      if (e instanceof ExtractPdfTooLong) throw new PdfTooLongError();
+      if (e instanceof ExtractAborted) throw new ReadAbortedError();
+      throw e;
+    }
+  }
+  const text = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (!text) throw new Error("PDF contains no extractable text");
+  console.log(`PDF: ${text.length} chars`);
+  return text;
+}
+
+/** The same read in this thread (FORGE_EXTRACT_IN_THREAD=1 only). Keeps pdf.js traced into the build. */
+async function extractFromPDFInThread(buffer: Buffer, limits: PdfLimits): Promise<string> {
+  ensurePdfjsPolyfills();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
@@ -190,10 +374,14 @@ async function extractFromPDF(buffer: Buffer): Promise<string> {
     isEvalSupported: false,
     disableFontFace: true,
   }).promise;
-
   const numPages = doc.numPages;
+  if (limits.maxPages !== undefined && numPages > limits.maxPages) {
+    await doc.destroy();
+    throw new PdfTooLongError();
+  }
   let out = "";
   for (let i = 1; i <= numPages; i++) {
+    if (limits.maxChars !== undefined && out.length > limits.maxChars) break;
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
     for (const item of tc.items as any[]) {
@@ -204,22 +392,19 @@ async function extractFromPDF(buffer: Buffer): Promise<string> {
     page.cleanup();
   }
   await doc.destroy();
-
-  const text = out.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  if (!text) throw new Error("PDF contains no extractable text");
-
-  console.log(`PDF: ${text.length} chars, ${numPages} pages`);
-  return text;
+  return out;
 }
 
-async function extractFromPDFWithOCR(buffer: Buffer): Promise<string> {
+async function extractFromPDFWithOCR(buffer: Buffer, ocrPages: number = MAX_PDF_OCR_PAGES): Promise<string> {
+  // The renderer decodes images and page boxes too: same check, every caller.
+  assertPdfSafe(buffer);
   try {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
 
     try {
       const rendered = await parser.getScreenshot({
-        first: MAX_PDF_OCR_PAGES,
+        first: ocrPages,
         scale: 2,
         imageBuffer: true,
         imageDataUrl: false,
@@ -260,16 +445,27 @@ async function extractFromPDFWithOCR(buffer: Buffer): Promise<string> {
 async function extractFromDOCX(buffer: Buffer): Promise<string> {
   if (buffer.length === 0) throw new Error("Word document is empty");
 
-  const mammoth = await import("mammoth");
-  const result = await mammoth.extractRawText({
-    buffer,
-  });
+  // mammoth never sees the upload: only a new zip of its checked text parts
+  // (lib/upload-safety.ts). Throws UnsafeUploadError when the file fails.
+  const safe = safeDocxForMammoth(buffer).zip;
+  let value: string;
+  if (inThread()) {
+    const mammoth = await import("mammoth");
+    value = (await mammoth.extractRawText({ buffer: safe })).value;
+  } else {
+    try {
+      value = await extractInWorker("docx", safe, { budgetMs: DOCX_TEXT_BUDGET_MS });
+    } catch (e) {
+      if (e instanceof ExtractAborted) throw new ReadAbortedError();
+      throw e;
+    }
+  }
 
-  if (!result.value?.trim())
+  if (!value?.trim())
     throw new Error("Word document contains no extractable text");
 
-  console.log(`DOCX: ${result.value.length} chars`);
-  return result.value;
+  console.log(`DOCX: ${value.length} chars`);
+  return value;
 }
 
 async function extractFromImageBuffer(

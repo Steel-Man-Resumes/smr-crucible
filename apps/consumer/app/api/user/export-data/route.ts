@@ -9,6 +9,7 @@
  *   career_paths, forge_output)
  * - forge_session content (all sessions ever linked to this user)
  * - refinery_artifact rows (resumes, cover letters, disclosure plans, etc.)
+ * - career lanes (name, target, format and length settings)
  * - job_application rows (the tracker pipeline)
  * - coach_conversation messages (full AI coach transcript)
  * - consent event history (current state per layer, from consumer_consent)
@@ -62,7 +63,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
       ),
       queryAsUser(userId, 
         `SELECT id, artifact_type, target_context, content, iteration_number,
-                scaffold_level, created_at, updated_at
+                scaffold_level, lane_id, is_demo, created_at, updated_at
            FROM refinery_artifact
           WHERE user_id = $1
           ORDER BY created_at DESC`,
@@ -214,6 +215,23 @@ export async function POST(req: Request) {
       payload.consumerProfile = consumerProfileRows;
       payload.forgeSessions = forgeSessionRows;
       payload.refineryArtifacts = refineryArtifactRows;
+      // Career lanes (073), archived ones included: they are the person's too.
+      // Everything a lane holds, including the person's own answers about
+      // their history (the two hybrid conditions).
+      payload.careerLanes = (await listLanes(userId, { includeArchived: true })).map((l) => ({
+        id: l.id,
+        name: l.name,
+        target_role: l.target_role,
+        format: l.format,
+        hybrid_uneven_history: l.hybrid_uneven_history,
+        hybrid_field_change: l.hybrid_field_change,
+        length_pref: l.length_pref,
+        first_lane_from_forge: l.is_first === true,
+        created_at: l.created_at,
+        updated_at: l.updated_at,
+        archived_at: l.archived_at,
+      }));
+      payload.laneToolNotesDismissed = await listDismissedIntros(userId);
     }
     if (want("applications")) payload.jobApplications = jobApplicationRows;
     if (want("chat")) payload.coachConversation = coachConversationRows;

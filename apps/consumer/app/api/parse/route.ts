@@ -258,4 +258,4 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "parse" });
+export const POST = withRateLimit(handlePost, { mode: "forge", endpoint: "parse" });

@@ -119,3 +119,30 @@ export async function sendSignInLinkEmail(params: {
     throw new Error("Resend error: " + res.status + " " + (await res.text()).slice(0, 300));
   }
 }
+
+/**
+ * LOGIN CSRF (security review 3a r1, M1). The callback signs in on arrival, so
+ * a page anywhere could send a person's browser to an attacker's own email
+ * link and sign them in to the attacker's account; everything they then typed
+ * into the Forge would go there. Only our own "Finish signing in" button
+ * (a same-origin navigation) may reach the callback. Any other GET of it (from
+ * another site, a typed or pasted address, a mail scanner, a sibling host) is
+ * sent to that button page with the same token, email and callbackUrl, which
+ * names the address being signed in to.
+ */
+export function emailCallbackNeedsButton(path: string, method: string, secFetchSite: string | null): boolean {
+  if (path !== EMAIL_CALLBACK_PATH) return false;
+  // Round 2: every method but a same-origin GET. A cross-site POST is a
+  // top-level navigation too (an auto-submitting form), and Auth.js reads the
+  // token from the query on POST as well. All of them go to the button page
+  // (303, so the browser follows with a GET).
+  return !(method.toUpperCase() === "GET" && secFetchSite === "same-origin");
+}
+
+/** "morgan@example.com" -> "m***@example.com", for the button page. */
+export function maskEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const at = email.lastIndexOf("@");
+  if (at < 1) return null;
+  return `${email[0]}***${email.slice(at)}`;
+}

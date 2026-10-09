@@ -269,6 +269,9 @@ export default function VaultDocumentsPage() {
         certificates, reference letters, records, and notes. It is yours for life, encrypted, and
         private to your account. Only you can open it. Nothing here is ever shared without your say.
       </p>
+      <p className="text-xs text-t-phos-dim mt-2" data-testid="vault-lanes-note">
+        One Vault for every lane. Your proof is the same whatever job you aim at.
+      </p>
       <div className="mt-3 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-phos-dim">
         <span className="font-semibold text-t-phos">This is not a password keeper.</span> Do not put
         passwords, your Social Security card, or bank logins here. Keep those somewhere built for
