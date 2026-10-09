@@ -53,3 +53,14 @@ test("R17 F2: a future or offer frame on a job line is not a job they held", () 
   }
   assert.ok(!titled(PAGE24, C + "Shift Lead - Kroger - 2024"), "control: an honest dated line clears");
 });
+
+test("R17 sanity: honest reads kept (compact pastes, 'starting pay', Incoming Freight, Professional Background)", () => {
+  const compact = C + "Cashier | Kroger | 2016 - 2019\nran the register\nSupervisor: Mike Jones\n(419) 555-0199\nStocker | Meijer | 2014 - 2016\nstocked shelves\nShift Lead | Kroger | 2019 - 2023\nopened the store\nlocked up\nordered stock\nran the schedule";
+  assert.ok(!titled("SHIFT LEAD | Kroger | Toledo, OH | 2019 - 2023", compact), "a header four lines after a supervisor line is read");
+  assert.ok(!titled("CASHIER | Kroger | Toledo, OH | 2016 - 2019", C + "Cashier | Kroger | 2016 - 2019 | starting pay $9"), "starting pay");
+  assert.ok(!titled("CASHIER | Kroger | Toledo, OH | 2016 - 2019", C + "I was a cashier at Kroger from 2016 to 2019, starting at $9."), "starting at $9");
+  assert.ok(!titled("DRIVER | Incoming Freight | 2018 - 2021", C + "Driver | Incoming Freight LLC | 2018 - 2021"), "Incoming Freight");
+  assert.ok(!titled(EARLY, "Sam Ortiz\nCONTACT\n419-555-0177\n\nPROFESSIONAL BACKGROUND\nShift Lead | Kroger | 2016 - 2019\nopened the store"), "Professional Background heading");
+  // Still held: a dated reference line right after the supervisor label.
+  assert.ok(titled(EARLY, `${CASHIER_UP}Supervisor:\nShift Lead - Kroger - Mike Jones - 2016 - 2019`), "dashed reference inside the block");
+});
