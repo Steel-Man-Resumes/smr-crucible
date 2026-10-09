@@ -151,6 +151,17 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
       if ((e as { code?: string })?.code !== "42P01") throw e;
     });
+    // Mini Forge plans this person loaded: expired and emptied, so a deleted
+    // plan can never be loaded again, into any account (security review 3a
+    // Part 2 r3, R3-1). Runs for data-only and account deletion alike, and
+    // before the account row goes (that would set imported_by to NULL).
+    // Before 078 the column is missing (42703) and there is nothing to mark.
+    {
+      const { expireImportedPlans } = await import("@/lib/tablet-session");
+      await expireImportedPlans(userId).catch((e) => {
+        if ((e as { code?: string })?.code !== "42703") throw e;
+      });
+    }
     // Which finished resumes were already emailed (078, hashes only). Without
     // them a resume finished after this delete is emailed again, as it should be.
     await queryAsUser(userId, "DELETE FROM forge_package_email_sent WHERE user_id = $1", [userId]).catch((e) => {

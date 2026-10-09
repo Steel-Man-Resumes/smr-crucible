@@ -24,6 +24,7 @@ import { sessionPending } from "@/lib/session-policy";
 import {
   getTabletSessionForImport,
   markImported,
+  markImportSaved,
   recordPinFailure,
   tabletColumnsMissing,
   TABLET_COOKIE,
@@ -82,8 +83,9 @@ async function before078Friendly<T>(write: () => Promise<T>): Promise<T> {
   }
 }
 
-export default async function ImportConfirmPage(props: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await props.searchParams;
+export default async function ImportConfirmPage(props: { searchParams: Promise<{ error?: string; ask?: string }> }) {
+  const { error, ask } = await props.searchParams;
+  const askReplace = ask === "replace";
   const person = await signedInPerson();
   const tabletId = canonicalTabletId((await cookies()).get(TABLET_COOKIE)?.value);
   if (!tabletId) redirect("/dashboard");
@@ -136,11 +138,19 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
       redirect("/mini-forge/import-confirm?error=wrong_pin");
     }
 
-    // Single use: claim the import first (atomic), then save. If the save
-    // throws, the claim is given back and the cookie stays, so the person
-    // can try again; if this request dies between the two, the same account
-    // finishes it next time (markImported lets its own claim through).
-    if (!(await before078Friendly(() => markImported(tablet.id, me.id)))) {
+    // This account already loaded this plan, and it was saved: loading it
+    // again would replace whatever they changed since. Ask first; keeping
+    // their changes is the default (security review 3a Part 2 r3, I3).
+    const reload = tablet.imported_by === me.id && !!tablet.import_saved_at;
+    if (reload && formData.get("replace") !== "yes") redirect("/mini-forge/import-confirm?ask=replace");
+
+    // Single use: claim the import first (atomic), then save, then mark it
+    // saved (final). If the save throws, a FRESH claim is given back and the
+    // cookie stays, so the person can try again; a claim that existed before
+    // this request is never given back (r3, R3-1). If this request dies
+    // between the claim and the save, the same account finishes it next time.
+    const claim = await before078Friendly(() => markImported(tablet.id, me.id));
+    if (!claim) {
       await clearTabletCookie();
       redirect("/mini-forge/import-confirm?error=imported");
     }
@@ -156,9 +166,10 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
         startedAt: toIsoTimestamp(tablet.created_at),
       });
     } catch (e) {
-      await unmarkImported(tablet.id, me.id).catch(() => {});
+      if (claim.fresh) await unmarkImported(tablet.id, me.id).catch(() => {});
       throw e;
     }
+    await before078Friendly(() => markImportSaved(tablet.id, me.id));
     await clearTabletCookie();
     redirect("/dashboard?welcome=mini-forge");
   }
@@ -185,11 +196,15 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
 
   return (
     <div className="py-4">
-      <h1 className="mb-2 text-2xl font-semibold text-foreground">Is this your Mini Forge plan?</h1>
-      <p className="mb-6 text-muted">
-        {person.email
-          ? `You're signed in as ${person.email}. Enter the PIN you made on the tablet, and we'll load your plan into this account.`
-          : "Enter the PIN you made on the tablet, and we'll load your plan into this account."}
+      <h1 className="mb-2 text-2xl font-semibold text-foreground">
+        {askReplace ? "Load the tablet plan again? This replaces your changes." : "Is this your Mini Forge plan?"}
+      </h1>
+      <p className="mb-6 text-muted" data-testid={askReplace ? "mf-replace-ask" : undefined}>
+        {askReplace
+          ? "This plan is already in your account, and you may have changed it since. Enter your PIN again to put the tablet plan back, or keep your changes."
+          : person.email
+            ? `You're signed in as ${person.email}. Enter the PIN you made on the tablet, and we'll load your plan into this account.`
+            : "Enter the PIN you made on the tablet, and we'll load your plan into this account."}
       </p>
 
       {error && messages[error] && (
@@ -199,6 +214,7 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
       )}
 
       <form action={confirm} className="space-y-5">
+        {askReplace && <input type="hidden" name="replace" value="yes" />}
         <div>
           <label htmlFor="pin" className="mb-2 block text-sm font-medium text-foreground">
             Your 4-digit PIN
@@ -220,13 +236,13 @@ export default async function ImportConfirmPage(props: { searchParams: Promise<{
           type="submit"
           className="min-h-touch w-full rounded-lg bg-accent px-6 py-4 text-lg font-semibold text-white transition-opacity hover:opacity-90"
         >
-          Load my plan
+          {askReplace ? "Load it again" : "Load my plan"}
         </button>
       </form>
 
       <form action={notMine} className="mt-4">
         <button type="submit" className="min-h-touch w-full rounded-lg border border-border px-6 py-3 text-base text-foreground">
-          This isn&apos;t my plan
+          {askReplace ? "Keep my changes" : "This isn't my plan"}
         </button>
       </form>
 

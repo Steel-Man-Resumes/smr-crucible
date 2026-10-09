@@ -47,6 +47,8 @@ export interface TabletSession {
   locked_at?: Date | null;
   imported_at?: Date | null;
   imported_by?: string | null;
+  /** Set once the plan was saved into imported_by's account (r3, R3-1). */
+  import_saved_at?: Date | null;
   unlocked_at?: Date | null;
   unlocked_by?: string | null;
 }
@@ -179,26 +181,57 @@ export async function recordPinFailure(id: string, lockAfter: number): Promise<{
 /**
  * Single use: mark the plan imported into this account. Atomic, so two
  * accounts can never both win. The SAME account may claim again, to finish
- * its own import that was cut off between the claim and the save (security
- * review 3a Part 2 r2, N2); the save is an upsert, so finishing twice is
- * harmless. Returns false when another account holds it.
+ * its own import that was cut off between the claim and the save (review r2,
+ * N2), or to load the plan again on purpose (r3, I3; the page asks first).
+ * Returns null when another account holds it, otherwise whether the claim is
+ * FRESH (created from nothing by this call). Only a fresh claim may be given
+ * back if the save fails.
  */
-export async function markImported(id: string, userId: string): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE tablet_session SET imported_at = now(), imported_by = $2
-      WHERE id = $1 AND (imported_at IS NULL OR imported_by = $2)
-      RETURNING id`,
+export async function markImported(id: string, userId: string): Promise<{ fresh: boolean } | null> {
+  const rows = await query<{ fresh: boolean }>(
+    `WITH prev AS (SELECT id, imported_at FROM tablet_session WHERE id = $1 FOR UPDATE)
+     UPDATE tablet_session t
+        SET imported_at = COALESCE(t.imported_at, now()), imported_by = $2
+       FROM prev
+      WHERE t.id = prev.id AND (t.imported_at IS NULL OR t.imported_by = $2)
+      RETURNING (prev.imported_at IS NULL) AS fresh`,
     [id, userId]
   );
-  return rows.length > 0;
+  return rows[0] ? { fresh: rows[0].fresh === true } : null;
 }
 
-/** Undo markImported when the save itself failed, so the person can try again. */
+/** The plan is now saved into the importer's account: the claim is final (r3, R3-1). */
+export async function markImportSaved(id: string, userId: string): Promise<void> {
+  await query(`UPDATE tablet_session SET import_saved_at = now() WHERE id = $1 AND imported_by = $2`, [id, userId]);
+}
+
+/**
+ * Undo a FRESH markImported when its save failed, so the person can try
+ * again. Never touches a claim whose plan was saved (import_saved_at), and
+ * only the importer's own.
+ */
 export async function unmarkImported(id: string, userId: string): Promise<void> {
   await query(
-    `UPDATE tablet_session SET imported_at = NULL, imported_by = NULL WHERE id = $1 AND imported_by = $2`,
+    `UPDATE tablet_session SET imported_at = NULL, imported_by = NULL
+      WHERE id = $1 AND imported_by = $2 AND import_saved_at IS NULL`,
     [id, userId]
   );
+}
+
+/**
+ * "Delete my data" and account deletion: every plan this person imported is
+ * expired and emptied, so it can never be loaded again, by anyone (r3,
+ * R3-1). The purge job then removes the rows.
+ */
+export async function expireImportedPlans(userId: string): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `UPDATE tablet_session
+        SET expires_at = now(), forge_output = NULL, forge_intake = '{}'::jsonb
+      WHERE imported_by = $1
+      RETURNING id`,
+    [userId]
+  );
+  return rows.length;
 }
 
 /** How old an import claim with nothing saved must be before an admin may release it. */
@@ -209,7 +242,9 @@ export const STUCK_CLAIM_MINUTES = 15;
  * lock, records who did it and when (unlocked_at, unlocked_by), and releases
  * an import claim that is older than STUCK_CLAIM_MINUTES with no plan saved
  * under it (security review 3a Part 2 r2, N2): a claim whose save never ran.
- * A finished import (its forge_session row exists) is never released.
+ * A finished import is never released: not when import_saved_at is set (r3,
+ * R3-1), not when its forge_session row exists, and not when the importer's
+ * account is gone (imported_by NULL).
  */
 export async function clearPinLock(
   importCode: string,
@@ -219,6 +254,8 @@ export async function clearPinLock(
     `WITH target AS (
        SELECT t.id,
               (t.imported_at IS NOT NULL
+               AND t.imported_by IS NOT NULL
+               AND t.import_saved_at IS NULL
                AND t.imported_at < now() - make_interval(mins => $3::int)
                AND NOT EXISTS (SELECT 1 FROM forge_session fs WHERE fs.session_id = 'mini-forge-' || t.id::text)) AS stuck
          FROM tablet_session t

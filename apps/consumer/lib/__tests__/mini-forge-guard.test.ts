@@ -105,7 +105,7 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
     assert.equal(planStateBlock(claimed, { needReady: true, me: "u2" }), "imported");
     assert.equal(planStateBlock(claimed, { needReady: true, me: null }), "imported", "signed out: not yours to finish");
     const lib = code(read("lib", "tablet-session.ts"));
-    assert.match(lib, /WHERE id = \$1 AND \(imported_at IS NULL OR imported_by = \$2\)/);
+    assert.match(lib, /WHERE t\.id = prev\.id AND \(t\.imported_at IS NULL OR t\.imported_by = \$2\)/);
   });
 
   it("before 078 (no lock columns on the row): 'unavailable', never an error (r2 deploy order)", () => {
@@ -161,9 +161,42 @@ describe("answers never depend on the PIN (L3) and a plan loads once (L4)", () =
   it("the database helpers: canonical reads, an atomic single-use mark, a lock at the limit", () => {
     const lib = code(read("lib", "tablet-session.ts"));
     assert.match(lib, /if \(!canonicalTabletId\(id\)\) return null;/);
-    assert.match(lib, /WHERE id = \$1 AND \(imported_at IS NULL OR imported_by = \$2\)\s+RETURNING id/);
+    assert.match(lib, /WHERE t\.id = prev\.id AND \(t\.imported_at IS NULL OR t\.imported_by = \$2\)\s+RETURNING/);
     assert.match(lib, /locked_at = CASE WHEN pin_failures \+ 1 >= \$2/);
     assert.doesNotMatch(lib, /export async function getTabletSessionByCode\(/, "the PIN-first lookup is gone");
+  });
+
+  it("r3 R3-1: a saved import is final; release and give-back run only before the save", () => {
+    const lib = code(read("lib", "tablet-session.ts"));
+    assert.match(lib, /SET import_saved_at = now\(\) WHERE id = \$1 AND imported_by = \$2/);
+    assert.match(lib, /WHERE id = \$1 AND imported_by = \$2 AND import_saved_at IS NULL/, "give-back");
+    assert.match(lib, /AND t\.imported_by IS NOT NULL\s+AND t\.import_saved_at IS NULL/, "admin release");
+    assert.match(lib, /RETURNING \(prev\.imported_at IS NULL\) AS fresh/, "markImported says whether its claim is fresh");
+    const page = code(read("app", "(mini-forge)", "mini-forge", "import-confirm", "page.tsx"));
+    assert.match(page, /if \(claim\.fresh\) await unmarkImported\(tablet\.id, me\.id\)/);
+    const saveAt = page.indexOf("saveForgeSession(");
+    const finalAt = page.indexOf("markImportSaved(tablet.id, me.id)");
+    assert.ok(saveAt > 0 && finalAt > saveAt, "marked saved right after the save");
+  });
+
+  it("r3 R3-1: deleting data or the account expires and empties the plans that person loaded", () => {
+    const lib = code(read("lib", "tablet-session.ts"));
+    assert.match(lib, /SET expires_at = now\(\), forge_output = NULL, forge_intake = '\{\}'::jsonb\s+WHERE imported_by = \$1/);
+    const del = code(read("app", "api", "user", "delete-data", "route.ts"));
+    const expireAt = del.indexOf("expireImportedPlans(userId)");
+    const accountAt = del.indexOf('DELETE FROM users WHERE id = $1');
+    assert.ok(expireAt > 0 && expireAt < accountAt, "before the account row goes (imported_by would turn NULL)");
+  });
+
+  it("r3 I3: loading a saved plan again asks first, and keeping the changes is the default", () => {
+    const page = code(read("app", "(mini-forge)", "mini-forge", "import-confirm", "page.tsx"));
+    assert.match(page, /const reload = tablet\.imported_by === me\.id && !!tablet\.import_saved_at;/);
+    assert.match(page, /if \(reload && formData\.get\("replace"\) !== "yes"\) redirect\("\/mini-forge\/import-confirm\?ask=replace"\)/);
+    const askAt = page.indexOf('redirect("/mini-forge/import-confirm?ask=replace")');
+    assert.ok(askAt < page.indexOf("markImported(tablet.id, me.id)"), "asked before anything is claimed or saved");
+    assert.match(page, /Load the tablet plan again\? This replaces your changes\./);
+    assert.match(page, /\{askReplace && <input type="hidden" name="replace" value="yes" \/>\}/);
+    assert.match(page, /askReplace \? "Keep my changes"/);
   });
 
   it("an admin can clear a lock; nobody else", () => {

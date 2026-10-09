@@ -55,6 +55,7 @@
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS locked_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS imported_by;
+--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS import_saved_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS unlocked_at;
 --   ALTER TABLE tablet_session DROP COLUMN IF EXISTS unlocked_by;
 --   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;
@@ -339,10 +340,14 @@ END $$;
 -- admin clears it; unlocked_at / unlocked_by record who did that, and when.
 -- imported_at / imported_by mark the one account a plan was loaded into;
 -- after that it never loads into another (the same account may finish its
--- own interrupted import). Old code ignores all six.
+-- own interrupted import). import_saved_at is set the moment the plan was
+-- actually saved into that account: from then on the claim is never released
+-- or given back, by anyone, for any reason (security review 3a Part 2 r3,
+-- R3-1). Old code ignores all seven.
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS pin_failures INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS imported_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS import_saved_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ;
 ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS unlocked_by UUID REFERENCES users(id) ON DELETE SET NULL;

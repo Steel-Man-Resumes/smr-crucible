@@ -148,7 +148,8 @@ describe("078 parts 3 and 4 (security review 3a Part 2 r1: M2, M1, L4)", () => {
     for (const c of ["pin_failures INTEGER NOT NULL DEFAULT 0", "locked_at TIMESTAMPTZ", "imported_at TIMESTAMPTZ", "imported_by UUID REFERENCES users\\(id\\) ON DELETE SET NULL"]) {
       assert.match(sql, new RegExp(`ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS ${c}`));
     }
-    for (const c of ["pin_failures", "locked_at", "imported_at", "imported_by", "unlocked_at", "unlocked_by"]) {
+    assert.match(sql, /ALTER TABLE tablet_session ADD COLUMN IF NOT EXISTS import_saved_at TIMESTAMPTZ;/, "r3 R3-1");
+    for (const c of ["pin_failures", "locked_at", "imported_at", "imported_by", "import_saved_at", "unlocked_at", "unlocked_by"]) {
       assert.match(sql, new RegExp(`^--   ALTER TABLE tablet_session DROP COLUMN IF EXISTS ${c};$`, "m"));
     }
     assert.match(sql, /^--   ALTER TABLE users DROP COLUMN IF EXISTS email_proof_source;$/m);
