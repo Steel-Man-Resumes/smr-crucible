@@ -202,8 +202,16 @@ export function picksFromReply(state: string, reply: string | null): { picks: Pi
 
 // ------------------------------------------------------------ rendering --
 
-function fill(text: string, slots: { state: string; job: string; source?: string }): string {
-  return text.replace(/\{state\}/g, slots.state).replace(/\{job\}/g, slots.job).replace(/\{source\}/g, slots.source ?? "");
+/**
+ * Fill a bank line's slots. Function replacers, so "$&", "$`" or "$'" in a
+ * value is taken literally; {job} last, so a typed job containing "{source}"
+ * or "{state}" is never expanded (security r2 N3).
+ */
+export function fill(text: string, slots: { state: string; job: string; source?: string }): string {
+  return text
+    .replace(/\{state\}/g, () => slots.state)
+    .replace(/\{source\}/g, () => slots.source ?? "")
+    .replace(/\{job\}/g, () => slots.job);
 }
 
 /** Build every line from the banks and the list. Ids no longer showable
@@ -339,7 +347,7 @@ function isSameOriginRead(headers: Headers): boolean {
 async function gate(
   req: Request,
   deps: RecordCheckDeps,
-  { needConsent, write }: { needConsent: boolean; write: boolean }
+  { needConsent, write, tier = true }: { needConsent: boolean; write: boolean; tier?: boolean }
 ): Promise<{ userId: string } | { res: Response }> {
   if (write ? !isSameOriginJsonPost(req.headers) : !isSameOriginRead(req.headers)) {
     return { res: json({ error: "Forbidden", code: "not_same_origin" }, 403) };
@@ -349,7 +357,9 @@ async function gate(
   if (await deps.actingForSomeoneElse()) {
     return { res: json({ error: RECORD_CHECK_COPY.staffBlocked, code: "staff_cannot_consent" }, 403) };
   }
-  if (!(await deps.tierAllowed(userId))) {
+  // Withdrawing (revoke, delete, reading what is saved in order to delete it)
+  // never depends on a tier (security r2 N2). Only using the step does.
+  if (tier && !(await deps.tierAllowed(userId))) {
     return { res: json({ error: "This tool requires a higher access tier." }, 403) };
   }
   if (needConsent && !(await hasCurrentConsent(deps, userId))) return { res: consentNeeded() };
@@ -431,7 +441,7 @@ export async function handleConsentGet(req: Request, deps: RecordCheckDeps): Pro
   const userId = await deps.userId();
   if (!userId) return json({ error: "Please sign in to use this feature." }, 401);
   const staff = await deps.actingForSomeoneElse();
-  if (!(await deps.tierAllowed(userId))) return json({ error: "This tool requires a higher access tier." }, 403);
+  // No tier check: a person must always be able to see their yes to take it back.
   const c = await deps.consentStatus(userId);
   return json({
     granted: c.granted && c.version === RECORD_CHECK_CONSENT_VERSION,
@@ -458,7 +468,7 @@ export async function handleConsentPost(req: Request, deps: RecordCheckDeps): Pr
 
 /** DELETE /api/record-check/consent: take back the yes, delete saved checks. */
 export async function handleConsentDelete(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(req, deps, { needConsent: false, write: true });
+  const g = await gate(req, deps, { needConsent: false, write: true, tier: false });
   if ("res" in g) return g.res;
   const cancelled = cancelInflightBuilds(g.userId);
   try {
@@ -472,7 +482,7 @@ export async function handleConsentDelete(req: Request, deps: RecordCheckDeps): 
 
 /** GET /api/record-check/saved (list, no typed text) or ?id= (one, opened). */
 export async function handleSavedGet(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(req, deps, { needConsent: false, write: false });
+  const g = await gate(req, deps, { needConsent: false, write: false, tier: false });
   if ("res" in g) return g.res;
   const id = new URL(req.url).searchParams.get("id");
   try {
@@ -524,7 +534,7 @@ export async function handleSavedPost(req: Request, deps: RecordCheckDeps): Prom
 
 /** DELETE /api/record-check/saved?id= */
 export async function handleSavedDelete(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(req, deps, { needConsent: false, write: true });
+  const g = await gate(req, deps, { needConsent: false, write: true, tier: false });
   if ("res" in g) return g.res;
   const id = new URL(req.url).searchParams.get("id") || "";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Invalid id" }, 400);

@@ -99,11 +99,17 @@ export interface OrgScope {
  */
 export async function runAsUser<T = unknown[]>(
   userId: string,
-  build: (sql: NeonQueryFunction<false, false>) => unknown[]
+  build: (sql: NeonQueryFunction<false, false>) => unknown[],
+  // Optional, additive: a caller whose correctness rests on an isolation level
+  // names it instead of trusting the server default (D11 record check).
+  opts?: { isolationLevel?: "ReadCommitted" | "RepeatableRead" | "Serializable" }
 ): Promise<T> {
   const client = connect();
   const setup = [client`SELECT set_config('app.user_id', ${userId}, true)`];
-  const results = await client.transaction([...setup, ...build(client)] as never);
+  const queries = [...setup, ...build(client)] as never;
+  const results = opts?.isolationLevel
+    ? await client.transaction(queries, { isolationLevel: opts.isolationLevel })
+    : await client.transaction(queries);
   return (results as unknown[]).slice(setup.length) as T;
 }
 

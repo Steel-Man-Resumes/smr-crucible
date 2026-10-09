@@ -119,6 +119,26 @@ export const RECORD_CHECK_REVOKE_EVENT_SQL =
    SELECT user_id, 'record_check', 'revoked', consent_text_version, 'record_check_screen', '{}'::jsonb
      FROM consumer_consent WHERE user_id = $1 AND consent_layer = 'record_check'`;
 
+/**
+ * The isolation both writes run under, named rather than assumed (security r2
+ * N6). The revoke/save race closure needs READ COMMITTED: under it, a save's
+ * FOR SHARE re-reads the consent row after a concurrent revoke commits (and
+ * writes nothing), and the revoke's DELETE, which starts after its UPDATE
+ * waited, sees a save that committed first. REPEATABLE READ or SERIALIZABLE
+ * would turn those waits into errors instead.
+ */
+export const RECORD_CHECK_TX = { isolationLevel: "ReadCommitted" } as const;
+
+/** Run one statement as the owner, in a READ COMMITTED transaction. */
+async function writeAsOwner<T>(userId: string, sql: string, params: unknown[]): Promise<T[]> {
+  const out = await runAsUser<unknown[][]>(
+    userId,
+    (c) => [(c as unknown as (s: string, p?: unknown[]) => unknown)(sql, params)],
+    RECORD_CHECK_TX
+  );
+  return (out[0] ?? []) as T[];
+}
+
 /** Seal one row's fields. Pure (no DB); exported for tests. */
 export function sealRecordCheck(
   userId: string,
@@ -157,7 +177,7 @@ export async function saveRecordCheck(params: {
   if (!RECORD_CHECK_STATE_RE.test(state)) throw new Error("record check: bad state code");
   const id = randomUUID();
   const sealed = sealRecordCheck(userId, id, params.picks, params.typed);
-  const rows = await queryAsUser<{ id: string; state: string; created_at: string }>(userId, RECORD_CHECK_INSERT_SQL, [
+  const rows = await writeAsOwner<{ id: string; state: string; created_at: string }>(userId, RECORD_CHECK_INSERT_SQL, [
     id,
     userId,
     state,
@@ -212,7 +232,7 @@ export async function revokeRecordCheckConsent(userId: string): Promise<{ delete
       run(RECORD_CHECK_DELETE_ALL_SQL, [userId]),
       run(RECORD_CHECK_REVOKE_EVENT_SQL, [userId]),
     ];
-  });
+  }, RECORD_CHECK_TX);
   const revoked = (out[0] as Array<{ revoked_at: string }>)[0];
   return { deleted: (out[1] as unknown[]).length, revokedAt: String(revoked?.revoked_at ?? "") };
 }

@@ -262,19 +262,37 @@ test("staff: the real dependency treats any impersonation cookie as staff; ident
 
 // ---------------------------------------------------- tier and origin (F6, F11) --
 
-test("tier: every route needs the person's tier", async () => {
-  const w = world({}, { tier: false });
+test("tier: using the step needs the person's tier", async () => {
+  const w = world({}, { tier: false, consented: false });
   const calls = [
-    handleConsentGet(get("/api/record-check/consent"), w.deps),
     handleConsentPost(req("/api/record-check/consent", "POST", { ticked: true, textVersion: RECORD_CHECK_CONSENT_VERSION }), w.deps),
-    handleConsentDelete(req("/api/record-check/consent", "DELETE"), w.deps),
     build(w),
-    handleSavedGet(get("/api/record-check/saved"), w.deps),
     handleSavedPost(req("/api/record-check/saved", "POST", { state: "OH", sourceIds: ["oh-licensing-law"] }), w.deps),
-    handleSavedDelete(req("/api/record-check/saved?id=00000000-0000-4000-8000-000000000001", "DELETE"), w.deps),
   ];
   for (const r of await Promise.all(calls)) assert.equal(r.status, 403);
-  assert.equal(w.grants.length + w.revokes + w.modelCalls.length + w.rows.length, 0);
+  assert.equal(w.grants.length + w.modelCalls.length + w.rows.length, 0);
+});
+
+test("tier: taking back the yes, reading and deleting saved checks never depend on the tier (r2 N2)", async () => {
+  const w = world({}, { tier: false });
+  const p = plainPicks("OH");
+  w.rows.push({ id: "00000000-0000-4000-8000-0000000000e1", userId: UID, state: "OH", picks: p, typed: null, createdAt: "" });
+  w.rows.push({ id: "00000000-0000-4000-8000-0000000000e2", userId: UID, state: "OH", picks: p, typed: null, createdAt: "" });
+  const status = await handleConsentGet(get("/api/record-check/consent"), w.deps);
+  assert.equal(status.status, 200);
+  assert.equal((await status.json()).granted, true);
+  assert.equal((await handleSavedGet(get("/api/record-check/saved"), w.deps)).status, 200);
+  assert.equal((await handleSavedGet(get("/api/record-check/saved?id=00000000-0000-4000-8000-0000000000e1"), w.deps)).status, 200);
+  assert.equal((await handleSavedDelete(req("/api/record-check/saved?id=00000000-0000-4000-8000-0000000000e1", "DELETE"), w.deps)).status, 200);
+  const rev = await handleConsentDelete(req("/api/record-check/consent", "DELETE"), w.deps);
+  assert.equal(rev.status, 200);
+  assert.equal((await rev.json()).deleted, 1);
+  assert.equal(w.rows.length, 0);
+  assert.equal(w.revokes, 1);
+  // Staff and origin checks still hold on the withdrawal routes.
+  const staff = world({}, { tier: false, staff: true });
+  assert.equal((await handleConsentDelete(req("/api/record-check/consent", "DELETE"), staff.deps)).status, 403);
+  assert.equal((await handleConsentDelete(req("/api/record-check/consent", "DELETE", "{}", { "Content-Type": "text/plain" }), world({}, { tier: false }).deps)).status, 403);
 });
 
 test("origin: every write must be same-origin JSON; a form post or a sibling site is refused", async () => {
@@ -418,6 +436,20 @@ test("hostile model: a model asked to pick from another state gets nothing from 
   const { picks } = picksFromReply("WI", JSON.stringify({ source_ids: ["oh-predetermination", "wi-hiring-law"], question_ids: ["q-pre-1"] }));
   assert.ok(!picks.sourceIds.includes("oh-predetermination"));
   assert.ok(picks.sourceIds.includes("wi-hiring-law"));
+});
+
+test("slots: a typed job with {source}, {state} or $ patterns renders literally (r2 N3)", async () => {
+  const job = "teacher {source} {state} $& $` $' $$ x";
+  const w = world();
+  const c = (await (await build(w, { ...BUILD, job })).json()).checklist;
+  assert.equal(c.jobShown, job);
+  assert.equal(c.steps[0].text, `Find the licensing board for ${job} in Ohio. Look for its page about records.`);
+  const q = c.questions.find((x: { id: string }) => x.id === "q-weigh-1");
+  assert.equal(q.text, `Which parts of a record does the board look at for ${job}?`);
+  // And a source title with "$" in it would also go in literally.
+  const { fill } = await import("../record-check/handler");
+  assert.equal(fill("Is {source} the rule?", { state: "Ohio", job: "x", source: "Code $& 9" }), "Is Code $& 9 the rule?");
+  assert.equal(fill("{job} in {state}", { state: "Ohio", job: "{state}" }), "{state} in Ohio");
 });
 
 test("slot backstop: a job that reads like a verdict, a link or a statute becomes 'this work'", () => {
@@ -722,6 +754,9 @@ test("copy: the 'only if' lines say the record check is the only screen that ask
   assert.match(sec, /only screen that asks for your offense/);
   assert.match(sec, /If you type your record somewhere else, like the chat or the disclosure planner, the AI sees it there too/);
   assert.match(sec, /up to 2 years for flagged content/);
+  assert.match(sec, /every line the person sees is ours, apart from the job and any link the person typed/);
+  const log = readFileSync(join(APP, "../../CHANGELOG.md"), "utf8").replace(/\s+/g, " ");
+  assert.match(log, /written by us, apart from the job and any link the person typed themselves/);
   assert.ok(!/goes to the AI only if you choose the record check/.test(sec));
   const tr = readFileSync(join(APP, "lib/assistant-prompt.ts"), "utf8");
   assert.match(tr, /only screen that asks for your exact offense/);

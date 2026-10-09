@@ -8,7 +8,8 @@ A dated, high-level history of what shipped, built from the commit log. Product 
   they want, using their record in their own words, the state and the job. It gives a checklist of
   where to look and questions to ask the board, never a ruling, and says it is not legal advice.
 - The AI only picks items, by id, from a dated source list and a fixed question bank in the repo.
-  Every line the person sees is written by us; the AI's own words are never shown or stored. If it
+  Every line the person sees is written by us, apart from the job and any link the person typed
+  themselves; the AI's own words are never shown or stored. If it
   picks nothing usable, or takes longer than 20 seconds, the person gets a fixed plain checklist.
 - It has its own yes: a ticked box, stored with the time and wording version, that can be taken back.
   Taking it back deletes every saved checklist in the same database transaction. Staff working in

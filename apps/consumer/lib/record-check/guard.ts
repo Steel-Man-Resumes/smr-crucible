@@ -7,10 +7,12 @@
  * is never shown or stored, so there is nothing of the model's to filter or
  * redact.
  *
- * What remains here is a backstop on SLOT VALUES only: the job the person
- * typed and a source title, before either is placed into a bank line. A slot
- * value that reads like a verdict, a link or a statute becomes a neutral
- * phrase instead. And safeErrorLabel(): logs carry fixed labels, never text.
+ * What remains here is a backstop on ONE slot value: the job the person
+ * typed, before it is placed into a bank line. A job that reads like a
+ * verdict, a link or a statute becomes "this work" instead. Source titles go
+ * into the {source} slot unchecked: they come from the curated list
+ * (sources.json), and some carry a statute number on purpose. And
+ * safeErrorLabel(): logs carry fixed labels, never text.
  */
 
 /** Normalize before matching: compatibility forms, zero-width and format

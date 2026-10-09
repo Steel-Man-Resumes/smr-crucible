@@ -20,6 +20,7 @@ import {
   RECORD_CHECK_REVOKE_SQL,
   RECORD_CHECK_CONSENT_LAYER,
   RECORD_CHECK_MAX_SAVED,
+  RECORD_CHECK_TX,
   type RecordCheckPicks,
 } from "../recordCheck";
 import { consentDefaultFor } from "../consent";
@@ -84,4 +85,18 @@ test("recordCheck.ts reads and writes only as the owner; revoke is one transacti
 test("restricted grants list the saved table with no UPDATE", () => {
   const src = readFileSync(join(import.meta.dirname, "..", "..", "..", "..", "scripts", "lib", "restricted-grants.mjs"), "utf8");
   assert.match(src, /record_check_saved: \["SELECT", "INSERT", "DELETE"\]/);
+});
+
+test("isolation: save and revoke name READ COMMITTED instead of trusting the default (r2 N6)", () => {
+  assert.deepEqual(RECORD_CHECK_TX, { isolationLevel: "ReadCommitted" });
+  const src = readFileSync(join(import.meta.dirname, "..", "recordCheck.ts"), "utf8");
+  const save = src.slice(src.indexOf("export async function saveRecordCheck"), src.indexOf("export async function listRecordCheckSummaries"));
+  assert.match(save, /await writeAsOwner</, "the save insert runs through the pinned transaction");
+  assert.ok(!/queryAsUser<[^>]*>\(userId, RECORD_CHECK_INSERT_SQL/.test(save));
+  assert.match(src, /async function writeAsOwner[\s\S]*?RECORD_CHECK_TX\s*\)/);
+  const revoke = src.slice(src.indexOf("export async function revokeRecordCheckConsent"), src.indexOf("export async function exportRecordChecks"));
+  assert.match(revoke, /\}, RECORD_CHECK_TX\);/);
+  // runAsUser hands the level to the driver's transaction.
+  const db = readFileSync(join(import.meta.dirname, "..", "db.ts"), "utf8");
+  assert.match(db, /client\.transaction\(queries, \{ isolationLevel: opts\.isolationLevel \}\)/);
 });
