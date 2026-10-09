@@ -109,7 +109,12 @@ const TITLE_MODIFIER = new Set(["shift", "team", "crew", "line", "floor", "night
 
 // A role word that can be a job title ("supervisor", "shift lead"); "leadership", "managers" never are.
 const TITLE_ROLE_WORD = /^(?:manager|supervisor|director|coordinator|foreman|lead|leader)$/i;
-const TARGET_TITLE_BEFORE = /\b(?:seek|seeks|seeking|looking\s+(?:for|to)|look\s+(?:for|to)|aim(?:s|ing)?\s+(?:for|to)|toward|towards|ready\s+(?:for|to)|step(?:ping)?\s+into|move\s+into|moving\s+into|grow(?:ing)?\s+into|apply(?:ing)?\s+(?:for|to)|applied\s+for|interested\s+in|pursu(?:e|ing)|hop(?:e|ing)\s+(?:for|to)|want(?:s|ing)?\s+(?:a|an|the|to)|goal\s+(?:is|of)|next\s+step|eager\s+to|work(?:ing)?\s+toward|become|becoming|for\s+(?:a|an|the|your)\s+(?:[a-z-]+\s+){0,3}(?:opening|position|role|job))\b[^.;!?]*$/i;
+// Round 15 (R15-B2): only the title that is the direct object of a target verb is the job they want: "applying
+// for the shift lead position", "seeking a shift supervisor role", "interested in the team lead opening", "grow
+// into a team lead", "the position of shift supervisor". Anything else ("as a shift lead", "because I was the
+// shift supervisor") is a title they claim to have held.
+const AS_ROLE_BEFORE = /\bas\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,3}$/i;
+const TARGET_TITLE_BEFORE = /\b(?:seek|seeks|seeking|sought|looking\s+for|look\s+for|apply(?:ing)?\s+(?:for|to)|applied\s+(?:for|to)|interested\s+in|grow(?:ing)?\s+into|step(?:ping)?\s+into|step(?:ping)?\s+up\s+(?:as|to|into)|move\s+up\s+(?:to|into|as)|(?:be|get|getting)\s+promoted\s+to|move\s+into|moving\s+into|ready\s+for|ready\s+to\s+(?:be|become|step\s+into)|aim(?:s|ing)?\s+for|pursu(?:e|ing)|toward|towards|position\s+of|role\s+of|become|becoming|hop(?:e|ing)\s+(?:for|to\s+(?:be|become))|want(?:s|ing)?\s+to\s+(?:be|become)|looking\s+to\s+(?:be|become|grow\s+into|move\s+into|step\s+into))\s+(?:(?:a|an|the|this|that|your|a\s+new)\s+)?(?:(?!as\b|was\b|because\b|i\b)[a-z-]+\s+){0,3}$/i;
 const SOMEONE_ELSES_ROLE_BEFORE = /\b(?:my|our|his|her|their|the|your|whose)\s+(?:[a-z-]+\s+){0,2}$/i;
 
 /** The role as a job title, as written: the role word with the title words before it ("Shift supervisor"), or "Lead X". */
@@ -121,7 +126,7 @@ function titleOfHit(text: string, at: number, end: number, titleShaped: boolean)
   const before = text.slice(0, at).split(/\s+/).filter(Boolean);
   let start = at;
   let n = 0;
-  for (let k = before.length - 1; k >= 0 && n < 2; k--, n++) {
+  for (let k = before.length - 1; k >= 0 && n < 3; k--, n++) {
     const w = before[k];
     if (/[,.;:!?|]$/.test(w) || !TITLE_MODIFIER.has(w.toLowerCase().replace(/[^a-z]/g, ""))) break;
     start = text.lastIndexOf(w, start - 1);
@@ -180,58 +185,33 @@ function ownHeaderTitles(sourceText: string): string[] {
 // ("Night Shift Lead Custodian" holds "Lead custodian"), never these ("Assistant Manager" never holds "Manager").
 const RANK_WORDS = new Set(["assistant", "co", "deputy", "associate", "junior", "trainee", "training", "in", "apprentice", "interim", "acting", "vice", "sub", "under", "temporary", "temp", "provisional", "probationary", "intern", "student"]);
 
-/** Round 14 (F2): the title appears in their words at least once with no rank word before or after it. */
+/**
+ * Round 15 (R15-B1): strict titles. A title is theirs only word for word, case, punctuation and the known short
+ * forms aside (Rep, Mgr, Sup, Supv, Asst, Coord, Sr, Jr, Tech). No word added, dropped or swapped: "Store manager"
+ * is not "Shift Manager", "Manager" is not "Assistant Manager", "Retail shift lead" is not "Shift Lead". Anything
+ * else gets the one-tap title card.
+ */
 function titleSaidPlain(title: string, sourceText: string): boolean {
-  return titleForms(title).some((t) => titleSaidPlainExact(t, sourceText));
-}
-// Round 14: a department word the writer put before their title ("Retail shift lead" for "Shift Lead") is not a
-// rank; "Lead", "Head", "Senior", "Assistant" and "General" are.
-const NOT_DEPARTMENT = new Set(["lead", "head", "senior", "junior", "assistant", "general", "chief"]);
-function titleForms(title: string): string[][] {
-  const w = titleWords(title);
-  const out = [w];
-  for (let i = 1; i < w.length; i++) {
-    if (!TITLE_MODIFIER.has(w[i - 1]) || NOT_DEPARTMENT.has(w[i - 1]) || RANK_WORDS.has(w[i - 1])) break;
-    out.push(w.slice(i));
-  }
-  return out.filter((x) => x.length);
-}
-function titleSaidPlainExact(t: string[], sourceText: string): boolean {
+  const t = titleWords(title);
   if (!t.length) return false;
   for (const line of ownTitleLines(sourceText)) {
     const w = titleWords(line);
     for (let i = 0; i + t.length <= w.length; i++) {
       if (w.slice(i, i + t.length).join(" ") !== t.join(" ")) continue;
-      // A rank word before it, even past department words ("Assistant Store Manager"), or after it ("Trainee").
-      let k = i - 1;
-      while (k >= 0 && TITLE_MODIFIER.has(w[k]) && !RANK_WORDS.has(w[k])) k--;
-      const prev = w[k] ?? "";
-      let n = i + t.length;
-      while (n < w.length && TITLE_MODIFIER.has(w[n]) && !RANK_WORDS.has(w[n])) n++;
-      const next = w[n] ?? "";
-      if (RANK_WORDS.has(prev) || /^(?:trainee|in|apprentice|intern|training)$/.test(next)) continue;
+      // The whole title: no title word right before or after it ("Assistant", "Store", "Trainee", "in training").
+      const prev = w[i - 1] ?? "";
+      const next = w[i + t.length] ?? "";
+      if (TITLE_MODIFIER.has(prev) || RANK_WORDS.has(prev) || TITLE_MODIFIER.has(next) || RANK_WORDS.has(next) || /^(?:trainee|apprentice|intern|training)$/.test(next)) continue;
       return true;
     }
   }
   return false;
 }
 
-/** Round 13 (SF-3): a role on the page that is one of the person's own job titles, or part of one ("Lead custodian" for "Lead Custodian"). */
+/** A role on the page that is one of the person's own job-header titles, word for word (round 15: strict). */
 export function titleInOwnHeaders(title: string, sourceText: string): boolean {
-  return titleForms(title).some((t) => titleInOwnHeadersExact(t, sourceText));
-}
-function titleInOwnHeadersExact(t: string[], sourceText: string): boolean {
-  if (!t.length) return false;
-  const key = t.join(" ");
-  return ownHeaderTitles(sourceText).some((h) => {
-    const hw = h.split(" ");
-    for (let i = 0; i + t.length <= hw.length; i++) {
-      if (hw.slice(i, i + t.length).join(" ") !== key) continue;
-      const dropped = [...hw.slice(0, i), ...hw.slice(i + t.length)];
-      if (dropped.every((w) => !RANK_WORDS.has(w) && TITLE_MODIFIER.has(w))) return true;
-    }
-    return false;
-  });
+  const key = titleWords(title).join(" ");
+  return !!key && ownHeaderTitles(sourceText).some((h) => h === key);
 }
 
 /** True when the hit is a role ("kitchen manager", "a shift lead"), not a verb. */
@@ -471,7 +451,10 @@ export function scopeHits(line: string): ScopeHit[] {
       // Round 9: a noun only. A verb after "by / for / with / asked" is still the page's claim.
       // Round 11: a plan or a wish on the page ("I would welcome the chance to help run your store") is not a claim
       // of something done; a past-tense claim ("trained new hires") always is.
-      if (!PAST_VERB_RE.test(m[0].split(/\s+/)[0]) && PAGE_NOT_DONE_BEFORE.test(text.slice(0, m.index))) continue;
+      // Round 15 (R15-B4): "eager to bring my experience as a shift supervisor": the frame governs "bring", not the
+      // role after "as / as a / as the", which is a title they claim to have held.
+      const asRole = (isRoleUse(text, m) || (family === "lead" && /^lead$/i.test(m[0]) && TITLE_SHAPED_LEAD.test(text.slice(m.index!)))) && AS_ROLE_BEFORE.test(text.slice(0, m.index));
+      if (!asRole && !PAST_VERB_RE.test(m[0].split(/\s+/)[0]) && PAGE_NOT_DONE_BEFORE.test(text.slice(0, m.index))) continue;
       // Round 11 (SF-2): "Forklift-trained operator", "cross-trained team member": an adjective, not training people.
       if (/^trained\b/i.test(m[0]) && TRAINED_ADJ_BEFORE.test(text.slice(0, m.index))) continue;
       // Round 10: a nominal claim ("Tasked with the training of all new hires") is a claim, not someone else's.
@@ -656,6 +639,29 @@ function presentHeld(before0: string, after: string, goal: boolean, next = ""): 
   const clause = cut >= 0 ? after.slice(0, cut) : after;
   if (PRESENT_FRAME_AFTER.test(clause)) return true;
   return BARE_FRAME_NEXT.test(next);
+}
+// Round 16: words a past sentence uses for a time it already had ("when the store opened", "until 2019", "would
+// open the store"). They are lifted out before a past own-job sentence takes the same frame list.
+const PAST_TIME_WORDS = /\b(?:when|whenever|after|until|till|as\s+soon\s+as|this\s+(?:year|month|week|fall|summer|spring|winter)|or\s+so|would|(?:was|were|had)\s+once|start(?:ing|ed)?\s+(?:back\s+)?(?:in|on)\s+(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b|\bbut\s+I\s+(?:don'?t|do\s+not|didn'?t|never|just|only)\b/gi;
+/**
+ * Round 16 (R16 follow-up 1): an own-job sentence under a future, plan or condition frame is never their job
+ * ("I am the shift lead at Kroger starting Monday", "Shift lead at Kroger next year hopefully", "I'd be ... if they
+ * promote me"). `start`/`end` bound the title in `line`. A present or tenseless reading ("I am the ...", "Shift lead
+ * at Kroger") takes the round 14 present-tense test; a past reading ("I was the ...") takes the same frame list less
+ * the words a past sentence uses. An employer's own name ("Next Level Staffing") is never read as a frame.
+ */
+export function ownJobFramed(line: string, start: number, end: number, present: boolean, nextLine = ""): boolean {
+  const before = line.slice(0, start);
+  const sStart = Math.max(before.lastIndexOf(". "), before.lastIndexOf("! "), before.lastIndexOf("? ")) + 1;
+  const tail = line.slice(end);
+  const stop = tail.search(/[.!?](?:\s|$)/);
+  const sentenceEnd = stop >= 0 ? end + stop + 1 : line.length;
+  const before0 = line.slice(sStart, start);
+  const after = line.slice(end, sentenceEnd).replace(/\b[A-Z][A-Za-z0-9&'.-]*(?:\s+[A-Z][A-Za-z0-9&'.-]*)*/g, (w) => (/^I$/.test(w) ? w : " "));
+  const next = line.slice(sentenceEnd).trim() || nextLine.trim();
+  if (present) return presentHeld(before0, after, false, next);
+  const clause = `${(before0.split(/[,;]|\b(?:and|but|so)\b/).pop() as string)} ${after.split(/[,;]|\b(?:and|but|so)\b/)[0]}`;
+  return PRESENT_FRAME_AFTER.test(clause.replace(PAST_TIME_WORDS, " "));
 }
 // A line about the job they want: a present tense in it is a wish, not their work (R13-B1).
 const GOAL_PARAGRAPH_RE = /\b(?:looking\s+(?:for|to)|seeking|want(?:s|ed)?\s+(?:a|an|to|my|the)|would\s+(?:love|like)|'d\s+(?:love|like)|hop(?:e|es|ing)\s+(?:to|for|I)|dream\s+(?:job|role)|ideal\s+(?:job|role)|my\s+goals?|next\s+(?:job|role)|new\s+(?:job|role)|interested\s+in|see\s+myself|in\s+(?:\d+|five|ten|a\s+few)\s+years)\b|(?:^|[.!?:]\s+)(?:a\s+)?[A-Za-z]+\s+(?:job|role|position)\s*(?:[.!:]|$)/im;
