@@ -204,6 +204,12 @@ export interface PracticeDetails {
    */
   otherNames?: string[];
   /**
+   * Set by the server when it hands an entry out, never stored or taken from
+   * a request (facilityDictionary.withCommonWords): the words of this entry's
+   * names that are common English words. Alone, those never ask a question.
+   */
+  commonWords?: string[];
+  /**
    * Set by the server only, never from a request: earlier titles and venues
    * of an entry that names a facility. A lane that keeps the entry off keeps
    * these off too, so a rename never lets an old name through.

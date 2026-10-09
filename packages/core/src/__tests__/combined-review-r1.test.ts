@@ -18,13 +18,14 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { PracticeEntry } from "../practiceRecordShared";
+import { cleanDetails, type PracticeEntry } from "../practiceRecordShared";
 import { applyPhraseAnswer, applyTitleMode, cleanKindSettings, type CreativeKindSettings } from "../creativeLaneShared";
 import { buildCvModel, cvPlainText } from "../cvShared";
 import { getCvStatus } from "../cvChecks";
 import { exportOpenItemLines } from "../creativeChecks";
 import { buildPerformerModel, performerPlainText, performerShownIds } from "../performerShared";
 import { getPerformerStatus } from "../performerChecks";
+import { withCommonWords } from "../facilityDictionary";
 
 let n = 0;
 const id = () => `00000000-0000-4000-8000-${String(70000 + ++n).padStart(12, "0")}`;
@@ -246,5 +247,102 @@ describe("combined review LOWs on the performer page", () => {
     const t2 = structuredClone(m);
     t2.sections.find((x) => x.key === "skills")!.text = "Stage combat, Fire breathing";
     assert.ok(getPerformerStatus({ entries: [ot], settings: s, model: t2, pages: 1 }).openItems.some((x) => x.rule === "CR-08" && x.line === "Special skills" && x.severity === "BLOCK"));
+  });
+});
+
+describe("CC rulings after round 1 (burden and the last three calls)", () => {
+  // The server marks facility-named entries with the common English words of their names (SCOWL).
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  it("ruling 2: a whole hidden name in the person's own name is a fixed hold with no card; 'No' never releases it", () => {
+    const { e, s } = hide("San Quentin State Prison", "credit");
+    const set = { ...s, displayName: "Ray Example, San Quentin State Prison" };
+    const m = buildPerformerModel([e], set);
+    assert.equal(m.header.name, "");
+    assert.ok(!m.asks.some((a) => a.field === "displayName"));
+    const st = getPerformerStatus({ entries: [e], settings: set, model: m, pages: 1 });
+    assert.ok(st.openItems.some((x) => x.rule === "STD-R03" && x.severity === "BLOCK" && x.line === "(top of the page)" && !x.answer));
+    assert.equal(buildPerformerModel([e], applyPhraseAnswer(set, set.displayName, "no")!).header.name, "");
+  });
+  it("ruling 3: a run of the name in a record line is held until answered, with one card; 'No' puts it back", () => {
+    const { e, s } = hide("Example Valley State Prison");
+    const college = entry({ section: "education", title: "Certificate in Welding", venue: "Example Valley College", year: 2021, details: { degree: false } });
+    const es = mark([DEG, college, e]);
+    const r = cv(es, s);
+    assert.doesNotMatch(r.text, /Example Valley College/);
+    const ask = r.model.asks.find((a) => a.entryId === college.id)!;
+    assert.ok(ask && ask.held);
+    assert.ok(r.status.openItems.some((x) => x.entryId === college.id && x.answer === "facility_word" && x.severity === "BLOCK"));
+    assert.ok(!r.status.openItems.some((x) => x.entryId === college.id && !x.answer), "the card replaces the generic hold");
+    const n2 = cv(es, applyPhraseAnswer(s, ask.phrase, "no")!);
+    assert.match(n2.text, /Certificate in Welding, Example Valley College/);
+    assert.equal(n2.status.state, "finished");
+  });
+  it("ruling 3: next to a facility or incarceration word, a whole name or a nickname, a record line stays a fixed hold", () => {
+    const { e, s } = hide("Example Valley State Prison");
+    const nick = { ...e, details: { otherNames: ["the Valley Pen"] } };
+    for (const [title, venue] of [
+      ["Welding instructor", "Example Valley prison shop"],
+      ["Kitchen trainer", "Example Valley State Prison"],
+      ["Inmate tutor", "Example Valley Annex"],
+      ["Choir", "the Valley Pen"],
+    ]) {
+      const row = entry({ section: "appointment", title, venue, year: 2020 });
+      const es = mark([DEG, nick, row]);
+      const r = cv(es, applyTitleMode(s, nick.id, "leave_out")!);
+      assert.ok(r.model.omitted.some((o) => o.entryId === row.id && o.reason === "names_hidden"), venue);
+      assert.ok(!r.model.asks.some((a) => a.entryId === row.id), `${venue}: no card`);
+    }
+  });
+  it("ruling 4: a common English word never asks on its own; a town or proper name still does", () => {
+    const quiet: [string, string][] = [
+      ["Valley State Prison", "Central Valley farmworker history"],
+      ["Mountain View Correctional Facility", "Point of view in documentary film"],
+      ["Green Haven Correctional Facility", "Green building; urban gardens"],
+      ["Coffee Creek Correctional Facility", "Spanish; coffee roasting"],
+      ["Great Meadow Correctional Facility", "The Great Migration"],
+      ["Lee Correctional Institution", "Spike Lee films"],
+      ["Example River Correctional Center", "River restoration"],
+    ];
+    for (const [venue, text] of quiet) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(!r.model.asks.length, `${venue}: ${text} ${JSON.stringify(r.model.asks)}`);
+      assert.equal(r.status.state, "finished", `${venue}: ${text}`);
+      assert.ok(r.text.includes(text.split(";")[0]));
+    }
+    const asks: [string, string][] = [
+      ["Folsom State Prison", "Theater at Folsom"],
+      ["San Quentin State Prison", "Films of Quentin Tarantino"],
+      ["Attica Correctional Facility", "Attica, New York history"],
+      ["Rikers Island Correctional Center", "Poetry on Rikers"],
+      ["Dane County Jail", "Dane County farmers market"],
+    ];
+    for (const [venue, text] of asks) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests"), `${venue}: ${text}`);
+      assert.equal(r.status.state, "draft");
+    }
+  });
+  it("ruling 4: common words still count inside a held run and next to a facility or incarceration word", () => {
+    for (const [venue, text] of [
+      ["Green Haven Correctional Facility", "Gardening at Green Haven"],
+      ["Valley State Prison", "Welding in the Valley yard"],
+      ["Mountain View Correctional Facility", "I did time at Mountain View"],
+      ["Coffee Creek Correctional Facility", "Coffee Creek prison choir"],
+    ] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), `${venue}: ${text}`);
+    }
+  });
+  it("ruling 4: without the server's mark (an entry the server did not hand out) every shared word still asks", () => {
+    const { e, s } = hide("Valley State Prison");
+    assert.ok(cv([DEG, e], { ...s, interests: "Central Valley farmworker history" }).model.asks.some((a) => a.field === "interests"));
+    const cw = mark([e])[0].details.commonWords!;
+    assert.ok(cw.includes("valley") && cw.includes("prison"), JSON.stringify(cw));
+    assert.ok(!mark([hide("Folsom State Prison").e])[0].details.commonWords!.includes("folsom"));
+    // The mark is never stored: the record's cleaner drops it.
+    assert.equal(cleanDetails("teaching", { commonWords: ["folsom"] }).commonWords, undefined);
   });
 });

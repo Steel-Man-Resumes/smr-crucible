@@ -309,8 +309,9 @@ test("performer page (s2r3, combined review): the place's word next to a facilit
   const n = await formats({ ...s0, ...applyPhraseAnswer(s0, ask.phrase, "no")! });
   for (const [k, v] of Object.entries(n.out)) assert.match(v, /Townie from Folsom/, k);
   assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word" && x.entryId === lake.id));
-  // The whole hidden name in the name field is its own card, held until answered (combined C-M2).
-  assert.ok(a.status.openItems.some((x) => x.answer === "facility_word" && x.line === "(top of the page)" && x.why.includes("off the page until you answer")));
+  // The whole hidden name in the name field is held for good, with no card (combined review ruling 2).
+  assert.ok(!a.status.openItems.some((x) => x.answer === "facility_word" && x.line === "(top of the page)"));
+  assert.ok(a.status.openItems.some((x) => x.rule === "STD-R03" && x.severity === "BLOCK" && x.line === "(top of the page)" && !x.answer));
 });
 
 test("performer page (combined C-L3): a page that fits one 8x10 page finished still fits as a DRAFT, in PDF and Word", async () => {

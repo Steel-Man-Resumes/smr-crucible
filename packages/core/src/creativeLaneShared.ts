@@ -397,6 +397,8 @@ export interface HiddenTerms {
    * never nothing.
    */
   chosenBy: { id: string; text: string }[];
+  /** Kept-off words that are common English words (server-marked on the entries): alone they never ask. */
+  common: string[];
   /** The person's answers on this lane, by phrase key. */
   answers: Record<string, PhraseAnswer>;
   /** The person's own name for this lane (when it names nothing held): in other text, never counted. */
@@ -477,6 +479,7 @@ export function hiddenFacilityTerms(
     const placeShown = mode === "venue_only" && !!e.venue && looksLikeFacilityName(e.venue);
     if (mode !== "true_title" && !placeShown) for (const o of e.details.otherNames ?? []) addName(o, 2, names);
   }
+  const common = Array.from(new Set(entries.flatMap((e) => (e.names_facility && Array.isArray(e.details.commonWords) ? e.details.commonWords : []))));
   const runs: string[] = [];
   const weakRuns: string[] = [];
   const words: string[] = [];
@@ -498,7 +501,7 @@ export function hiddenFacilityTerms(
     for (const w of d.length ? d : wordsOf(src).trim().split(" ").filter(isCityWord)) add(anchors, w);
   }
   const ownWords = s?.displayName ? wordsOf(s.displayName).trim().split(" ").filter((w) => w.length >= 2) : [];
-  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
+  const terms: HiddenTerms = { fullNames, names, runs, weakRuns, words, anchors, publicBy, chosenBy, common, answers: { ...(s?.phraseAnswers ?? {}) }, own: [], ownWords };
   // The person's own name is blanked out of other text, so a word it shares
   // with a place costs one card on the name itself, never one per line. Never
   // the home place, and never a name that itself holds a run, a nickname or a
@@ -604,8 +607,13 @@ function piecesOf(text: string): string[] {
 const ANCHOR_WINDOW = 4;
 
 function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId: string | null): { tier: 1 | 2; term: string; fixed: boolean } | null {
+  /** A record line (it has an entry id): a run of the name there is held only until the person answers. */
+  const row = !!selfId;
   // In free text a hold is fixed; in the person's own name or place it lasts until they answer.
   const hold = (term: string) => ({ tier: 1 as const, term, fixed: kind === "text" });
+  const fixedHold = (term: string) => ({ tier: 1 as const, term, fixed: true });
+  /** A word that may ask on its own: not a common English word (combined review burden ruling). */
+  const rare = (w: string) => !t.common.includes(w);
   const isPublic = (run: string) => t.publicBy.some((p) => p.id !== selfId && p.text.includes(` ${run} `));
   let ask: { tier: 2; term: string; fixed: false } | null = null;
   // A possessive reads both ways: "Riker's" matches "Rikers", "Stateville's" matches "Stateville".
@@ -614,8 +622,9 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
   for (const v of [piece, piece.replace(/['’ʼ]s\b/gi, ""), joined]) {
     const all = tokensOf(foldText(v));
     const whole = ` ${all.map((x) => x.w).join(" ")} `;
-    // A whole hidden name, or a name people use for the place: held in any field.
-    for (const n of t.fullNames) if (whole.includes(` ${n} `)) return hold(n);
+    // A whole hidden name: held for good in any field, the person's own name included (it is never a true fact there).
+    for (const n of t.fullNames) if (whole.includes(` ${n} `)) return fixedHold(n);
+    // A name people use for the place: held (in the person's own name or place, until they answer).
     for (const n of t.names) if (whole.includes(` ${n} `)) return hold(n);
     const toks = kind === "text" ? maskOwn(all, t.own) : all;
     // A kept-off word next to a facility or incarceration word: held, whatever else is on the page.
@@ -629,16 +638,18 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
         if (!ask) ask = { tier: 2, term: `${toks[i].w} ${toks[m].w}`, fixed: false };
       }
     }
-    // A run of the name: held, unless ANOTHER printed line shows that run (then one tap, never nothing).
+    // A run of the name: held, unless ANOTHER printed line shows that run (then one tap, never nothing). In a
+    // record line ("Example Valley College") it is held until the person answers (combined review ruling 3).
     const str = ` ${toks.map((x) => x.w).join(" ")} `;
     for (const r of t.runs) {
       if (!str.includes(` ${r} `)) continue;
-      if (!isPublic(r)) return hold(r);
+      if (!isPublic(r)) return row ? { tier: 1 as const, term: r, fixed: false } : hold(r);
       if (!ask) ask = { tier: 2, term: r, fixed: false };
     }
-    // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field.
-    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `)) { ask = { tier: 2, term: r, fixed: false }; break; }
-    if (!ask) for (const tk of toks) if (t.words.includes(tk.w)) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
+    // A distinctive word with only kind words beside it, or a single kept-off word: one tap, in any field,
+    // unless every such word is a common English word.
+    if (!ask) for (const r of t.weakRuns) if (str.includes(` ${r} `) && r.split(" ").some((w) => isDistinctive(w) && rare(w))) { ask = { tier: 2, term: r, fixed: false }; break; }
+    if (!ask) for (const tk of toks) if (t.words.includes(tk.w) && rare(tk.w)) { ask = { tier: 2, term: tk.w, fixed: false }; break; }
   }
   return ask;
 }
@@ -646,13 +657,15 @@ function pieceHit(piece: string, t: HiddenTerms, kind: FacilityFieldKind, selfId
 /**
  * The facility hit a text carries on this lane, or null (combined review
  * rulings, every lane):
- *   Tier 1, held: a whole hidden or earlier name, a name people use for it, a
- *     run of 2+ naming words of it, or a kept-off word within four words of a
- *     facility or incarceration word. In the person's own name, email,
- *     website or home place (and a row's place or a person's name) it is held
- *     only until they answer the card.
- *   Tier 2: any other single kept-off word, in any field. It prints, and the
- *     page stays a draft until the person answers.
+ *   Tier 1, held: a whole hidden or earlier name (always, in every field), a
+ *     name people use for it, a run of 2+ naming words of it, or a kept-off
+ *     word within four words of a facility or incarceration word. A nickname,
+ *     run or neighbor in the person's own name, email, website or home place
+ *     (and a row's place or a person's name), and a run in a record line, is
+ *     held only until they answer the card.
+ *   Tier 2: any other single kept-off word that is not a common English word
+ *     (server-marked, see facilityDictionary), in any field. It prints, and
+ *     the page stays a draft until the person answers.
  * "Yes" holds the phrase for good; "No" is stored and never asked again (it
  * never clears a tier 1 hold in free text). `selfId` is the entry whose line
  * this is: a line never makes its own words public.
