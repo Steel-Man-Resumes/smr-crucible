@@ -456,12 +456,13 @@ export function dropEmptySections(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
   let atEnd = false;
+  const heading = (t: string) => isSectionHeader(t) || SKILLS_HEADING_RE.test(t) || CERT_HEADING_RE.test(t);
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
-    if (t && isSectionHeader(t)) {
+    if (t && heading(t)) {
       let j = i + 1;
       while (j < lines.length && !lines[j].trim()) j++;
-      if (j >= lines.length || isSectionHeader(lines[j].trim())) {
+      if (j >= lines.length || heading(lines[j].trim())) {
         // The heading and the blank lines under it go; the gap before it stays as the gap before the next one.
         if (j >= lines.length) atEnd = true;
         i = j - 1;
@@ -591,7 +592,7 @@ export function cutTerm(text: string, term: string): string {
   const re = termRe(term);
   const lines = text.split("\n");
   const kinds = listLineKinds(lines);
-  return lines
+  const out = lines
     .map((l, i) => {
       if (!kinds.has(i) || !re.test(l)) return l;
       // A credentials line is split the one way the checker reads it, and a
@@ -612,6 +613,8 @@ export function cutTerm(text: string, term: string): string {
     })
     .join("\n")
     .replace(/\n{3,}/g, "\n\n");
+  // Round 14 (F8): the last term taken off takes its empty heading too (the Copy button copies this text).
+  return out === text ? text : dropEmptySections(out);
 }
 
 // ---- credentials the person confirmed (D4) ---------------------------------------
@@ -1323,7 +1326,8 @@ export function applyOwnTitle(text: string, answers: DefendAnswer[], line: strin
     // Round 13 (SF-4): a role in the summary or letter: only the role's words change, and the new title is theirs.
     const at = body.toLowerCase().indexOf(roleTitle.toLowerCase());
     if (at < 0) return { text, answers, changed: false };
-    const fit = /^[A-Z]/.test(body.slice(at)) ? t.charAt(0).toUpperCase() + t.slice(1) : at > 0 ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+    // Round 14 (F9): mid-sentence their title keeps the casing they typed; at the start of the line it starts with a capital.
+    const fit = at === 0 || /[.!?]\s*$/.test(body.slice(0, at)) ? t.charAt(0).toUpperCase() + t.slice(1) : t;
     const r = applyRewrite(text, answers, line, `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`);
     if (!r.changed) return r;
     const nextLine = (line.match(/^\s*(?:[-*•]\s*)?/)?.[0] ?? "") + `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`;

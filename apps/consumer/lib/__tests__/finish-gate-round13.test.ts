@@ -170,8 +170,9 @@ test("SF-4: a title in the letter gets its own card and changes in the letter", 
   const v = view(page("- Loaded trucks"), { letter });
   const g = v.groups.find((x) => x.target === "letter" && x.title)!;
   assert.deepEqual(g.title, { current: "shift supervisor", role: true });
-  const own = applyOwnTitle(letter, [], g.line, "Warehouse associate", "shift supervisor");
-  assert.match(own.text, /As a warehouse associate I led the dock crew\./);
+  // Round 14 (F9): mid-sentence their title keeps the casing they typed.
+  const own = applyOwnTitle(letter, [], g.line, "Warehouse Associate", "shift supervisor");
+  assert.match(own.text, /As a Warehouse Associate I led the dock crew\./);
 });
 
 // ---- SF-5 / SF-9 -------------------------------------------------------------------------------------
