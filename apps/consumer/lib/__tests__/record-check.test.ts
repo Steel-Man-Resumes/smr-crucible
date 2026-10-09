@@ -761,7 +761,7 @@ test("copy: the 'only if' lines say the record check is the only screen that ask
   const tr = readFileSync(join(APP, "lib/assistant-prompt.ts"), "utf8");
   assert.match(tr, /only screen that asks for your exact offense/);
   const pa = readFileSync(join(APP, "app/(forge)/partner/page.tsx"), "utf8");
-  assert.match(pa, /only screen that asks a client for their offense/);
+  assert.match(pa, /only screen that asks a client about their record/);
 });
 
 test("analytics never load on the record check page", () => {
