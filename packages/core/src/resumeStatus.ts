@@ -463,6 +463,8 @@ const HEADING_WORDS = /\b(?:work|experience|employment|history|jobs?|references?
 /** A sentence, never a title ("I was a shift lead at Kroger" is read as a sentence, below). */
 const NOT_A_TITLE = /^(?:I|I'm|[Ww]e|[Mm]y|[Hh]e|[Ss]he|[Tt]hey|[Yy]ou|[Oo]ur|[Tt]heir|[Hh]is|[Hh]er|[Ii]t|[Tt]his|[Tt]hat)\b|\b(?:[Ww]as|[Ww]ere|[Aa]m|[Ii]s|[Aa]re|[Bb]een|[Ww]orked|[Ww]ants?|[Hh]ope|[Hh]oping|[Pp]lan|[Pp]lanning|[Ss]aid)\b/;
 const hasYear = (t: string) => /\b(?:19|20)\d{2}\b/.test(t);
+/** Round 17 (F2): a job line about the future or an offer; never a job they held. */
+const FUTURE_IN_HEADER = /\b(?:starting|starts|start\s+date|upcoming|incoming|hopefully|soon|pending|offered|offer\s+letter|will\s+(?:be|start))\b/i;
 /** A line that can be a job title on its own line ("Cashier"): short, capitalized, no years, no sentence. */
 const titleLineOk = (t: string) =>
   /^[A-Z][A-Za-z'&/. -]{1,40}$/.test(t) && !NOT_A_TITLE.test(t) && t.split(/\s+/).length <= 5 && !/[.]$/.test(t) && !/\s(?:at|for)\s/i.test(t) && !HEADING_WORDS.test(t);
@@ -507,12 +509,25 @@ function ownJobs(sourceText: string): OwnJob[] {
     }
   };
   let blockEmployer: string[] = [];
+  // Round 17 (F1): a references section or a "Supervisor:" block names someone else's job, never theirs.
+  let refs = false;
+  let otherPerson = false;
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     const l = raw.trim().replace(/^\s*[-•*]\s*/, "");
-    if (!l || CONTACT_RE.test(l)) continue;
+    if (!l) { otherPerson = false; continue; }
+    if (CONTACT_RE.test(l)) continue;
     // A section heading ("EDUCATION", "Certifications") ends an employer's block.
-    if (!hasYear(l) && l.split(/\s+/).length <= 4 && HEADING_WORDS.test(l)) { blockEmployer = []; continue; }
+    if (!hasYear(l) && l.split(/\s+/).length <= 4 && HEADING_WORDS.test(l)) {
+      blockEmployer = [];
+      if (/\b(?:references?|contacts?)\b/i.test(l)) refs = true;
+      else if (/\b(?:work|experience|employment|history|jobs?)\b/i.test(l)) refs = false;
+      continue;
+    }
+    if (/^(?:my\s+)?(?:supervisor|manager|boss|reference|contact)s?\s*:/i.test(l)) { otherPerson = true; continue; }
+    if (refs || otherPerson) continue;
+    // Round 17 (F2): a header with a future or offer frame ("Shift Lead - Kroger - starting 2024") is not a job they held.
+    if (FUTURE_IN_HEADER.test(l)) continue;
     // Tab-separated only between parts: a duty indented with a tab is still read as a sentence.
     if (l.includes("|") || l.includes("\t")) {
       pushParts(l.split(l.includes("|") ? "|" : /\t+/).map((x) => x.trim()).filter(Boolean), l, i, false);
