@@ -1,7 +1,7 @@
 {
   "schema": "record_check_sources.v1",
   "as_of": "2026-10-09",
-  "how_to_read": "The record check shows ONLY entries in this file whose status is verify_before_relying, and always with that label. UNVERIFIED entries are placeholders for research: they have no url and are never shown to a person. No other url or statute may appear in a checklist except one the person typed themself. Every entry stays verify_before_relying until a research pass confirms it; then the reviewer may add a confirmed date. Descriptions say what a source is about, never what it means for one person.",
+  "how_to_read": "The record check shows ONLY entries in this file whose status is verify_before_relying, and always with that label. UNVERIFIED entries are placeholders for research: they have no url and are never shown to a person. No other url or statute may appear in a checklist except one the person typed themself. Every entry stays verify_before_relying until a research pass confirms it; then the reviewer may add a confirmed date. kind: official = the government's own page; legal_aid = a legal help site; reference = a national nonprofit or advocacy page; reference_copy = a copy of a law or a program site run for the government (for example Cornell's law copies). Descriptions say what a source is about, never what it means for one person.",
   "topics": {
     "licensing_law": "State law on how licensing boards may use a record",
     "predetermination": "Asking a board before you train or apply",
@@ -110,7 +110,6 @@
       "as_of": null,
       "checked_by": "Placeholder. Research owed: whether Montana has a pre-application review and where it is described."
     },
-
     {
       "id": "wi-hiring-law",
       "state": "WI",
@@ -195,7 +194,6 @@
       "as_of": null,
       "checked_by": "Placeholder. Research owed: confirm against the statute text before naming it."
     },
-
     {
       "id": "mi-hiring-law",
       "state": "MI",
@@ -292,7 +290,6 @@
       "as_of": null,
       "checked_by": "Placeholder. Research owed: confirm the statute and any pre-application review before naming them."
     },
-
     {
       "id": "mo-record-relief-law",
       "state": "MO",
@@ -315,7 +312,7 @@
       "kind": "official",
       "status": "verify_before_relying",
       "as_of": "2026-09-29",
-      "checked_by": "Listed on the steelmanresumes.com Missouri page (law as of September 2026); SMR legal floor review 2026-09-29."
+      "checked_by": "Listed on the steelmanresumes.com Missouri page (law as of September 2026), whose text says expunged or fully pardoned conviction records 'shall no longer be reported'; SMR legal floor review 2026-09-29."
     },
     {
       "id": "mo-courts-expungement",
@@ -365,7 +362,6 @@
       "as_of": null,
       "checked_by": "Placeholder. Research owed: confirm the statute and any pre-application review before naming them."
     },
-
     {
       "id": "oh-predetermination",
       "state": "OH",
@@ -474,7 +470,6 @@
       "as_of": null,
       "checked_by": "Placeholder. Research owed: the official page that lists Ohio's licensing boards."
     },
-
     {
       "id": "us-eeoc-guidance",
       "state": "US",
@@ -494,7 +489,7 @@
       "title": "49 CFR 383.51 (commercial driver's license)",
       "what_it_is": "The federal rule listing offenses that disqualify a commercial learner's permit or CDL holder, and for how long.",
       "url": "https://www.law.cornell.edu/cfr/text/49/383.51",
-      "kind": "official",
+      "kind": "reference_copy",
       "status": "verify_before_relying",
       "as_of": "2026-09-19",
       "checked_by": "Opened by SMR research 2026-09-19 (a copy of the federal rule)."
@@ -518,7 +513,7 @@
       "title": "12 U.S.C. 1829 (banking jobs)",
       "what_it_is": "The federal law on working at an FDIC-insured bank with certain convictions.",
       "url": "https://www.law.cornell.edu/uscode/text/12/1829",
-      "kind": "official",
+      "kind": "reference_copy",
       "status": "verify_before_relying",
       "as_of": "2026-09-19",
       "checked_by": "Opened by SMR research 2026-09-19 (a copy of the federal law)."
@@ -530,7 +525,7 @@
       "title": "5 CFR 731.202 (federal jobs)",
       "what_it_is": "The federal rule on suitability decisions for federal government jobs.",
       "url": "https://www.law.cornell.edu/cfr/text/5/731.202",
-      "kind": "official",
+      "kind": "reference_copy",
       "status": "verify_before_relying",
       "as_of": "2026-10-03",
       "checked_by": "Opened by SMR research 2026-10-03 (a copy of the federal rule)."
@@ -542,7 +537,7 @@
       "title": "15 U.S.C. 1681b (Fair Credit Reporting Act)",
       "what_it_is": "The federal law on when a background check report may be pulled for a job.",
       "url": "https://www.law.cornell.edu/uscode/text/15/1681b",
-      "kind": "official",
+      "kind": "reference_copy",
       "status": "verify_before_relying",
       "as_of": "2026-10-03",
       "checked_by": "Opened by SMR research 2026-10-03 (a copy of the federal law)."
@@ -554,7 +549,7 @@
       "title": "The Federal Bonding Program",
       "what_it_is": "The national site for the free Federal Bonding Program an employer can use.",
       "url": "https://bonds4jobs.com/",
-      "kind": "official",
+      "kind": "reference_copy",
       "status": "verify_before_relying",
       "as_of": "2026-10-03",
       "checked_by": "Opened by SMR research 2026-10-03."
@@ -569,7 +564,7 @@
       "kind": "reference",
       "status": "verify_before_relying",
       "as_of": "2026-09-19",
-      "checked_by": "Opened by SMR research 2026-09-19."
+      "checked_by": "Opened by SMR research 2026-09-19; this exact address is the one recorded in the research bibliography (the doubled word is in CCRC's own address)."
     },
     {
       "id": "us-ccrc-restoration-profiles",

@@ -86,7 +86,7 @@ const PARTNER_FAQ = [
   },
   {
     q: "What data do you collect on my clients?",
-    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing sold, and nothing shared except with the service providers that run the tools (hosting, AI, email). No advertising layer. AGPL-3.0 open source, and the code is public. A client's offense itself goes to our AI provider only if the client opens the record check and says yes on that screen. Staff cannot say yes for them, and a saved record check is never shared with your program.",
+    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing sold, and nothing shared except with the service providers that run the tools (hosting, AI, email). No advertising layer. AGPL-3.0 open source, and the code is public. The record check is the only screen that asks a client for their offense, and it asks for the client's own yes first. Staff cannot say yes for them, and a saved record check is never shared with your program. Anything a client types elsewhere, like the chat, goes to the AI there too.",
   },
   {
     q: "Can I self-host it for my program?",

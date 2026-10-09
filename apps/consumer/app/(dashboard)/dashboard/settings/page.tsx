@@ -704,9 +704,10 @@ function DataSection({
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
               In the record check, what you type about your record goes to
-              the AI only after you say yes on that screen. We keep it only
-              if you save the checklist and choose to keep it. Taking back
-              your yes deletes your saved checklists.
+              the AI only after you say yes on that screen. A saved checklist
+              keeps the list and the state. What you typed is kept only if
+              you tick the box for it. Taking back your yes deletes your
+              saved checklists.
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>

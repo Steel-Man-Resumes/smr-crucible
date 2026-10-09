@@ -5,7 +5,10 @@
  * Plain words, no dashes as punctuation (lint: tooling/ai-tells/lint.py).
  */
 
-export const RECORD_CHECK_CONSENT_VERSION = "2026-10-09-v1";
+// v2 (2026-10-09): provider retention wording checked by CC on 2026-10-09 at
+// privacy.claude.com ("How long do you store my organization's data"); the
+// typed job is now kept only with the keep box too (security r1 F2, F3).
+export const RECORD_CHECK_CONSENT_VERSION = "2026-10-09-v2";
 
 /** The provider this step uses. Claude only: no fallback to another company. */
 export const RECORD_CHECK_PROVIDER_NAME = "Anthropic";
@@ -26,7 +29,7 @@ export const RECORD_CHECK_COPY = {
     "What you type here, your record, the state and the job, goes to our AI provider, Anthropic (the company that makes Claude), to build your checklist. Nothing else from your account goes with it. Not your name, not your resume, not your other answers.",
   howLongLabel: "How long we keep it",
   howLong:
-    "Only while this page is open, unless you press Save. If you save, you choose whether to keep what you typed about your record. Anthropic does not train its AI on it. Under its business terms it may keep a copy for up to 30 days for safety checks, then delete it.",
+    "We keep it only while this page is open. If you press Save, we keep the list of sources and questions, the state and the date. What you typed is kept only if you also tick the box to keep it. Anthropic deletes it within 30 days. If their safety systems flag it, or the law requires it, they can keep it longer, up to 2 years for flagged content.",
   yourChoiceLabel: "You are in charge",
   yourChoice:
     "You can stop any time. Taking back your yes deletes every checklist you saved here. Staff who help you cannot say yes for you.",
@@ -44,14 +47,18 @@ export const RECORD_CHECK_COPY = {
   notAVerdict:
     "This is a checklist, not a ruling. It cannot tell you whether you will get the job or license. Only the board or the employer decides. This is not legal advice. For advice about your own case, talk to a legal aid office or a lawyer.",
   sourcesLabel: "Where to check",
-  sourcesNote: "Every source here comes from our dated list. Laws change, so verify before relying on any of them.",
+  sourcesNote: "These sources come from our dated list, plus any link you typed yourself. Laws change, so verify before relying on any of them.",
   stepsLabel: "What to check",
   questionsLabel: "Questions to ask the board or employer",
-  plainNote: "The AI could not help right now, so this is our plain checklist. It still works.",
+  plainNote: "This is our plain checklist. The AI did not pick items this time, but the list still works.",
 
-  keepOffenseLabel: "Keep what I typed about my record with this checklist",
+  keepOffenseLabel: "Keep what I typed (your record and the job)",
   saveButton: "Save this checklist",
   savedNote: "Saved. Only you can see it. Programs cannot open it, even if you share other things.",
+  capReached: "You have 50 saved checklists, the most we keep. Delete one to save a new one.",
+  referenceCopy: "reference copy",
+  openButton: "Open",
+  unreadable: "This saved checklist could not be opened. You can delete it.",
   startOver: "Start over",
 
   savedTitle: "Saved checklists",

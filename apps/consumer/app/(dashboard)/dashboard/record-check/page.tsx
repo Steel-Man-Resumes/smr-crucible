@@ -12,8 +12,11 @@
  *   localStorage or sessionStorage, and it is gone when the page closes.
  * - It is not passed to t.ROY's chat context (the shell sends only the page
  *   name), so the chat never sees it.
- * - Saving is a separate press; keeping the typed offense is a separate tick,
- *   off by default.
+ * - Every line of the checklist is ours (question bank, source list); the
+ *   model only picks ids.
+ * - Saving is a separate press and sends ids only. The job and the record
+ *   are sent to be kept only with a separate tick, off by default.
+ * - Every write is same-origin JSON, DELETE included.
  * - Analytics never load on this path (lib/analytics-exclusions.ts).
  */
 
@@ -33,10 +36,18 @@ interface ConsentInfo {
 interface SavedItem {
   id: string;
   createdAt: string;
-  offense: string | null;
-  keptOffense: boolean;
-  checklist: ChecklistView | null;
+  state: string;
+  stateName: string;
+  keptTyped: boolean;
 }
+
+interface OpenedItem {
+  checklist: ChecklistView | null;
+  typed: { job: string; offense: string } | null;
+  error?: string;
+}
+
+const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 const STATE_OPTIONS = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
 
@@ -61,6 +72,7 @@ function RecordCheckPage() {
   const [notice, setNotice] = useState("");
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [savedThis, setSavedThis] = useState(false);
+  const [opened, setOpened] = useState<Record<string, OpenedItem>>({});
 
   const loadSaved = useCallback(async () => {
     const r = await fetch("/api/record-check/saved", { cache: "no-store" });
@@ -87,6 +99,7 @@ function RecordCheckPage() {
     setChecklist(null);
     setKeepOffense(false);
     setSavedThis(false);
+    setOpened({});
   }
 
   async function giveConsent() {
@@ -95,7 +108,7 @@ function RecordCheckPage() {
     try {
       const r = await fetch("/api/record-check/consent", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ ticked: true, textVersion: RECORD_CHECK_CONSENT_VERSION }),
       });
       const j = await r.json().catch(() => ({}));
@@ -119,7 +132,7 @@ function RecordCheckPage() {
       // Exactly three fields. Nothing else from the account is sent.
       const r = await fetch("/api/record-check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ offense, state: stateCode, job }),
       });
       const j = await r.json().catch(() => ({}));
@@ -141,18 +154,15 @@ function RecordCheckPage() {
     try {
       const r = await fetch("/api/record-check/saved", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
+        // Ids only. What they typed goes along only when they ticked keep.
         body: JSON.stringify({
           state: checklist.state,
-          job: checklist.job,
-          checklist: {
-            steps: checklist.steps,
-            questions: checklist.questions,
-            sourceIds: checklist.sourceIds,
-            generatedBy: checklist.generatedBy,
-          },
-          keepOffense,
-          ...(keepOffense ? { offense } : {}),
+          sourceIds: checklist.picks.sourceIds,
+          questionIds: checklist.picks.questionIds,
+          generatedBy: checklist.picks.generatedBy,
+          keepTyped: keepOffense,
+          ...(keepOffense ? { job, offense } : {}),
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -170,11 +180,33 @@ function RecordCheckPage() {
   async function deleteSaved(id: string) {
     setBusy(true);
     try {
-      await fetch(`/api/record-check/saved?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      await fetch(`/api/record-check/saved?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: JSON_HEADERS, body: "{}" });
+      setOpened((o) => {
+        const n = { ...o };
+        delete n[id];
+        return n;
+      });
       await loadSaved();
     } finally {
       setBusy(false);
     }
+  }
+
+  async function openSaved(id: string) {
+    if (opened[id]) {
+      setOpened((o) => {
+        const n = { ...o };
+        delete n[id];
+        return n;
+      });
+      return;
+    }
+    const r = await fetch(`/api/record-check/saved?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    setOpened((o) => ({
+      ...o,
+      [id]: r.ok ? { checklist: j.saved.checklist, typed: j.saved.typed ?? null } : { checklist: null, typed: null, error: j.error || C.unreadable },
+    }));
   }
 
   async function revoke() {
@@ -182,7 +214,7 @@ function RecordCheckPage() {
     setBusy(true);
     setError("");
     try {
-      const r = await fetch("/api/record-check/consent", { method: "DELETE" });
+      const r = await fetch("/api/record-check/consent", { method: "DELETE", headers: JSON_HEADERS, body: "{}" });
       const j = await r.json().catch(() => ({}));
       clearTyped();
       setSaved([]);
@@ -357,26 +389,34 @@ function RecordCheckPage() {
                   <li key={s.id} className="bg-t-panel border border-t-line p-4" data-testid="rc-saved-item">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm text-t-white">
-                        {s.checklist?.job || "Checklist"}, {s.checklist?.stateName || ""}
+                        Checklist, {s.stateName}
                         <span className="block text-xs text-t-phos-dim">
-                          {new Date(s.createdAt).toLocaleDateString()} · {s.keptOffense ? C.keptYes : C.keptNo}
+                          {new Date(s.createdAt).toLocaleDateString()} · {s.keptTyped ? C.keptYes : C.keptNo}
                         </span>
                       </p>
-                      <button
-                        onClick={() => deleteSaved(s.id)}
-                        disabled={busy}
-                        className="px-3 py-2 text-sm text-t-steel min-h-touch"
-                      >
-                        {C.deleteButton}
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => openSaved(s.id)} className="px-3 py-2 text-sm text-t-steel min-h-touch" data-testid="rc-saved-open">
+                          {C.openButton}
+                        </button>
+                        <button
+                          onClick={() => deleteSaved(s.id)}
+                          disabled={busy}
+                          className="px-3 py-2 text-sm text-t-steel min-h-touch"
+                        >
+                          {C.deleteButton}
+                        </button>
+                      </div>
                     </div>
-                    {s.checklist && (
-                      <details className="mt-3">
-                        <summary className="text-sm text-t-steel cursor-pointer">Open</summary>
-                        <div className="mt-3">
-                          <ChecklistBlock checklist={s.checklist} />
-                        </div>
-                      </details>
+                    {opened[s.id] && (
+                      <div className="mt-3" data-testid="rc-saved-opened">
+                        {opened[s.id].error && <p className="text-sm text-t-phos">{opened[s.id].error}</p>}
+                        {opened[s.id].typed && (
+                          <p className="text-xs text-t-phos-dim mb-3" data-testid="rc-saved-typed">
+                            {C.jobLabel}: {opened[s.id].typed!.job}. {C.offenseLabel}: {opened[s.id].typed!.offense}
+                          </p>
+                        )}
+                        {opened[s.id].checklist && <ChecklistBlock checklist={opened[s.id].checklist!} />}
+                      </div>
                     )}
                   </li>
                 ))}
@@ -416,15 +456,15 @@ function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
 
       <h2 className="font-bold text-t-white mb-2">{C.stepsLabel}</h2>
       <ol className="list-decimal ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-steps">
-        {checklist.steps.map((s, i) => (
-          <li key={i}>{s.text}</li>
+        {checklist.steps.map((s) => (
+          <li key={s.id}>{s.text}</li>
         ))}
       </ol>
 
       <h2 className="font-bold text-t-white mb-2">{C.questionsLabel}</h2>
       <ul className="list-disc ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-questions">
-        {checklist.questions.map((q, i) => (
-          <li key={i}>{q}</li>
+        {checklist.questions.map((q) => (
+          <li key={q.id}>{q.text}</li>
         ))}
       </ul>
 
@@ -440,6 +480,7 @@ function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
                   <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="text-t-amber-bright underline" data-testid="rc-source-link">
                     {s.title}
                   </a>
+                  {s.kind === "reference_copy" && <span className="text-xs text-t-phos-dim"> ({C.referenceCopy})</span>}
                   <span className="block text-t-phos-dim text-xs">
                     {s.whatItIs} {s.label}{s.asOf ? `, as of ${s.asOf}` : ""}.
                   </span>

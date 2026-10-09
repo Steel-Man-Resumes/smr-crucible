@@ -4,6 +4,7 @@
  *   POST   -> { ticked: true, textVersion } records the yes with a timestamp
  *   DELETE -> takes the yes back and deletes every saved record check
  * Staff acting as the person (impersonation, any mode) can do none of these.
+ * Writes must be same-origin JSON; every call needs the person's tier.
  * The general /api/consent route cannot grant this layer (not toggleable).
  */
 import {
@@ -15,14 +16,14 @@ import { realRecordCheckDeps } from "@/lib/record-check/deps";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return handleConsentGet(realRecordCheckDeps());
+export async function GET(request: Request) {
+  return handleConsentGet(request, realRecordCheckDeps());
 }
 
 export async function POST(request: Request) {
   return handleConsentPost(request, realRecordCheckDeps());
 }
 
-export async function DELETE() {
-  return handleConsentDelete(realRecordCheckDeps());
+export async function DELETE(request: Request) {
+  return handleConsentDelete(request, realRecordCheckDeps());
 }

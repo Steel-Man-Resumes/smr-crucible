@@ -14,6 +14,8 @@ import { MOCK_RECORD_CHECK_REPLY } from "./mock";
 import type { RecordCheckDeps } from "./handler";
 
 const LAYER = "record_check" as const;
+// Same ranking as withRateLimit: lower is more privileged; client is the floor.
+const TIER_RANK: Record<string, number> = { admin: 0, unlimited: 1, partner: 2, client: 3, default: 3, observer: 4 };
 
 export function realRecordCheckDeps(): RecordCheckDeps {
   return {
@@ -26,6 +28,11 @@ export function realRecordCheckDeps(): RecordCheckDeps {
     actingForSomeoneElse: async () => {
       const store = await cookies();
       return !!store.get(IMPERSONATE_COOKIE)?.value;
+    },
+    tierAllowed: async (userId) => {
+      const { getUserTier } = await import("@crucible/core");
+      const tier = await getUserTier(userId);
+      return (TIER_RANK[tier] ?? 4) <= TIER_RANK.client;
     },
     consentStatus: async (userId) => {
       const { getOne } = await import("@crucible/core");
@@ -44,49 +51,54 @@ export function realRecordCheckDeps(): RecordCheckDeps {
       const rec = await grantConsent(userId, LAYER, version, { screen: "record_check" }, { collectionMethod: "record_check_screen" });
       return { grantedAt: String(rec.granted_at) };
     },
-    revokeConsent: async (userId) => {
-      const { revokeConsent } = await import("@crucible/core");
-      await revokeConsent(userId, LAYER, { collectionMethod: "record_check_screen" });
+    revokeAndDeleteAll: async (userId) => {
+      const { revokeRecordCheckConsent } = await import("@crucible/core");
+      const r = await revokeRecordCheckConsent(userId);
+      return { deleted: r.deleted };
     },
     store: {
-      save: async ({ userId, state, job, checklist, offense }) => {
+      save: async ({ userId, state, picks, typed, consentVersion }) => {
         const { saveRecordCheck } = await import("@crucible/core");
-        const r = await saveRecordCheck({ userId, state, job, checklist, offense });
-        return { id: r.id, createdAt: r.createdAt };
+        const r = await saveRecordCheck({ userId, state, picks, typed, consentVersion });
+        return r.ok ? { ok: true as const, id: r.id, createdAt: r.createdAt } : r;
       },
       list: async (userId) => {
-        const { listRecordChecks } = await import("@crucible/core");
-        return listRecordChecks(userId);
+        const { listRecordCheckSummaries } = await import("@crucible/core");
+        return listRecordCheckSummaries(userId);
+      },
+      get: async (userId, id) => {
+        const { getRecordCheck } = await import("@crucible/core");
+        return getRecordCheck(userId, id);
       },
       deleteOne: async (userId, id) => {
         const { deleteRecordCheck } = await import("@crucible/core");
         return deleteRecordCheck(userId, id);
       },
-      deleteAll: async (userId) => {
-        const { deleteAllRecordChecks } = await import("@crucible/core");
-        return deleteAllRecordChecks(userId);
-      },
     },
-    // Claude only, no OpenAI fallback: the consent names one provider.
-    callModel: (system, user, userId) =>
-      callAI(system, [{ role: "user", content: user }], 1400, MODEL_DEEP, {
-        userId,
-        endpoint: "record-check",
-        anthropicOnly: true,
-      }),
+    // Claude only, no OpenAI fallback: the consent names one provider. The
+    // signal carries the 20-second timeout and a revoke on this instance.
+    callModel: (system, user, userId, signal) =>
+      callAI(
+        system,
+        [{ role: "user", content: user }],
+        600,
+        MODEL_DEEP,
+        { userId, endpoint: "record-check", anthropicOnly: true },
+        signal
+      ),
     mock: isMockEnabled(),
     mockReply: MOCK_RECORD_CHECK_REPLY,
-    logDecision: async ({ userId, state, summary }) => {
+    logDecision: async ({ userId, summary }) => {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
         userId,
         contextPage: "record-check",
         modelProvider: "anthropic",
         modelId: MODEL_DEEP,
-        // Fingerprint input: the step and the state code only. Nothing typed.
-        input: `record-check|${state}`,
-        explanation: "Built a record check checklist in the consented step. No typed text is kept in this log.",
-        outputSummary: { type: "record_check", state, ...summary },
+        // Fingerprint input: the step name only. No state, nothing typed.
+        input: "record-check",
+        explanation: "Built a record check checklist in the consented step. Counts only.",
+        outputSummary: { type: "record_check", ...summary },
       });
     },
     logError: (where, label) => {

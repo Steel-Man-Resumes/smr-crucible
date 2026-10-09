@@ -29,7 +29,7 @@ export interface CuratedSource {
   title: string;
   what_it_is: string;
   url: string | null;
-  kind: "official" | "legal_aid" | "reference";
+  kind: "official" | "legal_aid" | "reference" | "reference_copy";
   status: SourceStatus;
   as_of: string | null;
   checked_by: string;

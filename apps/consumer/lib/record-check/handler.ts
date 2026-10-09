@@ -5,63 +5,66 @@
  * Data flow, in one place:
  *   - The person's offense, state and job arrive in ONE request to
  *     /api/record-check, only after a ticked, versioned, revocable yes.
- *   - The offense goes into this route's own prompt and to Anthropic only.
- *     It is not stored, not logged, not put in decision_log or ai usage
- *     rows, and not returned (the reply carries the checklist).
- *   - Saving is a separate request. The offense is stored (sealed) only when
- *     the person ticked "keep what I typed"; the default is not to.
- *   - Taking back the yes deletes every saved checklist.
- *   - Staff acting as the person (assist or view mode) can do none of this.
+ *   - They go into this route's own prompt and to Anthropic only. The model
+ *     returns PICKS ONLY: source ids from the dated list and question ids from
+ *     the bank. Every word the person sees is ours (question-bank.ts,
+ *     sources.json) or theirs; the model's own text is never shown or stored
+ *     (security r1 F1, F8). Unknown ids are dropped. No valid picks: the
+ *     fixed plain checklist.
+ *   - Nothing typed is stored, logged, or put in decision_log or usage rows.
+ *   - Saving is a separate request and stores the state, the picked ids and
+ *     the date. The job and the record are stored (sealed) only when the
+ *     person ticked "Keep what I typed" (security r1 F2).
+ *   - Taking back the yes runs as one transaction that marks it revoked and
+ *     deletes every saved check; a build in flight on this server is
+ *     cancelled, and any build or save re-checks the yes before it sends or
+ *     writes (security r1 F5).
+ *   - Staff acting as the person can do none of this. Every route needs the
+ *     person's tier, and every write must be same-origin JSON (F6, F11).
  */
 
 import { RECORD_CHECK_CONSENT_VERSION, RECORD_CHECK_COPY } from "./copy";
 import { buildRecordCheckPrompt, JOB_MAX, OFFENSE_MAX, type RecordCheckInput } from "./prompt";
-import { cleanLine, safeErrorLabel, typedUrlFrom, type LineDrop } from "./guard";
-import {
-  showableSourceById,
-  showableSourcesFor,
-  SOURCE_LIST_AS_OF,
-  missingTopicsFor,
-  type ShownSource,
-  type SourceTopic,
-} from "./sources";
+import { safeErrorLabel, safeJobSlot, typedUrlFrom } from "./guard";
+import { showableSourceById, showableSourcesFor, SOURCE_LIST_AS_OF, type ShownSource } from "./sources";
 import { isStateCode, STATE_NAMES } from "./states";
-import { plainPunctuation } from "@/lib/legal-sanitize";
+import { bankQuestion, DEFAULT_QUESTION_IDS, STEP_BANK, type BankStep } from "./question-bank";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 // ---------------------------------------------------------------- types --
 
-export interface ChecklistStep {
-  text: string;
+/** Ids only. Lines are rebuilt from the bank and the list on every render. */
+export interface Picks {
+  v: 2;
   sourceIds: string[];
+  questionIds: string[];
+  generatedBy: "ai" | "plain";
 }
 
-/** What is saved (sealed) for a checklist. Source ids, never URLs. */
-export interface StoredChecklist {
-  v: 1;
+export interface ChecklistView {
   state: string;
-  steps: ChecklistStep[];
-  questions: string[];
-  sourceIds: string[];
-  typedUrl: string | null;
+  stateName: string;
+  /** The job as shown in the lines: what they typed, or "this work". */
+  jobShown: string;
+  steps: Array<{ id: string; text: string; sourceIds: string[] }>;
+  questions: Array<{ id: string; text: string }>;
+  sources: ShownSource[];
+  picks: Picks;
   generatedBy: "ai" | "plain";
   sourceListAsOf: string;
-}
-
-/** What the page shows. Sources rendered from the list at read time. */
-export interface ChecklistView extends StoredChecklist {
-  stateName: string;
-  job: string;
-  sources: ShownSource[];
   notAVerdict: string;
 }
 
-export interface SavedRow {
+export interface SavedSummary {
   id: string;
   state: string;
-  job: string;
-  checklist: unknown;
-  offense: string | null;
+  keptTyped: boolean;
   createdAt: string;
+}
+
+export interface SavedFull extends SavedSummary {
+  picks: Picks;
+  typed: { job: string; offense: string } | null;
 }
 
 export interface ConsentState {
@@ -74,189 +77,157 @@ export interface RecordCheckDeps {
   userId: () => Promise<string | null>;
   /** True when the session is staff acting as someone (impersonation). */
   actingForSomeoneElse: () => Promise<boolean>;
+  /** The person's tier allows the Refinery tools (client or better). */
+  tierAllowed: (userId: string) => Promise<boolean>;
   consentStatus: (userId: string) => Promise<ConsentState>;
   grantConsent: (userId: string, version: string) => Promise<{ grantedAt: string }>;
-  revokeConsent: (userId: string) => Promise<void>;
+  /** One transaction: mark the yes revoked (with its time) and delete every saved check. */
+  revokeAndDeleteAll: (userId: string) => Promise<{ deleted: number }>;
   store: {
-    save: (p: { userId: string; state: string; job: string; checklist: StoredChecklist; offense: string | null }) => Promise<{ id: string; createdAt: string }>;
-    list: (userId: string) => Promise<SavedRow[]>;
+    save: (p: {
+      userId: string;
+      state: string;
+      picks: Picks;
+      typed: { job: string; offense: string } | null;
+      consentVersion: string;
+    }) => Promise<{ ok: true; id: string; createdAt: string } | { ok: false; reason: "no_consent" | "cap" }>;
+    list: (userId: string) => Promise<SavedSummary[]>;
+    get: (userId: string, id: string) => Promise<SavedFull | null | "unreadable">;
     deleteOne: (userId: string, id: string) => Promise<boolean>;
-    deleteAll: (userId: string) => Promise<number>;
   };
-  /** One model call. Implemented with callAI(..., { anthropicOnly: true }). */
-  callModel: (system: string, user: string, userId: string) => Promise<string>;
+  /** One model call. Implemented with callAI(..., { anthropicOnly: true }, signal). */
+  callModel: (system: string, user: string, userId: string, signal: AbortSignal) => Promise<string>;
   mock: boolean;
   mockReply: string;
-  /** Counts and fixed labels only. Never anything the person typed. */
-  logDecision: (entry: { userId: string; state: string; summary: Record<string, string | number | boolean> }) => Promise<void>;
+  /** Milliseconds before the build gives up and shows the plain checklist. */
+  timeoutMs?: number;
+  /** Counts only. Never anything the person typed, and no state. */
+  logDecision: (entry: { userId: string; summary: Record<string, string | number | boolean> }) => Promise<void>;
   /** A fixed label only (safeErrorLabel). */
   logError: (where: string, label: string) => void;
 }
 
+export const BUILD_TIMEOUT_MS = 20_000;
+
 const NO_STORE = { "Cache-Control": "no-store", Pragma: "no-cache" } as const;
-
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...NO_STORE },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...NO_STORE } });
 }
 
-// --------------------------------------------------------- plain checklist --
+// ------------------------------------------------- builds in flight (F5) --
 
-const PLAIN_QUESTIONS = [
-  "Do you review a record before someone applies or trains? How do I ask, and what does it cost?",
-  "Which parts of a record does the board look at for this license, and for how long?",
-  "What papers should I bring about my record and what I have done since?",
-  "If the board has concerns, how do I respond, and how long do I have?",
-  "Does a sealed or cleared record still count for this license?",
-];
-
-function idsForTopic(state: string, topic: SourceTopic): string[] {
-  return showableSourcesFor(state)
-    .filter((s) => s.id.startsWith(state.toLowerCase() + "-") && s.topic === topic)
-    .map((s) => s.id);
+const INFLIGHT = new Map<string, Set<AbortController>>();
+function track(userId: string, c: AbortController) {
+  const set = INFLIGHT.get(userId) ?? new Set<AbortController>();
+  set.add(c);
+  INFLIGHT.set(userId, set);
+}
+function untrack(userId: string, c: AbortController) {
+  const set = INFLIGHT.get(userId);
+  if (!set) return;
+  set.delete(c);
+  if (!set.size) INFLIGHT.delete(userId);
+}
+/** Cancel this person's builds running on this server instance. */
+export function cancelInflightBuilds(userId: string): number {
+  const set = INFLIGHT.get(userId);
+  if (!set) return 0;
+  for (const c of set) c.abort("revoked");
+  INFLIGHT.delete(userId);
+  return set.size;
 }
 
-/** The checklist with no model at all: fixed steps, list sources only. */
-export function plainSteps(state: string): ChecklistStep[] {
-  const missing = new Set(missingTopicsFor(state));
-  const steps: ChecklistStep[] = [
-    { text: "Find the licensing board for this work in your state. Look for its page about records.", sourceIds: idsForTopic(state, "licensing_board") },
-  ];
-  steps.push(
-    missing.has("predetermination")
-      ? { text: "Ask the board if it will look at your record before you apply or pay for training.", sourceIds: [] }
-      : { text: "Ask the board for a review of your record before you pay for training.", sourceIds: idsForTopic(state, "predetermination") }
-  );
-  if (!missing.has("licensing_law")) {
-    steps.push({ text: "Read your state's law on how licensing boards may use a record.", sourceIds: idsForTopic(state, "licensing_law") });
-  }
-  steps.push({ text: "Ask about sealing or clearing options for your record.", sourceIds: idsForTopic(state, "record_relief") });
-  steps.push({ text: "Check whether a federal rule covers this kind of work.", sourceIds: [] });
-  steps.push({ text: "Write down what the board tells you, with the date and the name of who you talked to.", sourceIds: [] });
-  return steps;
-}
+// -------------------------------------------------------------- picking --
 
-// ------------------------------------------------------------ build logic --
-
-export interface BuildCounts {
-  steps: number;
+export interface PickCounts {
+  sources: number;
   questions: number;
-  dropped_verdict: number;
-  dropped_link_or_citation: number;
-  dropped_other: number;
-  unknown_source_ids: number;
+  unknown_ids: number;
+  model_reply_used: boolean;
+}
+
+/** The plain checklist's picks: every showable source for the state plus the
+ *  national table, and the default questions. No model involved. */
+export function plainPicks(state: string): Picks {
+  const ids = showableSourcesFor(state)
+    .filter((s) => !s.id.startsWith("us-"))
+    .map((s) => s.id);
+  return { v: 2, sourceIds: [...ids, "us-ccrc-licensing-comparison"], questionIds: [...DEFAULT_QUESTION_IDS], generatedBy: "plain" };
 }
 
 /**
- * Turn a model reply (or null, when there was no usable reply) into a
- * checklist. Every model line is cleaned: verdicts, links and citations are
- * dropped, the person's own offense words are replaced with "your record".
- * Source ids not on the list for this state are dropped.
+ * Read ONLY ids from a model reply. Anything else in it is ignored and never
+ * kept. Unknown ids, and ids not showable for this state, are dropped.
  */
-export function buildChecklist(
-  input: RecordCheckInput,
-  reply: string | null
-): { checklist: ChecklistView; counts: BuildCounts } {
-  const { state, offense } = input;
-  const job = input.job.trim().slice(0, JOB_MAX);
+export function picksFromReply(state: string, reply: string | null): { picks: Picks; counts: PickCounts } {
   const allowed = new Set(showableSourcesFor(state).map((s) => s.id));
-  const counts: BuildCounts = { steps: 0, questions: 0, dropped_verdict: 0, dropped_link_or_citation: 0, dropped_other: 0, unknown_source_ids: 0 };
-  const noteDrop = (d: LineDrop) => {
-    if (d === "verdict") counts.dropped_verdict++;
-    else if (d === "link_or_citation") counts.dropped_link_or_citation++;
-    else counts.dropped_other++;
-  };
-
-  let steps: ChecklistStep[] = [];
-  let questions: string[] = [];
-  let parsedOk = false;
+  const counts: PickCounts = { sources: 0, questions: 0, unknown_ids: 0, model_reply_used: false };
+  let sourceIds: string[] = [];
+  let questionIds: string[] = [];
   if (reply) {
     try {
       const m = reply.match(/\{[\s\S]*\}/);
       const parsed = m ? JSON.parse(m[0]) : null;
-      if (parsed && typeof parsed === "object") {
-        parsedOk = true;
-        for (const s of Array.isArray(parsed.steps) ? parsed.steps.slice(0, 10) : []) {
-          const c = cleanLine(s?.text, offense);
-          if ("drop" in c) { noteDrop(c.drop); continue; }
-          const ids: string[] = [];
-          for (const id of Array.isArray(s?.source_ids) ? s.source_ids : []) {
-            if (typeof id === "string" && allowed.has(id)) ids.push(id);
-            else counts.unknown_source_ids++;
-          }
-          steps.push({ text: c.text, sourceIds: Array.from(new Set(ids)) });
-        }
-        for (const q of Array.isArray(parsed.questions) ? parsed.questions.slice(0, 10) : []) {
-          const c = cleanLine(q, offense);
-          if ("drop" in c) { noteDrop(c.drop); continue; }
-          questions.push(c.text);
-        }
+      const src = parsed && Array.isArray(parsed.source_ids) ? parsed.source_ids.slice(0, 20) : [];
+      const qs = parsed && Array.isArray(parsed.question_ids) ? parsed.question_ids.slice(0, 20) : [];
+      for (const id of src) {
+        if (typeof id === "string" && allowed.has(id)) sourceIds.push(id);
+        else counts.unknown_ids++;
+      }
+      for (const id of qs) {
+        if (bankQuestion(id)) questionIds.push(id as string);
+        else counts.unknown_ids++;
       }
     } catch {
-      parsedOk = false;
+      sourceIds = [];
+      questionIds = [];
     }
   }
-  const generatedBy: "ai" | "plain" = parsedOk && (steps.length >= 2 || questions.length >= 2) ? "ai" : "plain";
-  if (steps.length < 2) steps = plainSteps(state);
-  if (questions.length < 2) questions = [...PLAIN_QUESTIONS];
-  steps = dedupe(steps, (s) => s.text.toLowerCase()).slice(0, 8);
-  questions = dedupe(questions, (q) => q.toLowerCase()).slice(0, 8);
-  // Model text only: plain lines are already written without dashes.
-  ({ steps, questions } = plainPunctuation({ steps, questions }));
-
-  const sourceIds = chooseSourceIds(state, steps);
-  const typedUrl = typedUrlFrom(job);
-  counts.steps = steps.length;
-  counts.questions = questions.length;
-  const stored: StoredChecklist = {
-    v: 1,
-    state,
-    steps,
-    questions,
-    sourceIds,
-    typedUrl,
-    generatedBy,
-    sourceListAsOf: SOURCE_LIST_AS_OF,
-  };
-  return { checklist: renderChecklist(stored, job), counts };
-}
-
-function dedupe<T>(xs: T[], key: (x: T) => string): T[] {
-  const seen = new Set<string>();
-  return xs.filter((x) => {
-    const k = key(x);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
-
-/** Every showable source for the state, plus federal ones a step points at,
- *  plus the national licensing table. Ids only. */
-function chooseSourceIds(state: string, steps: ChecklistStep[]): string[] {
-  const stateIds = showableSourcesFor(state).filter((s) => !s.id.startsWith("us-")).map((s) => s.id);
-  const stepFederal = steps.flatMap((s) => s.sourceIds).filter((id) => id.startsWith("us-"));
-  return Array.from(new Set([...stateIds, ...stepFederal, "us-ccrc-licensing-comparison"])).filter(
-    (id) => showableSourceById(id) !== null
-  );
-}
-
-/** Render a stored checklist for the page. Ids that are no longer showable
- *  (marked UNVERIFIED or removed since) simply drop out. */
-export function renderChecklist(stored: StoredChecklist, job: string): ChecklistView {
-  const sources: ShownSource[] = [];
-  for (const id of stored.sourceIds) {
-    const s = showableSourceById(id);
-    if (s) sources.push(s);
+  sourceIds = Array.from(new Set(sourceIds)).slice(0, 12);
+  questionIds = Array.from(new Set(questionIds)).slice(0, 10);
+  if (!sourceIds.length && !questionIds.length) {
+    const picks = plainPicks(state);
+    return { picks, counts: { ...counts, sources: picks.sourceIds.length, questions: picks.questionIds.length } };
   }
-  if (stored.typedUrl) {
+  // Partial picks: fill from the defaults so the checklist is never thin.
+  if (questionIds.length < 4) {
+    for (const id of DEFAULT_QUESTION_IDS) if (questionIds.length < 4 && !questionIds.includes(id)) questionIds.push(id);
+  }
+  if (!sourceIds.includes("us-ccrc-licensing-comparison")) sourceIds.push("us-ccrc-licensing-comparison");
+  counts.sources = sourceIds.length;
+  counts.questions = questionIds.length;
+  counts.model_reply_used = true;
+  return { picks: { v: 2, sourceIds, questionIds, generatedBy: "ai" }, counts };
+}
+
+// ------------------------------------------------------------ rendering --
+
+function fill(text: string, slots: { state: string; job: string; source?: string }): string {
+  return text.replace(/\{state\}/g, slots.state).replace(/\{job\}/g, slots.job).replace(/\{source\}/g, slots.source ?? "");
+}
+
+/** Build every line from the banks and the list. Ids no longer showable
+ *  (marked UNVERIFIED or removed since) simply drop out. */
+export function renderChecklist(
+  state: string,
+  picks: Picks,
+  typed: { job?: string | null } = {}
+): ChecklistView {
+  const stateName = STATE_NAMES[state] ?? state;
+  const jobShown = safeJobSlot(typed.job ?? null);
+  const slots = { state: stateName, job: jobShown };
+  const sources: ShownSource[] = [];
+  for (const id of picks.sourceIds) {
+    const s = showableSourceById(id);
+    if (s && (s.id.startsWith(state.toLowerCase() + "-") || s.id.startsWith("us-"))) sources.push(s);
+  }
+  const typedUrl = typedUrlFrom(typed.job ?? null);
+  if (typedUrl) {
     sources.push({
       id: "you-typed",
       title: "The link you gave",
       whatItIs: "You typed this link. We did not check it.",
-      url: stored.typedUrl,
+      url: typedUrl,
       kind: "reference",
       topic: "reference",
       asOf: "",
@@ -264,13 +235,40 @@ export function renderChecklist(stored: StoredChecklist, job: string): Checklist
       from: "you",
     });
   }
-  const steps = stored.steps.map((s) => ({ text: s.text, sourceIds: s.sourceIds.filter((id) => showableSourceById(id) !== null) }));
+  const ofTopic = (...topics: string[]) => sources.filter((s) => s.from === "list" && topics.includes(s.topic)).map((s) => s.id);
+  const steps: Array<{ id: string; text: string; sourceIds: string[] }> = [];
+  const add = (step: BankStep, ids: string[]) => steps.push({ id: step.id, text: fill(step.text, slots), sourceIds: ids });
+  add(STEP_BANK.findBoard, ofTopic("licensing_board"));
+  const pre = ofTopic("predetermination");
+  add(pre.length ? STEP_BANK.predetermination : STEP_BANK.askReview, pre);
+  if (ofTopic("licensing_law").length) add(STEP_BANK.licensingLaw, ofTopic("licensing_law"));
+  if (ofTopic("hiring_law").length) add(STEP_BANK.hiringLaw, ofTopic("hiring_law"));
+  if (ofTopic("record_relief").length) add(STEP_BANK.recordRelief, ofTopic("record_relief"));
+  if (ofTopic("federal_license").length) add(STEP_BANK.federal, ofTopic("federal_license"));
+  if (ofTopic("background_checks").length) add(STEP_BANK.backgroundChecks, ofTopic("background_checks"));
+  if (ofTopic("bonding").length) add(STEP_BANK.bonding, ofTopic("bonding"));
+  if (ofTopic("reference").length) add(STEP_BANK.reference, ofTopic("reference"));
+  add(STEP_BANK.notes, []);
+
+  // {source} questions take the first picked state law source, else drop out.
+  const lawSource = sources.find((s) => s.from === "list" && !s.id.startsWith("us-") && ["licensing_law", "predetermination", "hiring_law"].includes(s.topic));
+  const questions: Array<{ id: string; text: string }> = [];
+  for (const id of picks.questionIds) {
+    const q = bankQuestion(id);
+    if (!q) continue;
+    if (q.text.includes("{source}") && !lawSource) continue;
+    questions.push({ id: q.id, text: fill(q.text, { ...slots, source: lawSource?.title }) });
+  }
   return {
-    ...stored,
+    state,
+    stateName,
+    jobShown,
     steps,
-    stateName: STATE_NAMES[stored.state] ?? stored.state,
-    job,
+    questions,
     sources,
+    picks,
+    generatedBy: picks.generatedBy,
+    sourceListAsOf: SOURCE_LIST_AS_OF,
     notAVerdict: RECORD_CHECK_COPY.notAVerdict,
   };
 }
@@ -283,8 +281,7 @@ const BUILD_KEYS = new Set(["offense", "state", "job"]);
  *  more than the check needs (a name, a resume, other record answers). */
 export function readBuildBody(body: unknown): { input: RecordCheckInput } | { error: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "Invalid body" };
-  const keys = Object.keys(body as object);
-  const extra = keys.filter((k) => !BUILD_KEYS.has(k));
+  const extra = Object.keys(body as object).filter((k) => !BUILD_KEYS.has(k));
   if (extra.length) return { error: "Only offense, state and job are accepted." };
   const b = body as Record<string, unknown>;
   const offense = typeof b.offense === "string" ? b.offense.trim() : "";
@@ -297,80 +294,74 @@ export function readBuildBody(body: unknown): { input: RecordCheckInput } | { er
   return { input: { offense, state: b.state, job } };
 }
 
-const SAVE_KEYS = new Set(["state", "job", "checklist", "keepOffense", "offense"]);
+const SAVE_KEYS = new Set(["state", "sourceIds", "questionIds", "generatedBy", "keepTyped", "job", "offense"]);
 
-/** Re-check a checklist the client sends back to save. Lines are cleaned
- *  again; ids must be showable; the typed link is recomputed from the job. */
+/** Ids only, re-checked against the list and the bank. The job and the record
+ *  come along only with keepTyped, and are refused otherwise. */
 export function readSaveBody(
   body: unknown
-): { state: string; job: string; checklist: StoredChecklist; offense: string | null } | { error: string } {
+): { state: string; picks: Picks; typed: { job: string; offense: string } | null } | { error: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "Invalid body" };
   const b = body as Record<string, unknown>;
   if (Object.keys(b).some((k) => !SAVE_KEYS.has(k))) return { error: "Unexpected field." };
   if (!isStateCode(b.state)) return { error: "Pick a state." };
   const state = b.state;
-  const job = typeof b.job === "string" ? b.job.trim().slice(0, JOB_MAX) : "";
-  const c = b.checklist as Record<string, unknown> | undefined;
-  if (!c || typeof c !== "object") return { error: "Nothing to save." };
-  const keep = b.keepOffense === true;
-  const offenseRaw = typeof b.offense === "string" ? b.offense.trim() : "";
-  if (keep && (!offenseRaw || offenseRaw.length > OFFENSE_MAX)) return { error: "Nothing typed to keep." };
-  const offense = keep ? offenseRaw : null;
-
+  const keep = b.keepTyped === true;
+  if (!keep && (b.job !== undefined || b.offense !== undefined)) {
+    return { error: "What you typed is only sent when you tick the box to keep it." };
+  }
+  let typed: { job: string; offense: string } | null = null;
+  if (keep) {
+    const job = typeof b.job === "string" ? b.job.trim() : "";
+    const offense = typeof b.offense === "string" ? b.offense.trim() : "";
+    if (!job || !offense || job.length > JOB_MAX || offense.length > OFFENSE_MAX) return { error: "Nothing typed to keep." };
+    typed = { job, offense };
+  }
   const allowed = new Set(showableSourcesFor(state).map((s) => s.id));
-  const steps: ChecklistStep[] = [];
-  for (const s of Array.isArray(c.steps) ? (c.steps as unknown[]).slice(0, 10) : []) {
-    const r = cleanLine((s as Record<string, unknown>)?.text, null);
-    if ("drop" in r) continue;
-    const idsRaw = (s as Record<string, unknown>)?.sourceIds;
-    const ids = (Array.isArray(idsRaw) ? idsRaw : []).filter((id): id is string => typeof id === "string" && allowed.has(id));
-    steps.push({ text: r.text, sourceIds: Array.from(new Set(ids)) });
-  }
-  const questions: string[] = [];
-  for (const q of Array.isArray(c.questions) ? (c.questions as unknown[]).slice(0, 10) : []) {
-    const r = cleanLine(q, null);
-    if (!("drop" in r)) questions.push(r.text);
-  }
-  if (!steps.length && !questions.length) return { error: "Nothing to save." };
-  const sourceIdsRaw = Array.isArray(c.sourceIds) ? (c.sourceIds as unknown[]) : [];
   const sourceIds = Array.from(
-    new Set(sourceIdsRaw.filter((id): id is string => typeof id === "string" && allowed.has(id)))
-  );
-  return {
-    state,
-    job,
-    offense,
-    checklist: {
-      v: 1,
-      state,
-      steps,
-      questions,
-      sourceIds,
-      typedUrl: typedUrlFrom(job),
-      generatedBy: c.generatedBy === "ai" ? "ai" : "plain",
-      sourceListAsOf: SOURCE_LIST_AS_OF,
-    },
-  };
+    new Set((Array.isArray(b.sourceIds) ? b.sourceIds : []).filter((id): id is string => typeof id === "string" && allowed.has(id)))
+  ).slice(0, 12);
+  const questionIds = Array.from(
+    new Set((Array.isArray(b.questionIds) ? b.questionIds : []).filter((id): id is string => !!bankQuestion(id)))
+  ).slice(0, 10);
+  if (!sourceIds.length && !questionIds.length) return { error: "Nothing to save." };
+  return { state, typed, picks: { v: 2, sourceIds, questionIds, generatedBy: b.generatedBy === "ai" ? "ai" : "plain" } };
 }
 
 // --------------------------------------------------------------- guards --
 
+/** A read from another origin (any steelmanresumes.com page is same-site). */
+function isSameOriginRead(headers: Headers): boolean {
+  const site = headers.get("sec-fetch-site");
+  return site === null || site === "same-origin" || site === "none";
+}
+
 async function gate(
+  req: Request,
   deps: RecordCheckDeps,
-  { needConsent }: { needConsent: boolean }
+  { needConsent, write }: { needConsent: boolean; write: boolean }
 ): Promise<{ userId: string } | { res: Response }> {
+  if (write ? !isSameOriginJsonPost(req.headers) : !isSameOriginRead(req.headers)) {
+    return { res: json({ error: "Forbidden", code: "not_same_origin" }, 403) };
+  }
   const userId = await deps.userId();
   if (!userId) return { res: json({ error: "Please sign in to use this feature." }, 401) };
   if (await deps.actingForSomeoneElse()) {
     return { res: json({ error: RECORD_CHECK_COPY.staffBlocked, code: "staff_cannot_consent" }, 403) };
   }
-  if (needConsent) {
-    const c = await deps.consentStatus(userId);
-    if (!c.granted || c.version !== RECORD_CHECK_CONSENT_VERSION) {
-      return { res: json({ error: "Your yes is needed first.", code: "consent_required" }, 409) };
-    }
+  if (!(await deps.tierAllowed(userId))) {
+    return { res: json({ error: "This tool requires a higher access tier." }, 403) };
   }
+  if (needConsent && !(await hasCurrentConsent(deps, userId))) return { res: consentNeeded() };
   return { userId };
+}
+
+async function hasCurrentConsent(deps: RecordCheckDeps, userId: string): Promise<boolean> {
+  const c = await deps.consentStatus(userId);
+  return c.granted && c.version === RECORD_CHECK_CONSENT_VERSION;
+}
+function consentNeeded() {
+  return json({ error: "Your yes is needed first.", code: "consent_required" }, 409);
 }
 
 async function readJson(req: Request, max: number): Promise<{ body: unknown } | { res: Response }> {
@@ -390,7 +381,7 @@ async function readJson(req: Request, max: number): Promise<{ body: unknown } | 
 
 /** POST /api/record-check: build one checklist. */
 export async function handleBuild(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: true });
+  const g = await gate(req, deps, { needConsent: true, write: true });
   if ("res" in g) return g.res;
   const r = await readJson(req, 8_000);
   if ("res" in r) return r.res;
@@ -398,25 +389,36 @@ export async function handleBuild(req: Request, deps: RecordCheckDeps): Promise<
   if ("error" in parsed) return json({ error: parsed.error }, 400);
   const input = parsed.input;
 
-  const prompt = buildRecordCheckPrompt(input);
   let reply: string | null = null;
   if (deps.mock) {
     reply = deps.mockReply;
   } else {
+    // Re-check the yes right before anything is sent (a revoke may have landed
+    // while the body was read).
+    if (!(await hasCurrentConsent(deps, g.userId))) return consentNeeded();
+    const prompt = buildRecordCheckPrompt(input);
+    const controller = new AbortController();
+    track(g.userId, controller);
+    const timer = setTimeout(() => controller.abort("timeout"), deps.timeoutMs ?? BUILD_TIMEOUT_MS);
     try {
-      reply = await deps.callModel(prompt.system, prompt.user, g.userId);
+      reply = await deps.callModel(prompt.system, prompt.user, g.userId, controller.signal);
     } catch (err) {
-      deps.logError("build", safeErrorLabel(err));
+      deps.logError("build", controller.signal.aborted ? `aborted_${String(controller.signal.reason)}` : safeErrorLabel(err));
       reply = null;
+    } finally {
+      clearTimeout(timer);
+      untrack(g.userId, controller);
     }
+    if (controller.signal.aborted && controller.signal.reason === "revoked") return consentNeeded();
   }
-  const { checklist, counts } = buildChecklist(input, reply);
+  // And again before anything is sent back: a revoke on another server
+  // instance discards this result.
+  if (!(await hasCurrentConsent(deps, g.userId))) return consentNeeded();
+
+  const { picks, counts } = picksFromReply(input.state, reply);
+  const checklist = renderChecklist(input.state, picks, { job: input.job });
   try {
-    await deps.logDecision({
-      userId: g.userId,
-      state: input.state,
-      summary: { ...counts, generated_by: checklist.generatedBy, sources: checklist.sources.length, consent_version: RECORD_CHECK_CONSENT_VERSION },
-    });
+    await deps.logDecision({ userId: g.userId, summary: { ...counts, generated_by: picks.generatedBy, consent_version: RECORD_CHECK_CONSENT_VERSION } });
   } catch (err) {
     deps.logError("decision_log", safeErrorLabel(err));
   }
@@ -424,10 +426,12 @@ export async function handleBuild(req: Request, deps: RecordCheckDeps): Promise<
 }
 
 /** GET /api/record-check/consent */
-export async function handleConsentGet(deps: RecordCheckDeps): Promise<Response> {
+export async function handleConsentGet(req: Request, deps: RecordCheckDeps): Promise<Response> {
+  if (!isSameOriginRead(req.headers)) return json({ error: "Forbidden", code: "not_same_origin" }, 403);
   const userId = await deps.userId();
   if (!userId) return json({ error: "Please sign in to use this feature." }, 401);
   const staff = await deps.actingForSomeoneElse();
+  if (!(await deps.tierAllowed(userId))) return json({ error: "This tool requires a higher access tier." }, 403);
   const c = await deps.consentStatus(userId);
   return json({
     granted: c.granted && c.version === RECORD_CHECK_CONSENT_VERSION,
@@ -439,7 +443,7 @@ export async function handleConsentGet(deps: RecordCheckDeps): Promise<Response>
 
 /** POST /api/record-check/consent: the person ticked the box. */
 export async function handleConsentPost(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: false });
+  const g = await gate(req, deps, { needConsent: false, write: true });
   if ("res" in g) return g.res;
   const r = await readJson(req, 2_000);
   if ("res" in r) return r.res;
@@ -453,56 +457,65 @@ export async function handleConsentPost(req: Request, deps: RecordCheckDeps): Pr
 }
 
 /** DELETE /api/record-check/consent: take back the yes, delete saved checks. */
-export async function handleConsentDelete(deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: false });
+export async function handleConsentDelete(req: Request, deps: RecordCheckDeps): Promise<Response> {
+  const g = await gate(req, deps, { needConsent: false, write: true });
   if ("res" in g) return g.res;
-  await deps.revokeConsent(g.userId);
-  let deleted = 0;
+  const cancelled = cancelInflightBuilds(g.userId);
   try {
-    deleted = await deps.store.deleteAll(g.userId);
+    const { deleted } = await deps.revokeAndDeleteAll(g.userId);
+    return json({ revoked: true, deleted, cancelled });
   } catch (err) {
-    deps.logError("revoke_delete", safeErrorLabel(err));
-    return json({ error: "Your yes is taken back, but deleting saved checklists failed. Try again.", revoked: true }, 500);
+    deps.logError("revoke", safeErrorLabel(err));
+    return json({ error: "That did not go through. Nothing changed. Try again." }, 500);
   }
-  return json({ revoked: true, deleted });
 }
 
-/** GET /api/record-check/saved */
-export async function handleSavedGet(deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: false });
+/** GET /api/record-check/saved (list, no typed text) or ?id= (one, opened). */
+export async function handleSavedGet(req: Request, deps: RecordCheckDeps): Promise<Response> {
+  const g = await gate(req, deps, { needConsent: false, write: false });
   if ("res" in g) return g.res;
+  const id = new URL(req.url).searchParams.get("id");
   try {
-    const rows = await deps.store.list(g.userId);
-    const saved = rows.map((row) => ({
-      id: row.id,
-      createdAt: row.createdAt,
-      offense: row.offense,
-      keptOffense: row.offense !== null,
-      checklist: isStored(row.checklist) ? renderChecklist(row.checklist, row.job) : null,
-    }));
-    return json({ saved });
+    if (id === null) {
+      const rows = await deps.store.list(g.userId);
+      return json({ saved: rows.map((r) => ({ ...r, stateName: STATE_NAMES[r.state] ?? r.state })) });
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Invalid id" }, 400);
+    const one = await deps.store.get(g.userId, id);
+    if (one === null) return json({ error: "Not found" }, 404);
+    if (one === "unreadable") return json({ error: RECORD_CHECK_COPY.unreadable, code: "unreadable" }, 422);
+    return json({
+      saved: {
+        id: one.id,
+        createdAt: one.createdAt,
+        keptTyped: one.keptTyped,
+        typed: one.typed,
+        checklist: renderChecklist(one.state, one.picks, { job: one.typed?.job ?? null }),
+      },
+    });
   } catch (err) {
-    deps.logError("list", safeErrorLabel(err));
+    deps.logError("saved_get", safeErrorLabel(err));
     return json({ error: "Could not load saved checklists." }, 500);
   }
 }
 
-function isStored(x: unknown): x is StoredChecklist {
-  const c = x as StoredChecklist;
-  return !!c && c.v === 1 && Array.isArray(c.steps) && Array.isArray(c.questions) && Array.isArray(c.sourceIds);
-}
-
 /** POST /api/record-check/saved: "Save this checklist". */
 export async function handleSavedPost(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: true });
+  const g = await gate(req, deps, { needConsent: true, write: true });
   if ("res" in g) return g.res;
-  const r = await readJson(req, 30_000);
+  const r = await readJson(req, 8_000);
   if ("res" in r) return r.res;
   const parsed = readSaveBody(r.body);
   if ("error" in parsed) return json({ error: parsed.error }, 400);
   try {
-    const saved = await deps.store.save({ userId: g.userId, ...parsed });
-    return json({ saved: { id: saved.id, createdAt: saved.createdAt, keptOffense: parsed.offense !== null } });
+    // The store writes only while the current yes stands (one statement).
+    const saved = await deps.store.save({ userId: g.userId, ...parsed, consentVersion: RECORD_CHECK_CONSENT_VERSION });
+    if (!saved.ok) {
+      return saved.reason === "cap"
+        ? json({ error: RECORD_CHECK_COPY.capReached, code: "cap" }, 409)
+        : consentNeeded();
+    }
+    return json({ saved: { id: saved.id, createdAt: saved.createdAt, keptTyped: parsed.typed !== null } });
   } catch (err) {
     deps.logError("save", safeErrorLabel(err));
     return json({ error: "Could not save. Try again." }, 500);
@@ -511,7 +524,7 @@ export async function handleSavedPost(req: Request, deps: RecordCheckDeps): Prom
 
 /** DELETE /api/record-check/saved?id= */
 export async function handleSavedDelete(req: Request, deps: RecordCheckDeps): Promise<Response> {
-  const g = await gate(deps, { needConsent: false });
+  const g = await gate(req, deps, { needConsent: false, write: true });
   if ("res" in g) return g.res;
   const id = new URL(req.url).searchParams.get("id") || "";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Invalid id" }, 400);

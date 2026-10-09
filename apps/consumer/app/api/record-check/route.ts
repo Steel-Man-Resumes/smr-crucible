@@ -4,7 +4,8 @@
  * Its own route and its own prompt (lib/record-check). Requires the person's
  * own, current yes (consent layer "record_check"); staff acting as the person
  * are refused. Accepts exactly three fields: offense, state, job. The offense
- * goes to Anthropic only (no fallback) and is never stored or logged here.
+ * goes to Anthropic only (no fallback); the model returns ids only, and
+ * nothing typed is stored or logged here. Same-origin JSON only.
  * Daily caps and tier gate come from withRateLimit, like every AI route.
  */
 import { withRateLimit } from "@/lib/withRateLimit";
@@ -18,4 +19,10 @@ async function handlePost(request: Request) {
   return handleBuild(request, realRecordCheckDeps());
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "record-check", requiredTier: "client" });
+export const POST = withRateLimit(handlePost, {
+  mode: "user",
+  endpoint: "record-check",
+  requiredTier: "client",
+  // Partner usage is logged as org + endpoint + time only (security r1 F7).
+  partnerUsageWithoutUser: true,
+});

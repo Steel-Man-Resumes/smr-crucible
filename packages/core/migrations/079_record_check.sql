@@ -9,19 +9,24 @@
 --                         timestamp (granted_at, plus the immutable event row).
 --                         Default is declined (consentDefaultFor in consent.ts).
 --   record_check_saved    one row per checklist the person chose to save.
---                         Owner only, every command. Nothing is written here
---                         unless the person presses "Save this checklist".
+--                         Owner only. Nothing is written here unless the
+--                         person presses "Save this checklist".
 --
--- WHAT IS NOT STORED. The offense the person types lives in the request and
--- on their screen for the session. It reaches this table only when they save
--- AND tick "keep what I typed" (offense_sealed); the default is NULL. The
--- checklist and the job they typed are sealed in the app (AES-256-GCM, the
--- DOCUMENT_ENCRYPTION_KEY envelope in crypto.ts) with the owner and row id in
--- the binding, so a sealed value cannot be replayed under another row or person.
--- Plain columns hold only the state code and dates.
+-- WHAT IS NOT STORED. The checklist's words are never stored: every line is
+-- rebuilt on read from the curated question bank and the dated source list,
+-- so a saved check holds only ids (picks_sealed). The job and the record the
+-- person typed live in the request and on their screen for the session, and
+-- reach this table only when they save AND tick "Keep what I typed"
+-- (typed_sealed); the default is NULL. Both sealed columns are encrypted in
+-- the app (AES-256-GCM, the DOCUMENT_ENCRYPTION_KEY envelope in crypto.ts)
+-- with the owner, row id and field in the binding. Plain columns hold only
+-- the state code and the date.
 --
--- OWNERSHIP. Owner only for every command, FORCE row-level security (same
--- policy shape as 059 / 073 / 075). No staff path, no sharing scope, no view.
+-- OWNERSHIP. Owner only, FORCE row-level security (same policy shape as
+-- 059 / 073 / 075, without UPDATE: a saved check is never edited). No staff
+-- path, no sharing scope, no view. The app role is REVOKEd first and then
+-- given SELECT, INSERT, DELETE only; scripts/lib/restricted-grants.mjs holds
+-- the same list so a later blanket grant cannot widen it.
 -- Deleting the account cascades. "Delete my data" and revoking the consent
 -- delete the rows through the app (as the owner, under these policies).
 --
@@ -58,26 +63,27 @@ SET LOCAL lock_timeout = '5s';
 CREATE TABLE IF NOT EXISTS record_check_saved (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  -- Two-letter state code, or 'US' when the person chose federal only.
+  -- Two-letter state code.
   state             TEXT NOT NULL CHECK (state ~ '^[A-Z]{2}$'),
-  -- {ciphertext, iv, tag, keyVersion}: the job they typed and the checklist.
-  checklist_sealed  JSONB NOT NULL
-                      CHECK (jsonb_typeof(checklist_sealed) = 'object'
-                             AND checklist_sealed ? 'ciphertext'
-                             AND octet_length(checklist_sealed::text) <= 60000),
-  -- The offense, sealed, ONLY when they ticked "keep what I typed". NULL by default.
-  offense_sealed    JSONB
-                      CHECK (offense_sealed IS NULL
-                             OR (jsonb_typeof(offense_sealed) = 'object'
-                                 AND offense_sealed ? 'ciphertext'
-                                 AND octet_length(offense_sealed::text) <= 4000)),
+  -- {ciphertext, iv, tag, keyVersion}: the picked source and question ids.
+  picks_sealed      JSONB NOT NULL
+                      CHECK (jsonb_typeof(picks_sealed) = 'object'
+                             AND picks_sealed ? 'ciphertext'
+                             AND octet_length(picks_sealed::text) <= 8000),
+  -- The job and record they typed, sealed, ONLY when they ticked "Keep what
+  -- I typed". NULL by default.
+  typed_sealed      JSONB
+                      CHECK (typed_sealed IS NULL
+                             OR (jsonb_typeof(typed_sealed) = 'object'
+                                 AND typed_sealed ? 'ciphertext'
+                                 AND octet_length(typed_sealed::text) <= 4000)),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_record_check_saved_user
   ON record_check_saved (user_id, created_at DESC);
 
--- Owner only, every command.
+-- Owner only: read, add, delete. No UPDATE policy (a saved check is never edited).
 DO $$
 DECLARE t text := 'record_check_saved';
 BEGIN
@@ -89,15 +95,16 @@ BEGIN
   EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_owner_delete', t);
   EXECUTE format($p$CREATE POLICY %I ON %I FOR SELECT USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_select', t);
   EXECUTE format($p$CREATE POLICY %I ON %I FOR INSERT WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_insert', t);
-  EXECUTE format($p$CREATE POLICY %I ON %I FOR UPDATE USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)
-                                               WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_update', t);
   EXECUTE format($p$CREATE POLICY %I ON %I FOR DELETE USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_delete', t);
 END $$;
 
+-- REVOKE first, then grant exactly three privileges, so default privileges
+-- or an earlier blanket grant cannot leave UPDATE or TRUNCATE behind.
 DO $$
 BEGIN
   REVOKE ALL ON record_check_saved FROM PUBLIC;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    REVOKE ALL ON record_check_saved FROM smr_app;
     GRANT SELECT, INSERT, DELETE ON record_check_saved TO smr_app;
   END IF;
 END $$;
